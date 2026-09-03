@@ -28,18 +28,21 @@ features/
 
 ## Page Inventory — Plane Upstream (existing)
 
-| Page                                           | File                                                                                   | Status      | Catatan                                                       |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------- | ------- | --- |
-| Work Items (Issues)                            | [`work-items.md`](./work-items.md)                                                     | ✅ Existing | Core — `apps/web/core/store/issue/*`, `plane.db.models.issue` |
-| Cycles (Sprints)                               | [`cycles.md`](./cycles.md)                                                             | ✅ Existing | `plane.db.models.cycle`, burn-down                            |
-| Modules                                        | [`modules.md`](./modules.md)                                                           | ✅ Existing | `plane.db.models.module`                                      |
-| Views                                          | [`views.md`](./views.md)                                                               | ✅ Existing | Saved filters, `plane.db.models.view`                         |
-| Pages                                          | [`pages.md`](./pages.md)                                                               | ✅ Existing | TipTap + Yjs, `apps/live`                                     |
-| Analytics                                      | [`analytics.md`](./analytics.md)                                                       | ✅ Existing | `plane.analytics`                                             |
-| Inbox / Notifications                          | [`inbox.md`](./inbox.md)                                                               | ✅ Existing | `plane.db.models.notification`                                |
-| Intake / Drafts / Stickies / Browse / Archives | \_(todo — actual: `intake`, `drafts`, `stickies`, `browse/:workItem`, `archives/issues | cycles      | modules`)\_                                                   | 📝 Todo | —   |
-
-| Workspace / Project Settings | [`settings.md`](./settings.md) | ✅ Existing | `apps/admin` god-mode + workspace settings |
+| Page                                      | File                               | Status      | Catatan                                                       |
+| ----------------------------------------- | ---------------------------------- | ----------- | ------------------------------------------------------------- |
+| Work Items (Issues)                       | [`work-items.md`](./work-items.md) | ✅ Doc done | Core — `apps/web/core/store/issue/*`, `plane.db.models.issue` |
+| Cycles (Sprints)                          | [`cycles.md`](./cycles.md)         | ✅ Doc done | `plane.db.models.cycle`, burn-down                            |
+| Modules                                   | [`modules.md`](./modules.md)       | ✅ Doc done | `plane.db.models.module`                                      |
+| Views                                     | [`views.md`](./views.md)           | ✅ Doc done | Saved filters, `plane.db.models.view`                         |
+| Pages                                     | [`pages.md`](./pages.md)           | ✅ Doc done | TipTap + Yjs, `apps/live`                                     |
+| Analytics                                 | [`analytics.md`](./analytics.md)   | ✅ Doc done | `plane.analytics`                                             |
+| Inbox / Notifications                     | [`inbox.md`](./inbox.md)           | ✅ Doc done | `plane.db.models.notification`                                |
+| Intake                                    | [`intake.md`](./intake.md)         | ✅ Doc done | `IntakeIssue` triage (`intake.py`), ex-inbox URL              |
+| Drafts                                    | [`drafts.md`](./drafts.md)         | ✅ Doc done | `draft_issues` table, publish via `draft-to-issue/`           |
+| Stickies                                  | [`stickies.md`](./stickies.md)     | ✅ Doc done | Personal notes, `sticky.py`                                   |
+| Browse                                    | [`browse.md`](./browse.md)         | ✅ Doc done | URL kanonik `{identifier}-{seq}`, full `IssueDetailRoot`      |
+| Archives (issues/cycles/modules/projects) | [`archives.md`](./archives.md)     | ✅ Doc done | `archived_at` soft-delete + restore                           |
+| Workspace / Project Settings              | [`settings.md`](./settings.md)     | ✅ Doc done | `apps/admin` god-mode + flags `features-list.tsx`             |
 
 ## Page Inventory — ITSM (future, bukan actual)
 
@@ -183,7 +186,7 @@ Berlaku cross-folder (`design/`, `features/`, `ui/`):
 
 ## Writing Order (recommended)
 
-**Option Y — Start dari yang ada dulu (recommended untuk fork):** Work Items (`work-items.md`) → Cycles → Service Map (`services.md`) → Incidents (`incidents.md`). Validates template dengan page yang sudah ada, ITSM pakai template matang.
+**Option Y — Start dari yang ada dulu (recommended untuk fork):** Work Items (`work-items.md` ✅) → Cycles → Modules → Views → Pages. Validates template dengan page yang sudah ada; ITSM pakai template matang (ide diparkir di `_backlog.md`).
 
 **Option X — Start complex first:** Incidents → Service Map → Work Items.
 
