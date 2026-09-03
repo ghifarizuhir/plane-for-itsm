@@ -1,0 +1,22 @@
+[Unit]
+Description=Plane ITSM Backend (docker-compose-local: db, redis, mq, minio, api, worker, beat)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ghifari/plane-for-itsm
+User=ghifari
+Group=ghifari
+Environment=COMPOSE_DOCKER_CLI_BUILD=1
+Environment=DOCKER_BUILDKIT=1
+ExecStart=/usr/bin/docker compose -f /home/ghifari/plane-for-itsm/docker-compose-local.yml up -d --build
+ExecStop=/usr/bin/docker compose -f /home/ghifari/plane-for-itsm/docker-compose-local.yml down
+ExecReload=/usr/bin/docker compose -f /home/ghifari/plane-for-itsm/docker-compose-local.yml up -d --build
+TimeoutStartSec=600
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

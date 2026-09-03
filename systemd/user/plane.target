@@ -1,0 +1,7 @@
+[Unit]
+Description=Plane ITSM Full Stack
+Wants=plane-backend.service plane-web.service plane-admin.service
+After=plane-backend.service plane-web.service plane-admin.service
+
+[Install]
+WantedBy=default.target

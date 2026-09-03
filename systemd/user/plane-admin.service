@@ -1,0 +1,21 @@
+[Unit]
+Description=Plane ITSM Admin (3001) - pnpm --filter=admin dev
+After=plane-backend.service network-online.target
+Wants=plane-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ghifari/plane-for-itsm
+Environment=NODE_ENV=development
+Environment=PATH=/home/ghifari/.nvm/versions/node/v24.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/ghifari/.nvm/versions/node/v24.16.0/bin/pnpm --filter=admin dev
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=plane-admin
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
