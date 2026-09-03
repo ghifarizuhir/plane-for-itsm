@@ -1,5 +1,5 @@
 [Unit]
-Description=Plane ITSM Admin (3001) - pnpm --filter=admin dev
+Description=Plane ITSM Admin (3001) - pnpm --filter=admin dev --host 0.0.0.0
 After=plane-backend.service network-online.target
 Wants=plane-backend.service
 Wants=network-online.target
@@ -11,7 +11,7 @@ Group=ghifari
 WorkingDirectory=/home/ghifari/plane-for-itsm
 Environment=NODE_ENV=development
 Environment=PATH=/home/ghifari/.nvm/versions/node/v24.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/home/ghifari/.nvm/versions/node/v24.16.0/bin/pnpm --filter=admin dev
+ExecStart=/home/ghifari/.nvm/versions/node/v24.16.0/bin/pnpm --filter=admin dev --host 0.0.0.0
 Restart=always
 RestartSec=5
 StandardOutput=journal
