@@ -136,6 +136,24 @@ async fn main() {
             post(routes::webhook::regenerate),
         )
         .route("/api/workspaces/:slug/webhook-logs/:webhook_id/", get(routes::webhook::list_logs))
+        .route("/api/workspaces/:slug/users/notifications/", get(routes::notification::list))
+        .route("/api/workspaces/:slug/users/notifications/unread/", get(routes::notification::unread))
+        .route(
+            "/api/workspaces/:slug/users/notifications/mark-all-read/",
+            post(routes::notification::mark_all_read),
+        )
+        .route(
+            "/api/workspaces/:slug/users/notifications/:pk/read/",
+            post(routes::notification::mark_read).delete(routes::notification::mark_unread),
+        )
+        .route(
+            "/api/workspaces/:slug/users/notifications/:pk/archive/",
+            post(routes::notification::archive).delete(routes::notification::unarchive),
+        )
+        .route(
+            "/api/users/me/notification-preferences/",
+            get(routes::notification::get_preferences).patch(routes::notification::patch_preferences),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
