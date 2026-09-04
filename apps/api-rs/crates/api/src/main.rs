@@ -73,6 +73,24 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
             get(routes::intake::list_issues).post(routes::intake::create_issue),
         )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/members/",
+            get(routes::member::list).post(routes::member::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-members/",
+            get(routes::member::list).post(routes::member::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-members-lite/",
+            get(routes::member::list_lite),
+        )
+        .route("/api/workspaces/:slug/members/", get(routes::member::list_workspace_members))
+        .route("/api/workspaces/:slug/members-lite/", get(routes::member::list_workspace_members))
+        .route(
+            "/api/workspaces/:slug/invitations/",
+            get(routes::member::list_invites).post(routes::member::create_invite),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());

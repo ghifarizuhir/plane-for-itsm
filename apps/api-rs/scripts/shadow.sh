@@ -15,6 +15,9 @@ paths=(
   "/api/workspaces/$WS/projects/$P/estimates/"
   "/api/workspaces/$WS/projects/$P/intakes/"
   "/api/workspaces/$WS/projects/$P/intake-issues/"
+  "/api/workspaces/$WS/projects/$P/members/"
+  "/api/workspaces/$WS/members/"
+  "/api/workspaces/$WS/invitations/"
 )
 fail=0
 for path in "${paths[@]}"; do
