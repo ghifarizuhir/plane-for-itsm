@@ -23,6 +23,7 @@ paths=(
   "/api/workspaces/$WS/projects/$P/user-favorite-views/"
   "/api/workspaces/$WS/projects/$P/pages/"
   "/api/workspaces/$WS/projects/$P/pages-summary/"
+  "/api/assets/v2/workspaces/$WS/check/00000000-0000-0000-0000-000000000000/"
 )
 fail=0
 for path in "${paths[@]}"; do

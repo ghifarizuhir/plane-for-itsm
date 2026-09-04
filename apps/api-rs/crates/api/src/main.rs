@@ -115,6 +115,18 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/favorite-pages/:page_id/",
             post(routes::page::create_favorite),
         )
+        .route(
+            "/api/assets/v2/workspaces/:slug/check/:asset_id/",
+            get(routes::asset::check),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/restore/:asset_id/",
+            post(routes::asset::restore),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/:asset_id/",
+            axum::routing::patch(routes::asset::mark_uploaded).delete(routes::asset::soft_delete),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());

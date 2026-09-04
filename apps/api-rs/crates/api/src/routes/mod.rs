@@ -1,3 +1,4 @@
+pub mod asset;
 pub mod cycle;
 pub mod estimate;
 pub mod intake;
