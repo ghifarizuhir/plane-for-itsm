@@ -5,7 +5,7 @@ mod middleware;
 mod routes;
 mod state;
 
-use axum::{routing::{get, post}, Router};
+use axum::{routing::{get, patch, post}, Router};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -354,6 +354,28 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/export-issues/",
             post(routes::misc::create_export).get(routes::misc::export_history),
+        )
+        .route(
+            "/api/users/me/",
+            get(routes::user::me).patch(routes::user::patch_me),
+        )
+        .route("/api/users/session/", get(routes::user::session))
+        .route("/api/users/me/settings/", get(routes::user::settings))
+        .route("/api/users/me/instance-admin/", get(routes::user::instance_admin))
+        .route("/api/users/me/onboard/", patch(routes::user::onboard))
+        .route("/api/users/me/tour-completed/", patch(routes::user::tour_completed))
+        .route("/api/users/me/activities/", get(routes::user::activities))
+        .route(
+            "/api/users/me/profile/",
+            get(routes::user::profile).patch(routes::user::patch_profile),
+        )
+        .route(
+            "/api/users/me/accounts/",
+            get(routes::user::list_accounts),
+        )
+        .route(
+            "/api/users/me/accounts/:pk/",
+            get(routes::user::get_account).delete(routes::user::delete_account),
         )
         .route(
             "/api/users/api-tokens/",
