@@ -160,6 +160,12 @@ async fn main() {
             get(routes::search::issue_search),
         )
         .route("/api/workspaces/:slug/entity-search/", get(routes::search::entity_search))
+        .route("/api/workspaces/:slug/default-analytics/", get(routes::analytic::default_analytics))
+        .route("/api/workspaces/:slug/project-stats/", get(routes::analytic::project_stats))
+        .route(
+            "/api/workspaces/:slug/analytic-view/",
+            get(routes::analytic::list_views).post(routes::analytic::create_view),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
