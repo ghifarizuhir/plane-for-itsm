@@ -33,6 +33,8 @@ paths=(
   "/api/workspaces/$WS/default-analytics/"
   "/api/workspaces/$WS/project-stats/"
   "/api/workspaces/$WS/analytic-view/"
+  "/api/workspaces/$WS/projects/$P/work-items/"
+  "/api/workspaces/$WS/work-items/search/?search=test"
 )
 fail=0
 for path in "${paths[@]}"; do

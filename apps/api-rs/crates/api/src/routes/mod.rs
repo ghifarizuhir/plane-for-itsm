@@ -9,6 +9,7 @@ pub mod page;
 pub mod search;
 pub mod view;
 pub mod webhook;
+pub mod work_item;
 pub mod health;
 pub mod issue;
 pub mod label;
