@@ -28,6 +28,8 @@ paths=(
   "/api/workspaces/$WS/users/notifications/"
   "/api/workspaces/$WS/users/notifications/unread/"
   "/api/users/me/notification-preferences/"
+  "/api/workspaces/$WS/search/?search=test"
+  "/api/workspaces/$WS/entity-search/?query=test"
 )
 fail=0
 for path in "${paths[@]}"; do

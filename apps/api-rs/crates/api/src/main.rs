@@ -154,6 +154,12 @@ async fn main() {
             "/api/users/me/notification-preferences/",
             get(routes::notification::get_preferences).patch(routes::notification::patch_preferences),
         )
+        .route("/api/workspaces/:slug/search/", get(routes::search::global_search))
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/search-issues/",
+            get(routes::search::issue_search),
+        )
+        .route("/api/workspaces/:slug/entity-search/", get(routes::search::entity_search))
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());

@@ -5,6 +5,7 @@ pub mod intake;
 pub mod member;
 pub mod notification;
 pub mod page;
+pub mod search;
 pub mod view;
 pub mod webhook;
 pub mod health;
