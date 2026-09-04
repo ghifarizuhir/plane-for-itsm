@@ -25,6 +25,14 @@ async fn main() {
             "/api/workspaces/",
             get(routes::workspace::list).post(routes::workspace::create),
         )
+        .route(
+            "/api/workspaces/:slug/projects/",
+            get(routes::project::list).post(routes::project::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/",
+            get(routes::issue::list).post(routes::issue::create),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
