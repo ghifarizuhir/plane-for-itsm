@@ -21,6 +21,7 @@ paths=(
   "/api/workspaces/$WS/projects/$P/issue-labels/00000000-0000-0000-0000-000000000000/"
   "/api/workspaces/$WS/projects/$P/estimates/"
   "/api/workspaces/$WS/projects/$P/estimates/00000000-0000-0000-0000-000000000000/"
+  "/api/workspaces/$WS/projects/$P/estimates/00000000-0000-0000-0000-000000000000/estimate-points/00000000-0000-0000-0000-000000000000/"
   "/api/workspaces/$WS/projects/$P/intakes/"
   "/api/workspaces/$WS/projects/$P/intakes/00000000-0000-0000-0000-000000000000/"
   "/api/workspaces/$WS/projects/$P/inboxes/00000000-0000-0000-0000-000000000000/"
