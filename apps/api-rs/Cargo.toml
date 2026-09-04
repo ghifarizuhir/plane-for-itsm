@@ -1,0 +1,21 @@
+[workspace]
+members = ["crates/common", "crates/api", "crates/worker", "crates/beat"]
+resolver = "2"
+
+[workspace.dependencies]
+tokio = { version = "1.38", features = ["full"] }
+axum = { version = "0.7", features = ["json", "http1", "http2"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors", "limit"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "json", "chrono", "uuid"] }
+redis = { version = "0.26", features = ["tokio-comp", "streams", "connection-manager"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tikv-jemallocator = "0.5"
+anyhow = "1"
+validator = { version = "0.18", features = ["derive"] }
+jsonwebtoken = "9"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }

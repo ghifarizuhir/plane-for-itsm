@@ -111,9 +111,14 @@ build/
 temp/
 scripts/
 !packages/i18n/scripts/
+!apps/api-rs/scripts/
 
 # i18n auto-generated types (regenerated on every build)
 packages/i18n/src/types/keys.generated.ts
 
 # Local security notes (not for version control)
 /security/
+
+# Rust
+/apps/api-rs/target
+/apps/api-rs/target/

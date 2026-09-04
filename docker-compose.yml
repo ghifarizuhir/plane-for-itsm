@@ -49,6 +49,26 @@ services:
       - plane-db
       - plane-redis
 
+  rust-api:
+    container_name: rust-api
+    build:
+      context: ./apps/api-rs
+      dockerfile: Dockerfile.rs
+      args:
+        DOCKER_BUILDKIT: 1
+    restart: always
+    env_file:
+      - ./apps/api/.env
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      - plane-db
+      - plane-redis
+    ports:
+      - "8001:8001"
+
   worker:
     container_name: bgworker
     build:
