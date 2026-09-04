@@ -1,4 +1,8 @@
+pub mod cycle;
 pub mod health;
 pub mod issue;
+pub mod module;
 pub mod project;
+pub mod state;
+pub mod user;
 pub mod workspace;

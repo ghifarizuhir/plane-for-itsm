@@ -21,3 +21,8 @@ validator = { workspace = true }
 jsonwebtoken = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+uuid = { workspace = true }
