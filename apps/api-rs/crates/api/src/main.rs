@@ -38,12 +38,30 @@ async fn main() {
             get(routes::cycle::list).post(routes::cycle::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:pk/",
+            get(routes::cycle::detail)
+                .patch(routes::cycle::patch)
+                .delete(routes::cycle::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/modules/",
             get(routes::module::list).post(routes::module::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:pk/",
+            get(routes::module::detail)
+                .patch(routes::module::patch)
+                .delete(routes::module::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/states/",
             get(routes::state::list).post(routes::state::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/states/:pk/",
+            get(routes::state::detail)
+                .patch(routes::state::patch)
+                .delete(routes::state::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",

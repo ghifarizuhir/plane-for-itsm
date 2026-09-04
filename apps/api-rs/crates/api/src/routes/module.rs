@@ -72,3 +72,99 @@ pub async fn create(
         Json(ModuleOut { id: row.id, name: row.name }),
     ))
 }
+
+/// Mirrors `plane/app/views/module/base.py`: archived modules are immutable
+/// ("Archived module cannot be updated"), missing → "Module not found".
+pub fn guard_patch(archived: bool) -> Result<(), String> {
+    if archived {
+        return Err("Archived module cannot be updated".to_string());
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchModule {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<NaiveDate>,
+    #[serde(default)]
+    pub target_date: Option<NaiveDate>,
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let row: Option<common::models::module::Module> = sqlx::query_as(
+        "SELECT id, name FROM modules WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(m) => Ok((StatusCode::OK, Json(serde_json::json!({"id": m.id, "name": m.name})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Module not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchModule>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let row: Option<(Option<chrono::DateTime<chrono::Utc>>,)> = sqlx::query_as(
+        "SELECT archived_at FROM modules WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((archived_at,)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Module not found"}))));
+    };
+    if let Err(e) = guard_patch(archived_at.is_some()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+    }
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 255 {
+            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+        }
+    }
+    if let (Some(s), Some(t)) = (body.start_date, body.target_date) {
+        if s > t {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Start date cannot exceed target date"})),
+            ));
+        }
+    }
+    sqlx::query(
+        "UPDATE modules SET name = COALESCE($1, name), start_date = COALESCE($2, start_date), target_date = COALESCE($3, target_date), updated_at = now() WHERE id = $4",
+    )
+    .bind(&body.name)
+    .bind(body.start_date)
+    .bind(body.target_date)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::OK, Json(serde_json::json!({"id": pk}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE modules SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}

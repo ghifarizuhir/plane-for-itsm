@@ -31,6 +31,22 @@ pub fn validate_create(body: &CreateCycle) -> Result<(), String> {
             return Err("Start date cannot exceed end date".to_string());
         }
     }
+    if body.start_date.is_some() != body.end_date.is_some() {
+        return Err("Both start date and end date are either required or are to be null".to_string());
+    }
+    Ok(())
+}
+
+/// Detail guards from `plane/app/views/cycle/base.py:partial_update`:
+/// archived cycles are immutable; completed cycles (end_date past) accept
+/// only sort-order changes.
+pub fn guard_patch(archived: bool, completed: bool, sort_only: bool) -> Result<(), String> {
+    if archived {
+        return Err("Archived cycle cannot be updated".to_string());
+    }
+    if completed && !sort_only {
+        return Err("The Cycle has already been completed so it cannot be edited".to_string());
+    }
     Ok(())
 }
 
@@ -78,4 +94,101 @@ pub async fn create(
         StatusCode::CREATED,
         Json(CycleOut { id: row.id, name: row.name }),
     ))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchCycle {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub end_date: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub sort_order: Option<f64>,
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let row: Option<common::models::cycle::Cycle> = sqlx::query_as(
+        "SELECT id, name FROM cycles WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(c) => Ok((StatusCode::OK, Json(serde_json::json!({"id": c.id, "name": c.name})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Cycle not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchCycle>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let row: Option<(Option<DateTime<Utc>>, Option<DateTime<Utc>>)> = sqlx::query_as(
+        "SELECT archived_at, end_date FROM cycles WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((archived_at, end_date)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Cycle not found"}))));
+    };
+    let completed = end_date.map(|e| e < Utc::now()).unwrap_or(false);
+    let sort_only = body.name.is_none() && body.start_date.is_none() && body.end_date.is_none();
+    if let Err(e) = guard_patch(archived_at.is_some(), completed, sort_only) {
+        return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+    }
+    if body.start_date.is_some() != body.end_date.is_some() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Both start date and end date are either required or are to be null"})),
+        ));
+    }
+    if let (Some(s), Some(e)) = (body.start_date, body.end_date) {
+        if s > e {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Start date cannot exceed end date"})),
+            ));
+        }
+    }
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 255 {
+            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+        }
+    }
+    sqlx::query(
+        "UPDATE cycles SET name = COALESCE($1, name), start_date = COALESCE($2, start_date), end_date = COALESCE($3, end_date), updated_at = now() WHERE id = $4",
+    )
+    .bind(&body.name)
+    .bind(body.start_date)
+    .bind(body.end_date)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::OK, Json(serde_json::json!({"id": pk}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE cycles SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
 }
