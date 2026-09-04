@@ -57,6 +57,22 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/",
             post(routes::estimate::create_point),
         )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intakes/",
+            get(routes::intake::list).post(routes::intake::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/inboxes/",
+            get(routes::intake::list).post(routes::intake::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-issues/",
+            get(routes::intake::list_issues).post(routes::intake::create_issue),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
+            get(routes::intake::list_issues).post(routes::intake::create_issue),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
