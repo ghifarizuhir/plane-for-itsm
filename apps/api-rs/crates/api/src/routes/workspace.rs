@@ -156,3 +156,91 @@ pub async fn create(
         }),
     ))
 }
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchWorkspace {
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Mirrors `plane/app/views/workspace/base.py:WorkSpaceViewSet`
+/// retrieve / partial_update / destroy on the slug detail route.
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let row: Option<common::models::workspace::Workspace> = sqlx::query_as(
+        "SELECT id, name, slug FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(w) => Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({"id": w.id, "name": w.name, "slug": w.slug})),
+        )),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Workspace not found"})),
+        )),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+    Json(body): Json<PatchWorkspace>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 80 || contains_url(name) {
+            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+        }
+    }
+    let n = sqlx::query(
+        "UPDATE workspaces SET name = COALESCE($1, name), updated_at = now() WHERE slug = $2 AND deleted_at IS NULL",
+    )
+    .bind(&body.name)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Workspace not found"})),
+        ));
+    }
+    Ok((StatusCode::OK, Json(serde_json::json!({"slug": slug}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    // Mirrors `remove_last_workspace_ids_from_user_settings`: profiles
+    // pointing at the workspace lose their last-workspace pointer.
+    let row: Option<(uuid::Uuid,)> =
+        sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
+    let Some((workspace_id,)) = row else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Workspace not found"})),
+        ));
+    };
+    sqlx::query("UPDATE profiles SET last_workspace_id = NULL WHERE last_workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&st.pool)
+        .await?;
+    sqlx::query("UPDATE workspaces SET deleted_at = now() WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}

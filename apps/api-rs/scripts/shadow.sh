@@ -6,7 +6,9 @@ WS=${WS:-test-ws}
 P=${P:-00000000-0000-0000-0000-000000000000}
 paths=(
   "/api/workspaces/"
+  "/api/workspaces/$WS/"
   "/api/workspaces/$WS/projects/"
+  "/api/workspaces/$WS/projects/00000000-0000-0000-0000-000000000000/"
   "/api/workspaces/$WS/projects/$P/issues/"
   "/api/workspaces/$WS/projects/$P/cycles/"
   "/api/workspaces/$WS/projects/$P/cycles/00000000-0000-0000-0000-000000000000/"

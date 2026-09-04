@@ -26,8 +26,20 @@ async fn main() {
             get(routes::workspace::list).post(routes::workspace::create),
         )
         .route(
+            "/api/workspaces/:slug/",
+            get(routes::workspace::detail)
+                .patch(routes::workspace::patch)
+                .delete(routes::workspace::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/projects/",
             get(routes::project::list).post(routes::project::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:pk/",
+            get(routes::project::detail)
+                .patch(routes::project::patch)
+                .delete(routes::project::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/",
