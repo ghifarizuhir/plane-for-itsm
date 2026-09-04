@@ -3,6 +3,7 @@ RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static build-
 WORKDIR /build
 COPY Cargo.toml Cargo.lock* rust-toolchain.toml ./
 COPY crates ./crates
+COPY migrations ./migrations
 RUN cargo build --release --bin api --bin worker --bin beat
 
 FROM alpine:3.19
