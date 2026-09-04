@@ -68,28 +68,72 @@ async fn main() {
             get(routes::label::list).post(routes::label::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/labels/:pk/",
+            get(routes::label::detail)
+                .patch(routes::label::patch)
+                .delete(routes::label::destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issue-labels/:pk/",
+            get(routes::label::detail)
+                .patch(routes::label::patch)
+                .delete(routes::label::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/estimates/",
             get(routes::estimate::list).post(routes::estimate::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/",
+            get(routes::estimate::detail)
+                .patch(routes::estimate::patch)
+                .delete(routes::estimate::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/",
             post(routes::estimate::create_point),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/:point_id/",
+            get(routes::estimate::detail)
+                .patch(routes::estimate::patch_point)
+                .delete(routes::estimate::destroy_point),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/intakes/",
             get(routes::intake::list).post(routes::intake::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intakes/:pk/",
+            get(routes::intake::detail)
+                .patch(routes::intake::patch)
+                .delete(routes::intake::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/inboxes/",
             get(routes::intake::list).post(routes::intake::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/inboxes/:pk/",
+            get(routes::intake::detail)
+                .patch(routes::intake::patch)
+                .delete(routes::intake::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/intake-issues/",
             get(routes::intake::list_issues).post(routes::intake::create_issue),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/",
+            get(routes::intake::detail_issue).delete(routes::intake::destroy_issue),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
             get(routes::intake::list_issues).post(routes::intake::create_issue),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/",
+            get(routes::intake::detail_issue).delete(routes::intake::destroy_issue),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/members/",

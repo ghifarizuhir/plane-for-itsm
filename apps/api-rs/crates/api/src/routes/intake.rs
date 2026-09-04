@@ -211,3 +211,140 @@ pub async fn create_issue(
         Json(json!({"id": row.id, "status": row.status, "issue_id": issue_id})),
     ))
 }
+
+/// Mirrors `plane/app/views/intake/base.py:destroy`: the default intake
+/// cannot be deleted.
+pub fn guard_delete(is_default: bool) -> Result<(), String> {
+    if is_default {
+        return Err("You cannot delete the default intake".to_string());
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchIntake {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<common::models::intake::Intake> = sqlx::query_as(
+        "SELECT id, name FROM intakes WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(i) => Ok((StatusCode::OK, Json(json!({"id": i.id, "name": i.name})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchIntake>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 255 {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+        }
+    }
+    let n = sqlx::query(
+        "UPDATE intakes SET name = COALESCE($1, name), description = COALESCE($2, description), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(&body.name)
+    .bind(&body.description)
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+    }
+    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<(bool,)> = sqlx::query_as(
+        "SELECT is_default FROM intakes WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((is_default,)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+    };
+    if let Err(e) = guard_delete(is_default) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    sqlx::query("DELETE FROM intakes WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+pub async fn detail_issue(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<common::models::intake::IntakeIssue> = sqlx::query_as(
+        "SELECT id, status FROM intake_issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(ii) => Ok((StatusCode::OK, Json(json!({"id": ii.id, "status": ii.status})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake issue not found"})))),
+    }
+}
+
+pub async fn destroy_issue(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Mirrors `plane/app/views/intake/base.py:destroy`: pending/rejected
+    // intake rows (status in [-2,-1,0,2]) take the underlying issue with them.
+    let row: Option<(i32, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT status, issue_id FROM intake_issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((status, issue_id)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake issue not found"}))));
+    };
+    if matches!(status, -2 | -1 | 0 | 2) {
+        if let Some(issue_id) = issue_id {
+            sqlx::query("UPDATE issues SET deleted_at = now() WHERE id = $1")
+                .bind(issue_id)
+                .execute(&st.pool)
+                .await?;
+        }
+    }
+    sqlx::query("DELETE FROM intake_issues WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
