@@ -57,6 +57,7 @@ services:
       args:
         DOCKER_BUILDKIT: 1
     restart: always
+    command: /usr/local/bin/api
     env_file:
       - ./apps/api/.env
     environment:

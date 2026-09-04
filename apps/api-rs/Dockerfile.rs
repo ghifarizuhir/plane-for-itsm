@@ -1,5 +1,5 @@
-FROM rust:1.78-alpine AS builder
-RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static
+FROM rust:1.96-alpine AS builder
+RUN apk add --no-cache musl-dev pkgconfig openssl-dev openssl-libs-static build-base make perl
 WORKDIR /build
 COPY Cargo.toml Cargo.lock* rust-toolchain.toml ./
 COPY crates ./crates
