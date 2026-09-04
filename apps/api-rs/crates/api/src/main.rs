@@ -1,6 +1,7 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+mod middleware;
 mod routes;
 mod state;
 
@@ -20,6 +21,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(routes::health::health))
+        .route(
+            "/api/workspaces/",
+            get(routes::workspace::list).post(routes::workspace::create),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
