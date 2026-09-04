@@ -112,7 +112,7 @@ pub async fn create(
         "INSERT INTO estimates (id, name, description, type, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, w.id, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
     )
     .bind(&body.name)
-    .bind(&body.description)
+    .bind(body.description.clone().unwrap_or_default())
     .bind(estimate_type)
     .bind(project_id)
     .bind(&slug)
@@ -145,7 +145,7 @@ pub async fn create_point(
     .bind(estimate_id)
     .bind(body.key)
     .bind(&body.value)
-    .bind(&body.description)
+    .bind(body.description.clone().unwrap_or_default())
     .fetch_one(&st.pool)
     .await?;
     Ok((

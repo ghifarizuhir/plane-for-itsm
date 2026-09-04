@@ -66,7 +66,7 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<CycleOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let row = sqlx::query_as::<_, common::models::cycle::Cycle>(
-        "INSERT INTO cycles (id, name, project_id, start_date, end_date, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now()) RETURNING id, name",
+        "INSERT INTO cycles (id, name, description, project_id, start_date, end_date, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, $3, $4, now(), now()) RETURNING id, name",
     )
     .bind(&body.name)
     .bind(project_id)

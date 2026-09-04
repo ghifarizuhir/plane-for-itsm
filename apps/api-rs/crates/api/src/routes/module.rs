@@ -59,7 +59,7 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<ModuleOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let row = sqlx::query_as::<_, common::models::module::Module>(
-        "INSERT INTO modules (id, name, project_id, start_date, target_date, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now()) RETURNING id, name",
+        "INSERT INTO modules (id, name, description, project_id, start_date, target_date, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, $3, $4, now(), now()) RETURNING id, name",
     )
     .bind(&body.name)
     .bind(project_id)

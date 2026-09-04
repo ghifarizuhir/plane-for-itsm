@@ -109,7 +109,7 @@ pub async fn create(
         "INSERT INTO intakes (id, name, description, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
     )
     .bind(&body.name)
-    .bind(&body.description)
+    .bind(body.description.clone().unwrap_or_default())
     .bind(project_id)
     .bind(&slug)
     .fetch_one(&st.pool)

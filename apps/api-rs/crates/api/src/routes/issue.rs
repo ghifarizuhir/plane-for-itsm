@@ -53,7 +53,7 @@ pub async fn list(
 pub async fn create(
     State(st): State<AppState>,
     _auth: AuthUser,
-    axum::extract::Path((_slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateIssue>,
 ) -> Result<(StatusCode, Json<IssueOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
@@ -103,10 +103,11 @@ pub async fn create(
     }
 
     let row = sqlx::query_as::<_, common::models::issue::Issue>(
-        "INSERT INTO issues (id, name, project_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, now(), now()) RETURNING id, name",
+        "INSERT INTO issues (id, name, description, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(project_id)
+    .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
     Ok((

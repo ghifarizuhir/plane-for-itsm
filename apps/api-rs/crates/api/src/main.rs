@@ -91,6 +91,18 @@ async fn main() {
             "/api/workspaces/:slug/invitations/",
             get(routes::member::list_invites).post(routes::member::create_invite),
         )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/views/",
+            get(routes::view::list).post(routes::view::create),
+        )
+        .route(
+            "/api/workspaces/:slug/views/",
+            get(routes::view::list_global).post(routes::view::create_global),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-views/",
+            get(routes::view::list_favorites).post(routes::view::create_favorite),
+        )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());

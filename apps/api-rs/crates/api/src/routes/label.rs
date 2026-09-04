@@ -110,8 +110,8 @@ pub async fn create(
         "INSERT INTO labels (id, name, color, description, external_source, external_id, parent_id, sort_order, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, (SELECT MAX(sort_order) + 10000 FROM labels WHERE project_id = $8), 65535), $8, w.id, now(), now() FROM workspaces w WHERE w.slug = $9 RETURNING id, name",
     )
     .bind(&body.name)
-    .bind(&body.color)
-    .bind(&body.description)
+    .bind(body.color.clone().unwrap_or_default())
+    .bind(body.description.clone().unwrap_or_default())
     .bind(&body.external_source)
     .bind(&body.external_id)
     .bind(body.parent_id)

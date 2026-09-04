@@ -141,7 +141,7 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<WorkspaceOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let row = sqlx::query_as::<_, common::models::workspace::Workspace>(
-        "INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, now(), now()) RETURNING id, name, slug",
+        "INSERT INTO workspaces (id, name, description, slug, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, now(), now()) RETURNING id, name, slug",
     )
     .bind(&body.name)
     .bind(&body.slug)
