@@ -16,3 +16,9 @@ pub async fn ping(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query("SELECT 1").execute(pool).await?;
     Ok(())
 }
+
+/// Apply embedded sqlx migrations (idempotent baseline + deltas).
+pub async fn migrate(pool: &PgPool) -> anyhow::Result<()> {
+    sqlx::migrate!("../../migrations").run(pool).await?;
+    Ok(())
+}
