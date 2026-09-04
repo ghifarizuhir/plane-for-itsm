@@ -242,6 +242,29 @@ async fn main() {
         )
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
+        .route("/api/timezones/", get(routes::misc::timezones))
+        .route(
+            "/api/workspaces/:slug/export-issues/",
+            post(routes::misc::create_export).get(routes::misc::export_history),
+        )
+        .route(
+            "/api/users/api-tokens/",
+            get(routes::misc::list_tokens).post(routes::misc::create_token),
+        )
+        .route(
+            "/api/users/api-tokens/:pk/",
+            get(routes::misc::get_token).delete(routes::misc::delete_token),
+        )
+        .route(
+            "/api/workspaces/:slug/stickies/",
+            get(routes::misc::list_stickies).post(routes::misc::create_sticky),
+        )
+        .route(
+            "/api/workspaces/:slug/stickies/:pk/",
+            get(routes::misc::get_sticky)
+                .patch(routes::misc::patch_sticky)
+                .delete(routes::misc::delete_sticky),
+        )
         .route("/api/workspaces/:slug/default-analytics/", get(routes::analytic::default_analytics))
         .route("/api/workspaces/:slug/project-stats/", get(routes::analytic::project_stats))
         .route(

@@ -1,0 +1,446 @@
+[
+  {
+    "label": "Midway Island",
+    "value": "Pacific/Midway"
+  },
+  {
+    "label": "American Samoa",
+    "value": "Pacific/Pago_Pago"
+  },
+  {
+    "label": "Hawaii",
+    "value": "Pacific/Honolulu"
+  },
+  {
+    "label": "Aleutian Islands",
+    "value": "America/Adak"
+  },
+  {
+    "label": "Marquesas Islands",
+    "value": "Pacific/Marquesas"
+  },
+  {
+    "label": "Alaska",
+    "value": "America/Anchorage"
+  },
+  {
+    "label": "Gambier Islands",
+    "value": "Pacific/Gambier"
+  },
+  {
+    "label": "Baja California",
+    "value": "America/Tijuana"
+  },
+  {
+    "label": "Arizona",
+    "value": "America/Phoenix"
+  },
+  {
+    "label": "Chihuahua, Mazatlan",
+    "value": "America/Chihuahua"
+  },
+  {
+    "label": "Saskatchewan",
+    "value": "America/Regina"
+  },
+  {
+    "label": "Tegucigalpa, Honduras",
+    "value": "America/Tegucigalpa"
+  },
+  {
+    "label": "Costa Rica",
+    "value": "America/Costa_Rica"
+  },
+  {
+    "label": "Lima",
+    "value": "America/Lima"
+  },
+  {
+    "label": "Bogota",
+    "value": "America/Bogota"
+  },
+  {
+    "label": "Quito",
+    "value": "America/Guayaquil"
+  },
+  {
+    "label": "Chetumal",
+    "value": "America/Cancun"
+  },
+  {
+    "label": "Caracas (Old Venezuela Time)",
+    "value": "America/Caracas"
+  },
+  {
+    "label": "Atlantic Time (Canada)",
+    "value": "America/Halifax"
+  },
+  {
+    "label": "Caracas",
+    "value": "America/Caracas"
+  },
+  {
+    "label": "Santiago",
+    "value": "America/Santiago"
+  },
+  {
+    "label": "La Paz",
+    "value": "America/La_Paz"
+  },
+  {
+    "label": "Manaus",
+    "value": "America/Manaus"
+  },
+  {
+    "label": "Georgetown",
+    "value": "America/Guyana"
+  },
+  {
+    "label": "Bermuda",
+    "value": "Atlantic/Bermuda"
+  },
+  {
+    "label": "Buenos Aires",
+    "value": "America/Argentina/Buenos_Aires"
+  },
+  {
+    "label": "Brasilia",
+    "value": "America/Sao_Paulo"
+  },
+  {
+    "label": "Greenland",
+    "value": "America/Godthab"
+  },
+  {
+    "label": "Montevideo",
+    "value": "America/Montevideo"
+  },
+  {
+    "label": "Falkland Islands",
+    "value": "Atlantic/Stanley"
+  },
+  {
+    "label": "Azores",
+    "value": "Atlantic/Azores"
+  },
+  {
+    "label": "Cape Verde Islands",
+    "value": "Atlantic/Cape_Verde"
+  },
+  {
+    "label": "Dublin",
+    "value": "Europe/Dublin"
+  },
+  {
+    "label": "Reykjavik",
+    "value": "Atlantic/Reykjavik"
+  },
+  {
+    "label": "Lisbon",
+    "value": "Europe/Lisbon"
+  },
+  {
+    "label": "Monrovia",
+    "value": "Africa/Monrovia"
+  },
+  {
+    "label": "Casablanca",
+    "value": "Africa/Casablanca"
+  },
+  {
+    "label": "West Central Africa",
+    "value": "Africa/Lagos"
+  },
+  {
+    "label": "Algiers",
+    "value": "Africa/Algiers"
+  },
+  {
+    "label": "Lagos",
+    "value": "Africa/Lagos"
+  },
+  {
+    "label": "Tunis",
+    "value": "Africa/Tunis"
+  },
+  {
+    "label": "Athens",
+    "value": "Europe/Athens"
+  },
+  {
+    "label": "Jerusalem",
+    "value": "Asia/Jerusalem"
+  },
+  {
+    "label": "Johannesburg",
+    "value": "Africa/Johannesburg"
+  },
+  {
+    "label": "Harare, Pretoria",
+    "value": "Africa/Harare"
+  },
+  {
+    "label": "Moscow Time",
+    "value": "Europe/Moscow"
+  },
+  {
+    "label": "Baghdad",
+    "value": "Asia/Baghdad"
+  },
+  {
+    "label": "Nairobi",
+    "value": "Africa/Nairobi"
+  },
+  {
+    "label": "Kuwait, Riyadh",
+    "value": "Asia/Riyadh"
+  },
+  {
+    "label": "Tehran",
+    "value": "Asia/Tehran"
+  },
+  {
+    "label": "Abu Dhabi",
+    "value": "Asia/Dubai"
+  },
+  {
+    "label": "Baku",
+    "value": "Asia/Baku"
+  },
+  {
+    "label": "Yerevan",
+    "value": "Asia/Yerevan"
+  },
+  {
+    "label": "Astrakhan",
+    "value": "Europe/Astrakhan"
+  },
+  {
+    "label": "Tbilisi",
+    "value": "Asia/Tbilisi"
+  },
+  {
+    "label": "Mauritius",
+    "value": "Indian/Mauritius"
+  },
+  {
+    "label": "Kabul",
+    "value": "Asia/Kabul"
+  },
+  {
+    "label": "Islamabad",
+    "value": "Asia/Karachi"
+  },
+  {
+    "label": "Karachi",
+    "value": "Asia/Karachi"
+  },
+  {
+    "label": "Tashkent",
+    "value": "Asia/Tashkent"
+  },
+  {
+    "label": "Yekaterinburg",
+    "value": "Asia/Yekaterinburg"
+  },
+  {
+    "label": "Maldives",
+    "value": "Indian/Maldives"
+  },
+  {
+    "label": "Chagos",
+    "value": "Indian/Chagos"
+  },
+  {
+    "label": "Chennai",
+    "value": "Asia/Kolkata"
+  },
+  {
+    "label": "Kolkata",
+    "value": "Asia/Kolkata"
+  },
+  {
+    "label": "Mumbai",
+    "value": "Asia/Kolkata"
+  },
+  {
+    "label": "New Delhi",
+    "value": "Asia/Kolkata"
+  },
+  {
+    "label": "Sri Jayawardenepura",
+    "value": "Asia/Colombo"
+  },
+  {
+    "label": "Kathmandu",
+    "value": "Asia/Kathmandu"
+  },
+  {
+    "label": "Dhaka",
+    "value": "Asia/Dhaka"
+  },
+  {
+    "label": "Almaty",
+    "value": "Asia/Almaty"
+  },
+  {
+    "label": "Bishkek",
+    "value": "Asia/Bishkek"
+  },
+  {
+    "label": "Thimphu",
+    "value": "Asia/Thimphu"
+  },
+  {
+    "label": "Yangon (Rangoon)",
+    "value": "Asia/Yangon"
+  },
+  {
+    "label": "Cocos Islands",
+    "value": "Indian/Cocos"
+  },
+  {
+    "label": "Bangkok",
+    "value": "Asia/Bangkok"
+  },
+  {
+    "label": "Hanoi",
+    "value": "Asia/Ho_Chi_Minh"
+  },
+  {
+    "label": "Jakarta",
+    "value": "Asia/Jakarta"
+  },
+  {
+    "label": "Novosibirsk",
+    "value": "Asia/Novosibirsk"
+  },
+  {
+    "label": "Krasnoyarsk",
+    "value": "Asia/Krasnoyarsk"
+  },
+  {
+    "label": "Beijing",
+    "value": "Asia/Shanghai"
+  },
+  {
+    "label": "Singapore",
+    "value": "Asia/Singapore"
+  },
+  {
+    "label": "Perth",
+    "value": "Australia/Perth"
+  },
+  {
+    "label": "Hong Kong",
+    "value": "Asia/Hong_Kong"
+  },
+  {
+    "label": "Ulaanbaatar",
+    "value": "Asia/Ulaanbaatar"
+  },
+  {
+    "label": "Palau",
+    "value": "Pacific/Palau"
+  },
+  {
+    "label": "Eucla",
+    "value": "Australia/Eucla"
+  },
+  {
+    "label": "Tokyo",
+    "value": "Asia/Tokyo"
+  },
+  {
+    "label": "Seoul",
+    "value": "Asia/Seoul"
+  },
+  {
+    "label": "Yakutsk",
+    "value": "Asia/Yakutsk"
+  },
+  {
+    "label": "Adelaide",
+    "value": "Australia/Adelaide"
+  },
+  {
+    "label": "Darwin",
+    "value": "Australia/Darwin"
+  },
+  {
+    "label": "Sydney",
+    "value": "Australia/Sydney"
+  },
+  {
+    "label": "Brisbane",
+    "value": "Australia/Brisbane"
+  },
+  {
+    "label": "Guam",
+    "value": "Pacific/Guam"
+  },
+  {
+    "label": "Vladivostok",
+    "value": "Asia/Vladivostok"
+  },
+  {
+    "label": "Tahiti",
+    "value": "Pacific/Tahiti"
+  },
+  {
+    "label": "Lord Howe Island",
+    "value": "Australia/Lord_Howe"
+  },
+  {
+    "label": "Solomon Islands",
+    "value": "Pacific/Guadalcanal"
+  },
+  {
+    "label": "Magadan",
+    "value": "Asia/Magadan"
+  },
+  {
+    "label": "Norfolk Island",
+    "value": "Pacific/Norfolk"
+  },
+  {
+    "label": "Bougainville Island",
+    "value": "Pacific/Bougainville"
+  },
+  {
+    "label": "Chokurdakh",
+    "value": "Asia/Srednekolymsk"
+  },
+  {
+    "label": "Auckland",
+    "value": "Pacific/Auckland"
+  },
+  {
+    "label": "Wellington",
+    "value": "Pacific/Auckland"
+  },
+  {
+    "label": "Fiji Islands",
+    "value": "Pacific/Fiji"
+  },
+  {
+    "label": "Anadyr",
+    "value": "Asia/Anadyr"
+  },
+  {
+    "label": "Chatham Islands",
+    "value": "Pacific/Chatham"
+  },
+  {
+    "label": "Nuku'alofa",
+    "value": "Pacific/Tongatapu"
+  },
+  {
+    "label": "Samoa",
+    "value": "Pacific/Apia"
+  },
+  {
+    "label": "Kiritimati Island",
+    "value": "Pacific/Kiritimati"
+  }
+]
