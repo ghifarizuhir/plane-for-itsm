@@ -146,3 +146,75 @@ pub async fn list_logs(
             .collect(),
     ))
 }
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchWebhook {
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+}
+
+/// Mirrors `plane/app/views/webhook/base.py:WebhookEndpoint` get / patch /
+/// delete on the workspace webhook detail route.
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<common::models::webhook::Webhook> = sqlx::query_as(
+        "SELECT wh.id, wh.url, wh.is_active FROM webhooks wh JOIN workspaces w ON w.id = wh.workspace_id WHERE wh.id = $1 AND w.slug = $2 AND wh.deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(wh) => Ok((
+            StatusCode::OK,
+            Json(json!({"id": wh.id, "url": wh.url, "is_active": wh.is_active})),
+        )),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Webhook not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<PatchWebhook>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if let Some(url) = &body.url {
+        validate_create(&CreateWebhook { url: url.clone(), is_active: body.is_active, project: None, issue: None, cycle: None, module: None, issue_comment: None })
+            .map_err(|e| anyhow::anyhow!(e))?;
+    }
+    let n = sqlx::query(
+        "UPDATE webhooks wh SET url = COALESCE($1, wh.url), is_active = COALESCE($2, wh.is_active), updated_at = now() FROM workspaces w WHERE w.id = wh.workspace_id AND w.slug = $3 AND wh.id = $4 AND wh.deleted_at IS NULL",
+    )
+    .bind(&body.url)
+    .bind(body.is_active)
+    .bind(&slug)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Webhook not found"}))));
+    }
+    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE webhooks wh SET deleted_at = now() FROM workspaces w WHERE w.id = wh.workspace_id AND w.slug = $1 AND wh.id = $2 AND wh.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}

@@ -130,3 +130,68 @@ pub async fn create_favorite(
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchPage {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description_html: Option<String>,
+}
+
+/// Mirrors `plane/app/views/page/base.py:PageViewSet` retrieve /
+/// partial_update / destroy on the page detail route.
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, page_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<common::models::page::Page> = sqlx::query_as(
+        "SELECT id, name FROM pages WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(page_id)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(p) => Ok((StatusCode::OK, Json(json!({"id": p.id, "name": p.name})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Page not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, page_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchPage>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let n = sqlx::query(
+        "UPDATE pages SET name = COALESCE($1, name), description_html = COALESCE($2, description_html), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(&body.name)
+    .bind(&body.description_html)
+    .bind(page_id)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Page not found"}))));
+    }
+    Ok((StatusCode::OK, Json(json!({"id": page_id}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, page_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE pages SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(page_id)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}

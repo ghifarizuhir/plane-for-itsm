@@ -170,8 +170,30 @@ async fn main() {
             get(routes::view::list).post(routes::view::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/views/:pk/",
+            get(routes::view::detail)
+                .patch(routes::view::patch)
+                .delete(routes::view::destroy),
+        )
+        .route(
             "/api/workspaces/:slug/views/",
             get(routes::view::list_global).post(routes::view::create_global),
+        )
+        .route(
+            "/api/workspaces/:slug/views/:pk/",
+            get(routes::view::detail_global),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/members/:pk/",
+            get(routes::member::detail)
+                .patch(routes::member::patch)
+                .delete(routes::member::destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-members/:pk/",
+            get(routes::member::detail)
+                .patch(routes::member::patch)
+                .delete(routes::member::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-views/",
@@ -180,6 +202,12 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/pages/",
             get(routes::page::list).post(routes::page::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/",
+            get(routes::page::detail)
+                .patch(routes::page::patch)
+                .delete(routes::page::destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/pages-summary/",
@@ -204,6 +232,12 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/webhooks/",
             get(routes::webhook::list).post(routes::webhook::create),
+        )
+        .route(
+            "/api/workspaces/:slug/webhooks/:pk/",
+            get(routes::webhook::detail)
+                .patch(routes::webhook::patch)
+                .delete(routes::webhook::destroy),
         )
         .route(
             "/api/workspaces/:slug/webhooks/:pk/regenerate/",

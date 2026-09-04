@@ -208,3 +208,146 @@ pub async fn create_invite(
         Json(json!({"id": row.id, "email": row.email, "role": row.role})),
     ))
 }
+
+/// Mirrors `plane/app/views/project/member.py:partial_update`: a non-admin
+/// cannot change their own project role.
+pub fn guard_patch_self(is_self: bool, is_admin: bool) -> Result<(), String> {
+    if is_self && !is_admin {
+        return Err("You cannot update your own role".to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors `destroy`: self-removal must go through leave-workspace.
+pub fn guard_destroy_self(is_self: bool) -> Result<(), String> {
+    if is_self {
+        return Err("You cannot remove yourself from the workspace. Please use leave workspace".to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors `destroy`: requester role must not be lower than the target's.
+pub fn guard_destroy_role(requester_role: i16, target_role: i16) -> Result<(), String> {
+    if requester_role < target_role {
+        return Err("You cannot remove a user having role higher than you".to_string());
+    }
+    Ok(())
+}
+
+async fn requester_id(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
+    sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
+        .bind(&auth.0)
+        .fetch_optional(&st.pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PatchMember {
+    pub role: i16,
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<common::models::member::ProjectMember> = sqlx::query_as(
+        "SELECT id, member_id, role FROM project_members WHERE id = $1 AND project_id = $2 AND is_active = true",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(m) => Ok((StatusCode::OK, Json(json!({"id": m.id, "role": m.role})))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"})))),
+    }
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchMember>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !ROLES.contains(&body.role) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid role"}))));
+    }
+    let target: Option<common::models::member::ProjectMember> = sqlx::query_as(
+        "SELECT id, member_id, role FROM project_members WHERE id = $1 AND project_id = $2 AND is_active = true",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(target) = target else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
+    };
+    let uid = requester_id(&st, &auth).await;
+    let requester: Option<common::models::member::ProjectMember> = match uid {
+        Some(uid) => sqlx::query_as(
+            "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+        )
+        .bind(project_id)
+        .bind(uid)
+        .fetch_optional(&st.pool)
+        .await?,
+        None => None,
+    };
+    let is_self = requester.as_ref().map(|r| r.id == target.id).unwrap_or(false);
+    // Project-admin stands in for the workspace-admin bypass.
+    let is_admin = requester.as_ref().map(|r| r.role == 20).unwrap_or(false);
+    if let Err(e) = guard_patch_self(is_self, is_admin) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    sqlx::query("UPDATE project_members SET role = $1, updated_at = now() WHERE id = $2")
+        .bind(body.role)
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::OK, Json(json!({"id": pk, "role": body.role}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let target: Option<common::models::member::ProjectMember> = sqlx::query_as(
+        "SELECT id, member_id, role FROM project_members WHERE id = $1 AND project_id = $2 AND is_active = true",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(target) = target else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
+    };
+    let uid = requester_id(&st, &auth).await;
+    let requester: Option<common::models::member::ProjectMember> = match uid {
+        Some(uid) => sqlx::query_as(
+            "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+        )
+        .bind(project_id)
+        .bind(uid)
+        .fetch_optional(&st.pool)
+        .await?,
+        None => None,
+    };
+    let is_self = requester.as_ref().map(|r| r.id == target.id).unwrap_or(false);
+    if let Err(e) = guard_destroy_self(is_self) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    if let Some(r) = &requester {
+        if let Err(e) = guard_destroy_role(r.role, target.role) {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+        }
+    }
+    sqlx::query("UPDATE project_members SET is_active = false, updated_at = now() WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}

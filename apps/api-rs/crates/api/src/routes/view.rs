@@ -48,6 +48,15 @@ pub fn validate_create(body: &CreateView) -> Result<(), String> {
     Ok(())
 }
 
+/// Mirrors `plane/app/views/view/base.py:retrieve`: a project guest sees a
+/// view only when guests may view all features or they own it.
+pub fn guard_guest_access(is_guest: bool, guest_view_all: bool, is_owner: bool) -> Result<(), String> {
+    if is_guest && !guest_view_all && !is_owner {
+        return Err("You are not allowed to view this issue".to_string());
+    }
+    Ok(())
+}
+
 pub fn validate_favorite_create(body: &CreateFavorite) -> Result<(), String> {
     if body.view.is_none() {
         return Err("view is required".to_string());
@@ -203,4 +212,131 @@ pub async fn create_favorite(
     .fetch_one(&st.pool)
     .await?;
     Ok((StatusCode::CREATED, Json(json!({"id": row.id, "view": row.entity_identifier}))))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchView {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub access: Option<i16>,
+}
+
+async fn view_detail_row(
+    st: &AppState,
+    auth: &AuthUser,
+    slug: &str,
+    project_id: Option<uuid::Uuid>,
+    pk: uuid::Uuid,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<(uuid::Uuid, String, Option<uuid::Uuid>)> = if let Some(pid) = project_id {
+        sqlx::query_as(
+            "SELECT v.id, v.name, v.owned_by_id FROM views v WHERE v.id = $1 AND v.project_id = $2 AND v.deleted_at IS NULL",
+        )
+        .bind(pk)
+        .bind(pid)
+        .fetch_optional(&st.pool)
+        .await?
+    } else {
+        sqlx::query_as(
+            "SELECT v.id, v.name, v.owned_by_id FROM views v JOIN workspaces w ON w.id = v.workspace_id WHERE v.id = $1 AND w.slug = $2 AND v.deleted_at IS NULL",
+        )
+        .bind(pk)
+        .bind(slug)
+        .fetch_optional(&st.pool)
+        .await?
+    };
+    let Some((id, name, owned_by)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+    };
+    // Guest gate mirrors `IssueViewViewSet.retrieve`.
+    let uid: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
+        .bind(&auth.0)
+        .fetch_optional(&st.pool)
+        .await?;
+    if let (Some(uid), Some(pid)) = (uid, project_id) {
+        let role: Option<i16> = sqlx::query_scalar(
+            "SELECT role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+        )
+        .bind(pid)
+        .bind(uid)
+        .fetch_optional(&st.pool)
+        .await?;
+        let gva: Option<bool> =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(pid)
+                .fetch_optional(&st.pool)
+                .await?;
+        if let Err(e) = guard_guest_access(
+            role == Some(5),
+            gva.unwrap_or(false),
+            owned_by == Some(uid),
+        ) {
+            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": e}))));
+        }
+    }
+    Ok((StatusCode::OK, Json(json!({"id": id, "name": name}))))
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    view_detail_row(&st, &auth, &_slug, Some(project_id), pk).await
+}
+
+pub async fn detail_global(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    view_detail_row(&st, &auth, &slug, None, pk).await
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchView>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 255 {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+        }
+    }
+    if let Some(access) = body.access {
+        if access != 0 && access != 1 {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid access"}))));
+        }
+    }
+    let n = sqlx::query(
+        "UPDATE views SET name = COALESCE($1, name), access = COALESCE($2, access), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(&body.name)
+    .bind(body.access)
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+    }
+    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE views SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
