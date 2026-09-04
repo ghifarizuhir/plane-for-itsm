@@ -24,6 +24,7 @@ paths=(
   "/api/workspaces/$WS/projects/$P/pages/"
   "/api/workspaces/$WS/projects/$P/pages-summary/"
   "/api/assets/v2/workspaces/$WS/check/00000000-0000-0000-0000-000000000000/"
+  "/api/workspaces/$WS/webhooks/"
 )
 fail=0
 for path in "${paths[@]}"; do

@@ -5,6 +5,7 @@ pub mod intake;
 pub mod member;
 pub mod page;
 pub mod view;
+pub mod webhook;
 pub mod issue;
 pub mod label;
 pub mod module;

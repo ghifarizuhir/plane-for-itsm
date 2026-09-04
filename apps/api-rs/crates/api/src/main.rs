@@ -127,6 +127,15 @@ async fn main() {
             "/api/assets/v2/workspaces/:slug/:asset_id/",
             axum::routing::patch(routes::asset::mark_uploaded).delete(routes::asset::soft_delete),
         )
+        .route(
+            "/api/workspaces/:slug/webhooks/",
+            get(routes::webhook::list).post(routes::webhook::create),
+        )
+        .route(
+            "/api/workspaces/:slug/webhooks/:pk/regenerate/",
+            post(routes::webhook::regenerate),
+        )
+        .route("/api/workspaces/:slug/webhook-logs/:webhook_id/", get(routes::webhook::list_logs))
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
