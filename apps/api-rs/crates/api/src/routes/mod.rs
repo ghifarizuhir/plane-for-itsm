@@ -2,6 +2,7 @@ pub mod cycle;
 pub mod estimate;
 pub mod intake;
 pub mod member;
+pub mod page;
 pub mod view;
 pub mod health;
 pub mod issue;
