@@ -1,6 +1,7 @@
 pub mod cycle;
 pub mod health;
 pub mod issue;
+pub mod label;
 pub mod module;
 pub mod project;
 pub mod state;
