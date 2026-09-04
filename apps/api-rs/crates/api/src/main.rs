@@ -5,7 +5,9 @@ mod middleware;
 mod routes;
 mod state;
 
-use axum::{routing::{get, patch, post}, Router};
+use axum::{middleware as axum_middleware, routing::{get, patch, post}, Router};
+
+use crate::middleware::rate_limit::{rate_limit_middleware, RateLimiter};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -404,6 +406,16 @@ async fn main() {
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
+
+    // Process-level burst backstop. Mirrors DRF throttle intent
+    // (`plane/settings/common.py`: anon 30/min, API-key 60/min) with
+    // immediate 429 (unlike tower's delay-based limiter) — true per-key
+    // accounting stays a follow-up (Redis-backed); this bucket is shared
+    // process-wide.
+    let app = app.route_layer(axum_middleware::from_fn_with_state(
+        RateLimiter::new(600, std::time::Duration::from_secs(60)),
+        rate_limit_middleware,
+    ));
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port))
         .await
