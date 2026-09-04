@@ -34,8 +34,13 @@ services:
       - api
       - web
 
-  api:
-    container_name: api
+  # Django fallback for un-ported boundaries (asset S3 upload/download,
+  # Unsplash/GPT external, analytic export, notification sending, OAuth).
+  # Opt-in only: docker compose --profile legacy up -d api-legacy
+  # (internal http://api-legacy:8000; async publish paths need a broker).
+  api-legacy:
+    container_name: api-legacy
+    profiles: ["legacy"]
     build:
       context: ./apps/api
       dockerfile: Dockerfile.api
@@ -49,8 +54,9 @@ services:
       - plane-db
       - plane-redis
 
-  rust-api:
-    container_name: rust-api
+  # Rust cutover: primary api on 8000 (proxy upstreams api:8000 unchanged).
+  api:
+    container_name: api
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -61,49 +67,19 @@ services:
     env_file:
       - ./apps/api/.env
     environment:
-      PORT: 8001
+      PORT: 8000
       DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
       REDIS_URL: redis://plane-redis:6379
     depends_on:
       - plane-db
       - plane-redis
     ports:
-      - "8001:8001"
+      - "8000:8000"
 
+  # Django celery worker/beat removed (superseded by Rust worker on the
+  # plane:jobs Redis Stream; plane-mq removed below).
   worker:
     container_name: bgworker
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile.api
-      args:
-        DOCKER_BUILDKIT: 1
-    restart: always
-    command: ./bin/docker-entrypoint-worker.sh
-    env_file:
-      - ./apps/api/.env
-    depends_on:
-      - api
-      - plane-db
-      - plane-redis
-
-  beat-worker:
-    container_name: beatworker
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile.api
-      args:
-        DOCKER_BUILDKIT: 1
-    restart: always
-    command: ./bin/docker-entrypoint-beat.sh
-    env_file:
-      - ./apps/api/.env
-    depends_on:
-      - api
-      - plane-db
-      - plane-redis
-
-  rust-worker:
-    container_name: rust-worker
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -121,8 +97,8 @@ services:
       - plane-db
       - plane-redis
 
-  rust-beat:
-    container_name: rust-beat
+  beat-worker:
+    container_name: beatworker
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -186,19 +162,8 @@ services:
     volumes:
       - redisdata:/data
 
-  plane-mq:
-    container_name: plane-mq
-    image: rabbitmq:3.13.6-management-alpine
-    restart: always
-    env_file:
-      - .env
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-
+  # plane-mq (RabbitMQ) removed: Rust worker/beat use the plane:jobs
+  # Redis Stream. api-legacy async publish paths need a broker if re-enabled.
   plane-minio:
     container_name: plane-minio
     image: minio/minio
@@ -233,4 +198,3 @@ volumes:
   pgdata:
   redisdata:
   uploads:
-  rabbitmq_data:
