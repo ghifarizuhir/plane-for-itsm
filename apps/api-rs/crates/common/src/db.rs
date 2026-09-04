@@ -4,7 +4,7 @@ use crate::config::AppConfig;
 
 pub async fn create_pool(cfg: &AppConfig) -> PgPool {
     PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(5)
         .min_connections(2)
         .acquire_timeout(std::time::Duration::from_secs(5))
         .connect(&cfg.database_url)
