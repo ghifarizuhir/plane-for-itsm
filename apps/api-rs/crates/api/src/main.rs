@@ -5,7 +5,7 @@ mod middleware;
 mod routes;
 mod state;
 
-use axum::{routing::get, Router};
+use axum::{routing::{get, post}, Router};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -48,6 +48,14 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",
             get(routes::label::list).post(routes::label::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/estimates/",
+            get(routes::estimate::list).post(routes::estimate::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/",
+            post(routes::estimate::create_point),
         )
         .with_state(state::AppState { pool, redis })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
