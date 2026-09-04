@@ -753,3 +753,13 @@ git tag rust-cutover-v1
 **2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
 
 **Which approach?**
+
+---
+
+> **SUPERSEDED:** This compact plan has been expanded & split into 4 granular plans for precise migration:
+>
+> - Plan 0 — Foundation: `2026-09-04-rust-0-foundation-plan.md`
+> - Plan 1 — Worker/Beat: `2026-09-04-rust-1-worker-beat-plan.md`
+> - Plan 2 — API Strangler: `2026-09-04-rust-2-api-strangler-plan.md`
+> - Plan 3 — DB Kajian + Cutover: `2026-09-04-rust-3-cutover-plan.md`
+>   Execute in order 0→3. This file kept for reference only.
