@@ -147,6 +147,64 @@ else
   rm -f "$JAR"
 fi
 
+echo "== batch-D =="
+check sub-status-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/subscribe/"
+check sub-add-201 201 -X POST "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/subscribe/"
+check sub-dup-400 400 -X POST "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/subscribe/"
+check sub-del-204 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/subscribe/"
+check subscribers-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/issue-subscribers/"
+check history-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/history/"
+check meta-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/meta/"
+check intake-state-200 200 "$BASE/api/workspaces/$WS/projects/$PID/intake-state/"
+check ws-states-200 200 "$BASE/api/workspaces/$WS/states/"
+check userprops-get-200 200 "$BASE/api/workspaces/$WS/projects/$PID/user-properties/"
+# D5: empty `updates` -> 200 per contract, so the 400 pin uses a missing-`id`
+# entry -> 400 {"error":"The required key does not exist."} (base.py:194-198).
+check dates-400 400 -X POST -d '{"updates":[{}]}' "$BASE/api/workspaces/$WS/projects/$PID/issue-dates/"
+check versions-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/versions/"
+check descver-200 200 "$BASE/api/workspaces/$WS/projects/$PID/work-items/$IID/description-versions/"
+DSID=$(curl -s -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/workspaces/$WS/projects/$PID/states/" | python3 -c "import json,sys; print([s['id'] for s in json.load(sys.stdin) if s['group']=='completed'][0])")
+check arch1-tmp-create 201 -X POST -d "{\"name\":\"Arch1 tmp\",\"state_id\":\"$DSID\"}" "$BASE/api/workspaces/$WS/projects/$PID/issues/"
+AID=$(jid id)
+check arch1-post-200 200 -X POST "$BASE/api/workspaces/$WS/projects/$PID/issues/$AID/archive/"
+check arch1-get-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$AID/archive/"
+check arch1-del-204 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/issues/$AID/archive/"
+check react-add-201 201 -X POST -d '{"reaction":"heart"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/reactions/"
+check react-del-204 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/reactions/heart/"
+check rel-a-create 201 -X POST -d '{"name":"Rel A"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/"
+RA=$(jid id)
+check rel-b-create 201 -X POST -d '{"name":"Rel B"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/"
+RB=$(jid id)
+# work_item.rs::create_relations takes {issues:[uuid], relation_type} (NOT related_issue).
+check relate-201 201 -X POST -d "{\"issues\":[\"$RB\"],\"relation_type\":\"relates_to\"}" "$BASE/api/workspaces/$WS/projects/$PID/issues/$RA/relations/"
+check remrel-204 204 -X POST -d "{\"related_issue\":\"$RB\"}" "$BASE/api/workspaces/$WS/projects/$PID/issues/$RA/remove-relation/"
+check draft-create-201 201 -X POST -d "{\"name\":\"Draft tmp\",\"project_id\":\"$PID\"}" "$BASE/api/workspaces/$WS/draft-issues/"
+DID=$(jid id)
+check draft-get-200 200 "$BASE/api/workspaces/$WS/draft-issues/$DID/"
+check draft-patch-204 204 -X PATCH -d '{"name":"Draft tmp2"}' "$BASE/api/workspaces/$WS/draft-issues/$DID/"
+check draft-del-204 204 -X DELETE "$BASE/api/workspaces/$WS/draft-issues/$DID/"
+check draft-create2-201 201 -X POST -d "{\"name\":\"Draft conv\",\"project_id\":\"$PID\"}" "$BASE/api/workspaces/$WS/draft-issues/"
+DID2=$(jid id)
+# draft.rs::create_draft_to_issue requires a `name` (missing -> 400).
+check draft-to-issue-201 201 -X POST -d '{"name":"Draft conv issue"}' "$BASE/api/workspaces/$WS/draft-to-issue/$DID2/"
+check ws-labels-200 200 "$BASE/api/workspaces/$WS/labels/"
+check label-create-201 201 -X POST -d '{"name":"SmokeLbl","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/issue-labels/"
+check label-dup-400 400 -X POST -d '{"name":"SmokeLbl","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/issue-labels/"
+check ws-issues-200 200 "$BASE/api/workspaces/$WS/issues/"
+check v2-issues-200 200 "$BASE/api/workspaces/$WS/projects/$PID/v2/issues/"
+UID=$(curl -s -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/users/me/" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+check user-issues-200 200 "$BASE/api/workspaces/$WS/user-issues/$UID/"
+# intake.rs::create takes {name} (SFX-suffixed: plain "Smoke intake" already
+# exists from == writes == -> 409); create_issue takes {issue:{name}} (no intake_id key).
+check inbox-intake-create 201 -X POST -d "{\"name\":\"Smoke intake $SFX\"}" "$BASE/api/workspaces/$WS/projects/$PID/intakes/"
+INKID=$(jid id)
+check inbox-issue-create 201 -X POST -d '{"issue":{"name":"Smoke inbox issue"}}' "$BASE/api/workspaces/$WS/projects/$PID/intake-issues/"
+INISSUE=$(jid id)
+# intake.rs::InboxIssuePatch takes nested {issue:{name}} (top-level name ignored).
+check inbox-patch-200 200 -X PATCH -d '{"issue":{"name":"Smoke inbox renamed"}}' "$BASE/api/workspaces/$WS/projects/$PID/inbox-issues/$INISSUE/"
+check fallback-404 404 "$BASE/api/workspaces/$WS/no-such-path-here/"
+grep -q 'Page not found' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   fallback-body -> Page not found"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED fallback-body"; echo "FAIL fallback-body: $(head -c 200 /tmp/smoke_body)"; }
+
 echo "== cleanup =="
 docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label = 'smoke2';" 2>&1 | head -n 1
 docker exec plane-db psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
