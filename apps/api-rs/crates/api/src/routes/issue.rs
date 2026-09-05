@@ -2776,6 +2776,22 @@ pub(crate) fn require_issue_ids(ids: &[uuid::Uuid]) -> Result<(), &'static str> 
     }
 }
 
+/// Maps the optional bulk body to ids-or-400. The handlers take
+/// `Option<Json<BulkIssueIds>>` because Axum 0.7.9's `Json` extractor
+/// rejects an ENTIRELY ABSENT body with `JsonRejection` (415 without
+/// Content-Type, generic-400 on empty body, 422 on bad shape) before the
+/// handler runs — while Django's `request.data.get("issue_ids", [])`
+/// treats it as `[]` → 400 `{"error": "Issue IDs are required"}`.
+/// Axum's `Option<Json>` swallows rejections into `None`
+/// (`axum-core/.../extract/mod.rs`, `FromRequest for Option<T>`), so
+/// `None` maps to Django's 400 here, before any DB work; `Some` with empty
+/// ids takes the existing `require_issue_ids` 400 path. (`#[serde(default)]`
+/// on `BulkIssueIds` still covers the explicit `{}` case.)
+pub(crate) fn resolve_bulk_ids(body: Option<Json<BulkIssueIds>>) -> Result<Vec<uuid::Uuid>, Value> {
+    let ids = body.map(|Json(b)| b.issue_ids).unwrap_or_default();
+    require_issue_ids(&ids).map(|()| ids).map_err(|e| json!({"error": e}))
+}
+
 /// Error code for archiving a non-done issue, byte-exact from
 /// `plane/utils/error_codes.py:7` (`"INVALID_ARCHIVE_STATE_GROUP": 4091`).
 pub(crate) const INVALID_ARCHIVE_STATE_GROUP_CODE: i32 = 4091;
@@ -2865,7 +2881,7 @@ pub async fn bulk_delete(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-    Json(body): Json<BulkIssueIds>,
+    body: Option<Json<BulkIssueIds>>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // PROJECT-level ADMIN-only gate (`permissions/base.py:53-78` with
     // `allowed_roles=[ADMIN]`): allowed-role branch needs role 20; the
@@ -2875,19 +2891,17 @@ pub async fn bulk_delete(
     if !project_gate_allows(member_role == Some(20), member_role.is_some(), ws_admin) {
         return Ok(deny());
     }
-    if require_issue_ids(&body.issue_ids).is_err() {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Issue IDs are required"})),
-        ));
-    }
+    let issue_ids = match resolve_bulk_ids(body) {
+        Ok(ids) => ids,
+        Err(err) => return Ok((StatusCode::BAD_REQUEST, Json(err))),
+    };
     let mut tx = st.pool.begin().await?;
     let issue_set = bulk_delete_issue_set_sql();
     // PRE-delete queryset count (`total_issues = len(issues)`, `base.py:782`).
     let total: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM ({issue_set}) AS sub"))
         .bind(project_id)
         .bind(&slug)
-        .bind(&body.issue_ids)
+        .bind(&issue_ids)
         .fetch_one(&mut *tx)
         .await?;
     // `CycleIssue.objects.filter(issue__in=issues).delete()` (`base.py:786`).
@@ -2897,7 +2911,7 @@ pub async fn bulk_delete(
     ))
     .bind(project_id)
     .bind(&slug)
-    .bind(&body.issue_ids)
+    .bind(&issue_ids)
     .execute(&mut *tx)
     .await?;
     // `ModuleIssue.objects.filter(issue__in=issues).delete()` (`base.py:789`).
@@ -2907,7 +2921,7 @@ pub async fn bulk_delete(
     ))
     .bind(project_id)
     .bind(&slug)
-    .bind(&body.issue_ids)
+    .bind(&issue_ids)
     .execute(&mut *tx)
     .await?;
     // `issues.delete()` (`base.py:792`): soft-delete via the default manager.
@@ -2923,7 +2937,7 @@ pub async fn bulk_delete(
     ))
     .bind(project_id)
     .bind(&slug)
-    .bind(&body.issue_ids)
+    .bind(&issue_ids)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -2963,18 +2977,16 @@ pub async fn bulk_archive(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-    Json(body): Json<BulkIssueIds>,
+    body: Option<Json<BulkIssueIds>>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     if !matches!(member_role, Some(20) | Some(15)) {
         return Ok(deny());
     }
-    if require_issue_ids(&body.issue_ids).is_err() {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Issue IDs are required"})),
-        ));
-    }
+    let issue_ids = match resolve_bulk_ids(body) {
+        Ok(ids) => ids,
+        Err(err) => return Ok((StatusCode::BAD_REQUEST, Json(err))),
+    };
     let mut tx = st.pool.begin().await?;
     // `Issue.objects.filter(...).select_related("state")`
     // (`archive.py:315-317`): plain manager = live rows only.
@@ -2986,7 +2998,7 @@ pub async fn bulk_archive(
     )
     .bind(project_id)
     .bind(&slug)
-    .bind(&body.issue_ids)
+    .bind(&issue_ids)
     .fetch_all(&mut *tx)
     .await?;
     for group in &groups {
@@ -3014,7 +3026,7 @@ pub async fn bulk_archive(
     )
     .bind(project_id)
     .bind(&slug)
-    .bind(&body.issue_ids)
+    .bind(&issue_ids)
     .bind(today)
     .execute(&mut *tx)
     .await?;
@@ -3139,6 +3151,33 @@ mod bulk_tests {
         assert!(sub.contains("LEFT JOIN states s ON s.id = i.state_id"), "{sub}");
         assert!(sub.contains("i.id = ANY($3)"), "{sub}");
         assert!(sub.contains(&bulk_delete_scope_sql("i")), "{sub}");
+    }
+
+    #[test]
+    fn resolve_bulk_ids_absent_body_matches_django() {
+        // An entirely absent body reaches the handler as `None` via Axum's
+        // `Option<Json>` (which swallows `JsonRejection` into `None`) and
+        // must map to Django's 400 `{"error": "Issue IDs are required"}`
+        // (`base.py:778-779`, `archive.py:312-313`) — not Axum's 415/400/422
+        // rejection bodies. `{}` (serde default) and explicit empty ids take
+        // the same 400 path; valid ids pass through.
+        assert_eq!(
+            resolve_bulk_ids(None).unwrap_err(),
+            json!({"error": "Issue IDs are required"})
+        );
+        assert_eq!(
+            resolve_bulk_ids(Some(Json(BulkIssueIds::default()))).unwrap_err(),
+            json!({"error": "Issue IDs are required"})
+        );
+        assert_eq!(
+            resolve_bulk_ids(Some(Json(BulkIssueIds { issue_ids: vec![] }))).unwrap_err(),
+            json!({"error": "Issue IDs are required"})
+        );
+        let id = uuid::Uuid::nil();
+        assert_eq!(
+            resolve_bulk_ids(Some(Json(BulkIssueIds { issue_ids: vec![id] }))).unwrap(),
+            vec![id]
+        );
     }
 
     #[test]
