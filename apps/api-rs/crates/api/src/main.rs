@@ -287,6 +287,44 @@ async fn main() {
                 .post(routes::issue_archive_one::archive)
                 .delete(routes::issue_archive_one::unarchive),
         )
+        // Parity with `IssueReactionViewSet`
+        // (`views/issue/reaction.py:25-85`, `urls/issue.py:191-201`): GET 200
+        // serializer list via `get_queryset` (no custom `list` — scope
+        // ws+project+issue + active member + archived-null, created_at DESC)
+        // + POST **201** (`IssueReactionSerializer`, `serializers/issue.py:
+        // 649-655`, `__all__`+`actor_detail`) + DELETE **204** scoped
+        // `(slug,project,issue,reaction,actor=user)`. Dup POST → NO explicit
+        // catch → 400 `{"error":"The payload is not valid"}` via the base
+        // handler. `:reaction_code` is `str` (`urls/issue.py:198`). Gate
+        // ADMIN/MEMBER/GUEST (+ ws-admin fallback). Issues path ONLY.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/reactions/",
+            get(routes::reactions::issue_reactions_list)
+                .post(routes::reactions::issue_reaction_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/reactions/:reaction_code/",
+            delete(routes::reactions::issue_reaction_destroy),
+        )
+        // Parity with `CommentReactionViewSet`
+        // (`views/issue/comment.py:163-239`, `urls/issue.py:203-213`): same
+        // GET/POST/DELETE shape over `comment_reactions`, scoped to the
+        // comment instead of the issue (`CommentReactionSerializer`,
+        // `serializers/issue.py:666-685`, 12 keys incl. `display_name`).
+        // Dup POST → explicit catch → 400
+        // `{"error":"Reaction already exists for the user"}`
+        // (`comment.py:206-210` — differs from the issue twin). Gate
+        // ADMIN/MEMBER/GUEST (+ ws-admin fallback). Project-level comments
+        // path ONLY (Django nests under project, not under issue).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/comments/:comment_id/reactions/",
+            get(routes::reactions::comment_reactions_list)
+                .post(routes::reactions::comment_reaction_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/comments/:comment_id/reactions/:reaction_code/",
+            delete(routes::reactions::comment_reaction_destroy),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
