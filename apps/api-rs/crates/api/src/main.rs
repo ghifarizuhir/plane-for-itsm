@@ -611,6 +611,20 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/relations/",
             get(routes::work_item::list_relations).post(routes::work_item::create_relations),
         )
+        // Parity with `IssueRelationViewSet.remove_relation`
+        // (`views/issue/relation.py:271-293`, `urls/issue.py:240-244`):
+        // POST **204**; relation found via the bidirectional OR-filter
+        // (`issue=X&related=Y OR swapped`, `relation.py:276-278`); miss —
+        // or `related_issue` absent (Django has no such branch; it 500s on
+        // `None.delete()`) — → 404 `missing()` (intentional deviation).
+        // Gate `ProjectEntityPermission` (`relation.py:40`, POST =
+        // non-safe → ADMIN/MEMBER + ws-admin fallback). Issues path ONLY;
+        // `DELETE issue-relation/:relId/` is FE-dead (no Django route) and
+        // stays OUT.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/remove-relation/",
+            post(routes::work_item::remove_relation),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/activities/",
             get(routes::work_item::list_activities),

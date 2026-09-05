@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::routes::project::{FORBIDDEN_MSG, deny, missing};
+
+use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 
 /// Issue sub-resources + `work-items/` aliases for
 /// `plane/api/urls/work_item.py`. The `work-items/` paths serve the SAME
@@ -72,6 +75,13 @@ pub struct CreateRelation {
     pub issues: Vec<uuid::Uuid>,
     #[serde(default)]
     pub relation_type: Option<String>,
+}
+
+/// POST body for `remove-relation`: mirrors
+/// `request.data.get("related_issue", None)` (`relation.py:272`).
+#[derive(Debug, Clone, Deserialize)]
+pub struct RemoveRelationBody {
+    pub related_issue: Option<uuid::Uuid>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -412,6 +422,101 @@ pub async fn create_relations(
     Ok((StatusCode::CREATED, Json(json!({"ids": created}))))
 }
 
+/// PROJECT-level role check for `remove-relation`: mirrors
+/// `IssueRelationViewSet.permission_classes = [ProjectEntityPermission]`
+/// (`relation.py:40`) on a non-safe (POST) method → ADMIN/MEMBER only
+/// (`permissions/project.py:112-119`); anything else (incl. GUEST 5 and
+/// non-member) falls to the workspace-ADMIN fallback applied by the caller
+/// via the shared `project_gate_allows` (same shape as D5/D7/D8).
+pub(crate) fn guard_remove_relation(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) | Some(15) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// Mirrors `request.data.get("related_issue", None)` (`relation.py:272`):
+/// Django has NO missing-key branch — a missing key just filters with None
+/// → `.first()` → None → `None.delete()` → AttributeError (500). Rust
+/// returns 404 `missing()` instead (intentional deviation, sane); the
+/// caller maps this `Err` to `missing()`.
+pub(crate) fn resolve_related_issue(body: &RemoveRelationBody) -> Result<uuid::Uuid, ()> {
+    body.related_issue.ok_or(())
+}
+
+/// Shared PROJECT gate for `remove_relation`: the outer
+/// `ProjectEntityPermission` check with the standard workspace-ADMIN
+/// fallback (`permissions/base.py:53-78`) via `project_gate_allows` —
+/// exactly the D8 `reactions_gate` shape.
+async fn remove_relation_gate(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        guard_remove_relation(member_role).is_ok(),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// POST `.../issues/:issue_id/remove-relation/` — parity with Django
+/// `IssueRelationViewSet.remove_relation` (`relation.py:271-293`,
+/// `urls/issue.py:240-244`).
+///
+/// - Gate ADMIN/MEMBER + ws-admin fallback (see `remove_relation_gate`).
+/// - Relation found via the bidirectional OR-filter
+///   (`Q(issue=related, related_issue=issue) | Q(issue=issue,
+///   related_issue=related)`, `relation.py:276-278`), workspace-scoped
+///   (`workspace__slug=slug`, `relation.py:274-275`) over live rows
+///   (soft-delete default managers are implicit in Django), `.first()`
+///   = `ORDER BY created_at DESC LIMIT 1` (`IssueRelation`
+///   `Meta.ordering = ("-created_at",)`, `db/models/issue.py:317`).
+/// - Success is a soft-delete (Django default-manager `.delete()`) →
+///   **204** empty. Miss — or `related_issue` absent (Django has no such
+///   branch; it would 500 on `None.delete()`) — → 404 `missing()`
+///   (intentional deviation, documented).
+///
+/// Deviations: none on the wire; Celery `issue_activity.delay` skipped
+/// (batch-wide precedent). `DELETE issue-relation/:relId/` is NOT
+/// implemented — Django defines no such route (FE-dead; FE
+/// `issue.service.ts:196` must migrate to this endpoint).
+pub async fn remove_relation(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
+    Json(body): Json<RemoveRelationBody>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !remove_relation_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Ok(related) = resolve_related_issue(&body) else {
+        return Ok(missing());
+    };
+    let row: Option<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT r.id FROM issue_relations r JOIN workspaces w ON w.id = r.workspace_id \
+        WHERE w.slug = $1 AND r.deleted_at IS NULL \
+        AND ((r.issue_id = $2 AND r.related_issue_id = $3) OR (r.issue_id = $3 AND r.related_issue_id = $2)) \
+        ORDER BY r.created_at DESC LIMIT 1",
+    )
+    .bind(&slug)
+    .bind(issue_id)
+    .bind(related)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((rel_id,)) = row else {
+        return Ok(missing());
+    };
+    sqlx::query("UPDATE issue_relations SET deleted_at = now() WHERE id = $1")
+        .bind(rel_id)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 // ---- activities (read-only) ----
 
 pub async fn list_activities(
@@ -556,5 +661,70 @@ pub async fn get_by_identifier(
     match row {
         Some((id, name)) => Ok((StatusCode::OK, Json(json!({"id": id, "name": name})))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Work item not found"})))),
+    }
+}
+
+#[cfg(test)]
+mod batch_d_d9_tests {
+    use super::*;
+    use crate::routes::project::{FORBIDDEN_MSG, NOT_FOUND_MSG};
+
+    #[test]
+    fn missing_related_issue_maps_to_404_missing_not_400() {
+        // `remove_relation` reads `request.data.get("related_issue", None)`
+        // (`relation.py:272`) with NO missing-key branch — a missing key
+        // just filters with None → `.first()` → None → `None.delete()` →
+        // AttributeError (500 in Django). Rust returns 404 `missing()`
+        // instead (intentional deviation, sane).
+        assert!(resolve_related_issue(&RemoveRelationBody { related_issue: None }).is_err());
+        let (status, body) = missing();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body.0, json!({"error": NOT_FOUND_MSG}));
+    }
+
+    #[test]
+    fn present_related_issue_resolves() {
+        let id = uuid::Uuid::nil();
+        assert_eq!(
+            resolve_related_issue(&RemoveRelationBody { related_issue: Some(id) }),
+            Ok(id)
+        );
+    }
+
+    #[test]
+    fn guard_remove_relation_is_admin_member_only() {
+        // `IssueRelationViewSet.permission_classes =
+        // [ProjectEntityPermission]` (`relation.py:40`); POST is non-safe
+        // → ADMIN/MEMBER only (`permissions/project.py:112-119`); GUEST
+        // falls to the workspace-ADMIN fallback via `project_gate_allows`.
+        assert!(guard_remove_relation(Some(20)).is_ok());
+        assert!(guard_remove_relation(Some(15)).is_ok());
+        assert!(guard_remove_relation(Some(5)).is_err());
+        assert_eq!(
+            guard_remove_relation(None).unwrap_err(),
+            FORBIDDEN_MSG.to_string()
+        );
+    }
+
+    #[test]
+    fn ws_admin_fallback_covers_non_amg_member() {
+        // Same `project_gate_allows` shape as D5/D7/D8: a member with a
+        // non-AMG role + ws-admin still passes; roleless never passes.
+        use super::super::issue_common::project_gate_allows;
+        assert!(project_gate_allows(
+            guard_remove_relation(Some(10)).is_ok(),
+            true,
+            true
+        ));
+        assert!(!project_gate_allows(
+            guard_remove_relation(Some(5)).is_ok(),
+            true,
+            false
+        ));
+        assert!(!project_gate_allows(
+            guard_remove_relation(None).is_ok(),
+            false,
+            true
+        ));
     }
 }
