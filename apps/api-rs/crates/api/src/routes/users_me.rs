@@ -897,6 +897,70 @@ pub async fn join_projects(
     (StatusCode::CREATED, Json(json!({"message": "Projects joined successfully"})))
 }
 
+/// Pembentuk peta `{project_id: role}` untuk respons project-roles.
+pub fn project_roles_map(pairs: Vec<(String, i32)>) -> Value {
+    let mut m = serde_json::Map::new();
+    for (k, v) in pairs { m.insert(k, json!(v)); }
+    Value::Object(m)
+}
+
+/// GET /api/users/me/workspaces/:slug/project-roles/ — paritas
+/// `UserProjectRolesEndpoint.get`: keanggotaan workspace aktif disyaratkan
+/// dulu, lalu peta `{project_id: role}` proyek ber-membership aktif.
+/// Bukan member ATAU slug tak dikenal → 403 (sengaja tak dibedakan,
+/// sama seperti kegagalan izin).
+pub async fn my_project_roles(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+) -> (StatusCode, Json<Value>) {
+    // Syarat aktif di workspace; slug tak dikenal ikut 403 (tak dibedakan).
+    let member: Option<bool> = match sqlx::query_scalar(
+        "SELECT true FROM workspace_members wm JOIN workspaces w ON w.id = wm.workspace_id \
+         WHERE w.slug = $1 AND wm.member_id = $2 AND wm.is_active = true \
+           AND wm.deleted_at IS NULL AND w.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "project-roles: membership lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    if member != Some(true) {
+        return (StatusCode::FORBIDDEN, Json(json!({"error": "forbidden"})));
+    }
+    // Hanya proyek dengan membership proyek aktif + membership workspace aktif.
+    let pairs: Vec<(uuid::Uuid, i16)> = match sqlx::query_as(
+        "SELECT pm.project_id, pm.role FROM project_members pm \
+         JOIN workspaces w ON w.id = pm.workspace_id \
+         WHERE w.slug = $1 AND pm.member_id = $2 AND pm.is_active = true \
+           AND pm.deleted_at IS NULL AND w.deleted_at IS NULL \
+           AND EXISTS(SELECT 1 FROM workspace_members wm2 WHERE wm2.workspace_id = w.id \
+             AND wm2.member_id = $2 AND wm2.is_active = true AND wm2.deleted_at IS NULL)",
+    )
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_all(&st.pool)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "project-roles: lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    let mapped: Vec<(String, i32)> = pairs
+        .into_iter()
+        .map(|(pid, role)| (pid.to_string(), i32::from(role)))
+        .collect();
+    (StatusCode::OK, Json(project_roles_map(mapped)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -942,5 +1006,11 @@ mod tests {
         assert!(may_join_project(2, 15));
         assert!(may_join_project(0, 20));
         assert!(!may_join_project(0, 15));
+    }
+
+    #[test]
+    fn roles_map_shape() {
+        let v = project_roles_map(vec![("pid".into(), 15)]);
+        assert_eq!(v["pid"], 15);
     }
 }

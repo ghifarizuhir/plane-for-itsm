@@ -399,6 +399,10 @@ async fn main() {
             get(routes::users_me::my_project_invitations).post(routes::users_me::join_projects),
         )
         .route(
+            "/api/users/me/workspaces/:slug/project-roles/",
+            get(routes::users_me::my_project_roles),
+        )
+        .route(
             "/api/users/me/profile/",
             get(routes::user::profile).patch(routes::user::patch_profile),
         )
