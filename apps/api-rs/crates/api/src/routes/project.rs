@@ -843,19 +843,20 @@ pub struct FavProjectBody {
     pub project: uuid::Uuid,
 }
 
-/// Pure Postgres unique-violation probe. The partial unique constraint
-/// (`entity_type,entity_identifier,user WHERE deleted_at IS NULL`,
-/// `plane/db/models/favorite.py:35-40`) surfaces via sqlx as code `23505`;
-/// callers map it to 400 `{"error": "The payload is not valid"}` like Django
-/// (`views/base.py:80-84`).
-pub(crate) fn is_unique_violation(code: &str) -> bool {
-    code == "23505"
+/// Pure Postgres integrity-class probe. Django `handle_exception`
+/// (`views/base.py:80-84`) maps EVERY `IntegrityError` → 400
+/// `{"error": "The payload is not valid"}`: the duplicate-favorite unique
+/// violation (`23505`, `plane/db/models/favorite.py:35-40`) AND the FK
+/// violation on an unknown project id (`23503`) are both SQLSTATE class
+/// `23` (integrity-constraint violation).
+pub(crate) fn is_integrity_error(code: &str) -> bool {
+    code.starts_with("23")
 }
 
-fn is_unique_err(e: &sqlx::Error) -> bool {
+fn is_integrity_err(e: &sqlx::Error) -> bool {
     e.as_database_error()
         .and_then(|d| d.code())
-        .map(|c| is_unique_violation(c.as_ref()))
+        .map(|c| is_integrity_error(c.as_ref()))
         .unwrap_or(false)
 }
 
@@ -887,9 +888,9 @@ pub(crate) fn map_fav_error(rows_deleted: u64) -> StatusCode {
 /// Deviations: `workspace_id` is resolved from the URL slug, while Django's
 /// `WorkspaceBaseModel.save` (`workspace.py:192-195`) derives it from the
 /// linked project's workspace (the slug kwarg is unused in `create`); the
-/// two agree whenever slug matches the project's workspace. FK violations
-/// (unknown project id) surface as 500 via `?`, whereas Django maps every
-/// `IntegrityError` to the same 400.
+/// two agree whenever slug matches the project's workspace. Integrity-class
+/// DB errors (`23505` unique, `23503` FK on unknown project id) → 400 like
+/// Django's blanket `IntegrityError` mapping; other DB errors → 500 via `?`.
 pub async fn fav_add(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -911,7 +912,7 @@ pub async fn fav_add(
             }
             Ok((StatusCode::NO_CONTENT, Json(json!(null))))
         }
-        Err(e) if is_unique_err(&e) => Ok((
+        Err(e) if is_integrity_err(&e) => Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": INVALID_PAYLOAD_MSG})),
         )),
@@ -1137,12 +1138,14 @@ mod batch_c_tests {
     }
 
     #[test]
-    fn unique_violation_detects_postgres_23505() {
-        // Django `IntegrityError` → `views/base.py:80-84`
-        // `{"error": "The payload is not valid"}`; sqlx surfaces Postgres
-        // unique-violation as code `23505`.
-        assert!(is_unique_violation("23505"));
-        assert!(!is_unique_violation("23503"));
-        assert!(!is_unique_violation(""));
+    fn integrity_error_covers_unique_and_fk() {
+        // Django `handle_exception` (`views/base.py:80-84`) maps EVERY
+        // `IntegrityError` → 400 `{"error": "The payload is not valid"}`:
+        // both `23505` unique (duplicate favorite, `favorite.py:35-40`)
+        // and `23503` FK (unknown project id) are integrity class `23`.
+        assert!(is_integrity_error("23505"));
+        assert!(is_integrity_error("23503"));
+        assert!(!is_integrity_error("42P01"));
+        assert!(!is_integrity_error(""));
     }
 }
