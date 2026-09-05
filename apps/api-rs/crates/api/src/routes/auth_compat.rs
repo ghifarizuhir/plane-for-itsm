@@ -14,7 +14,9 @@ use common::auth as authn;
 use super::auth::{email_valid, EmailCheckBody};
 
 pub fn csrf_token_value() -> Value {
-    json!({"csrf_token": ""})
+    // Non-empty agar caller frontend (`if (!csrfToken) throw`) tetap jalan;
+    // server Rust mengabaikan header X-CSRFTOKEN (pengganti: Origin-check).
+    json!({"csrf_token": "rust-csrf-disabled"})
 }
 
 /// GET /auth/get-csrf-token/ — paritas `CSRFTokenEndpoint` (`common.py:28`).
@@ -236,7 +238,7 @@ mod tests {
     #[test]
     fn csrf_token_shape() {
         let v = csrf_token_value();
-        assert_eq!(v, serde_json::json!({"csrf_token": ""}));
+        assert_eq!(v["csrf_token"], "rust-csrf-disabled");
     }
 
     #[test]
