@@ -94,7 +94,11 @@ pub async fn login(
         sqlx::query_as("SELECT id, email, password FROM users WHERE email = $1")
             .bind(&email)
             .fetch_optional(&st.pool)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::warn!(error=%e, "auth login: db lookup failed");
+                common::errors::AppError::internal()
+            })?;
     let Some((uid, db_email, hash)) = row else {
         return Ok((
             StatusCode::UNAUTHORIZED,
@@ -112,7 +116,10 @@ pub async fn login(
     let access = authn::encode_access(&uid, &st.config.jwt_secret, ACCESS_TTL_SECS);
     let (hash_rt, raw_rt) = authn::new_refresh();
     let family = uuid::Uuid::new_v4().to_string();
-    let mut conn = st.redis_client().await.map_err(|e| anyhow::anyhow!(e))?;
+    let mut conn = st.redis_client().await.map_err(|e| {
+        tracing::warn!(error=%e, "auth login: redis unavailable");
+        common::errors::AppError::internal()
+    })?;
     redis::cmd("SET")
         .arg(authn::refresh_key(&hash_rt))
         .arg(format!("{uid}:{family}"))
@@ -120,19 +127,28 @@ pub async fn login(
         .arg(REFRESH_TTL_SECS)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth login: refresh store failed");
+            common::errors::AppError::internal()
+        })?;
     redis::cmd("SADD")
         .arg(family_key(&family))
         .arg(&hash_rt)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth login: family store failed");
+            common::errors::AppError::internal()
+        })?;
     redis::cmd("EXPIRE")
         .arg(family_key(&family))
         .arg(REFRESH_TTL_SECS)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth login: family expire failed");
+            common::errors::AppError::internal()
+        })?;
     let mut headers = HeaderMap::new();
     set_cookies(&mut headers, &access, &raw_rt, st.config.cookie_secure);
     Ok((StatusCode::OK, headers, Json(json!({"id": uid, "email": db_email}))))
@@ -144,6 +160,11 @@ pub async fn login(
 /// dari hash tak dikenal (family hanya tersimpan di value Redis), jadi reuse
 /// ditolak tanpa efek samping; anggota keluarga yang sah tetap berlaku hingga
 /// dipakai (rotasi) atau logout.
+///
+/// TODO(single-flight): dua refresh konkuren dengan rt yang sama berlomba —
+/// pemenang merotasi, yang kalah mendapat 401 (diperlakukan sebagai reuse).
+/// Follow-up: single-flight per-hash (mis. lock Redis SET NX) agar retry
+/// jinak tidak memaksa login ulang.
 pub async fn refresh(
     State(st): State<AppState>,
     headers_in: HeaderMap,
@@ -159,33 +180,53 @@ pub async fn refresh(
         return Ok(unauthorized());
     };
     let old_hash = authn::sha256hex(&raw);
-    let mut conn = st.redis_client().await.map_err(|e| anyhow::anyhow!(e))?;
+    let mut conn = st.redis_client().await.map_err(|e| {
+        tracing::warn!(error=%e, "auth refresh: redis unavailable");
+        common::errors::AppError::internal()
+    })?;
     let val: Option<String> = redis::cmd("GET")
         .arg(authn::refresh_key(&old_hash))
         .query_async(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: lookup failed");
+            common::errors::AppError::internal()
+        })?;
     let Some(val) = val else {
         return Ok(unauthorized());
     };
     let (uid_str, family) = val.split_once(':').unwrap_or(("", ""));
-    let uid: uuid::Uuid = uid_str.parse().map_err(|_| anyhow::anyhow!("bad refresh value"))?;
+    // Nilai Redis korup (bukan UUID) = token tak dikenal → 401, bukan 500.
+    let uid: uuid::Uuid = match uid_str.parse() {
+        Ok(u) => u,
+        Err(_) => return Ok(unauthorized()),
+    };
     // Hapus hash lama + keluarkan dari SET keluarga.
     redis::cmd("DEL")
         .arg(authn::refresh_key(&old_hash))
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: del failed");
+            common::errors::AppError::internal()
+        })?;
     redis::cmd("SREM")
         .arg(family_key(family))
         .arg(&old_hash)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: srem failed");
+            common::errors::AppError::internal()
+        })?;
     let row: Option<(String,)> = sqlx::query_as("SELECT email FROM users WHERE id = $1")
         .bind(uid)
         .fetch_optional(&st.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: db lookup failed");
+            common::errors::AppError::internal()
+        })?;
     let Some((db_email,)) = row else {
         return Ok(unauthorized());
     };
@@ -199,19 +240,28 @@ pub async fn refresh(
         .arg(REFRESH_TTL_SECS)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: store failed");
+            common::errors::AppError::internal()
+        })?;
     redis::cmd("SADD")
         .arg(family_key(family))
         .arg(&hash_rt)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: sadd failed");
+            common::errors::AppError::internal()
+        })?;
     redis::cmd("EXPIRE")
         .arg(family_key(family))
         .arg(REFRESH_TTL_SECS)
         .query_async::<()>(&mut conn)
         .await
-        .map_err(|e| anyhow::anyhow!(e))?;
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: expire failed");
+            common::errors::AppError::internal()
+        })?;
     let mut headers = HeaderMap::new();
     set_cookies(&mut headers, &access, &raw_rt, st.config.cookie_secure);
     Ok((StatusCode::OK, headers, Json(json!({"id": uid, "email": db_email}))))
@@ -225,17 +275,26 @@ pub async fn logout(
 ) -> Result<(StatusCode, HeaderMap, Json<Value>), common::errors::AppError> {
     if let Some(raw) = read_cookie(&headers_in, &["plane_rt", "__Host-plane_rt"]) {
         let hash = authn::sha256hex(&raw);
-        let mut conn = st.redis_client().await.map_err(|e| anyhow::anyhow!(e))?;
+        let mut conn = st.redis_client().await.map_err(|e| {
+            tracing::warn!(error=%e, "auth logout: redis unavailable");
+            common::errors::AppError::internal()
+        })?;
         let val: Option<String> = redis::cmd("GET")
             .arg(authn::refresh_key(&hash))
             .query_async(&mut conn)
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| {
+                tracing::warn!(error=%e, "auth logout: lookup failed");
+                common::errors::AppError::internal()
+            })?;
         redis::cmd("DEL")
             .arg(authn::refresh_key(&hash))
             .query_async::<()>(&mut conn)
             .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .map_err(|e| {
+                tracing::warn!(error=%e, "auth logout: del failed");
+                common::errors::AppError::internal()
+            })?;
         if let Some(val) = val {
             if let Some((_, family)) = val.split_once(':') {
                 redis::cmd("SREM")
@@ -243,7 +302,10 @@ pub async fn logout(
                     .arg(&hash)
                     .query_async::<()>(&mut conn)
                     .await
-                    .map_err(|e| anyhow::anyhow!(e))?;
+                    .map_err(|e| {
+                        tracing::warn!(error=%e, "auth logout: srem failed");
+                        common::errors::AppError::internal()
+                    })?;
             }
         }
     }
@@ -275,9 +337,7 @@ pub async fn logout(
 //   plan menyimpan mentah (risiko open-redirect).
 const OAUTH_STATE_TTL_SECS: i64 = 600;
 
-fn oauth_state_key(state: &str) -> String {
-    format!("auth:oauth:{state}")
-}
+// Kunci state OAuth terpusat di `common::auth::oauth_key` (sumber tunggal).
 
 /// `next_path` aman untuk header Location: hanya path absolut (tak boleh
 /// `//host`, URL absolut, string kosong, atau karakter kontrol).
@@ -683,7 +743,7 @@ pub async fn oauth_start(
         }
     };
     if let Err(e) = redis::cmd("SET")
-        .arg(oauth_state_key(&state))
+        .arg(authn::oauth_key(&state))
         .arg(&value)
         .arg("EX")
         .arg(OAUTH_STATE_TTL_SECS)
@@ -737,7 +797,7 @@ pub async fn oauth_callback(
         }
     };
     let stored: Option<String> = match redis::cmd("GETDEL")
-        .arg(oauth_state_key(state))
+        .arg(authn::oauth_key(state))
         .query_async(&mut conn)
         .await
     {

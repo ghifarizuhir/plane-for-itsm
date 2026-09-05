@@ -92,6 +92,10 @@ pub async fn rate_limit_middleware(
 
 #[derive(Debug, Clone)]
 pub struct IpRateLimiter {
+    // TODO(redis-backed): bucket per-IP ini in-memory per proses — restart
+    // menghilangkan status dan tiap replika menghitung sendiri. Follow-up:
+    // akuntansi terpusat (mis. Redis INCR+EXPIRE per IP) agar limit 5/mnt
+    // konsisten lintas proses/replika.
     buckets: Arc<Mutex<HashMap<IpAddr, Bucket>>>,
     quota: u64,
     per: Duration,
@@ -111,6 +115,11 @@ impl IpRateLimiter {
 }
 
 /// Ekstrak IP: X-Forwarded-For pertama → ConnectInfo → loopback.
+///
+/// DEPLOYMENT: XFF dipercaya tanpa syarat — layanan ini WAJIB duduk di
+/// belakang reverse proxy yang men-strip/men-set XFF dari klien. Bila
+/// terekspos langsung, penyerang dapat memutar IP arbitrer via header XFF
+/// dan lolos dari limit login 5/mnt per IP.
 pub fn client_ip(req: &Request, fallback: IpAddr) -> IpAddr {
     if let Some(xff) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         if let Some(first) = xff.split(',').next() {
