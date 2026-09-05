@@ -176,6 +176,21 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/:subscriber_id/",
             delete(routes::subscribe::subscriber_remove),
         )
+        // Parity with `IssueActivityEndpoint.get`
+        // (`views/issue/activity.py:30-86`, `urls/issue.py:149-153`):
+        // `?activity_type=issue-property` → activities, `=issue-comment`
+        // → comments, else merged ASC (issues path ONLY).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/history/",
+            get(routes::history::history),
+        )
+        // Parity with `IssueMetaEndpoint.get`
+        // (`views/issue/base.py:1186-1198`, `urls/issue.py:277-279`):
+        // 200 `{"sequence_id", "project_identifier"}` (issues path ONLY).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/meta/",
+            get(routes::history::meta),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
