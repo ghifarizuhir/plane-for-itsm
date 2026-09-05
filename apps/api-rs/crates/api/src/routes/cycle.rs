@@ -63,6 +63,9 @@ pub const PERMISSION_DETAIL_MSG: &str = "You do not have permission to perform t
 /// Mirrors the `status` Case (`plane/app/views/cycle/base.py:153-167`):
 /// CURRENT → UPCOMING → COMPLETED → DRAFT (both null) → default DRAFT.
 /// Order matters: the first matching When wins.
+/// Test-only: production SQL computes `status` inline (LIST/ARCHIVED
+/// fragments); this is the unit-testable decision bit.
+#[cfg(test)]
 pub fn cycle_status(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
@@ -87,6 +90,9 @@ pub fn cycle_status(
 
 /// Mirrors the overlap filter (`plane/app/views/cycle/base.py:542-546`):
 /// `(start<=s & end>=s) | (start<=e & end>=e) | (start>=s & end<=e)`.
+/// Test-only: production runs this filter in SQL (`date_check`); this is
+/// the unit-testable decision bit.
+#[cfg(test)]
 pub fn cycles_overlap(
     a_start: DateTime<Utc>,
     a_end: DateTime<Utc>,
@@ -115,6 +121,8 @@ pub fn date_check_result(overlap: bool) -> (StatusCode, Value) {
 /// a start-date whose local date IS today-in-project-tz stores `now()`
 /// instead of `00:00:01` local→UTC. The SQL helper `convert_to_utc` below
 /// implements the same rule; this fn is the testable decision bit.
+/// Test-only: production path is `convert_to_utc` (SQL).
+#[cfg(test)]
 pub fn convert_start_is_today(date_part: &str, today_part: &str) -> bool {
     date_part == today_part
 }
@@ -225,6 +233,50 @@ pub fn guard_archive(end: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Result<(
     }
 }
 
+/// Mirrors the date-check presence gate (`plane/app/views/cycle/base.py:526-530`).
+pub fn guard_datecheck_present(has_start: bool, has_end: bool) -> Result<(), String> {
+    if !has_start || !has_end {
+        return Err(DATECHECK_REQUIRED_MSG.to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors the analytics dated-cycle gate (`plane/app/views/cycle/base.py:807-811`).
+pub fn guard_cycle_dated(has_start: bool, has_end: bool) -> Result<(), String> {
+    if !has_start || !has_end {
+        return Err(NO_DATES_MSG.to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors the completed-target transfer gate
+/// (`plane/utils/cycle_transfer_issues.py:61-65`): target end < now → 400
+/// verbatim.
+pub fn guard_transfer_target(end: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Result<(), String> {
+    if end.map(|e| e < now).unwrap_or(false) {
+        return Err(TRANSFER_TARGET_COMPLETED_MSG.to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors the add-to-completed gate (`plane/app/views/cycle/issue.py:232-236`):
+/// cycle end < now → 400 verbatim.
+pub fn guard_cycle_open(end: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Result<(), String> {
+    if end.map(|e| e < now).unwrap_or(false) {
+        return Err(COMPLETED_NO_ADD_MSG.to_string());
+    }
+    Ok(())
+}
+
+/// Mirrors the empty-issues gate (`plane/app/views/cycle/issue.py:227-228`):
+/// no issue ids → 400 verbatim.
+pub fn guard_issues_present(n: usize) -> Result<(), String> {
+    if n == 0 {
+        return Err(ISSUES_REQUIRED_MSG.to_string());
+    }
+    Ok(())
+}
+
 /// Mirrors the completed-cycle PATCH gate (`plane/app/views/cycle/base.py:349-357`):
 /// a completed cycle may ONLY be patched when the body contains `sort_order`
 /// (any other key — or none — → 400). Presence of the key is the whole rule.
@@ -243,6 +295,12 @@ pub fn format_archived_at(now: DateTime<Utc>) -> String {
 /// `plane/utils/analytics_plot.py:236-264`: per-day pending =
 /// total − completed-cumulative; future dates → null. `total` is the issue
 /// count (or estimate-point sum); `done` maps day → completed that day.
+///
+/// Django iterates the full date range with no cap; this clamps ranges over
+/// 732 days (2 years) to `start + 732d` to bound response size (a cycle
+/// spanning centuries would otherwise emit huge JSON — DoS guard).
+/// Day stepping uses `let-else break` so a `NaiveDate` overflow can never
+/// spin forever (the old `unwrap_or(day)` retried the same day forever).
 pub fn burndown_chart(
     start: chrono::NaiveDate,
     end: chrono::NaiveDate,
@@ -251,6 +309,16 @@ pub fn burndown_chart(
     done: &std::collections::BTreeMap<chrono::NaiveDate, f64>,
     round_issues: bool,
 ) -> Value {
+    const MAX_DAYS: i64 = 732; // 2 years, inclusive bound on emitted days
+    let mut end = end;
+    if (end - start).num_days() > MAX_DAYS {
+        // `checked_add_signed` returns None only within ~2yr of
+        // `NaiveDate::MAX`; fall back to the unclamped end there and rely
+        // on the `succ_opt` break below.
+        end = start
+            .checked_add_signed(chrono::Duration::days(MAX_DAYS))
+            .unwrap_or(end);
+    }
     let mut map = serde_json::Map::new();
     let mut day = start;
     while day <= end {
@@ -264,12 +332,18 @@ pub fn burndown_chart(
         } else {
             map.insert(key, json!(pending));
         }
-        day = day.succ_opt().unwrap_or(day);
-        if day.to_string().is_empty() {
-            break;
-        }
+        let Some(n) = day.succ_opt() else { break };
+        day = n;
     }
     Value::Object(map)
+}
+
+/// Tolerantly parses an `estimate_points.value` (varchar) to f64.
+/// Surrounding whitespace is ignored; anything unparseable (NULL, empty,
+/// non-numeric) yields None and is skipped by callers — same rule as the
+/// issues-branch `completion_chart` below.
+pub fn parse_point_value(raw: Option<&str>) -> Option<f64> {
+    raw?.trim().parse::<f64>().ok()
 }
 
 // ============================================================================
@@ -310,29 +384,62 @@ struct CycleListRow {
     status: String,
 }
 
-const LIST_SELECT: &str = "c.id, c.workspace_id, c.project_id, c.name, c.description, \
-    c.start_date, c.end_date, c.owned_by_id, c.view_props, c.sort_order, \
-    c.external_source, c.external_id, c.progress_snapshot, c.logo_props, c.version, \
-    c.created_by_id, \
-    EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'cycle' \
-        AND uf.entity_identifier = c.id AND uf.user_id = $3 AND uf.deleted_at IS NULL) AS is_favorite, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS total_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'completed' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS completed_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'cancelled' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS cancelled_issues, \
-    COALESCE(ARRAY(SELECT DISTINCT ia.assignee_id FROM cycle_issues ci2 \
-        JOIN issue_assignees ia ON ia.issue_id = ci2.issue_id AND ia.deleted_at IS NULL \
-        WHERE ci2.cycle_id = c.id AND ci2.deleted_at IS NULL), '{}') AS assignee_ids, \
-    CASE WHEN c.start_date <= now() AND c.end_date >= now() THEN 'CURRENT' \
-        WHEN c.start_date > now() THEN 'UPCOMING' \
-        WHEN c.end_date < now() THEN 'COMPLETED' \
-        WHEN c.start_date IS NULL AND c.end_date IS NULL THEN 'DRAFT' \
-        ELSE 'DRAFT' END AS status";
+// Shared SELECT fragments: single source for the favorite/count/assignee/
+// status columns used by both the list and archived selects below.
+// (Field order differs per shape, so fragments compose per shape instead
+// of one monolithic string; every column text lives in exactly one const.)
+const FRAG_IS_FAVORITE: &str = "EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'cycle' \
+    AND uf.entity_identifier = c.id AND uf.user_id = $3 AND uf.deleted_at IS NULL) AS is_favorite";
+const FRAG_TOTAL_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS total_issues";
+const FRAG_COMPLETED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND s.\"group\" = 'completed' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS completed_issues";
+const FRAG_CANCELLED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND s.\"group\" = 'cancelled' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS cancelled_issues";
+const FRAG_STARTED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND s.\"group\" = 'started' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS started_issues";
+const FRAG_UNSTARTED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND s.\"group\" = 'unstarted' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS unstarted_issues";
+const FRAG_BACKLOG_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
+    WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+    AND s.\"group\" = 'backlog' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS backlog_issues";
+const FRAG_ASSIGNEE_IDS: &str = "COALESCE(ARRAY(SELECT DISTINCT ia.assignee_id FROM cycle_issues ci2 \
+    JOIN issue_assignees ia ON ia.issue_id = ci2.issue_id AND ia.deleted_at IS NULL \
+    WHERE ci2.cycle_id = c.id AND ci2.deleted_at IS NULL), '{}') AS assignee_ids";
+const FRAG_STATUS: &str = "CASE WHEN c.start_date <= now() AND c.end_date >= now() THEN 'CURRENT' \
+    WHEN c.start_date > now() THEN 'UPCOMING' \
+    WHEN c.end_date < now() THEN 'COMPLETED' \
+    WHEN c.start_date IS NULL AND c.end_date IS NULL THEN 'DRAFT' \
+    ELSE 'DRAFT' END AS status";
+
+/// List-shape column list (field order matches `CycleListRow`).
+fn list_select() -> String {
+    format!(
+        "c.id, c.workspace_id, c.project_id, c.name, c.description, \
+        c.start_date, c.end_date, c.owned_by_id, c.view_props, c.sort_order, \
+        c.external_source, c.external_id, c.progress_snapshot, c.logo_props, c.version, \
+        c.created_by_id, \
+        {FRAG_IS_FAVORITE}, {FRAG_TOTAL_ISSUES}, {FRAG_COMPLETED_ISSUES}, \
+        {FRAG_CANCELLED_ISSUES}, {FRAG_ASSIGNEE_IDS}, {FRAG_STATUS}"
+    )
+}
+
+/// Archived-shape column list (field order matches `ArchivedRow`).
+fn archived_select() -> String {
+    format!(
+        "c.id, c.workspace_id, c.project_id, c.name, c.description, \
+        c.start_date, c.end_date, c.owned_by_id, c.view_props, c.sort_order, \
+        c.external_source, c.external_id, c.progress_snapshot, \
+        {FRAG_IS_FAVORITE}, {FRAG_TOTAL_ISSUES}, {FRAG_CANCELLED_ISSUES}, \
+        {FRAG_COMPLETED_ISSUES}, {FRAG_STARTED_ISSUES}, {FRAG_UNSTARTED_ISSUES}, \
+        {FRAG_BACKLOG_ISSUES}, {FRAG_ASSIGNEE_IDS}, {FRAG_STATUS}, c.archived_at"
+    )
+}
 
 fn opt_uuid(u: &Option<uuid::Uuid>) -> Value {
     u.map(|v| json!(v)).unwrap_or(Value::Null)
@@ -342,32 +449,125 @@ fn opt_str(s: &Option<String>) -> Value {
     s.as_ref().map(|v| json!(v)).unwrap_or(Value::Null)
 }
 
+/// Single builder for every cycle JSON shape. The shapes share all core
+/// keys; the 2–3 differing keys travel as `Option`s (`None` = key omitted):
+/// - `cancelled_issues`: list + archived shapes only (write shape omits it).
+/// - `logo_props`/`version`/`created_by`: list shape only (travel together).
+/// - `started/unstarted/backlog_issues` + `archived_at`: archived shape only.
+/// (`serde_json` maps sort keys, so output bytes are identical to the old
+/// per-shape `json!` literals for the same key set.)
+struct CycleJson<'a> {
+    id: uuid::Uuid,
+    workspace_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    name: &'a str,
+    description: &'a str,
+    start_date: Option<DateTime<Utc>>,
+    end_date: Option<DateTime<Utc>>,
+    owned_by_id: uuid::Uuid,
+    view_props: &'a Value,
+    sort_order: f64,
+    external_source: &'a Option<String>,
+    external_id: &'a Option<String>,
+    progress_snapshot: &'a Value,
+    is_favorite: bool,
+    total_issues: i64,
+    completed_issues: i64,
+    assignee_ids: &'a [uuid::Uuid],
+    status: &'a str,
+    cancelled_issues: Option<i64>,
+    logo_props: Option<&'a Value>,
+    version: Option<i32>,
+    created_by: Option<Option<uuid::Uuid>>,
+    started_issues: Option<i64>,
+    unstarted_issues: Option<i64>,
+    backlog_issues: Option<i64>,
+    archived_at: Option<Option<DateTime<Utc>>>,
+}
+
+fn cycle_json(v: CycleJson<'_>) -> Value {
+    let mut m = serde_json::Map::new();
+    m.insert("id".to_string(), json!(v.id));
+    m.insert("workspace_id".to_string(), json!(v.workspace_id));
+    m.insert("project_id".to_string(), json!(v.project_id));
+    m.insert("name".to_string(), json!(v.name));
+    m.insert("description".to_string(), json!(v.description));
+    m.insert("start_date".to_string(), json!(v.start_date));
+    m.insert("end_date".to_string(), json!(v.end_date));
+    m.insert("owned_by_id".to_string(), json!(v.owned_by_id));
+    m.insert("view_props".to_string(), v.view_props.clone());
+    m.insert("sort_order".to_string(), json!(v.sort_order));
+    m.insert("external_source".to_string(), opt_str(v.external_source));
+    m.insert("external_id".to_string(), opt_str(v.external_id));
+    m.insert(
+        "progress_snapshot".to_string(),
+        v.progress_snapshot.clone(),
+    );
+    m.insert("is_favorite".to_string(), json!(v.is_favorite));
+    m.insert("total_issues".to_string(), json!(v.total_issues));
+    m.insert(
+        "completed_issues".to_string(),
+        json!(v.completed_issues),
+    );
+    m.insert("assignee_ids".to_string(), json!(v.assignee_ids));
+    m.insert("status".to_string(), json!(v.status));
+    if let Some(c) = v.cancelled_issues {
+        m.insert("cancelled_issues".to_string(), json!(c));
+    }
+    if let Some(l) = v.logo_props {
+        m.insert("logo_props".to_string(), l.clone());
+    }
+    if let Some(ver) = v.version {
+        m.insert("version".to_string(), json!(ver));
+    }
+    if let Some(cb) = v.created_by {
+        m.insert("created_by".to_string(), opt_uuid(&cb));
+    }
+    if let Some(s) = v.started_issues {
+        m.insert("started_issues".to_string(), json!(s));
+    }
+    if let Some(u) = v.unstarted_issues {
+        m.insert("unstarted_issues".to_string(), json!(u));
+    }
+    if let Some(b) = v.backlog_issues {
+        m.insert("backlog_issues".to_string(), json!(b));
+    }
+    if let Some(a) = v.archived_at {
+        m.insert("archived_at".to_string(), json!(a));
+    }
+    Value::Object(m)
+}
+
 /// List-shape JSON in the exact `.values()` key order
 /// (`plane/app/views/cycle/base.py:239-265`).
 fn cycle_list_json(r: &CycleListRow) -> Value {
-    json!({
-        "id": r.id,
-        "workspace_id": r.workspace_id,
-        "project_id": r.project_id,
-        "name": r.name,
-        "description": r.description,
-        "start_date": r.start_date,
-        "end_date": r.end_date,
-        "owned_by_id": r.owned_by_id,
-        "view_props": r.view_props,
-        "sort_order": r.sort_order,
-        "external_source": opt_str(&r.external_source),
-        "external_id": opt_str(&r.external_id),
-        "progress_snapshot": r.progress_snapshot,
-        "logo_props": r.logo_props,
-        "is_favorite": r.is_favorite,
-        "total_issues": r.total_issues,
-        "cancelled_issues": r.cancelled_issues,
-        "completed_issues": r.completed_issues,
-        "assignee_ids": r.assignee_ids,
-        "status": r.status,
-        "version": r.version,
-        "created_by": opt_uuid(&r.created_by_id),
+    cycle_json(CycleJson {
+        id: r.id,
+        workspace_id: r.workspace_id,
+        project_id: r.project_id,
+        name: &r.name,
+        description: &r.description,
+        start_date: r.start_date,
+        end_date: r.end_date,
+        owned_by_id: r.owned_by_id,
+        view_props: &r.view_props,
+        sort_order: r.sort_order,
+        external_source: &r.external_source,
+        external_id: &r.external_id,
+        progress_snapshot: &r.progress_snapshot,
+        is_favorite: r.is_favorite,
+        total_issues: r.total_issues,
+        completed_issues: r.completed_issues,
+        assignee_ids: &r.assignee_ids,
+        status: &r.status,
+        cancelled_issues: Some(r.cancelled_issues),
+        logo_props: Some(&r.logo_props),
+        version: Some(r.version),
+        created_by: Some(r.created_by_id),
+        started_issues: None,
+        unstarted_issues: None,
+        backlog_issues: None,
+        archived_at: None,
     })
 }
 
@@ -375,27 +575,33 @@ fn cycle_list_json(r: &CycleListRow) -> Value {
 /// `logo_props`. (`base.py:281-307,362-387` include `logo_props`; the E2
 /// contract pins the slimmer shape, so this is an intentional deviation.)
 fn cycle_write_json(r: &CycleListRow) -> Value {
-    json!({
-        "id": r.id,
-        "workspace_id": r.workspace_id,
-        "project_id": r.project_id,
-        "name": r.name,
-        "description": r.description,
-        "start_date": r.start_date,
-        "end_date": r.end_date,
-        "owned_by_id": r.owned_by_id,
-        "view_props": r.view_props,
-        "sort_order": r.sort_order,
-        "external_source": opt_str(&r.external_source),
-        "external_id": opt_str(&r.external_id),
-        "progress_snapshot": r.progress_snapshot,
-        "is_favorite": r.is_favorite,
-        "total_issues": r.total_issues,
-        "completed_issues": r.completed_issues,
-        "assignee_ids": r.assignee_ids,
-        "status": r.status,
-        "version": r.version,
-        "created_by": opt_uuid(&r.created_by_id),
+    cycle_json(CycleJson {
+        id: r.id,
+        workspace_id: r.workspace_id,
+        project_id: r.project_id,
+        name: &r.name,
+        description: &r.description,
+        start_date: r.start_date,
+        end_date: r.end_date,
+        owned_by_id: r.owned_by_id,
+        view_props: &r.view_props,
+        sort_order: r.sort_order,
+        external_source: &r.external_source,
+        external_id: &r.external_id,
+        progress_snapshot: &r.progress_snapshot,
+        is_favorite: r.is_favorite,
+        total_issues: r.total_issues,
+        completed_issues: r.completed_issues,
+        assignee_ids: &r.assignee_ids,
+        status: &r.status,
+        cancelled_issues: None,
+        logo_props: None,
+        version: Some(r.version),
+        created_by: Some(r.created_by_id),
+        started_issues: None,
+        unstarted_issues: None,
+        backlog_issues: None,
+        archived_at: None,
     })
 }
 
@@ -463,6 +669,17 @@ async fn gate_am(
     ))
 }
 
+/// The `convert_to_utc` statement (`plane/utils/timezone_converter.py:42-94`)
+/// as a standalone helper so unit tests exercise the real SQL rule (same-day
+/// start → `now()`, else `00:00:01` local→UTC; end → `23:59:00` local→UTC)
+/// instead of asserting a string literal.
+fn convert_to_utc_sql() -> &'static str {
+    "SELECT (CASE WHEN $3 THEN \
+        CASE WHEN ($1::date) = ((now() AT TIME ZONE $2)::date) THEN now() \
+        ELSE (($1 || ' 00:00:01')::timestamp AT TIME ZONE $2) END \
+    ELSE (($1 || ' 23:59:00')::timestamp AT TIME ZONE $2) END)"
+}
+
 /// `convert_to_utc` (`plane/utils/timezone_converter.py:42-94`) executed in
 /// Postgres (which owns the IANA tz database — no new Rust deps):
 /// start = `00:00:01` local→UTC except same-local-day → `now()`;
@@ -473,12 +690,7 @@ async fn convert_to_utc(
     project_tz: &str,
     is_start: bool,
 ) -> Result<DateTime<Utc>, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT (CASE WHEN $3 THEN \
-            CASE WHEN ($1::date) = ((now() AT TIME ZONE $2)::date) THEN now() \
-            ELSE (($1 || ' 00:00:01')::timestamp AT TIME ZONE $2) END \
-        ELSE (($1 || ' 23:59:00')::timestamp AT TIME ZONE $2) END)",
-    )
+    sqlx::query_scalar(convert_to_utc_sql())
     .bind(date_part)
     .bind(project_tz)
     .bind(is_start)
@@ -493,8 +705,9 @@ async fn fetch_list_row(
     slug: &str,
     user: uuid::Uuid,
 ) -> Result<Option<CycleListRow>, sqlx::Error> {
+    let select = list_select();
     let sql = format!(
-        "SELECT {LIST_SELECT} FROM cycles c \
+        "SELECT {select} FROM cycles c \
          JOIN workspaces w ON w.id = c.workspace_id \
          WHERE c.id = $1 AND c.project_id = $2 AND w.slug = $4 AND c.deleted_at IS NULL \
          AND c.archived_at IS NULL"
@@ -535,16 +748,17 @@ pub async fn list(
         return Ok(deny());
     }
     let current_only = q.cycle_view.as_deref() == Some("current");
+    let select = list_select();
     let sql = if current_only {
         format!(
-            "SELECT {LIST_SELECT} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
+            "SELECT {select} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
              WHERE c.project_id = $1 AND w.slug = $2 AND c.deleted_at IS NULL \
              AND c.archived_at IS NULL AND c.start_date <= now() AND c.end_date >= now() \
              ORDER BY is_favorite DESC, c.created_at DESC"
         )
     } else {
         format!(
-            "SELECT {LIST_SELECT} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
+            "SELECT {select} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
              WHERE c.project_id = $1 AND w.slug = $2 AND c.deleted_at IS NULL \
              AND c.archived_at IS NULL \
              ORDER BY is_favorite DESC, c.created_at DESC"
@@ -632,7 +846,10 @@ pub async fn create(
         .to_string();
     // Django `Cycle.save` sort_order = min-10000 per project; owned_by +
     // created_by = request user; version 1; timezone = project tz.
-    let cid: (uuid::Uuid,) = sqlx::query_as(
+    // Single-statement write wrapped in a tx so a mid-flight failure rolls
+    // back instead of leaving a half-created row.
+    let mut tx = st.pool.begin().await?;
+    let cid: Option<(uuid::Uuid,)> = sqlx::query_as(
         "INSERT INTO cycles (id, name, description, project_id, workspace_id, owned_by_id, \
          created_by_id, timezone, version, view_props, logo_props, progress_snapshot, \
          sort_order, start_date, end_date, created_at, updated_at) \
@@ -647,9 +864,13 @@ pub async fn create(
     .bind(start_utc)
     .bind(end_utc)
     .bind(pid)
-    .fetch_one(&st.pool)
+    .fetch_optional(&mut *tx)
     .await?;
-    match fetch_list_row(&st.pool, cid.0, pid, &slug, auth.0).await? {
+    tx.commit().await?;
+    let Some((cid,)) = cid else {
+        return Ok(missing());
+    };
+    match fetch_list_row(&st.pool, cid, pid, &slug, auth.0).await? {
         Some(row) => Ok((StatusCode::CREATED, Json(cycle_write_json(&row)))),
         None => Ok(missing()),
     }
@@ -727,7 +948,13 @@ pub async fn patch(
             Json(json!({"error": CYCLE_NOT_FOUND_MSG})),
         ));
     };
-    let completed = cur.end_date.map(|e| e < Utc::now()).unwrap_or(false);
+    // Single DB clock for this request's boundary comparisons (Rust-side
+    // `end < now` on the already-fetched row; a second `now()` call could
+    // straddle a midnight boundary).
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&st.pool)
+        .await?;
+    let completed = cur.end_date.map(|e| e < now).unwrap_or(false);
     let has_sort = patch_has_sort_order(&body);
     // Completed-cycle rule (`base.py:349-357`): without `sort_order` → 400;
     // with it, apply ONLY that field.
@@ -863,9 +1090,12 @@ pub async fn destroy(
     }
     // Soft-delete the cycle; delete favorite rows (soft) and hard-delete
     // recent-visit rows (`base.py:500-517`). Celery side-effects skipped.
+    // All three writes share one tx: any failure drops (rolls back) the tx
+    // and the `?` maps to the same error response as before.
+    let mut tx = st.pool.begin().await?;
     sqlx::query("UPDATE cycles SET deleted_at = now() WHERE id = $1")
         .bind(cid)
-        .execute(&st.pool)
+        .execute(&mut *tx)
         .await?;
     sqlx::query(
         "UPDATE user_favorites SET deleted_at = now() WHERE user_id = $1 \
@@ -875,7 +1105,7 @@ pub async fn destroy(
     .bind(auth.0)
     .bind(cid)
     .bind(pid)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
     sqlx::query(
         "DELETE FROM user_recent_visits WHERE project_id = $1 \
@@ -883,8 +1113,9 @@ pub async fn destroy(
     )
     .bind(pid)
     .bind(cid)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
@@ -1114,8 +1345,8 @@ pub async fn cycle_issues_create(
         })
         .unwrap_or_default();
     // `issue.py:227-228`.
-    if issues.is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": ISSUES_REQUIRED_MSG}))));
+    if let Err(e) = guard_issues_present(issues.len()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     // Django `.get()` crash → sane 404 (documented normalize-crash).
     let cyc: Option<(Option<DateTime<Utc>>, uuid::Uuid)> = sqlx::query_as(
@@ -1130,13 +1361,20 @@ pub async fn cycle_issues_create(
     let Some((end_date, ws_id)) = cyc else {
         return Ok(missing());
     };
+    // Single DB clock for this request's boundary comparison.
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&st.pool)
+        .await?;
     // `issue.py:232-236`.
-    if end_date.map(|e| e < Utc::now()).unwrap_or(false) {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": COMPLETED_NO_ADD_MSG}))));
+    if let Err(e) = guard_cycle_open(end_date, now) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     // Move cross-cycle rows scoped to the same workspace+project
     // (`issue.py:243-249`); bulk-create the rest scoped likewise
-    // (`issue.py:254-261`); silently drop foreign rows.
+    // (`issue.py:254-261`); silently drop foreign rows. Both writes share
+    // one tx: any failure drops (rolls back) the tx and the `?` maps to
+    // the same error response as before.
+    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "UPDATE cycle_issues SET cycle_id = $1 WHERE cycle_id != $1 AND issue_id = ANY($2) \
          AND workspace_id = $3 AND project_id = $4 AND deleted_at IS NULL",
@@ -1145,34 +1383,30 @@ pub async fn cycle_issues_create(
     .bind(&issues)
     .bind(ws_id)
     .bind(pid)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
-    let fresh: Vec<(uuid::Uuid,)> = sqlx::query_as(
-        "SELECT i.id FROM issues i WHERE i.id = ANY($1) AND i.workspace_id = $2 \
-         AND i.project_id = $3 AND i.deleted_at IS NULL \
+    // Single `INSERT ... SELECT ... ON CONFLICT DO NOTHING` for issues with
+    // no live row at all. The arbiter-less `DO NOTHING` covers the partial
+    // unique index `cycle_issue_when_deleted_at_null (cycle_id, issue_id)
+    // WHERE deleted_at IS NULL`, so concurrent inserts stay silent.
+    sqlx::query(
+        "INSERT INTO cycle_issues (id, project_id, workspace_id, created_by_id, \
+         updated_by_id, cycle_id, issue_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, $2, $3, $3, $4, i.id, now(), now() \
+         FROM issues i WHERE i.id = ANY($5) AND i.workspace_id = $2 \
+         AND i.project_id = $1 AND i.deleted_at IS NULL \
          AND NOT EXISTS(SELECT 1 FROM cycle_issues ci WHERE ci.issue_id = i.id \
-            AND ci.deleted_at IS NULL)",
+            AND ci.deleted_at IS NULL) \
+         ON CONFLICT DO NOTHING",
     )
-    .bind(&issues)
-    .bind(ws_id)
     .bind(pid)
-    .fetch_all(&st.pool)
+    .bind(ws_id)
+    .bind(auth.0)
+    .bind(cid)
+    .bind(&issues)
+    .execute(&mut *tx)
     .await?;
-    for (iid,) in fresh {
-        sqlx::query(
-            "INSERT INTO cycle_issues (id, project_id, workspace_id, created_by_id, \
-             updated_by_id, cycle_id, issue_id, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $3, $4, $5, now(), now()) \
-             ON CONFLICT DO NOTHING",
-        )
-        .bind(pid)
-        .bind(ws_id)
-        .bind(auth.0)
-        .bind(cid)
-        .bind(iid)
-        .execute(&st.pool)
-        .await?;
-    }
+    tx.commit().await?;
     Ok((StatusCode::CREATED, Json(json!({"message": "success"}))))
 }
 
@@ -1221,11 +1455,8 @@ pub async fn date_check(
     let raw_start = body.get("start_date").and_then(Value::as_str).unwrap_or("");
     let raw_end = body.get("end_date").and_then(Value::as_str).unwrap_or("");
     // `base.py:526-530`.
-    if raw_start.is_empty() || raw_end.is_empty() {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": DATECHECK_REQUIRED_MSG})),
-        ));
+    if let Err(e) = guard_datecheck_present(!raw_start.is_empty(), !raw_end.is_empty()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let (Some(ds), Some(de)) = (extract_date_part(raw_start), extract_date_part(raw_end)) else {
         return Ok((
@@ -1356,24 +1587,164 @@ async fn project_has_points_estimate(pool: &sqlx::PgPool, pid: uuid::Uuid) -> Re
     .await
 }
 
+/// Row filter for a group-count query. Transfer and progress count the same
+/// five `state.group` buckets but keep their own historical row filters
+/// (transfer excludes archived/draft issues; progress scopes by workspace
+/// slug + project), so the helper takes the scope while sharing the
+/// single-`GROUP BY` shape + fold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GroupScope {
+    Transfer,
+    Progress,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct GroupCounts {
+    total: i64,
+    completed: i64,
+    cancelled: i64,
+    started: i64,
+    unstarted: i64,
+    backlog: i64,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct DistRow {
-    display_name: Option<String>,
-    assignee_id: Option<uuid::Uuid>,
-    avatar_url: Option<String>,
+struct GroupCountRow {
+    total: i64,
+    g: Option<String>,
+    n: i64,
+}
+
+/// Folds `GROUP BY state.group` rows into per-bucket counts (pure, tested).
+/// `total` rides on every row via scalar subquery; rows with a NULL or
+/// unknown group contribute to `total` only (same as the old COUNTs).
+fn fold_group_counts(rows: &[GroupCountRow]) -> GroupCounts {
+    let mut out = GroupCounts::default();
+    if let Some(first) = rows.first() {
+        out.total = first.total;
+    }
+    for r in rows {
+        match r.g.as_deref() {
+            Some("completed") => out.completed = r.n,
+            Some("cancelled") => out.cancelled = r.n,
+            Some("started") => out.started = r.n,
+            Some("unstarted") => out.unstarted = r.n,
+            Some("backlog") => out.backlog = r.n,
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Single `GROUP BY s."group"` query replacing the 5–6 sequential COUNTs
+/// per call at the old transfer/progress `grp` helpers.
+async fn group_counts(
+    pool: &sqlx::PgPool,
+    cid: uuid::Uuid,
+    pid: uuid::Uuid,
+    slug: Option<&str>,
+    scope: GroupScope,
+) -> Result<GroupCounts, sqlx::Error> {
+    let rows: Vec<GroupCountRow> = match scope {
+        GroupScope::Transfer => {
+            sqlx::query_as(
+                "SELECT (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+                  WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+                  AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS total, \
+                 s.\"group\" AS g, COUNT(*) AS n \
+                 FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+                 JOIN states s ON s.id = i.state_id \
+                 WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+                 AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL \
+                 GROUP BY s.\"group\"",
+            )
+            .bind(cid)
+            .fetch_all(pool)
+            .await?
+        }
+        GroupScope::Progress => {
+            sqlx::query_as(
+                "SELECT (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+                  LEFT JOIN states s ON s.id = i.state_id \
+                  JOIN workspaces w ON w.id = ci.workspace_id \
+                  WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+                  AND w.slug = $2 AND ci.project_id = $3) AS total, \
+                 s.\"group\" AS g, COUNT(*) AS n \
+                 FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+                 LEFT JOIN states s ON s.id = i.state_id \
+                 JOIN workspaces w ON w.id = ci.workspace_id \
+                 WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+                 AND w.slug = $2 AND ci.project_id = $3 \
+                 GROUP BY s.\"group\"",
+            )
+            .bind(cid)
+            .bind(slug)
+            .bind(pid)
+            .fetch_all(pool)
+            .await?
+        }
+    };
+    Ok(fold_group_counts(&rows))
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct EntityDistRow {
+    name: Option<String>,
+    color: Option<String>,
+    entity_id: Option<uuid::Uuid>,
     total_issues: i64,
     completed_issues: i64,
     pending_issues: i64,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct LabelDistRow {
-    label_name: Option<String>,
-    color: Option<String>,
-    label_id: Option<uuid::Uuid>,
-    total_issues: i64,
-    completed_issues: i64,
-    pending_issues: i64,
+/// Shared distribution query for the transfer/analytics endpoints: the
+/// completed/total/pending `FILTER` counts are identical; only the
+/// entity columns + joins + grouping differ per caller (`cols` selects
+/// `name, color, entity_id`; `joins` spans `issues i`; `group_order`
+/// holds GROUP BY + ORDER BY). Output key names are parameters too, so
+/// both shapes stay byte-identical to the old per-entity literals.
+#[allow(clippy::too_many_arguments)]
+async fn entity_distribution(
+    pool: &sqlx::PgPool,
+    cid: uuid::Uuid,
+    pid: uuid::Uuid,
+    ws_id: uuid::Uuid,
+    cols: &str,
+    joins: &str,
+    group_order: &str,
+    name_key: &str,
+    color_key: &str,
+    id_key: &str,
+) -> Result<Value, sqlx::Error> {
+    let sql = format!(
+        "SELECT {cols}, \
+         COUNT(*) FILTER (WHERE i.archived_at IS NULL AND i.is_draft = false) AS total_issues, \
+         COUNT(*) FILTER (WHERE i.completed_at IS NOT NULL AND i.archived_at IS NULL \
+            AND i.is_draft = false) AS completed_issues, \
+         COUNT(*) FILTER (WHERE i.completed_at IS NULL AND i.archived_at IS NULL \
+            AND i.is_draft = false) AS pending_issues \
+         {joins} \
+         JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+         WHERE i.project_id = $2 AND i.workspace_id = $3 AND i.deleted_at IS NULL \
+         {group_order}"
+    );
+    let rows: Vec<EntityDistRow> = sqlx::query_as(&sql)
+        .bind(cid)
+        .bind(pid)
+        .bind(ws_id)
+        .fetch_all(pool)
+        .await?;
+    Ok(json!(rows
+        .iter()
+        .map(|r| json!({
+            name_key: r.name,
+            id_key: r.entity_id.map(|u| u.to_string()),
+            color_key: r.color,
+            "total_issues": r.total_issues,
+            "completed_issues": r.completed_issues,
+            "pending_issues": r.pending_issues,
+        }))
+        .collect::<Vec<_>>()))
 }
 
 async fn assignee_distribution(
@@ -1383,35 +1754,20 @@ async fn assignee_distribution(
     ws_id: uuid::Uuid,
 ) -> Result<Value, sqlx::Error> {
     // `cycle_transfer_issues.py:286-347` (issues branch).
-    let rows: Vec<DistRow> = sqlx::query_as(
-        "SELECT u.display_name, u.id AS assignee_id, u.avatar AS avatar_url, \
-         COUNT(*) FILTER (WHERE i.archived_at IS NULL AND i.is_draft = false) AS total_issues, \
-         COUNT(*) FILTER (WHERE i.completed_at IS NOT NULL AND i.archived_at IS NULL \
-            AND i.is_draft = false) AS completed_issues, \
-         COUNT(*) FILTER (WHERE i.completed_at IS NULL AND i.archived_at IS NULL \
-            AND i.is_draft = false) AS pending_issues \
-         FROM issues i JOIN issue_assignees ia ON ia.issue_id = i.id AND ia.deleted_at IS NULL \
-         JOIN users u ON u.id = ia.assignee_id \
-         JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL \
-         WHERE i.project_id = $2 AND i.workspace_id = $3 AND i.deleted_at IS NULL \
-         GROUP BY u.display_name, u.id, u.avatar ORDER BY u.display_name",
+    entity_distribution(
+        pool,
+        cid,
+        pid,
+        ws_id,
+        "u.display_name AS name, u.avatar AS color, u.id AS entity_id",
+        "FROM issues i JOIN issue_assignees ia ON ia.issue_id = i.id AND ia.deleted_at IS NULL \
+         JOIN users u ON u.id = ia.assignee_id",
+        "GROUP BY u.display_name, u.id, u.avatar ORDER BY u.display_name",
+        "display_name",
+        "avatar_url",
+        "assignee_id",
     )
-    .bind(cid)
-    .bind(pid)
-    .bind(ws_id)
-    .fetch_all(pool)
-    .await?;
-    Ok(json!(rows
-        .iter()
-        .map(|r| json!({
-            "display_name": r.display_name,
-            "assignee_id": r.assignee_id.map(|u| u.to_string()),
-            "avatar_url": r.avatar_url,
-            "total_issues": r.total_issues,
-            "completed_issues": r.completed_issues,
-            "pending_issues": r.pending_issues,
-        }))
-        .collect::<Vec<_>>()))
+    .await
 }
 
 async fn label_distribution(
@@ -1421,35 +1777,20 @@ async fn label_distribution(
     ws_id: uuid::Uuid,
 ) -> Result<Value, sqlx::Error> {
     // `cycle_transfer_issues.py:350-396` (issues branch).
-    let rows: Vec<LabelDistRow> = sqlx::query_as(
-        "SELECT l.name AS label_name, l.color, l.id AS label_id, \
-         COUNT(*) FILTER (WHERE i.archived_at IS NULL AND i.is_draft = false) AS total_issues, \
-         COUNT(*) FILTER (WHERE i.completed_at IS NOT NULL AND i.archived_at IS NULL \
-            AND i.is_draft = false) AS completed_issues, \
-         COUNT(*) FILTER (WHERE i.completed_at IS NULL AND i.archived_at IS NULL \
-            AND i.is_draft = false) AS pending_issues \
-         FROM issues i JOIN issue_labels il ON il.issue_id = i.id AND il.deleted_at IS NULL \
-         JOIN labels l ON l.id = il.label_id \
-         JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL \
-         WHERE i.project_id = $2 AND i.workspace_id = $3 AND i.deleted_at IS NULL \
-         GROUP BY l.name, l.color, l.id ORDER BY l.name",
+    entity_distribution(
+        pool,
+        cid,
+        pid,
+        ws_id,
+        "l.name AS name, l.color AS color, l.id AS entity_id",
+        "FROM issues i JOIN issue_labels il ON il.issue_id = i.id AND il.deleted_at IS NULL \
+         JOIN labels l ON l.id = il.label_id",
+        "GROUP BY l.name, l.color, l.id ORDER BY l.name",
+        "label_name",
+        "color",
+        "label_id",
     )
-    .bind(cid)
-    .bind(pid)
-    .bind(ws_id)
-    .fetch_all(pool)
-    .await?;
-    Ok(json!(rows
-        .iter()
-        .map(|r| json!({
-            "label_name": r.label_name,
-            "color": r.color,
-            "label_id": r.label_id.map(|u| u.to_string()),
-            "total_issues": r.total_issues,
-            "completed_issues": r.completed_issues,
-            "pending_issues": r.pending_issues,
-        }))
-        .collect::<Vec<_>>()))
+    .await
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -1513,7 +1854,7 @@ async fn completion_chart(
         .await?;
         total_f = pts
             .iter()
-            .filter_map(|(v,)| v.as_deref()?.trim().parse::<f64>().ok())
+            .filter_map(|(v,)| parse_point_value(v.as_deref()))
             .sum();
         let pdone: Vec<(Option<chrono::NaiveDate>, Option<String>)> = sqlx::query_as(
             "SELECT (i.completed_at AT TIME ZONE 'UTC')::date, ep.value \
@@ -1530,10 +1871,8 @@ async fn completion_chart(
         .await?;
         done.clear();
         for (d, v) in pdone {
-            if let (Some(d), Some(v)) = (d, v) {
-                if let Ok(f) = v.trim().parse::<f64>() {
-                    *done.entry(d).or_insert(0.0) += f;
-                }
+            if let (Some(d), Some(f)) = (d, parse_point_value(v.as_deref())) {
+                *done.entry(d).or_insert(0.0) += f;
             }
         }
     } else {
@@ -1543,6 +1882,9 @@ async fn completion_chart(
             }
         }
     }
+    // Rust-side `today` is intentional here: day-granularity display marker
+    // only (future days → null); the request's DB clock governs the
+    // start/end boundary comparisons in the handlers above.
     let today = Utc::now().date_naive();
     Ok(burndown_chart(
         s.date_naive(),
@@ -1553,6 +1895,17 @@ async fn completion_chart(
         !points,
     ))
 }
+
+/// Source-cycle lookup row: workspace + date range (`transfer`).
+type SrcCycleRow = (uuid::Uuid, Option<DateTime<Utc>>, Option<DateTime<Utc>>);
+
+/// Analytics lookup row: date range + snapshot + workspace (`analytics`).
+type AnalyticsCycleRow = (
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+    Value,
+    uuid::Uuid,
+);
 
 pub async fn transfer(
     State(st): State<AppState>,
@@ -1591,14 +1944,18 @@ pub async fn transfer(
     let Some((target_end,)) = target else {
         return Ok(missing());
     };
+    // Single DB clock for this request's boundary comparison.
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&st.pool)
+        .await?;
     // `cycle_transfer_issues.py:61-65`.
-    if target_end.map(|e| e < Utc::now()).unwrap_or(false) {
+    if let Err(e) = guard_transfer_target(target_end, now) {
         return Ok((
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": TRANSFER_TARGET_COMPLETED_MSG})),
+            Json(json!({"error": e})),
         ));
     }
-    let src: Option<(uuid::Uuid, Option<DateTime<Utc>>, Option<DateTime<Utc>>)> = sqlx::query_as(
+    let src: Option<SrcCycleRow> = sqlx::query_as(
         "SELECT c.workspace_id, c.start_date, c.end_date FROM cycles c \
          JOIN workspaces w ON w.id = c.workspace_id \
          WHERE c.id = $1 AND c.project_id = $2 AND w.slug = $3 AND c.deleted_at IS NULL",
@@ -1616,39 +1973,10 @@ pub async fn transfer(
             Json(json!({"error": TRANSFER_SOURCE_MISSING_MSG})),
         ));
     };
-    // Snapshot counts (`cycle_transfer_issues.py:68-141`).
-    async fn grp(
-        pool: &sqlx::PgPool,
-        cid: uuid::Uuid,
-        g: &str,
-    ) -> Result<i64, sqlx::Error> {
-        let r: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
-             JOIN states s ON s.id = i.state_id \
-             WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
-             AND s.\"group\" = $2 AND i.archived_at IS NULL AND i.is_draft = false \
-             AND i.deleted_at IS NULL",
-        )
-        .bind(cid)
-        .bind(g)
-        .fetch_one(pool)
-        .await?;
-        Ok(r.0)
-    }
-    let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
-         WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
-         AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL",
-    )
-    .bind(cid)
-    .fetch_one(&st.pool)
-    .await?;
+    // Snapshot counts (`cycle_transfer_issues.py:68-141`): one GROUP BY
+    // query instead of 5–6 sequential COUNTs.
+    let counts = group_counts(&st.pool, cid, pid, None, GroupScope::Transfer).await?;
     let snapshot = {
-        let completed = grp(&st.pool, cid, "completed").await?;
-        let cancelled = grp(&st.pool, cid, "cancelled").await?;
-        let started = grp(&st.pool, cid, "started").await?;
-        let unstarted = grp(&st.pool, cid, "unstarted").await?;
-        let backlog = grp(&st.pool, cid, "backlog").await?;
         let assignees = assignee_distribution(&st.pool, cid, pid, ws_id).await?;
         let labels = label_distribution(&st.pool, cid, pid, ws_id).await?;
         let chart = completion_chart(&st.pool, cid, pid, ws_id, src_start, src_end, false).await?;
@@ -1661,12 +1989,12 @@ pub async fn transfer(
             json!({})
         };
         json!({
-            "total_issues": total.0,
-            "completed_issues": completed,
-            "cancelled_issues": cancelled,
-            "started_issues": started,
-            "unstarted_issues": unstarted,
-            "backlog_issues": backlog,
+            "total_issues": counts.total,
+            "completed_issues": counts.completed,
+            "cancelled_issues": counts.cancelled,
+            "started_issues": counts.started,
+            "unstarted_issues": counts.unstarted,
+            "backlog_issues": counts.backlog,
             "distribution": {"labels": labels, "assignees": assignees, "completion_chart": chart},
             "estimate_distribution": estimate_distribution,
         })
@@ -1674,10 +2002,13 @@ pub async fn transfer(
     // NOTE: Django writes the snapshot on the SOURCE cycle
     // (`cycle_transfer_issues.py:408-432`, `pk=cycle_id`) — the E2 brief
     // says "target", but the verified source wins (intentional deviation).
+    // Both writes share one tx: any failure drops (rolls back) the tx and
+    // the `?` maps to the same error response as before.
+    let mut tx = st.pool.begin().await?;
     sqlx::query("UPDATE cycles SET progress_snapshot = $1, updated_at = now() WHERE id = $2")
         .bind(&snapshot)
         .bind(cid)
-        .execute(&st.pool)
+        .execute(&mut *tx)
         .await?;
     // Move only backlog/unstarted/started (`cycle_transfer_issues.py:435-442`).
     sqlx::query(
@@ -1689,8 +2020,9 @@ pub async fn transfer(
     .bind(new_cid)
     .bind(cid)
     .bind(pid)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok((StatusCode::OK, Json(json!({"message": "Success"}))))
 }
 
@@ -1728,64 +2060,35 @@ struct ArchivedRow {
 /// Archived-list shape (`archive.py:274-303`): list keys +
 /// started/unstarted/backlog + archived_at, NO logo_props/version/created_by.
 fn archived_list_json(r: &ArchivedRow) -> Value {
-    json!({
-        "id": r.id,
-        "workspace_id": r.workspace_id,
-        "project_id": r.project_id,
-        "name": r.name,
-        "description": r.description,
-        "start_date": r.start_date,
-        "end_date": r.end_date,
-        "owned_by_id": r.owned_by_id,
-        "view_props": r.view_props,
-        "sort_order": r.sort_order,
-        "external_source": opt_str(&r.external_source),
-        "external_id": opt_str(&r.external_id),
-        "progress_snapshot": r.progress_snapshot,
-        "total_issues": r.total_issues,
-        "is_favorite": r.is_favorite,
-        "cancelled_issues": r.cancelled_issues,
-        "completed_issues": r.completed_issues,
-        "started_issues": r.started_issues,
-        "unstarted_issues": r.unstarted_issues,
-        "backlog_issues": r.backlog_issues,
-        "assignee_ids": r.assignee_ids,
-        "status": r.status,
-        "archived_at": r.archived_at,
+    cycle_json(CycleJson {
+        id: r.id,
+        workspace_id: r.workspace_id,
+        project_id: r.project_id,
+        name: &r.name,
+        description: &r.description,
+        start_date: r.start_date,
+        end_date: r.end_date,
+        owned_by_id: r.owned_by_id,
+        view_props: &r.view_props,
+        sort_order: r.sort_order,
+        external_source: &r.external_source,
+        external_id: &r.external_id,
+        progress_snapshot: &r.progress_snapshot,
+        is_favorite: r.is_favorite,
+        total_issues: r.total_issues,
+        completed_issues: r.completed_issues,
+        assignee_ids: &r.assignee_ids,
+        status: &r.status,
+        cancelled_issues: Some(r.cancelled_issues),
+        logo_props: None,
+        version: None,
+        created_by: None,
+        started_issues: Some(r.started_issues),
+        unstarted_issues: Some(r.unstarted_issues),
+        backlog_issues: Some(r.backlog_issues),
+        archived_at: Some(r.archived_at),
     })
 }
-
-const ARCHIVED_SELECT: &str = "c.id, c.workspace_id, c.project_id, c.name, c.description, \
-    c.start_date, c.end_date, c.owned_by_id, c.view_props, c.sort_order, \
-    c.external_source, c.external_id, c.progress_snapshot, \
-    EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'cycle' \
-        AND uf.entity_identifier = c.id AND uf.user_id = $3 AND uf.deleted_at IS NULL) AS is_favorite, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS total_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'completed' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS completed_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'cancelled' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS cancelled_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'started' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS started_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'unstarted' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS unstarted_issues, \
-    (SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
-        WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
-        AND s.\"group\" = 'backlog' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS backlog_issues, \
-    COALESCE(ARRAY(SELECT DISTINCT ia.assignee_id FROM cycle_issues ci2 \
-        JOIN issue_assignees ia ON ia.issue_id = ci2.issue_id AND ia.deleted_at IS NULL \
-        WHERE ci2.cycle_id = c.id AND ci2.deleted_at IS NULL), '{}') AS assignee_ids, \
-    CASE WHEN c.start_date <= now() AND c.end_date >= now() THEN 'CURRENT' \
-        WHEN c.start_date > now() THEN 'UPCOMING' \
-        WHEN c.end_date < now() THEN 'COMPLETED' \
-        WHEN c.start_date IS NULL AND c.end_date IS NULL THEN 'DRAFT' \
-        ELSE 'DRAFT' END AS status, c.archived_at";
 
 pub async fn archived_list(
     State(st): State<AppState>,
@@ -1799,8 +2102,9 @@ pub async fn archived_list(
         return Ok(deny());
     }
     // `archive.py:271-304`.
+    let select = archived_select();
     let rows: Vec<ArchivedRow> = sqlx::query_as(&format!(
-        "SELECT {ARCHIVED_SELECT} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
+        "SELECT {select} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
          WHERE c.project_id = $1 AND w.slug = $2 AND c.deleted_at IS NULL \
          AND c.archived_at IS NOT NULL \
          ORDER BY is_favorite DESC, c.created_at DESC"
@@ -1827,8 +2131,9 @@ pub async fn archived_detail(
     if !gate_am(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
+    let select = archived_select();
     let row: Option<ArchivedRow> = sqlx::query_as(&format!(
-        "SELECT {ARCHIVED_SELECT} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
+        "SELECT {select} FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
          WHERE c.id = $1 AND c.project_id = $2 AND w.slug = $4 AND c.deleted_at IS NULL \
          AND c.archived_at IS NOT NULL"
     ))
@@ -1842,23 +2147,19 @@ pub async fn archived_detail(
     let Some(row) = row else {
         return Ok(missing());
     };
-    let ws_id: (uuid::Uuid,) =
-        sqlx::query_as("SELECT workspace_id FROM cycles WHERE id = $1")
-            .bind(pk)
-            .fetch_one(&st.pool)
-            .await?;
+    // `ArchivedRow` already carries workspace/dates — reuse them instead of
+    // re-fetching the cycle (removes two extra queries).
+    let ws_id = row.workspace_id;
+    let (cyc_start, cyc_end) = (row.start_date, row.end_date);
     let estimate_type = project_has_points_estimate(&st.pool, pid).await?;
-    let assignees = assignee_distribution(&st.pool, pk, pid, ws_id.0).await?;
-    let labels = label_distribution(&st.pool, pk, pid, ws_id.0).await?;
+    let assignees = assignee_distribution(&st.pool, pk, pid, ws_id).await?;
+    let labels = label_distribution(&st.pool, pk, pid, ws_id).await?;
     // `archive.py:575-582`: issues completion_chart only when dated.
-    let cyc: (Option<DateTime<Utc>>, Option<DateTime<Utc>>) =
-        sqlx::query_as("SELECT start_date, end_date FROM cycles WHERE id = $1")
-            .bind(pk)
-            .fetch_one(&st.pool)
-            .await?;
-    let issues_chart = completion_chart(&st.pool, pk, pid, ws_id.0, cyc.0, cyc.1, false).await?;
+    let issues_chart =
+        completion_chart(&st.pool, pk, pid, ws_id, cyc_start, cyc_end, false).await?;
     let estimate_distribution = if estimate_type {
-        let chart_p = completion_chart(&st.pool, pk, pid, ws_id.0, cyc.0, cyc.1, true).await?;
+        let chart_p =
+            completion_chart(&st.pool, pk, pid, ws_id, cyc_start, cyc_end, true).await?;
         json!({"assignees": [], "labels": [], "completion_chart": chart_p})
     } else {
         json!({})
@@ -1897,18 +2198,25 @@ pub async fn archive(
     let Some((end,)) = cur else {
         return Ok(missing());
     };
+    // Single DB clock for the boundary comparison AND the stored
+    // `archived_at` (one `now()` per request).
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&st.pool)
+        .await?;
     // `archive.py:590-594`.
-    if guard_archive(end, Utc::now()).is_err() {
+    if guard_archive(end, now).is_err() {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": ARCHIVE_ONLY_COMPLETED_MSG})),
         ));
     }
-    let now = Utc::now();
+    // Both writes share one tx: any failure drops (rolls back) the tx and
+    // the `?` maps to the same error response as before.
+    let mut tx = st.pool.begin().await?;
     sqlx::query("UPDATE cycles SET archived_at = $1, updated_at = now() WHERE id = $2")
         .bind(now)
         .bind(cid)
-        .execute(&st.pool)
+        .execute(&mut *tx)
         .await?;
     // `archive.py:598-603`: delete favorites on archive (all users).
     sqlx::query(
@@ -1917,8 +2225,9 @@ pub async fn archive(
     )
     .bind(cid)
     .bind(pid)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok((StatusCode::OK, Json(json!({"archived_at": format_archived_at(now)}))))
 }
 
@@ -1982,7 +2291,7 @@ pub async fn progress(
     };
     // Points-estimate sums (`base.py:664-711`); group sums `or 0`, total may
     // be null. Only `points`-type estimate points count.
-    #[derive(Debug, Clone, sqlx::FromRow)]
+    #[derive(Debug, Clone, Default)]
     struct PtAgg {
         backlog_estimate_point: Option<f64>,
         unstarted_estimate_point: Option<f64>,
@@ -1991,14 +2300,16 @@ pub async fn progress(
         completed_estimate_points: Option<f64>,
         total_estimate_points: Option<f64>,
     }
-    let agg: PtAgg = sqlx::query_as(
-        "SELECT \
-         SUM(CASE WHEN s.\"group\" = 'backlog' THEN ep.value::double precision ELSE 0 END) AS backlog_estimate_point, \
-         SUM(CASE WHEN s.\"group\" = 'unstarted' THEN ep.value::double precision ELSE 0 END) AS unstarted_estimate_point, \
-         SUM(CASE WHEN s.\"group\" = 'started' THEN ep.value::double precision ELSE 0 END) AS started_estimate_point, \
-         SUM(CASE WHEN s.\"group\" = 'cancelled' THEN ep.value::double precision ELSE 0 END) AS cancelled_estimate_point, \
-         SUM(CASE WHEN s.\"group\" = 'completed' THEN ep.value::double precision ELSE 0 END) AS completed_estimate_points, \
-         SUM(ep.value::double precision) AS total_estimate_points \
+    #[derive(Debug, Clone, sqlx::FromRow)]
+    struct PtRow {
+        g: Option<String>,
+        value: Option<String>,
+    }
+    // `ep.value` is varchar: fetch raw and sum tolerantly in Rust (the old
+    // `value::double precision` cast 500'd on any non-numeric row — same
+    // tolerant rule as `completion_chart`).
+    let pt_rows: Vec<PtRow> = sqlx::query_as(
+        "SELECT s.\"group\" AS g, ep.value \
          FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
          LEFT JOIN states s ON s.id = i.state_id \
          JOIN estimate_points ep ON ep.id = i.estimate_point_id \
@@ -2008,16 +2319,46 @@ pub async fn progress(
     )
     .bind(cid)
     .bind(pid)
-    .fetch_one(&st.pool)
-    .await
-    .unwrap_or(PtAgg {
-        backlog_estimate_point: None,
-        unstarted_estimate_point: None,
-        started_estimate_point: None,
-        cancelled_estimate_point: None,
-        completed_estimate_points: None,
-        total_estimate_points: None,
-    });
+    .fetch_all(&st.pool)
+    .await?;
+    // Nullable-when-no-rows semantics preserved: no rows → all None (total
+    // renders null); rows present → group sums default 0, total is Some.
+    let agg: PtAgg = if pt_rows.is_empty() {
+        PtAgg::default()
+    } else {
+        let mut a = PtAgg {
+            backlog_estimate_point: Some(0.0),
+            unstarted_estimate_point: Some(0.0),
+            started_estimate_point: Some(0.0),
+            cancelled_estimate_point: Some(0.0),
+            completed_estimate_points: Some(0.0),
+            total_estimate_points: Some(0.0),
+        };
+        for r in &pt_rows {
+            if let Some(f) = parse_point_value(r.value.as_deref()) {
+                *a.total_estimate_points.as_mut().expect("set above") += f;
+                match r.g.as_deref() {
+                    Some("backlog") => {
+                        *a.backlog_estimate_point.as_mut().expect("set above") += f;
+                    }
+                    Some("unstarted") => {
+                        *a.unstarted_estimate_point.as_mut().expect("set above") += f;
+                    }
+                    Some("started") => {
+                        *a.started_estimate_point.as_mut().expect("set above") += f;
+                    }
+                    Some("cancelled") => {
+                        *a.cancelled_estimate_point.as_mut().expect("set above") += f;
+                    }
+                    Some("completed") => {
+                        *a.completed_estimate_points.as_mut().expect("set above") += f;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        a
+    };
     // `base.py:712-765`: snapshot counts win when the snapshot is truthy.
     let snap_obj = snap.as_object();
     let snap_live = snap_obj.map(|o| o.contains_key("total_issues")).unwrap_or(false);
@@ -2032,36 +2373,15 @@ pub async fn progress(
             g("total_issues"),
         )
     } else {
-        async fn grp(
-            pool: &sqlx::PgPool,
-            cid: uuid::Uuid,
-            pid: uuid::Uuid,
-            slug: &str,
-            g: Option<&str>,
-        ) -> i64 {
-            let r: Result<(i64,), sqlx::Error> = sqlx::query_as(
-                "SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
-                 LEFT JOIN states s ON s.id = i.state_id \
-                 JOIN workspaces w ON w.id = ci.workspace_id \
-                 WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
-                 AND w.slug = $2 AND ci.project_id = $3 \
-                 AND ($4::text IS NULL OR s.\"group\" = $4)",
-            )
-            .bind(cid)
-            .bind(slug)
-            .bind(pid)
-            .bind(g)
-            .fetch_one(pool)
-            .await;
-            r.map(|v| v.0).unwrap_or(0)
-        }
+        // One GROUP BY query instead of 6 sequential COUNTs.
+        let c = group_counts(&st.pool, cid, pid, Some(&slug), GroupScope::Progress).await?;
         (
-            grp(&st.pool, cid, pid, &slug, Some("backlog")).await,
-            grp(&st.pool, cid, pid, &slug, Some("unstarted")).await,
-            grp(&st.pool, cid, pid, &slug, Some("started")).await,
-            grp(&st.pool, cid, pid, &slug, Some("cancelled")).await,
-            grp(&st.pool, cid, pid, &slug, Some("completed")).await,
-            grp(&st.pool, cid, pid, &slug, None).await,
+            c.backlog,
+            c.unstarted,
+            c.started,
+            c.cancelled,
+            c.completed,
+            c.total,
         )
     };
     Ok((
@@ -2103,7 +2423,7 @@ pub async fn analytics(
     }
     // Django crashes on a missing cycle (`None.start_date`); sane 404
     // (documented normalize-crash).
-    let cyc: Option<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Value, uuid::Uuid)> =
+    let cyc: Option<AnalyticsCycleRow> =
         sqlx::query_as(
             "SELECT c.start_date, c.end_date, c.progress_snapshot, c.workspace_id \
              FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
@@ -2121,8 +2441,8 @@ pub async fn analytics(
         ));
     };
     // `base.py:807-811`.
-    if start.is_none() || end.is_none() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": NO_DATES_MSG}))));
+    if let Err(e) = guard_cycle_dated(start.is_some(), end.is_some()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     // Snapshot branch (`base.py:821-830`).
     if snap.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
@@ -2362,10 +2682,17 @@ mod cycle_e2_tests {
     }
 
     #[test]
-    fn convert_to_utc_same_day_stores_now() {
-        // `timezone_converter.py:82-84`: start-date on today's local date →
-        // now(); any other date → 00:00:01 local→UTC (decision bit; the SQL
-        // helper `convert_to_utc` implements the full rule in Postgres).
+    fn convert_to_utc_sql_encodes_same_day_rule() {
+        // Exercises the REAL SQL helper (`convert_to_utc_sql`, used by
+        // `convert_to_utc`): same-local-day start → `now()`, other starts →
+        // `00:00:01` local→UTC, ends → `23:59:00` local→UTC, all in
+        // project-tz (`timezone_converter.py:42-94`).
+        let sql = convert_to_utc_sql();
+        assert!(sql.contains("THEN now()"), "same-day start stores now()");
+        assert!(sql.contains("00:00:01"), "start-of-day rule present");
+        assert!(sql.contains("23:59:00"), "end-of-day rule present");
+        assert!(sql.contains("AT TIME ZONE"), "project-tz conversion present");
+        // Decision bit on top of the SQL rule:
         assert!(convert_start_is_today("2026-06-15", "2026-06-15"));
         assert!(!convert_start_is_today("2026-06-14", "2026-06-15"));
         assert!(!convert_start_is_today("2026-06-16", "2026-06-15"));
@@ -2377,38 +2704,78 @@ mod cycle_e2_tests {
     }
 
     #[test]
-    fn transfer_error_consts_verbatim() {
-        // `base.py:601`, `cycle_transfer_issues.py:64,147`.
-        assert_eq!(TRANSFER_TARGET_REQUIRED_MSG, "New Cycle Id is required");
+    fn transfer_guards_behavior() {
+        // `base.py:597-603`: missing/unparseable `new_cycle_id` parses to
+        // None (the handler then 400s `TRANSFER_TARGET_REQUIRED_MSG`).
+        let parse_target =
+            |v: Option<&str>| v.and_then(|s| s.parse::<uuid::Uuid>().ok());
+        assert!(parse_target(None).is_none());
+        assert!(parse_target(Some("not-a-uuid")).is_none());
+        assert!(parse_target(Some("123e4567-e89b-12d3-a456-426614174000")).is_some());
+        // `cycle_transfer_issues.py:61-65` via the real guard: completed
+        // target → 400 verbatim; open/missing target → ok.
+        let now = dt(2026, 6, 15);
         assert_eq!(
-            TRANSFER_TARGET_COMPLETED_MSG,
-            "The cycle where the issues are transferred is already completed"
+            guard_transfer_target(Some(dt(2026, 5, 1)), now).unwrap_err(),
+            TRANSFER_TARGET_COMPLETED_MSG
         );
-        assert_eq!(TRANSFER_SOURCE_MISSING_MSG, "Source cycle not found");
+        assert!(guard_transfer_target(Some(dt(2026, 7, 1)), now).is_ok());
+        assert!(guard_transfer_target(None, now).is_ok());
+        // `issue.py:227-228` via the real guard: empty list → 400 verbatim.
+        assert_eq!(
+            guard_issues_present(0).unwrap_err(),
+            ISSUES_REQUIRED_MSG
+        );
+        assert!(guard_issues_present(3).is_ok());
+        // `issue.py:232-236` via the real guard: completed cycle → 400 verbatim.
+        assert_eq!(
+            guard_cycle_open(Some(dt(2026, 5, 1)), now).unwrap_err(),
+            COMPLETED_NO_ADD_MSG
+        );
+        assert!(guard_cycle_open(Some(dt(2026, 7, 1)), now).is_ok());
+        assert!(guard_cycle_open(None, now).is_ok());
     }
 
     #[test]
-    fn archived_gate_consts_verbatim() {
-        // `archive.py:592`, `base.py:341,355,459,528,809`, `issue.py:228,234`.
-        assert_eq!(ARCHIVE_ONLY_COMPLETED_MSG, "Only completed cycles can be archived");
-        assert_eq!(ARCHIVED_IMMUTABLE_MSG, "Archived cycle cannot be updated");
-        assert_eq!(
-            COMPLETED_IMMUTABLE_MSG,
-            "The Cycle has already been completed so it cannot be edited"
-        );
-        assert_eq!(CYCLE_NOT_FOUND_MSG, "Cycle not found");
-        assert_eq!(ISSUES_REQUIRED_MSG, "Issues are required");
-        assert_eq!(
-            COMPLETED_NO_ADD_MSG,
-            "The Cycle has already been completed so no new issues can be added"
-        );
-        assert_eq!(DATECHECK_REQUIRED_MSG, "Start date and end date both are required");
-        assert_eq!(NO_DATES_MSG, "Cycle has no start or end date");
-        // Archive gate: null or future end → 400; past end → ok.
+    fn archived_gates_behavior() {
+        // `archive.py:590-594` via the real guard: null or future end → 400
+        // verbatim; past end → ok.
         let now = dt(2026, 6, 15);
         assert!(guard_archive(Some(dt(2026, 5, 1)), now).is_ok());
-        assert!(guard_archive(None, now).is_err());
-        assert!(guard_archive(Some(dt(2026, 7, 1)), now).is_err());
+        assert_eq!(
+            guard_archive(None, now).unwrap_err(),
+            ARCHIVE_ONLY_COMPLETED_MSG
+        );
+        assert_eq!(
+            guard_archive(Some(dt(2026, 7, 1)), now).unwrap_err(),
+            ARCHIVE_ONLY_COMPLETED_MSG
+        );
+        // `base.py:339-357` via the real guards: archived/completed PATCH gates.
+        assert_eq!(
+            guard_patch(true, false, true).unwrap_err(),
+            ARCHIVED_IMMUTABLE_MSG
+        );
+        assert_eq!(
+            guard_patch(false, true, false).unwrap_err(),
+            COMPLETED_IMMUTABLE_MSG
+        );
+        assert!(guard_patch(false, true, true).is_ok());
+        // `base.py:526-530` + `base.py:807-811` via the real guards.
+        assert_eq!(
+            guard_datecheck_present(false, true).unwrap_err(),
+            DATECHECK_REQUIRED_MSG
+        );
+        assert!(guard_datecheck_present(true, true).is_ok());
+        assert_eq!(
+            guard_cycle_dated(true, false).unwrap_err(),
+            NO_DATES_MSG
+        );
+        assert!(guard_cycle_dated(true, true).is_ok());
+        // Overlap-miss message surfaces through the real response builder.
+        let (code, body) = date_check_result(true);
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(body.get("error"), Some(&json!(DATECHECK_OVERLAP_MSG)));
+        assert_eq!(body.get("status"), Some(&json!(false)));
     }
 
     #[test]
@@ -2464,6 +2831,137 @@ mod cycle_e2_tests {
         assert_eq!(v.get("2026-06-01"), Some(&json!(5)));
         assert_eq!(v.get("2026-06-02"), Some(&json!(3)));
         assert_eq!(v.get("2026-06-04"), Some(&json!(Value::Null)));
+    }
+
+    #[test]
+    fn burndown_chart_caps_huge_ranges_and_terminates_on_overflow() {
+        // Django has no cap (`analytics_plot.py`); the 732-day clamp bounds
+        // response size (huge-JSON DoS guard) without touching normal ranges.
+        use std::collections::BTreeMap;
+        let done: BTreeMap<chrono::NaiveDate, f64> = BTreeMap::new();
+        let start = chrono::NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
+        let far = chrono::NaiveDate::from_ymd_opt(2030, 1, 1).unwrap();
+        let today = chrono::NaiveDate::from_ymd_opt(2020, 6, 1).unwrap();
+        let v = burndown_chart(start, far, today, 5.0, &done, true);
+        assert_eq!(v.as_object().map(|o| o.len()), Some(733));
+        assert!(v.get("2020-01-01").is_some());
+        assert!(v.get("2022-01-02").is_some()); // start + 732d
+        assert!(v.get("2022-01-03").is_none()); // clamped away
+        // A range exactly at the cap is untouched.
+        let end = start + chrono::Duration::days(732);
+        let v = burndown_chart(start, end, today, 5.0, &done, true);
+        assert_eq!(v.as_object().map(|o| o.len()), Some(733));
+        // `NaiveDate::MAX` overflow terminates (single entry, no spin).
+        let max = chrono::NaiveDate::MAX;
+        let v = burndown_chart(max, max, max, 1.0, &done, true);
+        assert_eq!(v, json!({ max.to_string(): 1 }));
+    }
+
+    #[test]
+    fn parse_point_value_tolerates_varchar_noise() {
+        // `estimate_points.value` is varchar: numerics parse, everything
+        // else is skipped (old `::double precision` cast 500'd instead).
+        assert_eq!(parse_point_value(Some("3")), Some(3.0));
+        assert_eq!(parse_point_value(Some(" 2.5 ")), Some(2.5));
+        assert_eq!(parse_point_value(None), None);
+        assert_eq!(parse_point_value(Some("")), None);
+        assert_eq!(parse_point_value(Some("abc")), None);
+        assert_eq!(parse_point_value(Some("1,000")), None);
+    }
+
+    #[test]
+    fn fold_group_counts_maps_buckets_and_ignores_null_group() {
+        // Pure fold behind the single-`GROUP BY` `group_counts` helper.
+        let rows = vec![
+            GroupCountRow { total: 7, g: Some("completed".to_string()), n: 3 },
+            GroupCountRow { total: 7, g: Some("backlog".to_string()), n: 2 },
+            GroupCountRow { total: 7, g: None, n: 2 }, // stateless: total only
+        ];
+        let c = fold_group_counts(&rows);
+        assert_eq!(
+            c,
+            GroupCounts {
+                total: 7,
+                completed: 3,
+                cancelled: 0,
+                started: 0,
+                unstarted: 0,
+                backlog: 2,
+            }
+        );
+        assert_eq!(fold_group_counts(&[]), GroupCounts::default());
+    }
+
+    #[test]
+    fn cycle_json_shapes_share_one_builder() {
+        // The merged builder keeps every shape byte-identical: list has all
+        // keys, write drops `cancelled_issues`+`logo_props`, archived adds
+        // group counts + `archived_at` and drops logo/version/created_by.
+        let id = uuid::Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
+        let row = CycleListRow {
+            id,
+            workspace_id: id,
+            project_id: id,
+            name: "c".to_string(),
+            description: "d".to_string(),
+            start_date: None,
+            end_date: None,
+            owned_by_id: id,
+            view_props: json!({}),
+            sort_order: 1.0,
+            external_source: None,
+            external_id: None,
+            progress_snapshot: json!({}),
+            logo_props: json!({}),
+            version: 1,
+            created_by_id: Some(id),
+            is_favorite: false,
+            total_issues: 4,
+            completed_issues: 1,
+            cancelled_issues: 2,
+            assignee_ids: vec![],
+            status: "DRAFT".to_string(),
+        };
+        let list = cycle_list_json(&row);
+        assert_eq!(list.get("cancelled_issues"), Some(&json!(2)));
+        assert_eq!(list.get("logo_props"), Some(&json!({})));
+        assert_eq!(list.get("version"), Some(&json!(1)));
+        let write = cycle_write_json(&row);
+        assert!(write.get("cancelled_issues").is_none());
+        assert!(write.get("logo_props").is_none());
+        assert_eq!(write.get("version"), Some(&json!(1)));
+        assert_eq!(write.get("completed_issues"), Some(&json!(1)));
+        let arow = ArchivedRow {
+            id,
+            workspace_id: id,
+            project_id: id,
+            name: "c".to_string(),
+            description: "d".to_string(),
+            start_date: None,
+            end_date: None,
+            owned_by_id: id,
+            view_props: json!({}),
+            sort_order: 1.0,
+            external_source: None,
+            external_id: None,
+            progress_snapshot: json!({}),
+            is_favorite: false,
+            total_issues: 4,
+            cancelled_issues: 2,
+            completed_issues: 1,
+            started_issues: 0,
+            unstarted_issues: 1,
+            backlog_issues: 0,
+            assignee_ids: vec![],
+            status: "DRAFT".to_string(),
+            archived_at: None,
+        };
+        let arch = archived_list_json(&arow);
+        assert_eq!(arch.get("started_issues"), Some(&json!(0)));
+        assert!(arch.get("archived_at").is_some());
+        assert!(arch.get("logo_props").is_none());
+        assert!(arch.get("version").is_none());
+        assert!(arch.get("created_by").is_none());
     }
 
     #[test]
