@@ -379,6 +379,10 @@ async fn main() {
         .route("/api/users/me/tour-completed/", patch(routes::user::tour_completed))
         .route("/api/users/me/activities/", get(routes::user::activities))
         .route(
+            "/api/users/me/email/generate-code/",
+            post(routes::users_me::generate_email_code),
+        )
+        .route(
             "/api/users/me/profile/",
             get(routes::user::profile).patch(routes::user::patch_profile),
         )

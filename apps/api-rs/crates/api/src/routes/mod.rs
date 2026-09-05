@@ -21,4 +21,5 @@ pub mod module;
 pub mod project;
 pub mod state;
 pub mod user;
+pub mod users_me;
 pub mod workspace;
