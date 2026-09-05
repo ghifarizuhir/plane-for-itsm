@@ -92,11 +92,14 @@ if [ -z "${SMOKE_EMAIL:-}" ] || [ -z "${SMOKE_PASSWORD:-}" ]; then
 else
   JAR=/tmp/smoke_jar
   rm -f "$JAR"
-  # email-check (paritas Django EmailCheckEndpoint) dulu: hanya 2 hit agar
-  # total hit rate-limit IP (5/mnt) tetap aman bersama login+login-bad.
+  # Budget rate-limit IP 5 hit/mnt (router terbatas): email-check(1) +
+  # login(2) + login-bad(3) + forgot(4) + magic(5). csrf unlimited.
+  # email-check-bad dihapus dari smoke (dilindungi unit test email_valid).
   check_auth email-check-200 200 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/email-check/"
   grep -q '"existing":true' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   email-check-body -> existing:true"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED email-check-body"; echo "FAIL email-check-body: $(head -c 200 /tmp/smoke_body)"; }
-  check_auth email-check-bad-400 400 -X POST -d '{"email":"bukan-email"}' "$BASE/auth/email-check/"
+  check_auth csrf-200 200 "$BASE/auth/get-csrf-token/"
+  check_auth forgot-smtp-400 400 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/forgot-password/"
+  check_auth magic-smtp-400 400 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/magic-generate/"
   check_auth login-200 200 -c "$JAR" -X POST -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"$SMOKE_PASSWORD\"}" "$BASE/api/auth/login/"
   check_auth me-200 200 -b "$JAR" "$BASE/api/users/me/"
   check_auth refresh-200 200 -c "$JAR" -b "$JAR" -X POST "$BASE/api/auth/refresh/"
