@@ -367,7 +367,7 @@ pub async fn list_by_ids(
           LEFT JOIN states ss ON ss.id = si.state_id \
           WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
           AND si.archived_at IS NULL AND si.is_draft = false \
-          AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage') AS sub_issues_count, \
+          AND ss.\"group\" <> 'triage') AS sub_issues_count, \
         i.created_at, i.updated_at, \
         i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
         (SELECT COUNT(*) FROM file_assets fa \
@@ -381,7 +381,7 @@ pub async fn list_by_ids(
         WHERE i.project_id = $1 \
         AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
-        AND s.deleted_at IS NULL AND s.\"group\" <> 'triage' \
+        AND s.\"group\" <> 'triage' \
         AND i.id = ANY($3) \
         AND EXISTS(SELECT 1 FROM projects p \
           WHERE p.id = i.project_id AND p.archived_at IS NULL AND p.deleted_at IS NULL) \
@@ -1949,7 +1949,7 @@ pub(crate) const DETAIL_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.s
        LEFT JOIN states ss ON ss.id = si.state_id \
        WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
        AND si.archived_at IS NULL AND si.is_draft = false \
-       AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage' \
+       AND ss.\"group\" <> 'triage' \
        AND EXISTS(SELECT 1 FROM projects sp \
          WHERE sp.id = si.project_id AND sp.archived_at IS NULL)) AS sub_issues_count, \
      (SELECT COUNT(*) FROM file_assets fa \
@@ -3446,7 +3446,7 @@ pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.
        LEFT JOIN states ss ON ss.id = si.state_id \
        WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
        AND si.archived_at IS NULL AND si.is_draft = false \
-       AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage' \
+       AND ss.\"group\" <> 'triage' \
        AND EXISTS(SELECT 1 FROM projects sp \
          WHERE sp.id = si.project_id AND sp.archived_at IS NULL)) AS sub_issues_count, \
      i.created_at, i.updated_at, \
@@ -3822,8 +3822,10 @@ mod batch_c_i4_tests {
     fn archive_select_matches_i2_detail_fragments() {
         // Consistency with I2 `DETAIL_SELECT_SQL`: all three id arrays
         // carry `ORDER BY <bridge>.created_at DESC`, and the
-        // `sub_issues_count` state predicate carries `ss.deleted_at IS
-        // NULL` like the detail subquery. (`DISTINCT` on `module_ids` is
+        // `sub_issues_count` state predicate is the bare forward-FK
+        // `ss."group" <> 'triage'` like the detail subquery (no
+        // `ss.deleted_at` filter: forward-FK lookups don't apply
+        // `StateManager`). (`DISTINCT` on `module_ids` is
         // dropped: the partial unique index
         // `module_issue_unique_issue_module_when_deleted_at_null`
         // (`issue_id`, `module_id`) makes it a no-op over live rows — and
@@ -3834,8 +3836,12 @@ mod batch_c_i4_tests {
             "module_ids ordering"
         );
         assert!(
-            ARCHIVE_SELECT_SQL.contains("ss.deleted_at IS NULL AND ss.\"group\" <> 'triage'"),
+            ARCHIVE_SELECT_SQL.contains("ss.\"group\" <> 'triage'"),
             "sub_issues_count state predicate"
+        );
+        assert!(
+            !ARCHIVE_SELECT_SQL.contains("ss.deleted_at"),
+            "no state-deleted predicate on count join"
         );
     }
 
@@ -4146,8 +4152,7 @@ pub struct SubIssuesEnvelope {
 /// - NO `s.deleted_at` predicate on EITHER state join (outer `s` for the
 ///   `state_group` annotation, inner `ss` for `sub_issues_count`): forward-FK
 ///   lookups don't apply `StateManager` (I2-fix-#2 principle, applied here to
-///   both joins; note the I2/I4 count fragments carry an extra-strict
-///   `ss.deleted_at IS NULL`, deliberately not copied).
+///   both joins, matching the I1/I2/I4 fragments).
 /// - `assignee_ids` keeps only assignees with an active project membership
 ///   (`assignee__member_project__is_active=True`, `sub_issue.py:107-111` —
 ///   `member_project` is the `ProjectMember.member → User` related name,
