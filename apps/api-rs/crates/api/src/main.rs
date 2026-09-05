@@ -88,6 +88,16 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/list/",
             get(routes::issue::list_by_ids),
         )
+        // Parity with `IssueDetailEndpoint.get`
+        // (`views/issue/base.py:1027-1103`, `urls/issue.py:48-50`): static
+        // `issues-detail` wins over `:pk`-style routes in Axum (same as the
+        // `issues/list/` precedent above). FE `getIssuesFromServer`
+        // (`issue.service.ts:40-61`) branches here iff `queries.expand`
+        // includes `issue_relation` && `!group_by`.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues-detail/",
+            get(routes::issue::list_detail),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
