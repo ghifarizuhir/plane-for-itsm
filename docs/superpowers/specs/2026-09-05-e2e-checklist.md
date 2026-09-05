@@ -18,6 +18,12 @@ Diisi manual oleh operator; tiap baris beri ✓ / ✗ + catatan di kolom Hasil.
 - `COOKIE_SECURE=0` wajib untuk http://localhost (cookie `plane_at`/`plane_rt`
   polos). Bila `COOKIE_SECURE=1`, cookie menjadi `__Host-` + `Secure` dan
   browser di http TIDAK akan menyimpan/mengirimnya → login tampak "gagal".
+- Cookie `plane_at`/`plane_rt` = `HttpOnly; SameSite=Lax`
+  (`crates/common/src/auth.rs`); tanpa layer CORS di `main.rs` (mutasi
+  non-GET dijaga `origin_middleware`). Di localhost lintas-port
+  (:3000 → :8000) cookie berbagi host-only — `signOut` memanggil Rust
+  `/api/auth/logout/` dengan `credentials:include` best-effort sebelum POST
+  Django, jadi satu klik logout membersihkan kedua sesi.
 - Rate-limit login (Task 10) BELUM ada: login berulang cepat aman untuk saat ini.
 - Kredensial JANGAN di-commit; cukup diingat/dicatat lokal oleh operator.
 
@@ -29,7 +35,7 @@ Diisi manual oleh operator; tiap baris beri ✓ / ✗ + catatan di kolom Hasil.
 | 2   | Isi email + password valid → submit                                             | Masuk workspace (redirect `/` atau workspace terakhir), nama/avatar user tampil                                                                                                                                                 |       |
 | 3   | Reload halaman (Ctrl+R)                                                         | Tetap login — TIDAK dilempar ke `/sign-in` (sesi persist via cookie + refresh)                                                                                                                                                  |       |
 | 4   | Buat 1 issue di project mana pun                                                | Issue tersimpan dan muncul di list; reload tetap ada                                                                                                                                                                            |       |
-| 5   | Klik logout                                                                     | Redirect ke `/sign-in`; menu/user terbersih                                                                                                                                                                                     |       |
+| 5   | Klik logout                                                                     | Redirect ke `/sign-in`; menu/user terbersih; sesi Django DAN Rust bersih (cookie `plane_at`/`plane_rt` ter-clear + sesi Django mati — langkah 6 membuktikan keduanya) |       |
 | 6   | Setelah logout, buka rute privat (`/` atau `/issues`) langsung via address bar  | Redirect ke `/sign-in` (tidak bisa akses tanpa sesi)                                                                                                                                                                            |       |
 | 7   | Di `/sign-in`, klik OAuth GitHub (sampai redirect saja, tak perlu login GitHub) | Browser redirect: ke `github.com/login/oauth/authorize` bila kredensial GitHub riil, ATAU kembali ke app dengan error `oauth_disabled` bila dummy/kosong. Yang penting: terjadi redirect (start → 302), bukan halaman blank/500 |       |
 

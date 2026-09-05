@@ -60,6 +60,16 @@ export class AuthService extends APIService {
   }
 
   async signOut(baseUrl: string): Promise<any> {
+    // Best-effort: hapus sesi Rust (plane_at/plane_rt) dulu; abaikan gagal —
+    // POST Django di bawah tetap jalan membunuh sesi Django selama transisi.
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout/`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // abaikan — Django sign-out tetap dijalankan
+    }
     await this.requestCSRFToken().then((data) => {
       const csrfToken = data?.csrf_token;
 
