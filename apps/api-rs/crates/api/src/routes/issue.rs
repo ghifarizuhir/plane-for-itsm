@@ -3322,6 +3322,70 @@ pub(crate) fn archive_group_by_conflict(
     }
 }
 
+/// Group-by allowlist for issues, byte-exact from
+/// `plane/utils/order_queryset.py:93-105` (`ISSUE_GROUP_BY_ALLOWLIST`).
+pub(crate) const ISSUE_GROUP_BY_ALLOWLIST: &[&str] = &[
+    "state_id",
+    "state__group",
+    "priority",
+    "labels__id",
+    "assignees__id",
+    "issue_module__module_id",
+    "cycle_id",
+    "project_id",
+    "created_by",
+    "target_date",
+    "start_date",
+];
+
+/// Mirrors the allowlist gate in `BasePaginator.paginate`
+/// (`plane/utils/paginator.py:690-699`, GHSA-wwgj-929g-42cm): a truthy
+/// `group_by` outside `ISSUE_GROUP_BY_ALLOWLIST` raises
+/// `ParseError(detail=f"Invalid group_by field: X")`, then the same for a
+/// truthy `sub_group_by` — but ONLY inside the truthy-`group_by` branch
+/// (the whole block is skipped when `group_by` is falsy, so a lone invalid
+/// `sub_group_by` is a Django 200, mirrored here as `None`). DRF renders
+/// `ParseError` as 400 `{"detail": msg}` (same envelope as the I2
+/// per_page/cursor errors). Runs AFTER the same-value 400: the view's
+/// conflict check (`archive.py:140-147`) precedes `paginate`.
+pub(crate) fn archive_group_by_allowlist_error(
+    group_by: Option<&str>,
+    sub_group_by: Option<&str>,
+) -> Option<String> {
+    let g = group_by?;
+    if g.is_empty() {
+        return None;
+    }
+    if !ISSUE_GROUP_BY_ALLOWLIST.contains(&g) {
+        return Some(format!("Invalid group_by field: {g}"));
+    }
+    match sub_group_by {
+        Some(s) if !s.is_empty() && !ISSUE_GROUP_BY_ALLOWLIST.contains(&s) => {
+            Some(format!("Invalid sub_group_by field: {s}"))
+        }
+        _ => None,
+    }
+}
+
+/// Known-gap 400 body for truthy `group_by`/`sub_group_by` that survive the
+/// conflict + allowlist checks. Django would 200 with the
+/// `GroupedOffsetPaginator` / `SubGroupedOffsetPaginator` grouped-dict
+/// shape (`paginator.py:195-633`, FIELD_MAPPER key swaps,
+/// `archive.py:148-209`) — implementing that path is out of scope, so this
+/// endpoint 400s instead. Plain descriptive string (NOT a Django message):
+/// unreachable in the default FE flows (only 2 `getArchivedIssues` callers,
+/// both in `archived/issue.store.ts` flat flow; archived page is
+/// hardcoded list-layout, `groupedBy` never passed) — a user-set display
+/// `group_by` hits it.
+pub(crate) const ARCHIVE_GROUPING_UNSUPPORTED_MSG: &str = "Grouped pagination is not supported";
+
+/// Truthiness mirrors Django's `if group_by:` (`archive.py:140`, where the
+/// param defaults to `False`): absent or `""` is flat, anything else is
+/// grouped.
+pub(crate) fn archive_grouping_unsupported(group_by: Option<&str>, sub_group_by: Option<&str>) -> bool {
+    group_by.is_some_and(|g| !g.is_empty()) || sub_group_by.is_some_and(|s| !s.is_empty())
+}
+
 /// Mirrors `show_sub_issues = request.GET.get("show_sub_issues", "true")`
 /// (`archive.py:109-115`): only the exact `"true"` (incl. the default when
 /// absent) keeps sub-issues — `"false"` (or any other explicit value) adds
@@ -3380,9 +3444,17 @@ pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.
        LEFT JOIN states ss ON ss.id = si.state_id \
        WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
        AND si.archived_at IS NULL AND si.is_draft = false \
-       AND ss.\"group\" <> 'triage' \
+       AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage' \
        AND EXISTS(SELECT 1 FROM projects sp \
          WHERE sp.id = si.project_id AND sp.archived_at IS NULL)) AS sub_issues_count, \
+     i.created_at, i.updated_at, \
+     i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
+     (SELECT COUNT(*) FROM file_assets fa \
+       WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
+       AND fa.deleted_at IS NULL) AS attachment_count, \
+     (SELECT COUNT(*) FROM issue_links lin \
+       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
+     i.is_draft, i.archived_at, s.\"group\" AS state_group, \
      i.created_at, i.updated_at, \
      i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
      (SELECT COUNT(*) FROM file_assets fa \
@@ -3395,7 +3467,7 @@ pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.
        WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, \
      COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
        WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
-     COALESCE((SELECT array_agg(DISTINCT mi.module_id) FROM module_issues mi \
+     COALESCE((SELECT array_agg(mi.module_id ORDER BY mi.created_at DESC) FROM module_issues mi \
        JOIN modules m ON m.id = mi.module_id \
        WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL \
        AND m.archived_at IS NULL), '{}'::uuid[]) AS module_ids \
@@ -3437,8 +3509,11 @@ fn push_archive_where(
 /// parity with Django `IssueArchiveViewSet.list`
 /// (`plane/app/views/issue/archive.py:97-218`, `urls/issue.py:224-225`).
 ///
-/// - Gate: ADMIN/MEMBER ONLY (`@allow_permission([ADMIN, MEMBER])`,
-///   `archive.py:106`) — GUEST → 403 `deny()`.
+/// - Gate: ADMIN/MEMBER via the shared PROJECT-level helpers
+///   (`@allow_permission([ADMIN, MEMBER])`, `archive.py:106`, default
+///   `level="PROJECT"` incl. the ws-admin fallback branch
+///   `permissions/base.py:64-78` — a GUEST-role member who is workspace
+///   ADMIN passes); otherwise 403 `deny()`.
 /// - `show_sub_issues` default `"true"` (`"false"` → `parent__isnull`,
 ///   `archive.py:109-115`); `order_by` default `-created_at` (same
 ///   `order_issue_queryset` + paginator re-ordering as I2, reusing
@@ -3455,8 +3530,12 @@ fn push_archive_where(
 ///
 /// Deviations (reviewer-adjudicable, Django-literal readings): grouped
 /// pagination (`GroupedOffsetPaginator` / `SubGroupedOffsetPaginator`,
-/// `archive.py:148-209`) is OUT — a present (non-conflicting) `group_by`
-/// still returns the flat I2 envelope (FE flat-list flow unaffected);
+/// `archive.py:148-209`) is OUT — truthy `group_by`/`sub_group_by` 400
+/// here (`ARCHIVE_GROUPING_UNSUPPORTED_MSG`, known gap) instead of
+/// Django's grouped 200, AFTER the byte-exact allowlist 400 for invalid
+/// fields (`paginator.py:690-699`); unreachable in the default FE flows
+/// (archived callers never pass `groupedBy`, archived page is
+/// hardcoded list-layout);
 /// `label_ids`/`assignee_ids` arrays carry `ORDER BY bridge.created_at
 /// DESC` (Django `ArrayAgg(DISTINCT …)` is unordered — set-equal, order
 /// deterministic); datetimes RFC3339 UTC (batch convention).
@@ -3466,8 +3545,15 @@ pub async fn archived_list(
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     axum::extract::Query(q): axum::extract::Query<DetailIssuesQuery>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // PROJECT-level ADMIN/MEMBER gate (`archive.py:106`, default
+    // `level="PROJECT"`, `permissions/base.py:53-78`) with
+    // `BaseViewSet.permission_classes=[IsAuthenticated]` only: the
+    // allowed-role branch needs 20/15 and the ws-admin fallback branch
+    // (`base.py:64-78`) APPLIES — a GUEST-role member who is workspace
+    // ADMIN passes. Shared `project_gate_allows`, same as I1/I3.
     let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
-    if !matches!(member_role, Some(20) | Some(15)) {
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(matches!(member_role, Some(20) | Some(15)), member_role.is_some(), ws_admin) {
         return Ok(deny());
     }
     if let Some(msg) = archive_group_by_conflict(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
@@ -3482,6 +3568,21 @@ pub async fn archived_list(
         Ok(c) => c,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
     };
+    // Group-by allowlist BEFORE the window check: Django validates the
+    // field names while constructing the paginator
+    // (`paginator.py:690-699`), which precedes `get_result` (the
+    // offset/window 400). Invalid fields 400 byte-exact (`{"detail"}`).
+    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok(detail_400(json!({"detail": msg})));
+    }
+    // Known gap (see `ARCHIVE_GROUPING_UNSUPPORTED_MSG`): truthy grouped
+    // fields that Django would grouped-paginate 200 400 here instead.
+    if archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": ARCHIVE_GROUPING_UNSUPPORTED_MSG})),
+        ));
+    }
     // `limit = min(limit, max_limit)` (`paginator.py:132`); offset-first
     // negative-window 400 mirrors I2 (`paginator.py:142-150, 708-711`).
     let limit = per_page.min(1000);
@@ -3634,14 +3735,93 @@ mod batch_c_i4_tests {
     }
 
     #[test]
-    fn archived_gate_is_admin_member_only() {
-        // Mirrors `@allow_permission([ADMIN, MEMBER])` (`archive.py:106`):
-        // GUEST denies.
-        let allows = |role: Option<i16>| matches!(role, Some(20) | Some(15));
-        assert!(allows(Some(20)));
-        assert!(allows(Some(15)));
-        assert!(!allows(Some(5)));
-        assert!(!allows(None));
+    fn archived_gate_is_admin_member_with_django_fallback() {
+        // Mirrors `@allow_permission([ADMIN, MEMBER])` (`archive.py:106`,
+        // default `level="PROJECT"`, `permissions/base.py:53-78`) with
+        // `BaseViewSet.permission_classes=[IsAuthenticated]` only: the
+        // allowed-role branch needs 20/15, and the fallback branch (any
+        // active project membership + workspace ADMIN,
+        // `permissions/base.py:64-78`) APPLIES — so a GUEST-role member who
+        // is workspace ADMIN passes; expressed through the shared
+        // `project_gate_allows` like I1/I3.
+        let allows = |role: Option<i16>, ws_admin: bool| {
+            project_gate_allows(matches!(role, Some(20) | Some(15)), role.is_some(), ws_admin)
+        };
+        assert!(allows(Some(20), false));
+        assert!(allows(Some(15), false));
+        assert!(!allows(Some(5), false));
+        assert!(!allows(None, false));
+        assert!(!allows(None, true));
+        // Django fallback parity: any active membership + ws ADMIN passes,
+        // even with a GUEST project role.
+        assert!(allows(Some(5), true));
+        assert!(allows(Some(15), true));
+    }
+
+    #[test]
+    fn archive_group_by_allowlist_matches_django() {
+        // Mirrors the allowlist gate in `BasePaginator.paginate`
+        // (`plane/utils/paginator.py:690-699`, GHSA-wwgj-929g-42cm):
+        // a truthy `group_by` outside `ISSUE_GROUP_BY_ALLOWLIST`
+        // (`order_queryset.py:93-105`) → ParseError → 400
+        // `{"detail": "Invalid group_by field: X"}` byte-exact; then the
+        // same for a truthy `sub_group_by` — but ONLY when `group_by` is
+        // truthy (the whole block is skipped otherwise, so a lone invalid
+        // `sub_group_by` is a Django 200).
+        assert_eq!(
+            archive_group_by_allowlist_error(Some("nope"), None),
+            Some("Invalid group_by field: nope".to_string())
+        );
+        assert_eq!(
+            archive_group_by_allowlist_error(Some("priority"), Some("zzz")),
+            Some("Invalid sub_group_by field: zzz".to_string())
+        );
+        // Group checked first.
+        assert_eq!(
+            archive_group_by_allowlist_error(Some("nope"), Some("zzz")),
+            Some("Invalid group_by field: nope".to_string())
+        );
+        assert_eq!(archive_group_by_allowlist_error(Some("priority"), Some("state__group")), None);
+        assert_eq!(archive_group_by_allowlist_error(None, None), None);
+        assert_eq!(archive_group_by_allowlist_error(Some(""), Some("")), None);
+        assert_eq!(archive_group_by_allowlist_error(None, Some("zzz")), None);
+    }
+
+    #[test]
+    fn archive_grouping_gap_400_matches_reviewer_scope() {
+        // Known gap (grouped paginators OUT): any truthy
+        // `group_by`/`sub_group_by` that survives the conflict + allowlist
+        // checks 400s instead of Django's grouped 200. Unreachable in the
+        // default FE flows (archived callers never pass groupedBy; archived
+        // page is list-layout) — a user-set display group_by hits it.
+        assert!(archive_grouping_unsupported(Some("priority"), None));
+        assert!(archive_grouping_unsupported(None, Some("priority")));
+        assert!(archive_grouping_unsupported(Some("priority"), Some("state__group")));
+        assert!(!archive_grouping_unsupported(None, None));
+        assert!(!archive_grouping_unsupported(Some(""), Some("")));
+        assert!(!archive_grouping_unsupported(Some(""), None));
+        assert_eq!(ARCHIVE_GROUPING_UNSUPPORTED_MSG, "Grouped pagination is not supported");
+    }
+
+    #[test]
+    fn archive_select_matches_i2_detail_fragments() {
+        // Consistency with I2 `DETAIL_SELECT_SQL`: all three id arrays
+        // carry `ORDER BY <bridge>.created_at DESC`, and the
+        // `sub_issues_count` state predicate carries `ss.deleted_at IS
+        // NULL` like the detail subquery. (`DISTINCT` on `module_ids` is
+        // dropped: the partial unique index
+        // `module_issue_unique_issue_module_when_deleted_at_null`
+        // (`issue_id`, `module_id`) makes it a no-op over live rows — and
+        // PG rejects `array_agg(DISTINCT x ORDER BY y)` unless `y` is in
+        // the argument list.)
+        assert!(
+            ARCHIVE_SELECT_SQL.contains("array_agg(mi.module_id ORDER BY mi.created_at DESC)"),
+            "module_ids ordering"
+        );
+        assert!(
+            ARCHIVE_SELECT_SQL.contains("ss.deleted_at IS NULL AND ss.\"group\" <> 'triage'"),
+            "sub_issues_count state predicate"
+        );
     }
 
     #[test]
