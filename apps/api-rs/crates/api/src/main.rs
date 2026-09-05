@@ -223,6 +223,18 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/modules/:module_id/user-properties/",
             get(routes::userprops::module_props_get).patch(routes::userprops::module_props_patch),
         )
+        // Parity with `IssueBulkUpdateDateEndpoint.post`
+        // (`views/issue/base.py:1106-1183`, `urls/issue.py:251-255`):
+        // POST bulk start/target update; validation merges new-over-current
+        // (`%Y-%m-%d`); unknown ids skipped silently; empty `updates` → 200;
+        // single bulk UPDATE at the end (NO explicit tx — one statement =
+        // atomic); 400 `{"message": ...}` on start>target; gate
+        // ADMIN/MEMBER (issues path ONLY — Django defines no work-items
+        // variant).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issue-dates/",
+            post(routes::issue_dates::bulk_update_dates),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
