@@ -86,6 +86,67 @@ pub async fn change_password(
     (StatusCode::OK, Json(json!({"message": "Password updated successfully"})))
 }
 
+#[derive(Deserialize)]
+pub struct SetPasswordBody {
+    pub password: Option<String>,
+}
+
+/// Subset `me` untuk respons set-password — hanya field yang dipakai caller
+/// (`store/user handleSetPassword`, onboarding); tanpa field `password`.
+pub fn user_subset_json(id: &str, email: &str, first: &str, last: &str) -> Value {
+    json!({"id": id, "email": email, "first_name": first, "last_name": last})
+}
+
+/// POST /auth/set-password/ — paritas `SetUserPasswordEndpoint`
+/// (`common.py:99-138`). Hanya untuk user `is_password_autoset=true`.
+pub async fn set_password(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<SetPasswordBody>,
+) -> (StatusCode, Json<Value>) {
+    // NOTE: tabel `users` tidak punya `deleted_at` — filter id saja.
+    let row: Option<(bool,)> =
+        sqlx::query_as("SELECT is_password_autoset FROM users WHERE id = $1")
+            .bind(auth.0)
+            .fetch_optional(&st.pool)
+            .await
+            .unwrap_or(None);
+    let Some((autoset,)) = row else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+    };
+    if !autoset {
+        return (StatusCode::BAD_REQUEST, auth_error_payload(5145, "PASSWORD_ALREADY_SET", "Your password is already set please change your password from profile"));
+    }
+    let Some(pw) = body.password.as_deref().filter(|s| !s.is_empty()) else {
+        return (StatusCode::BAD_REQUEST, auth_error(5020, "INVALID_PASSWORD"));
+    };
+    if !password_strong_enough(pw) {
+        return (StatusCode::BAD_REQUEST, auth_error(5020, "INVALID_PASSWORD"));
+    }
+    let hash = authn::make_django_password(pw);
+    let upd = sqlx::query("UPDATE users SET password = $1, is_password_autoset = false, updated_at = now() WHERE id = $2")
+        .bind(&hash)
+        .bind(auth.0)
+        .execute(&st.pool)
+        .await;
+    if upd.is_err() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+    }
+    let back: Option<(String, String, String)> =
+        sqlx::query_as("SELECT email, first_name, last_name FROM users WHERE id = $1")
+            .bind(auth.0)
+            .fetch_optional(&st.pool)
+            .await
+            .unwrap_or(None);
+    match back {
+        Some((email, first, last)) => (
+            StatusCode::OK,
+            Json(user_subset_json(&auth.0.to_string(), &email, &first, &last)),
+        ),
+        None => (StatusCode::NOT_FOUND, Json(json!({"error": "User not found"}))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +162,12 @@ mod tests {
         assert!(password_strong_enough("xQ9#mZ2!vL8$pL4@"));
         assert!(!password_strong_enough("password123"));
         assert!(!password_strong_enough("abc"));
+    }
+
+    #[test]
+    fn set_password_user_shape() {
+        let v = user_subset_json("11111111-1111-1111-1111-111111111111", "a@b.co", "A", "B");
+        assert_eq!(v["email"], "a@b.co");
+        assert!(v.get("password").is_none());
     }
 }

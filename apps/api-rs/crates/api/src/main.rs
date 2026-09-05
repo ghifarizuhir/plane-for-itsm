@@ -361,6 +361,7 @@ async fn main() {
         .route("/api/auth/logout/", post(routes::auth::logout))
         // Tanpa throttle selaras Django (`ChangePasswordEndpoint` tanpa throttle_classes).
         .route("/auth/change-password/", post(routes::auth_compat::change_password))
+        .route("/auth/set-password/", post(routes::auth_compat::set_password))
         .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))
         .route(
             "/api/workspaces/:slug/export-issues/",
