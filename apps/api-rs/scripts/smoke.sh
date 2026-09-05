@@ -89,6 +89,34 @@ check export-create 200 -X POST -d '{"provider":"csv"}' "$BASE/api/workspaces/$W
 check notif-unread 200 "$BASE/api/workspaces/$WS/users/notifications/unread/"
 check search 200 "$BASE/api/workspaces/$WS/search/?query=smoke"
 
+echo "== batch-C =="
+check proj-details-200 200 "$BASE/api/workspaces/$WS/projects/details/"
+check identifiers-200 200 "$BASE/api/workspaces/$WS/project-identifiers/?name=ZZZUNUSED"
+check identifiers-400 400 "$BASE/api/workspaces/$WS/project-identifiers/"
+check fav-add-204 204 -X POST -d "{\"project\":\"$PID\"}" "$BASE/api/workspaces/$WS/user-favorite-projects/"
+check fav-del-204 204 -X DELETE "$BASE/api/workspaces/$WS/user-favorite-projects/$PID/"
+check fav-del-404 404 -X DELETE "$BASE/api/workspaces/$WS/user-favorite-projects/$PID/"
+check archive-post-200 200 -X POST "$BASE/api/workspaces/$WS/projects/$PID/archive/"
+check archive-restore-204 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/archive/"
+check members-me-200 200 "$BASE/api/workspaces/$WS/projects/$PID/project-members/me/"
+check mark-default-204 204 -X POST "$BASE/api/workspaces/$WS/projects/$PID/states/$SID/mark-default/"
+check issues-list-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/list/?issues=$IID"
+check issues-list-400 400 "$BASE/api/workspaces/$WS/projects/$PID/issues/list/"
+check issues-detail-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues-detail/"
+grep -q '"total_count"' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   issues-detail-envelope -> total_count"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED issues-detail-envelope"; echo "FAIL issues-detail-envelope: $(head -c 200 /tmp/smoke_body)"; }
+check bulk-del-400 400 -X DELETE -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/bulk-delete-issues/"
+check bulk-tmp-create 201 -X POST -d '{"name":"Bulk tmp"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/"
+BID=$(jid id)
+check bulk-del-200 200 -X DELETE -d "{\"issue_ids\":[\"$BID\"]}" "$BASE/api/workspaces/$WS/projects/$PID/bulk-delete-issues/"
+grep -q 'issues were deleted' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   bulk-del-body -> message"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED bulk-del-body"; echo "FAIL bulk-del-body: $(head -c 200 /tmp/smoke_body)"; }
+check bulk-archive-400 400 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/bulk-archive-issues/"
+check archived-200 200 "$BASE/api/workspaces/$WS/projects/$PID/archived-issues/"
+check deleted-200 200 "$BASE/api/workspaces/$WS/projects/$PID/deleted-issues/"
+check sub-get-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/sub-issues/"
+# token user is SOLE admin of smoke project -> leave yields 400 (guard proof), not 204; LAST before auth
+check leave-400 400 -X POST "$BASE/api/workspaces/$WS/projects/$PID/members/leave/"
+grep -q 'only admin' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   leave-body -> sole-admin"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED leave-body"; echo "FAIL leave-body: $(head -c 200 /tmp/smoke_body)"; }
+
 echo "== auth =="
 if [ -z "${SMOKE_EMAIL:-}" ] || [ -z "${SMOKE_PASSWORD:-}" ]; then
   echo "skip auth checks (SMOKE_EMAIL/SMOKE_PASSWORD unset)"
