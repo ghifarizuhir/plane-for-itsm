@@ -46,7 +46,12 @@ features/
 
 ## Page Inventory — ITSM (future, bukan actual)
 
-Belum ada halaman ITSM di kode (tidak ada `incidents` / `configuration-items` di `apps/web/app/routes/core.ts`, tidak ada model CI di `plane/db/models/`). Semua ide ITSM (Incident, Problem+RCA, Change, Request, Knowledge, Improvement, Asset, Service Map) diparkir di [`_backlog.md`](./_backlog.md) — jangan buat `features/<page>.md` sampai implementasi dimulai.
+| Page                                               | File                   | Status              | Catatan                                                                                                   |
+| -------------------------------------------------- | ---------------------- | ------------------- | --------------------------------------------------------------------------------------------------------- |
+| CMDB / Service Map                                 | [`cmdb.md`](./cmdb.md) | 📝 Proposal (Draft) | Proposal pertama — dari Terra actual, butuh 3 tabel Postgres baru (+ migrasi sqlx + handler Rust)         |
+| Incident, Problem, Change, Request, Knowledge, ... | —                      | 💡 Backlog          | Diparkir di [`_backlog.md`](./_backlog.md) — jangan buat `features/<page>.md` sampai implementasi dimulai |
+
+> `cmdb.md` adalah pengecualian pertama aturan "jangan buat file sebelum ada kode" — ditulis sebagai proposal berlandaskan audit Terra actual (bukan klaim docs). Proposal ITSM lain tetap diparkir di `_backlog.md`.
 
 ## Shared Concerns
 
