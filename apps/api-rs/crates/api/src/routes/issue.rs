@@ -491,15 +491,18 @@ pub(crate) fn build_cursor(limit: i64, page: i128, is_prev: bool) -> String {
 
 /// `OffsetPaginator.get_result` (`paginator.py:165`): next cursor is
 /// `(limit, page+1, False)`; the limit echoed is the EFFECTIVE limit
-/// (`min(per_page, max_limit)`, `paginator.py:132`).
+/// (`min(per_page, max_limit)`, `paginator.py:132`). Saturates: a saturated
+/// `i128::MAX` page (unbounded cursor) renders without panicking in debug
+/// or wrapping in release — Django renders the unbounded int and 200s.
 pub(crate) fn next_cursor_str(limit: i64, page: i128) -> String {
-    build_cursor(limit, page + 1, false)
+    build_cursor(limit, page.saturating_add(1), false)
 }
 
 /// `OffsetPaginator.get_result` (`paginator.py:167`): prev cursor is
 /// `(limit, page-1, True)` — including page `-1` on the first page.
+/// Saturates at `i128::MIN` for the same reason as `next_cursor_str`.
 pub(crate) fn prev_cursor_str(limit: i64, page: i128) -> String {
-    build_cursor(limit, page - 1, true)
+    build_cursor(limit, page.saturating_sub(1), true)
 }
 
 /// The row-window offset, computed the way `OffsetPaginator.get_result`
@@ -525,11 +528,14 @@ pub(crate) fn page_window(page: i128, limit: i64) -> Result<PageWindow, ()> {
     Ok(PageWindow::Rows(offset as i64))
 }
 
-/// Mirrors `math.ceil(count / limit)` (`paginator.py:180`). Callers guarantee
-/// `total >= 0` and `limit > 0` (Django would crash with `ZeroDivisionError`
-/// → 500 there).
+/// Mirrors `math.ceil(count / limit)` (`paginator.py:180`) without
+/// overflowing the `total + limit - 1` intermediate: `total / limit` rounds
+/// down, plus one iff there is a remainder. (The `+ 1` cannot overflow:
+/// a `total / limit == i64::MAX` quotient implies `limit == 1`, hence a
+/// zero remainder.) Callers guarantee `total >= 0` and `limit > 0`
+/// (Django would crash with `ZeroDivisionError` → 500 there).
 pub(crate) fn total_pages(total: i64, limit: i64) -> i64 {
-    (total + limit - 1) / limit
+    total / limit + i64::from(total % limit != 0)
 }
 
 /// Order-by allowlist for issues, byte-exact from
@@ -2343,6 +2349,33 @@ mod issue_detail_tests {
         assert_eq!(total_pages(1000, 1000), 1);
         assert_eq!(total_pages(1001, 1000), 2);
         assert_eq!(total_pages(2000, 1000), 2);
+    }
+
+    #[test]
+    fn cursor_arithmetic_saturates_without_panic() {
+        // A saturated `i128::MAX` page (e.g. cursor `1000:<huge>:0`) must
+        // render a next cursor without panicking in the debug test profile
+        // (Django renders the unbounded int and 200s an empty page).
+        assert_eq!(
+            next_cursor_str(1000, i128::MAX),
+            format!("1000:{}:0", i128::MAX)
+        );
+        // Symmetric floor: `i128::MIN` prev saturates instead of panicking.
+        assert_eq!(
+            prev_cursor_str(1000, i128::MIN),
+            format!("1000:{}:1", i128::MIN)
+        );
+    }
+
+    #[test]
+    fn total_pages_edges_do_not_overflow() {
+        // Empty result sets and degenerate-but-reachable inputs must not
+        // overflow the `total + limit - 1` intermediate: `total=0` → 0
+        // pages; `ceil(i64::MAX / 1000)` is exact.
+        assert_eq!(total_pages(0, 1000), 0);
+        assert_eq!(total_pages(0, 1), 0);
+        assert_eq!(total_pages(i64::MAX, 1000), 9_223_372_036_854_776);
+        assert_eq!(total_pages(i64::MAX, 1), i64::MAX);
     }
 
     #[test]
