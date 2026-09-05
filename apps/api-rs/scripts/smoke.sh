@@ -68,7 +68,7 @@ check ws-invitations-200 200 "$BASE/api/users/me/workspaces/invitations/"
 check proj-create 201 -X POST -d '{"name":"Smoke Proj","identifier":"SMP"}' "$BASE/api/workspaces/$WS/projects/"
 PID=$(jid id)
 check project-roles-200 200 "$BASE/api/users/me/workspaces/$WS/project-roles/"
-check state-create 201 -X POST -d '{"name":"Todo","group":"backlog","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/states/"
+check state-create 201 -X POST -d '{"name":"Smoke State","group":"backlog","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/states/"
 SID=$(jid id)
 check issue-create 201 -X POST -d '{"name":"Smoke issue"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/"
 IID=$(jid id)
