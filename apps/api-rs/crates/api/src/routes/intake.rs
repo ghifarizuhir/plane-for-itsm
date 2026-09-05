@@ -204,7 +204,7 @@ pub async fn create_issue(
     };
 
     let row = sqlx::query_as::<_, common::models::intake::IntakeIssue>(
-        "INSERT INTO intake_issues (id, intake_id, issue_id, status, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, -2, $3, $4, now(), now()) RETURNING id, status",
+        "INSERT INTO intake_issues (id, intake_id, issue_id, status, extra, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, -2, '{}'::jsonb, $3, $4, now(), now()) RETURNING id, status",
     )
     .bind(intake_id)
     .bind(issue_id)
