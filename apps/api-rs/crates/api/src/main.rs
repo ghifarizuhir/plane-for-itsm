@@ -362,6 +362,7 @@ async fn main() {
         // Tanpa throttle selaras Django (`ChangePasswordEndpoint` tanpa throttle_classes).
         .route("/auth/change-password/", post(routes::auth_compat::change_password))
         .route("/auth/set-password/", post(routes::auth_compat::set_password))
+        .route("/auth/get-csrf-token/", get(routes::auth_compat::csrf_token))
         .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))
         .route(
             "/api/workspaces/:slug/export-issues/",
@@ -421,7 +422,6 @@ async fn main() {
         .route("/auth/email-check/", post(routes::auth::email_check))
         .route("/auth/forgot-password/", post(routes::auth_compat::forgot_password))
         .route("/auth/magic-generate/", post(routes::auth_compat::magic_generate))
-        .route("/auth/get-csrf-token/", get(routes::auth_compat::csrf_token))
         .route_layer(axum_middleware::from_fn_with_state(
             IpRateLimiter::new(5, std::time::Duration::from_secs(60)),
             ip_rate_limit_middleware,
