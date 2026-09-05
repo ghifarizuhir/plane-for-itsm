@@ -397,6 +397,97 @@ async fn main() {
                 .patch(routes::cycle::patch)
                 .delete(routes::cycle::destroy),
         )
+        // Parity with `CycleIssueViewSet.list/create`
+        // (`views/cycle/issue.py:108-221`, `urls/cycle.py:39-43`): GET 200
+        // paginated envelope (cursor/per_page default/max 1000, order_by,
+        // cycle/link/attachment/sub-issues annotations; grouped shapes OUT —
+        // flat envelope) + POST **201** `{"message":"success"}`. Gate
+        // ADMIN/MEMBER. `group_by==sub_group_by` → 400 verbatim.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/",
+            get(routes::cycle::cycle_issues_list).post(routes::cycle::cycle_issues_create),
+        )
+        // Parity with `CycleIssueViewSet.destroy`
+        // (`views/cycle/issue.py:319-343`, `urls/cycle.py:44-55`): DELETE
+        // **204** always, even with 0 rows (soft-delete). Gate ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/:issue_id/",
+            delete(routes::cycle::cycle_issue_destroy),
+        )
+        // Parity with `CycleDateCheckEndpoint.post`
+        // (`views/cycle/base.py:520-556`, `urls/cycle.py:56-60`): POST 200
+        // `{"status":true}`; overlap → **200** (NOT 4xx) verbatim error +
+        // `status:false`. Gate ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/date-check/",
+            post(routes::cycle::date_check),
+        )
+        // Parity with `CycleFavoriteViewSet.create/destroy`
+        // (`views/cycle/base.py:559-591`, `urls/cycle.py:61-70`): POST 204
+        // (dup → 400 `{"error":"The payload is not valid"}`, no existence
+        // check) + DELETE 204 (miss → 404). Gate ADMIN/MEMBER. NO GET —
+        // the E2 contract wires POST+DELETE only.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/",
+            post(routes::cycle::fav_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/:cycle_id/",
+            delete(routes::cycle::fav_destroy),
+        )
+        // Parity with `TransferCycleIssueEndpoint.post`
+        // (`views/cycle/base.py:594-622`, `urls/cycle.py:71-75`,
+        // `utils/cycle_transfer_issues.py`): POST 200 `{"message":"Success"}`
+        // + progress-snapshot write on the SOURCE cycle (verified Django
+        // behavior) + backlog/unstarted/started-only move. Gate ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/transfer-issues/",
+            post(routes::cycle::transfer),
+        )
+        // Parity with `CycleArchiveUnarchiveEndpoint.get`
+        // (`views/cycle/archive.py:271-304,305-584`, `urls/cycle.py:86-95`):
+        // archived-only list/detail 200 (list shape + started/unstarted/
+        // backlog + archived_at, NO logo_props/version/created_by; detail +
+        // distribution/estimate_distribution). Gate ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archived-cycles/",
+            get(routes::cycle::archived_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archived-cycles/:pk/",
+            get(routes::cycle::archived_detail),
+        )
+        // Parity with `CycleArchiveUnarchiveEndpoint.post/delete`
+        // (`views/cycle/archive.py:586-611`, `urls/cycle.py:81-85`): POST
+        // 200 `{"archived_at"}` (non-completed → 400 verbatim) + DELETE 204.
+        // Gate ADMIN/MEMBER. NO GET on this path (Django defines none).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/archive/",
+            post(routes::cycle::archive).delete(routes::cycle::unarchive),
+        )
+        // Parity with `CycleProgressEndpoint.get`
+        // (`views/cycle/base.py:658-783`, `urls/cycle.py:96-100`): GET 200,
+        // 12 keys (snapshot counts win when present; points-estimate only;
+        // total may be null). Gate ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/progress/",
+            get(routes::cycle::progress),
+        )
+        // Parity with `CycleAnalyticsEndpoint.get`
+        // (`views/cycle/base.py:786-1048`, `urls/cycle.py:101-105`): GET 200
+        // `{assignees,labels,completion_chart}` (snapshot-or-live; points
+        // branch only with a points estimate). Gate ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/analytics/",
+            get(routes::cycle::analytics),
+        )
+        // Parity with `WorkspaceCyclesEndpoint.get`
+        // (`views/workspace/cycle.py:19-132`, `urls/workspace.py:183-185`):
+        // GET 200 cross-project `CycleSerializer[]` (member-projects only,
+        // archived excluded; NO favorite/status/assignee annotations; WITH
+        // started/unstarted/backlog counts). Gate = any ACTIVE ws member;
+        // deny is the DRF permission-class 403 `{"detail": ...}`.
+        .route("/api/workspaces/:slug/cycles/", get(routes::cycle::workspace_cycles))
         .route(
             "/api/workspaces/:slug/projects/:project_id/modules/",
             get(routes::module::list).post(routes::module::create),
