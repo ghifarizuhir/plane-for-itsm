@@ -304,13 +304,13 @@ const PROJECT_COLS: &str = "id, created_at, updated_at, created_by_id, updated_b
     deleted_at, workspace_id, project_id, user_id, filters, display_filters, \
     display_properties, rich_filters, preferences, sort_order";
 
-const CYCLE_COLS: &str = "id, created_at, updated_at, created_by_id, updated_by_id, \
-    deleted_at, workspace_id, project_id, cycle_id, user_id, filters, \
-    display_filters, display_properties, rich_filters";
+const CYCLE_COLS: &str = "c.id, c.created_at, c.updated_at, c.created_by_id, c.updated_by_id, \
+    c.deleted_at, c.workspace_id, c.project_id, c.cycle_id, c.user_id, c.filters, \
+    c.display_filters, c.display_properties, c.rich_filters";
 
-const MODULE_COLS: &str = "id, created_at, updated_at, created_by_id, updated_by_id, \
-    deleted_at, workspace_id, project_id, module_id, user_id, filters, \
-    display_filters, display_properties, rich_filters";
+const MODULE_COLS: &str = "m.id, m.created_at, m.updated_at, m.created_by_id, m.updated_by_id, \
+    m.deleted_at, m.workspace_id, m.project_id, m.module_id, m.user_id, m.filters, \
+    m.display_filters, m.display_properties, m.rich_filters";
 
 /// Live project row for the caller, mirroring `.get(user, project_id)`
 /// (`issue/base.py:747-750`) — default-manager semantics
@@ -551,9 +551,9 @@ pub async fn cycle_props_patch(
     };
     let updated: Result<Option<CyclePropRow>, sqlx::Error> =
         sqlx::query_as::<_, CyclePropRow>(&format!(
-            "UPDATE cycle_user_properties SET filters = $1, rich_filters = $2, \
+            "UPDATE cycle_user_properties AS c SET filters = $1, rich_filters = $2, \
             display_filters = $3, display_properties = $4, updated_by_id = $5, \
-            updated_at = now() WHERE id = $6 RETURNING {CYCLE_COLS}"
+            updated_at = now() WHERE c.id = $6 RETURNING {CYCLE_COLS}"
         ))
         .bind(pick_or(&body, "filters", &cur.filters))
         .bind(pick_or(&body, "rich_filters", &cur.rich_filters))
@@ -670,9 +670,9 @@ pub async fn module_props_patch(
     };
     let updated: Result<Option<ModulePropRow>, sqlx::Error> =
         sqlx::query_as::<_, ModulePropRow>(&format!(
-            "UPDATE module_user_properties SET filters = $1, rich_filters = $2, \
+            "UPDATE module_user_properties AS m SET filters = $1, rich_filters = $2, \
             display_filters = $3, display_properties = $4, updated_by_id = $5, \
-            updated_at = now() WHERE id = $6 RETURNING {MODULE_COLS}"
+            updated_at = now() WHERE m.id = $6 RETURNING {MODULE_COLS}"
         ))
         .bind(pick_or(&body, "filters", &cur.filters))
         .bind(pick_or(&body, "rich_filters", &cur.rich_filters))
