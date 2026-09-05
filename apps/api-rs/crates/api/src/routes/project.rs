@@ -447,6 +447,303 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
 }
 
+/// Workspace role → project visibility scope for `project_details`.
+/// Mirrors `plane/app/views/project/base.py:105-128`: GUEST (5) sees only
+/// projects with an active membership ("own"), MEMBER (15) sees own +
+/// public (`network=2`), ADMIN (20) sees all. "Own" is an active
+/// `project_members` row
+/// (`project_projectmember__member=user, is_active=True`), NOT `created_by`.
+pub(crate) fn details_scope(role: i16) -> &'static str {
+    match role {
+        20 => "all",
+        15 => "own_or_public",
+        // 5 (GUEST) and anything unknown fall back to the most restrictive
+        // scope; Django only knows 20/15/5 (`ROLE_CHOICES`).
+        _ => "own",
+    }
+}
+
+/// Mirrors `get_next_work_item_sequence`
+/// (`plane/app/serializers/project.py:132-135`): `MAX(sequence)+1`, or 1
+/// when the project has no `IssueSequence` rows.
+pub(crate) fn next_work_item_sequence(max_seq: Option<i64>) -> i64 {
+    max_seq.map(|m| m + 1).unwrap_or(1)
+}
+
+/// Mirrors `Project.cover_image_url` (`plane/db/models/project.py:128-137`)
+/// + `FileAsset.asset_url` (`plane/db/models/asset.py:83-90`): a linked
+/// cover asset wins over the legacy `cover_image` text column; empty text
+/// counts as missing.
+pub(crate) fn cover_image_url(
+    asset_id: Option<uuid::Uuid>,
+    asset_entity_type: Option<&str>,
+    cover_image: Option<&str>,
+) -> Option<String> {
+    if let Some(id) = asset_id {
+        // Practically the linked asset is always `PROJECT_COVER`
+        // (`/api/assets/v2/static/<id>/`); any other entity type yields
+        // Django's per-type branch URLs or `None` — mapped to `None` here
+        // (deviation, see `project_details` docs).
+        if asset_entity_type == Some("PROJECT_COVER") {
+            return Some(format!("/api/assets/v2/static/{id}/"));
+        }
+        return None;
+    }
+    cover_image
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// One row of the `project_details` listing: all `projects` model columns
+/// plus the `get_queryset` annotations (`base.py:54-97`). Field names match
+/// the SELECT aliases in `project_details`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct DetailRow {
+    pub(crate) id: uuid::Uuid,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) description_text: Option<serde_json::Value>,
+    pub(crate) description_html: Option<serde_json::Value>,
+    pub(crate) network: i16,
+    pub(crate) identifier: String,
+    pub(crate) created_by_id: Option<uuid::Uuid>,
+    pub(crate) default_assignee_id: Option<uuid::Uuid>,
+    pub(crate) project_lead_id: Option<uuid::Uuid>,
+    pub(crate) updated_by_id: Option<uuid::Uuid>,
+    pub(crate) workspace_id: uuid::Uuid,
+    pub(crate) emoji: Option<String>,
+    pub(crate) cycle_view: bool,
+    pub(crate) module_view: bool,
+    pub(crate) cover_image: Option<String>,
+    pub(crate) issue_views_view: bool,
+    pub(crate) page_view: bool,
+    pub(crate) estimate_id: Option<uuid::Uuid>,
+    pub(crate) icon_prop: Option<serde_json::Value>,
+    pub(crate) intake_view: bool,
+    pub(crate) archive_in: i32,
+    pub(crate) close_in: i32,
+    pub(crate) default_state_id: Option<uuid::Uuid>,
+    pub(crate) logo_props: serde_json::Value,
+    pub(crate) archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) is_time_tracking_enabled: bool,
+    pub(crate) is_issue_type_enabled: bool,
+    pub(crate) guest_view_all_features: bool,
+    pub(crate) timezone: String,
+    pub(crate) cover_image_asset_id: Option<uuid::Uuid>,
+    pub(crate) external_id: Option<String>,
+    pub(crate) external_source: Option<String>,
+    pub(crate) created_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) is_favorite: bool,
+    pub(crate) member_role: Option<i16>,
+    pub(crate) anchor: Option<String>,
+    pub(crate) sort_order: Option<f64>,
+    pub(crate) max_seq: Option<i64>,
+    pub(crate) cover_asset_entity_type: Option<String>,
+}
+
+/// Serializes one `DetailRow` like `ProjectListSerializer`
+/// (`serializers/project.py:115-139`): all model fields (FKs as id strings,
+/// matching DRF's default PK representation) + the 8 annotation keys.
+pub(crate) fn project_detail_json(row: &DetailRow, members: &[uuid::Uuid]) -> Value {
+    let opt_id = |id: &Option<uuid::Uuid>| id.map(|u| json!(u)).unwrap_or(Value::Null);
+    // Built via explicit `Map` inserts: a 44-key `json!` literal exceeds the
+    // macro recursion limit.
+    let mut m = serde_json::Map::with_capacity(44);
+    let mut put = |k: &str, v: Value| {
+        m.insert(k.to_string(), v);
+    };
+    put("id", json!(row.id));
+    put("name", json!(&row.name));
+    put("description", json!(&row.description));
+    put("description_text", json!(&row.description_text));
+    put("description_html", json!(&row.description_html));
+    put("network", json!(row.network));
+    put("identifier", json!(&row.identifier));
+    put("created_by", opt_id(&row.created_by_id));
+    put("default_assignee", opt_id(&row.default_assignee_id));
+    put("project_lead", opt_id(&row.project_lead_id));
+    put("updated_by", opt_id(&row.updated_by_id));
+    put("workspace", json!(row.workspace_id));
+    put("emoji", json!(&row.emoji));
+    put("cycle_view", json!(row.cycle_view));
+    put("module_view", json!(row.module_view));
+    put("cover_image", json!(&row.cover_image));
+    put("issue_views_view", json!(row.issue_views_view));
+    put("page_view", json!(row.page_view));
+    put("estimate", opt_id(&row.estimate_id));
+    put("icon_prop", json!(&row.icon_prop));
+    put("intake_view", json!(row.intake_view));
+    put("archive_in", json!(row.archive_in));
+    put("close_in", json!(row.close_in));
+    put("default_state", opt_id(&row.default_state_id));
+    put("logo_props", json!(&row.logo_props));
+    put("archived_at", json!(&row.archived_at));
+    put("is_time_tracking_enabled", json!(row.is_time_tracking_enabled));
+    put("is_issue_type_enabled", json!(row.is_issue_type_enabled));
+    // Always null here: the listing query filters `deleted_at IS NULL`
+    // (Django includes the field as null the same way).
+    put("deleted_at", Value::Null);
+    put(
+        "guest_view_all_features",
+        json!(row.guest_view_all_features),
+    );
+    put("timezone", json!(&row.timezone));
+    put("cover_image_asset", opt_id(&row.cover_image_asset_id));
+    put("external_id", json!(&row.external_id));
+    put("external_source", json!(&row.external_source));
+    put("created_at", json!(&row.created_at));
+    put("updated_at", json!(&row.updated_at));
+    put("is_favorite", json!(row.is_favorite));
+    put("member_role", json!(&row.member_role));
+    put("anchor", json!(&row.anchor));
+    put("sort_order", json!(&row.sort_order));
+    put("members", json!(members));
+    put(
+        "cover_image_url",
+        json!(cover_image_url(
+            row.cover_image_asset_id,
+            row.cover_asset_entity_type.as_deref(),
+            row.cover_image.as_deref(),
+        )),
+    );
+    put("inbox_view", json!(row.intake_view));
+    put(
+        "next_work_item_sequence",
+        json!(next_work_item_sequence(row.max_seq)),
+    );
+    Value::Object(m)
+}
+
+/// GET `/api/workspaces/:slug/projects/details/` — parity with Django
+/// `ProjectViewSet.list_detail` full-list branch
+/// (`plane/app/views/project/base.py:101-143`, branch at 142-143).
+///
+/// - Gate: workspace non-members → 403 via `deny()` (`allow_permission`
+///   ADMIN/MEMBER/GUEST, level WORKSPACE).
+/// - Role filter mirrors `base.py:105-128` via `details_scope`.
+/// - Annotations mirror `get_queryset` (`base.py:54-97`): `is_favorite`
+///   (`user_favorites`, `entity_type='project'`), `member_role` (active
+///   membership or null), `anchor` (`deploy_boards`, nullable), `sort_order`
+///   (`project_user_properties`, nullable), `members` (active non-bot member
+///   ids, mirroring `members_list` + `get_members`), `cover_image_url`,
+///   `inbox_view` (`=intake_view`), `next_work_item_sequence` (max+1 else 1).
+/// - Ordering mirrors `base.py:104`: `sort_order, name` (both ASC).
+///
+/// Deviations: paginated branch (`?per_page`, `base.py:130-140`) is OUT — FE
+/// `getProjects()` never paginates (`project.service.ts:55-61`); `?fields=`
+/// filtering is not honored (FE never sends it); datetimes serialize as
+/// RFC3339 (chrono) vs DRF ISO8601 (same instants); annotation subqueries
+/// add explicit `deleted_at IS NULL` (Django's soft-delete default manager
+/// does this implicitly, `mixins.py:58`); `IssueSequence` MAX ignores the
+/// `deleted` boolean flag exactly like Django (only `deleted_at` excluded);
+/// member rows with NULL `member_id` are skipped (Django would crash
+/// dereferencing `member.member.is_bot`); non-`PROJECT_COVER` asset entity
+/// types map `cover_image_url` to null instead of Django's branch URLs.
+pub async fn project_details(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let user_id = auth.0;
+    let role = ws_role(&st.pool, user_id, &slug).await.map_err(|e| {
+        tracing::warn!(error = %e, "projects-details: ws_role lookup failed");
+        common::errors::AppError(anyhow::anyhow!("internal error"))
+    })?;
+    let Some(role) = role else {
+        return Ok(deny());
+    };
+    // Role filter mirrors `base.py:105-128` (`network=2` is PUBLIC,
+    // `project.py:30-33`).
+    let scope_filter = match details_scope(role) {
+        "all" => String::new(),
+        "own_or_public" => "AND (p.network = 2 OR EXISTS(SELECT 1 FROM project_members pmf \
+            WHERE pmf.project_id = p.id AND pmf.member_id = $2 \
+            AND pmf.is_active = true AND pmf.deleted_at IS NULL))"
+            .to_string(),
+        _ => "AND EXISTS(SELECT 1 FROM project_members pmf \
+            WHERE pmf.project_id = p.id AND pmf.member_id = $2 \
+            AND pmf.is_active = true AND pmf.deleted_at IS NULL)"
+            .to_string(),
+    };
+    let sql = format!(
+        "SELECT p.id, p.name, p.description, p.description_text, p.description_html, \
+        p.network, p.identifier, p.created_by_id, p.default_assignee_id, \
+        p.project_lead_id, p.updated_by_id, p.workspace_id, p.emoji, \
+        p.cycle_view, p.module_view, p.cover_image, p.issue_views_view, \
+        p.page_view, p.estimate_id, p.icon_prop, p.intake_view, p.archive_in, \
+        p.close_in, p.default_state_id, p.logo_props, p.archived_at, \
+        p.is_time_tracking_enabled, p.is_issue_type_enabled, \
+        p.guest_view_all_features, p.timezone, p.cover_image_asset_id, \
+        p.external_id, p.external_source, p.created_at, p.updated_at, \
+        EXISTS(SELECT 1 FROM user_favorites uf \
+            WHERE uf.user_id = $2 AND uf.entity_identifier = p.id \
+            AND uf.entity_type = 'project' AND uf.project_id = p.id \
+            AND uf.deleted_at IS NULL) AS is_favorite, \
+        (SELECT pm.role FROM project_members pm \
+            WHERE pm.project_id = p.id AND pm.member_id = $2 \
+            AND pm.is_active = true AND pm.deleted_at IS NULL) AS member_role, \
+        (SELECT db.anchor FROM deploy_boards db \
+            WHERE db.entity_name = 'project' AND db.entity_identifier = p.id \
+            AND db.workspace_id = p.workspace_id \
+            AND db.deleted_at IS NULL) AS anchor, \
+        (SELECT pup.sort_order FROM project_user_properties pup \
+            WHERE pup.user_id = $2 AND pup.project_id = p.id \
+            AND pup.workspace_id = p.workspace_id \
+            AND pup.deleted_at IS NULL) AS sort_order, \
+        (SELECT MAX(seq.sequence) FROM issue_sequences seq \
+            WHERE seq.project_id = p.id AND seq.deleted_at IS NULL) AS max_seq, \
+        fa.entity_type AS cover_asset_entity_type \
+        FROM projects p \
+        JOIN workspaces w ON w.id = p.workspace_id \
+        LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
+        WHERE w.slug = $1 AND p.deleted_at IS NULL {scope_filter} \
+        ORDER BY sort_order ASC NULLS LAST, p.name ASC"
+    );
+    let rows: Vec<DetailRow> = sqlx::query_as(&sql)
+        .bind(&slug)
+        .bind(user_id)
+        .fetch_all(&st.pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "projects-details: listing query failed");
+            common::errors::AppError(anyhow::anyhow!("internal error"))
+        })?;
+    // Members for all rows in one query (mirrors the `members_list`
+    // prefetch `base.py:89-97` + `get_members`
+    // `serializers/project.py:125-130`: active members, bots excluded).
+    let ids: Vec<uuid::Uuid> = rows.iter().map(|r| r.id).collect();
+    let member_rows: Vec<(uuid::Uuid, uuid::Uuid)> = if ids.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as(
+            "SELECT pm.project_id, pm.member_id FROM project_members pm \
+             JOIN users u ON u.id = pm.member_id \
+             WHERE pm.project_id = ANY($1) AND pm.is_active = true \
+             AND pm.deleted_at IS NULL AND pm.member_id IS NOT NULL \
+             AND u.is_bot = false",
+        )
+        .bind(&ids)
+        .fetch_all(&st.pool)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = %e, "projects-details: members query failed");
+            common::errors::AppError(anyhow::anyhow!("internal error"))
+        })?
+    };
+    let mut by_project: std::collections::HashMap<uuid::Uuid, Vec<uuid::Uuid>> =
+        std::collections::HashMap::new();
+    for (pid, mid) in member_rows {
+        by_project.entry(pid).or_default().push(mid);
+    }
+    let empty: Vec<uuid::Uuid> = Vec::new();
+    let out: Vec<Value> = rows
+        .iter()
+        .map(|r| project_detail_json(r, by_project.get(&r.id).unwrap_or(&empty)))
+        .collect();
+    Ok((StatusCode::OK, Json(Value::Array(out))))
+}
+
 #[cfg(test)]
 mod batch_c_tests {
     use super::*;
@@ -492,5 +789,116 @@ mod batch_c_tests {
             invalid_lead_body(&lead),
             serde_json::json!({"project_lead": ["Invalid pk \"12345678-1234-5678-1234-567812345678\" - object does not exist."]})
         );
+    }
+
+    #[test]
+    fn details_scope_matches_django_role_filters() {
+        // Mapping mirrors `plane/app/views/project/base.py:105-128`: GUEST
+        // (5) sees only projects with an active membership ("own"), MEMBER
+        // (15) sees own + public (`network=2`), ADMIN (20) sees all. "Own"
+        // means an active `project_members` row
+        // (`project_projectmember__member=user, is_active=True`), NOT
+        // `created_by` — read from code, not guessed.
+        assert_eq!(details_scope(20), "all");
+        assert_eq!(details_scope(15), "own_or_public");
+        assert_eq!(details_scope(5), "own");
+    }
+
+    #[test]
+    fn next_sequence_matches_django_serializer() {
+        // Mirrors `get_next_work_item_sequence`
+        // (`plane/app/serializers/project.py:132-135`): max+1, or 1 when no
+        // `IssueSequence` rows exist.
+        assert_eq!(next_work_item_sequence(None), 1);
+        assert_eq!(next_work_item_sequence(Some(4)), 5);
+    }
+
+    #[test]
+    fn cover_url_matches_django_property() {
+        // Mirrors `Project.cover_image_url`
+        // (`plane/db/models/project.py:128-137`) + `FileAsset.asset_url`
+        // (`plane/db/models/asset.py:83-90`): asset wins over the legacy
+        // `cover_image` text column; empty text counts as missing.
+        let asset = uuid::Uuid::parse_str("12345678-1234-5678-1234-567812345678").unwrap();
+        assert_eq!(
+            cover_image_url(Some(asset), Some("PROJECT_COVER"), None),
+            Some(format!("/api/assets/v2/static/{asset}/"))
+        );
+        assert_eq!(
+            cover_image_url(Some(asset), Some("ISSUE_ATTACHMENT"), Some("https://x/y.png")),
+            None
+        );
+        assert_eq!(
+            cover_image_url(None, None, Some("https://x/y.png")),
+            Some("https://x/y.png".to_string())
+        );
+        assert_eq!(cover_image_url(None, None, Some("")), None);
+        assert_eq!(cover_image_url(None, None, None), None);
+    }
+
+    #[test]
+    fn detail_json_has_all_serializer_fields() {
+        // `ProjectListSerializer` (`serializers/project.py:115-139`) =
+        // all model fields + 8 annotation keys (`is_favorite`,
+        // `member_role`, `anchor`, `sort_order`, `members`,
+        // `cover_image_url`, `inbox_view`, `next_work_item_sequence`).
+        let row = DetailRow {
+            id: uuid::Uuid::nil(),
+            name: "P".to_string(),
+            description: String::new(),
+            description_text: None,
+            description_html: None,
+            network: 2,
+            identifier: "P".to_string(),
+            created_by_id: None,
+            default_assignee_id: None,
+            project_lead_id: None,
+            updated_by_id: None,
+            workspace_id: uuid::Uuid::nil(),
+            emoji: None,
+            cycle_view: false,
+            module_view: false,
+            cover_image: None,
+            issue_views_view: false,
+            page_view: true,
+            estimate_id: None,
+            icon_prop: None,
+            intake_view: false,
+            archive_in: 0,
+            close_in: 0,
+            default_state_id: None,
+            logo_props: serde_json::json!({}),
+            archived_at: None,
+            is_time_tracking_enabled: false,
+            is_issue_type_enabled: false,
+            guest_view_all_features: false,
+            timezone: "UTC".to_string(),
+            cover_image_asset_id: None,
+            external_id: None,
+            external_source: None,
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            is_favorite: false,
+            member_role: None,
+            anchor: None,
+            sort_order: None,
+            max_seq: None,
+            cover_asset_entity_type: None,
+        };
+        let v = project_detail_json(&row, &[]);
+        for key in [
+            "is_favorite",
+            "member_role",
+            "anchor",
+            "sort_order",
+            "members",
+            "cover_image_url",
+            "inbox_view",
+            "next_work_item_sequence",
+        ] {
+            assert!(v.get(key).is_some(), "missing key {key}");
+        }
+        // 36 model columns + 8 annotation keys.
+        assert_eq!(v.as_object().unwrap().len(), 44);
     }
 }

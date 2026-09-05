@@ -41,6 +41,10 @@ async fn main() {
             get(routes::project::list).post(routes::project::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/details/",
+            get(routes::project::project_details),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:pk/",
             get(routes::project::detail)
                 .patch(routes::project::patch)
