@@ -420,6 +420,7 @@ async fn main() {
         .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
         .route("/auth/email-check/", post(routes::auth::email_check))
         .route("/auth/forgot-password/", post(routes::auth_compat::forgot_password))
+        .route("/auth/magic-generate/", post(routes::auth_compat::magic_generate))
         .route("/auth/get-csrf-token/", get(routes::auth_compat::csrf_token))
         .route_layer(axum_middleware::from_fn_with_state(
             IpRateLimiter::new(5, std::time::Duration::from_secs(60)),

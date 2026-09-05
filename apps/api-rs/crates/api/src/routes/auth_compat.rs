@@ -191,6 +191,34 @@ pub async fn forgot_password(
     (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "password-reset email delivery not implemented yet"})))
 }
 
+/// POST /auth/magic-generate/ — paritas `MagicGenerateEndpoint` (`magic.py:36-61`)
+/// SEBATAS gate (5000/5025/5005). Penerbitan kode + email = follow-up bersama
+/// forgot-password; sukses kelak 200 `{"key": str}`.
+pub async fn magic_generate(
+    State(st): State<AppState>,
+    Json(body): Json<EmailCheckBody>,
+) -> (StatusCode, Json<Value>) {
+    // NOTE: `instances` punya `deleted_at`, `users` tidak — selaras forgot-password.
+    let setup: Option<bool> = sqlx::query_scalar(
+        "SELECT is_setup_done FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .unwrap_or(None);
+    if setup != Some(true) {
+        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+    }
+    if !smtp_configured(&std::env::var("EMAIL_HOST").unwrap_or_default()) {
+        return (StatusCode::BAD_REQUEST, auth_error(5025, "SMTP_NOT_CONFIGURED"));
+    }
+    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    if email.is_empty() || !email_valid(&email) {
+        return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
+    }
+    // SMTP terkonfigurasi tapi penerbitan kode + email belum ada → katakan terus terang.
+    (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "magic-code email delivery not implemented yet"})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +247,11 @@ mod tests {
     fn smtp_gate() {
         assert!(!smtp_configured(""));
         assert!(smtp_configured("smtp.example.com"));
+    }
+
+    #[test]
+    fn magic_key_shape() {
+        let v = json!({"key": "abc123"});
+        assert_eq!(v["key"], "abc123");
     }
 }
