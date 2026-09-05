@@ -23,6 +23,7 @@ pub mod label;
 pub mod module;
 pub mod project;
 pub mod state;
+pub mod subscribe;
 pub mod user;
 pub mod users_me;
 pub mod workspace;

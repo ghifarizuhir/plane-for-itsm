@@ -149,6 +149,33 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/sub-issues/",
             get(routes::issue_sub::sub_list).post(routes::issue_sub::sub_add),
         )
+        // Parity with `IssueSubscriberViewSet.subscription_status/subscribe/
+        // unsubscribe` (`views/issue/subscriber.py:69-104`,
+        // `urls/issue.py:185-189`): GET 200 `{"subscribed"}` + POST 201 +
+        // DELETE 204 on the issues path ONLY (no work-items/epics variants —
+        // Django defines none).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/subscribe/",
+            get(routes::subscribe::subscription_status)
+                .post(routes::subscribe::subscribe)
+                .delete(routes::subscribe::unsubscribe),
+        )
+        // Parity with `IssueSubscriberViewSet.list`
+        // (`views/issue/subscriber.py:52-57`, `urls/issue.py:174-179`): GET
+        // returns the `ProjectMemberLite` list (issues path ONLY). Django's
+        // URL also maps POST→create, but the Batch D plan scopes D1b to
+        // GET + DELETE only, so no POST handler is wired here.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/",
+            get(routes::subscribe::subscribers_list),
+        )
+        // Parity with `IssueSubscriberViewSet.destroy`
+        // (`views/issue/subscriber.py:59-67`, `urls/issue.py:180-184`):
+        // DELETE 204 (issues path ONLY).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/:subscriber_id/",
+            delete(routes::subscribe::subscriber_remove),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
