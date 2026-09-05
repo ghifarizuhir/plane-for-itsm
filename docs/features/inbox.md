@@ -31,7 +31,7 @@ Satu tempat untuk semua pemberitahuan workspace: mention, assignment, update wor
 
 ### Tanpa realtime socket
 
-Koreksi penting: tidak ada websocket/centrifugo/live untuk notifikasi — hanya SWR fetch on-mount + refetch `getUnreadNotificationsCount` tiap `getNotifications` (store `:345`). Email async via celery `bgtasks/email_notification_task.stack_email_notification` (`api/plane/celery.py:46-47`).
+Koreksi penting: tidak ada websocket/centrifugo/live untuk notifikasi — hanya SWR fetch on-mount + refetch `getUnreadNotificationsCount` tiap `getNotifications` (store `:345`). Email async via Rust worker (`crates/worker`, Stream `plane:jobs`; cron stack tiap 5 mnt via `crates/beat`) — padanan Django `bgtasks/email_notification_task.stack_email_notification` hanya referensi/fallback.
 
 ### Store (MobX)
 
@@ -39,6 +39,8 @@ Koreksi penting: tidak ada websocket/centrifugo/live untuk notifikasi — hanya 
 - Item: `store/notifications/notification.ts:33-324` `class Notification`: `markNotificationAsRead` / `UnRead` (`:194` / `:219`, optimistic + rollback count), `archive` / `unArchive` (`:244` / `:267`), `snooze` / `unSnooze` (`:291` / `:311`), `updateNotification` (`:174`).
 
 ### Model + API (Django)
+
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
 
 - Model: `apps/api/plane/db/models/notification.py` — `Notification:13-39` (`workspace` FK, `project` FK null, `data` JSON, `entity_identifier` UUID, `entity_name`, `title` Text, `message` JSON / `message_html` / `message_stripped`, `sender` Char, `triggered_by` FK User SET_NULL, `receiver` FK User CASCADE, `read_at` / `snoozed_till` / `archived_at` nullable; `db_table = "notifications"`, ordering `-created_at`); `UserNotificationPreference:81-108` (`user` / `workspace` / `project` FK + `property_change` / `state_change` / `comment` / `mention` / `issue_completed` Bool default True); `EmailNotificationLog:121-149`.
 - API: `apps/api/plane/app/urls/notification.py:16-52` (views `app/views/notification/base.py:33-296`) → `GET users/notifications/` (list, `NotificationViewSet.list:49`), `GET/PATCH/DELETE <uuid:pk>/`, `POST/DELETE <pk>/read/` (`mark_read:169` / `mark_unread:177`), `POST/DELETE <pk>/archive/` (`archive:185` / `unarchive:193`), `GET unread/` (`UnreadNotificationEndpoint:201`), `POST mark-all-read/` (`MarkAllReadNotificationViewSet.create:239`), `users/me/notification-preferences/` (`UserNotificationPreferenceEndpoint:296`).

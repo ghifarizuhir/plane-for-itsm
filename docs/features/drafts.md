@@ -28,6 +28,8 @@ Koreksi penting: `Issue.is_draft` (`issue.py:100,161`, manager exclude `is_draft
 
 ### Model + API (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - ViewSet: `apps/api/plane/app/views/workspace/draft.py:46-51` (`WorkspaceDraftIssueViewSet`, `model = DraftIssue`).
 - API: `apps/api/plane/app/urls/workspace.py:203,208,213` → `draft-issues/`, `draft-issues/<pk>/`, `draft-to-issue/<draft_id>/`.
 

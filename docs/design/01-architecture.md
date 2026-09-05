@@ -4,18 +4,18 @@ Status: **Draft.**
 
 References: [`02-data-model.md`](./02-data-model.md), [`03-api-contract.md`](./03-api-contract.md).
 
-Adaptasi dari `terra/docs/design/03-architecture.md:1` — stack Terra (npm+Express+Drizzle+TanStack Query) diganti stack Plane (pnpm+Turbo+Django+MobX).
+Adaptasi dari `terra/docs/design/03-architecture.md:1` — stack Terra (npm+Express+Drizzle+TanStack Query) diganti stack Plane (pnpm+Turbo+Rust Axum+MobX). Sejak cutover `rust-cutover-v1` (2026-09-05), API utama adalah **Rust Axum + SQLx** (`apps/api-rs`); Django (`apps/api`) tinggal sebagai fallback opt-in `api-legacy` untuk boundary yang belum di-port.
 
 ---
 
 ## Design Principles
 
 1. **Monorepo dengan batasan tegas.** `apps/*` adalah user-facing app; `packages/*` adalah reusable library. Apps tidak import apps lain. Packages tidak import apps. Enforce via `pnpm-workspace.yaml` + `catalog:` + `workspace:*`.
-2. **Django sebagai source of truth data.** Semua model di `apps/api/plane/db/models/` — bukan `entities` JSONB. Frontend (MobX stores) mirror API shape, bukan define sendiri.
+2. **Postgres sebagai source of truth data.** Skema didefinisikan Django (`apps/api/plane/db/models/`, 123 migrasi → baseline idempoten `apps/api-rs/migrations/0001_initial.sql`); Rust SQLx query tabel yang sama — bukan `entities` JSONB. Frontend (MobX stores) mirror API shape, bukan define sendiri.
 3. **TypeScript strict everywhere.** `strict: true`, `noUncheckedIndexedAccess: true` — `packages/typescript-config` shared. Tidak ada `any`.
-4. **Thin views, fat services.** Di `apps/api/plane/api/` — view hanya parse req, call service/serializer, serialize response. Business logic di `services/`/`bgtasks/`.
+4. **Thin handlers, pure validators.** Di `apps/api-rs/crates/api/src/routes/` — handler hanya parse req, call validator murni (`validate_*`), query SQLx, serialize response. Business logic async di `crates/worker/src/handlers/` via Redis Stream `plane:jobs`. (Django `plane/api/` + `plane/bgtasks/` hanya referensi/fallback.)
 5. **Feature-colocation di frontend.** `apps/web/core/` + `apps/web/app/routes` per domain — bukan sorted by technical concern.
-6. **Postgres-only.** `dj_database_url` (`plane/settings/common.py:204`) — no SQLite.
+6. **Postgres-only.** `DATABASE_URL` (pool SQLx 5 koneksi, `apps/api-rs/crates/common/src/db.rs`) — no SQLite.
 7. **Dev parity dengan prod.** Docker Compose (`docker-compose.yml`, `docker-compose-local.yml`) sama dengan prod image.
 
 ---
@@ -34,7 +34,8 @@ plane-for-itsm/                            ← pnpm + turbo (terra: npm workspac
 │   ├── admin/      (@admin — god-mode, port 3001, `apps/admin/app/(all)/(dashboard)/*`)
 │   ├── live/       (live — Express+ws + @hocuspocus/server, Yjs collab, port LIVE_BASE_URL)
 │   ├── space/      (space — Pages public, `SPACE_BASE_PATH=/spaces/`)
-│   ├── api/        (api — Django 5 + DRF + Celery + Postgres + Redis + RabbitMQ, `plane/*`)
+│   ├── api-rs/     (api — Rust Axum + SQLx + Redis Stream, `crates/api|worker|beat`, port 8000)
+│   ├── api/        (api-legacy — Django 5 + DRF, fallback opt-in `--profile legacy`, `plane/*`)
 │   └── proxy/      (proxy — reverse)
 │
 └── packages/
@@ -50,7 +51,7 @@ plane-for-itsm/                            ← pnpm + turbo (terra: npm workspac
     └── tailwind-config/ + typescript-config/ + logger/ + ...
 ```
 
-**Terra vs Plane:** Terra `apps/web/src/features/<domain>/` + `apps/api/src/services/` + `packages/contracts` (Zod). Plane `apps/web/core/store/<domain>.store.ts` (MobX) + `apps/api/plane/db/models/<domain>.py` (Django) + `packages/types` + `packages/services` (axios). Jangan copy Terra layout — pakai Plane idioms.
+**Terra vs Plane:** Terra `apps/web/src/features/<domain>/` + `apps/api/src/services/` + `packages/contracts` (Zod). Plane `apps/web/core/store/<domain>.store.ts` (MobX) + `apps/api-rs/crates/api/src/routes/<domain>.rs` (Axum, validator murni) + `packages/types` + `packages/services` (axios). Skema tabel referensi `apps/api/plane/db/models/<domain>.py` (Django). Jangan copy Terra layout — pakai Plane idioms.
 
 ---
 
@@ -62,7 +63,8 @@ plane-for-itsm/                            ← pnpm + turbo (terra: npm workspac
 packages:
   - apps/*
   - packages/*
-  - "!apps/api" # Django — bukan pnpm workspace
+  - "!apps/api" # Django legacy — bukan pnpm workspace
+  - "!apps/api-rs" # Rust cargo workspace — bukan pnpm workspace
   - "!apps/proxy"
 catalog: # 70+ deps pinned (terra: package.json workspaces)
   react: "19.2.8"
@@ -121,18 +123,22 @@ catalog: # 70+ deps pinned (terra: package.json workspaces)
 | Build          | React Router dev + Vite 8           | 8.0.16  | `react-router.config.ts`                   |
 | Lint           | Oxlint 1.51 + oxfmt 0.35            | —       | `docs/linting.md`                          |
 
-### `apps/api`
+### `apps/api-rs` (cutover `rust-cutover-v1` — API utama)
 
-| Concern   | Library                                     | Versi | Alasan                                        |
-| --------- | ------------------------------------------- | ----- | --------------------------------------------- |
-| Runtime   | Python                                      | 3.11+ | Django requirement                            |
-| Framework | Django 5 + DRF                              | —     | `plane/settings/common.py:114`                |
-| DB driver | psycopg + dj_database_url                   | —     | `plane/settings/common.py:204`                |
-| Cache     | django-redis + Redis                        | —     | `plane/settings/common.py:242`                |
-| Queue     | Celery + RabbitMQ                           | —     | `plane/settings/common.py:326`                |
-| Auth      | SessionAuthentication + django-cors-headers | —     | `plane/settings/common.py:138`                |
-| Storage   | S3/MinIO (whitenoise)                       | —     | `plane/settings/common.py:303`                |
-| Testing   | pytest + pytest-django                      | —     | `apps/api/tests/` + `docker-compose-test.yml` |
+| Concern    | Library                                              | Versi | Alasan                                                  |
+| ---------- | ---------------------------------------------------- | ----- | ------------------------------------------------------- |
+| Runtime    | Rust                                                 | 1.96  | `rust-toolchain.toml`, musl static                      |
+| Framework  | Axum                                                 | 0.7   | `crates/api/src/main.rs`                                |
+| DB driver  | SQLx (compile-time checked) + `PgPool` (max 5)       | 0.7   | `crates/common/src/db.rs`                               |
+| Migrasi    | sqlx migrate (baseline idempoten `migrations/`)      | —     | boot-migrate di api/worker                              |
+| Queue      | Redis Stream `plane:jobs` (consumer group + DLQ)     | —     | `crates/common/src/stream.rs`, ganti RabbitMQ (dihapus) |
+| Scheduler  | tokio-cron-scheduler (11 jadwal ala celery beat)     | —     | `crates/beat`                                           |
+| Auth       | `X-Api-Key` (DB `api_tokens`) + `Bearer`             | —     | `crates/api/src/middleware/auth.rs`                     |
+| Rate-limit | token-bucket per-key, 600/mnt, 429 langsung          | —     | `crates/api/src/middleware/rate_limit.rs`               |
+| Alloc      | jemalloc + LTO + strip (binary api ~6,7 MB)          | —     | RSS api+worker+beat ~9 MiB (<150)                       |
+| Testing    | cargo test workspace + shadow + parity/cutover gates | —     | `crates/*/tests/`, `scripts/shadow.sh`                  |
+
+Django (`apps/api`: Python 3.11, Django 5 + DRF, Celery + RabbitMQ) tinggal sebagai **fallback opt-in** `api-legacy` (`--profile legacy`) untuk boundary belum di-port: asset S3 upload/download, Unsplash/GPT external, analytic export, notification sending, OAuth — lihat `03-api-contract.md`.
 
 ---
 
@@ -185,43 +191,36 @@ apps/web/app/
 
 ---
 
-## apps/api Architecture
+## apps/api-rs Architecture (Django `apps/api` = referensi/fallback)
 
 ### Request Lifecycle
 
 ```
 Request
   ↓
-middleware: CorsMiddleware → SecurityMiddleware → SessionMiddleware (plane 125)
+tower-http: Trace + CORS + body limit 5 MB
   ↓
-DRF: authentication (SessionAuthentication 139) → throttling (Anonymous/asset_id) → permission (IsAuthenticated 145)
+middleware: rate_limit (token-bucket 600/mnt → 429) → auth (X-Api-Key → owner user_id, atau Bearer)
   ↓
-view (apps/api/plane/api/views/*): parse + serializer.validate + call service
+handler (crates/api/src/routes/<domain>.rs): parse + validate_* murni + query SQLx
   ↓
-service / bgtasks (plane.bgtasks.*, Celery): business logic + transaksi
+async? → XADD plane:jobs → worker consumer group → handlers (cleanup, email, webhook, …)
   ↓
-serializer: serialize response
-  ↓
-middleware: logger (RequestLoggerMiddleware 134)
-  ↓
-Response (JSONRenderer 146)
+Response JSON (kontrak 1:1 Django — shadow.sh + parity gate)
 ```
 
-### Service Layer (Django — bukan Express service)
+### Handler Pattern (Rust — bukan DRF ViewSet)
 
-```python
-# plane/api/views/issue.py (contoh pola — thin view)
-class IssueViewSet(viewsets.ModelViewSet):
-    serializer_class = IssueSerializer
-    permission_classes = [IsAuthenticated]
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(created_by=request.user, workspace=request.workspace)
-        return Response(serializer.data, status=201)
+```rust
+// crates/api/src/routes/issue.rs (pola — thin handler)
+pub async fn create(State(s): State<AppState>, auth: AuthUser, Json(b): Json<CreateIssue>) -> ... {
+    validate_create(&b).map_err(bad_request)?;   // validator murni, unit-testable
+    let row = sqlx::query!(...).fetch_one(&s.pool).await?;  // tabel sama dengan Django
+    Ok((StatusCode::CREATED, Json(row)))
+}
 ```
 
-Business logic di `plane/bgtasks/*` (Celery) untuk async; sync logic di `plane/utils/*` atau `plane/api/services/`.
+Business logic async di `crates/worker/src/handlers/*` (Redis Stream); cron di `crates/beat` (11 jadwal). Validasi sync di fungsi `validate_*` per route.
 
 ---
 
@@ -231,28 +230,32 @@ Business logic di `plane/bgtasks/*` (Celery) untuk async; sync logic di `plane/u
 pnpm build  → turbo run build
   1. packages/* → dist/ (tsdown)
   2. apps/web, admin, space, live → build/ (react-router build)
-  3. apps/api → collectstatic (whitenoise)
+  3. apps/api-rs → cargo build --release (LTO+strip; Dockerfile.rs, butuh build-base make perl)
 Runtime:
   - web: serve build/client (port 3000)
-  - api: gunicorn plane.wsgi (DJANGO_SETTINGS_MODULE=plane.settings)
+  - api: /usr/local/bin/api (Rust, PORT=8000, boot-migrate sqlx)
+  - worker: /usr/local/bin/worker (Redis Stream plane:jobs)
+  - beat: /usr/local/bin/beat (11 cron)
   - live: node apps/live/dist (Hocuspocus+ws)
-  - proxy: nginx reverse
+  - proxy: Caddy reverse (`/api/*`, `/auth/*`, `/static/*` → api:8000, tidak berubah saat cutover)
 ```
 
-Single compose layout: `docker-compose.yml` → web:3000, admin:3001, api:8000, live:\*, postgres, redis, rabbitmq.
+Single compose layout: `docker-compose.yml` → web:3000, admin:3001, api:8000 (Rust), live:\*, postgres (`max_connections=100`), redis (Valkey, Stream + cache). `plane-mq` (RabbitMQ) **dihapus**; Django hanya via `--profile legacy` (`api-legacy:8000` internal).
 
 ---
 
 ## Coding Conventions
 
-| Kind            | Convention                        | Example                                      |
-| --------------- | --------------------------------- | -------------------------------------------- |
-| React component | PascalCase                        | `IssueDetail.tsx`                            |
-| MobX store      | camelCase + `.store.ts`           | `issue.store.ts` (`core/store/issue/`)       |
-| Django model    | PascalCase, app `plane.db.models` | `Issue`, `Workspace`, `Cycle`, `Module`      |
-| DRF view        | `<Domain>ViewSet`                 | `IssueViewSet`                               |
-| API path        | kebab-case                        | `/api/workspaces/:slug/projects/:id/issues/` |
-| TS type         | PascalCase                        | `Issue`, `Workspace` (`packages/types`)      |
+| Kind            | Convention                        | Example                                                                   |
+| --------------- | --------------------------------- | ------------------------------------------------------------------------- |
+| React component | PascalCase                        | `IssueDetail.tsx`                                                         |
+| MobX store      | camelCase + `.store.ts`           | `issue.store.ts` (`core/store/issue/`)                                    |
+| Django model    | PascalCase, app `plane.db.models` | `Issue`, `Workspace`, `Cycle`, `Module` (referensi skema — dilayani Rust) |
+| DRF view        | `<Domain>ViewSet`                 | `IssueViewSet` (legacy — padanan Rust: `routes/issue.rs`)                 |
+| Rust route      | snake_case file + handler         | `routes/cycle.rs::list/create/detail/patch/delete`                        |
+| Rust validator  | `validate_*` murni                | `validate_archive`, `validate_upload_init`                                |
+| API path        | kebab-case                        | `/api/workspaces/:slug/projects/:id/issues/`                              |
+| TS type         | PascalCase                        | `Issue`, `Workspace` (`packages/types`)                                   |
 
 Import order: builtins → external (`catalog:`) → `workspace:*` (`@plane/*`) → relative.
 
@@ -260,14 +263,14 @@ Import order: builtins → external (`catalog:`) → `workspace:*` (`@plane/*`) 
 
 ## Resolved Decisions
 
-| #   | Topik            | Keputusan                                                                 |
-| --- | ---------------- | ------------------------------------------------------------------------- |
-| 1   | Monorepo tooling | **pnpm + Turbo** — actual (`pnpm-workspace.yaml:1`, `turbo.json:1`)       |
-| 2   | Backend          | **Django 5 + DRF** — actual (`plane/settings/common.py:97`)               |
-| 3   | Frontend state   | **MobX + SWR** — actual (`CoreRootStore`, `swr:2.4.2`)                    |
-| 4   | Editor           | **TipTap 2 + Yjs + Hocuspocus** — actual (`packages/editor`, `apps/live`) |
-| 5   | Lint             | **Oxlint + oxfmt** — actual (`package.json:31`)                           |
-| 6   | Realtime         | **apps/live (Express+ws)** — actual (`LIVE_BASE_URL`)                     |
+| #   | Topik            | Keputusan                                                                                      |
+| --- | ---------------- | ---------------------------------------------------------------------------------------------- |
+| 1   | Monorepo tooling | **pnpm + Turbo** — actual (`pnpm-workspace.yaml:1`, `turbo.json:1`)                            |
+| 2   | Backend          | **Rust Axum + SQLx** — actual (`apps/api-rs`, tag `rust-cutover-v1`); Django = fallback opt-in |
+| 3   | Frontend state   | **MobX + SWR** — actual (`CoreRootStore`, `swr:2.4.2`)                                         |
+| 4   | Editor           | **TipTap 2 + Yjs + Hocuspocus** — actual (`packages/editor`, `apps/live`)                      |
+| 5   | Lint             | **Oxlint + oxfmt** — actual (`package.json:31`)                                                |
+| 6   | Realtime         | **apps/live (Express+ws)** — actual (`LIVE_BASE_URL`)                                          |
 
 ---
 
@@ -287,6 +290,7 @@ Layouts: `apps/web/core/layouts/auth-layout` + `default-layout`; admin sidebar `
 
 ## Changelog
 
-| Date       | Change    |
-| ---------- | --------- |
-| 2026-09-03 | fork init |
+| Date       | Change                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| 2026-09-03 | fork init                                                                                                        |
+| 2026-09-05 | cutover `rust-cutover-v1`: API utama Rust Axum+SQLx (api:8000), Django → `api-legacy` opt-in, `plane-mq` dihapus |

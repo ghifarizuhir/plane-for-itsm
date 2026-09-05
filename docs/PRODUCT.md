@@ -23,7 +23,7 @@ Sukses = seberapa cepat work bergerak `open → done` dengan trace lengkap (comm
 
 ## Positioning
 
-Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra = **entity-graph unification**, tapi itu arsitektur Terra (Express+Drizzle `entities` JSONB) — bukan actual Plane (Django per-table `plane/db/models/`). Fork ITSM future (lihat `_backlog.md`) akan reuse Work Items + `IssueType` (`issue_type.py:11`) bila memungkinkan, bukan copy `entities` JSONB.
+Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra = **entity-graph unification**, tapi itu arsitektur Terra (Express+Drizzle `entities` JSONB) — bukan actual Plane (Postgres per-table, skema `plane/db/models/`, dilayani Rust Axum). Fork ITSM future (lihat `_backlog.md`) akan reuse Work Items + `IssueType` (`issue_type.py:11`) bila memungkinkan, bukan copy `entities` JSONB.
 
 ## Operating Context
 
@@ -55,8 +55,8 @@ Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra
 **Constraints:**
 
 - UI bahasa Inggris (product), docs Indonesia.
-- Deploy: **Docker Compose** (`docker-compose.yml`, `docker-compose-local.yml`) + Postgres + Redis + RabbitMQ/Celery — bukan Render free-tier Terra.
-- Auth: Django `SessionAuthentication` (`plane/settings/common.py:139`) + social (GitHub/GitLab/Google/Gitea) + god-mode — bukan JWT bearer Terra.
+- Deploy: **Docker Compose** (`docker-compose.yml`) + Postgres + Valkey Redis (Stream `plane:jobs`, ganti RabbitMQ/Celery) — bukan Render free-tier Terra. API: Rust `api:8000`; Django hanya fallback opt-in.
+- Auth: `X-Api-Key` + `Bearer` (Rust) + social OAuth via Django fallback (GitHub/GitLab/Google/Gitea) + god-mode — bukan JWT bearer Terra.
 - Package manager: **pnpm** (`pnpm@11.10.0`, `pnpm-workspace.yaml:1`) + **Turbo** (`turbo.json:1`) — bukan npm workspaces.
 
 ## Brand Commitments
@@ -67,7 +67,7 @@ Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra
 
 ## Evidence on Hand
 
-- `apps/web` + `apps/admin` + `apps/live` + `apps/space` + `apps/api` (Django) + `packages/*` (15 packages) — working implementation Plane.
+- `apps/web` + `apps/admin` + `apps/live` + `apps/space` + `apps/api-rs` (Rust Axum — API utama) + `apps/api` (Django, fallback) + `packages/*` (15 packages) — working implementation Plane.
 - `docs/design/` — engineering cross-cutting (lihat `design/README.md`).
 - `docs/features/` — per-page specs (lihat `features/README.md`).
 - Upstream: `https://docs.plane.so` + `https://developers.plane.so`.
@@ -84,6 +84,7 @@ Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra
 
 ## Changelog
 
-| Date       | Change                                         |
-| ---------- | ---------------------------------------------- |
-| 2026-09-03 | fork init — adaptasi dari terra `PRODUCT.md:6` |
+| Date       | Change                                                    |
+| ---------- | --------------------------------------------------------- |
+| 2026-09-03 | fork init — adaptasi dari terra `PRODUCT.md:6`            |
+| 2026-09-05 | cutover `rust-cutover-v1`: backend + deploy + auth → Rust |

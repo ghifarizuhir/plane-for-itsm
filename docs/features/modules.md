@@ -39,6 +39,8 @@ Pengelompokan kerja lintas-sprint: module adalah container work items untuk sebu
 
 ### Model (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - `apps/api/plane/db/models/module.py:58-99`: `ModuleStatus` 6 nilai; field `name`, `description` (+ `_text` / `_html`), `start_date`, `target_date`, `status` (default `planned`), `lead` (FK), `members` (M2M via `ModuleMember`), `archived_at`, `sort_order`, `view_props` / `logo_props`.
 - Relasi: `ModuleIssue`, `ModuleLink`, `ModuleUserProperties`.
 

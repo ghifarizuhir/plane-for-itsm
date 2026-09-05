@@ -61,6 +61,8 @@ Redirect legacy: `:workspaceSlug/projects/:projectId/settings/*` → path baru (
 
 ### Model Django + Store FE (peta)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - Model: `workspace.py:198` (`WorkspaceMember`), `project.py:210` (`ProjectMember`), `state.py:79` (`State`), `label.py:11` (`Label`), `estimate.py:18` (`Estimate`), `webhook.py:34` (`Webhook`).
 - Store FE: `store/member/workspace/workspace-member.store.ts`, `member/project/base-project-member.store.ts`, `state.store.ts`, `label.store.ts`, `estimates/project-estimate.store.ts`, `workspace/webhook.store.ts`, `user/settings.store.ts` + `profile.store.ts`.
 

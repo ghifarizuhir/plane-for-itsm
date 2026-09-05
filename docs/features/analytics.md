@@ -32,6 +32,8 @@ Koreksi penting: `ProgressChart` (`components/core/sidebar/progress-chart.tsx:20
 
 ### Model + API (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - Model: `apps/api/plane/db/models/analytic.py:11-26` `AnalyticView` (workspace FK `related_name="analytics"`, `name`, `description`, `query` JSON, `query_dict`); app `plane/analytics/apps.py:9`, terdaftar `settings/common.py:103`. Catatan: model ini saved analytic view (CRUD API ada) — bukan definisi tab.
 - API: `apps/api/plane/app/urls/analytic.py:24-89` → `GET analytics/`, `analytic-view/` + `analytic-view/<pk>/` (CRUD `AnalyticViewViewset`), `saved-analytic-view/<id>/`, `export-analytics/`, `default-analytics/`, `project-stats/`, `advance-analytics[/-stats/-charts]` (workspace-level) + `projects/<id>/advance-analytics[/-stats/-charts]` (peek-view); plus `urls/cycle.py:102` (`.../cycles/<id>/analytics/` untuk sidebar cycle).
 

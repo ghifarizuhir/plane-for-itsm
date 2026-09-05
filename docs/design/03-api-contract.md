@@ -4,9 +4,9 @@ Status: **Draft.**
 
 Base: [`01-architecture.md`](./01-architecture.md), [`02-data-model.md`](./02-data-model.md).
 
-Backend: `apps/api` Django 5 + DRF (`plane/settings/common.py:138`). Adaptasi dari `terra/docs/design/02-api-contract.md:6` (Terra: Express+Drizzle+JWT bearer — **jangan copy**; Plane: Django SessionAuthentication).
+Backend: `apps/api-rs` Rust Axum + SQLx — kontrak 1:1 Django (`plane/settings/common.py:138` = referensi). Session/CSRF Django hanya berlaku di fallback `api-legacy`.
 
-Base URL: `http://localhost:8000` (dev, via `docker-compose-local.yml`). Client: `packages/services` (axios) + `SWR` di `apps/web`.
+Base URL: `http://localhost:8000` (Rust `api`, via `docker-compose.yml`). Client: `packages/services` (axios) + `SWR` di `apps/web`.
 
 ---
 
@@ -14,7 +14,7 @@ Base URL: `http://localhost:8000` (dev, via `docker-compose-local.yml`). Client:
 
 1. **REST over RPC.** Resource-oriented, HTTP verb standard (GET/POST/PATCH/DELETE).
 2. **Workspace-scoped.** Semua endpoint di bawah `/api/workspaces/:slug/` atau `/api/workspaces/:slug/projects/:id/` — filter `workspace_id` selalu.
-3. **Thin views, fat serializers/services.** View hanya parse + validate + delegate; logic di `plane/db/models` + `plane/bgtasks`.
+3. **Thin handlers, pure validators.** Handler hanya parse + `validate_*` + query SQLx; logic async di worker via Stream.
 4. **Predictable errors.** Shape konsisten + HTTP status bermakna.
 5. **Soft delete invisible.** Default `deleted_at__isnull=True`; `?includeDeleted=true` untuk admin/audit.
 
@@ -24,11 +24,10 @@ Base URL: `http://localhost:8000` (dev, via `docker-compose-local.yml`). Client:
 
 ### Authentication
 
-- **Session cookie** `session-id` (`plane/settings/common.py:374`, age 604800) — `SessionAuthentication` (`plane/settings/common.py:139`). Login via `plane.authentication` (Django auth + social GitHub/GitLab/Google/Gitea).
-- **CSRF:** `CsrfViewMiddleware` (`plane/settings/common.py:127`) + `CSRF_COOKIE_NAME` — frontend wajib `X-CSRFToken` header.
-- **API Key (opsional):** `X-API-Key` (`plane/settings/common.py:192` `CORS_ALLOW_HEADERS`, `API_KEY_RATE_LIMIT=60/minute:154`).
-- Public: `/api/auth/` + `/api/workspaces/` list (tergantung permission). Lainnya `IsAuthenticated` (`plane/settings/common.py:145`).
-- **Belum JWT bearer** seperti Terra — kalau ITSM butuh service-to-service token, tambahkan DRF `TokenAuthentication` terpisah (jangan ganti Session).
+- **API Key utama:** `X-Api-Key` — token dicek ke tabel `api_tokens` → owner `user_id`; tanpa token valid → 401 `missing or invalid bearer` (`middleware/auth.rs:12`).
+- **Bearer:** didukung sebagai alternatif API key (bukan JWT session Terra).
+- **Legacy (Django `api-legacy` saja):** session cookie `session-id` + CSRF + DRF `SessionAuthentication`. Login/social (GitHub/GitLab/Google/Gitea) masih via Django — belum di-port.
+- Public: `/api/auth/` + `/api/workspaces/` list (tergantung permission). Lainnya butuh auth.
 
 ### Authorization
 
@@ -40,12 +39,12 @@ Base URL: `http://localhost:8000` (dev, via `docker-compose-local.yml`). Client:
 | Member                    | CRUD own + read others dalam workspace            |
 | Guest (space)             | Read-only via `apps/space`                        |
 
-Enforcement di DRF `permission_classes` per view — bukan di SQL scope utility Terra (`buildScopeCondition`).
+Enforcement di Axum extractor `AuthUser` + guard per handler (owner/self/higher-role) — bukan di SQL scope utility Terra (`buildScopeCondition`).
 
 ### Request / Response Format
 
 - JSON, `Content-Type: application/json`, timestamps ISO 8601 UTC, IDs string.
-- Pagination: `?page=1&pageSize=50` (default 50, max 200) → `{results, count, next, previous, hasMore}` atau `{items,total,hasMore}` — konsistenkan ke `CHEAT-SHEET.md` §URL & Routing (Plane pakai DRF `PageNumberPagination`).
+- Pagination: `?page=1&pageSize=50` (default 50, max 200) → `{results, count, next, previous, hasMore}` atau `{items,total,hasMore}` — konsistenkan ke `CHEAT-SHEET.md` §URL & Routing (shape parity Django `PageNumberPagination`).
 - Filter: `?state=backlog,started&priority=urgent&assignee=USR-1` (CSV multi-value).
 - Sort: `?sort=created_at:desc,priority:asc`.
 
@@ -55,9 +54,9 @@ Enforcement di DRF `permission_classes` per view — bukan di SQL scope utility 
 { "error": "Human readable", "code": "ERR_SLUG", "details": { "field": "info" }, "requestId": "req-abc123" }
 ```
 
-HTTP status: 200 OK, 201 Created, 204 No Content, 400 Validation, 401 Unauth, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Rate Limited (`429 ERR_RATE_LIMITED` dari throttle `plane/settings/common.py:141`), 500 Internal.
+HTTP status: 200 OK, 201 Created, 204 No Content, 400 Validation, 401 Unauth, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Rate Limited (token-bucket per-key 600/mnt, 429 langsung — `middleware/rate_limit.rs`), 500 Internal.
 
-DRF default error adalah `{"field": ["message"]}` — ITSM fork **bungkus** jadi shape `code` di `plane.authentication.adapter.exception.auth_exception_handler` (`plane/settings/common.py:148`).
+Error Rust: plain string validasi (parity pesan Django, mis. `PROJECT_NAME_ALREADY_EXIST`) atau `missing or invalid bearer` untuk 401 — kontrak diverifikasi shadow + parity gate, bukan wrapper DRF.
 
 ---
 
@@ -101,13 +100,13 @@ Implement di `plane/bgtasks/issue_version_sync` + `description_version.py` — j
 
 ## Resolved Decisions
 
-| #   | Topik          | Keputusan                                                                                                              |
-| --- | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1   | Auth           | **Session cookie + CSRF** (Plane) — bukan JWT bearer Terra                                                             |
-| 2   | Scoping        | **Workspace FK filter** — bukan `org_id` orgMiddleware                                                                 |
-| 3   | Pagination     | **DRF PageNumberPagination** — shape `{count,next,previous,results}` atau normalisasi ke `{items,total,hasMore}` di FE |
-| 4   | ITSM endpoints | **Nested `/workspaces/:slug/projects/:id/incidents/`** — reuse Issue infra, bukan `/api/incidents` global              |
-| 5   | Error shape    | **Wrap DRF errors** jadi `{error,code,details}` via `auth_exception_handler`                                           |
+| #   | Topik          | Keputusan                                                                                                                        |
+| --- | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Auth           | **Session cookie + CSRF** (Plane) — bukan JWT bearer Terra                                                                       |
+| 2   | Scoping        | **Workspace FK filter** — bukan `org_id` orgMiddleware                                                                           |
+| 3   | Pagination     | **Shape parity Django PageNumberPagination** — `{count,next,previous,results}` atau normalisasi ke `{items,total,hasMore}` di FE |
+| 4   | ITSM endpoints | **Nested `/workspaces/:slug/projects/:id/incidents/`** — reuse Issue infra, bukan `/api/incidents` global                        |
+| 5   | Error shape    | **Parity pesan Django** via validator Rust + shadow/parity gate (bukan wrapper DRF)                                              |
 
 ---
 
@@ -115,6 +114,7 @@ Implement di `plane/bgtasks/issue_version_sync` + `description_version.py` — j
 
 ## Changelog
 
-| Date       | Change |
-| ---------- | ------ |
-| 2026-09-03 | —      |
+| Date       | Change                                                                             |
+| ---------- | ---------------------------------------------------------------------------------- |
+| 2026-09-03 | —                                                                                  |
+| 2026-09-05 | cutover `rust-cutover-v1`: auth X-Api-Key/Bearer, rate-limit 600/mnt, error parity |

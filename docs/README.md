@@ -1,6 +1,6 @@
 # Plane for ITSM — Dokumentasi
 
-Plane for ITSM adalah **fork Plane** (project management open-source). **Actual-only:** docs ini snapshot Plane upstream (Work Items, Cycles, Modules, Views, Pages, Analytics) — disesuaikan ke stack Plane: **pnpm + Turbo + Django + React Router + MobX**. Arah ITSM (incidents/problems/changes/Service Map) adalah future, diparkir di `features/_backlog.md`. Dokumentasi mengikuti pola `terra` (referensi) untuk struktur `design/` + `features/` + `ui/`, tapi isi actual Plane.
+Plane for ITSM adalah **fork Plane** (project management open-source). **Actual-only:** docs ini snapshot Plane upstream (Work Items, Cycles, Modules, Views, Pages, Analytics) — disesuaikan ke stack Plane: **pnpm + Turbo + Rust Axum (API, sejak `rust-cutover-v1`) + React Router + MobX**. Skema data referensi Django (`apps/api`, fallback opt-in). Arah ITSM (incidents/problems/changes/Service Map) adalah future, diparkir di `features/_backlog.md`. Dokumentasi mengikuti pola `terra` (referensi) untuk struktur `design/` + `features/` + `ui/`, tapi isi actual Plane.
 
 - **`PRODUCT.md`** — platform, users, capabilities, constraints (actual Plane upstream) — menjawab "produk ini untuk siapa & bisa apa?"
 - **`business-capabilities.md`** — snapshot observasional berbasis kode (bukan rencana) — menjawab "apa yang benar-benar ada di `apps/` + `packages/`?"
@@ -9,7 +9,7 @@ Plane for ITSM adalah **fork Plane** (project management open-source). **Actual-
 - **`features/`** — product per halaman + cross-cutting interaksi — menjawab "apa yang user lihat & lakukan di halaman X?"
 - **`ui/`** — spesifikasi teknis komponen shell & editor — menjawab "bagaimana komponen dirender?"
 
-> Referensi asal: `../terra-service-management/docs/` — struktur `design/` + `features/` + `ui/` dicontek, isi diadaptasi ke Django/MobX/multi-app Plane. Jangan lock 1:1 (Terra = Express+Drizzle, Plane = Django+Postgres).
+> Referensi asal: `../terra-service-management/docs/` — struktur `design/` + `features/` + `ui/` dicontek, isi diadaptasi ke Rust Axum/MobX/multi-app Plane. Jangan lock 1:1 (Terra = Express+Drizzle, Plane = Axum+Postgres).
 
 ---
 
@@ -25,10 +25,10 @@ docs/
 ├── design/                     ← engineering cross-cutting (kontrak hidup)
 │   ├── README.md               ← reading order & status
 │   ├── 01-architecture.md      # monorepo pnpm+turbo, 6 apps, 15 packages
-│   ├── 02-data-model.md        # Django ORM (plane.db.models.*) + Postgres
-│   ├── 03-api-contract.md      # Django REST Framework + Session/JWT
+│   ├── 02-data-model.md        # Postgres per-table (skema Django) + Postgres
+│   ├── 03-api-contract.md      # Rust Axum + X-Api-Key/Bearer (kontrak 1:1 Django)
 │   ├── 04-design-system.md     # @plane/ui + tailwind-config + editor
-│   ├── 05-testing-strategy.md  # pytest (api) + vitest (web/packages)
+│   ├── 05-testing-strategy.md  # cargo test (api-rs) + pytest baseline + vitest (web/packages)
 │   └── 06-ops-runbook.md       # docker-compose + deployments + env
 │
 ├── features/                   ← product per halaman + shared
@@ -89,3 +89,4 @@ Perubahan kode di `apps/`/`packages/` wajib disertai update doc yang relevan dal
 | Date       | Change                                        |
 | ---------- | --------------------------------------------- |
 | 2026-09-03 | init — adaptasi dari terra `docs/README.md:2` |
+| 2026-09-05 | cutover `rust-cutover-v1`: stack → Rust Axum  |

@@ -4,13 +4,13 @@ Status: **Draft.**
 
 References: [`01-architecture.md`](./01-architecture.md), [`03-api-contract.md`](./03-api-contract.md).
 
-Database: **Postgres** via `dj_database_url` (`plane/settings/common.py:204`) — Django ORM (`plane.db.models.*`). Actual-only: snapshot model Plane upstream, bukan propose ITSM.
+Database: **Postgres** via `DATABASE_URL` — skema didefinisikan Django ORM (`plane.db.models.*`, referensi), **dilayani Rust SQLx** (`apps/api-rs`, migrasi `migrations/`). Actual-only: snapshot model Plane upstream, bukan propose ITSM. Model di bawah tidak berubah saat cutover (kontrak 1:1).
 
 ---
 
 ## Design Principles
 
-1. **Django per-table.** `Workspace → Project → Issue/Cycle/Module/Page` sebagai tabel terpisah (`plane/db/models/workspace.py`, `project.py`, `issue.py`, `cycle.py`, `module.py`, `page.py`, `state.py`, `label.py`, `view.py`, `issue_type.py`).
+1. **Per-table (skema Django, dilayani Rust).** `Workspace → Project → Issue/Cycle/Module/Page` sebagai tabel terpisah (`plane/db/models/workspace.py`, `project.py`, `issue.py`, `cycle.py`, `module.py`, `page.py`, `state.py`, `label.py`, `view.py`, `issue_type.py`).
 2. **Workspace-scoped multi-tenant.** Domain tabel FK ke `Workspace` (via `Project.workspace`); query filter `workspace_id`.
 3. **Soft delete via `deleted_at`.** `HARD_DELETE_AFTER_DAYS=60` (`plane/settings/common.py:420`) + `plane.bgtasks.cleanup_task`.
 4. **Enums via Django choices + `IssueType` table.** `issue_type.py` (`IssueType`, `ProjectIssueType`) adalah tipe Work Item upstream — bukan ITSM propose.
@@ -33,7 +33,7 @@ Semua layer di atas delivered upstream (actual). Propose ITSM (incident/problem/
 
 ---
 
-## ERD (ringkas — Django models)
+## ERD (ringkas — tabel Postgres, definisi Django)
 
 ```
 WORKSPACE ||--o{ PROJECT : contains

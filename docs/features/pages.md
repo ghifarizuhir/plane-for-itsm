@@ -45,6 +45,8 @@ Koreksi penting: `access` (0 = Public, 1 = Private) = visibilitas **di dalam pro
 
 ### Model (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - `apps/api/plane/db/models/page.py:23-55` `class Page(BaseModel)` (db `pages`): `name`, `description_json` / `binary` / `html` / `stripped`, `owned_by`, `access` (0 Public / 1 Private), `color`, `parent` FK self (`child_page`, sub-pages + `sort_order`), `archived_at`, `is_locked`, `view_props` / `logo_props`, `projects` M2M via `ProjectPage`, `moved_to_page` / `project`.
 - Pendamping: `PageLog:80-114`, `PageLabel:120-133`, `ProjectPage:135-152`, `PageVersion:158-173` (`description_*` + `sub_pages_data`).
 

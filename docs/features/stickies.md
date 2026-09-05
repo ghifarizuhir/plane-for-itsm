@@ -24,6 +24,8 @@ Catatan cepat pribadi per workspace (sticky notes): tempel ide, simpan warna, ca
 
 ### Model + API (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - Model: `apps/api/plane/db/models/sticky.py:16-30` `Sticky` (`name`, `description` JSON/HTML, `color`/`background_color`, `workspace` + `owner` FK, `sort_order`).
 - API: `apps/api/plane/app/urls/workspace.py:245,250` → `stickies/`, `stickies/<pk>/`.
 

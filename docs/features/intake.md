@@ -29,6 +29,8 @@ Koreksi penting: Intake bukan `Issue.is_draft` dan bukan state Issue biasa — m
 
 ### Model + API (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - Model: `apps/api/plane/db/models/intake.py:12-18` `Intake(name, is_default, view_props)` + `:50-80` `IntakeIssue`.
 - API: `apps/api/plane/app/urls/intake.py:16-55` → `intakes/`, `intake-issues/[/<pk>/]` + alias legacy `inboxes/`, `inbox-issues/`; `:56-65` `intake-work-items/<id>/description-versions/`; views `app/views/intake/base.py:57-80` (`IntakeViewSet` / `IntakeIssueViewSet`).
 

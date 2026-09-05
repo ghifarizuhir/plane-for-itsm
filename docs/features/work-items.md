@@ -26,6 +26,8 @@ Halaman utama kerja per project: lihat, filter, dan kelola work items (Issue) da
 
 ### Model (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - `apps/api/plane/db/models/issue.py:104-170` `class Issue(ProjectBaseModel)`: `name:136`, `priority:141-146` (`urgent/high/medium/low/none`, default `none`), `state` FK `State:121-127`, `assignees` M2M via `IssueAssignee:149-155`, `labels` M2M via `IssueLabel:157`, `parent` FK self (`parent_issue:114-120`, sub-issue), `point:128` + `estimate_point` FK:129-135, `start_date/target_date:147-148`, `sequence_id:156` (auto-increment per-project via `pg_advisory_xact_lock` di `save():180-214`), `sort_order:158`, `type` FK `IssueType:164-170`, `is_draft:161`, `archived_at:160`.
 - Server defaults: `get_default_properties():29-44` (assignee/dates/labels/key/priority/state/sub_issue_count/link/attachment/estimate/created_on/updated_on); `get_default_filters():47-58` (priority/state/state_group/assignees/created_by/labels/start_date/target_date/subscriber); `get_default_display_filters():61-70` (`group_by null`, `order_by -created_at`, `layout list`, `sub_issue true`, `show_empty_groups true`).
 

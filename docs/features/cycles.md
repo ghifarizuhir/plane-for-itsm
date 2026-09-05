@@ -32,6 +32,8 @@ Koreksi penting vs asumsi umum: model `Cycle` **tidak punya field status**. Stat
 
 ### Model (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - `apps/api/plane/db/models/cycle.py:60-80` `class Cycle`: `name`, `description`, `start_date`, `end_date` (nullable), `owned_by` (FK user), `archived_at`, `timezone`, `progress_snapshot` / `view_props` / `logo_props` (JSON), `sort_order`, `version`.
 - Relasi: `CycleIssue:104-124`, preferensi per user `CycleUserProperties:130-157`.
 

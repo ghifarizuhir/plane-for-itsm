@@ -40,6 +40,8 @@ Catatan: `browse/:workItem` (`core.ts:76-78`) **bukan view** — itu detail Work
 
 ### Model (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - `apps/api/plane/db/models/view.py:58` `IssueView(WorkspaceBaseModel)`: `name` / `description` / `query` / `filters` / `display_filters` / `display_properties` / `rich_filters` / `access` (0 = Private, 1 = Public) / `owned_by` / `is_locked` / `archived_at` (`:59-71`).
 - Defaults: `get_default_filters` / `display_filters` / `display_properties` (`:14-55`); `save()` derivasi `query = issue_filters(filters)` + `sort_order` (`:79-93`).
 

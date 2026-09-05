@@ -39,6 +39,8 @@ Archive = set `archived_at` (non-null = arsip); restore = null-kan; delete perma
 
 ### Service + Model + API (Django)
 
+> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+
 - Service (pola sama `POST .../archive/` + `DELETE .../archive|unarchive/`): `issue/issue_archive.service.ts:24,36-51` (`GET archived-issues/`, `POST/DELETE .../archive/` = `restoreIssue`, `bulk-archive-issues/` di `issue.service.ts:368-370`); `cycle_archive.service.ts:20,42,50`; `module_archive.service.ts:20,42,50`; `project/project-archive.service.ts:23,31`.
 - Model: `archived_at` di `issue.py:160` (DateField null), `cycle.py:75`, `module.py:98`, `project.py:114` (DateTimeField null).
 - API: `urls/issue.py:99-101,224-230` (`bulk-archive-issues/`, `archived-issues/` + `.../<pk>/archive/`, `IssueArchiveViewSet` di `views/issue/archive.py:53`: list/retrieve/archive/unarchive); `urls/cycle.py:83-93`, `urls/module.py:92-102`, `urls/project.py:124` (`archived-cycles | modules` + `archive/unarchive`; impl `views/cycle/archive.py:40`, `views/module/archive.py:42`, `views/project/base.py:427` — `archived_at = now()` vs `= None`).
