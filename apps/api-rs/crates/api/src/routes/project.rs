@@ -773,9 +773,10 @@ pub(crate) struct IdentifierRow {
 /// - Else 200 `{"exists": <count>, "identifiers": [{"id", "name",
 ///   "project"}]}` filtered `name=X AND workspace__slug=slug`.
 ///
-/// Deviations: none on the filter — the SELECT mirrors Django exactly (no
-/// `deleted_at` clause: `ProjectIdentifier.objects` is the default manager,
-/// which does not exclude soft-deleted rows); row order follows
+/// Deviations: none on the filter — the SELECT mirrors Django exactly:
+/// `ProjectIdentifier(AuditModel)` inherits `SoftDeletionManager`
+/// (`apps/api/plane/db/mixins.py:56-58`), so `objects.filter()` excludes
+/// soft-deleted rows (`pi.deleted_at IS NULL`); row order follows
 /// `Meta.ordering = ("-created_at",)`. DELETE on this path is out of scope
 /// (FE never calls it).
 pub async fn check_identifier(
@@ -796,7 +797,7 @@ pub async fn check_identifier(
     let rows: Vec<IdentifierRow> = sqlx::query_as(
         "SELECT pi.id, pi.name, pi.project_id FROM project_identifiers pi \
          JOIN workspaces w ON w.id = pi.workspace_id \
-         WHERE pi.name = $1 AND w.slug = $2 \
+         WHERE pi.name = $1 AND w.slug = $2 AND pi.deleted_at IS NULL \
          ORDER BY pi.created_at DESC",
     )
     .bind(&name)
