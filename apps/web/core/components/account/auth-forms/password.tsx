@@ -71,11 +71,14 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     setPasswordFormData((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
+    // CSRF hanya dibutuhkan mode SIGN_UP (POST native ke Django).
+    // SIGN_IN login JSON ke Rust (/api/auth/login/, cookie HttpOnly) tanpa CSRF.
+    if (mode !== EAuthModes.SIGN_UP) return;
     if (csrfPromise === undefined) {
       const promise = authService.requestCSRFToken();
       setCsrfPromise(promise);
     }
-  }, [csrfPromise]);
+  }, [csrfPromise, mode]);
 
   const redirectToUniqueCodeSignIn = async () => {
     handleAuthStep(EAuthSteps.UNIQUE_CODE);
@@ -116,6 +119,31 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const confirmPassword = passwordFormData?.confirm_password ?? "";
   const renderPasswordMatchError = !isRetryPasswordInputFocused || confirmPassword.length >= password.length;
 
+  const handleSignIn = async () => {
+    // Rust slice-1: POST JSON ke /api/auth/login/; server menyetel cookie
+    // HttpOnly plane_at/plane_rt (credentials:include). 200 → masuk workspace.
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setBannerMessage(false);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: passwordFormData.email, password: passwordFormData.password }),
+      });
+      if (res.ok) {
+        window.location.assign(nextPath || "/");
+        return;
+      }
+      setBannerMessage(true);
+    } catch {
+      setBannerMessage(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCSRFToken = async () => {
     if (!formRef || !formRef.current) return;
     const token = await csrfPromise;
@@ -124,8 +152,39 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     csrfElement?.setAttribute("value", token?.csrf_token);
   };
 
+  const handleSignUp = async () => {
+    // TODO(spec 2026-09-05-rust-auth-slice1): endpoint POST /api/auth/signup/
+    // BELUM ada di backend Rust (non-goal irisan 1) — pendaftaran baru tetap
+    // POST native ke Django dengan CSRF seperti sebelumnya.
+    await handleCSRFToken();
+    const isPasswordValid = getPasswordStrength(passwordFormData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID;
+    if (isPasswordValid) {
+      setIsSubmitting(true);
+      if (formRef.current) formRef.current.submit(); // Manually submit the form if the condition is met
+    } else {
+      setBannerMessage(true);
+    }
+  };
+
   return (
     <>
+      {isBannerMessage && mode === EAuthModes.SIGN_IN && (
+        <div className="relative flex items-center gap-2 rounded-md border border-danger-strong/50 bg-danger-subtle p-2">
+          <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+            <InfoOutline width={16} height={16} className="text-danger-primary" />
+          </div>
+          <div className="w-full text-13 font-medium text-danger-primary">
+            {t("auth.sign_in.errors.invalid_credentials")}
+          </div>
+          <button
+            type="button"
+            className="relative ml-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-xs text-accent-primary/80 transition-all hover:bg-danger-subtle-hover"
+            onClick={() => setBannerMessage(false)}
+          >
+            <CloseOutline className="h-4 w-4 shrink-0 text-danger-primary" />
+          </button>
+        </div>
+      )}
       {isBannerMessage && mode === EAuthModes.SIGN_UP && (
         <div className="relative flex items-center gap-2 rounded-md border border-danger-strong/50 bg-danger-subtle p-2">
           <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
@@ -150,16 +209,10 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         action={`${API_BASE_URL}/auth/${mode === EAuthModes.SIGN_IN ? "sign-in" : "sign-up"}/`}
         onSubmit={async (event) => {
           event.preventDefault(); // Prevent form from submitting by default
-          await handleCSRFToken();
-          const isPasswordValid =
-            mode === EAuthModes.SIGN_UP
-              ? getPasswordStrength(passwordFormData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID
-              : true;
-          if (isPasswordValid) {
-            setIsSubmitting(true);
-            if (formRef.current) formRef.current.submit(); // Manually submit the form if the condition is met
+          if (mode === EAuthModes.SIGN_UP) {
+            await handleSignUp();
           } else {
-            setBannerMessage(true);
+            await handleSignIn();
           }
         }}
         onError={() => {

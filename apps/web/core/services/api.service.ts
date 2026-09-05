@@ -25,7 +25,20 @@ export abstract class APIService {
   private setupInterceptors() {
     this.axiosInstance.interceptors.response.use(
       (response) => response,
-      (error) => {
+      async (error) => {
+        const original = error.config as any;
+        // Rust slice-1: sesi cookie (plane_at/plane_rt, HttpOnly). 401 sekali →
+        // coba refresh lalu ulangi request asli. URL /api/auth/* dikecualikan
+        // agar login/refresh gagal tidak memicu loop refresh.
+        if (original && error.response?.status === 401 && !original._retried && !original.url?.includes("/api/auth/")) {
+          original._retried = true;
+          try {
+            await this.axiosInstance.post("/api/auth/refresh/", {});
+            return this.axiosInstance.request(original);
+          } catch {
+            /* jatuh ke redirect */
+          }
+        }
         if (error.response && error.response.status === 401) {
           const currentPath = window.location.pathname;
           window.location.replace(`/${currentPath ? `?next_path=${currentPath}` : ``}`);

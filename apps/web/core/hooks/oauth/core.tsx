@@ -41,7 +41,9 @@ export const useCoreOAuthConfig = (oauthActionText: string): TOAuthConfigs => {
       text: `${oauthActionText} with Google`,
       icon: <img src={googleLogo} height={18} width={18} alt="Google Logo" />,
       onClick: () => {
-        window.location.assign(`${API_BASE_URL}/auth/google/${next_path ? `?next_path=${next_path}` : ``}`);
+        window.location.assign(
+          `${API_BASE_URL}/api/auth/oauth/google/start/${next_path ? `?next_path=${next_path}` : ``}`
+        );
       },
       enabled: config?.is_google_enabled,
     },
@@ -57,10 +59,14 @@ export const useCoreOAuthConfig = (oauthActionText: string): TOAuthConfigs => {
         />
       ),
       onClick: () => {
-        window.location.assign(`${API_BASE_URL}/auth/github/${next_path ? `?next_path=${next_path}` : ``}`);
+        window.location.assign(
+          `${API_BASE_URL}/api/auth/oauth/github/start/${next_path ? `?next_path=${next_path}` : ``}`
+        );
       },
       enabled: config?.is_github_enabled,
     },
+    // NOTE(spec 2026-09-05-rust-auth-slice1, Task 7 SKIP): GitLab/Gitea belum ada
+    // di backend Rust — URL tetap menunjuk Django agar tidak rusak.
     {
       id: "gitlab",
       text: `${oauthActionText} with GitLab`,
