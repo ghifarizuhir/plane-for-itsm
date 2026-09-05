@@ -230,6 +230,14 @@ async fn main() {
                 .patch(routes::member::patch)
                 .delete(routes::member::destroy),
         )
+        // Parity with `ProjectMemberUserEndpoint`
+        // (`views/project/member.py:352-362`, `urls/project.py:97-101`):
+        // static `me` wins over `:pk` in Axum (no conflict; live-curl
+        // proof deferred to T13).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-members/me/",
+            get(routes::project::my_membership),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-views/",
             get(routes::view::list_favorites).post(routes::view::create_favorite),

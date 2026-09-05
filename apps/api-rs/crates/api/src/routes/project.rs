@@ -1050,6 +1050,235 @@ pub async fn fav_remove(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
+/// Mirrors `Workspace.logo_url` (`plane/db/models/workspace.py:145-154`)
+/// + `FileAsset.asset_url` (`plane/db/models/asset.py:83-90`): a linked
+/// logo asset wins over the legacy `logo` text column; empty text counts
+/// as missing. Only `WORKSPACE_LOGO` yields a URL (same narrowing as
+/// `cover_image_url` for `PROJECT_COVER`).
+pub(crate) fn workspace_logo_url(
+    asset_id: Option<uuid::Uuid>,
+    asset_entity_type: Option<&str>,
+    logo: Option<&str>,
+) -> Option<String> {
+    if let Some(id) = asset_id {
+        if asset_entity_type == Some("WORKSPACE_LOGO") {
+            return Some(format!("/api/assets/v2/static/{id}/"));
+        }
+        return None;
+    }
+    logo.filter(|s| !s.is_empty()).map(|s| s.to_string())
+}
+
+/// Mirrors `User.avatar_url` (`plane/db/models/user.py:142-151`)
+/// + `FileAsset.asset_url`: a linked avatar asset wins over the legacy
+/// `avatar` text column; empty text counts as missing. Only `USER_AVATAR`
+/// yields a URL (same narrowing as `cover_image_url`).
+pub(crate) fn user_avatar_url(
+    asset_id: Option<uuid::Uuid>,
+    asset_entity_type: Option<&str>,
+    avatar: Option<&str>,
+) -> Option<String> {
+    if let Some(id) = asset_id {
+        if asset_entity_type == Some("USER_AVATAR") {
+            return Some(format!("/api/assets/v2/static/{id}/"));
+        }
+        return None;
+    }
+    avatar.filter(|s| !s.is_empty()).map(|s| s.to_string())
+}
+
+/// One row for `my_membership`: the `project_members` model columns plus
+/// the nested-lite columns. Field names match the SELECT aliases in
+/// `my_membership`. Live columns verified in
+/// `apps/api-rs/migrations/0001_initial.sql` (`project_members`,
+/// `projects`, `workspaces`, `users` tables).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct MyMembershipRow {
+    pub(crate) id: uuid::Uuid,
+    pub(crate) created_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) updated_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) created_by_id: Option<uuid::Uuid>,
+    pub(crate) updated_by_id: Option<uuid::Uuid>,
+    pub(crate) deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) project_id: uuid::Uuid,
+    pub(crate) workspace_id: uuid::Uuid,
+    pub(crate) member_id: Option<uuid::Uuid>,
+    pub(crate) comment: Option<String>,
+    pub(crate) role: i16,
+    pub(crate) view_props: Value,
+    pub(crate) default_props: Value,
+    pub(crate) preferences: Value,
+    pub(crate) sort_order: f64,
+    pub(crate) is_active: bool,
+    pub(crate) ws_id: uuid::Uuid,
+    pub(crate) ws_name: String,
+    pub(crate) ws_slug: String,
+    pub(crate) ws_logo: Option<String>,
+    pub(crate) ws_logo_asset_id: Option<uuid::Uuid>,
+    pub(crate) ws_logo_entity_type: Option<String>,
+    pub(crate) proj_id: uuid::Uuid,
+    pub(crate) proj_identifier: String,
+    pub(crate) proj_name: String,
+    pub(crate) proj_cover_image: Option<String>,
+    pub(crate) proj_cover_asset_id: Option<uuid::Uuid>,
+    pub(crate) proj_cover_entity_type: Option<String>,
+    pub(crate) proj_logo_props: Value,
+    pub(crate) proj_description: String,
+    pub(crate) u_id: Option<uuid::Uuid>,
+    pub(crate) u_first_name: Option<String>,
+    pub(crate) u_last_name: Option<String>,
+    pub(crate) u_avatar: Option<String>,
+    pub(crate) u_avatar_asset_id: Option<uuid::Uuid>,
+    pub(crate) u_avatar_entity_type: Option<String>,
+    pub(crate) u_is_bot: Option<bool>,
+    pub(crate) u_display_name: Option<String>,
+}
+
+/// Serializes one `MyMembershipRow` like `ProjectMemberSerializer`
+/// (`plane/app/serializers/project.py:156-163`, `fields="__all__"`):
+/// all `project_members` model columns (FKs `created_by`/`updated_by` as
+/// id strings, matching DRF's default PK representation) + nested
+/// `workspace: WorkspaceLiteSerializer` (name,slug,id,logo_url),
+/// `project: ProjectLiteSerializer`
+/// (id,identifier,name,cover_image,cover_image_url,logo_props,description),
+/// `member: UserLiteSerializer`
+/// (id,first_name,last_name,avatar,avatar_url,is_bot,display_name).
+pub(crate) fn my_membership_json(row: &MyMembershipRow) -> Value {
+    let opt_id = |id: &Option<uuid::Uuid>| id.map(|u| json!(u)).unwrap_or(Value::Null);
+    let ws = {
+        let mut m = serde_json::Map::with_capacity(4);
+        m.insert("name".to_string(), json!(&row.ws_name));
+        m.insert("slug".to_string(), json!(&row.ws_slug));
+        m.insert("id".to_string(), json!(row.ws_id));
+        m.insert(
+            "logo_url".to_string(),
+            json!(workspace_logo_url(
+                row.ws_logo_asset_id,
+                row.ws_logo_entity_type.as_deref(),
+                row.ws_logo.as_deref(),
+            )),
+        );
+        Value::Object(m)
+    };
+    let proj = {
+        let mut m = serde_json::Map::with_capacity(7);
+        m.insert("id".to_string(), json!(row.proj_id));
+        m.insert("identifier".to_string(), json!(&row.proj_identifier));
+        m.insert("name".to_string(), json!(&row.proj_name));
+        m.insert("cover_image".to_string(), json!(&row.proj_cover_image));
+        m.insert(
+            "cover_image_url".to_string(),
+            json!(cover_image_url(
+                row.proj_cover_asset_id,
+                row.proj_cover_entity_type.as_deref(),
+                row.proj_cover_image.as_deref(),
+            )),
+        );
+        m.insert("logo_props".to_string(), row.proj_logo_props.clone());
+        m.insert("description".to_string(), json!(&row.proj_description));
+        Value::Object(m)
+    };
+    let member = match row.u_id {
+        Some(uid) => {
+            let mut m = serde_json::Map::with_capacity(7);
+            m.insert("id".to_string(), json!(uid));
+            m.insert("first_name".to_string(), json!(&row.u_first_name));
+            m.insert("last_name".to_string(), json!(&row.u_last_name));
+            m.insert("avatar".to_string(), json!(&row.u_avatar));
+            m.insert(
+                "avatar_url".to_string(),
+                json!(user_avatar_url(
+                    row.u_avatar_asset_id,
+                    row.u_avatar_entity_type.as_deref(),
+                    row.u_avatar.as_deref(),
+                )),
+            );
+            m.insert("is_bot".to_string(), json!(&row.u_is_bot));
+            m.insert("display_name".to_string(), json!(&row.u_display_name));
+            Value::Object(m)
+        }
+        None => Value::Null,
+    };
+    let mut m = serde_json::Map::with_capacity(16);
+    let mut put = |k: &str, v: Value| {
+        m.insert(k.to_string(), v);
+    };
+    put("id", json!(row.id));
+    put("created_at", json!(row.created_at));
+    put("updated_at", json!(row.updated_at));
+    put("created_by", opt_id(&row.created_by_id));
+    put("updated_by", opt_id(&row.updated_by_id));
+    put("deleted_at", json!(row.deleted_at));
+    put("project", proj);
+    put("workspace", ws);
+    put("member", member);
+    put("comment", json!(&row.comment));
+    put("role", json!(row.role));
+    put("view_props", row.view_props.clone());
+    put("default_props", row.default_props.clone());
+    put("preferences", row.preferences.clone());
+    put("sort_order", json!(row.sort_order));
+    put("is_active", json!(row.is_active));
+    Value::Object(m)
+}
+
+/// GET `/api/workspaces/:slug/projects/:project_id/project-members/me/` —
+/// parity with Django `ProjectMemberUserEndpoint.get`
+/// (`plane/app/views/project/member.py:352-362`).
+///
+/// - Gate: `AuthUser` only (IsAuthenticated) — NO membership gate.
+/// - Filter `project_id + workspace__slug + member=user + is_active`
+///   (Django `ProjectMember.objects.get(...)` via the default
+///   `SoftDeletionManager`, so `pm.deleted_at IS NULL`); miss → 404
+///   `missing()` (`views/base.py:92-96`, `ObjectDoesNotExist`).
+/// - Shape: `my_membership_json` (`ProjectMemberSerializer`,
+///   `serializers/project.py:156-163`).
+///
+/// Deviations: datetimes serialize as RFC3339 (chrono serde) vs DRF
+/// ISO8601 (same instants, `project_detail_json` precedent); non-`...`
+/// asset entity types map `*_url` to null instead of Django's branch URLs
+/// (same narrowing as `cover_image_url`); the projects `deleted_at` filter
+/// is intentionally absent (Django filters only the member row).
+pub async fn my_membership(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<MyMembershipRow> = sqlx::query_as(
+        "SELECT pm.id, pm.created_at, pm.updated_at, pm.created_by_id, pm.updated_by_id, \
+        pm.deleted_at, pm.project_id, pm.workspace_id, pm.member_id, pm.comment, pm.role, \
+        pm.view_props, pm.default_props, pm.preferences, pm.sort_order, pm.is_active, \
+        w.id AS ws_id, w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
+        w.logo_asset_id AS ws_logo_asset_id, wfa.entity_type AS ws_logo_entity_type, \
+        p.id AS proj_id, p.identifier AS proj_identifier, p.name AS proj_name, \
+        p.cover_image AS proj_cover_image, p.cover_image_asset_id AS proj_cover_asset_id, \
+        pfa.entity_type AS proj_cover_entity_type, p.logo_props AS proj_logo_props, \
+        p.description AS proj_description, \
+        u.id AS u_id, u.first_name AS u_first_name, u.last_name AS u_last_name, \
+        u.avatar AS u_avatar, u.avatar_asset_id AS u_avatar_asset_id, \
+        ufa.entity_type AS u_avatar_entity_type, u.is_bot AS u_is_bot, \
+        u.display_name AS u_display_name \
+        FROM project_members pm \
+        JOIN workspaces w ON w.id = pm.workspace_id \
+        JOIN projects p ON p.id = pm.project_id \
+        LEFT JOIN users u ON u.id = pm.member_id \
+        LEFT JOIN file_assets wfa ON wfa.id = w.logo_asset_id \
+        LEFT JOIN file_assets pfa ON pfa.id = p.cover_image_asset_id \
+        LEFT JOIN file_assets ufa ON ufa.id = u.avatar_asset_id \
+        WHERE pm.project_id = $1 AND w.slug = $2 AND pm.member_id = $3 \
+        AND pm.is_active = true AND pm.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(r) => Ok((StatusCode::OK, Json(my_membership_json(&r)))),
+        None => Ok(missing()),
+    }
+}
+
 #[cfg(test)]
 mod batch_c_tests {
     use super::*;
@@ -1258,5 +1487,113 @@ mod batch_c_tests {
         assert!(guard_archive(Some(15)).is_ok());
         assert!(guard_archive(Some(5)).is_err());
         assert!(guard_archive(None).is_err());
+    }
+
+    #[test]
+    fn my_membership_shape_matches_django_serializer() {
+        // Mirrors `ProjectMemberSerializer`
+        // (`plane/app/serializers/project.py:156-163`, `fields="__all__"`
+        // on `project_members` + nested `workspace: WorkspaceLiteSerializer`
+        // (name,slug,id,logo_url), `project: ProjectLiteSerializer`
+        // (id,identifier,name,cover_image,cover_image_url,logo_props,
+        // description), `member: UserLiteSerializer` (id,first_name,
+        // last_name,avatar,avatar_url,is_bot,display_name)).
+        // NOTE: `member.rs:242-258` `detail` returns only `{id,role}` —
+        // shape DIFFERS, so it is NOT reused (changing it would regress
+        // existing callers); this builder is the correct shape, built
+        // separately.
+        let row = MyMembershipRow {
+            id: uuid::Uuid::nil(),
+            created_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            updated_at: chrono::DateTime::from_timestamp(0, 0).unwrap(),
+            created_by_id: None,
+            updated_by_id: None,
+            deleted_at: None,
+            project_id: uuid::Uuid::nil(),
+            workspace_id: uuid::Uuid::nil(),
+            member_id: Some(uuid::Uuid::nil()),
+            comment: None,
+            role: 15,
+            view_props: serde_json::json!({}),
+            default_props: serde_json::json!({}),
+            preferences: serde_json::json!({}),
+            sort_order: 65535.0,
+            is_active: true,
+            ws_id: uuid::Uuid::nil(),
+            ws_name: "WS".to_string(),
+            ws_slug: "ws".to_string(),
+            ws_logo: None,
+            ws_logo_asset_id: None,
+            ws_logo_entity_type: None,
+            proj_id: uuid::Uuid::nil(),
+            proj_identifier: "P".to_string(),
+            proj_name: "Proj".to_string(),
+            proj_cover_image: None,
+            proj_cover_asset_id: None,
+            proj_cover_entity_type: None,
+            proj_logo_props: serde_json::json!({}),
+            proj_description: String::new(),
+            u_id: Some(uuid::Uuid::nil()),
+            u_first_name: Some(String::new()),
+            u_last_name: Some(String::new()),
+            u_avatar: Some(String::new()),
+            u_avatar_asset_id: None,
+            u_avatar_entity_type: None,
+            u_is_bot: Some(false),
+            u_display_name: Some(String::new()),
+        };
+        let v = my_membership_json(&row);
+        for key in [
+            "id",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+            "project",
+            "workspace",
+            "member",
+            "comment",
+            "role",
+            "view_props",
+            "default_props",
+            "preferences",
+            "sort_order",
+            "is_active",
+        ] {
+            assert!(v.get(key).is_some(), "missing top-level key {key}");
+        }
+        assert_eq!(v.as_object().unwrap().len(), 16);
+        let ws = v.get("workspace").unwrap();
+        for key in ["name", "slug", "id", "logo_url"] {
+            assert!(ws.get(key).is_some(), "missing workspace key {key}");
+        }
+        assert_eq!(ws.as_object().unwrap().len(), 4);
+        let proj = v.get("project").unwrap();
+        for key in [
+            "id",
+            "identifier",
+            "name",
+            "cover_image",
+            "cover_image_url",
+            "logo_props",
+            "description",
+        ] {
+            assert!(proj.get(key).is_some(), "missing project key {key}");
+        }
+        assert_eq!(proj.as_object().unwrap().len(), 7);
+        let member = v.get("member").unwrap();
+        for key in [
+            "id",
+            "first_name",
+            "last_name",
+            "avatar",
+            "avatar_url",
+            "is_bot",
+            "display_name",
+        ] {
+            assert!(member.get(key).is_some(), "missing member key {key}");
+        }
+        assert_eq!(member.as_object().unwrap().len(), 7);
     }
 }
