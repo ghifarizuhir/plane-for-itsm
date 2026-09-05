@@ -36,7 +36,8 @@ pub const PAGE_LOCKED_MSG: &str = "Page is locked";
 /// `plane/app/views/page/base.py:193` (access change by non-owner) and
 /// `:213` (the `except Page.DoesNotExist` quirk — parent-missing and
 /// page-missing both land here; preserved verbatim).
-pub const ACCESS_QUIRK_MSG: &str = "Access cannot be updated since this page is owned by someone else";
+pub const ACCESS_QUIRK_MSG: &str =
+    "Access cannot be updated since this page is owned by someone else";
 /// `plane/app/views/page/base.py:339` (archive by non-owner non-admin).
 pub const ARCHIVE_ONLY_MSG: &str = "Only the owner or admin can archive the page";
 /// `plane/app/views/page/base.py:370` (unarchive; sic "un archive").
@@ -141,7 +142,11 @@ pub fn sanitize_page_order_by(raw: &str) -> (&'static str, bool) {
 /// Mirrors the access-change guard (`plane/app/views/page/base.py:191-195`
 /// and `:296-300`): changing `access` when the requester is not the owner →
 /// the quirk 400.
-pub fn guard_access_change(page_access: i16, body_access: Option<i16>, is_owner: bool) -> Result<(), String> {
+pub fn guard_access_change(
+    page_access: i16,
+    body_access: Option<i16>,
+    is_owner: bool,
+) -> Result<(), String> {
     if let Some(next) = body_access {
         if next != page_access && !is_owner {
             return Err(ACCESS_QUIRK_MSG.to_string());
@@ -153,7 +158,11 @@ pub fn guard_access_change(page_access: i16, body_access: Option<i16>, is_owner:
 /// Mirrors the archive/unarchive owner-or-admin gate
 /// (`plane/app/views/page/base.py:332-341`, `:363-372`): an active member
 /// with role ≤ 15 who is not the owner is denied.
-pub fn guard_archive_owner(is_owner: bool, low_role_member: bool, unarchive: bool) -> Result<(), String> {
+pub fn guard_archive_owner(
+    is_owner: bool,
+    low_role_member: bool,
+    unarchive: bool,
+) -> Result<(), String> {
     if !is_owner && low_role_member {
         return Err(if unarchive {
             UNARCHIVE_ONLY_MSG.to_string()
@@ -204,7 +213,14 @@ pub fn validate_binary_bytes(data: &[u8]) -> Result<(), String> {
         return Err("Binary data too short to be valid document format".to_string());
     }
     let head = String::from_utf8_lossy(&data[..data.len().min(200)]).to_lowercase();
-    const PATTERNS: &[&str] = &["<html", "<!doctype", "<script", "javascript:", "data:", "<iframe"];
+    const PATTERNS: &[&str] = &[
+        "<html",
+        "<!doctype",
+        "<script",
+        "javascript:",
+        "data:",
+        "<iframe",
+    ];
     if PATTERNS.iter().any(|p| head.contains(p)) {
         return Err("Binary data contains suspicious content patterns".to_string());
     }
@@ -228,21 +244,416 @@ pub fn decode_description_binary(raw: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// Strips `<script>`/`<style>` blocks, HTML comments, `on*` event attributes
-/// and `javascript:`/`data:`/`vbscript:` URL values inside tags. Hand-rolled:
-/// the `ammonia`/`nh3` crate is not in the dependency closure and CONSTRAINTS
-/// allow modifying only `main.rs`, so the exact `nh3.clean` allowlist
-/// (`plane/utils/content_validator.py:72-160`) cannot be linked — this removes
-/// the dangerous constructs nh3 would strip while keeping benign markup.
-/// Documented deviation.
+/// Classifies one `description_binary` body value for the description PATCH
+/// (`PageBinaryUpdateSerializer`, `serializers/page.py:173-198`): absent or
+/// null → no-op; string → base64 decode+validate (bad base64 →
+/// `{"description_binary": ["Failed to decode base64 data"]}`, `:198`;
+/// rule violations → `Invalid binary data: <msg>`, `:190-192`); non-string
+/// → DRF CharField failure `Not a valid string.` (the decode message is
+/// reserved for present-but-undecodable strings).
+pub fn parse_desc_binary_value(v: Option<&Value>) -> Result<Option<Vec<u8>>, String> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => decode_description_binary(s).map(Some),
+        Some(_) => Err("Not a valid string.".to_string()),
+    }
+}
+
+/// Allowlist HTML sanitizer mirroring `nh3.clean` as configured by Django
+/// (`plane/utils/content_validator.py:72-160,211-243`):
+/// (a) tags outside `ALLOWED_TAGS` are dropped with inner text kept —
+///     effective set = `nh3.ALLOWED_TAGS` (i.e. `ammonia::Builder::default()`
+///     tags) plus `CUSTOM_TAGS = {"mention-component","label","input",
+///     "image-component"}` (`content_validator.py:72-79`), quoted below;
+///     `script`/`style` are nh3 `clean_content_tags` (content removed too);
+/// (b) kept tags drop every attribute outside the per-tag map
+///     (`content_validator.py:82-157`, quoted below; HTML attribute names
+///     are ASCII-case-insensitive so Django's `aspectRatio`/`textColor`
+///     entries take effect as `aspectratio`/`textcolor`);
+/// (c) dangerous schemes STRIP the attribute (nh3 behavior — never rewrite
+///     to `href="#"`); effective `SAFE_PROTOCOLS = {"http","https","mailto",
+///     "tel"}` (`content_validator.py:159`) — notably `data:` is NOT safe;
+/// (d) scheme checks apply to ammonia's URL attributes (`is_url_attr`:
+///     `href`/`xlink:href`, `src`, `form`/`action`, `object`/`data`,
+///     `button|input`/`formaction`, `a`/`ping`, `video`/`poster`);
+///     relative URLs pass through (`UrlRelative::PassThrough` default).
+/// NOTE on `data-*`: the file's comment claims every `data-*` seen in the
+/// input is dynamically included, but no such code exists in the file —
+/// `nh3.clean` receives the static map — so only the listed keys are kept.
+/// Documented deviation: nh3's default `link_rel="noopener noreferrer"`
+/// insertion on `<a>` is not mirrored (strip-only sanitizer).
 pub fn sanitize_html_content(input: &str) -> String {
     let mut s = input.to_string();
     for tag in ["script", "style"] {
         s = strip_element_blocks(&s, tag);
     }
     s = strip_html_comments(&s);
-    s = strip_tag_attributes(&s);
+    s = sanitize_tags_allowlist(&s);
     s
+}
+
+/// Effective `ALLOWED_TAGS`, sorted for `binary_search`: ammonia defaults
+/// (`a, abbr, acronym, area, article, aside, b, bdi, bdo, blockquote, br,
+/// caption, center, cite, code, col, colgroup, data, dd, del, details, dfn,
+/// div, dl, dt, em, figcaption, figure, footer, h1-h6, header, hgroup, hr,
+/// i, img, ins, kbd, li, map, mark, nav, ol, p, pre, q, rp, rt, rtc, ruby,
+/// s, samp, small, span, strike, strong, sub, summary, sup, table, tbody,
+/// td, th, thead, time, tr, tt, u, ul, var, wbr`) + Django `CUSTOM_TAGS`.
+const ALLOWED_TAGS: &[&str] = &[
+    "a",
+    "abbr",
+    "acronym",
+    "area",
+    "article",
+    "aside",
+    "b",
+    "bdi",
+    "bdo",
+    "blockquote",
+    "br",
+    "caption",
+    "center",
+    "cite",
+    "code",
+    "col",
+    "colgroup",
+    "data",
+    "dd",
+    "del",
+    "details",
+    "dfn",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "figcaption",
+    "figure",
+    "footer",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hgroup",
+    "hr",
+    "i",
+    "image-component",
+    "img",
+    "input",
+    "ins",
+    "kbd",
+    "label",
+    "li",
+    "map",
+    "mark",
+    "mention-component",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "q",
+    "rp",
+    "rt",
+    "rtc",
+    "ruby",
+    "s",
+    "samp",
+    "small",
+    "span",
+    "strike",
+    "strong",
+    "sub",
+    "summary",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "time",
+    "tr",
+    "tt",
+    "u",
+    "ul",
+    "var",
+    "wbr",
+];
+
+/// Effective generic (`"*"`) attributes (`content_validator.py:83-113`),
+/// sorted for `binary_search`.
+const GENERIC_ATTRS: &[&str] = &[
+    "aria-hidden",
+    "aria-label",
+    "class",
+    "data-background",
+    "data-background-color",
+    "data-block-type",
+    "data-checked",
+    "data-emoji-unicode",
+    "data-emoji-url",
+    "data-icon-color",
+    "data-icon-name",
+    "data-id",
+    "data-logo-in-use",
+    "data-name",
+    "data-node-type",
+    "data-text-color",
+    "data-tight",
+    "data-type",
+    "id",
+    "role",
+    "start",
+    "style",
+    "title",
+    "type",
+    "xmlns",
+];
+
+/// Effective per-tag attributes (`content_validator.py:114-157`).
+fn tag_specific_attrs(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "a" => &["href", "target"],
+        "image-component" => &[
+            "alignment",
+            "aspectratio",
+            "height",
+            "id",
+            "src",
+            "status",
+            "width",
+        ],
+        "img" => &[
+            "alignment",
+            "alt",
+            "aspectratio",
+            "height",
+            "src",
+            "title",
+            "width",
+        ],
+        "mention-component" => &["entity_identifier", "entity_name", "id"],
+        "th" => &["background", "colspan", "colwidth", "rowspan", "style"],
+        "td" => &[
+            "background",
+            "colspan",
+            "colwidth",
+            "rowspan",
+            "style",
+            "textcolor",
+        ],
+        "tr" => &["background", "style", "textcolor"],
+        "pre" => &["language"],
+        "code" => &["language", "spellcheck"],
+        "input" => &["checked", "type"],
+        _ => &[],
+    }
+}
+
+/// Effective URL schemes (`content_validator.py:159`).
+const SAFE_SCHEMES: &[&str] = &["http", "https", "mailto", "tel"];
+
+/// Mirrors ammonia's `is_url_attr`: the attributes whose values are checked
+/// against `SAFE_SCHEMES` (others pass the allowlist untouched).
+fn is_url_attr(tag: &str, attr: &str) -> bool {
+    (attr == "href" || attr == "xlink:href")
+        || attr == "src"
+        || (tag == "form" && attr == "action")
+        || (tag == "object" && attr == "data")
+        || ((tag == "button" || tag == "input") && attr == "formaction")
+        || (tag == "a" && attr == "ping")
+        || (tag == "video" && attr == "poster")
+}
+
+/// Mirrors ammonia's scheme gate: relative URLs (no scheme) pass through;
+/// absolute URLs survive only on a `SAFE_SCHEMES` scheme; unparseable
+/// values are stripped.
+fn url_scheme_allowed(value: &str) -> bool {
+    let v = value.trim();
+    let Some(colon) = v.find(':') else {
+        return true;
+    };
+    let head = &v[..colon];
+    // A `/`, `?` or `#` before the colon means no scheme (relative path).
+    if head.contains(['/', '?', '#']) {
+        return true;
+    }
+    // Malformed scheme or embedded whitespace → `Url::parse` fails → strip.
+    if head.is_empty()
+        || !head.as_bytes()[0].is_ascii_alphabetic()
+        || !head
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'-' || c == b'.')
+    {
+        return false;
+    }
+    SAFE_SCHEMES.contains(&head.to_ascii_lowercase().as_str())
+}
+
+fn escape_attr_value(v: &str) -> String {
+    let mut out = String::with_capacity(v.len());
+    for c in v.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '"' => out.push_str("&quot;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Finds the `>` closing a tag opened at `from` (offset just past `<`),
+/// ignoring `>` inside single/double-quoted attribute values.
+fn tag_close(s: &str, from: usize) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut i = from;
+    let mut quote: Option<u8> = None;
+    while i < b.len() {
+        let c = b[i];
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+        } else if c == b'"' || c == b'\'' {
+            quote = Some(c);
+        } else if c == b'>' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Drops non-allowlist tags (inner text kept) and non-allowlist attributes,
+/// tag-aware (text outside `<...>` untouched). Tag/attribute names are
+/// matched case-insensitively and emitted lowercase (nh3 normalizes via
+/// html5ever); `<!...>` declarations/doctypes are dropped and comments are
+/// already stripped upstream.
+fn sanitize_tags_allowlist(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < s.len() {
+        let Some(rel) = s[i..].find('<') else {
+            out.push_str(&s[i..]);
+            break;
+        };
+        let abs = i + rel;
+        out.push_str(&s[i..abs]);
+        let Some(close) = tag_close(s, abs + 1) else {
+            // Dangling `<` with no close: nh3 drops the tag; keep the text.
+            out.push_str(&s[abs + 1..]);
+            break;
+        };
+        let end = close + 1;
+        let inner = &s[abs + 1..close];
+        let inner_trim = inner.trim_start();
+        // Declarations / doctypes / comments remnants pass as nothing.
+        if inner_trim.starts_with('!') {
+            i = end;
+            continue;
+        }
+        let is_close = inner_trim.starts_with('/');
+        let name_src = if is_close {
+            inner_trim[1..].trim_start()
+        } else {
+            inner_trim
+        };
+        let name_end = name_src
+            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+            .unwrap_or(name_src.len());
+        let tag = name_src[..name_end].to_ascii_lowercase();
+        if tag.is_empty()
+            || tag.starts_with('!')
+            || !ALLOWED_TAGS.binary_search(&tag.as_str()).is_ok()
+        {
+            // Disallowed tag (or stray `<>`): drop the tag, keep inner text.
+            i = end;
+            continue;
+        }
+        if is_close {
+            out.push_str(&format!("</{tag}>"));
+            i = end;
+            continue;
+        }
+        out.push_str(&clean_tag_allowlist(&tag, &name_src[name_end..]));
+        i = end;
+    }
+    out
+}
+
+/// Filters one open tag's attributes against the allowlist + scheme gate.
+fn clean_tag_allowlist(tag: &str, rest: &str) -> String {
+    let b = rest.as_bytes();
+    let mut kept: Vec<String> = Vec::new();
+    let mut i = 0usize;
+    while i < b.len() {
+        while i < b.len() && (b[i].is_ascii_whitespace() || b[i] == b'/') {
+            i += 1;
+        }
+        if i >= b.len() {
+            break;
+        }
+        let ns = i;
+        while i < b.len() && b[i] != b'=' && !b[i].is_ascii_whitespace() && b[i] != b'/' {
+            i += 1;
+        }
+        let name = rest[ns..i].to_ascii_lowercase();
+        if name.is_empty() {
+            break;
+        }
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let mut val = String::new();
+        if b.get(i).is_some_and(|c| *c == b'=') {
+            i += 1;
+            while i < b.len() && b[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if let Some(&q) = b.get(i) {
+                if q == b'"' || q == b'\'' {
+                    i += 1;
+                    let vs = i;
+                    while i < b.len() && b[i] != q {
+                        i += 1;
+                    }
+                    val = rest[vs..i].to_string();
+                    if i < b.len() {
+                        i += 1;
+                    }
+                } else {
+                    // Unquoted: `/` is a legal value char; only whitespace
+                    // ends it (`>` cannot occur — `tag_close` excluded it).
+                    let vs = i;
+                    while i < b.len() && !b[i].is_ascii_whitespace() {
+                        i += 1;
+                    }
+                    val = rest[vs..i].to_string();
+                }
+            }
+        }
+        if GENERIC_ATTRS.binary_search(&name.as_str()).is_err()
+            && !tag_specific_attrs(tag).contains(&name.as_str())
+        {
+            continue;
+        }
+        if is_url_attr(tag, &name) && !url_scheme_allowed(&val) {
+            continue;
+        }
+        if val.is_empty() && !rest[ns..].contains('=') {
+            kept.push(name);
+        } else {
+            kept.push(format!("{name}=\"{}\"", escape_attr_value(&val)));
+        }
+    }
+    if kept.is_empty() {
+        format!("<{tag}>")
+    } else {
+        format!("<{tag} {}>", kept.join(" "))
+    }
 }
 
 /// Validates + sanitizes a `description_html` body value
@@ -274,7 +685,11 @@ fn strip_element_blocks(s: &str, tag: &str) -> String {
         };
         let abs = rest + rel;
         // The char after `<tag` must end the name (space, `/`, `>`).
-        let after = lower.as_bytes().get(abs + open_pat.len()).copied().unwrap_or(b'>');
+        let after = lower
+            .as_bytes()
+            .get(abs + open_pat.len())
+            .copied()
+            .unwrap_or(b'>');
         if after != b'>' && after != b'/' && !after.is_ascii_whitespace() {
             out.push_str(&s[rest..abs + 1]);
             rest = abs + 1;
@@ -283,12 +698,18 @@ fn strip_element_blocks(s: &str, tag: &str) -> String {
         out.push_str(&s[rest..abs]);
         let from = abs + open_pat.len();
         // Skip to the end of the opening tag, then to `</tag>`.
-        let after_open = lower[from..].find('>').map(|i| from + i + 1).unwrap_or(s.len());
+        let after_open = lower[from..]
+            .find('>')
+            .map(|i| from + i + 1)
+            .unwrap_or(s.len());
         let tail = &lower[after_open..];
         match tail.find(close_pat.as_str()) {
             Some(ci) => {
                 let cabs = after_open + ci;
-                rest = lower[cabs..].find('>').map(|i| cabs + i + 1).unwrap_or(s.len());
+                rest = lower[cabs..]
+                    .find('>')
+                    .map(|i| cabs + i + 1)
+                    .unwrap_or(s.len());
             }
             None => break, // unclosed: drop to end (nh3 drops the dangling open tag too)
         }
@@ -315,118 +736,6 @@ fn strip_html_comments(s: &str) -> String {
         }
     }
     out
-}
-
-/// Removes `on*` event attributes and neutralizes dangerous URL schemes in
-/// `href`/`src` attributes, tag-aware (text outside `<...>` untouched).
-fn strip_tag_attributes(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = String::with_capacity(s.len());
-    let mut i = 0usize;
-    while i < s.len() {
-        let Some(rel) = s[i..].find('<') else {
-            out.push_str(&s[i..]);
-            break;
-        };
-        let abs = i + rel;
-        out.push_str(&s[i..abs]);
-        // Comment remnants / declarations / closing tags pass through
-        // (comments already stripped; keep `</...>` and `<!...>` verbatim).
-        if bytes.get(abs + 1).is_some_and(|b| *b == b'/' || *b == b'!') {
-            let end = s[abs..].find('>').map(|e| abs + e + 1).unwrap_or(s.len());
-            out.push_str(&s[abs..end]);
-            i = end;
-            continue;
-        }
-        let end = s[abs..].find('>').map(|e| abs + e + 1).unwrap_or(s.len());
-        out.push_str(&clean_tag(&s[abs..end]));
-        i = end;
-    }
-    out
-}
-
-fn clean_tag(tag: &str) -> String {
-    // Tokenize `name="v"`, `name='v'`, `name=v`, `name`.
-    let mut kept: Vec<String> = Vec::new();
-    let b = tag.as_bytes();
-    let mut i = 1usize; // skip `<`
-    // Tag name first.
-    while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' && b[i] != b'/' {
-        i += 1;
-    }
-    kept.push(tag[..i].to_string());
-    while i < b.len() {
-        while i < b.len() && (b[i].is_ascii_whitespace() || b[i] == b'/') {
-            i += 1;
-        }
-        if i >= b.len() || b[i] == b'>' {
-            break;
-        }
-        let ns = i;
-        while i < b.len() && b[i] != b'=' && !b[i].is_ascii_whitespace() && b[i] != b'>' {
-            i += 1;
-        }
-        let name = tag[ns..i].to_string();
-        while i < b.len() && b[i].is_ascii_whitespace() {
-            i += 1;
-        }
-        let mut val = String::new();
-        let mut raw_attr = name.clone();
-        if b.get(i).is_some_and(|c| *c == b'=') {
-            i += 1;
-            while i < b.len() && b[i].is_ascii_whitespace() {
-                i += 1;
-            }
-            if let Some(&q) = b.get(i) {
-                if q == b'"' || q == b'\'' {
-                    i += 1;
-                    let vs = i;
-                    while i < b.len() && b[i] != q {
-                        i += 1;
-                    }
-                    val = tag[vs..i].to_string();
-                    raw_attr = format!("{name}={q}{val}{q}", q = q as char);
-                    if i < b.len() {
-                        i += 1;
-                    }
-                }
-            }
-            if val.is_empty() && !raw_attr.contains('=') {
-                let vs = i;
-                while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' {
-                    i += 1;
-                }
-                val = tag[vs..i].to_string();
-                raw_attr = format!("{name}={val}");
-            }
-        }
-        let lname = name.to_lowercase();
-        // Drop event handlers (`content_validator` nh3 ATTRIBUTES allowlist
-        // has no `on*` entries).
-        if lname.starts_with("on") && lname.len() > 2 {
-            continue;
-        }
-        // Neutralize dangerous URL schemes (nh3 `SAFE_PROTOCOLS =
-        // {"http","https","mailto","tel"}` — anything else is stripped; we
-        // keep the attribute with a benign value so markup stays valid).
-        if lname == "href" || lname == "src" {
-            let vtrim = val.trim().to_lowercase();
-            if vtrim.starts_with("javascript:")
-                || vtrim.starts_with("data:")
-                || vtrim.starts_with("vbscript:")
-            {
-                kept.push(format!("{name}=\"#\""));
-                continue;
-            }
-        }
-        kept.push(raw_attr);
-    }
-    let mut s = kept.join(" ");
-    if tag.trim_end().ends_with("/>") && !s.ends_with("/>") {
-        s.push_str(" /");
-    }
-    s.push('>');
-    s
 }
 
 /// Mirrors `strip_tags` for the stored `description_stripped` column
@@ -576,12 +885,7 @@ async fn require_page_perm(
     let role = fetch_project_member_role(pool, user, slug, pid).await?;
     let page = fetch_perm_page(pool, page_id, slug, pid).await?;
     let decision = match &page {
-        Some(p) => page_perm_decision(
-            p.owned_by_id == user,
-            p.access == 1,
-            method,
-            role,
-        ),
+        Some(p) => page_perm_decision(p.owned_by_id == user, p.access == 1, method, role),
         None => PagePerm::Deny,
     };
     match (page, decision) {
@@ -738,6 +1042,70 @@ const PAGE_ROW_COLS: &str = "p.id, p.name, p.owned_by_id, p.access, p.color, p.p
     COALESCE(ARRAY(SELECT DISTINCT pp2.project_id FROM project_pages pp2 \
         WHERE pp2.page_id = p.id AND pp2.deleted_at IS NULL), '{}') AS project_ids";
 
+/// Archived-project scope for the page collection/detail queries: Django
+/// `base.py:93-97` (`get_queryset`: `projects__archived_at__isnull=True`)
+/// and `base.py:440-443` (`summary`). Every query below binds the URL
+/// project as `$2`, so the scope joins `projects` on `$2` directly.
+const ARCHIVED_PROJECT_SCOPE: &str = "JOIN projects pr ON pr.id = $2 AND pr.archived_at IS NULL";
+
+/// `PageViewSet.summary` SQL (`base.py:436-484`). Binds: `$1=slug`,
+/// `$2=pid`, `$3=user`, `$4=owned_only bool`.
+fn summary_sql() -> &'static str {
+    "SELECT COUNT(*) FILTER (WHERE p.access = 0 AND p.archived_at IS NULL), \
+     COUNT(*) FILTER (WHERE p.access = 1 AND p.archived_at IS NULL), \
+     COUNT(*) FILTER (WHERE p.archived_at IS NOT NULL) \
+     FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
+     JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
+     JOIN projects pr ON pr.id = $2 AND pr.archived_at IS NULL \
+     WHERE w.slug = $1 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
+     AND (p.owned_by_id = $3 OR (p.access = 0 AND $4 = false))"
+}
+
+/// `PageViewSet.list` SQL (`base.py:82-142,306-321`). Binds: `$1=slug`,
+/// `$2=pid`, `$3=user`, `$4=user` (the `PAGE_ROW_COLS` fav subquery),
+/// `$5=owned_only bool`, `$6=search text` — each `$N` binds the type its
+/// position is compared against (PG 42883 otherwise, plus a dead search).
+fn list_sql(order_expr: &str, desc: bool) -> String {
+    let dir = if desc { "DESC" } else { "ASC" };
+    format!(
+        "SELECT {PAGE_ROW_COLS} FROM pages p \
+         JOIN workspaces w ON w.id = p.workspace_id \
+         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
+         {ARCHIVED_PROJECT_SCOPE} \
+         WHERE w.slug = $1 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
+         AND (p.owned_by_id = $3 OR (p.access = 0 AND $5 = false)) \
+         AND ($6 = '' OR p.name ILIKE '%' || $6 || '%') \
+         ORDER BY is_favorite DESC, {order_expr} {dir}, p.id ASC"
+    )
+}
+
+/// Detail-row SQL for create/duplicate/patch re-reads (no top-level or
+/// owner scoping — the caller already gated). Binds: `$1=slug`, `$2=pid`,
+/// `$3=page`, `$4=user` (fav subquery).
+fn fetch_detail_sql() -> String {
+    format!(
+        "SELECT {PAGE_ROW_COLS} FROM pages p \
+         JOIN workspaces w ON w.id = p.workspace_id \
+         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
+         {ARCHIVED_PROJECT_SCOPE} \
+         WHERE w.slug = $1 AND p.id = $3 AND p.deleted_at IS NULL"
+    )
+}
+
+/// Scoped retrieve SQL (`base.py:82-142` queryset: top-level +
+/// owned-or-public + active link). Binds: `$1=slug`, `$2=pid`, `$3=page`,
+/// `$4=user` (fav subquery), `$5=user` (owner check).
+fn scoped_detail_sql() -> String {
+    format!(
+        "SELECT {PAGE_ROW_COLS} FROM pages p \
+         JOIN workspaces w ON w.id = p.workspace_id \
+         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
+         {ARCHIVED_PROJECT_SCOPE} \
+         WHERE w.slug = $1 AND p.id = $3 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
+         AND (p.owned_by_id = $5 OR p.access = 0)"
+    )
+}
+
 /// Parses a `labels` body key the way DRF `PrimaryKeyRelatedField(many=True)`
 /// does: must be a list of UUIDs — anything else is a `ValidationError` →
 /// 400 `{"error": "Please provide valid detail"}` (`views/base.py:92-97`).
@@ -759,6 +1127,36 @@ fn parse_labels(body: &Value) -> Result<Option<Vec<uuid::Uuid>>, ()> {
 
 fn invalid_pk_msg(key: &str, raw: &str) -> Value {
     json!({key: [format!("Invalid pk \"{raw}\" - object does not exist.")]})
+}
+
+/// PATCH `parent` classification (`base.py:181-188`): Django applies an
+/// explicit `null` (`parent` is nullable) while an absent key is a no-op.
+/// `COALESCE($N, parent_id)` cannot express the clear, so the handler
+/// carries a separate clear flag (see the `CASE WHEN $9` in the UPDATE).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParentUpdate {
+    Absent,
+    Clear,
+    Set(uuid::Uuid),
+}
+
+/// Absent → `Absent`; explicit null → `Clear`; `""`/non-string/unparseable
+/// → `{"error": "Please provide valid detail"}` (DRF `ValidationError` →
+/// `views/base.py:92-97`); UUID string → `Set` (the handler runs the scoped
+/// lookup; miss → the quirk 400).
+pub fn parse_parent_value(v: Option<&Value>) -> Result<ParentUpdate, String> {
+    let Some(v) = v else {
+        return Ok(ParentUpdate::Absent);
+    };
+    match v {
+        Value::Null => Ok(ParentUpdate::Clear),
+        Value::String(s) if s.is_empty() => Err(VALID_DETAIL_MSG.to_string()),
+        Value::String(s) => match s.parse::<uuid::Uuid>() {
+            Ok(u) => Ok(ParentUpdate::Set(u)),
+            Err(_) => Err(VALID_DETAIL_MSG.to_string()),
+        },
+        _ => Err(VALID_DETAIL_MSG.to_string()),
+    }
 }
 
 // ============================================================================
@@ -786,22 +1184,17 @@ pub async fn summary(
     let owned_only = guest_restricted(&st.pool, auth.0, &slug, pid).await?;
     // `base.py:468-482`: public = access 0 unarchived; private = access 1
     // unarchived; archived = `archived_at` set (any access).
-    let row: (i64, i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*) FILTER (WHERE p.access = 0 AND p.archived_at IS NULL), \
-         COUNT(*) FILTER (WHERE p.access = 1 AND p.archived_at IS NULL), \
-         COUNT(*) FILTER (WHERE p.archived_at IS NOT NULL) \
-         FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
-         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
-         WHERE w.slug = $1 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
-         AND (p.owned_by_id = $3 OR (p.access = 0 AND $4 = false))",
+    let row: (i64, i64, i64) = sqlx::query_as(summary_sql())
+        .bind(&slug)
+        .bind(pid)
+        .bind(auth.0)
+        .bind(owned_only)
+        .fetch_one(&st.pool)
+        .await?;
+    Ok(
+        Json(json!({"public_pages": row.0, "private_pages": row.1, "archived_pages": row.2}))
+            .into(),
     )
-    .bind(&slug)
-    .bind(pid)
-    .bind(auth.0)
-    .bind(owned_only)
-    .fetch_one(&st.pool)
-    .await?;
-    Ok(Json(json!({"public_pages": row.0, "private_pages": row.1, "archived_pages": row.2})).into())
     .map(|j| (StatusCode::OK, j))
 }
 
@@ -836,18 +1229,10 @@ pub async fn list(
     }
     let owned_only = guest_restricted(&st.pool, auth.0, &slug, pid).await?;
     let (expr, desc) = sanitize_page_order_by(q.order_by.as_deref().unwrap_or("-created_at"));
-    let dir = if desc { "DESC" } else { "ASC" };
     let search = q.search.as_deref().unwrap_or("").to_string();
     // `filter_queryset` SearchFilter: empty search matches everything.
-    let sql = format!(
-        "SELECT {PAGE_ROW_COLS} FROM pages p \
-         JOIN workspaces w ON w.id = p.workspace_id \
-         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
-         WHERE w.slug = $1 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
-         AND (p.owned_by_id = $3 OR (p.access = 0 AND $4 = false)) \
-         AND ($5 = '' OR p.name ILIKE '%' || $5 || '%') \
-         ORDER BY is_favorite DESC, {expr} {dir}, p.id ASC"
-    );
+    // Bind order is slug, pid, user, user(fav $4), owned_only($5), search($6).
+    let sql = list_sql(expr, desc);
     let rows: Vec<PageRow> = sqlx::query_as(&sql)
         .bind(&slug)
         .bind(pid)
@@ -857,9 +1242,6 @@ pub async fn list(
         .bind(search)
         .fetch_all(&st.pool)
         .await?;
-    // NOTE: `$4` is bound twice (user id for `is_favorite`, then the
-    // owned-only flag) — bind order above is slug, pid, user(fav), user(own),
-    // owned_only, search. The query text uses $1..$6 positionally.
     Ok((
         StatusCode::OK,
         Json(json!(rows.iter().map(page_list_json).collect::<Vec<_>>())),
@@ -873,12 +1255,7 @@ async fn fetch_detail_row(
     pid: uuid::Uuid,
     user: uuid::Uuid,
 ) -> Result<Option<PageRow>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {PAGE_ROW_COLS} FROM pages p \
-         JOIN workspaces w ON w.id = p.workspace_id \
-         JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
-         WHERE w.slug = $1 AND p.id = $3 AND p.deleted_at IS NULL"
-    );
+    let sql = fetch_detail_sql();
     sqlx::query_as::<_, PageRow>(&sql)
         .bind(slug)
         .bind(pid)
@@ -984,18 +1361,22 @@ pub async fn create(
         }
     };
     if let Some(p) = parent {
-        let exists: (bool,) =
-            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM pages WHERE id = $1 AND deleted_at IS NULL)")
-                .bind(p)
-                .fetch_one(&st.pool)
-                .await?;
+        let exists: (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM pages WHERE id = $1 AND deleted_at IS NULL)",
+        )
+        .bind(p)
+        .fetch_one(&st.pool)
+        .await?;
         if !exists.0 {
             let raw = body
                 .get("parent")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-            return Ok((StatusCode::BAD_REQUEST, Json(invalid_pk_msg("parent", &raw))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(invalid_pk_msg("parent", &raw)),
+            ));
         }
     }
     // `labels` write-only M2M (`serializers/page.py:27-31`).
@@ -1010,11 +1391,12 @@ pub async fn create(
     };
     if let Some(ids) = &labels {
         for id in ids {
-            let exists: (bool,) =
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM labels WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(id)
-                    .fetch_one(&st.pool)
-                    .await?;
+            let exists: (bool,) = sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM labels WHERE id = $1 AND deleted_at IS NULL)",
+            )
+            .bind(id)
+            .fetch_one(&st.pool)
+            .await?;
             if !exists.0 {
                 return Ok((
                     StatusCode::BAD_REQUEST,
@@ -1073,7 +1455,11 @@ pub async fn create(
     .bind(&description_json)
     .bind(&description_binary)
     .bind(&description_html)
-    .bind(if stripped.is_empty() { None } else { Some(stripped) })
+    .bind(if stripped.is_empty() {
+        None
+    } else {
+        Some(stripped)
+    })
     .bind(auth.0)
     .bind(&color)
     .bind(access)
@@ -1145,13 +1531,7 @@ pub async fn detail(
     // Queryset scope (`base.py:82-142`): top-level + owned-or-public + active
     // link for the URL project.
     let row: Option<PageRow> = {
-        let sql = format!(
-            "SELECT {PAGE_ROW_COLS} FROM pages p \
-             JOIN workspaces w ON w.id = p.workspace_id \
-             JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
-             WHERE w.slug = $1 AND p.id = $3 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
-             AND (p.owned_by_id = $5 OR p.access = 0)"
-        );
+        let sql = scoped_detail_sql();
         sqlx::query_as::<_, PageRow>(&sql)
             .bind(&slug)
             .bind(pid)
@@ -1235,44 +1615,32 @@ pub async fn patch(
         ));
     }
     // Parent lookup (`base.py:181-188`): truthy `parent` must resolve in the
-    // same scope; miss → the quirk 400. Bad UUID → valid-detail 400
-    // (DRF `ValidationError` → `views/base.py:92-97`).
-    let parent: Option<Option<uuid::Uuid>> = match body.get("parent") {
-        None | Some(Value::Null) if body.get("parent").is_none() => None,
-        None | Some(Value::Null) => Some(None),
-        Some(Value::String(s)) if s.is_empty() => Some(None),
-        Some(Value::String(s)) => match s.parse::<uuid::Uuid>() {
-            Ok(u) => {
-                let exists: (bool,) = sqlx::query_as(
-                    "SELECT EXISTS(SELECT 1 FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
-                     JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL \
-                     WHERE p.id = $1 AND w.slug = $2 AND pp.project_id = $3 AND p.deleted_at IS NULL)",
-                )
-                .bind(u)
-                .bind(&slug)
-                .bind(pid)
-                .fetch_one(&st.pool)
-                .await?;
-                if !exists.0 {
-                    return Ok((
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"error": ACCESS_QUIRK_MSG})),
-                    ));
-                }
-                Some(Some(u))
-            }
-            Err(_) => {
+    // same scope; miss → the quirk 400. Explicit null CLEARS (`parent` is
+    // nullable); absent key is a no-op; `""`/bad types → valid-detail 400.
+    let parent: Option<Option<uuid::Uuid>> = match parse_parent_value(body.get("parent")) {
+        Ok(ParentUpdate::Absent) => None,
+        Ok(ParentUpdate::Clear) => Some(None),
+        Ok(ParentUpdate::Set(u)) => {
+            let exists: (bool,) = sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
+                 JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL \
+                 WHERE p.id = $1 AND w.slug = $2 AND pp.project_id = $3 AND p.deleted_at IS NULL)",
+            )
+            .bind(u)
+            .bind(&slug)
+            .bind(pid)
+            .fetch_one(&st.pool)
+            .await?;
+            if !exists.0 {
                 return Ok((
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"error": VALID_DETAIL_MSG})),
+                    Json(json!({"error": ACCESS_QUIRK_MSG})),
                 ));
             }
-        },
-        Some(_) => {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": VALID_DETAIL_MSG})),
-            ));
+            Some(Some(u))
+        }
+        Err(e) => {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
         }
     };
     // Access-change guard (`base.py:191-195`).
@@ -1337,11 +1705,12 @@ pub async fn patch(
     };
     if let Some(ids) = &labels {
         for id in ids {
-            let exists: (bool,) =
-                sqlx::query_as("SELECT EXISTS(SELECT 1 FROM labels WHERE id = $1 AND deleted_at IS NULL)")
-                    .bind(id)
-                    .fetch_one(&st.pool)
-                    .await?;
+            let exists: (bool,) = sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM labels WHERE id = $1 AND deleted_at IS NULL)",
+            )
+            .bind(id)
+            .fetch_one(&st.pool)
+            .await?;
             if !exists.0 {
                 return Ok((
                     StatusCode::BAD_REQUEST,
@@ -1355,9 +1724,12 @@ pub async fn patch(
         .map(|h| strip_tags_text(h))
         .map(|s| if s.is_empty() { None } else { Some(s) });
     let mut tx = st.pool.begin().await?;
+    // Explicit-null parent clears (`base.py` applies it; `parent` nullable):
+    // `COALESCE` cannot express NULL, hence the `CASE WHEN $9` clear flag.
+    let clear_parent = matches!(parent, Some(None));
     sqlx::query(
         "UPDATE pages SET name = COALESCE($1, name), access = COALESCE($2, access), \
-         color = COALESCE($3, color), parent_id = COALESCE($4, parent_id), \
+         color = COALESCE($3, color), parent_id = CASE WHEN $9 THEN NULL ELSE COALESCE($4, parent_id) END, \
          description_html = COALESCE($5, description_html), \
          description_json = COALESCE($6, description_json), \
          description_stripped = COALESCE($7, description_stripped), \
@@ -1371,6 +1743,7 @@ pub async fn patch(
     .bind(&description_json)
     .bind(stripped.flatten())
     .bind(page_id)
+    .bind(clear_parent)
     .execute(&mut *tx)
     .await?;
     // `labels` key present → replace `page_labels`
@@ -1396,10 +1769,6 @@ pub async fn patch(
         }
     }
     tx.commit().await?;
-    // NOTE: setting `parent` to null via PATCH is not expressible through
-    // `COALESCE` (Django `partial=True` likewise ignores explicit nulls for
-    // non-nullable handling here); explicit-null parent stays unchanged —
-    // documented deviation.
     match fetch_detail_row(&st.pool, page_id, &slug, pid, auth.0).await? {
         Some(r) => Ok((StatusCode::OK, Json(page_detail_json(&r)))),
         None => Ok(missing()),
@@ -1623,7 +1992,9 @@ pub async fn archive(
         ));
     }
     // Single DB clock for the stored value AND the response (E2/E3 precedent).
-    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()").fetch_one(&st.pool).await?;
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&st.pool)
+        .await?;
     let mut tx = st.pool.begin().await?;
     sqlx::query(
         "UPDATE user_favorites SET deleted_at = now(), updated_at = now() \
@@ -1879,7 +2250,10 @@ pub async fn desc_get(
     Path((slug, pid, page_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<Response, common::errors::AppError> {
     if !project_in_workspace(&st.pool, pid, &slug).await? {
-        return desc_err(StatusCode::NOT_FOUND, json!({"error": "The required object does not exist."}));
+        return desc_err(
+            StatusCode::NOT_FOUND,
+            json!({"error": "The required object does not exist."}),
+        );
     }
     if require_page_perm(&st.pool, auth.0, &slug, pid, page_id, "GET")
         .await?
@@ -1888,7 +2262,7 @@ pub async fn desc_get(
         let (s, j) = deny_detail();
         return desc_err(s, j.0);
     }
-    let row: Option<(Option<Vec<u8>> ,)> = sqlx::query_as(
+    let row: Option<(Option<Vec<u8>>,)> = sqlx::query_as(
         "SELECT p.description_binary FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
          JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL \
          WHERE p.id = $1 AND w.slug = $2 AND pp.project_id = $3 AND p.deleted_at IS NULL \
@@ -1901,7 +2275,10 @@ pub async fn desc_get(
     .fetch_optional(&st.pool)
     .await?;
     let Some((bytes,)) = row else {
-        return desc_err(StatusCode::NOT_FOUND, json!({"error": "The required object does not exist."}));
+        return desc_err(
+            StatusCode::NOT_FOUND,
+            json!({"error": "The required object does not exist."}),
+        );
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -1931,7 +2308,10 @@ pub async fn desc_patch(
     Json(body): Json<Value>,
 ) -> Result<Response, common::errors::AppError> {
     if !project_in_workspace(&st.pool, pid, &slug).await? {
-        return desc_err(StatusCode::NOT_FOUND, json!({"error": "The required object does not exist."}));
+        return desc_err(
+            StatusCode::NOT_FOUND,
+            json!({"error": "The required object does not exist."}),
+        );
     }
     if require_page_perm(&st.pool, auth.0, &slug, pid, page_id, "PATCH")
         .await?
@@ -1954,7 +2334,10 @@ pub async fn desc_patch(
     .fetch_optional(&st.pool)
     .await?;
     let Some((is_locked, archived_at)) = cur else {
-        return desc_err(StatusCode::NOT_FOUND, json!({"error": "The required object does not exist."}));
+        return desc_err(
+            StatusCode::NOT_FOUND,
+            json!({"error": "The required object does not exist."}),
+        );
     };
     if is_locked {
         return desc_err(
@@ -1969,22 +2352,10 @@ pub async fn desc_patch(
         );
     }
     // `PageBinaryUpdateSerializer` field validation.
-    let binary: Option<Vec<u8>> = match body.get("description_binary") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) => match decode_description_binary(s) {
-            Ok(b) => Some(b),
-            Err(e) => {
-                return desc_err(
-                    StatusCode::BAD_REQUEST,
-                    json!({"description_binary": [e]}),
-                );
-            }
-        },
-        Some(_) => {
-            return desc_err(
-                StatusCode::BAD_REQUEST,
-                json!({"description_binary": [DESC_DECODE_MSG]}),
-            );
+    let binary: Option<Vec<u8>> = match parse_desc_binary_value(body.get("description_binary")) {
+        Ok(b) => b,
+        Err(e) => {
+            return desc_err(StatusCode::BAD_REQUEST, json!({"description_binary": [e]}));
         }
     };
     let html: Option<String> = match body.get("description_html") {
@@ -2224,7 +2595,10 @@ pub async fn versions_list(
     .await?;
     Ok((
         StatusCode::OK,
-        Json(json!(rows.iter().map(page_version_json).collect::<Vec<_>>())),
+        Json(json!(rows
+            .iter()
+            .map(page_version_json)
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -2300,26 +2674,65 @@ mod page_e4_tests {
             }
         }
         // `page.py:89-91` — no active membership → deny (DRF-403 branch).
-        assert_eq!(page_perm_decision(false, false, "GET", None), PagePerm::Deny);
+        assert_eq!(
+            page_perm_decision(false, false, "GET", None),
+            PagePerm::Deny
+        );
         // `page.py:100-128` — public action matrix.
-        assert_eq!(page_perm_decision(false, false, "POST", Some(20)), PagePerm::Allow);
-        assert_eq!(page_perm_decision(false, false, "POST", Some(15)), PagePerm::Allow);
-        assert_eq!(page_perm_decision(false, false, "POST", Some(5)), PagePerm::Deny);
+        assert_eq!(
+            page_perm_decision(false, false, "POST", Some(20)),
+            PagePerm::Allow
+        );
+        assert_eq!(
+            page_perm_decision(false, false, "POST", Some(15)),
+            PagePerm::Allow
+        );
+        assert_eq!(
+            page_perm_decision(false, false, "POST", Some(5)),
+            PagePerm::Deny
+        );
         for method in ["GET", "HEAD", "OPTIONS"] {
             for role in [Some(20), Some(15), Some(5)] {
-                assert_eq!(page_perm_decision(false, false, method, role), PagePerm::Allow);
+                assert_eq!(
+                    page_perm_decision(false, false, method, role),
+                    PagePerm::Allow
+                );
             }
         }
-        assert_eq!(page_perm_decision(false, false, "GET", Some(1)), PagePerm::Deny);
+        assert_eq!(
+            page_perm_decision(false, false, "GET", Some(1)),
+            PagePerm::Deny
+        );
         for method in ["PUT", "PATCH"] {
-            assert_eq!(page_perm_decision(false, false, method, Some(20)), PagePerm::Allow);
-            assert_eq!(page_perm_decision(false, false, method, Some(15)), PagePerm::Allow);
-            assert_eq!(page_perm_decision(false, false, method, Some(5)), PagePerm::Deny);
+            assert_eq!(
+                page_perm_decision(false, false, method, Some(20)),
+                PagePerm::Allow
+            );
+            assert_eq!(
+                page_perm_decision(false, false, method, Some(15)),
+                PagePerm::Allow
+            );
+            assert_eq!(
+                page_perm_decision(false, false, method, Some(5)),
+                PagePerm::Deny
+            );
         }
-        assert_eq!(page_perm_decision(false, false, "DELETE", Some(20)), PagePerm::Allow);
-        assert_eq!(page_perm_decision(false, false, "DELETE", Some(15)), PagePerm::Deny);
-        assert_eq!(page_perm_decision(false, false, "DELETE", Some(5)), PagePerm::Deny);
-        assert_eq!(page_perm_decision(false, false, "TRACE", Some(20)), PagePerm::Deny);
+        assert_eq!(
+            page_perm_decision(false, false, "DELETE", Some(20)),
+            PagePerm::Allow
+        );
+        assert_eq!(
+            page_perm_decision(false, false, "DELETE", Some(15)),
+            PagePerm::Deny
+        );
+        assert_eq!(
+            page_perm_decision(false, false, "DELETE", Some(5)),
+            PagePerm::Deny
+        );
+        assert_eq!(
+            page_perm_decision(false, false, "TRACE", Some(20)),
+            PagePerm::Deny
+        );
     }
 
     #[test]
@@ -2336,15 +2749,33 @@ mod page_e4_tests {
     #[test]
     fn order_by_sanitized_to_allowlist() {
         // `order_queryset.py:79-84,129-150` + `base.py:113-118`.
-        assert_eq!(sanitize_page_order_by("-created_at"), ("p.created_at", true));
+        assert_eq!(
+            sanitize_page_order_by("-created_at"),
+            ("p.created_at", true)
+        );
         assert_eq!(sanitize_page_order_by("name"), ("p.name", false));
-        assert_eq!(sanitize_page_order_by("-sort_order"), ("p.sort_order", true));
-        assert_eq!(sanitize_page_order_by("updated_at"), ("p.updated_at", false));
+        assert_eq!(
+            sanitize_page_order_by("-sort_order"),
+            ("p.sort_order", true)
+        );
+        assert_eq!(
+            sanitize_page_order_by("updated_at"),
+            ("p.updated_at", false)
+        );
         // Unknown / malformed → default `-created_at`.
-        assert_eq!(sanitize_page_order_by("description_html"), ("p.created_at", true));
-        assert_eq!(sanitize_page_order_by("--created_at"), ("p.created_at", true));
+        assert_eq!(
+            sanitize_page_order_by("description_html"),
+            ("p.created_at", true)
+        );
+        assert_eq!(
+            sanitize_page_order_by("--created_at"),
+            ("p.created_at", true)
+        );
         assert_eq!(sanitize_page_order_by(""), ("p.created_at", true));
-        assert_eq!(sanitize_page_order_by("-is_favorite"), ("p.created_at", true));
+        assert_eq!(
+            sanitize_page_order_by("-is_favorite"),
+            ("p.created_at", true)
+        );
     }
 
     #[test]
@@ -2464,10 +2895,158 @@ mod page_e4_tests {
         assert!(evil.contains(">y</a>"));
         // Oversize → `content_validator.py:219-221` message.
         let big = "a".repeat(10 * 1024 * 1024 + 1);
-        assert!(clean_description_html(&big)
-            .unwrap_err()
-            .contains("10MB"));
+        assert!(clean_description_html(&big).unwrap_err().contains("10MB"));
         assert_eq!(clean_description_html("").unwrap(), "");
+    }
+
+    #[test]
+    fn gap1_list_sql_bind_numbering() {
+        // GAP 1: `$1=slug, $2=pid, $3=user, $4=user(fav subquery),
+        // $5=owned_only bool, $6=search text`. The owned-only flag must be
+        // `$5` (bool) and the search predicate `$6` (text); `$4` belongs to
+        // the `PAGE_ROW_COLS` fav subquery.
+        let sql = list_sql("p.created_at", true);
+        assert!(
+            sql.contains("$5 = false"),
+            "owned-only flag must use $5, got: {sql}"
+        );
+        assert!(
+            sql.contains("$6 = ''"),
+            "empty-search guard must use $6, got: {sql}"
+        );
+        assert!(
+            sql.contains("ILIKE '%' || $6 || '%'"),
+            "search predicate must use $6, got: {sql}"
+        );
+        assert!(
+            !sql.contains("$4 = false"),
+            "must not reuse $4 (fav UUID) as the bool flag, got: {sql}"
+        );
+    }
+
+    #[test]
+    fn gap2_list_summary_detail_scope_archived_projects() {
+        // GAP 2: Django `base.py:93-97,440-443`
+        // (`projects__archived_at__isnull=True`) — list + summary + detail
+        // paths must exclude pages linked via archived projects.
+        for sql in [
+            list_sql("p.created_at", true),
+            summary_sql().to_string(),
+            scoped_detail_sql(),
+            fetch_detail_sql(),
+        ] {
+            assert!(
+                sql.contains("archived_at IS NULL")
+                    && (sql.contains("projects") || sql.contains(" pr ")),
+                "page query must scope to non-archived projects, got: {sql}"
+            );
+        }
+    }
+
+    #[test]
+    fn gap3_sanitizer_drops_non_allowlist_tags_keeps_text() {
+        // GAP 3 (a): tags outside Django's `ALLOWED_TAGS`
+        // (`content_validator.py:72-79` + nh3 defaults) are dropped with
+        // inner text kept (nh3 semantics).
+        let clean = sanitize_html_content(
+            "<iframe>vid</iframe><object>o</object><embed>e</embed>\
+             <form>f</form><link><meta><div>ok</div>",
+        );
+        for tag in ["iframe", "object", "embed", "form", "link", "meta"] {
+            assert!(
+                !clean.contains(tag),
+                "<{tag}> must be removed, got: {clean}"
+            );
+        }
+        for text in ["vid", "o", "e", "f", "ok"] {
+            assert!(clean.contains(text), "inner text kept, got: {clean}");
+        }
+        // `script`/`style` are nh3 `clean_content_tags`: content removed too.
+        let clean = sanitize_html_content("<style>.x{}</style>safe<script>evil()</script>");
+        assert!(!clean.contains("evil"), "got: {clean}");
+        assert!(clean.contains("safe"), "got: {clean}");
+    }
+
+    #[test]
+    fn gap3_sanitizer_attr_allowlist_and_schemes() {
+        // GAP 3 (b): attrs outside the per-tag map are dropped, incl. `on*`.
+        let clean = sanitize_html_content("<p onclick=\"alert(1)\" class=\"c\">x</p>");
+        assert!(!clean.contains("onclick"), "got: {clean}");
+        assert!(
+            clean.contains("class=\"c\""),
+            "generic attr kept, got: {clean}"
+        );
+        // GAP 3 (c)+(d): dangerous schemes STRIP the attribute (nh3
+        // behavior) — never rewrite to `href="#"`.
+        let clean = sanitize_html_content("<a href=\"javascript:alert(1)\">y</a>");
+        assert!(!clean.contains("javascript:"), "got: {clean}");
+        assert!(
+            !clean.contains("href=\"#\""),
+            "must strip, not rewrite, got: {clean}"
+        );
+        assert!(clean.contains(">y</a>"), "got: {clean}");
+        let clean = sanitize_html_content("<img src=\"javascript:alert(1)\" alt=\"t\">");
+        assert!(!clean.contains("javascript:"), "got: {clean}");
+        assert!(clean.contains("alt=\"t\""), "got: {clean}");
+        // `poster` is not in the allowlist at all → dropped regardless.
+        let clean = sanitize_html_content("<video poster=\"javascript:alert(1)\">v</video>");
+        assert!(!clean.contains("poster"), "got: {clean}");
+        // Benign markup preserved.
+        let clean =
+            sanitize_html_content("<p>Hello <b>world</b></p><a href=\"https://example.com\">x</a>");
+        assert!(clean.contains("<b>world</b>"), "got: {clean}");
+        assert!(
+            clean.contains("href=\"https://example.com\""),
+            "got: {clean}"
+        );
+    }
+
+    #[test]
+    fn gap4_parent_update_classification() {
+        // GAP 4: absent key → no-op; explicit null → CLEAR; `""` → 400;
+        // UUID string → Set (handler validates lookup, miss → quirk 400);
+        // non-string → 400.
+        assert_eq!(parse_parent_value(None), Ok(ParentUpdate::Absent));
+        assert_eq!(
+            parse_parent_value(Some(&Value::Null)),
+            Ok(ParentUpdate::Clear)
+        );
+        assert_eq!(
+            parse_parent_value(Some(&json!(""))).unwrap_err(),
+            VALID_DETAIL_MSG
+        );
+        assert_eq!(
+            parse_parent_value(Some(&json!(123))).unwrap_err(),
+            VALID_DETAIL_MSG
+        );
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(
+            parse_parent_value(Some(&json!(id.to_string()))),
+            Ok(ParentUpdate::Set(id))
+        );
+        assert_eq!(
+            parse_parent_value(Some(&json!("not-a-uuid"))).unwrap_err(),
+            VALID_DETAIL_MSG
+        );
+    }
+
+    #[test]
+    fn gap5_desc_binary_non_string_message() {
+        // GAP 5: `serializers/page.py:173-198` — non-string
+        // `description_binary` is a DRF CharField failure
+        // (`{"description_binary": ["Not a valid string."]}`), while a
+        // present-but-undecodable string keeps
+        // `Failed to decode base64 data`.
+        assert_eq!(
+            parse_desc_binary_value(Some(&json!(123))).unwrap_err(),
+            "Not a valid string."
+        );
+        assert_eq!(
+            parse_desc_binary_value(Some(&json!("!!!not-base64!!!"))).unwrap_err(),
+            DESC_DECODE_MSG
+        );
+        assert_eq!(parse_desc_binary_value(None).unwrap(), None);
+        assert_eq!(parse_desc_binary_value(Some(&Value::Null)).unwrap(), None);
     }
 
     #[test]
