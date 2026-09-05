@@ -1,3 +1,6 @@
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
 
@@ -42,4 +45,51 @@ pub fn make_django_password(password: &str) -> String {
         "pbkdf2_sha256${ITERATIONS}${salt}${}",
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, out)
     )
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AccessClaims {
+    sub: String,
+    exp: usize,
+    iat: usize,
+    jti: String,
+}
+
+pub fn encode_access(user_id: &uuid::Uuid, secret: &str, ttl_secs: i64) -> String {
+    let now = chrono::Utc::now().timestamp();
+    let claims = AccessClaims {
+        sub: user_id.to_string(),
+        exp: (now + ttl_secs) as usize,
+        iat: now as usize,
+        jti: uuid::Uuid::new_v4().to_string(),
+    };
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .expect("jwt encode")
+}
+
+pub fn decode_access(token: &str, secret: &str) -> Result<uuid::Uuid, String> {
+    let mut v = Validation::default();
+    v.validate_exp = true;
+    decode::<AccessClaims>(token, &DecodingKey::from_secret(secret.as_bytes()), &v)
+        .map_err(|e| e.to_string())?
+        .claims
+        .sub
+        .parse()
+        .map_err(|e| format!("bad sub: {e}"))
+}
+
+pub fn cookie_headers(name: &str, value: &str, max_age: i64, secure: bool) -> String {
+    let mut h = format!("{name}={value}; HttpOnly; Path=/; Max-Age={max_age}; SameSite=Lax");
+    if secure {
+        h.push_str("; Secure");
+    }
+    h
+}
+
+pub fn clear_cookie_header(name: &str, secure: bool) -> String {
+    let mut h = format!("{name}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
+    if secure {
+        h.push_str("; Secure");
+    }
+    h
 }
