@@ -231,6 +231,98 @@ pub async fn update_email(
     }
 }
 
+/// Logo workspace: aset file diutamakan, fallback ke kolom `logo` lama.
+pub fn pick_logo_url(asset: Option<&str>, logo: Option<&str>) -> Option<String> {
+    asset.map(str::to_string).or_else(|| logo.map(str::to_string))
+}
+
+#[derive(sqlx::FromRow)]
+struct MyWorkspaceRow {
+    id: uuid::Uuid,
+    name: String,
+    slug: String,
+    timezone: String,
+    organization_size: Option<String>,
+    logo: Option<String>,
+    logo_asset_url: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    owner_id: uuid::Uuid,
+    owner_email: String,
+    owner_first: String,
+    owner_last: String,
+    role: i16,
+    total_members: i64,
+}
+
+/// GET /api/users/me/workspaces/ — paritas `UserWorkSpacesEndpoint.get`
+/// (workspace ber-membership aktif + anotasi role & total_members).
+pub async fn my_workspaces(
+    State(st): State<AppState>,
+    auth: AuthUser,
+) -> (StatusCode, Json<Value>) {
+    // `file_assets` tidak punya kolom `asset_url` (skema aktual: `asset`,
+    // varchar 800) — logo diambil dari `fa.asset`, fallback ke `w.logo`.
+    // Field `url` DIHILANGKAN: tidak ada kolomnya di `workspaces` dan tidak
+    // ada kode FE yang membaca properti `workspace.url`.
+    let rows: Vec<MyWorkspaceRow> = match sqlx::query_as(
+        "SELECT w.id, w.name, w.slug, w.timezone, w.organization_size, w.logo, \
+                fa.asset AS logo_asset_url, \
+                w.created_at, w.updated_at, w.created_by_id, w.updated_by_id, \
+                o.id AS owner_id, o.email AS owner_email, \
+                o.first_name AS owner_first, o.last_name AS owner_last, \
+                wm.role AS role, \
+                (SELECT COUNT(*) FROM workspace_members m JOIN users u ON u.id = m.member_id \
+                  WHERE m.workspace_id = w.id AND m.is_active = true AND m.deleted_at IS NULL \
+                    AND u.is_bot = false) AS total_members \
+         FROM workspaces w \
+         JOIN workspace_members wm ON wm.workspace_id = w.id \
+           AND wm.member_id = $1 AND wm.is_active = true AND wm.deleted_at IS NULL \
+         JOIN users o ON o.id = w.owner_id \
+         LEFT JOIN file_assets fa ON fa.id = w.logo_asset_id \
+         WHERE w.deleted_at IS NULL \
+         ORDER BY w.created_at DESC",
+    )
+    .bind(auth.0)
+    .fetch_all(&st.pool)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "my-workspaces: lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    let out: Vec<Value> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "name": r.name,
+                "slug": r.slug,
+                "timezone": r.timezone,
+                "organization_size": r.organization_size.unwrap_or_default(),
+                "logo_url": pick_logo_url(r.logo_asset_url.as_deref(), r.logo.as_deref()),
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "created_by": r.created_by_id,
+                "updated_by": r.updated_by_id,
+                "owner": {
+                    "id": r.owner_id,
+                    "email": r.owner_email,
+                    "first_name": r.owner_first,
+                    "last_name": r.owner_last,
+                },
+                "role": r.role,
+                "total_members": r.total_members,
+            })
+        })
+        .collect();
+    (StatusCode::OK, Json(Value::Array(out)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +349,12 @@ mod tests {
         // key yang dihapus setelah sukses harus sama dengan key generate
         let uid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         assert_eq!(email_code_key(&uid, "n@x.io"), "emailcode:11111111-1111-1111-1111-111111111111:n@x.io");
+    }
+
+    #[test]
+    fn logo_fallback_order() {
+        assert_eq!(pick_logo_url(Some("a"), Some("b")).as_deref(), Some("a"));
+        assert_eq!(pick_logo_url(None, Some("b")).as_deref(), Some("b"));
+        assert_eq!(pick_logo_url(None, None), None);
     }
 }

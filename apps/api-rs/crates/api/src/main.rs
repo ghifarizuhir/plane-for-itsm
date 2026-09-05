@@ -387,6 +387,10 @@ async fn main() {
             patch(routes::users_me::update_email),
         )
         .route(
+            "/api/users/me/workspaces/",
+            get(routes::users_me::my_workspaces),
+        )
+        .route(
             "/api/users/me/profile/",
             get(routes::user::profile).patch(routes::user::patch_profile),
         )
