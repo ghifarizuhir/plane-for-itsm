@@ -159,7 +159,7 @@ pub(crate) fn parse_issue_csv(raw: Option<&str>) -> Result<Vec<uuid::Uuid>, Stri
 }
 
 /// One row of the default-branch `list_by_ids` response. Field order is the
-/// exact `.values()` key order from `IssueListEndpoint.get`
+/// exact 26-key `.values()` order from `IssueListEndpoint.get`
 /// (`plane/app/views/issue/base.py:175-202`); struct serialization preserves
 /// declaration order, so the JSON keys keep this order. `estimate_point`,
 /// `created_by`, `updated_by` are the FK ids (`values()` on an FK yields
@@ -194,12 +194,30 @@ pub struct IssueListRow {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Pure allow/deny decision for the project-level gate in `list_by_ids`,
+/// mirroring `allow_permission(..., level="PROJECT")`
+/// (`plane/app/permissions/base.py:53-78`): branch 1 passes when the caller
+/// has an active project membership with an allowed role (20/15/5,
+/// `base.py:53-63`); the fallback branch (`base.py:64-78`) passes when the
+/// caller has ANY active project membership AND is a workspace ADMIN.
+/// Anything else denies.
+pub(crate) fn project_gate_allows(
+    has_allowed_role: bool,
+    has_any_membership: bool,
+    is_ws_admin: bool,
+) -> bool {
+    has_allowed_role || (has_any_membership && is_ws_admin)
+}
+
 /// GET `/api/workspaces/:slug/projects/:project_id/issues/list/` — parity
 /// with Django `IssueListEndpoint.get` default branch
 /// (`plane/app/views/issue/base.py:84-205`, `fields`/`expand` unset).
 ///
-/// - Gate: workspace-level ADMIN/MEMBER/GUEST — `ws_role` `Some` (any of
-///   20/15/5) passes, `None` → 403 `deny()`.
+/// - Gate: PROJECT-level ADMIN/MEMBER/GUEST (`allow_permission` default
+///   `level="PROJECT"`, `permissions/base.py:19,53-78`) — an active
+///   `project_members` row (slug-scoped) with role 20/15/5 passes, else the
+///   fallback (any active membership + workspace ADMIN) decides; otherwise
+///   403 `deny()`.
 /// - Missing/empty `?issues` → 400 `{"error": "Issues are required"}`
 ///   (`base.py:88-89`); malformed UUID → 400
 ///   `{"error": "Please provide valid detail"}` (see `parse_issue_csv`).
@@ -209,10 +227,11 @@ pub struct IssueListRow {
 /// - Manager scope mirrors `IssueManager`
 ///   (`plane/db/models/issue.py:92-101`) + `SoftDeletionManager` +
 ///   `base.py:114` (`state__deleted_at__isnull`): `deleted_at IS NULL`,
-///   `archived_at IS NULL`, `is_draft=false`, state group `IS DISTINCT
-///   FROM 'triage'` (live `states.group`, `state.py:14-20`), state's
-///   `deleted_at IS NULL` (NULL-state rows pass both, matching the LEFT
-///   JOIN semantics), project not archived/deleted.
+///   `archived_at IS NULL`, `is_draft=false`, `NOT (group='triage')` on the
+///   LEFT-joined live `states.group` (`state.py:14-20`) — NULL-state rows
+///   evaluate to NULL and are DROPPED, exactly like Django's
+///   `exclude(state__group='triage')` (`issue.py:97`) — plus state's
+///   `deleted_at IS NULL`, project not archived/deleted.
 /// - Annotations mirror `base.py:122-151` + `issue_queryset_grouper`
 ///   (`plane/utils/grouper.py:49-90`, applied with `group_by=False` so all
 ///   three array annotations are present): `cycle_id` (first live
@@ -235,20 +254,40 @@ pub struct IssueListRow {
 /// `created_at`/`updated_at` serialize as RFC3339 UTC (chrono, same as
 /// P1/P5) instead of Django's per-user-timezone conversion
 /// (`user_timezone_converter`, `base.py:203-204`); `recent_visited_task`
-/// side effect (`base.py:164-170`) is skipped (async worker concern);
-/// annotation subqueries add explicit `deleted_at IS NULL` (Django's
-/// soft-delete default managers do this implicitly); NULL-state rows pass
-/// the triage exclusion via `IS DISTINCT FROM` (Django `exclude()` on an
-/// empty FK is an edge case — issues always get a default state on save,
-/// `issue.py:228-239`).
+///   side effect (`base.py:164-170`) is skipped (async worker concern);
+///   annotation subqueries add explicit `deleted_at IS NULL` (Django's
+///   soft-delete default managers do this implicitly).
 pub async fn list_by_ids(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     axum::extract::Query(params): axum::extract::Query<ListIssuesQuery>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let role = ws_role(&st.pool, auth.0, &slug).await?;
-    if role.is_none() {
+    // Project-level gate (`permissions/base.py:53-78`, default
+    // `level="PROJECT"`): slug-scoped active project membership; role
+    // 20/15/5 passes outright, else the fallback needs workspace ADMIN.
+    // (`deleted_at IS NULL` is explicit here; Django's default managers
+    // imply it.)
+    let member_role: Option<i16> = sqlx::query_scalar(
+        "SELECT pm.role FROM project_members pm \
+          JOIN workspaces w ON w.id = pm.workspace_id \
+          WHERE pm.project_id = $1 AND pm.member_id = $2 AND w.slug = $3 \
+          AND pm.is_active = true AND pm.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(auth.0)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    let ws_admin = ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .map(|r| r == 20)
+        .unwrap_or(false);
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
         return Ok(deny());
     }
     let ids = match parse_issue_csv(params.issues.as_deref()) {
@@ -272,7 +311,7 @@ pub async fn list_by_ids(
     let guest_filter = if guest_scoped {
         "AND i.created_by_id = $4"
     } else {
-        "AND ($4 IS NULL OR TRUE)"
+        ""
     };
     let sql = format!(
         "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
@@ -283,7 +322,7 @@ pub async fn list_by_ids(
         COALESCE((SELECT array_agg(DISTINCT mi.module_id) FROM module_issues mi \
           JOIN modules m ON m.id = mi.module_id \
           WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL \
-          AND m.archived_at IS NULL AND m.deleted_at IS NULL), '{{}}'::uuid[]) AS module_ids, \
+          AND m.archived_at IS NULL), '{{}}'::uuid[]) AS module_ids, \
         COALESCE((SELECT array_agg(DISTINCT il.label_id) FROM issue_labels il \
           WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{{}}'::uuid[]) AS label_ids, \
         COALESCE((SELECT array_agg(DISTINCT ia.assignee_id) FROM issue_assignees ia \
@@ -292,7 +331,7 @@ pub async fn list_by_ids(
           LEFT JOIN states ss ON ss.id = si.state_id \
           WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
           AND si.archived_at IS NULL AND si.is_draft = false \
-          AND ss.deleted_at IS NULL AND ss.\"group\" IS DISTINCT FROM 'triage') AS sub_issues_count, \
+          AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage') AS sub_issues_count, \
         i.created_at, i.updated_at, \
         i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
         (SELECT COUNT(*) FROM file_assets fa \
@@ -306,20 +345,21 @@ pub async fn list_by_ids(
         WHERE i.project_id = $1 \
         AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
-        AND s.deleted_at IS NULL AND s.\"group\" IS DISTINCT FROM 'triage' \
+        AND s.deleted_at IS NULL AND s.\"group\" <> 'triage' \
         AND i.id = ANY($3) \
         AND EXISTS(SELECT 1 FROM projects p \
           WHERE p.id = i.project_id AND p.archived_at IS NULL AND p.deleted_at IS NULL) \
         {guest_filter} \
         ORDER BY i.created_at DESC"
     );
-    let rows: Vec<IssueListRow> = sqlx::query_as(&sql)
+    let mut query = sqlx::query_as::<_, IssueListRow>(&sql)
         .bind(project_id)
         .bind(&slug)
-        .bind(&ids)
-        .bind(if guest_scoped { Some(auth.0) } else { None::<uuid::Uuid> })
-        .fetch_all(&st.pool)
-        .await?;
+        .bind(&ids);
+    if guest_scoped {
+        query = query.bind(auth.0);
+    }
+    let rows: Vec<IssueListRow> = query.fetch_all(&st.pool).await?;
     Ok((StatusCode::OK, Json(json!(rows))))
 }
 
@@ -379,5 +419,25 @@ mod issue_list_tests {
         // branch). Static `list` wins over `:pk` in Axum (same as P6/P7
         // `members/leave/`, `project-members/me/` precedent).
         let _ = super::list_by_ids;
+    }
+
+    #[test]
+    fn project_gate_allows_matrix_matches_django() {
+        // Mirrors `allow_permission(..., level="PROJECT")`
+        // (`plane/app/permissions/base.py:53-78`): branch 1 — an active
+        // project membership whose role is in the allowed list (20/15/5);
+        // branch 2 (fallback) — ANY active project membership PLUS active
+        // workspace ADMIN; otherwise deny.
+        // Branch 1: allowed role passes regardless of the other inputs.
+        assert!(project_gate_allows(true, false, false));
+        assert!(project_gate_allows(true, true, false));
+        assert!(project_gate_allows(true, false, true));
+        // Branch 2: membership (any role) + workspace admin passes.
+        assert!(project_gate_allows(false, true, true));
+        // Everything else denies: non-member, member without ws-admin,
+        // ws-admin without project membership.
+        assert!(!project_gate_allows(false, false, false));
+        assert!(!project_gate_allows(false, true, false));
+        assert!(!project_gate_allows(false, false, true));
     }
 }
