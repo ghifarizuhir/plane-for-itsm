@@ -80,6 +80,14 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/",
             get(routes::issue::list).post(routes::issue::create),
         )
+        // Parity with `IssueListEndpoint.get`
+        // (`views/issue/base.py:84-205`): static `list` wins over `:pk` in
+        // Axum (no conflict; same as P6/P7 `members/leave/`,
+        // `project-members/me/` precedent).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/list/",
+            get(routes::issue::list_by_ids),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
