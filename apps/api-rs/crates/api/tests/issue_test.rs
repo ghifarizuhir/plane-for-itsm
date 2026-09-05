@@ -1,4 +1,4 @@
-use api::routes::issue::{validate_create, CreateIssue};
+use api::routes::issue_write::{validate_create, CreateIssue};
 
 #[test]
 fn rejects_empty_name() {

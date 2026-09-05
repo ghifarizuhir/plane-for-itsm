@@ -6,13 +6,27 @@ mod routes;
 mod state;
 
 use axum::{
+    http::StatusCode,
     middleware as axum_middleware,
     routing::{delete, get, patch, post},
-    Router,
+    Json, Router,
 };
+use serde_json::{json, Value};
 
 use crate::middleware::rate_limit::{ip_rate_limit_middleware, rate_limit_middleware, IpRateLimiter, RateLimiter};
 use tracing_subscriber::EnvFilter;
+
+// Django catch-all 404 body, byte-exact from
+// `apps/api/plane/app/views/error_404.py:9-10`:
+// ```python
+// def custom_404_view(request, exception=None):
+//     return JsonResponse({"error": "Page not found."}, status=404)
+// ```
+// Axum fallback for unmatched routes (incl. non-UUID segments); existing
+// routes unaffected.
+async fn fallback_404() -> (StatusCode, Json<Value>) {
+    (StatusCode::NOT_FOUND, Json(json!({"error": "Page not found."})))
+}
 
 #[tokio::main]
 async fn main() {
@@ -78,7 +92,7 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/",
-            get(routes::issue::list).post(routes::issue::create),
+            get(routes::issue_query::list).post(routes::issue_write::create),
         )
         // Parity with `IssueListEndpoint.get`
         // (`views/issue/base.py:84-205`): static `list` wins over `:pk` in
@@ -86,7 +100,7 @@ async fn main() {
         // `project-members/me/` precedent).
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/list/",
-            get(routes::issue::list_by_ids),
+            get(routes::issue_query::list_by_ids),
         )
         // Parity with `BulkDeleteIssuesEndpoint.delete`
         // (`views/issue/base.py:773-797`, `urls/issue.py:94-96`): DELETE
@@ -94,27 +108,27 @@ async fn main() {
         // deferred to T13).
         .route(
             "/api/workspaces/:slug/projects/:project_id/bulk-delete-issues/",
-            delete(routes::issue::bulk_delete),
+            delete(routes::issue_write::bulk_delete),
         )
         // Parity with `BulkArchiveIssuesEndpoint.post`
         // (`views/issue/archive.py:305-343`, `urls/issue.py:99-101`).
         .route(
             "/api/workspaces/:slug/projects/:project_id/bulk-archive-issues/",
-            post(routes::issue::bulk_archive),
+            post(routes::issue_write::bulk_archive),
         )
         // Parity with `DeletedIssuesListViewSet.get`
         // (`views/issue/base.py:800-813`, `urls/issue.py:247-249`): bare
         // UUID array, unpaginated.
         .route(
             "/api/workspaces/:slug/projects/:project_id/deleted-issues/",
-            get(routes::issue::deleted_list),
+            get(routes::issue_query::deleted_list),
         )
         // Parity with `IssueArchiveViewSet.list`
         // (`views/issue/archive.py:97-218`, `urls/issue.py:224-225`):
         // flat-list paginated envelope (grouped paginators out of scope).
         .route(
             "/api/workspaces/:slug/projects/:project_id/archived-issues/",
-            get(routes::issue::archived_list),
+            get(routes::issue_query::archived_list),
         )
         // Parity with `IssueDetailEndpoint.get`
         // (`views/issue/base.py:1027-1103`, `urls/issue.py:48-50`): static
@@ -124,7 +138,7 @@ async fn main() {
         // includes `issue_relation` && `!group_by`.
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues-detail/",
-            get(routes::issue::list_detail),
+            get(routes::issue_query::list_detail),
         )
         // Parity with `SubIssuesEndpoint`
         // (`views/issue/sub_issue.py:37-275`, `urls/issue.py:104-108`):
@@ -133,7 +147,7 @@ async fn main() {
         // conflict — same static-vs-dynamic precedent as `issues/list/`).
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/sub-issues/",
-            get(routes::issue::sub_list).post(routes::issue::sub_add),
+            get(routes::issue_sub::sub_list).post(routes::issue_sub::sub_add),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
@@ -422,7 +436,7 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/work-items/",
-            get(routes::issue::list).post(routes::issue::create),
+            get(routes::issue_query::list).post(routes::issue_write::create),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/work-items/:pk/",
@@ -563,6 +577,7 @@ async fn main() {
     let app = Router::new()
         .merge(auth_router)
         .merge(app)
+        .fallback(fallback_404)
         .with_state(state::AppState { pool, redis, config: cfg.clone() })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
