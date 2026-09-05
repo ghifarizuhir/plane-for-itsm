@@ -794,7 +794,35 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/favorite-pages/:page_id/",
-            post(routes::page::create_favorite),
+            post(routes::page::create_favorite).delete(routes::page::destroy_favorite),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/archive/",
+            post(routes::page::archive).delete(routes::page::unarchive),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/lock/",
+            post(routes::page::lock).delete(routes::page::unlock),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/access/",
+            post(routes::page::access),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/description/",
+            get(routes::page::desc_get).patch(routes::page::desc_patch),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/versions/",
+            get(routes::page::versions_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/versions/:pk/",
+            get(routes::page::version_detail),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/duplicate/",
+            post(routes::page::duplicate),
         )
         .route(
             "/api/assets/v2/workspaces/:slug/check/:asset_id/",
