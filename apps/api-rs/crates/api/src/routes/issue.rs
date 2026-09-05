@@ -1703,9 +1703,15 @@ fn complex_bridge_target(base: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// UUID leaf: every piece must parse (`UUIDFilter` coercion failure → 400).
+/// UUID leaf. `UUIDField.to_python("")` → `None` (valid), and direct
+/// filters bypass `EMPTY_VALUES` (`BaseFilterSet.build_combined_q:79-108`),
+/// so empty scalars become `Q(<col>__exact=None)` → `IS NULL`, while method
+/// (bridge) filters no-op on empty (`filter_backend.py:268` maps null→`""`
+/// and `FilterMethod` short-circuits). `Q(<col>__in=[])` matches nothing.
 /// `table == ""` means a direct column (`created_by_id`/`state_id`/
-/// `project_id`); otherwise a live-bridge `EXISTS`.
+/// `project_id`); otherwise a live-bridge `EXISTS`. Non-empty values coerce
+/// strictly (`UUIDFilter` failure → 400); repeated scalar values resolve to
+/// the LAST, like Django's `QueryDict`.
 fn apply_complex_uuid_leaf(
     qb: &mut QueryBuilder<Postgres>,
     table: &str,
@@ -1713,30 +1719,49 @@ fn apply_complex_uuid_leaf(
     pieces: &[String],
     suffix: &str,
 ) -> Result<(), ComplexFilterError> {
-    let mut ids = Vec::with_capacity(pieces.len());
-    for piece in pieces {
-        ids.push(uuid::Uuid::parse_str(piece).map_err(|_| ComplexFilterError::invalid_filterset())?);
+    if suffix != "in" {
+        let last = pieces.last().map(String::as_str).unwrap_or("");
+        if last.is_empty() {
+            if table.is_empty() {
+                qb.push(col.unwrap_or("i.id")).push(" IS NULL");
+            } else {
+                qb.push("TRUE");
+            }
+            return Ok(());
+        }
+        let id =
+            uuid::Uuid::parse_str(last).map_err(|_| ComplexFilterError::invalid_filterset())?;
+        if table.is_empty() {
+            qb.push(col.unwrap_or("i.id")).push(" = ").push_bind(id);
+            return Ok(());
+        }
+        qb.push("EXISTS(SELECT 1 FROM ").push(table).push(
+            " b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.",
+        );
+        qb.push(col.unwrap_or("id")).push(" = ").push_bind(id).push(")");
+        return Ok(());
     }
-    if table.is_empty() {
-        let col = col.unwrap_or("i.id");
-        if suffix == "in" {
-            qb.push(col).push(" = ANY(").push_bind(ids).push(")");
+    let kept: Vec<&String> = pieces.iter().filter(|p| !p.is_empty()).collect();
+    if kept.is_empty() {
+        if table.is_empty() {
+            qb.push(col.unwrap_or("i.id")).push(" = ANY('{}'::uuid[])");
         } else {
-            // Scalar with repeated values → Django `QueryDict` keeps the LAST.
-            qb.push(col).push(" = ").push_bind(ids.into_iter().last());
+            qb.push("TRUE");
         }
         return Ok(());
     }
-    let col = col.unwrap_or("id");
+    let mut ids = Vec::with_capacity(kept.len());
+    for piece in kept {
+        ids.push(uuid::Uuid::parse_str(piece).map_err(|_| ComplexFilterError::invalid_filterset())?);
+    }
+    if table.is_empty() {
+        qb.push(col.unwrap_or("i.id")).push(" = ANY(").push_bind(ids).push(")");
+        return Ok(());
+    }
     qb.push("EXISTS(SELECT 1 FROM ").push(table).push(
         " b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.",
     );
-    qb.push(col);
-    if suffix == "in" {
-        qb.push(" = ANY(").push_bind(ids).push("))");
-    } else {
-        qb.push(" = ").push_bind(ids.into_iter().last()).push(")");
-    }
+    qb.push(col.unwrap_or("id")).push(" = ANY(").push_bind(ids).push("))");
     Ok(())
 }
 
@@ -2615,6 +2640,64 @@ mod issue_detail_tests {
             apply_complex_leaf(&mut qb, "is_draft", &serde_json::json!(raw)).unwrap();
             assert_eq!(qb.sql(), "SELECT 1i.is_draft IS NULL", "input {raw}");
         }
+    }
+
+    #[test]
+    fn complex_uuid_empty_scalar_matches_django() {
+        // `UUIDField.to_python("")` → `None` (valid); direct filters bypass
+        // `EMPTY_VALUES` (`build_combined_q:79-108`) →
+        // `Q(state_id__exact=None)` → `IS NULL`, while method (bridge)
+        // filters no-op on `EMPTY` (`filter_backend.py:268` maps null→`""`).
+        for key in ["state_id", "state_id__exact", "created_by_id", "project_id"] {
+            let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+            apply_complex_leaf(&mut qb, key, &serde_json::json!(null)).unwrap();
+            assert!(qb.sql().contains(" IS NULL"), "key {key}: {}", qb.sql());
+        }
+        for key in [
+            "assignee_id",
+            "assignee_id__exact",
+            "cycle_id",
+            "module_id",
+            "mention_id",
+            "label_id",
+            "subscriber_id",
+        ] {
+            let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+            apply_complex_leaf(&mut qb, key, &serde_json::json!(null)).unwrap();
+            assert_eq!(qb.sql(), "SELECT 1TRUE", "key {key}");
+        }
+        // Non-empty scalars still coerce strictly (garbage → 400).
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        assert!(apply_complex_leaf(&mut qb, "state_id", &serde_json::json!("zzz")).is_err());
+    }
+
+    #[test]
+    fn complex_uuid_empty_in_matches_django() {
+        // `Q(state_id__in=[])` matches nothing; bridge method filters no-op
+        // on empty. `""` pieces are dropped first, so mixed lists still
+        // filter on the surviving ids.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_complex_leaf(&mut qb, "state_id__in", &serde_json::json!("")).unwrap();
+        assert!(
+            qb.sql().contains("i.state_id = ANY('{}'::uuid[])"),
+            "{}",
+            qb.sql()
+        );
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_complex_leaf(&mut qb, "assignee_id__in", &serde_json::json!("")).unwrap();
+        assert_eq!(qb.sql(), "SELECT 1TRUE");
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_complex_leaf(
+            &mut qb,
+            "state_id__in",
+            &serde_json::json!(["", "12345678-1234-5678-1234-567812345678"]),
+        )
+        .unwrap();
+        assert!(qb.sql().contains("i.state_id = ANY("), "{}", qb.sql());
+        assert!(!qb.sql().contains("'{}'"), "{}", qb.sql());
+        // A surviving invalid id still 400s.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        assert!(apply_complex_leaf(&mut qb, "state_id__in", &serde_json::json!(["", "zzz"])).is_err());
     }
 
     #[test]
