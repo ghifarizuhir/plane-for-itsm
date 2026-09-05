@@ -54,6 +54,12 @@ async fn main() {
                 .patch(routes::workspace::patch)
                 .delete(routes::workspace::destroy),
         )
+        // Parity with `WorkspaceStatesEndpoint.get`
+        // (`views/workspace/state.py:17-...`, `urls/workspace.py:167-171`):
+        // GET `StateSerializer[]` with per-group `order`; gate = any
+        // ACTIVE ws member incl. GUEST (WorkspaceEntityPermission safe
+        // branch, `permissions/workspace.py:74-82`).
+        .route("/api/workspaces/:slug/states/", get(routes::workspace::ws_states))
         .route(
             "/api/workspaces/:slug/projects/",
             get(routes::project::list).post(routes::project::create),
@@ -227,6 +233,15 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/states/:pk/mark-default/",
             post(routes::state::mark_default),
+        )
+        // Parity with `IntakeStateEndpoint.get`
+        // (`views/state/base.py:136-...`, `urls/state.py:22-26`): 200
+        // `StateSerializer` (no `order` key); miss → 404
+        // `{"error":"Triage state not found"}` verbatim; gate PROJECT
+        // ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-state/",
+            get(routes::state::intake_state),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",

@@ -1,7 +1,15 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
-use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::{
+    middleware::auth::AuthUser,
+    routes::project::{deny, ws_role},
+    state::AppState,
+};
+
+use super::state::{state_order, state_serializer_json, StateFullRow};
 
 /// Mirrors `plane/app/views/workspace/base.py:WorkSpaceViewSet` +Serializer
 /// `plane/app/serializers/workspace.py:WorkSpaceSerializer`.
@@ -304,4 +312,95 @@ pub async fn destroy(
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}
+
+/// GET-safe branch of `WorkspaceEntityPermission`
+/// (`plane/app/permissions/workspace.py:74-82`): any ACTIVE ws member
+/// passes, incl. GUEST — NO role filter (differs from the unsafe branch,
+/// which requires ADMIN/MEMBER). Non-member → 403 `deny()`.
+pub(crate) fn guard_ws_states(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(_) => Ok(()),
+        None => Err(crate::routes::project::FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// GET `/api/workspaces/:slug/states/` — parity with Django
+/// `WorkspaceStatesEndpoint.get`
+/// (`plane/app/views/workspace/state.py:17-...`,
+/// `plane/app/urls/workspace.py:167-171`).
+///
+/// - Gate: `WorkspaceEntityPermission` on a safe (GET) method = any
+///   ACTIVE ws member incl. GUEST (`permissions/workspace.py:74-82`),
+///   via `ws_role` (checks `is_active` + soft-delete, same helper the
+///   Batch C gates use).
+/// - Scope mirrors the queryset exactly: `State.objects` (default
+///   `StateManager` = soft-deletion + `exclude(group='triage')`,
+///   `plane/db/models/state.py:65-69`) + `workspace__slug=slug` +
+///   active `project_members` row for the caller +
+///   `project__archived_at__isnull=True` + explicit `is_triage=False`.
+/// - `order` mirrors the Python loop (`state.py:30-37`): per-`group`
+///   1-based `index / count`, serialized via the shared
+///   `state_serializer_json` (D3a reuses the same struct/fn with
+///   `order=None`).
+/// - Deviations: `ORDER BY sequence ASC` for determinism (Django sets no
+///   ordering); datetimes unneeded (no datetime keys in the shape);
+///   JSON key order follows repo batch convention while the KEY SET
+///   matches `StateSerializer` exactly.
+pub async fn ws_states(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_ws_states(role).is_err() {
+        return Ok(deny());
+    }
+    let rows: Vec<StateFullRow> = sqlx::query_as(
+        "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence \
+         FROM states s JOIN projects p ON p.id = s.project_id \
+         WHERE s.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
+         AND s.deleted_at IS NULL AND s.\"group\" != 'triage' AND s.is_triage = false \
+         AND p.archived_at IS NULL \
+         AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = s.project_id AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+         ORDER BY s.sequence ASC",
+    )
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_all(&st.pool)
+    .await?;
+    let mut totals: HashMap<&str, usize> = HashMap::new();
+    for r in &rows {
+        *totals.entry(r.group.as_str()).or_insert(0) += 1;
+    }
+    let mut seen: HashMap<&str, usize> = HashMap::new();
+    let out: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            let n = seen.entry(r.group.as_str()).or_insert(0);
+            *n += 1;
+            state_serializer_json(r, Some(state_order(*n, totals[r.group.as_str()])))
+        })
+        .collect();
+    Ok((StatusCode::OK, Json(Value::Array(out))))
+}
+
+#[cfg(test)]
+mod batch_d_d3_tests {
+    use super::*;
+
+    #[test]
+    fn ws_states_gate_allows_any_active_member() {
+        // GET-safe branch of `WorkspaceEntityPermission`
+        // (`plane/app/permissions/workspace.py:74-82`): any ACTIVE ws
+        // member passes, incl. GUEST — no role filter. Non-member → 403.
+        assert!(guard_ws_states(Some(20)).is_ok());
+        assert!(guard_ws_states(Some(15)).is_ok());
+        assert!(guard_ws_states(Some(5)).is_ok());
+        assert!(guard_ws_states(None).is_err());
+        assert_eq!(
+            guard_ws_states(None).unwrap_err(),
+            crate::routes::project::FORBIDDEN_MSG
+        );
+    }
 }
