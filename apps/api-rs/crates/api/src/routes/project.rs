@@ -99,8 +99,8 @@ pub struct CreateProject {
     pub identifier: String,
     /// Mirrors `ProjectSerializer` (`plane/app/serializers/project.py:30-37`,
     /// `fields = "__all__"`): nullable `project_lead` FK to users. An unknown
-    /// id is rejected with 400, mirroring the serializer's FK
-    /// `does_not_exist` validation error.
+    /// id is rejected with 400, mirroring implicit DRF FK validation
+    /// (`PrimaryKeyRelatedField does_not_exist`).
     #[serde(default)]
     pub project_lead: Option<uuid::Uuid>,
 }
@@ -165,6 +165,15 @@ pub async fn list(
     ))
 }
 
+/// 400 body for an unknown `project_lead`, mirroring implicit DRF FK
+/// validation (`PrimaryKeyRelatedField does_not_exist`) from
+/// `ProjectSerializer` (`plane/app/serializers/project.py:30-37`,
+/// `fields = "__all__"`): `{"project_lead": ["Invalid pk \"<uuid>\" -
+/// object does not exist."]}`.
+pub(crate) fn invalid_lead_body(lead: &uuid::Uuid) -> Value {
+    json!({"project_lead": [format!("Invalid pk \"{}\" - object does not exist.", lead)]})
+}
+
 pub async fn create(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -185,7 +194,7 @@ pub async fn create(
         if !exists {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": "Invalid project_lead"})),
+                Json(invalid_lead_body(&lead)),
             ));
         }
     }
@@ -470,6 +479,18 @@ mod batch_c_tests {
         assert_eq!(
             DEFAULT_STATES_SEED.iter().filter(|s| s.default).count(),
             1
+        );
+    }
+
+    #[test]
+    fn invalid_lead_body_matches_drf_fk_error() {
+        // Mirrors implicit DRF FK validation (`PrimaryKeyRelatedField
+        // does_not_exist`) from `ProjectSerializer`
+        // (`plane/app/serializers/project.py:30-37`, `fields = "__all__"`).
+        let lead = uuid::Uuid::parse_str("12345678-1234-5678-1234-567812345678").unwrap();
+        assert_eq!(
+            invalid_lead_body(&lead),
+            serde_json::json!({"project_lead": ["Invalid pk \"12345678-1234-5678-1234-567812345678\" - object does not exist."]})
         );
     }
 }
