@@ -275,6 +275,18 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/intake-work-items/:work_item_id/description-versions/:pk/",
             get(routes::versions::intake_desc_version_detail),
         )
+        // Parity with `IssueArchiveViewSet.retrieve/archive/unarchive`
+        // (`views/issue/archive.py:221-302`, `urls/issue.py:228-232`):
+        // GET 200 `IssueDetailSerializer` (ARCHIVED ONLY — non-archived →
+        // 404) + POST 200 `{"archived_at"}` (state-group check → 400
+        // `{"error": ...}`, key `error` NOT `error_code`) + DELETE 204.
+        // Gate ADMIN/MEMBER (+ ws-admin fallback). Issues path ONLY.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:pk/archive/",
+            get(routes::issue_archive_one::retrieve)
+                .post(routes::issue_archive_one::archive)
+                .delete(routes::issue_archive_one::unarchive),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
