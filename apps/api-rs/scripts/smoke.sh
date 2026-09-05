@@ -192,8 +192,8 @@ check label-create-201 201 -X POST -d '{"name":"SmokeLbl","color":"#ff0000"}' "$
 check label-dup-400 400 -X POST -d '{"name":"SmokeLbl","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/issue-labels/"
 check ws-issues-200 200 "$BASE/api/workspaces/$WS/issues/"
 check v2-issues-200 200 "$BASE/api/workspaces/$WS/projects/$PID/v2/issues/"
-UID=$(curl -s -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/users/me/" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
-check user-issues-200 200 "$BASE/api/workspaces/$WS/user-issues/$UID/"
+MUID=$(curl -s -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/users/me/" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+check user-issues-200 200 "$BASE/api/workspaces/$WS/user-issues/$MUID/"
 # intake.rs::create takes {name} (SFX-suffixed: plain "Smoke intake" already
 # exists from == writes == -> 409); create_issue takes {issue:{name}} (no intake_id key).
 check inbox-intake-create 201 -X POST -d "{\"name\":\"Smoke intake $SFX\"}" "$BASE/api/workspaces/$WS/projects/$PID/intakes/"
