@@ -216,7 +216,17 @@ pub async fn magic_generate(
         return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
     }
     // SMTP terkonfigurasi tapi penerbitan kode + email belum ada → katakan terus terang.
+    // Follow-up saat EMAIL_HOST dikonfigurasi: ganti fallback ini dengan
+    // penerbitan kode via `magic_key_json` → 200 `{"key": str}`.
     (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "magic-code email delivery not implemented yet"})))
+}
+
+/// Bentuk sukses follow-up magic-generate — mengunci kontrak Django
+/// `MagicGenerateEndpoint` (`magic.py:58`): 200 `{"key": str}`.
+/// Belum dipakai handler (masih 501) sampai pengiriman email diimplementasikan.
+#[allow(dead_code)]
+pub fn magic_key_json(key: &str) -> Value {
+    json!({"key": key})
 }
 
 #[cfg(test)]
@@ -251,7 +261,8 @@ mod tests {
 
     #[test]
     fn magic_key_shape() {
-        let v = json!({"key": "abc123"});
+        let v = magic_key_json("abc123");
         assert_eq!(v["key"], "abc123");
+        assert_eq!(v.as_object().map(|o| o.len()), Some(1));
     }
 }
