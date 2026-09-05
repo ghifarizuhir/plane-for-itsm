@@ -402,38 +402,64 @@ pub async fn list_by_ids(
 /// Parsed `issues-detail/` cursor. Mirrors `Cursor`
 /// (`plane/utils/paginator.py:22-59`): `limit_value` is the `value` slot
 /// (int, or float when the raw token contains `.`), `page` the `offset`
-/// slot, `is_prev` the flag slot. `OffsetPaginator` (`paginator.py:142-144`)
+/// slot, `is_prev` the flag slot. `page` is `i128`: Django ints are
+/// unbounded, and a huge-but-parseable page yields an (empty) page, NOT a
+/// 400 — out-of-range magnitudes saturate (any such value behaves
+/// identically downstream). `OffsetPaginator` (`paginator.py:142-144`)
 /// computes the row window from `page * limit` and ignores `limit_value`,
 /// so only `page` drives SQL here.
 #[derive(Debug)]
 pub(crate) struct DetailCursor {
     pub limit_value: f64,
-    pub page: i64,
+    pub page: i128,
     pub is_prev: bool,
+}
+
+/// Parses an integer the way Python `int()` does (ASCII reading):
+/// surrounding whitespace stripped, at most one leading `+`/`-`, digits
+/// with single underscores allowed BETWEEN digits (`int("1_0") == 10`,
+/// while `"1__0"`, `"_1"`, `"1_"`, `"0x10"` all fail). Django ints are
+/// unbounded: magnitudes past `i128` saturate to `i128::{MAX,MIN}` by sign.
+pub(crate) fn parse_python_int(s: &str) -> Option<i128> {
+    let t = s.trim();
+    let (negative, body) = match t.strip_prefix(['+', '-']) {
+        Some(rest) => (t.starts_with('-'), rest),
+        None => (false, t),
+    };
+    if body.is_empty() {
+        return None;
+    }
+    if !body
+        .split('_')
+        .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return None;
+    }
+    match body.replace('_', "").parse::<i128>() {
+        Ok(v) => Some(if negative { -v } else { v }),
+        Err(_) => Some(if negative { i128::MIN } else { i128::MAX }),
+    }
 }
 
 /// Mirrors `BasePaginator.get_per_page` (`plane/utils/paginator.py:643-653`,
 /// defaults 1000/1000): non-integer → `ParseError("Invalid per_page
 /// parameter.")`, over max → `ParseError("Invalid per_page value. Cannot
-/// exceed 1000.")` — messages byte-exact; DRF renders `ParseError` as 400
-/// `{"detail": msg}`.
+/// exceed 1000.")` — messages byte-exact, including for huge-but-parseable
+/// magnitudes (Django parses the bigint, then fails the max check); DRF
+/// renders `ParseError` as 400 `{"detail": msg}`.
 pub(crate) fn parse_per_page(raw: Option<&str>) -> Result<i64, String> {
     let s = raw.unwrap_or("1000");
-    // Python `int()` strips surrounding whitespace.
-    let v: i64 = s
-        .trim()
-        .parse()
-        .map_err(|_| "Invalid per_page parameter.".to_string())?;
+    let v = parse_python_int(s).ok_or_else(|| "Invalid per_page parameter.".to_string())?;
     if v > 1000 {
         return Err("Invalid per_page value. Cannot exceed 1000.".to_string());
     }
-    Ok(v)
+    Ok(v.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64)
 }
 
 /// Mirrors `Cursor.from_string` (`paginator.py:48-59`) as wrapped by
 /// `BasePaginator.paginate` (`paginator.py:677-681`): the value slot is int
 /// unless it contains `.` (then float); offset/is_prev go through Python
-/// `int()` (whitespace-tolerant, sign-tolerant); the `is_prev` slot is
+/// `int()` semantics (see `parse_python_int`); the `is_prev` slot is
 /// `bool(int(...))`. ANY malformation surfaces client-side as `ParseError`
 /// `"Invalid cursor parameter."` (byte-exact), so every failure maps to it.
 pub(crate) fn parse_cursor(raw: &str) -> Result<DetailCursor, String> {
@@ -446,17 +472,10 @@ pub(crate) fn parse_cursor(raw: &str) -> Result<DetailCursor, String> {
     let limit_value: f64 = if bits[0].contains('.') {
         bits[0].trim().parse().map_err(|_| ERR.to_string())?
     } else {
-        bits[0]
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| ERR.to_string())? as f64
+        parse_python_int(bits[0]).ok_or_else(|| ERR.to_string())? as f64
     };
-    let page: i64 = bits[1].trim().parse().map_err(|_| ERR.to_string())?;
-    let is_prev: bool = bits[2]
-        .trim()
-        .parse::<i64>()
-        .map(|v| v != 0)
-        .map_err(|_| ERR.to_string())?;
+    let page: i128 = parse_python_int(bits[1]).ok_or_else(|| ERR.to_string())?;
+    let is_prev: bool = parse_python_int(bits[2]).ok_or_else(|| ERR.to_string())? != 0;
     Ok(DetailCursor {
         limit_value,
         page,
@@ -466,21 +485,44 @@ pub(crate) fn parse_cursor(raw: &str) -> Result<DetailCursor, String> {
 
 /// Mirrors `Cursor.__str__` (`paginator.py:31-32`):
 /// `f"{value}:{offset}:{int(is_prev)}"`.
-pub(crate) fn build_cursor(limit: i64, page: i64, is_prev: bool) -> String {
+pub(crate) fn build_cursor(limit: i64, page: i128, is_prev: bool) -> String {
     format!("{limit}:{page}:{flag}", flag = i32::from(is_prev))
 }
 
 /// `OffsetPaginator.get_result` (`paginator.py:165`): next cursor is
 /// `(limit, page+1, False)`; the limit echoed is the EFFECTIVE limit
 /// (`min(per_page, max_limit)`, `paginator.py:132`).
-pub(crate) fn next_cursor_str(limit: i64, page: i64) -> String {
+pub(crate) fn next_cursor_str(limit: i64, page: i128) -> String {
     build_cursor(limit, page + 1, false)
 }
 
 /// `OffsetPaginator.get_result` (`paginator.py:167`): prev cursor is
 /// `(limit, page-1, True)` — including page `-1` on the first page.
-pub(crate) fn prev_cursor_str(limit: i64, page: i64) -> String {
+pub(crate) fn prev_cursor_str(limit: i64, page: i128) -> String {
     build_cursor(limit, page - 1, true)
+}
+
+/// The row-window offset, computed the way `OffsetPaginator.get_result`
+/// does (`paginator.py:142-150`): `offset = page * limit` FIRST — a
+/// negative offset raises `BadPaginationError` (→ 400) even when the limit
+/// itself is degenerate. The product saturates (`i128`): windows past
+/// `i64::MAX` (`BeyondEnd`) slice to `[]` in Django and return an empty
+/// page with a 200, so they are not errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PageWindow {
+    Rows(i64),
+    BeyondEnd,
+}
+
+pub(crate) fn page_window(page: i128, limit: i64) -> Result<PageWindow, ()> {
+    let offset = page.saturating_mul(i128::from(limit));
+    if offset < 0 {
+        return Err(());
+    }
+    if offset > i128::from(i64::MAX) {
+        return Ok(PageWindow::BeyondEnd);
+    }
+    Ok(PageWindow::Rows(offset as i64))
 }
 
 /// Mirrors `math.ceil(count / limit)` (`paginator.py:180`). Callers guarantee
@@ -760,12 +802,12 @@ pub struct DetailEnvelope {
 
 /// Failure of a legacy `issue_filters` key. `BadRequest` carries the
 /// `{"error": ...}` body Django's `BaseAPIView.handle_exception` renders
-/// for `ValidationError` (`plane/app/views/base.py:182-186`); `Server` maps
-/// to a 500 like Django's `FieldError`/uncaught paths (`base.py:200-204`).
+/// for `ValidationError` (`plane/app/views/base.py:182-186`); `Server`
+/// renders Django's generic 500 body (see `server_error()`).
 #[derive(Debug)]
 pub(crate) enum LegacyFilterError {
     BadRequest(String),
-    Server(String),
+    Server,
 }
 
 /// Failure of the `filters` JSON param. Renders as Django-DRF does for
@@ -842,18 +884,24 @@ fn push_legacy_uuid_in(
 }
 
 /// Pushes an `EXISTS` over a live bridge table for legacy CSV UUID filters
-/// (`labels`/`assignees`/`cycle`/`module`): `"None"` in the list selects
-/// issues with NO live bridge row (`labels__isnull=True` on the
-/// live-filtered join, `issue_filters.py:150-151` etc.); valid ids select
-/// issues having a live row in the list. Both conditions AND when both are
-/// present, exactly like Django.
+/// (`labels`/`assignees`/`cycle`/`module`/`subscriber`): `"None"` in the
+/// list selects issues with NO live bridge row (`labels__isnull=True` on
+/// the live-filtered join, `issue_filters.py:150-151` etc.); valid ids
+/// select issues having a live row in the list (both AND when both are
+/// present, exactly like Django); and a present-but-unusable value
+/// (garbage-only, even `""`) still restricts to issues WITH a live bridge
+/// row, because `<bridge>__deleted_at__isnull=True` is applied
+/// UNCONDITIONALLY (`issue_filters.py:158,173,331,346,401`). `none_isnull`
+/// is false for `subscriber`, whose Django filter has no `"None"` branch
+/// (`issue_filters.py:392-397`) — there `"None"` counts as garbage.
 fn push_legacy_bridge(
     qb: &mut QueryBuilder<Postgres>,
     bridge: &str,
     bridge_col: &str,
     raw: &str,
+    none_isnull: bool,
 ) {
-    let has_none = raw.split(',').any(|t| t == "None");
+    let has_none = none_isnull && raw.split(',').any(|t| t == "None");
     let ids = legacy_uuid_list(raw);
     if has_none {
         qb.push(" AND NOT EXISTS(SELECT 1 FROM ")
@@ -868,6 +916,10 @@ fn push_legacy_bridge(
             .push(" = ANY(")
             .push_bind(ids)
             .push("))");
+    } else if !has_none {
+        qb.push(" AND EXISTS(SELECT 1 FROM ")
+            .push(bridge)
+            .push(" b WHERE b.issue_id = i.id AND b.deleted_at IS NULL)");
     }
 }
 
@@ -895,34 +947,39 @@ fn push_legacy_date(
         let parts: Vec<&str> = token.split(';').collect();
         if parts.len() >= 2 {
             // `pattern = re.compile(r"\d+_(weeks|months)$")` used with
-            // `.match()` — a PREFIX match. When it matches but the token
-            // does not split into exactly 3 `;` parts, Django adds NOTHING;
-            // when the head has 3+ `_` parts, `digit, term = ...split("_")`
-            // raises ValueError → 500. Both are mirrored.
+            // `.match()`: the `$` end-anchor makes it a FULL match on exact
+            // `weeks`/`months` (`issue_filters.py:12,63`). When it matches
+            // but the token does not split into exactly 3 `;` parts, Django
+            // adds NOTHING. Anything else takes the plain-date branch below
+            // (so `2_weeksXYZ;after;fromnow` 400s on the garbage date).
             if is_relative_head(parts[0]) {
                 if parts.len() == 3 {
-                    let (digit, term) = split_relative_head(parts[0]);
-                    let days: i64 = match term {
-                        "months" => digit as i64 * 30,
-                        _ => digit as i64 * 7,
-                    };
+                    let (digits, term) = split_relative_head(parts[0]);
+                    // Django `int()` is unbounded; `timedelta` overflow
+                    // raises → 500. Checked arithmetic mirrors the status
+                    // (the body becomes the generic 500 downstream).
+                    let duration: i128 = digits.parse().map_err(|_| LegacyFilterError::Server)?;
+                    let days: i128 = duration
+                        .checked_mul(if term == "months" { 30 } else { 7 })
+                        .ok_or(LegacyFilterError::Server)?;
+                    let span = chrono::Days::new(
+                        days.try_into()
+                            .map_err(|_| LegacyFilterError::Server)?,
+                    );
                     // `subsequent == "after"` → `__gte`, else `__lte`;
                     // `offset == "fromnow"` → future, else past
                     // (`issue_filters.py:31-52`).
                     let bound = if parts[2] == "fromnow" {
-                        today + chrono::Days::new(days as u64)
+                        today.checked_add_days(span)
                     } else {
-                        today - chrono::Days::new(days as u64)
-                    };
+                        today.checked_sub_days(span)
+                    }
+                    .ok_or(LegacyFilterError::Server)?;
                     if parts[1] == "after" {
                         qb.push(" AND ").push(lhs).push(" >= ").push_bind(bound);
                     } else {
                         qb.push(" AND ").push(lhs).push(" <= ").push_bind(bound);
                     }
-                } else if parts[0].split('_').count() > 2 {
-                    return Err(LegacyFilterError::Server(
-                        "invalid relative date filter".to_string(),
-                    ));
                 }
                 continue;
             }
@@ -948,25 +1005,34 @@ fn push_legacy_date(
     Ok(())
 }
 
-/// Prefix test for `re.compile(r"\d+_(weeks|months)$").match(head)`: leading
-/// ASCII digits, `_`, then a `weeks`/`months` prefix. (Python `\d` also
-/// matches non-ASCII digits — pathological inputs may diverge; the ASCII
-/// reading is documented.)
+/// Exact-match test for `re.compile(r"\d+_(weeks|months)$").match(head)`
+/// (`issue_filters.py:12`): leading ASCII digits, `_`, then EXACTLY `weeks`
+/// or `months` (the `$` end-anchor rules out `2_weeksXYZ`). (Python `\d`
+/// also matches non-ASCII digits — pathological inputs may diverge; the
+/// ASCII reading is documented.)
 fn is_relative_head(head: &str) -> bool {
-    let Some((digits, rest)) = head.split_once('_') else {
+    let Some((digits, term)) = head.split_once('_') else {
         return false;
     };
     !digits.is_empty()
         && digits.bytes().all(|b| b.is_ascii_digit())
-        && (rest.starts_with("weeks") || rest.starts_with("months"))
+        && (term == "weeks" || term == "months")
 }
 
-/// Splits a matched relative head into `(duration, "weeks"|"months")` using
-/// the exact-term reading (`issue_filters.py:66`).
-fn split_relative_head(head: &str) -> (u64, &str) {
-    let (digits, rest) = head.split_once('_').unwrap_or((head, ""));
-    let term = if rest.starts_with("months") { "months" } else { "weeks" };
-    (digits.parse().unwrap_or(0), term)
+/// Splits an `is_relative_head`-matched head into `(digit-string, term)`.
+/// The digit string parses infallibly for realistic magnitudes; absurd ones
+/// are rejected by the caller with a 500 (mirroring Django's `timedelta`
+/// `OverflowError` → 500).
+fn split_relative_head(head: &str) -> (&str, &str) {
+    let (digits, term) = head.split_once('_').unwrap_or((head, ""));
+    (digits, term)
+}
+
+/// Django's `"" not in <list>` guards on the raw-string legacy filters
+/// (`issue_filters.py:99,110,125,353,368`): ANY `""` token (after the
+/// exact-`"null"` drops) skips the WHOLE key.
+fn has_empty_token(raw: &str) -> bool {
+    raw.split(',').filter(|t| *t != "null").any(|t| t.is_empty())
 }
 
 /// Applies every supported legacy `issue_filters` GET key
@@ -976,14 +1042,13 @@ fn split_relative_head(head: &str) -> (u64, &str) {
 /// keys. Deviations from a full mirror, each Django-literal and committed
 /// as reviewer-adjudicable:
 /// - `logged_by` names no model field: Django builds `logged_by__...`
-///   kwargs and dies with `FieldError` → 500. Only when the value yields ≥1
-///   lookup (`"None"` present or ≥1 valid UUID); empty values add nothing.
+///   kwargs and dies with `FieldError` → generic 500. Only when the value
+///   yields ≥1 lookup (`"None"` present or ≥1 valid UUID); empty values add
+///   nothing.
 /// - `estimate_point__in` / `intake_status__in` coerce to UUID/int: garbage
 ///   raises `ValidationError` → 400 `"Please provide valid detail"`.
-/// - `mentions` / `intake_status` / `inbox_status` add no explicit
-///   `deleted_at` filter; the `deleted_at IS NULL` below is the
-///   default-manager-implied reading (all three models use the soft-delete
-///   default manager).
+/// - `mentions` / `intake_status` / `inbox_status` set NO `deleted_at`
+///   condition (`issue_filters.py:177-186,350-377`), mirrored literally.
 fn apply_legacy_filters(
     qb: &mut QueryBuilder<Postgres>,
     q: &DetailIssuesQuery,
@@ -1009,49 +1074,63 @@ fn apply_legacy_filters(
         qb.push(" AND s.\"group\" = ANY(").push_bind(groups).push(")");
     } else if let Some(raw) = q.state_group.as_deref() {
         // `state__group__in` (`issue_filters.py:96-100`): raw strings, no
-        // validation; exact-`"null"` tokens dropped. Applies only when
-        // `type` is absent (see above).
-        let groups: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
-        if !groups.is_empty() {
-            qb.push(" AND s.\"group\" = ANY(").push_bind(groups).push(")");
+        // validation; exact-`"null"` tokens dropped, but ANY `""` token
+        // skips the whole key (`"" not in ...`, `issue_filters.py:99`).
+        // Applies only when `type` is absent (see above).
+        if has_empty_token(raw) {
+            // Whole-key no-op.
+        } else {
+            let groups: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
+            if !groups.is_empty() {
+                qb.push(" AND s.\"group\" = ANY(").push_bind(groups).push(")");
+            }
         }
     }
     if let Some(raw) = q.estimate_point.as_deref() {
         // `estimate_point__in` takes RAW strings (`issue_filters.py:107-111`)
-        // against the UUID FK: garbage → Django `ValidationError` → 400.
-        let ids: Vec<&str> = raw.split(',').filter(|t| *t != "null").collect();
-        if !ids.is_empty() {
-            let mut parsed = Vec::with_capacity(ids.len());
-            for id in ids {
-                parsed.push(
-                    uuid::Uuid::parse_str(id)
-                        .map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?,
-                );
+        // against the UUID FK: garbage → Django `ValidationError` → 400 —
+        // unless a `""` token skips the whole key first
+        // (`issue_filters.py:110`).
+        if !has_empty_token(raw) {
+            let ids: Vec<&str> = raw.split(',').filter(|t| *t != "null").collect();
+            if !ids.is_empty() {
+                let mut parsed = Vec::with_capacity(ids.len());
+                for id in ids {
+                    parsed.push(
+                        uuid::Uuid::parse_str(id)
+                            .map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?,
+                    );
+                }
+                qb.push(" AND i.estimate_point_id = ANY(").push_bind(parsed).push(")");
             }
-            qb.push(" AND i.estimate_point_id = ANY(").push_bind(parsed).push(")");
         }
     }
     if let Some(raw) = q.priority.as_deref() {
-        let pris: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
-        if !pris.is_empty() {
-            qb.push(" AND i.priority = ANY(").push_bind(pris).push(")");
+        // Raw strings (`issue_filters.py:122-126`); `""` skips the whole key
+        // (`issue_filters.py:125`).
+        if !has_empty_token(raw) {
+            let pris: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
+            if !pris.is_empty() {
+                qb.push(" AND i.priority = ANY(").push_bind(pris).push(")");
+            }
         }
     }
     if let Some(raw) = q.parent.as_deref() {
         push_legacy_uuid_in(qb, "i.parent_id", raw, Some("i.parent_id"));
     }
     if let Some(raw) = q.labels.as_deref() {
-        push_legacy_bridge(qb, "issue_labels", "label_id", raw);
+        push_legacy_bridge(qb, "issue_labels", "label_id", raw, true);
     }
     if let Some(raw) = q.assignees.as_deref() {
-        push_legacy_bridge(qb, "issue_assignees", "assignee_id", raw);
+        push_legacy_bridge(qb, "issue_assignees", "assignee_id", raw, true);
     }
     if let Some(raw) = q.mentions.as_deref() {
-        // `issue_mention__mention__id__in` (`issue_filters.py:177-186`).
+        // `issue_mention__mention__id__in` (`issue_filters.py:177-186`):
+        // sets NO `deleted_at` condition — mirrored literally.
         let ids = legacy_uuid_list(raw);
         if !ids.is_empty() {
             qb.push(" AND EXISTS(SELECT 1 FROM issue_mentions im \
-                WHERE im.issue_id = i.id AND im.deleted_at IS NULL \
+                WHERE im.issue_id = i.id \
                 AND im.mention_id = ANY(")
                 .push_bind(ids)
                 .push("))");
@@ -1065,7 +1144,7 @@ fn apply_legacy_filters(
         // lookup raises Django `FieldError` → 500 (`issue_filters.py:414-425`).
         let tokens: Vec<&str> = raw.split(',').filter(|t| *t != "null").collect();
         if tokens.iter().any(|t| *t == "None") || !legacy_uuid_list(raw).is_empty() {
-            return Err(LegacyFilterError::Server("unsupported legacy filter: logged_by".to_string()));
+            return Err(LegacyFilterError::Server);
         }
     }
     if let Some(raw) = q.name.as_deref() {
@@ -1098,17 +1177,19 @@ fn apply_legacy_filters(
         }
     }
     if let Some(raw) = q.cycle.as_deref() {
-        push_legacy_bridge(qb, "cycle_issues", "cycle_id", raw);
+        push_legacy_bridge(qb, "cycle_issues", "cycle_id", raw, true);
     }
     if let Some(raw) = q.module.as_deref() {
-        push_legacy_bridge(qb, "module_issues", "module_id", raw);
+        push_legacy_bridge(qb, "module_issues", "module_id", raw, true);
     }
     // `issue_intake__status__in` (`issue_filters.py:350-377`): `status`
     // is an integer column — non-integer tokens raise Django
-    // `ValidationError` → 400. Both legacy keys write the SAME dict key and
-    // `inbox_status` runs LATER in the dispatch order, so a non-empty
-    // `inbox_status` OVERWRITES `intake_status` (an empty one leaves the
-    // earlier value intact) — mirrored, not ANDed.
+    // `ValidationError` → 400 — and ANY `""` token skips the key
+    // (`issue_filters.py:353,368`). Sets NO `deleted_at` condition.
+    // Both legacy keys write the SAME dict key and `inbox_status` runs
+    // LATER in the dispatch order, so a VALID (non-empty, no-`""`)
+    // `inbox_status` OVERWRITES `intake_status`; an invalid one leaves the
+    // earlier value intact — mirrored, not ANDed.
     let intake_tokens: Vec<&str> = q
         .intake_status
         .as_deref()
@@ -1119,7 +1200,14 @@ fn apply_legacy_filters(
         .as_deref()
         .map(|raw| raw.split(',').filter(|t| *t != "null").collect())
         .unwrap_or_default();
-    let status_tokens = if inbox_tokens.is_empty() { intake_tokens } else { inbox_tokens };
+    let tokens_valid = |tokens: &[&str]| !tokens.is_empty() && !tokens.iter().any(|t| t.is_empty());
+    let status_tokens = if tokens_valid(&inbox_tokens) {
+        inbox_tokens
+    } else if tokens_valid(&intake_tokens) {
+        intake_tokens
+    } else {
+        Vec::new()
+    };
     if !status_tokens.is_empty() {
         let mut statuses = Vec::with_capacity(status_tokens.len());
         for token in status_tokens {
@@ -1130,7 +1218,7 @@ fn apply_legacy_filters(
             );
         }
         qb.push(" AND EXISTS(SELECT 1 FROM intake_issues ii \
-            WHERE ii.issue_id = i.id AND ii.deleted_at IS NULL \
+            WHERE ii.issue_id = i.id \
             AND ii.status = ANY(")
             .push_bind(statuses)
             .push("))");
@@ -1146,15 +1234,10 @@ fn apply_legacy_filters(
     }
     if let Some(raw) = q.subscriber.as_deref() {
         // `issue_subscribers__subscriber_id__in`
-        // (`issue_filters.py:392-403`).
-        let ids = legacy_uuid_list(raw);
-        if !ids.is_empty() {
-            qb.push(" AND EXISTS(SELECT 1 FROM issue_subscribers isn \
-                WHERE isn.issue_id = i.id AND isn.deleted_at IS NULL \
-                AND isn.subscriber_id = ANY(")
-                .push_bind(ids)
-                .push("))");
-        }
+        // (`issue_filters.py:392-403`), with the same unconditional
+        // live-bridge scoping as the other bridge filters
+        // (`issue_filters.py:401`).
+        push_legacy_bridge(qb, "issue_subscribers", "subscriber_id", raw, false);
     }
     if let Some(raw) = q.start_target_date.as_deref() {
         // (`issue_filters.py:406-411`): `"true"` → both dates set.
@@ -1512,14 +1595,15 @@ fn eval_filter_node(qb: &mut QueryBuilder<Postgres>, node: &serde_json::Value) -
 
 /// Single filterset leaf → SQL. Mirrors the `IssueFilterSet` lookups:
 /// bridge `EXISTS` for the `*_id` method filters (`filterset.py:215-297`),
-/// direct comparisons otherwise; `is_archived` accepts Django's truthy /
-/// falsy spellings (`filterset.py:202-211`) with anything else a no-op;
-/// `is_draft` accepts the same spellings, `""` (JSON null → `QueryDict`
-/// `""` → `NullBooleanField` → `None` → `exact None` → `IS NULL`), and 400s
-/// the rest. Date scalars bind `YYYY-MM-DD` (`""` → `IS NULL`, mirroring
-/// `DateField("")` → `None` → `exact None`); `__range` binds an inclusive
-/// `BETWEEN` over the comma-split pair (`DateCSVRangeFilter` for
-/// datetimes compares the date component, `filterset.py:22-30`).
+/// direct comparisons otherwise. `is_archived`/`is_draft` go through
+/// `forms.NullBooleanField`, which NEVER raises: recognized truthy/falsy
+/// spellings filter, while anything else cleans to `None` — a method-filter
+/// no-op for `is_archived` (`EMPTY_VALUES` short-circuit) and
+/// `exact None` → `IS NULL` for `is_draft`. Date scalars bind `YYYY-MM-DD`
+/// (`""` → `IS NULL`, mirroring `DateField("")` → `None` → `exact None`);
+/// `__range` binds an inclusive `BETWEEN` over the comma-split pair
+/// (`DateCSVRangeFilter` for datetimes compares the date component,
+/// `filterset.py:22-30`).
 fn apply_complex_leaf(
     qb: &mut QueryBuilder<Postgres>,
     key: &str,
@@ -1565,28 +1649,35 @@ fn apply_complex_leaf(
         "is_archived" => {
             // `filter_is_archived` (`filterset.py:202-211`); the value went
             // through `QueryDict` stringification (see `leaf_scalar_string`),
-            // and repeated values resolve to the LAST one.
+            // and repeated values resolve to the LAST one. Crucially the
+            // `BooleanFilter` form field is `forms.NullBooleanField`, whose
+            // `to_python` maps ANYTHING outside the True/False spellings
+            // (incl. `"yes"`, `""`) to `None` and whose `validate()` is a
+            // no-op — so unrecognized spellings NEVER 400. `None` then hits
+            // `FilterMethod`'s `EMPTY_VALUES` short-circuit → bare `Q()`.
             let last = pieces.last().map(String::as_str).unwrap_or("");
             if ["True", "true", "1"].contains(&last) {
                 qb.push("i.archived_at IS NOT NULL");
             } else if ["False", "false", "0"].contains(&last) {
                 qb.push("i.archived_at IS NULL");
             } else {
-                // Any other spelling (incl. `""`) → bare `Q()` no-op.
                 qb.push("TRUE");
             }
             Ok(())
         }
         "is_draft" => {
+            // Same `NullBooleanField` leniency (never raises — the model
+            // field's non-nullability, `db/models/issue.py:161`, does not
+            // affect filter validation): unrecognized spellings clean to
+            // `None` → standard `Q(is_draft__exact=None)` → `IS NULL`
+            // (matches nothing on this non-nullable column), NOT a 400.
             let last = pieces.last().map(String::as_str).unwrap_or("");
             if ["True", "true", "1"].contains(&last) {
                 qb.push("i.is_draft = true");
             } else if ["False", "false", "0"].contains(&last) {
                 qb.push("i.is_draft = false");
-            } else if last.is_empty() {
-                qb.push("i.is_draft IS NULL");
             } else {
-                return Err(ComplexFilterError::invalid_filterset());
+                qb.push("i.is_draft IS NULL");
             }
             Ok(())
         }
@@ -1704,10 +1795,11 @@ fn apply_complex_date_leaf(
 /// scoping (the `Exists(permission_subquery)`, `base.py:1033-1060`, which
 /// reduces to `fetch_guest_scoped` given the gate), legacy
 /// `issue_filters`, and the `filters` JSON tree. Note the detail endpoint
-/// does NOT add the `/list/` endpoint's explicit `state__deleted_at__isnull`
-/// (`base.py:114`): soft-deleted states drop out here through the
-/// NULL-state path instead (`s.deleted_at IS NULL` fails → row gone), with
-/// an identical keep/drop truth table on all four state cases.
+/// has NO `state__deleted_at` predicate (`base.py:1058-1060`): forward-FK
+/// lookups don't apply `StateManager`, so soft-deleted states JOIN normally
+/// and their rows are kept iff the (deleted) state's group isn't triage —
+/// unlike the `/list/` endpoint's explicit `state__deleted_at__isnull`
+/// (`base.py:114`).
 fn push_detail_where(
     qb: &mut QueryBuilder<Postgres>,
     slug: &str,
@@ -1724,7 +1816,7 @@ fn push_detail_where(
     .push_bind(slug.to_string())
     .push(
         ") AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
-         AND s.deleted_at IS NULL AND s.\"group\" <> 'triage' \
+         AND s.\"group\" <> 'triage' \
          AND EXISTS(SELECT 1 FROM projects p \
            WHERE p.id = i.project_id AND p.archived_at IS NULL AND p.deleted_at IS NULL)",
     );
@@ -1760,7 +1852,7 @@ fn detail_400(body: Value) -> (StatusCode, Json<Value>) {
 ///   `"{per_page}:0:0"`) mirror `BasePaginator` byte-exact, including the
 ///   400 `{"detail": ...}` bodies for `ParseError`s and the 400
 ///   `{"detail": "Error in parsing"}` for negative windows
-///   (`BadPaginationError`, `paginator.py:149-150`).
+///   (`BadPaginationError`, `paginator.py:142-150`).
 /// - `order_by` (default `-created_at`) mirrors `order_issue_queryset` +
 ///   the paginator re-ordering (see `detail_order_expr`, incl. the priority
 ///   direction swap and the state-group double negation).
@@ -1779,9 +1871,57 @@ fn detail_400(body: Value) -> (StatusCode, Json<Value>) {
 /// per-user-timezone conversion; unknown legacy params ignored (Django
 /// dispatches known `ISSUE_FILTER` keys only); `group_by`/`sub_group_by` /
 /// `fields` accepted-but-ignored (the detail view never reads them);
-/// `logged_by` → 500 (Django `FieldError` → 500); `per_page <= 0` and
-/// overflowed windows → 500 (Django `ZeroDivisionError`/`AssertionError` →
-/// 500); relative-date "now" is UTC (`Utc::now().date_naive()`).
+/// `logged_by` and out-of-range relative dates → generic 500 (Django
+/// `FieldError`/`OverflowError` → 500); `per_page <= 0` → generic 500
+/// (Django `ZeroDivisionError`/`AssertionError` → 500); relative-date "now"
+/// is UTC (`Utc::now().date_naive()`).
+///
+/// Django's generic 500 body, byte-exact from
+/// `BaseAPIView.handle_exception` (`plane/app/views/base.py:200-204`).
+pub(crate) const GENERIC_500_MSG: &str = "Something went wrong please try again later";
+
+fn server_error() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error": GENERIC_500_MSG})),
+    )
+}
+
+/// The page-query SELECT prefix for `list_detail`: the 25 `SELECT` items in
+/// `IssueListDetailSerializer` order with the `apply_annotations`
+/// subqueries (`base.py:979-1025`). The `array_agg` aggregates carry
+/// `ORDER BY <bridge>.created_at DESC` because the `.all()` prefetches
+/// follow bridge `Meta.ordering = ("-created_at",)` (`db/models/issue.py`
+/// `IssueAssignee`/`IssueLabel`, `db/models/cycle.py` `CycleIssue`,
+/// `db/models/module.py` `ModuleIssue`); the `cycle_id` scalar takes the
+/// same ordering before `LIMIT 1` (Django applies `Meta.ordering` to the
+/// unordered `values()[:1]` subquery).
+pub(crate) const DETAIL_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
+     i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, \
+     i.sequence_id, i.project_id, i.parent_id, i.created_at, i.updated_at, \
+     i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
+     i.is_draft, i.archived_at, \
+     (SELECT ci.cycle_id FROM cycle_issues ci \
+       WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, \
+     COALESCE((SELECT array_agg(mi.module_id ORDER BY mi.created_at DESC) FROM module_issues mi \
+       WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, \
+     COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+       WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
+     COALESCE((SELECT array_agg(ia.assignee_id ORDER BY ia.created_at DESC) FROM issue_assignees ia \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, \
+     (SELECT COUNT(*) FROM issues si \
+       LEFT JOIN states ss ON ss.id = si.state_id \
+       WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
+       AND si.archived_at IS NULL AND si.is_draft = false \
+       AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage' \
+       AND EXISTS(SELECT 1 FROM projects sp \
+         WHERE sp.id = si.project_id AND sp.archived_at IS NULL)) AS sub_issues_count, \
+     (SELECT COUNT(*) FROM file_assets fa \
+       WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
+       AND fa.deleted_at IS NULL) AS attachment_count, \
+     (SELECT COUNT(*) FROM issue_links lin \
+       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count \
+     FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 pub async fn list_detail(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1806,21 +1946,22 @@ pub async fn list_detail(
         Ok(c) => c,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
     };
-    // `limit = min(limit, max_limit)` (`paginator.py:132`).
+    // `limit = min(limit, max_limit)` (`paginator.py:132`). Django computes
+    // `offset = page * limit` FIRST (`paginator.py:142-150`): a negative
+    // offset 400s even when the limit itself is degenerate.
     let limit = per_page.min(1000);
+    let window = match page_window(cursor.page, limit) {
+        // `BadPaginationError("Pagination offset cannot be negative")` →
+        // `ParseError(detail="Error in parsing")` — no trailing period
+        // (`paginator.py:142-150, 708-711`).
+        Err(()) => return Ok(detail_400(json!({"detail": "Error in parsing"}))),
+        Ok(w) => w,
+    };
     if limit <= 0 {
         // Django: `limit=0` → `ZeroDivisionError` in `math.ceil`, negative
-        // limits → negative slices → `AssertionError`; both → 500.
-        return Err(anyhow::anyhow!("invalid pagination window").into());
-    }
-    let offset = cursor
-        .page
-        .checked_mul(limit)
-        .ok_or_else(|| anyhow::anyhow!("invalid pagination window"))?;
-    if offset < 0 {
-        // `BadPaginationError("Pagination offset cannot be negative")` →
-        // `ParseError("Error in parsing")` (`paginator.py:149-150, 710-711`).
-        return Ok(detail_400(json!({"detail": "Error in parsing"})));
+        // limits → negative slices → `AssertionError`; both → generic 500.
+        // (`per_page=0` 500s on both sides.)
+        return Ok(server_error());
     }
     let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
     let sanitized = sanitize_order_by(q.order_by.as_deref().unwrap_or("-created_at"));
@@ -1866,8 +2007,10 @@ pub async fn list_detail(
         Err(DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg))) => {
             return Ok(detail_400(json!({"error": msg})));
         }
-        Err(DetailWhereError::Legacy(LegacyFilterError::Server(msg))) => {
-            return Err(anyhow::anyhow!(msg).into());
+        Err(DetailWhereError::Legacy(LegacyFilterError::Server)) => {
+            // Django `FieldError`/uncaught paths → generic 500
+            // (`views/base.py:200-204`): never surface internals.
+            return Ok(server_error());
         }
         Err(DetailWhereError::Complex(e)) => {
             return Ok(detail_400(json!({"message": e.message, "code": e.code})));
@@ -1877,33 +2020,10 @@ pub async fn list_detail(
 
     // Page window: `[offset:offset+limit+1]`, truncated to `limit`
     // (`paginator.py:144-145, 152, 170`); `next.has_results` ⇔ the window
-    // held more than `limit` (`paginator.py:154, 165`).
-    let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(
-        "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
-         i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, \
-         i.sequence_id, i.project_id, i.parent_id, i.created_at, i.updated_at, \
-         i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
-         i.is_draft, i.archived_at, \
-         (SELECT ci.cycle_id FROM cycle_issues ci \
-           WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL LIMIT 1) AS cycle_id, \
-         COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi \
-           WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, \
-         COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il \
-           WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
-         COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia \
-           WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, \
-         (SELECT COUNT(*) FROM issues si \
-           LEFT JOIN states ss ON ss.id = si.state_id \
-           WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
-           AND si.archived_at IS NULL AND si.is_draft = false \
-           AND ss.deleted_at IS NULL AND ss.\"group\" <> 'triage') AS sub_issues_count, \
-         (SELECT COUNT(*) FROM file_assets fa \
-           WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
-           AND fa.deleted_at IS NULL) AS attachment_count, \
-         (SELECT COUNT(*) FROM issue_links lin \
-           WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count \
-         FROM issues i LEFT JOIN states s ON s.id = i.state_id",
-    );
+    // held more than `limit` (`paginator.py:154, 165`). A `BeyondEnd`
+    // window (unbounded page) slices to `[]` in Django and returns an
+    // empty page with a 200 — no extra query needed.
+    let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(DETAIL_SELECT_SQL);
     match push_detail_where(
         &mut page_qb,
         &slug,
@@ -1918,8 +2038,10 @@ pub async fn list_detail(
         Err(DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg))) => {
             return Ok(detail_400(json!({"error": msg})));
         }
-        Err(DetailWhereError::Legacy(LegacyFilterError::Server(msg))) => {
-            return Err(anyhow::anyhow!(msg).into());
+        Err(DetailWhereError::Legacy(LegacyFilterError::Server)) => {
+            // Django `FieldError`/uncaught paths → generic 500
+            // (`views/base.py:200-204`): never surface internals.
+            return Ok(server_error());
         }
         Err(DetailWhereError::Complex(e)) => {
             return Ok(detail_400(json!({"message": e.message, "code": e.code})));
@@ -1933,10 +2055,15 @@ pub async fn list_detail(
         .push(" ")
         .push(order_dir)
         .push(" NULLS LAST, i.created_at DESC LIMIT ")
-        .push_bind(limit + 1)
-        .push(" OFFSET ")
-        .push_bind(offset);
-    let mut rows: Vec<IssueDetailRow> = page_qb.build_query_as().fetch_all(&st.pool).await?;
+        .push_bind(limit + 1);
+    let mut rows: Vec<IssueDetailRow> = match window {
+        PageWindow::Rows(offset) => {
+            page_qb.push(" OFFSET ").push_bind(offset);
+            page_qb.build_query_as().fetch_all(&st.pool).await?
+        }
+        // Unbounded page: Django slices to `[]` → empty page, 200.
+        PageWindow::BeyondEnd => Vec::new(),
+    };
     // `OffsetPaginator` (`paginator.py:157-158`): when `cursor.value !=
     // limit and cursor.is_prev`, the window is re-sliced to its last
     // `limit+1` rows — a no-op here since the window holds at most
@@ -2322,5 +2449,191 @@ mod issue_detail_tests {
         // `getIssuesFromServer` (`issue.service.ts:40-61`) branches here iff
         // `queries.expand` includes `issue_relation` && `!group_by`.
         let _ = super::list_detail;
+    }
+
+    #[test]
+    fn parse_python_int_vectors_match_django() {
+        // Python `int()`: surrounding whitespace tolerated, one leading
+        // sign, single underscores between digits (`int("1_0") == 10`);
+        // out-of-range saturates (Django ints are unbounded).
+        assert_eq!(parse_python_int("10"), Some(10));
+        assert_eq!(parse_python_int("  +10  "), Some(10));
+        assert_eq!(parse_python_int("-7"), Some(-7));
+        assert_eq!(parse_python_int("1_0"), Some(10));
+        assert_eq!(parse_python_int("1_00_0"), Some(1000));
+        // Past `i128::MAX` (~1.7e38) magnitudes saturate by sign.
+        assert_eq!(
+            parse_python_int("99999999999999999999999999999999999999999"),
+            Some(i128::MAX)
+        );
+        assert_eq!(
+            parse_python_int("-99999999999999999999999999999999999999999"),
+            Some(i128::MIN)
+        );
+        for bad in ["", "   ", "abc", "1__0", "_1", "1_", "+-1", "0x10", "10.5", "+_1"] {
+            assert_eq!(parse_python_int(bad), None, "input {bad:?}");
+        }
+    }
+
+    #[test]
+    fn parse_per_page_edges_match_django() {
+        // Underscores accepted like Python `int()`; huge-but-parseable
+        // positives 400 with the Cannot-exceed message (Django parses the
+        // bigint fine, then fails the max check).
+        assert_eq!(parse_per_page(Some("1_0")).unwrap(), 10);
+        assert_eq!(
+            parse_per_page(Some("99999999999999999999999999999999999999999")).unwrap_err(),
+            "Invalid per_page value. Cannot exceed 1000."
+        );
+    }
+
+    #[test]
+    fn parse_cursor_unbounded_page_matches_django() {
+        // Django ints are unbounded: a huge page parses fine and yields an
+        // (empty) page, NOT a 400. Saturates to `i128::MAX`.
+        let c = parse_cursor("1000:99999999999999999999999999999999999999999:0").unwrap();
+        assert_eq!(c.page, i128::MAX);
+        assert!(!c.is_prev);
+        // Underscore pages parse like Python `int()`.
+        let c = parse_cursor("1_0:2_0:0").unwrap();
+        assert_eq!((c.limit_value, c.page), (10.0, 20));
+    }
+
+    #[test]
+    fn page_window_offset_first_matches_django() {
+        // Django computes `offset = page * limit` FIRST
+        // (`paginator.py:142-150`): a negative offset 400s even when the
+        // limit itself would 500 (`per_page=-5, page=2` → offset -10).
+        assert_eq!(page_window(2, -5), Err(()));
+        assert_eq!(page_window(0, 0), Ok(PageWindow::Rows(0)));
+        assert_eq!(page_window(2, 1000), Ok(PageWindow::Rows(2000)));
+        // Unbounded pages saturate past `i64::MAX` → empty page, not an error.
+        assert_eq!(page_window(i128::MAX, 1000), Ok(PageWindow::BeyondEnd));
+    }
+
+    #[test]
+    fn relative_date_anchor_is_exact_like_django() {
+        // `pattern = re.compile(r"\d+_(weeks|months)$")`
+        // (`issue_filters.py:12`) end-anchors: `2_weeksXYZ;after;fromnow`
+        // takes the plain-date branch and 400s on the garbage date.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        let err = push_legacy_date(
+            &mut qb,
+            "i.target_date",
+            "2_weeksXYZ;after;fromnow",
+            chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, LegacyFilterError::BadRequest(_)));
+        // Exact `weeks`/`months` still anchor relatively.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        push_legacy_date(
+            &mut qb,
+            "i.target_date",
+            "2_weeks;after;fromnow",
+            chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(),
+        )
+        .unwrap();
+        assert!(qb.sql().contains(" >= "));
+    }
+
+    #[test]
+    fn legacy_empty_csv_token_skips_key_like_django() {
+        // `"" not in <list>` guards (`issue_filters.py:99,110,125,353,368`):
+        // ANY `""` token skips the WHOLE key.
+        use chrono::NaiveDate;
+        let today = NaiveDate::from_ymd_opt(2026, 9, 5).unwrap();
+        for (key, raw) in [
+            ("state_group", "backlog,"),
+            ("priority", "high,"),
+            ("estimate_point", "12345678-1234-5678-1234-567812345678,"),
+            ("intake_status", "1,"),
+            ("inbox_status", "2,"),
+        ] {
+            let mut q = DetailIssuesQuery::default();
+            match key {
+                "state_group" => q.state_group = Some(raw.to_string()),
+                "priority" => q.priority = Some(raw.to_string()),
+                "estimate_point" => q.estimate_point = Some(raw.to_string()),
+                "intake_status" => q.intake_status = Some(raw.to_string()),
+                _ => q.inbox_status = Some(raw.to_string()),
+            }
+            let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+            apply_legacy_filters(&mut qb, &q, today).unwrap();
+            assert_eq!(qb.sql(), "SELECT 1", "key {key}");
+        }
+    }
+
+    #[test]
+    fn legacy_bridge_garbage_still_scopes_live_like_django() {
+        // `filter_labels` etc. apply `<bridge>__deleted_at__isnull`
+        // UNCONDITIONALLY (`issue_filters.py:158,173,331,346,401`): a
+        // garbage-only value still restricts to issues WITH a live bridge row.
+        let mut q = DetailIssuesQuery::default();
+        q.labels = Some("zzz".to_string());
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_legacy_filters(&mut qb, &q, chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()).unwrap();
+        let sql = qb.sql();
+        assert!(sql.contains("EXISTS(SELECT 1 FROM issue_labels"), "{sql}");
+        assert!(!sql.contains("= ANY"), "{sql}");
+    }
+
+    #[test]
+    fn legacy_mentions_intake_have_no_deleted_filter_like_django() {
+        // `filter_mentions` (`issue_filters.py:177-186`) and
+        // `filter_intake_status`/`filter_inbox_status` (`issue_filters.py:350-377`)
+        // set NO `deleted_at` condition.
+        let mut q = DetailIssuesQuery::default();
+        q.mentions = Some("12345678-1234-5678-1234-567812345678".to_string());
+        q.intake_status = Some("1".to_string());
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_legacy_filters(&mut qb, &q, chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()).unwrap();
+        let sql = qb.sql();
+        assert!(!sql.contains("im.deleted_at"), "{sql}");
+        assert!(!sql.contains("ii.deleted_at"), "{sql}");
+    }
+
+    #[test]
+    fn complex_is_archived_yes_is_noop_like_django() {
+        // `NullBooleanField.to_python("yes")` → `None` (never raises), then
+        // `FilterMethod` short-circuits on `EMPTY_VALUES` → no-op.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_complex_leaf(&mut qb, "is_archived", &serde_json::json!("yes")).unwrap();
+        assert_eq!(qb.sql(), "SELECT 1TRUE");
+        // Genuinely invalid numerics behave the same way.
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+        apply_complex_leaf(&mut qb, "is_archived", &serde_json::json!(2)).unwrap();
+        assert_eq!(qb.sql(), "SELECT 1TRUE");
+    }
+
+    #[test]
+    fn complex_is_draft_garbage_is_null_not_400_like_django() {
+        // `NullBooleanField` never raises: unrecognized spellings clean to
+        // `None` → `Q(is_draft__exact=None)` → `IS NULL`, NOT a 400.
+        for raw in ["yes", "2", "1.5"] {
+            let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
+            apply_complex_leaf(&mut qb, "is_draft", &serde_json::json!(raw)).unwrap();
+            assert_eq!(qb.sql(), "SELECT 1i.is_draft IS NULL", "input {raw}");
+        }
+    }
+
+    #[test]
+    fn detail_select_orders_arrays_like_django() {
+        // Bridge `.all()` prefetches follow bridge `Meta.ordering =
+        // ("-created_at",)` (issue.py/cycle.py/module.py), so `array_agg`
+        // carries `ORDER BY <bridge>.created_at DESC`.
+        for needle in [
+            "array_agg(mi.module_id ORDER BY mi.created_at DESC)",
+            "array_agg(il.label_id ORDER BY il.created_at DESC)",
+            "array_agg(ia.assignee_id ORDER BY ia.created_at DESC)",
+        ] {
+            assert!(DETAIL_SELECT_SQL.contains(needle), "{needle}");
+        }
+    }
+
+    #[test]
+    fn generic_500_body_matches_django() {
+        // `BaseAPIView.handle_exception` (`app/views/base.py:200-204`).
+        assert_eq!(GENERIC_500_MSG, "Something went wrong please try again later");
     }
 }
