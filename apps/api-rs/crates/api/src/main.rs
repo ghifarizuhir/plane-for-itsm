@@ -401,6 +401,24 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/intake-state/",
             get(routes::state::intake_state),
         )
+        // Parity with `WorkspaceLabelsEndpoint.get`
+        // (`views/workspace/label.py:17-30`, `urls/workspace.py:157-161`):
+        // GET 200 `LabelSerializer[]` scoped to the caller's active
+        // projects (archived excluded); gate `WorkspaceViewerPermission` =
+        // any ACTIVE ws member incl. GUEST.
+        .route("/api/workspaces/:slug/labels/", get(routes::label::ws_labels))
+        // Parity with `LabelViewSet.list/create`
+        // (`views/issue/label.py:23-55`, `urls/issue.py:71-75`): GET 200
+        // `LabelSerializer[]` (`ORDER BY sort_order`, scoped ws+project+
+        // caller membership; read gate `ProjectBasePermission` safe-methods
+        // = any active ws member) + POST **201** (create gate ADMIN
+        // project-level + ws-admin fallback; dup → 400 `{"error": ...}`
+        // via the IntegrityError branch, `label.py:51-55`). Detail
+        // `issue-labels/:pk/` below stays on the pre-existing handlers.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issue-labels/",
+            get(routes::label::issue_labels_list).post(routes::label::issue_labels_create),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",
             get(routes::label::list).post(routes::label::create),
