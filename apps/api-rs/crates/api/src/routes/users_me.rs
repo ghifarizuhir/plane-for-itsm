@@ -323,6 +323,236 @@ pub async fn my_workspaces(
     (StatusCode::OK, Json(Value::Array(out)))
 }
 
+/// Link terima-undangan, byte-exact dari
+/// `WorkSpaceMemberInviteSerializer.get_invite_link`.
+pub fn workspace_invite_link(id: &str, slug: &str, token: &str) -> String {
+    format!("/workspace-invitations/?invitation_id={id}&slug={slug}&token={token}")
+}
+
+#[derive(sqlx::FromRow)]
+struct MyWorkspaceInviteRow {
+    id: uuid::Uuid,
+    email: String,
+    accepted: bool,
+    token: String,
+    message: Option<String>,
+    responded_at: Option<chrono::DateTime<chrono::Utc>>,
+    role: i16,
+    workspace_id: uuid::Uuid,
+    workspace_name: String,
+    workspace_slug: String,
+    workspace_logo: Option<String>,
+}
+
+/// GET /api/users/me/workspaces/invitations/ — paritas
+/// `UserWorkspaceInvitationsViewSet.list` (filter email user saat ini).
+pub async fn my_workspace_invitations(
+    State(st): State<AppState>,
+    auth: AuthUser,
+) -> (StatusCode, Json<Value>) {
+    // Galat DB = 500; hanya user yang benar-benar hilang yang jadi 401.
+    let email_row: Option<(String,)> = match sqlx::query_as("SELECT email FROM users WHERE id = $1")
+        .bind(auth.0)
+        .fetch_optional(&st.pool)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "ws-invitations: current-email lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    let Some((email,)) = email_row else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+    };
+    let rows: Vec<MyWorkspaceInviteRow> = match sqlx::query_as(
+        "SELECT i.id, i.email, i.accepted, i.token, i.message, i.responded_at, i.role, \
+                w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug, \
+                w.logo AS workspace_logo \
+         FROM workspace_member_invites i \
+         JOIN workspaces w ON w.id = i.workspace_id AND w.deleted_at IS NULL \
+         WHERE i.email = $1 AND i.deleted_at IS NULL \
+         ORDER BY i.created_at DESC",
+    )
+    .bind(&email)
+    .fetch_all(&st.pool)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "ws-invitations: lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    let out: Vec<Value> = rows
+        .into_iter()
+        .map(|r| {
+            let id = r.id.to_string();
+            json!({
+                "id": id,
+                "email": r.email,
+                "accepted": r.accepted,
+                "token": r.token,
+                "message": r.message,
+                "responded_at": r.responded_at,
+                "role": r.role,
+                "workspace": {
+                    "id": r.workspace_id,
+                    "name": r.workspace_name,
+                    "slug": r.workspace_slug,
+                    "logo_url": pick_logo_url(None, r.workspace_logo.as_deref()),
+                },
+                "invite_link": workspace_invite_link(&id, &r.workspace_slug, &r.token),
+            })
+        })
+        .collect();
+    (StatusCode::OK, Json(Value::Array(out)))
+}
+
+#[derive(Deserialize)]
+pub struct JoinWorkspacesBody {
+    pub invitations: Vec<uuid::Uuid>,
+}
+
+/// Default `view_props`/`default_props` ala Django `get_default_props()`.
+fn default_view_props() -> Value {
+    json!({
+        "filters": {
+            "priority": null, "state": null, "state_group": null,
+            "assignees": null, "created_by": null, "labels": null,
+            "start_date": null, "target_date": null, "subscriber": null,
+        },
+        "display_filters": {
+            "group_by": null, "order_by": "-created_at", "type": null,
+            "sub_issue": true, "show_empty_groups": true,
+            "layout": "list", "calendar_date_range": "",
+        },
+        "display_properties": {
+            "assignee": true, "attachment_count": true, "created_on": true,
+            "due_date": true, "estimate": true, "key": true, "labels": true,
+            "link": true, "priority": true, "start_date": true, "state": true,
+            "sub_issue_count": true, "updated_on": true,
+        },
+    })
+}
+
+/// Default `issue_props` ala Django `get_issue_props()`.
+fn default_issue_props() -> Value {
+    json!({"subscribed": true, "assigned": true, "created": true, "all_issues": true})
+}
+
+/// POST /api/users/me/workspaces/invitations/ — paritas
+/// `UserWorkspaceInvitationsViewSet.create`: aktifkan member nonaktif,
+/// insert member baru (abaikan konflik), hapus invite — semua dalam SATU
+/// transaksi. Sukses = 204 tanpa body.
+pub async fn join_workspaces(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<JoinWorkspacesBody>,
+) -> Result<StatusCode, (StatusCode, Json<Value>)> {
+    // Galat DB = 500; hanya user yang benar-benar hilang yang jadi 401.
+    let email_row: Option<(String,)> = match sqlx::query_as("SELECT email FROM users WHERE id = $1")
+        .bind(auth.0)
+        .fetch_optional(&st.pool)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "ws-join: current-email lookup failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+    };
+    let Some((email,)) = email_row else {
+        return Err((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"}))));
+    };
+    if body.invitations.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let mut tx = match st.pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!(error = %e, "ws-join: begin transaction failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+    };
+    // Hanya invite milik email user ini (cermin `filter(pk__in=..., email=...)`).
+    let invites: Vec<(uuid::Uuid, uuid::Uuid, i16)> = match sqlx::query_as(
+        "SELECT i.id, i.workspace_id, i.role FROM workspace_member_invites i \
+         WHERE i.id = ANY($1) AND i.email = $2 AND i.deleted_at IS NULL \
+         ORDER BY i.created_at DESC",
+    )
+    .bind(&body.invitations)
+    .bind(&email)
+    .fetch_all(&mut *tx)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "ws-join: invite lookup failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+    };
+    let view_props = default_view_props();
+    let issue_props = default_issue_props();
+    for (_, workspace_id, role) in &invites {
+        // Aktifkan keanggotaan nonaktif (cermin `update(is_active=True, role=...)`).
+        if sqlx::query(
+            "UPDATE workspace_members SET is_active = true, role = $1, updated_at = now() \
+             WHERE workspace_id = $2 AND member_id = $3",
+        )
+        .bind(role)
+        .bind(workspace_id)
+        .bind(auth.0)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+        {
+            tracing::warn!("ws-join: member activation failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+        // `ON CONFLICT DO NOTHING` tanpa target: cermin
+        // `bulk_create(ignore_conflicts=True)` — kena constraint mana pun
+        // ((workspace_id, member_id) parsial maupun (workspace_id,
+        // member_id, deleted_at)) tetap diabaikan, tak perlu arbiter.
+        if sqlx::query(
+            "INSERT INTO workspace_members \
+             (id, workspace_id, member_id, role, created_by_id, view_props, \
+              default_props, issue_props, is_active, getting_started_checklist, \
+              tips, explored_features, created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, $3, $5, $5, $6, true, '{}', '{}', '{}', now(), now()) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(auth.0)
+        .bind(role)
+        .bind(&view_props)
+        .bind(&issue_props)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+        {
+            tracing::warn!("ws-join: member insert failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+    }
+    let joined_ids: Vec<uuid::Uuid> = invites.into_iter().map(|(id, _, _)| id).collect();
+    if sqlx::query("DELETE FROM workspace_member_invites WHERE id = ANY($1)")
+        .bind(&joined_ids)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+    {
+        tracing::warn!("ws-join: invite delete failed");
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+    }
+    if tx.commit().await.is_err() {
+        tracing::warn!("ws-join: commit failed");
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,5 +586,10 @@ mod tests {
         assert_eq!(pick_logo_url(Some("a"), Some("b")).as_deref(), Some("a"));
         assert_eq!(pick_logo_url(None, Some("b")).as_deref(), Some("b"));
         assert_eq!(pick_logo_url(None, None), None);
+    }
+
+    #[test]
+    fn invite_link_shape() {
+        assert_eq!(workspace_invite_link("1", "s", "t"), "/workspace-invitations/?invitation_id=1&slug=s&token=t");
     }
 }

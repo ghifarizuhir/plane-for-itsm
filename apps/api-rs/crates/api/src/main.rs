@@ -391,6 +391,10 @@ async fn main() {
             get(routes::users_me::my_workspaces),
         )
         .route(
+            "/api/users/me/workspaces/invitations/",
+            get(routes::users_me::my_workspace_invitations).post(routes::users_me::join_workspaces),
+        )
+        .route(
             "/api/users/me/profile/",
             get(routes::user::profile).patch(routes::user::patch_profile),
         )
