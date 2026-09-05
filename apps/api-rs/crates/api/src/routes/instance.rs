@@ -91,7 +91,11 @@ pub async fn get(
         "SELECT id, created_at, updated_at, instance_name, whitelist_emails, instance_id, current_version, latest_version, last_checked_at, namespace, is_telemetry_enabled, is_support_required, is_setup_done, is_signup_screen_visited, is_verified, created_by_id, updated_by_id FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
     )
     .fetch_optional(&st.pool)
-    .await?;
+    .await
+    .map_err(|e| {
+        tracing::warn!(error=%e, "instance: lookup failed");
+        common::errors::AppError::internal()
+    })?;
 
     let Some(inst) = row else {
         return Ok((
@@ -103,10 +107,18 @@ pub async fn get(
     let workspaces_exist: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workspaces WHERE deleted_at IS NULL)")
             .fetch_one(&st.pool)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::warn!(error=%e, "instance: workspaces_exist lookup failed");
+                common::errors::AppError::internal()
+            })?;
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&st.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::warn!(error=%e, "instance: user_count lookup failed");
+            common::errors::AppError::internal()
+        })?;
 
     let instance = json!({
         "id": inst.id.to_string(),
