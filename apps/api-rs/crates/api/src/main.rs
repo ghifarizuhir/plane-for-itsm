@@ -7,7 +7,7 @@ mod state;
 
 use axum::{middleware as axum_middleware, routing::{get, patch, post}, Router};
 
-use crate::middleware::rate_limit::{rate_limit_middleware, RateLimiter};
+use crate::middleware::rate_limit::{ip_rate_limit_middleware, rate_limit_middleware, IpRateLimiter, RateLimiter};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -356,11 +356,9 @@ async fn main() {
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
         .route("/api/timezones/", get(routes::misc::timezones))
-        .route("/api/auth/login/", post(routes::auth::login))
         .route("/api/auth/refresh/", post(routes::auth::refresh))
         .route("/api/auth/logout/", post(routes::auth::logout))
         .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))
-        .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
         .route(
             "/api/workspaces/:slug/export-issues/",
             post(routes::misc::create_export).get(routes::misc::export_history),
@@ -410,7 +408,20 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/analytic-view/",
             get(routes::analytic::list_views).post(routes::analytic::create_view),
-        )
+        );
+
+    // Login + OAuth callback di-limit per-IP (5/mnt); refresh/logout/start bebas.
+    let auth_router = Router::new()
+        .route("/api/auth/login/", post(routes::auth::login))
+        .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
+        .route_layer(axum_middleware::from_fn_with_state(
+            IpRateLimiter::new(5, std::time::Duration::from_secs(60)),
+            ip_rate_limit_middleware,
+        ));
+
+    let app = Router::new()
+        .merge(auth_router)
+        .merge(app)
         .with_state(state::AppState { pool, redis, config: cfg.clone() })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
@@ -434,5 +445,8 @@ async fn main() {
         .await
         .unwrap();
     tracing::info!("rust-api listening on {}", cfg.port);
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    ).await.unwrap();
 }

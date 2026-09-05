@@ -1,4 +1,6 @@
 use std::{
+    collections::HashMap,
+    net::IpAddr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -7,8 +9,9 @@ use axum::{
     extract::{Request, State},
     http::StatusCode,
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
+use serde_json::json;
 
 /// Token-bucket backstop mirroring DRF throttle intent
 /// (`plane/settings/common.py`: anon 30/min, API-key 60/min).
@@ -84,5 +87,53 @@ pub async fn rate_limit_middleware(
         Ok(next.run(req).await)
     } else {
         Err(StatusCode::TOO_MANY_REQUESTS)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IpRateLimiter {
+    buckets: Arc<Mutex<HashMap<IpAddr, Bucket>>>,
+    quota: u64,
+    per: Duration,
+}
+
+impl IpRateLimiter {
+    pub fn new(quota: u64, per: Duration) -> Self {
+        Self { buckets: Arc::new(Mutex::new(HashMap::new())), quota, per }
+    }
+    pub fn allow_ip(&self, ip: IpAddr) -> bool {
+        let mut map = self.buckets.lock().unwrap();
+        if map.len() > 10_000 {
+            map.clear();
+        }
+        map.entry(ip).or_insert_with(|| Bucket::new(self.quota, self.per)).allow(Instant::now())
+    }
+}
+
+/// Ekstrak IP: X-Forwarded-For pertama → ConnectInfo → loopback.
+pub fn client_ip(req: &Request, fallback: IpAddr) -> IpAddr {
+    if let Some(xff) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = xff.split(',').next() {
+            if let Ok(ip) = first.trim().parse() {
+                return ip;
+            }
+        }
+    }
+    req.extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|c| c.0.ip())
+        .unwrap_or(fallback)
+}
+
+pub async fn ip_rate_limit_middleware(
+    State(lim): State<IpRateLimiter>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let ip = client_ip(&req, IpAddr::from([127, 0, 0, 1]));
+    if lim.allow_ip(ip) {
+        next.run(req).await
+    } else {
+        (StatusCode::TOO_MANY_REQUESTS, axum::Json(json!({"error": "rate limit exceeded"}))).into_response()
     }
 }
