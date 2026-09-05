@@ -3367,23 +3367,25 @@ pub(crate) fn archive_group_by_allowlist_error(
     }
 }
 
-/// Known-gap 400 body for truthy `group_by`/`sub_group_by` that survive the
-/// conflict + allowlist checks. Django would 200 with the
-/// `GroupedOffsetPaginator` / `SubGroupedOffsetPaginator` grouped-dict
-/// shape (`paginator.py:195-633`, FIELD_MAPPER key swaps,
-/// `archive.py:148-209`) — implementing that path is out of scope, so this
-/// endpoint 400s instead. Plain descriptive string (NOT a Django message):
-/// unreachable in the default FE flows (only 2 `getArchivedIssues` callers,
-/// both in `archived/issue.store.ts` flat flow; archived page is
-/// hardcoded list-layout, `groupedBy` never passed) — a user-set display
-/// `group_by` hits it.
+/// Known-gap 400 body for truthy `group_by` that survives the conflict +
+/// allowlist checks. Django would 200 with the `GroupedOffsetPaginator` /
+/// `SubGroupedOffsetPaginator` grouped-dict shape (`paginator.py:195-633`,
+/// FIELD_MAPPER key swaps, `archive.py:148-209`) — implementing that path
+/// is out of scope, so this endpoint 400s instead. Plain descriptive
+/// string (NOT a Django message): unreachable in the default FE flows
+/// (only 2 `getArchivedIssues` callers, both in `archived/issue.store.ts`
+/// flat flow; archived page is hardcoded list-layout, `groupedBy` never
+/// passed) — a user-set display `group_by` hits it. A lone `sub_group_by`
+/// is ignored (flat path), exactly like Django.
 pub(crate) const ARCHIVE_GROUPING_UNSUPPORTED_MSG: &str = "Grouped pagination is not supported";
 
 /// Truthiness mirrors Django's `if group_by:` (`archive.py:140`, where the
-/// param defaults to `False`): absent or `""` is flat, anything else is
-/// grouped.
-pub(crate) fn archive_grouping_unsupported(group_by: Option<&str>, sub_group_by: Option<&str>) -> bool {
-    group_by.is_some_and(|g| !g.is_empty()) || sub_group_by.is_some_and(|s| !s.is_empty())
+/// param defaults to `False`): a lone `sub_group_by` is ignored entirely
+/// (flat path — no gap-400 and no allowlist-400, since the allowlist block
+/// in `paginate` is nested under truthy `group_by`). Only truthy `group_by`
+/// groups.
+pub(crate) fn archive_grouping_unsupported(group_by: Option<&str>, _sub_group_by: Option<&str>) -> bool {
+    group_by.is_some_and(|g| !g.is_empty())
 }
 
 /// Mirrors `show_sub_issues = request.GET.get("show_sub_issues", "true")`
@@ -3455,14 +3457,6 @@ pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.
      (SELECT COUNT(*) FROM issue_links lin \
        WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
      i.is_draft, i.archived_at, s.\"group\" AS state_group, \
-     i.created_at, i.updated_at, \
-     i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
-     (SELECT COUNT(*) FROM file_assets fa \
-       WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
-       AND fa.deleted_at IS NULL) AS attachment_count, \
-     (SELECT COUNT(*) FROM issue_links lin \
-       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
-     i.is_draft, i.archived_at, s.\"group\" AS state_group, \
      COALESCE((SELECT array_agg(ia.assignee_id ORDER BY ia.created_at DESC) FROM issue_assignees ia \
        WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, \
      COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
@@ -3472,6 +3466,25 @@ pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.
        WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL \
        AND m.archived_at IS NULL), '{}'::uuid[]) AS module_ids \
      FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id";
+
+/// Counts the top-level SELECT columns in `ARCHIVE_SELECT_SQL` (commas at
+/// paren depth 0, plus one). Locks the 26-`ArchiveRow`-field projection:
+/// sqlx maps `query_as` positionally, so a duplicated (or dropped) column
+/// fails at runtime instead of compile time. Test-only.
+#[cfg(test)]
+pub(crate) fn archive_select_column_count() -> usize {
+    let mut depth = 0usize;
+    let mut commas = 0usize;
+    for c in ARCHIVE_SELECT_SQL.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => commas += 1,
+            _ => {}
+        }
+    }
+    commas + 1
+}
 
 /// Shared WHERE clause for the `archived-issues/` COUNT + page queries:
 /// the archive queryset (`archive.py:97-103`) — plain `Issue.objects`
@@ -3530,10 +3543,11 @@ fn push_archive_where(
 ///
 /// Deviations (reviewer-adjudicable, Django-literal readings): grouped
 /// pagination (`GroupedOffsetPaginator` / `SubGroupedOffsetPaginator`,
-/// `archive.py:148-209`) is OUT — truthy `group_by`/`sub_group_by` 400
-/// here (`ARCHIVE_GROUPING_UNSUPPORTED_MSG`, known gap) instead of
-/// Django's grouped 200, AFTER the byte-exact allowlist 400 for invalid
-/// fields (`paginator.py:690-699`); unreachable in the default FE flows
+/// `archive.py:148-209`) is OUT — truthy `group_by` 400 here
+/// (`ARCHIVE_GROUPING_UNSUPPORTED_MSG`, known gap) instead of Django's
+/// grouped 200, AFTER the byte-exact allowlist 400 for invalid fields
+/// (`paginator.py:690-699`); a lone `sub_group_by` is ignored (flat path),
+/// exactly like Django (`if group_by:`, `archive.py:140`); unreachable in the default FE flows
 /// (archived callers never pass `groupedBy`, archived page is
 /// hardcoded list-layout);
 /// `label_ids`/`assignee_ids` arrays carry `ORDER BY bridge.created_at
@@ -3789,17 +3803,18 @@ mod batch_c_i4_tests {
 
     #[test]
     fn archive_grouping_gap_400_matches_reviewer_scope() {
-        // Known gap (grouped paginators OUT): any truthy
-        // `group_by`/`sub_group_by` that survives the conflict + allowlist
-        // checks 400s instead of Django's grouped 200. Unreachable in the
-        // default FE flows (archived callers never pass groupedBy; archived
-        // page is list-layout) — a user-set display group_by hits it.
+        // Known gap (grouped paginators OUT): truthy `group_by` that
+        // survives the conflict + allowlist checks 400s instead of
+        // Django's grouped 200. A lone `sub_group_by` is IGNORED —
+        // Django `if group_by:` (`archive.py:140`) never groups on it, so
+        // it takes the flat path (no gap-400, no allowlist-400).
         assert!(archive_grouping_unsupported(Some("priority"), None));
-        assert!(archive_grouping_unsupported(None, Some("priority")));
         assert!(archive_grouping_unsupported(Some("priority"), Some("state__group")));
         assert!(!archive_grouping_unsupported(None, None));
         assert!(!archive_grouping_unsupported(Some(""), Some("")));
         assert!(!archive_grouping_unsupported(Some(""), None));
+        assert!(!archive_grouping_unsupported(None, Some("priority")));
+        assert!(!archive_grouping_unsupported(None, Some("zzz")));
         assert_eq!(ARCHIVE_GROUPING_UNSUPPORTED_MSG, "Grouped pagination is not supported");
     }
 
@@ -3822,6 +3837,14 @@ mod batch_c_i4_tests {
             ARCHIVE_SELECT_SQL.contains("ss.deleted_at IS NULL AND ss.\"group\" <> 'triage'"),
             "sub_issues_count state predicate"
         );
+    }
+
+    #[test]
+    fn archive_select_column_count_matches_row() {
+        // `ARCHIVE_SELECT_SQL` must project exactly the 26 `ArchiveRow`
+        // fields: sqlx maps `query_as` positionally, so a duplicated (or
+        // dropped) column fails at runtime, not compile time.
+        assert_eq!(archive_select_column_count(), 26);
     }
 
     #[test]
