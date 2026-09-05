@@ -235,6 +235,46 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issue-dates/",
             post(routes::issue_dates::bulk_update_dates),
         )
+        // Parity with `IssueVersionEndpoint`
+        // (`views/issue/version.py:27-74`, `urls/issue.py:256-265`): GET
+        // cursor-paginated 10-key list + GET single full snapshot (issues
+        // path ONLY). List ordering is the model `Meta.ordering =
+        // ("-created_at",)` (`db/models/issue.py:731`); gate
+        // ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/versions/",
+            get(routes::versions::issue_versions_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/versions/:pk/",
+            get(routes::versions::issue_version_detail),
+        )
+        // Parity with `WorkItemDescriptionVersionEndpoint`
+        // (`views/issue/version.py:77-144`, `urls/issue.py:266-275`): GET
+        // list (explicit `.order_by("-created_at")`) + GET single 14-key
+        // detail, with the guest-403 gate. Work-items path ONLY — Django
+        // defines NO `issues/:id/description-versions/` route.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/work-items/:work_item_id/description-versions/",
+            get(routes::versions::desc_versions_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/work-items/:work_item_id/description-versions/:pk/",
+            get(routes::versions::desc_version_detail),
+        )
+        // Parity with `IntakeWorkItemDescriptionVersionEndpoint`
+        // (`views/intake/base.py:572-640`, `urls/intake.py:56-65`): same
+        // 10-key list (NO explicit ordering — mirrored literally) + same
+        // 14-key single + same guest-403 gate, over the same
+        // `issue_description_versions` table.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-work-items/:work_item_id/description-versions/",
+            get(routes::versions::intake_desc_versions_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-work-items/:work_item_id/description-versions/:pk/",
+            get(routes::versions::intake_desc_version_detail),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),

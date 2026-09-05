@@ -30,3 +30,4 @@ pub mod workspace;
 pub mod history;
 pub mod userprops;
 pub mod issue_dates;
+pub mod versions;
