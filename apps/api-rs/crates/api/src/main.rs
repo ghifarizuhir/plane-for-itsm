@@ -8,7 +8,7 @@ mod state;
 use axum::{
     http::StatusCode,
     middleware as axum_middleware,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -495,9 +495,100 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/modules/:pk/",
             get(routes::module::detail)
+                .put(routes::module::update)
                 .patch(routes::module::patch)
                 .delete(routes::module::destroy),
         )
+        // Parity with `ModuleIssueViewSet.list/create_module_issues`
+        // (`views/module/issue.py:94-254`, `urls/module.py:41-45`): GET 200
+        // cursor-paginated envelope (order default `created_at` ASC,
+        // module/link/attachment/sub-issues annotations; grouped shapes OUT
+        // — flat envelope) + POST **201** `{"message":"success"}` (issues
+        // re-scoped to ws+project, unknown silently dropped). Gate
+        // ADMIN/MEMBER. `group_by==sub_group_by` → 400 verbatim.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/",
+            get(routes::module::issues_list).post(routes::module::issues_create),
+        )
+        // Parity with `ModuleIssueViewSet.create_issue_modules`
+        // (`views/module/issue.py:256-323`, `urls/module.py:36-40`): POST
+        // **201** `{"message":"success"}` always, even with empty lists;
+        // added modules NOT scoped (replicated as-is). Gate ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/modules/",
+            post(routes::module::issue_modules_create),
+        )
+        // Parity with `ModuleIssueViewSet.destroy`
+        // (`views/module/issue.py:325-345`, `urls/module.py:46-57`): DELETE
+        // **204** always, even with 0 rows (soft-delete; missing link → 204
+        // idempotent, Django `.first().module` crash normalized). Gate
+        // ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/",
+            delete(routes::module::issue_destroy),
+        )
+        // Parity with `ModuleLinkViewSet.list/create`
+        // (`views/module/base.py:762-788`, `urls/module.py:58-62`): GET 200
+        // (order `-created_at`) + POST **201** (prepend `http://` when the
+        // scheme is missing). Gate SAFE = any active member incl GUEST,
+        // unsafe = ADMIN/MEMBER (DRF `{"detail": ...}` deny).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/module-links/",
+            get(routes::module::links_list).post(routes::module::links_create),
+        )
+        // Parity with `ModuleLinkViewSet.retrieve/update/partial_update/
+        // destroy` (`urls/module.py:63-74`): GET 200 + PUT/PATCH 200 (dup
+        // url on update → 400 sic `"URL already exists for this Issue"`) +
+        // DELETE **204**. Bad url → 400 field errors. Same entity gate.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/module-links/:pk/",
+            get(routes::module::link_detail)
+                .put(routes::module::link_put)
+                .patch(routes::module::link_patch)
+                .delete(routes::module::link_destroy),
+        )
+        // Parity with `ModuleFavoriteViewSet.create/destroy`
+        // (`views/module/base.py:791-822`, `urls/module.py:75-84`): POST 204
+        // (dup → 400 `{"error":"The payload is not valid"}`, NO
+        // module-existence check) + DELETE 204 (miss → 404). Gate Lite (any
+        // active member; DRF `{"detail": ...}` deny). NO GET — the E3
+        // contract wires POST+DELETE only.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/",
+            post(routes::module::fav_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/:module_id/",
+            delete(routes::module::fav_destroy),
+        )
+        // Parity with `ModuleArchiveUnarchiveEndpoint.post/delete`
+        // (`views/module/archive.py:544-565`, `urls/module.py:90-94`): POST
+        // 200 `{"archived_at"}` (wrong status → 400 verbatim) + DELETE 204
+        // (no status check). Gate ADMIN/MEMBER (DRF `{"detail": ...}` deny).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/archive/",
+            post(routes::module::archive).delete(routes::module::unarchive),
+        )
+        // Parity with `ModuleArchiveUnarchiveEndpoint.get`
+        // (`views/module/archive.py:258-309,310-542`, `urls/module.py:
+        // 95-104`): archived-only list/detail 200 (list shape OMITS
+        // `logo_props,estimate_points`; detail + link/sub-issues/
+        // distribution/estimate_distribution). Gate SAFE (any active
+        // member; DRF `{"detail": ...}` deny).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archived-modules/",
+            get(routes::module::archived_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archived-modules/:pk/",
+            get(routes::module::archived_detail),
+        )
+        // Parity with `WorkspaceModulesEndpoint.get`
+        // (`views/workspace/module.py:25-132`): GET 200 cross-project
+        // `ModuleSerializer[]` (member-projects only, archived excluded).
+        // Gate = any ACTIVE ws member; deny is the DRF permission-class 403
+        // `{"detail": ...}`.
+        .route("/api/workspaces/:slug/modules/", get(routes::module::workspace_modules))
         .route(
             "/api/workspaces/:slug/projects/:project_id/states/",
             get(routes::state::list).post(routes::state::create),
