@@ -356,6 +356,7 @@ async fn main() {
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
         .route("/api/timezones/", get(routes::misc::timezones))
+        .route("/api/instances/", get(routes::instance::get))
         .route("/api/auth/refresh/", post(routes::auth::refresh))
         .route("/api/auth/logout/", post(routes::auth::logout))
         .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))

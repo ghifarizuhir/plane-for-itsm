@@ -13,6 +13,7 @@ pub mod view;
 pub mod webhook;
 pub mod work_item;
 pub mod health;
+pub mod instance;
 pub mod issue;
 pub mod label;
 pub mod module;
