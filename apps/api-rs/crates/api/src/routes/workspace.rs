@@ -137,6 +137,9 @@ pub async fn list(
 /// Owner = token user (Django `WorkSpaceViewSet` sets owner=request.user);
 /// `timezone`/`background_color` mirror model defaults (`UTC` + random hex,
 /// `plane/db/models/workspace.py:138-139`, `plane/utils/color.py:9`).
+/// Mirrors `base.py:124-129`: creator is added as `WorkspaceMember`
+/// with `role=20` (ADMIN) in the same transaction, so membership-gated
+/// endpoints don't 403 on freshly created workspaces.
 pub async fn create(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -145,6 +148,10 @@ pub async fn create(
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let owner = auth.0;
     let color = format!("#{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
+    let mut tx = st.pool.begin().await.map_err(|e| {
+        tracing::warn!(error = %e, "ws-create: begin transaction failed");
+        common::errors::AppError(anyhow::anyhow!("internal error"))
+    })?;
     let row = sqlx::query_as::<_, common::models::workspace::Workspace>(
         "INSERT INTO workspaces (id, name, slug, owner_id, timezone, background_color, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'UTC', $4, now(), now()) RETURNING id, name, slug",
     )
@@ -152,8 +159,55 @@ pub async fn create(
     .bind(&body.slug)
     .bind(owner)
     .bind(&color)
-    .fetch_one(&st.pool)
-    .await?;
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| {
+        tracing::warn!(error = %e, "ws-create: workspace insert failed");
+        common::errors::AppError(anyhow::anyhow!("internal error"))
+    })?;
+    // `view_props`/`default_props` mirror Django `get_default_props()`,
+    // `issue_props` mirrors `get_issue_props()`.
+    let view_props = serde_json::json!({
+        "filters": {
+            "priority": null, "state": null, "state_group": null,
+            "assignees": null, "created_by": null, "labels": null,
+            "start_date": null, "target_date": null, "subscriber": null,
+        },
+        "display_filters": {
+            "group_by": null, "order_by": "-created_at", "type": null,
+            "sub_issue": true, "show_empty_groups": true,
+            "layout": "list", "calendar_date_range": "",
+        },
+        "display_properties": {
+            "assignee": true, "attachment_count": true, "created_on": true,
+            "due_date": true, "estimate": true, "key": true, "labels": true,
+            "link": true, "priority": true, "start_date": true, "state": true,
+            "sub_issue_count": true, "updated_on": true,
+        },
+    });
+    let issue_props = serde_json::json!({"subscribed": true, "assigned": true, "created": true, "all_issues": true});
+    if sqlx::query(
+        "INSERT INTO workspace_members \
+         (id, workspace_id, member_id, role, created_by_id, view_props, \
+          default_props, issue_props, is_active, getting_started_checklist, \
+          tips, explored_features, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, 20, $2, $3, $3, $4, true, '{}', '{}', '{}', now(), now())",
+    )
+    .bind(row.id)
+    .bind(owner)
+    .bind(&view_props)
+    .bind(&issue_props)
+    .execute(&mut *tx)
+    .await
+    .is_err()
+    {
+        tracing::warn!("ws-create: member insert failed");
+        return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
+    }
+    if tx.commit().await.is_err() {
+        tracing::warn!("ws-create: commit failed");
+        return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
+    }
     Ok((
         StatusCode::CREATED,
         Json(WorkspaceOut {
