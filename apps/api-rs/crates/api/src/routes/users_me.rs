@@ -22,7 +22,7 @@ pub fn email_code_key(uid: &uuid::Uuid, email: &str) -> String {
 
 /// 6 digit seperti Django `secrets.randbelow(900000) + 100000`.
 pub fn new_email_code() -> String {
-    let n: u32 = rand::random::<u32>() % 900000 + 100000;
+    let n: u32 = rand::random_range(100000..1000000);
     format!("{n:06}")
 }
 
@@ -53,13 +53,19 @@ async fn validate_new_email(
         return Err((StatusCode::BAD_REQUEST, plain_error("New email must be different from current email")));
     }
     // NOTE: tabel `users` tidak punya `deleted_at` (skema aktual) — filter email saja.
-    let taken: Option<bool> =
-        sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
-            .bind(&email)
-            .bind(uid)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None);
+    // Galat DB di sini jangan fail-open (bisa melewatkan duplikat) — balas 500.
+    let taken: Option<bool> = match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
+        .bind(&email)
+        .bind(uid)
+        .fetch_optional(pool)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "generate-code: duplicate-email check failed");
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        }
+    };
     if taken == Some(true) {
         return Err((StatusCode::BAD_REQUEST, plain_error("An account with this email already exists")));
     }
@@ -73,11 +79,18 @@ pub async fn generate_email_code(
     auth: AuthUser,
     Json(body): Json<EmailBody>,
 ) -> (StatusCode, Json<Value>) {
-    let email_row: Option<(String,)> = sqlx::query_as("SELECT email FROM users WHERE id = $1")
+    // Galat DB = 500; hanya user yang benar-benar hilang yang jadi 401.
+    let email_row: Option<(String,)> = match sqlx::query_as("SELECT email FROM users WHERE id = $1")
         .bind(auth.0)
         .fetch_optional(&st.pool)
         .await
-        .unwrap_or(None);
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "generate-code: current-email lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
     let Some((current,)) = email_row else {
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
     };
@@ -89,13 +102,29 @@ pub async fn generate_email_code(
         Ok(c) => c,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))),
     };
+    // INCR gagal = fail-closed (anggap budget habis) agar throttle tak bisa
+    // dilewati saat Redis bermasalah.
     let count: i64 = redis::cmd("INCR")
         .arg(email_code_throttle_key(&auth.0))
         .query_async(&mut conn)
         .await
         .unwrap_or(4);
     if count == 1 {
-        let _: () = redis::cmd("EXPIRE").arg(email_code_throttle_key(&auth.0)).arg(3600).query_async(&mut conn).await.unwrap_or(());
+        // Tanpa TTL, kunci throttle mengunci user selamanya — kalau EXPIRE
+        // gagal, hapus kuncinya agar hitungan mulai bersih di percobaan berikut.
+        let expire: redis::RedisResult<()> = redis::cmd("EXPIRE")
+            .arg(email_code_throttle_key(&auth.0))
+            .arg(3600)
+            .query_async(&mut conn)
+            .await;
+        if let Err(e) = expire {
+            tracing::warn!(error = %e, "generate-code: EXPIRE throttle failed, resetting key");
+            let _: () = redis::cmd("DEL")
+                .arg(email_code_throttle_key(&auth.0))
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(());
+        }
     }
     if count > 3 {
         return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error_code": 5900, "error_message": "RATE_LIMIT_EXCEEDED"})));
@@ -132,6 +161,8 @@ mod tests {
         for _ in 0..200 {
             let c = new_email_code();
             assert!(c.len() == 6 && c.bytes().all(|b| b.is_ascii_digit()));
+            let n: u32 = c.parse().expect("kode harus numerik");
+            assert!((100000..=999999).contains(&n));
         }
     }
 }
