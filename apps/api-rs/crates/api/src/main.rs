@@ -88,6 +88,20 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/list/",
             get(routes::issue::list_by_ids),
         )
+        // Parity with `BulkDeleteIssuesEndpoint.delete`
+        // (`views/issue/base.py:773-797`, `urls/issue.py:94-96`): DELETE
+        // with JSON body (Axum `Json` reads DELETE bodies; live-curl proof
+        // deferred to T13).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/bulk-delete-issues/",
+            delete(routes::issue::bulk_delete),
+        )
+        // Parity with `BulkArchiveIssuesEndpoint.post`
+        // (`views/issue/archive.py:305-343`, `urls/issue.py:99-101`).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/bulk-archive-issues/",
+            post(routes::issue::bulk_archive),
+        )
         // Parity with `IssueDetailEndpoint.get`
         // (`views/issue/base.py:1027-1103`, `urls/issue.py:48-50`): static
         // `issues-detail` wins over `:pk`-style routes in Axum (same as the

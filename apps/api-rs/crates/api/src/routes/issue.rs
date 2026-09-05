@@ -2753,3 +2753,342 @@ mod issue_detail_tests {
         assert_eq!(GENERIC_500_MSG, "Something went wrong please try again later");
     }
 }
+
+// ---- Batch C I3 ----
+
+/// Body for the bulk issue endpoints. Mirrors
+/// `request.data.get("issue_ids", [])` (`base.py:776`,
+/// `archive.py:310`): a missing key defaults to `[]`, which then 400s via
+/// `require_issue_ids`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BulkIssueIds {
+    #[serde(default)]
+    pub issue_ids: Vec<uuid::Uuid>,
+}
+
+/// Mirrors `if not len(issue_ids)` (`base.py:778-779`,
+/// `archive.py:312-313`) → 400 `{"error": "Issue IDs are required"}`.
+pub(crate) fn require_issue_ids(ids: &[uuid::Uuid]) -> Result<(), &'static str> {
+    if ids.is_empty() {
+        Err("Issue IDs are required")
+    } else {
+        Ok(())
+    }
+}
+
+/// Error code for archiving a non-done issue, byte-exact from
+/// `plane/utils/error_codes.py:7` (`"INVALID_ARCHIVE_STATE_GROUP": 4091`).
+pub(crate) const INVALID_ARCHIVE_STATE_GROUP_CODE: i32 = 4091;
+pub(crate) const INVALID_ARCHIVE_STATE_GROUP_MSG: &str = "INVALID_ARCHIVE_STATE_GROUP";
+
+/// Mirrors the per-issue check in `BulkArchiveIssuesEndpoint.post`
+/// (`archive.py:319-327`): only `completed`/`cancelled` state groups may
+/// archive — anything else → `Err((4091, "INVALID_ARCHIVE_STATE_GROUP"))`.
+pub(crate) fn guard_archive_group(group: &str) -> Result<(), (i32, &'static str)> {
+    if group == "completed" || group == "cancelled" {
+        Ok(())
+    } else {
+        Err((
+            INVALID_ARCHIVE_STATE_GROUP_CODE,
+            INVALID_ARCHIVE_STATE_GROUP_MSG,
+        ))
+    }
+}
+
+/// Mirrors `f"{total_issues} issues were deleted"` (`base.py:794-797`):
+/// always plural; `n` is the PRE-delete queryset count, not rows-affected.
+pub(crate) fn delete_message(n: i64) -> String {
+    format!("{n} issues were deleted")
+}
+
+/// DELETE `/api/workspaces/:slug/projects/:project_id/bulk-delete-issues/`
+/// — parity with Django `BulkDeleteIssuesEndpoint.delete`
+/// (`plane/app/views/issue/base.py:773-797`, `urls/issue.py:94-96`).
+///
+/// - Gate: PROJECT-level ADMIN-only (`@allow_permission([ROLE.ADMIN])`,
+///   `base.py:774`, default `level="PROJECT"`): the allowed-role branch needs
+///   role 20, expressed through the shared `project_gate_allows` (same
+///   fallback branch as I1 — any active membership + workspace ADMIN);
+///   otherwise 403 `deny()`.
+/// - Empty/missing `issue_ids` → 400 `{"error": "Issue IDs are required"}`
+///   (`base.py:778-779`).
+/// - Single transaction: PRE-delete scoped count (`base.py:782`, `len()` of
+///   the pre-delete queryset) → soft-delete `cycle_issues` bridges
+///   (`base.py:786`) + `module_issues` bridges (`base.py:789`) → soft-delete
+///   the issues (`base.py:792`) → 200 `{"message": "{n} issues were deleted"}`
+///   (`base.py:794-797`). Bridge scope mirrors `issue__in=issues` via an
+///   issue-subquery (same ws+project+ids+live set).
+/// - FE `bulkDeleteIssues` (`issue.service.ts:347-360`) sends an axios
+///   DELETE with body — Axum's `Json` extractor reads DELETE bodies
+///   (live-curl proof deferred to T13).
+///
+/// Deviations: bridge deletes are soft-deletes (`deleted_at=now()`, Django's
+/// `SoftDeletionQuerySet.delete`, `mixins.py:48-53` — NOT hard `DELETE`s);
+/// the issue scope is ws slug + project + `id = ANY(ids)` + live
+/// (`deleted_at IS NULL`) and does NOT apply `IssueManager`'s
+/// triage/archived/draft/project-archived exclusions
+/// (`db/models/issue.py:92-101`) per the batch scope; Celery/activity writes
+/// are skipped (batch-wide precedent: Rust never writes activities).
+pub async fn bulk_delete(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<BulkIssueIds>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // PROJECT-level ADMIN-only gate (`permissions/base.py:53-78` with
+    // `allowed_roles=[ADMIN]`): allowed-role branch needs role 20; the
+    // fallback (any active membership + workspace ADMIN) is shared.
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(member_role == Some(20), member_role.is_some(), ws_admin) {
+        return Ok(deny());
+    }
+    if require_issue_ids(&body.issue_ids).is_err() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Issue IDs are required"})),
+        ));
+    }
+    let mut tx = st.pool.begin().await?;
+    // PRE-delete queryset count (`total_issues = len(issues)`, `base.py:782`).
+    let total: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issues \
+         WHERE project_id = $1 \
+         AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND id = ANY($3) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .fetch_one(&mut *tx)
+    .await?;
+    // `CycleIssue.objects.filter(issue__in=issues).delete()` (`base.py:786`).
+    sqlx::query(
+        "UPDATE cycle_issues SET deleted_at = now() WHERE deleted_at IS NULL \
+         AND issue_id IN (SELECT id FROM issues \
+           WHERE project_id = $1 \
+           AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+           AND id = ANY($3) AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .execute(&mut *tx)
+    .await?;
+    // `ModuleIssue.objects.filter(issue__in=issues).delete()` (`base.py:789`).
+    sqlx::query(
+        "UPDATE module_issues SET deleted_at = now() WHERE deleted_at IS NULL \
+         AND issue_id IN (SELECT id FROM issues \
+           WHERE project_id = $1 \
+           AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+           AND id = ANY($3) AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .execute(&mut *tx)
+    .await?;
+    // `issues.delete()` (`base.py:792`): soft-delete via the default manager.
+    sqlx::query(
+        "UPDATE issues SET deleted_at = now() \
+         WHERE project_id = $1 \
+         AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND id = ANY($3) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!({"message": delete_message(total.0)})),
+    ))
+}
+
+/// POST `/api/workspaces/:slug/projects/:project_id/bulk-archive-issues/`
+/// — parity with Django `BulkArchiveIssuesEndpoint.post`
+/// (`plane/app/views/issue/archive.py:305-343`, `urls/issue.py:99-101`).
+///
+/// - Gate: `ProjectEntityPermission` (unsafe methods need role ∈
+///   {ADMIN, MEMBER}, `permissions/project.py:104-119` — GUEST denies)
+///   COMBINED with `@allow_permission([ADMIN, MEMBER])`
+///   (`archive.py:306,308`): the entity perm already denies guests, so the
+///   decorator fallback can never admit anyone new — effective gate is
+///   `role ∈ {20, 15}`, no fallback; otherwise 403 `deny()`.
+/// - Empty/missing `issue_ids` → 400 `{"error": "Issue IDs are required"}`
+///   (`archive.py:312-313`).
+/// - Issues loaded scoped (ws+project+ids, live only) with the state group
+///   (`select_related("state")`, `archive.py:315-317`); if ANY
+///   `state.group ∉ {completed, cancelled}` → 400
+///   `{"error_code": 4091, "error_message": "INVALID_ARCHIVE_STATE_GROUP"}`
+///   (`archive.py:319-327`).
+/// - Else `archived_at=today` (+bulk_update, `archive.py:340-342`) → 200
+///   `{"archived_at": "<str(today)>"}`, date-only `YYYY-MM-DD`
+///   (`archive.py:343`). Single transaction.
+///
+/// Deviations: per-issue Celery `issue_activity` (`archive.py:328-339`)
+/// skipped (batch-wide precedent); a NULL-state issue maps to 4091 (Django
+/// would raise `AttributeError` on `None.group` → generic 500 — the `not in`
+/// check itself treats a missing group as invalid); `updated_at` is not
+/// bumped (Django `bulk_update(["archived_at"])` writes that column only).
+pub async fn bulk_archive(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<BulkIssueIds>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if !matches!(member_role, Some(20) | Some(15)) {
+        return Ok(deny());
+    }
+    if require_issue_ids(&body.issue_ids).is_err() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Issue IDs are required"})),
+        ));
+    }
+    let mut tx = st.pool.begin().await?;
+    // `Issue.objects.filter(...).select_related("state")`
+    // (`archive.py:315-317`): plain manager = live rows only.
+    let groups: Vec<Option<String>> = sqlx::query_scalar(
+        "SELECT s.\"group\" FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.project_id = $1 \
+         AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND i.id = ANY($3) AND i.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .fetch_all(&mut *tx)
+    .await?;
+    for group in &groups {
+        let valid = match group.as_deref() {
+            Some(g) => guard_archive_group(g).is_ok(),
+            None => false,
+        };
+        if !valid {
+            tx.rollback().await?;
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error_code": INVALID_ARCHIVE_STATE_GROUP_CODE,
+                    "error_message": INVALID_ARCHIVE_STATE_GROUP_MSG,
+                })),
+            ));
+        }
+    }
+    let today = chrono::Utc::now().date_naive();
+    sqlx::query(
+        "UPDATE issues SET archived_at = $4 \
+         WHERE project_id = $1 \
+         AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND id = ANY($3) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(&body.issue_ids)
+    .bind(today)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!({"archived_at": today.to_string()})),
+    ))
+}
+
+#[cfg(test)]
+mod bulk_tests {
+    use super::*;
+
+    #[test]
+    fn guard_archive_group_vectors_match_django() {
+        // Mirrors `BulkArchiveIssuesEndpoint.post` (`archive.py:319-327`):
+        // only `completed`/`cancelled` groups may archive; anything else →
+        // 400 `{"error_code": 4091, "error_message":
+        // "INVALID_ARCHIVE_STATE_GROUP"}` (code `utils/error_codes.py:7`).
+        assert!(guard_archive_group("completed").is_ok());
+        assert!(guard_archive_group("cancelled").is_ok());
+        for bad in ["backlog", "unstarted", "started", "triage", ""] {
+            assert_eq!(
+                guard_archive_group(bad).unwrap_err(),
+                (4091, "INVALID_ARCHIVE_STATE_GROUP"),
+                "group {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn delete_message_matches_django() {
+        // Mirrors `BulkDeleteIssuesEndpoint.delete` (`base.py:794-797`):
+        // `f"{total_issues} issues were deleted"` (always plural, count is
+        // the PRE-delete queryset length).
+        assert_eq!(delete_message(3), "3 issues were deleted");
+        assert_eq!(delete_message(0), "0 issues were deleted");
+        assert_eq!(delete_message(1), "1 issues were deleted");
+    }
+
+    #[test]
+    fn require_issue_ids_matches_django() {
+        // Mirrors `if not len(issue_ids)` (`base.py:778-779`,
+        // `archive.py:312-313`): missing defaults to `[]` (serde) and empty
+        // → 400 `{"error": "Issue IDs are required"}`.
+        assert_eq!(
+            require_issue_ids(&[]).unwrap_err(),
+            "Issue IDs are required"
+        );
+        assert!(require_issue_ids(&[uuid::Uuid::nil()]).is_ok());
+    }
+
+    #[test]
+    fn bulk_delete_gate_is_admin_only_with_django_fallback() {
+        // Mirrors `@allow_permission([ROLE.ADMIN])` at PROJECT level
+        // (`base.py:774`, default `level="PROJECT"`,
+        // `permissions/base.py:53-78`): the allowed-role branch needs role
+        // 20 (ADMIN-only — narrower than I1's 20/15/5), while the fallback
+        // branch (any active membership + workspace ADMIN) is unchanged, so
+        // it is expressed through the shared `project_gate_allows` with
+        // `has_allowed_role = (role == Some(20))` — no new gate fn.
+        let allows = |role: Option<i16>, ws_admin: bool| {
+            project_gate_allows(role == Some(20), role.is_some(), ws_admin)
+        };
+        assert!(allows(Some(20), false));
+        assert!(allows(Some(20), true));
+        // Plain non-admin callers deny (no ws-admin fallback).
+        assert!(!allows(Some(15), false));
+        assert!(!allows(Some(5), false));
+        assert!(!allows(None, false));
+        assert!(!allows(None, true));
+        // Django fallback parity: any active membership + ws ADMIN passes.
+        assert!(allows(Some(15), true));
+        assert!(allows(Some(5), true));
+    }
+
+    #[test]
+    fn bulk_archive_gate_is_admin_member_only() {
+        // Mirrors `ProjectEntityPermission` (unsafe: role ∈ {ADMIN, MEMBER},
+        // `permissions/project.py:104-119` — GUEST denies) COMBINED with
+        // `@allow_permission([ADMIN, MEMBER])` (`archive.py:306,308`): the
+        // entity perm already denies guests, so the decorator fallback (any
+        // membership + ws ADMIN) can never admit anyone the entity perm
+        // rejects — effective gate is `role ∈ {20, 15}`, no fallback.
+        let allows = |role: Option<i16>| matches!(role, Some(20) | Some(15));
+        assert!(allows(Some(20)));
+        assert!(allows(Some(15)));
+        assert!(!allows(Some(5)));
+        assert!(!allows(None));
+    }
+
+    #[test]
+    fn bulk_handlers_exist_for_bulk_routes() {
+        // Wiring guard: `main.rs` registers
+        // `DELETE .../bulk-delete-issues/` → `bulk_delete` (Django
+        // `BulkDeleteIssuesEndpoint.delete`, `urls/issue.py:94-96`) and
+        // `POST .../bulk-archive-issues/` → `bulk_archive` (Django
+        // `BulkArchiveIssuesEndpoint.post`, `urls/issue.py:99-101`).
+        let _ = super::bulk_delete;
+        let _ = super::bulk_archive;
+    }
+}
