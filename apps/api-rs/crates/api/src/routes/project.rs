@@ -744,6 +744,91 @@ pub async fn project_details(
     Ok((StatusCode::OK, Json(Value::Array(out))))
 }
 
+/// Query params for `check_identifier`: `?name=` (Django reads
+/// `request.GET.get("name", "")`, so the param is optional here — a missing
+/// param normalizes to `""` and yields the same 400).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct IdentifierQuery {
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// One `project_identifiers` row for `check_identifier`: `id` is `bigint`
+/// (live `\d project_identifiers`), `project` maps `project_id` (Django
+/// `.values("project")` yields the FK id under the field name).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct IdentifierRow {
+    pub(crate) id: i64,
+    pub(crate) name: String,
+    pub(crate) project_id: uuid::Uuid,
+}
+
+/// GET `/api/workspaces/:slug/project-identifiers/` — parity with Django
+/// `ProjectIdentifierEndpoint.get` (`plane/app/views/project/base.py:444-454`).
+///
+/// - Gate: workspace ADMIN/MEMBER only — GUEST (5) and non-members → 403 via
+///   `deny()` (`allow_permission([ADMIN, MEMBER], level="WORKSPACE")`).
+/// - `?name=`: strip + UPPERCASE; missing/empty → 400
+///   `{"error": "Name is required"}`.
+/// - Else 200 `{"exists": <count>, "identifiers": [{"id", "name",
+///   "project"}]}` filtered `name=X AND workspace__slug=slug`.
+///
+/// Deviations: none on the filter — the SELECT mirrors Django exactly (no
+/// `deleted_at` clause: `ProjectIdentifier.objects` is the default manager,
+/// which does not exclude soft-deleted rows); row order follows
+/// `Meta.ordering = ("-created_at",)`. DELETE on this path is out of scope
+/// (FE never calls it).
+pub async fn check_identifier(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+    axum::extract::Query(params): axum::extract::Query<IdentifierQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    match role {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(deny()),
+    }
+    let name = normalize_ident(params.name.as_deref().unwrap_or(""));
+    if let Err(e) = validate_ident_name(&name) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    let rows: Vec<IdentifierRow> = sqlx::query_as(
+        "SELECT pi.id, pi.name, pi.project_id FROM project_identifiers pi \
+         JOIN workspaces w ON w.id = pi.workspace_id \
+         WHERE pi.name = $1 AND w.slug = $2 \
+         ORDER BY pi.created_at DESC",
+    )
+    .bind(&name)
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    let identifiers: Vec<Value> = rows
+        .iter()
+        .map(|r| json!({"id": r.id, "name": r.name, "project": r.project_id}))
+        .collect();
+    Ok((
+        StatusCode::OK,
+        Json(json!({"exists": identifiers.len(), "identifiers": identifiers})),
+    ))
+}
+
+/// Mirrors `ProjectIdentifierEndpoint.get`
+/// (`plane/app/views/project/base.py:444-454`):
+/// `request.GET.get("name", "").strip().upper()`.
+pub(crate) fn normalize_ident(raw: &str) -> String {
+    raw.trim().to_uppercase()
+}
+
+/// Mirrors `base.py:447-448`: missing/empty `name` → 400
+/// `{"error": "Name is required"}`.
+pub(crate) fn validate_ident_name(name: &str) -> Result<(), String> {
+    if name.trim().is_empty() {
+        return Err("Name is required".to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod batch_c_tests {
     use super::*;
@@ -900,5 +985,21 @@ mod batch_c_tests {
         }
         // 36 model columns + 8 annotation keys.
         assert_eq!(v.as_object().unwrap().len(), 44);
+    }
+
+    #[test]
+    fn normalize_ident_strips_and_uppercases() {
+        // Mirrors `ProjectIdentifierEndpoint.get`
+        // (`plane/app/views/project/base.py:444-454`):
+        // `request.GET.get("name", "").strip().upper()`.
+        assert_eq!(normalize_ident("  abc "), "ABC");
+    }
+
+    #[test]
+    fn validate_ident_name_requires_name() {
+        // Mirrors `base.py:447-448`: missing/empty `name` → 400
+        // `{"error": "Name is required"}`.
+        assert_eq!(validate_ident_name(""), Err("Name is required".to_string()));
+        assert!(validate_ident_name("x").is_ok());
     }
 }

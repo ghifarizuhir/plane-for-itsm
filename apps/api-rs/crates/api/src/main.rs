@@ -45,6 +45,10 @@ async fn main() {
             get(routes::project::project_details),
         )
         .route(
+            "/api/workspaces/:slug/project-identifiers/",
+            get(routes::project::check_identifier),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:pk/",
             get(routes::project::detail)
                 .patch(routes::project::patch)
