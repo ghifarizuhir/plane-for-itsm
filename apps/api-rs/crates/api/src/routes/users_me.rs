@@ -145,6 +145,92 @@ pub async fn generate_email_code(
     (StatusCode::OK, Json(json!({"message": "Verification code sent to email"})))
 }
 
+#[derive(Deserialize)]
+pub struct UpdateEmailBody {
+    pub email: Option<String>,
+    pub code: Option<String>,
+}
+
+/// PATCH /api/users/me/email/ — paritas `UserEndpoint.update_email`.
+pub async fn update_email(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<UpdateEmailBody>,
+) -> (StatusCode, Json<Value>) {
+    // Galat DB = 500; hanya user yang benar-benar hilang yang jadi 401.
+    let row: Option<(String,)> = match sqlx::query_as("SELECT email FROM users WHERE id = $1")
+        .bind(auth.0)
+        .fetch_optional(&st.pool)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "update-email: current-email lookup failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    let Some((current,)) = row else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+    };
+    let email = match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
+        Ok(e) => e,
+        Err(err) => return err,
+    };
+    let code = body.code.unwrap_or_default().trim().to_string();
+    if code.is_empty() {
+        return (StatusCode::BAD_REQUEST, plain_error("Verification code is required"));
+    }
+    let mut conn = match st.redis_client().await {
+        Ok(c) => c,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))),
+    };
+    let key = email_code_key(&auth.0, &email);
+    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await.unwrap_or(None);
+    let Some(raw) = cached else {
+        return (StatusCode::BAD_REQUEST, plain_error("Verification code has expired or is invalid"));
+    };
+    let stored: String = serde_json::from_str::<Value>(&raw).ok().and_then(|v| v.get("token").and_then(|t| t.as_str()).map(str::to_string)).unwrap_or_default();
+    if stored != code {
+        return (StatusCode::BAD_REQUEST, plain_error("Invalid verification code"));
+    }
+    // Cek ulang duplikat (bisa diambil user lain antara generate dan update);
+    // galat DB = 500 agar tak fail-open menimpa email duplikat.
+    let taken: Option<bool> = match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
+        .bind(&email).bind(auth.0).fetch_optional(&st.pool).await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "update-email: duplicate-email recheck failed");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        }
+    };
+    if taken == Some(true) {
+        return (StatusCode::BAD_REQUEST, plain_error("An account with this email already exists"));
+    }
+    let upd = sqlx::query("UPDATE users SET email = $1, is_email_verified = false, updated_at = now() WHERE id = $2")
+        .bind(&email).bind(auth.0).execute(&st.pool).await;
+    if upd.is_err() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+    }
+    let _: () = redis::cmd("DEL").arg(&key).query_async(&mut conn).await.unwrap_or(());
+    // Tanpa logout server-side: sesi Rust stateless (JWT ≤15 mnt, refresh
+    // me-resolve uid → email baru berlaku otomatis); frontend sign-out sendiri.
+    let back: Option<(String, String, String)> =
+        match sqlx::query_as("SELECT email, first_name, last_name FROM users WHERE id = $1")
+            .bind(auth.0).fetch_optional(&st.pool).await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "update-email: re-read after update failed");
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            }
+        };
+    match back {
+        Some((email, first, last)) => (StatusCode::OK, Json(json!({"id": auth.0, "email": email, "first_name": first, "last_name": last}))),
+        None => (StatusCode::NOT_FOUND, Json(json!({"error": "User not found"}))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,5 +250,12 @@ mod tests {
             let n: u32 = c.parse().expect("kode harus numerik");
             assert!((100000..=999999).contains(&n));
         }
+    }
+
+    #[test]
+    fn email_update_clears_key_format() {
+        // key yang dihapus setelah sukses harus sama dengan key generate
+        let uid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        assert_eq!(email_code_key(&uid, "n@x.io"), "emailcode:11111111-1111-1111-1111-111111111111:n@x.io");
     }
 }

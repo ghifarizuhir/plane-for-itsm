@@ -383,6 +383,10 @@ async fn main() {
             post(routes::users_me::generate_email_code),
         )
         .route(
+            "/api/users/me/email/",
+            patch(routes::users_me::update_email),
+        )
+        .route(
             "/api/users/me/profile/",
             get(routes::user::profile).patch(routes::user::patch_profile),
         )
