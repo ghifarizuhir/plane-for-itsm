@@ -60,6 +60,26 @@ async fn main() {
         // ACTIVE ws member incl. GUEST (WorkspaceEntityPermission safe
         // branch, `permissions/workspace.py:74-82`).
         .route("/api/workspaces/:slug/states/", get(routes::workspace::ws_states))
+        // Parity with `WorkspaceViewIssuesViewSet.list`
+        // (`views/view/base.py:222-259`, `urls/views.py:51-55`):
+        // GET 200 offset-paginated 26-key `ViewIssueListSerializer` rows,
+        // workspace-scoped with the per-row project-permission predicate
+        // (`_get_project_permission_filters`, `view/base.py:155-171`).
+        // Gate WORKSPACE ADMIN/MEMBER/GUEST (any active ws member 20/15/5).
+        .route("/api/workspaces/:slug/issues/", get(routes::issue_lists::workspace_issues))
+        // Parity with `WorkspaceUserProfileIssuesEndpoint.get`
+        // (`views/workspace/user.py:98-203`,
+        // `urls/workspace.py:152-156`): GET 200 flat `issue_on_results`
+        // (assignee∨creator∨subscriber `:uid`, requester ACTIVE project
+        // member per row). Gate `WorkspaceViewerPermission` (any active ws
+        // member). `group_by==sub_group_by` → 400
+        // `{"error": "Group by and sub group by cannot have same parameters"}`
+        // (`user.py:176-181`); truthy `group_by` grouped shapes are OUT
+        // (Batch F — 400, `archived_list` precedent).
+        .route(
+            "/api/workspaces/:slug/user-issues/:user_id/",
+            get(routes::issue_lists::user_issues),
+        )
         .route(
             "/api/workspaces/:slug/projects/",
             get(routes::project::list).post(routes::project::create),
@@ -145,6 +165,18 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues-detail/",
             get(routes::issue_query::list_detail),
+        )
+        // Parity with `IssuePaginatedViewSet.list`
+        // (`views/issue/base.py:863-972`, `urls/issue.py:54-58`): GET 200
+        // cursor-`paginate()` 26-key rows (27 with `?description=true`),
+        // fixed `ORDER BY updated_at ASC`, `?updated_at__gt` filter, GUEST
+        // scoping to own rows when NOT `guest_view_all_features`
+        // (`base.py:910-920`). Gate ADMIN/MEMBER/GUEST (+ ws-admin
+        // fallback); project miss → 404. NO `v2/work-items/` — Django
+        // defines none.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/v2/issues/",
+            get(routes::issue_lists::v2_issues),
         )
         // Parity with `SubIssuesEndpoint`
         // (`views/issue/sub_issue.py:37-275`, `urls/issue.py:104-108`):
