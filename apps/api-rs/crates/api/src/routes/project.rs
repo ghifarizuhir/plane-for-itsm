@@ -830,6 +830,129 @@ pub(crate) fn validate_ident_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Quoted from `plane/app/views/base.py:80-84` (Django `IntegrityError` →
+/// 400).
+pub(crate) const INVALID_PAYLOAD_MSG: &str = "The payload is not valid";
+
+/// Body for `fav_add`: mirrors `ProjectFavoritesViewSet.create`
+/// (`plane/app/views/project/base.py:514-521`), which reads
+/// `request.data.get("project")` for both `entity_identifier` and
+/// `project_id`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FavProjectBody {
+    pub project: uuid::Uuid,
+}
+
+/// Pure Postgres unique-violation probe. The partial unique constraint
+/// (`entity_type,entity_identifier,user WHERE deleted_at IS NULL`,
+/// `plane/db/models/favorite.py:35-40`) surfaces via sqlx as code `23505`;
+/// callers map it to 400 `{"error": "The payload is not valid"}` like Django
+/// (`views/base.py:80-84`).
+pub(crate) fn is_unique_violation(code: &str) -> bool {
+    code == "23505"
+}
+
+fn is_unique_err(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| is_unique_violation(c.as_ref()))
+        .unwrap_or(false)
+}
+
+/// Maps the `fav_remove` affected-row count to a status: 0 rows means
+/// Django's `.get(...)` raised `ObjectDoesNotExist` → 404 `missing()`
+/// (`views/base.py:92-96`); otherwise 204.
+pub(crate) fn map_fav_error(rows_deleted: u64) -> StatusCode {
+    if rows_deleted == 0 {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::NO_CONTENT
+    }
+}
+
+/// POST `/api/workspaces/:slug/user-favorite-projects/` — parity with Django
+/// `ProjectFavoritesViewSet.create`
+/// (`plane/app/views/project/base.py:514-521`).
+///
+/// - Gate: `AuthUser` only (IsAuthenticated) — NO membership check.
+/// - INSERTs `user_favorites(user, entity_type='project',
+///   entity_identifier=project, project_id=project, workspace from slug)` →
+///   204 empty.
+/// - Duplicate (partial unique `entity_type,entity_identifier,user`,
+///   `favorite.py:35-40`) → 400 `{"error": "The payload is not valid"}`
+///   (Django `IntegrityError` → `views/base.py:80-84`).
+/// - NO GET: Django defines no `serializer_class`; FE uses
+///   `/user-favorites/` instead.
+///
+/// Deviations: `workspace_id` is resolved from the URL slug, while Django's
+/// `WorkspaceBaseModel.save` (`workspace.py:192-195`) derives it from the
+/// linked project's workspace (the slug kwarg is unused in `create`); the
+/// two agree whenever slug matches the project's workspace. FK violations
+/// (unknown project id) surface as 500 via `?`, whereas Django maps every
+/// `IntegrityError` to the same 400.
+pub async fn fav_add(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+    Json(body): Json<FavProjectBody>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let res = sqlx::query(
+        "INSERT INTO user_favorites (id, entity_type, entity_identifier, user_id, is_folder, sequence, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), 'project', $1, $2, false, 65535, $1, w.id, now(), now() FROM workspaces w WHERE w.slug = $3",
+    )
+    .bind(body.project)
+    .bind(auth.0)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await;
+    match res {
+        Ok(done) => {
+            if done.rows_affected() == 0 {
+                return Ok(missing());
+            }
+            Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+        }
+        Err(e) if is_unique_err(&e) => Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": INVALID_PAYLOAD_MSG})),
+        )),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// DELETE `/api/workspaces/:slug/user-favorite-projects/:project_id/` —
+/// parity with Django `ProjectFavoritesViewSet.destroy`
+/// (`plane/app/views/project/base.py:523-531`).
+///
+/// - Gate: `AuthUser` only (IsAuthenticated) — NO membership check.
+/// - Hard-deletes the row matching user + slug + project
+///   (`get(...).delete(soft=False)`) → 204; 0 rows → 404 `missing()`.
+///
+/// Deviations: none on delete semantics — `user_favorites` HAS a
+/// `deleted_at` column (live `\d user_favorites`), but Django passes
+/// `soft=False` so this is a real `DELETE`, mirrored exactly (no
+/// `deleted_at` flag write). The `deleted_at IS NULL` predicate preserves
+/// Django's default-manager behavior (a soft-deleted row is invisible to
+/// `.get()`, hence 404 rather than 204).
+pub async fn fav_remove(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let n = sqlx::query(
+        "DELETE FROM user_favorites uf USING workspaces w WHERE uf.user_id = $1 AND uf.entity_type = 'project' AND uf.entity_identifier = $2 AND uf.project_id = $2 AND uf.workspace_id = w.id AND w.slug = $3 AND uf.deleted_at IS NULL",
+    )
+    .bind(auth.0)
+    .bind(project_id)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if map_fav_error(n) == StatusCode::NOT_FOUND {
+        return Ok(missing());
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 #[cfg(test)]
 mod batch_c_tests {
     use super::*;
@@ -1002,5 +1125,24 @@ mod batch_c_tests {
         // `{"error": "Name is required"}`.
         assert_eq!(validate_ident_name(""), Err("Name is required".to_string()));
         assert!(validate_ident_name("x").is_ok());
+    }
+
+    #[test]
+    fn fav_delete_rows_maps_to_status() {
+        // Mirrors `ProjectFavoritesViewSet.destroy`
+        // (`plane/app/views/project/base.py:523-532`): 0 rows → 404
+        // `missing()`, deleted row → 204.
+        assert_eq!(map_fav_error(0), StatusCode::NOT_FOUND);
+        assert_eq!(map_fav_error(1), StatusCode::NO_CONTENT);
+    }
+
+    #[test]
+    fn unique_violation_detects_postgres_23505() {
+        // Django `IntegrityError` → `views/base.py:80-84`
+        // `{"error": "The payload is not valid"}`; sqlx surfaces Postgres
+        // unique-violation as code `23505`.
+        assert!(is_unique_violation("23505"));
+        assert!(!is_unique_violation("23503"));
+        assert!(!is_unique_violation(""));
     }
 }

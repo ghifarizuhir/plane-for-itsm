@@ -5,7 +5,11 @@ mod middleware;
 mod routes;
 mod state;
 
-use axum::{middleware as axum_middleware, routing::{get, patch, post}, Router};
+use axum::{
+    middleware as axum_middleware,
+    routing::{delete, get, patch, post},
+    Router,
+};
 
 use crate::middleware::rate_limit::{ip_rate_limit_middleware, rate_limit_middleware, IpRateLimiter, RateLimiter};
 use tracing_subscriber::EnvFilter;
@@ -47,6 +51,17 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/project-identifiers/",
             get(routes::project::check_identifier),
+        )
+        // Parity with `ProjectFavoritesViewSet` (`views/project/base.py:498-532`,
+        // `urls/project.py:102-111`): POST-only collection + DELETE-only detail.
+        // NO GET — Django defines no `serializer_class` for this viewset.
+        .route(
+            "/api/workspaces/:slug/user-favorite-projects/",
+            post(routes::project::fav_add),
+        )
+        .route(
+            "/api/workspaces/:slug/user-favorite-projects/:project_id/",
+            delete(routes::project::fav_remove),
         )
         .route(
             "/api/workspaces/:slug/projects/:pk/",
