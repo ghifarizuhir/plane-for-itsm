@@ -197,6 +197,32 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/meta/",
             get(routes::history::meta),
         )
+        // Parity with `ProjectUserDisplayPropertyEndpoint`
+        // (`views/issue/base.py:743-770`, `urls/issue.py:217-221`):
+        // GET 200 + PATCH 200, row auto-created if missing
+        // (`get_or_create` — never 404); gate ADMIN/MEMBER/GUEST. NO POST
+        // (Django defines none; the FE `issue-display-properties/` POST is
+        // FE-dead).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-properties/",
+            get(routes::userprops::project_props_get).patch(routes::userprops::project_props_patch),
+        )
+        // Parity with `CycleUserPropertiesEndpoint`
+        // (`views/cycle/base.py:625-655`, `urls/cycle.py:77-81`):
+        // GET 200 (`get_or_create`) + PATCH **201** (missing row → 404);
+        // PATCH merges only the 4 filter keys. Gate ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/user-properties/",
+            get(routes::userprops::cycle_props_get).patch(routes::userprops::cycle_props_patch),
+        )
+        // Parity with `ModuleUserPropertiesEndpoint`
+        // (`views/module/base.py:825-855`, `urls/module.py:86-90`):
+        // same 200/201/404 semantics as the cycle twin. Gate
+        // ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/modules/:module_id/user-properties/",
+            get(routes::userprops::module_props_get).patch(routes::userprops::module_props_patch),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),

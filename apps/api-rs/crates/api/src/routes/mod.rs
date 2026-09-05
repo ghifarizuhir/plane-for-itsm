@@ -28,3 +28,4 @@ pub mod user;
 pub mod users_me;
 pub mod workspace;
 pub mod history;
+pub mod userprops;
