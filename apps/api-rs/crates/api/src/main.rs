@@ -420,6 +420,11 @@ async fn main() {
         rate_limit_middleware,
     ));
 
+    let app = app.route_layer(axum_middleware::from_fn_with_state(
+        cfg.frontend_url.clone(),
+        crate::middleware::origin::origin_middleware,
+    ));
+
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port))
         .await
         .unwrap();

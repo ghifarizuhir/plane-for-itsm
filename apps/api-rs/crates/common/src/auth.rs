@@ -93,3 +93,25 @@ pub fn clear_cookie_header(name: &str, secure: bool) -> String {
     }
     h
 }
+
+pub fn new_refresh() -> (String, String) {
+    // (sha256hex_untuk_redis, refresh_mentah)
+    let raw = format!("rt_{}", uuid::Uuid::new_v4().simple());
+    (sha256hex(&raw), raw)
+}
+
+pub fn sha256hex(s: &str) -> String {
+    use sha2::Digest;
+    hex_of(&sha2::Sha256::digest(s.as_bytes()))
+}
+
+fn hex_of(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub fn refresh_key(hash: &str) -> String {
+    format!("auth:refresh:{hash}")
+}
+pub fn oauth_key(state: &str) -> String {
+    format!("auth:oauth:{state}")
+}
