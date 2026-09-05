@@ -126,6 +126,15 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues-detail/",
             get(routes::issue::list_detail),
         )
+        // Parity with `SubIssuesEndpoint`
+        // (`views/issue/sub_issue.py:37-275`, `urls/issue.py:104-108`):
+        // GET lists + POST attaches. The extra `sub-issues` segment keeps
+        // it distinct from `.../issues/:pk/` (segment-count distinct, no
+        // conflict — same static-vs-dynamic precedent as `issues/list/`).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/sub-issues/",
+            get(routes::issue::sub_list).post(routes::issue::sub_add),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
