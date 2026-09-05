@@ -225,6 +225,20 @@ pub fn guard_archive(end: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Result<(
     }
 }
 
+/// Mirrors the completed-cycle PATCH gate (`plane/app/views/cycle/base.py:349-357`):
+/// a completed cycle may ONLY be patched when the body contains `sort_order`
+/// (any other key — or none — → 400). Presence of the key is the whole rule.
+pub fn patch_has_sort_order(body: &Value) -> bool {
+    body.get("sort_order").is_some()
+}
+
+/// Mirrors `str(timezone.now())` on aware UTC (`plane/app/views/cycle/archive.py:596-604`):
+/// `"2026-09-06 12:34:56.123456+00:00"` — microsecond precision, `+00:00` suffix
+/// (chrono `to_string()` would emit nanoseconds + a `UTC` suffix instead).
+pub fn format_archived_at(now: DateTime<Utc>) -> String {
+    now.format("%Y-%m-%d %H:%M:%S%.6f+00:00").to_string()
+}
+
 /// Builds a burndown `completion_chart` mirroring
 /// `plane/utils/analytics_plot.py:236-264`: per-day pending =
 /// total − completed-cumulative; future dates → null. `total` is the issue
@@ -714,20 +728,10 @@ pub async fn patch(
         ));
     };
     let completed = cur.end_date.map(|e| e < Utc::now()).unwrap_or(false);
-    let has_sort = body.get("sort_order").is_some();
+    let has_sort = patch_has_sort_order(&body);
     // Completed-cycle rule (`base.py:349-357`): without `sort_order` → 400;
     // with it, apply ONLY that field.
-    if let Err(e) = guard_patch(cur.archived_at.is_some(), completed, {
-        let obj = body.as_object();
-        obj.map(|o| {
-            o.keys()
-                .all(|k| k == "sort_order")
-                || (o.get("name").is_none()
-                    && o.get("start_date").is_none()
-                    && o.get("end_date").is_none())
-        })
-        .unwrap_or(true)
-    }) {
+    if let Err(e) = guard_patch(cur.archived_at.is_some(), completed, has_sort) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     if completed && has_sort {
@@ -1915,7 +1919,7 @@ pub async fn archive(
     .bind(pid)
     .execute(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!({"archived_at": now.to_string()}))))
+    Ok((StatusCode::OK, Json(json!({"archived_at": format_archived_at(now)}))))
 }
 
 pub async fn unarchive(
@@ -2460,5 +2464,35 @@ mod cycle_e2_tests {
         assert_eq!(v.get("2026-06-01"), Some(&json!(5)));
         assert_eq!(v.get("2026-06-02"), Some(&json!(3)));
         assert_eq!(v.get("2026-06-04"), Some(&json!(Value::Null)));
+    }
+
+    #[test]
+    fn completed_patch_guard_mirrors_base_349_357() {
+        // `base.py:349-357`: completed cycle + body WITHOUT `sort_order`
+        // → 400 verbatim; WITH `sort_order` → only that field applied.
+        for raw in [r#"{"description":"x"}"#, r#"{}"#, r#"{"view_props":{}}"#] {
+            let body: Value = serde_json::from_str(raw).unwrap();
+            assert!(!patch_has_sort_order(&body));
+            assert_eq!(
+                guard_patch(false, true, patch_has_sort_order(&body)).unwrap_err(),
+                "The Cycle has already been completed so it cannot be edited"
+            );
+        }
+        let body: Value = serde_json::from_str(r#"{"sort_order":1,"name":"hack"}"#).unwrap();
+        assert!(patch_has_sort_order(&body));
+        assert!(guard_patch(false, true, patch_has_sort_order(&body)).is_ok());
+    }
+
+    #[test]
+    fn archived_at_format_mirrors_django_str() {
+        // `archive.py:596-604`: `str(timezone.now())` → microsecond
+        // precision with `+00:00` suffix.
+        let now = Utc.with_ymd_and_hms(2026, 9, 6, 12, 34, 56).unwrap();
+        let s = format_archived_at(now);
+        assert!(s.starts_with("2026-09-06 12:34:56."));
+        assert!(s.ends_with("+00:00"));
+        let frac = &s[20..s.len() - 6];
+        assert_eq!(frac.len(), 6);
+        assert!(frac.chars().all(|c| c.is_ascii_digit()));
     }
 }
