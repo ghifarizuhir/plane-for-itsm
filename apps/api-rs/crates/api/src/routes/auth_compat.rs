@@ -11,6 +11,8 @@ use serde_json::{json, Value};
 use crate::{middleware::auth::AuthUser, state::AppState};
 use common::auth as authn;
 
+use super::auth::{email_valid, EmailCheckBody};
+
 pub fn csrf_token_value() -> Value {
     json!({"csrf_token": ""})
 }
@@ -147,6 +149,48 @@ pub async fn set_password(
     }
 }
 
+/// Cek SMTP terkonfigurasi selaras `routes::instance` — `EMAIL_HOST` tak kosong.
+pub fn smtp_configured(host: &str) -> bool {
+    !host.is_empty()
+}
+
+/// POST /auth/forgot-password/ — paritas `ForgotPasswordEndpoint` SEBATAS
+/// gate yang terjangkau tanpa SMTP (5000/5025/5005/5060). Pengiriman email
+/// reset = follow-up saat EMAIL_HOST dikonfigurasi.
+pub async fn forgot_password(
+    State(st): State<AppState>,
+    Json(body): Json<EmailCheckBody>,
+) -> (StatusCode, Json<Value>) {
+    // NOTE: `instances` punya `deleted_at`, `users` tidak — selaras email-check.
+    let setup: Option<bool> = sqlx::query_scalar(
+        "SELECT is_setup_done FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .unwrap_or(None);
+    if setup != Some(true) {
+        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+    }
+    if !smtp_configured(&std::env::var("EMAIL_HOST").unwrap_or_default()) {
+        return (StatusCode::BAD_REQUEST, auth_error(5025, "SMTP_NOT_CONFIGURED"));
+    }
+    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    if email.is_empty() || !email_valid(&email) {
+        return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
+    }
+    let exists: Option<bool> =
+        sqlx::query_scalar("SELECT true FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(&st.pool)
+            .await
+            .unwrap_or(None);
+    if exists != Some(true) {
+        return (StatusCode::BAD_REQUEST, auth_error(5060, "USER_DOES_NOT_EXIST"));
+    }
+    // SMTP terkonfigurasi tapi pengiriman email belum ada → katakan terus terang.
+    (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "password-reset email delivery not implemented yet"})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,5 +213,11 @@ mod tests {
         let v = user_subset_json("11111111-1111-1111-1111-111111111111", "a@b.co", "A", "B");
         assert_eq!(v["email"], "a@b.co");
         assert!(v.get("password").is_none());
+    }
+
+    #[test]
+    fn smtp_gate() {
+        assert!(!smtp_configured(""));
+        assert!(smtp_configured("smtp.example.com"));
     }
 }

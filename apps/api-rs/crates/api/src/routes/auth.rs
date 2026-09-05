@@ -97,7 +97,7 @@ fn auth_error(code: i32, message: &str) -> Json<Value> {
 /// Validasi email sederhana selaras `django.core.validators.validate_email`
 /// untuk kebutuhan email-check (frontend sudah validasi client-side):
 /// satu `@`, lokal+domain tak kosong, domain memuat titik, tanpa spasi.
-fn email_valid(email: &str) -> bool {
+pub(crate) fn email_valid(email: &str) -> bool {
     if email.is_empty() || email.len() > 254 || email.contains(' ') {
         return false;
     }
