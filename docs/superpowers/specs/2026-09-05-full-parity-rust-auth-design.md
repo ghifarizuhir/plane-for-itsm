@@ -90,3 +90,18 @@ Testing (tiga lapis):
 Port boundary (notif/export/S3/eksternal), lockout akun beyond rate-limit,
 magic-link (ikut pola password+OAuth yang ada), hapus fisik Django
 (irisan 4, setelah semua gate hijau).
+
+## Follow-up: OAuth GitLab + Gitea (Task 7 di-SKIP)
+
+Instance ini tidak memakai keduanya (tidak ada `GITLAB_*`/`GITEA_*`/
+`IS_GITLAB_ENABLED`/`IS_GITEA_ENABLED` di `.env`/`docker-compose.yml`;
+keduanya default off di Django). Bila suatu saat dibutuhkan, port dengan pola
+identik Task 6 (`OAuthProvider` baru di `routes/auth.rs`):
+- GitLab: `token_url=https://{GITLAB_HOST}/oauth/token`,
+  `userinfo=https://{GITLAB_HOST}/api/v4/user` (field `email`, butuh scope
+  `read_user`; hormati `confirmed_at` seperti `email_verified`).
+- Gitea: `token_url={GITEA_HOST}/login/oauth/access_token`,
+  `authorize={GITEA_HOST}/login/oauth/authorize`,
+  userinfo `{GITEA_HOST}/api/v1/user` + `/user/emails`
+  (lihat `apps/api/plane/authentication/provider/oauth/gitea.py`).
+- Tambah `GITLAB_*/GITEA_*` ke `AppConfig` + rute `:provider` yang sama.
