@@ -110,6 +110,13 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
+        // Parity with `StateViewSet.mark_as_default`
+        // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
+        // POST blind clear+set → 204 unconditional.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/states/:pk/mark-default/",
+            post(routes::state::mark_default),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",
             get(routes::label::list).post(routes::label::create),

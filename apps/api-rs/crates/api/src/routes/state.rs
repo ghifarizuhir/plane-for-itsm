@@ -1,7 +1,11 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::{
+    middleware::auth::AuthUser,
+    routes::project::{deny, project_role},
+    state::AppState,
+};
 
 /// Mirrors `plane/app/serializers/state.py:StateSerializer.validate`
 /// + `plane/db/models/state.py:StateGroup`.
@@ -197,4 +201,85 @@ pub async fn destroy(
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}
+
+/// Mirrors `plane/app/views/state/base.py:104-106` (`mark_as_default`):
+/// `@allow_permission([ROLE.ADMIN])` (level PROJECT) — only project ADMIN
+/// (20) passes; MEMBER (15) / GUEST (5) / non-member → 403 via `deny()`.
+/// (`ROLE` values from `plane/app/permissions/base.py:13-16`.)
+pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) => Ok(()),
+        _ => Err(crate::routes::project::FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// POST `/api/workspaces/:slug/projects/:project_id/states/:pk/mark-default/`
+/// — parity with Django `StateViewSet.mark_as_default`
+/// (`plane/app/views/state/base.py:104-110`).
+///
+/// - Gate: PROJECT ADMIN (20) only via `project_role` + `guard_mark_default`;
+///   MEMBER (15) / GUEST (5) / non-member → 403 `deny()`.
+/// - Two blind updates, both scoped to (workspace slug + project_id), in a
+///   single tx: clear `"default"` where true, then set `"default"=true`
+///   where pk (`base.py:108-109`).
+/// - **204 ALWAYS** — even when pk matches 0 rows (no existence check;
+///   `base.py:108-109` are blind `.update()` calls whose row counts are
+///   discarded).
+///
+/// Queryset filters mirror Django exactly: `State.objects.filter(...)`
+/// uses the default `StateManager` (`plane/db/models/state.py:65-69`),
+/// which is `SoftDeletionManager` (`plane/db/mixins.py:56-58`,
+/// `deleted_at IS NULL`) + `.exclude(group="triage")`. So BOTH updates
+/// carry `AND deleted_at IS NULL AND "group" != 'triage'` — triage states
+/// are skipped on clear AND set (a triage pk yields 204 with no change).
+/// `updated_at` is NOT bumped: Django `QuerySet.update()` bypasses
+/// `save()`/`auto_now`, unlike the `patch`/`archive` paths.
+///
+/// Deviations: single explicit transaction (Django runs two autocommit
+/// UPDATEs); no cache invalidation — Rust has no cache layer (Django
+/// `@invalidate_cache(path="workspaces/:slug/states/")`, `base.py:104`).
+pub async fn mark_default(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let role = project_role(&st.pool, auth.0, project_id).await?;
+    if guard_mark_default(role).is_err() {
+        return Ok(deny());
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE states SET \"default\" = false WHERE project_id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND \"default\" = true AND deleted_at IS NULL AND \"group\" != 'triage'",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE states SET \"default\" = true WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL AND \"group\" != 'triage'",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .bind(&slug)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}
+
+#[cfg(test)]
+mod state_mark_default_tests {
+    use super::*;
+
+    #[test]
+    fn mark_default_guard_allows_admin_only() {
+        // Mirrors `plane/app/views/state/base.py:104-110` (`mark_as_default`):
+        // `@allow_permission([ROLE.ADMIN])` (level PROJECT) — only project
+        // ADMIN (20) passes; MEMBER (15) / GUEST (5) / non-member → 403.
+        assert!(guard_mark_default(Some(20)).is_ok());
+        assert!(guard_mark_default(Some(15)).is_err());
+        assert!(guard_mark_default(Some(5)).is_err());
+        assert!(guard_mark_default(None).is_err());
+    }
 }
