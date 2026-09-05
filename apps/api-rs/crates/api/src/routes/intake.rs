@@ -154,10 +154,16 @@ pub async fn create_issue(
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"}))));
     };
 
-    // Triage state lookup-or-create mirrors the viewset: the intake issue
-    // lands in triage, creating the state row on demand.
+    // Triage state lookup-or-create mirrors
+    // `IntakeIssueViewSet.create` (`plane/app/views/intake/base.py:246-256`):
+    // Django reads `State.triage_objects.filter(project_id, workspace__slug)`
+    // (`TriageStateManager`, `plane/db/models/state.py:72-76`), i.e. triage
+    // identity is `"group" = 'triage'` — NOT `is_triage` (both the
+    // `DEFAULT_STATES` seed and the on-demand `State.objects.create` leave
+    // `is_triage` at its `default=False`). The intake issue lands in triage,
+    // creating the state row on demand.
     let triage_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM states WHERE project_id = $1 AND is_triage = true AND deleted_at IS NULL LIMIT 1",
+        "SELECT id FROM states WHERE project_id = $1 AND \"group\" = 'triage' AND deleted_at IS NULL LIMIT 1",
     )
     .bind(project_id)
     .fetch_optional(&st.pool)
@@ -166,7 +172,7 @@ pub async fn create_issue(
         Some(id) => id,
         None => {
             sqlx::query_scalar(
-                "INSERT INTO states (id, name, description, slug, \"group\", color, sequence, is_triage, \"default\", project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), 'Triage', '', 'triage', 'triage', '#4E5355', 65000, true, false, $1, $2, now(), now()) RETURNING id",
+                "INSERT INTO states (id, name, description, slug, \"group\", color, sequence, is_triage, \"default\", project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), 'Triage', '', 'triage', 'triage', '#4E5355', 65000, false, false, $1, $2, now(), now()) RETURNING id",
             )
             .bind(project_id)
             .bind(workspace_id)
