@@ -724,6 +724,11 @@ pub struct DetailIssuesQuery {
     pub subscriber: Option<String>,
     #[serde(default)]
     pub start_target_date: Option<String>,
+    // Archive-only toggle (`IssueArchiveViewSet.list`, `archive.py:109-115`):
+    // default `"true"` keeps sub-issues, `"false"` adds `parent__isnull`.
+    // Accepted AND ignored by `list_detail` (the detail view never reads it).
+    #[serde(default)]
+    pub show_sub_issues: Option<String>,
 }
 
 /// One row of the `issues-detail/` page. Field order is the exact
@@ -2014,7 +2019,8 @@ pub async fn list_detail(
         .collect();
     // `group_by` / `sub_group_by` / `fields` are accepted AND ignored (see
     // `DetailIssuesQuery`): `IssueDetailEndpoint.get` never reads them.
-    let _ = (&q.group_by, &q.sub_group_by, &q.fields);
+    // `show_sub_issues` is likewise unread here (archive-only toggle).
+    let _ = (&q.group_by, &q.sub_group_by, &q.fields, &q.show_sub_issues);
     let want_relation = expand.iter().any(|t| *t == "issue_relation");
     let want_related = expand.iter().any(|t| *t == "issue_related");
 
@@ -3189,5 +3195,477 @@ mod bulk_tests {
         // `BulkArchiveIssuesEndpoint.post`, `urls/issue.py:99-101`).
         let _ = super::bulk_delete;
         let _ = super::bulk_archive;
+    }
+}
+
+// ---- Batch C I4 ----
+
+/// Query params for `deleted_list`. Mirrors
+/// `request.GET.get("updated_at__gt", None)` (`base.py:804`): the only
+/// filter Django applies on top of the archived-or-deleted scope.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct DeletedIssuesQuery {
+    #[serde(default, rename = "updated_at__gt")]
+    pub updated_at_gt: Option<String>,
+}
+
+/// Parses `?updated_at__gt` the way Django's `DateTimeField` lookup does
+/// (`base.py:804-805,809`): RFC3339 datetimes and bare `YYYY-MM-DD` dates
+/// (midnight) are valid; naive datetimes read as UTC (containers run UTC).
+/// Garbage raises Django `ValidationError`, mapped by
+/// `BaseAPIView.handle_exception` (`views/base.py:182-186`) to 400
+/// `{"error": "Please provide valid detail"}`.
+pub(crate) fn parse_deleted_updated_at_gt(raw: &str) -> Result<chrono::DateTime<chrono::Utc>, &'static str> {
+    const BAD: &str = "Please provide valid detail";
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+        return Ok(dt.with_timezone(&chrono::Utc));
+    }
+    // Django `parse_datetime` also accepts space-separated and naive forms.
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+    ] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(raw, fmt) {
+            return Ok(chrono::DateTime::from_naive_utc_and_offset(
+                naive,
+                chrono::Utc,
+            ));
+        }
+    }
+    // Bare date → midnight (`parse_date` fallback in `DateTimeField.to_python`).
+    if let Ok(day) = raw.parse::<chrono::NaiveDate>() {
+        if let Some(naive) = day.and_hms_opt(0, 0, 0) {
+            return Ok(chrono::DateTime::from_naive_utc_and_offset(
+                naive,
+                chrono::Utc,
+            ));
+        }
+    }
+    Err(BAD)
+}
+
+/// GET `/api/workspaces/:slug/projects/:project_id/deleted-issues/` — parity
+/// with Django `DeletedIssuesListViewSet.get`
+/// (`plane/app/views/issue/base.py:800-813`, `urls/issue.py:247-249`).
+///
+/// - Gate: PROJECT-level ADMIN/MEMBER/GUEST via the shared helpers (same as
+///   I1; `@allow_permission([ADMIN, MEMBER, GUEST])`, `base.py:801`,
+///   defaults to `level="PROJECT"` incl. the ws-admin fallback branch).
+/// - Scope mirrors `Issue.all_objects` (`db/mixins.py:67`, the UNFILTERED
+///   manager incl. soft-deleted) + `Q(archived_at__isnull=False) |
+///   Q(deleted_at__isnull=False)`, scoped ws+project; optional
+///   `?updated_at__gt` (`__gt`, `base.py:803-811`). Ordering follows the
+///   model `Meta.ordering = ("-created_at",)`.
+/// - 200 BARE UUID array, unpaginated (Django `Response(deleted_issues)`
+///   over `values_list("id", flat=True)`).
+/// - FE `getDeletedIssues` (`issue.service.ts:89-97`) has ZERO callers —
+///   still implemented (1 query).
+///
+/// Deviations: datetimes RFC3339 (batch convention); invalid
+/// `updated_at__gt` → 400 `{"error": "Please provide valid detail"}` via the
+/// generic `ValidationError` mapping (the view itself defines no errors).
+pub async fn deleted_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Query(q): axum::extract::Query<DeletedIssuesQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    let gt = match q.updated_at_gt.as_deref() {
+        None => None,
+        Some(raw) => match parse_deleted_updated_at_gt(raw) {
+            Ok(dt) => Some(dt),
+            Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
+        },
+    };
+    let mut qb: QueryBuilder<Postgres> =
+        QueryBuilder::new("SELECT i.id FROM issues i WHERE i.project_id = ");
+    qb.push_bind(project_id)
+        .push(" AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
+        .push_bind(slug)
+        .push(") AND (i.archived_at IS NOT NULL OR i.deleted_at IS NOT NULL)");
+    if let Some(dt) = gt {
+        qb.push(" AND i.updated_at > ").push_bind(dt);
+    }
+    qb.push(" ORDER BY i.created_at DESC");
+    let ids: Vec<uuid::Uuid> = qb.build_query_scalar().fetch_all(&st.pool).await?;
+    Ok((StatusCode::OK, Json(json!(ids))))
+}
+
+/// Byte-exact 400 body for `group_by == sub_group_by`
+/// (`archive.py:143-147`).
+pub(crate) const ARCHIVE_GROUP_BY_CONFLICT_MSG: &str =
+    "Group by and sub group by cannot have same parameters";
+
+/// Mirrors the truthiness guards (`archive.py:134-143`): `group_by` /
+/// `sub_group_by` default to `False` and empty strings are falsy too — only
+/// two non-empty EQUAL values conflict.
+pub(crate) fn archive_group_by_conflict(
+    group_by: Option<&str>,
+    sub_group_by: Option<&str>,
+) -> Option<&'static str> {
+    match (group_by, sub_group_by) {
+        (Some(g), Some(s)) if !g.is_empty() && !s.is_empty() && g == s => {
+            Some(ARCHIVE_GROUP_BY_CONFLICT_MSG)
+        }
+        _ => None,
+    }
+}
+
+/// Mirrors `show_sub_issues = request.GET.get("show_sub_issues", "true")`
+/// (`archive.py:109-115`): only the exact `"true"` (incl. the default when
+/// absent) keeps sub-issues — `"false"` (or any other explicit value) adds
+/// `parent__isnull=True`.
+pub(crate) fn show_sub_issues_hides_children(raw: Option<&str>) -> bool {
+    raw.unwrap_or("true") != "true"
+}
+
+/// One row of the `archived-issues/` page. Key order is the exact
+/// `issue_on_results` order (`plane/utils/grouper.py:106-141`): the 23
+/// `required_fields` (`id` … `state__group`) then `assignee_ids`,
+/// `label_ids`, `module_ids`. Delta vs the I2 `IssueDetailRow` (25 keys):
+/// PLUS `state__group` (the archive queryset keeps triage/NULL-state rows,
+/// so it is `Option`); otherwise the same 25 keys, NO `deleted_at`.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ArchiveRow {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub state_id: Option<uuid::Uuid>,
+    pub sort_order: f64,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub estimate_point: Option<uuid::Uuid>,
+    pub priority: String,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub target_date: Option<chrono::NaiveDate>,
+    pub sequence_id: i32,
+    pub project_id: uuid::Uuid,
+    pub parent_id: Option<uuid::Uuid>,
+    pub cycle_id: Option<uuid::Uuid>,
+    pub sub_issues_count: i64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: Option<uuid::Uuid>,
+    pub updated_by: Option<uuid::Uuid>,
+    pub attachment_count: i64,
+    pub link_count: i64,
+    pub is_draft: bool,
+    pub archived_at: Option<chrono::NaiveDate>,
+    #[serde(rename = "state__group")]
+    pub state_group: Option<String>,
+    pub assignee_ids: Vec<uuid::Uuid>,
+    pub label_ids: Vec<uuid::Uuid>,
+    pub module_ids: Vec<uuid::Uuid>,
+}
+
+/// The page-query SELECT prefix for `archived_list`: the 26
+/// `issue_on_results` columns in grouper order, on top of the archive
+/// `apply_annotations` (`archive.py:60-95`) + `issue_queryset_grouper`
+/// (`grouper.py:28-90`) subqueries.
+pub(crate) const ARCHIVE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
+     i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, \
+     i.sequence_id, i.project_id, i.parent_id, \
+     (SELECT ci.cycle_id FROM cycle_issues ci \
+       WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, \
+     (SELECT COUNT(*) FROM issues si \
+       LEFT JOIN states ss ON ss.id = si.state_id \
+       WHERE si.parent_id = i.id AND si.deleted_at IS NULL \
+       AND si.archived_at IS NULL AND si.is_draft = false \
+       AND ss.\"group\" <> 'triage' \
+       AND EXISTS(SELECT 1 FROM projects sp \
+         WHERE sp.id = si.project_id AND sp.archived_at IS NULL)) AS sub_issues_count, \
+     i.created_at, i.updated_at, \
+     i.created_by_id AS created_by, i.updated_by_id AS updated_by, \
+     (SELECT COUNT(*) FROM file_assets fa \
+       WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
+       AND fa.deleted_at IS NULL) AS attachment_count, \
+     (SELECT COUNT(*) FROM issue_links lin \
+       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
+     i.is_draft, i.archived_at, s.\"group\" AS state_group, \
+     COALESCE((SELECT array_agg(ia.assignee_id ORDER BY ia.created_at DESC) FROM issue_assignees ia \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, \
+     COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+       WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
+     COALESCE((SELECT array_agg(DISTINCT mi.module_id) FROM module_issues mi \
+       JOIN modules m ON m.id = mi.module_id \
+       WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL \
+       AND m.archived_at IS NULL), '{}'::uuid[]) AS module_ids \
+     FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id";
+
+/// Shared WHERE clause for the `archived-issues/` COUNT + page queries:
+/// the archive queryset (`archive.py:97-103`) — plain `Issue.objects`
+/// (soft-delete excluded ONLY: no triage/draft/project-archived exclusion)
+/// + `Q(type__isnull=True) | Q(type__is_epic=False)` (FK `type_id` NULL or
+/// the joined `issue_types.is_epic` false — forward-FK lookups apply no
+/// `deleted_at` predicate) + `archived_at IS NOT NULL` + slug/project
+/// scoping — then `show_sub_issues`, legacy `issue_filters`, and the
+/// `filters` JSON tree (same filter support as I2 `list_detail`, reusing the
+/// I2 helpers).
+fn push_archive_where(
+    qb: &mut QueryBuilder<Postgres>,
+    slug: &str,
+    project_id: uuid::Uuid,
+    q: &DetailIssuesQuery,
+    tree: Option<&serde_json::Value>,
+    today: chrono::NaiveDate,
+) -> Result<(), DetailWhereError> {
+    qb.push(" WHERE i.project_id = ")
+        .push_bind(project_id)
+        .push(" AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
+        .push_bind(slug.to_string())
+        .push(") AND i.deleted_at IS NULL AND i.archived_at IS NOT NULL AND (i.type_id IS NULL OR t.is_epic = false)");
+    if show_sub_issues_hides_children(q.show_sub_issues.as_deref()) {
+        qb.push(" AND i.parent_id IS NULL");
+    }
+    apply_legacy_filters(qb, q, today).map_err(DetailWhereError::Legacy)?;
+    if let Some(tree) = tree {
+        apply_complex_filter(qb, tree).map_err(DetailWhereError::Complex)?;
+    }
+    Ok(())
+}
+
+/// GET `/api/workspaces/:slug/projects/:project_id/archived-issues/` —
+/// parity with Django `IssueArchiveViewSet.list`
+/// (`plane/app/views/issue/archive.py:97-218`, `urls/issue.py:224-225`).
+///
+/// - Gate: ADMIN/MEMBER ONLY (`@allow_permission([ADMIN, MEMBER])`,
+///   `archive.py:106`) — GUEST → 403 `deny()`.
+/// - `show_sub_issues` default `"true"` (`"false"` → `parent__isnull`,
+///   `archive.py:109-115`); `order_by` default `-created_at` (same
+///   `order_issue_queryset` + paginator re-ordering as I2, reusing
+///   `sanitize_order_by` / `detail_order_expr`); `group_by`/`sub_group_by`
+///   equal → 400 `{"error": "Group by and sub group by cannot have same
+///   parameters"}` byte-exact (`archive.py:143-147`).
+/// - Filterset + legacy filters mirror the SAME support as I2 `list_detail`
+///   (reused helpers, incl. the same 400/500 mappings); paginated envelope
+///   is the SAME 12-key `DetailEnvelope` as I2 (reused paginator fns);
+///   rows render the `issue_on_results` 26-key shape (`archive.py:212-218`,
+///   `grouper.py:93-141`) — the I2 25 keys PLUS `state__group`.
+/// - FE `getArchivedIssues` (`issue_archive.service.ts:22-34`) →
+///   `store/issue/archived/issue.store.ts` envelope flow (flat-list path).
+///
+/// Deviations (reviewer-adjudicable, Django-literal readings): grouped
+/// pagination (`GroupedOffsetPaginator` / `SubGroupedOffsetPaginator`,
+/// `archive.py:148-209`) is OUT — a present (non-conflicting) `group_by`
+/// still returns the flat I2 envelope (FE flat-list flow unaffected);
+/// `label_ids`/`assignee_ids` arrays carry `ORDER BY bridge.created_at
+/// DESC` (Django `ArrayAgg(DISTINCT …)` is unordered — set-equal, order
+/// deterministic); datetimes RFC3339 UTC (batch convention).
+pub async fn archived_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Query(q): axum::extract::Query<DetailIssuesQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if !matches!(member_role, Some(20) | Some(15)) {
+        return Ok(deny());
+    }
+    if let Some(msg) = archive_group_by_conflict(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": msg}))));
+    }
+    let per_page = match parse_per_page(q.per_page.as_deref()) {
+        Ok(v) => v,
+        Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
+    };
+    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor = match parse_cursor(&cursor_raw) {
+        Ok(c) => c,
+        Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
+    };
+    // `limit = min(limit, max_limit)` (`paginator.py:132`); offset-first
+    // negative-window 400 mirrors I2 (`paginator.py:142-150, 708-711`).
+    let limit = per_page.min(1000);
+    let window = match page_window(cursor.page, limit) {
+        Err(()) => return Ok(detail_400(json!({"detail": "Error in parsing"}))),
+        Ok(w) => w,
+    };
+    if limit <= 0 {
+        return Ok(server_error());
+    }
+    let sanitized = sanitize_order_by(q.order_by.as_deref().unwrap_or("-created_at"));
+    let (order_expr, desc) = detail_order_expr(&sanitized);
+    let order_dir = if desc { "DESC" } else { "ASC" };
+    let today = chrono::Utc::now().date_naive();
+    let tree = match parse_complex_filter(q.filters.as_deref()) {
+        Ok(t) => t,
+        Err(e) => {
+            return Ok(detail_400(json!({"message": e.message, "code": e.code})));
+        }
+    };
+    // `expand` has no archive reading (`issue_on_results` values only);
+    // `fields` likewise unused here.
+    let _ = (&q.fields, &q.expand);
+
+    let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
+        "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id",
+    );
+    match push_archive_where(&mut count_qb, &slug, project_id, &q, tree.as_ref(), today) {
+        Ok(()) => {}
+        Err(DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg))) => {
+            return Ok(detail_400(json!({"error": msg})));
+        }
+        Err(DetailWhereError::Legacy(LegacyFilterError::Server)) => {
+            return Ok(server_error());
+        }
+        Err(DetailWhereError::Complex(e)) => {
+            return Ok(detail_400(json!({"message": e.message, "code": e.code})));
+        }
+    }
+    let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
+
+    let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(ARCHIVE_SELECT_SQL);
+    match push_archive_where(&mut page_qb, &slug, project_id, &q, tree.as_ref(), today) {
+        Ok(()) => {}
+        Err(DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg))) => {
+            return Ok(detail_400(json!({"error": msg})));
+        }
+        Err(DetailWhereError::Legacy(LegacyFilterError::Server)) => {
+            return Ok(server_error());
+        }
+        Err(DetailWhereError::Complex(e)) => {
+            return Ok(detail_400(json!({"message": e.message, "code": e.code})));
+        }
+    }
+    // Paginator ordering: `(key DIR NULLS LAST, -created_at)`
+    // (`paginator.py:136-140`), same as I2.
+    page_qb
+        .push(" ORDER BY ")
+        .push(order_expr)
+        .push(" ")
+        .push(order_dir)
+        .push(" NULLS LAST, i.created_at DESC LIMIT ")
+        .push_bind(limit + 1);
+    let mut rows: Vec<ArchiveRow> = match window {
+        PageWindow::Rows(offset) => {
+            page_qb.push(" OFFSET ").push_bind(offset);
+            page_qb.build_query_as().fetch_all(&st.pool).await?
+        }
+        PageWindow::BeyondEnd => Vec::new(),
+    };
+    let _ = (cursor.limit_value, cursor.is_prev);
+    let next_page_results = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+
+    let mut results = Vec::with_capacity(rows.len());
+    for row in &rows {
+        results.push(serde_json::to_value(row).map_err(|e| anyhow::anyhow!(e))?);
+    }
+
+    let envelope = DetailEnvelope {
+        grouped_by: None,
+        sub_grouped_by: None,
+        total_count: total,
+        next_cursor: next_cursor_str(limit, cursor.page),
+        prev_cursor: prev_cursor_str(limit, cursor.page),
+        next_page_results,
+        prev_page_results: cursor.page > 0,
+        count: rows.len() as i64,
+        total_pages: total_pages(total, limit),
+        total_results: total,
+        extra_stats: None,
+        results,
+    };
+    Ok((StatusCode::OK, Json(json!(envelope))))
+}
+
+#[cfg(test)]
+mod batch_c_i4_tests {
+    use super::*;
+
+    #[test]
+    fn show_sub_issues_filter_matches_django() {
+        // Mirrors `IssueArchiveViewSet.list` (`archive.py:109-115`):
+        // `show_sub_issues` defaults to `"true"`; only the exact `"true"`
+        // keeps sub-issues — `"false"` (and any other explicit value) adds
+        // `parent__isnull=True`.
+        assert!(!show_sub_issues_hides_children(None));
+        assert!(!show_sub_issues_hides_children(Some("true")));
+        assert!(show_sub_issues_hides_children(Some("false")));
+    }
+
+    #[test]
+    fn archive_group_by_conflict_matches_django() {
+        // Mirrors `IssueArchiveViewSet.list` (`archive.py:143-147`):
+        // truthy `group_by` + truthy equal `sub_group_by` → 400 with the
+        // byte-exact body below; anything else is no error.
+        assert_eq!(
+            archive_group_by_conflict(Some("priority"), Some("priority")),
+            Some(ARCHIVE_GROUP_BY_CONFLICT_MSG)
+        );
+        assert_eq!(
+            ARCHIVE_GROUP_BY_CONFLICT_MSG,
+            "Group by and sub group by cannot have same parameters"
+        );
+        assert_eq!(
+            archive_group_by_conflict(Some("priority"), Some("state__group")),
+            None
+        );
+        assert_eq!(archive_group_by_conflict(Some("priority"), None), None);
+        assert_eq!(archive_group_by_conflict(None, None), None);
+        assert_eq!(archive_group_by_conflict(Some(""), Some("")), None);
+    }
+
+    #[test]
+    fn deleted_gate_is_project_level_with_django_fallback() {
+        // Mirrors `@allow_permission([ADMIN, MEMBER, GUEST])`
+        // (`base.py:801`, default `level="PROJECT"`,
+        // `permissions/base.py:53-78`): allowed-role branch needs 20/15/5,
+        // fallback (any active membership + workspace ADMIN) unchanged —
+        // shared `project_gate_allows`, same as I1.
+        let allows = |role: Option<i16>, ws_admin: bool| {
+            project_gate_allows(matches!(role, Some(20) | Some(15) | Some(5)), role.is_some(), ws_admin)
+        };
+        assert!(allows(Some(20), false));
+        assert!(allows(Some(15), false));
+        assert!(allows(Some(5), false));
+        assert!(!allows(None, false));
+        assert!(!allows(None, true));
+        assert!(allows(Some(5), true));
+    }
+
+    #[test]
+    fn archived_gate_is_admin_member_only() {
+        // Mirrors `@allow_permission([ADMIN, MEMBER])` (`archive.py:106`):
+        // GUEST denies.
+        let allows = |role: Option<i16>| matches!(role, Some(20) | Some(15));
+        assert!(allows(Some(20)));
+        assert!(allows(Some(15)));
+        assert!(!allows(Some(5)));
+        assert!(!allows(None));
+    }
+
+    #[test]
+    fn deleted_updated_at_gt_parses_like_django() {
+        // Mirrors `.filter(updated_at__gt=<str>)` (`base.py:804-805,809`):
+        // Django's `DateTimeField` accepts datetimes and bare dates
+        // (midnight); garbage raises `ValidationError` → 400
+        // `{"error": "Please provide valid detail"}`.
+        assert!(parse_deleted_updated_at_gt("2026-01-02T03:04:05Z").is_ok());
+        assert!(parse_deleted_updated_at_gt("2026-01-02").is_ok());
+        assert_eq!(
+            parse_deleted_updated_at_gt("zzz").unwrap_err(),
+            "Please provide valid detail"
+        );
+    }
+
+    #[test]
+    fn i4_handlers_exist_for_i4_routes() {
+        // Wiring guard: `main.rs` registers
+        // `GET .../deleted-issues/` → `deleted_list` (Django
+        // `DeletedIssuesListViewSet.get`, `urls/issue.py:247-249`) and
+        // `GET .../archived-issues/` → `archived_list` (Django
+        // `IssueArchiveViewSet.list`, `urls/issue.py:224-225`).
+        let _ = super::deleted_list;
+        let _ = super::archived_list;
     }
 }

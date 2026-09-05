@@ -102,6 +102,20 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/bulk-archive-issues/",
             post(routes::issue::bulk_archive),
         )
+        // Parity with `DeletedIssuesListViewSet.get`
+        // (`views/issue/base.py:800-813`, `urls/issue.py:247-249`): bare
+        // UUID array, unpaginated.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/deleted-issues/",
+            get(routes::issue::deleted_list),
+        )
+        // Parity with `IssueArchiveViewSet.list`
+        // (`views/issue/archive.py:97-218`, `urls/issue.py:224-225`):
+        // flat-list paginated envelope (grouped paginators out of scope).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archived-issues/",
+            get(routes::issue::archived_list),
+        )
         // Parity with `IssueDetailEndpoint.get`
         // (`views/issue/base.py:1027-1103`, `urls/issue.py:48-50`): static
         // `issues-detail` wins over `:pk`-style routes in Axum (same as the
