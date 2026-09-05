@@ -359,6 +359,8 @@ async fn main() {
         .route("/api/auth/login/", post(routes::auth::login))
         .route("/api/auth/refresh/", post(routes::auth::refresh))
         .route("/api/auth/logout/", post(routes::auth::logout))
+        .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))
+        .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
         .route(
             "/api/workspaces/:slug/export-issues/",
             post(routes::misc::create_export).get(routes::misc::export_history),
