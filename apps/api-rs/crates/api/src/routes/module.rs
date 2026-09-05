@@ -51,6 +51,25 @@ pub const VALID_DETAIL_MSG: &str = "Please provide valid detail";
 /// DRF permission-class deny body (links / favorites / archive / workspace).
 pub const PERMISSION_DETAIL_MSG: &str = "You do not have permission to perform this action.";
 
+/// E3 soft-delete parity (`plane/db/mixins.py:48-53`: `SoftDeletionQuerySet`
+/// deletes via `UPDATE ... SET deleted_at=now()`): PATCH member replace
+/// (`base.py`) soft-deletes instead of hard-deleting so removed rows retain
+/// `deleted_at`. Re-insert uses `ON CONFLICT DO NOTHING` and the partial
+/// unique index `(module_id, member_id) WHERE deleted_at IS NULL` excludes
+/// soft-deleted rows, so resurrected members re-insert cleanly.
+const MODULE_MEMBERS_REPLACE_SOFT_DELETE_SQL: &str =
+    "UPDATE module_members SET deleted_at = now(), updated_at = now() \
+     WHERE module_id = $1 AND deleted_at IS NULL";
+/// E3 soft-delete parity (`issue.py:263-323` removal path mirrors
+/// `issue_destroy` below): removed issue links soft-delete instead of
+/// hard-deleting. The partial unique index
+/// `(issue_id, module_id) WHERE deleted_at IS NULL` excludes soft-deleted
+/// rows, so re-added links re-insert cleanly via `ON CONFLICT DO NOTHING`.
+const MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL: &str =
+    "UPDATE module_issues SET deleted_at = now(), updated_at = now() \
+     WHERE issue_id = $1 AND module_id = ANY($2) \
+     AND project_id = $3 AND workspace_id = $4 AND deleted_at IS NULL";
+
 // ============================================================================
 // Pure helpers (unit-tested below).
 // ============================================================================
@@ -1454,7 +1473,7 @@ async fn apply_update(
             .await?;
     }
     if let Some(ids) = members {
-        sqlx::query("DELETE FROM module_members WHERE module_id = $1")
+        sqlx::query(MODULE_MEMBERS_REPLACE_SOFT_DELETE_SQL)
             .bind(mid)
             .execute(&mut *tx)
             .await?;
@@ -1925,10 +1944,7 @@ pub async fn issue_modules_create(
         .await?;
     }
     if !removed.is_empty() {
-        sqlx::query(
-            "DELETE FROM module_issues WHERE issue_id = $1 AND module_id = ANY($2) \
-             AND project_id = $3 AND workspace_id = $4",
-        )
+        sqlx::query(MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL)
         .bind(iid)
         .bind(&removed)
         .bind(pid)
@@ -2710,5 +2726,37 @@ mod module_e3_tests {
         let out = project_fields(v.clone(), &["name".to_string()]);
         assert_eq!(out, json!({"name": "M"}));
         assert_eq!(project_fields(v.clone(), &[]), v);
+    }
+
+    #[test]
+    fn member_replace_removal_path_soft_deletes() {
+        // E3 GAP 2 (`db/mixins.py:48-53`): PATCH member replace must
+        // `UPDATE ... SET deleted_at` (row retained with `deleted_at NOT
+        // NULL), never `DELETE FROM module_members`. Mirrors the
+        // `issue_destroy` soft-UPDATE pattern.
+        let sql = MODULE_MEMBERS_REPLACE_SOFT_DELETE_SQL;
+        assert!(!sql.contains("DELETE"), "must not hard-delete: {sql}");
+        assert!(sql.contains("UPDATE module_members"));
+        assert!(sql.contains("SET deleted_at"));
+        assert!(sql.contains("updated_at"));
+        assert!(sql.contains("deleted_at IS NULL"));
+    }
+
+    #[test]
+    fn issue_removal_path_soft_deletes() {
+        // E3 GAP 1 (`db/mixins.py:48-53`): `issue_modules_create` removal
+        // path must `UPDATE ... SET deleted_at` (row retained with
+        // `deleted_at NOT NULL`), never `DELETE FROM module_issues`.
+        let sql = MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL;
+        assert!(!sql.contains("DELETE"), "must not hard-delete: {sql}");
+        assert!(sql.contains("UPDATE module_issues"));
+        assert!(sql.contains("SET deleted_at"));
+        assert!(sql.contains("updated_at"));
+        assert!(sql.contains("deleted_at IS NULL"));
+        // Scope parity with the pre-fix query: issue + modules + project +
+        // workspace bindings ($1..$4) preserved.
+        for ph in ["$1", "$2", "$3", "$4"] {
+            assert!(sql.contains(ph), "missing bind {ph}: {sql}");
+        }
     }
 }
