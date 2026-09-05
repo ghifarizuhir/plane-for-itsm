@@ -513,7 +513,9 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/",
-            get(routes::intake::detail_issue).delete(routes::intake::destroy_issue),
+            get(routes::intake::detail_issue)
+                .patch(routes::intake::patch_issue)
+                .delete(routes::intake::destroy_issue),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
@@ -521,7 +523,9 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/",
-            get(routes::intake::detail_issue).delete(routes::intake::destroy_issue),
+            get(routes::intake::detail_issue)
+                .patch(routes::intake::patch_issue)
+                .delete(routes::intake::destroy_issue),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/members/",
