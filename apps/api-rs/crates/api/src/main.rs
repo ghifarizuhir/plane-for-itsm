@@ -69,6 +69,13 @@ async fn main() {
                 .patch(routes::project::patch)
                 .delete(routes::project::destroy),
         )
+        // Parity with `ProjectArchiveUnarchiveEndpoint`
+        // (`views/project/base.py:427-441`, `urls/project.py:122-126`):
+        // POST archives (200 `{"archived_at"}`), DELETE restores (204).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/archive/",
+            post(routes::project::archive).delete(routes::project::unarchive),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/",
             get(routes::issue::list).post(routes::issue::create),

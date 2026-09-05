@@ -312,6 +312,21 @@ pub fn guard_identifier_unique(exists: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Mirrors `ProjectArchiveUnarchiveEndpoint`
+/// (`plane/app/views/project/base.py:427-441`):
+/// `@allow_permission([ADMIN, MEMBER])` (level PROJECT) — only project
+/// ADMIN (20) / MEMBER (15) pass; GUEST (5) / non-member → 403 via
+/// `deny()`. Workspace-admin WITHOUT project membership is also denied:
+/// the `permissions/base.py:64-78` bypass requires an active
+/// project-membership row, so a bare workspace-admin (no membership)
+/// still denies — no bypass is implemented here, mirror exactly.
+pub(crate) fn guard_archive(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) | Some(15) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct PatchProject {
     #[serde(default)]
@@ -445,6 +460,87 @@ pub async fn destroy(
         ));
     }
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
+}
+
+/// POST `/api/workspaces/:slug/projects/:project_id/archive/` — parity with
+/// Django `ProjectArchiveUnarchiveEndpoint.post`
+/// (`plane/app/views/project/base.py:427-434`).
+///
+/// - Gate: PROJECT ADMIN (20) / MEMBER (15) via `project_role` +
+///   `guard_archive`; GUEST (5) / non-member → 403 `deny()`. No
+///   workspace-admin bypass (mirror exactly — `permissions/base.py:64-78`
+///   bypass needs a project-membership row; bare workspace-admin denies).
+/// - Resolve by (slug, pid) with `deleted_at IS NULL` (Django
+///   `SoftDeletionManager`, `mixins.py:56-58`); miss → 404 `missing()`.
+/// - Single transaction: `archived_at=now()` + soft-delete ALL
+///   `user_favorites` for (slug workspace + project, all users — Django
+///   `UserFavorite(workspace__slug, project).delete()`), → 200
+///   `{"archived_at": "<str>"}`.
+///
+/// Deviations: `archived_at` serializes as RFC3339 (chrono serde, same as
+/// `project_detail_json` elsewhere in this file) vs Django
+/// `str(project.archived_at)` (`"YYYY-MM-DD HH:MM:SS+00:00"`) — same
+/// instant, different format; `updated_at` is bumped alongside (Django
+/// `save()` `auto_now`). Favorites cleanup is a soft-delete
+/// (`deleted_at=now()`, Django default queryset `delete()`) not a hard
+/// `DELETE` (unlike `fav_remove` which passes `soft=False`).
+pub async fn archive(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = project_role(&st.pool, auth.0, project_id).await?;
+    if guard_archive(role).is_err() {
+        return Ok(deny());
+    }
+    let mut tx = st.pool.begin().await?;
+    let archived: Option<(chrono::DateTime<chrono::Utc>,)> = sqlx::query_as(
+        "UPDATE projects SET archived_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL RETURNING archived_at",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((archived_at,)) = archived else {
+        tx.rollback().await?;
+        return Ok(missing());
+    };
+    sqlx::query(
+        "UPDATE user_favorites SET deleted_at = now() WHERE project_id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::OK, Json(json!({"archived_at": archived_at}))))
+}
+
+/// DELETE `/api/workspaces/:slug/projects/:project_id/archive/` — parity
+/// with Django `ProjectArchiveUnarchiveEndpoint.delete`
+/// (`plane/app/views/project/base.py:436-441`): same gate + resolve as
+/// `archive`; `archived_at=None` → 204 empty.
+pub async fn unarchive(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = project_role(&st.pool, auth.0, project_id).await?;
+    if guard_archive(role).is_err() {
+        return Ok(deny());
+    }
+    let n = sqlx::query(
+        "UPDATE projects SET archived_at = NULL, updated_at = now() WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok(missing());
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
 /// Workspace role → project visibility scope for `project_details`.
@@ -1147,5 +1243,20 @@ mod batch_c_tests {
         assert!(is_integrity_error("23503"));
         assert!(!is_integrity_error("42P01"));
         assert!(!is_integrity_error(""));
+    }
+
+    #[test]
+    fn archive_guard_allows_admin_member_only() {
+        // Mirrors `ProjectArchiveUnarchiveEndpoint`
+        // (`plane/app/views/project/base.py:427-441`):
+        // `@allow_permission([ADMIN, MEMBER])` (level PROJECT) — only
+        // project ADMIN (20) / MEMBER (15) pass; GUEST (5) / non-member
+        // → 403. Workspace-admin WITHOUT project membership is also
+        // denied (no bypass — the `base.py:64-78` bypass requires an
+        // active project membership row, absent here).
+        assert!(guard_archive(Some(20)).is_ok());
+        assert!(guard_archive(Some(15)).is_ok());
+        assert!(guard_archive(Some(5)).is_err());
+        assert!(guard_archive(None).is_err());
     }
 }
