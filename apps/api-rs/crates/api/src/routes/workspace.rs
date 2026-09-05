@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
 
+use super::misc::user_id;
+
 /// Mirrors `plane/app/views/workspace/base.py:WorkSpaceViewSet` +Serializer
 /// `plane/app/serializers/workspace.py:WorkSpaceSerializer`.
 #[derive(Debug, Clone, Deserialize)]
@@ -134,17 +136,26 @@ pub async fn list(
 }
 
 /// POST /api/workspaces/ — validates then inserts.
+/// Owner = token user (Django `WorkSpaceViewSet` sets owner=request.user);
+/// `timezone`/`background_color` mirror model defaults (`UTC` + random hex,
+/// `plane/db/models/workspace.py:138-139`, `plane/utils/color.py:9`).
 pub async fn create(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     Json(body): Json<CreateWorkspace>,
 ) -> Result<(StatusCode, Json<WorkspaceOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    let owner = user_id(&st, &auth)
+        .await
+        .map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let color = format!("#{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
     let row = sqlx::query_as::<_, common::models::workspace::Workspace>(
-        "INSERT INTO workspaces (id, name, description, slug, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, now(), now()) RETURNING id, name, slug",
+        "INSERT INTO workspaces (id, name, slug, owner_id, timezone, background_color, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'UTC', $4, now(), now()) RETURNING id, name, slug",
     )
     .bind(&body.name)
     .bind(&body.slug)
+    .bind(owner)
+    .bind(&color)
     .fetch_one(&st.pool)
     .await?;
     Ok((

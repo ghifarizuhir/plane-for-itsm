@@ -91,7 +91,7 @@ pub async fn create(
     let access = body.access.unwrap_or(0);
 
     let page: common::models::page::Page = sqlx::query_as(
-        "INSERT INTO pages (id, name, description_html, description_json, color, access, is_locked, is_global, owned_by_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '<p></p>', '{}', $2, $3, false, false, $4, w.id, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
+        "INSERT INTO pages (id, name, description_html, description_json, color, access, is_locked, is_global, owned_by_id, workspace_id, logo_props, view_props, sort_order, created_at, updated_at) SELECT gen_random_uuid(), $1, '<p></p>', '{}', $2, $3, false, false, $4, w.id, '{}', '{}', 65535, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
     )
     .bind(body.name.clone().unwrap_or_default())
     .bind(body.color.clone().unwrap_or_default())

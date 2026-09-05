@@ -122,7 +122,7 @@ pub async fn create(
     }
 
     let row = sqlx::query_as::<_, common::models::member::ProjectMember>(
-        "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, member_id, role",
+        "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, is_active, view_props, default_props, sort_order, preferences, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, w.id, true, '{}', '{}', 65535, '{}', now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, member_id, role",
     )
     .bind(member_id)
     .bind(role)
@@ -196,7 +196,7 @@ pub async fn create_invite(
     }
 
     let row = sqlx::query_as::<_, common::models::member::WorkspaceInvite>(
-        "INSERT INTO workspace_member_invites (id, email, role, token, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, gen_random_uuid()::text, w.id, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, email, role",
+        "INSERT INTO workspace_member_invites (id, email, role, token, accepted, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, gen_random_uuid()::text, false, w.id, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, email, role",
     )
     .bind(&body.email)
     .bind(role)

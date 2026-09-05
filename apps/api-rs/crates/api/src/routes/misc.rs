@@ -43,7 +43,7 @@ pub async fn timezones() -> Json<Value> {
     Json(serde_json::from_str(DATA).unwrap_or(Value::Array(vec![])))
 }
 
-async fn user_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
+pub(crate) async fn user_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
     let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
         .bind(&auth.0)
         .fetch_optional(&st.pool)
@@ -74,7 +74,7 @@ pub async fn create_export(
     let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
     let projects = body.project.unwrap_or_default();
     sqlx::query(
-        "INSERT INTO exporters (id, workspace_id, project, provider, \"type\", initiated_by_id, created_at, updated_at) SELECT gen_random_uuid(), w.id, $1, $2, 'issue_exports', $3, now(), now() FROM workspaces w WHERE w.slug = $4",
+        "INSERT INTO exporters (id, workspace_id, project, provider, \"type\", initiated_by_id, status, reason, key, token, created_at, updated_at) SELECT gen_random_uuid(), w.id, $1, $2, 'issue_exports', $3, 'queued', '', '', 'exp_' || replace(gen_random_uuid()::text, '-', ''), now(), now() FROM workspaces w WHERE w.slug = $4",
     )
     .bind(&projects)
     .bind(body.provider.as_deref())
@@ -158,7 +158,7 @@ pub async fn create_token(
         .await?;
     // Token visible only on create, like APITokenSerializer.
     let row: (uuid::Uuid, String, String) = sqlx::query_as(
-        "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'plane_api_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, $5, now(), now()) RETURNING id, label, token",
+        "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'plane_api_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, true, false, '60/min', $5, now(), now()) RETURNING id, label, token",
     )
     .bind(&label)
     .bind(body.description.clone().unwrap_or_default())
@@ -235,7 +235,7 @@ pub async fn create_sticky(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
     let row = sqlx::query_as::<_, common::models::misc::Sticky>(
-        "INSERT INTO stickies (id, name, description_html, color, sort_order, workspace_id, owner_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '<p></p>', $2, 65535, w.id, $3, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
+        "INSERT INTO stickies (id, name, description, description_html, logo_props, color, sort_order, workspace_id, owner_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '{}', '<p></p>', '{}', $2, 65535, w.id, $3, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(&body.color)

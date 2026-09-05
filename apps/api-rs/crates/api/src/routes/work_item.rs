@@ -166,7 +166,7 @@ pub async fn create_comment(
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
     }
     let row = sqlx::query_as::<_, common::models::work_item::IssueComment>(
-        "INSERT INTO issue_comments (id, comment_html, comment_json, comment_stripped, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '', $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, comment_html",
+        "INSERT INTO issue_comments (id, comment_html, comment_json, comment_stripped, access, attachments, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '', 'INTERNAL', '{}', $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, comment_html",
     )
     .bind(body.comment_html.clone().unwrap_or_else(|| "<p></p>".to_string()))
     .bind(body.comment_json.clone().unwrap_or(json!({})))
@@ -263,7 +263,7 @@ pub async fn create_link(
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
     }
     let row = sqlx::query_as::<_, common::models::work_item::IssueLink>(
-        "INSERT INTO issue_links (id, title, url, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, url",
+        "INSERT INTO issue_links (id, title, url, metadata, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, url",
     )
     .bind(&body.title)
     .bind(&body.url)

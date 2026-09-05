@@ -118,7 +118,7 @@ pub async fn create(
 
     let estimate_type = body.estimate_type.as_deref().unwrap_or("categories");
     let row = sqlx::query_as::<_, common::models::estimate::Estimate>(
-        "INSERT INTO estimates (id, name, description, type, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, w.id, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
+        "INSERT INTO estimates (id, name, description, type, last_used, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, false, $4, w.id, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(body.description.clone().unwrap_or_default())

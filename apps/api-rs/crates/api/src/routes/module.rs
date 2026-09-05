@@ -58,13 +58,15 @@ pub async fn create(
     Json(body): Json<CreateModule>,
 ) -> Result<(StatusCode, Json<ModuleOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    // Django `Module.save` (`plane/db/models/module.py:94-121`): sort_order =
+    // min-10000 per project; status default "planned".
     let row = sqlx::query_as::<_, common::models::module::Module>(
-        "INSERT INTO modules (id, name, description, project_id, start_date, target_date, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, $3, $4, now(), now()) RETURNING id, name",
+        "INSERT INTO modules (id, name, description, status, project_id, workspace_id, view_props, logo_props, sort_order, start_date, target_date, created_at, updated_at) SELECT gen_random_uuid(), $1, '', 'planned', p.id, p.workspace_id, '{}', '{}', COALESCE((SELECT MIN(sort_order) FROM modules WHERE project_id = p.id), 65535 + 10000) - 10000, $2, $3, now(), now() FROM projects p WHERE p.id = $4 RETURNING id, name",
     )
     .bind(&body.name)
-    .bind(project_id)
     .bind(body.start_date)
     .bind(body.target_date)
+    .bind(project_id)
     .fetch_one(&st.pool)
     .await?;
     Ok((

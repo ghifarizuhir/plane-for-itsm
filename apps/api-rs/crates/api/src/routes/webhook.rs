@@ -95,7 +95,7 @@ pub async fn create(
     }
 
     let row = sqlx::query_as::<_, common::models::webhook::Webhook>(
-        "INSERT INTO webhooks (id, url, is_active, secret_key, project, issue, module, cycle, issue_comment, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, 'plane_wh_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, $5, $6, $7, w.id, now(), now() FROM workspaces w WHERE w.slug = $8 RETURNING id, url, is_active",
+        "INSERT INTO webhooks (id, url, is_active, is_internal, version, secret_key, project, issue, module, cycle, issue_comment, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, false, 'v1', 'plane_wh_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, $5, $6, $7, w.id, now(), now() FROM workspaces w WHERE w.slug = $8 RETURNING id, url, is_active",
     )
     .bind(&body.url)
     .bind(body.is_active.unwrap_or(true))

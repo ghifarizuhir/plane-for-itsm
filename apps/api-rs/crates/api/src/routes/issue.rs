@@ -102,11 +102,14 @@ pub async fn create(
         }
     }
 
+    // Django `Issue.save` (`plane/db/models/issue.py:190-216`): sequence_id from
+    // IssueSequence max+1 per project; sort_order max+10000 per (project, state).
     let row = sqlx::query_as::<_, common::models::issue::Issue>(
-        "INSERT INTO issues (id, name, description, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, name",
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '<p></p>', '{}', 'none', false, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $2 AND state_id IS NOT DISTINCT FROM $3), 65535 - 10000) + 10000, COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $2), 0) + 1, $3, $2, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(project_id)
+    .bind(body.state_id)
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;

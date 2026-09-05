@@ -76,7 +76,7 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<StateOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let row = sqlx::query_as::<_, common::models::state::State>(
-        "INSERT INTO states (id, name, description, \"group\", color, project_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, '', $2, $3, $4, now(), now()) RETURNING id, name, \"group\"",
+        "INSERT INTO states (id, name, description, \"group\", color, project_id, workspace_id, slug, sequence, \"default\", is_triage, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, $3, p.id, p.workspace_id, lower(regexp_replace($1, '[^a-zA-Z0-9]+', '-', 'g')), COALESCE((SELECT MAX(sequence) FROM states WHERE project_id = p.id), 0) + 15000, false, false, now(), now() FROM projects p WHERE p.id = $4 RETURNING id, name, \"group\"",
     )
     .bind(&body.name)
     .bind(&body.group)

@@ -80,7 +80,7 @@ pub async fn create(
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let ident = body.identifier.trim().to_uppercase();
     let row = sqlx::query_as::<_, common::models::project::Project>(
-        "INSERT INTO projects (id, name, description, identifier, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, name",
+        "INSERT INTO projects (id, name, description, identifier, workspace_id, network, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features, archive_in, close_in, logo_props, timezone, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, 2, false, false, false, true, false, false, false, false, 0, 0, '{}', w.timezone, now(), now() FROM workspaces w WHERE w.slug = $3 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(&ident)

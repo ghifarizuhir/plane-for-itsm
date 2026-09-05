@@ -106,7 +106,7 @@ pub async fn create(
     }
 
     let row = sqlx::query_as::<_, common::models::intake::Intake>(
-        "INSERT INTO intakes (id, name, description, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
+        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, false, '{}', '{}', $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(body.description.clone().unwrap_or_default())
@@ -166,7 +166,7 @@ pub async fn create_issue(
         Some(id) => id,
         None => {
             sqlx::query_scalar(
-                "INSERT INTO states (id, name, \"group\", color, sequence, is_triage, \"default\", project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), 'Triage', 'triage', '#4E5355', 65000, true, false, $1, $2, now(), now()) RETURNING id",
+                "INSERT INTO states (id, name, description, slug, \"group\", color, sequence, is_triage, \"default\", project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), 'Triage', '', 'triage', 'triage', '#4E5355', 65000, true, false, $1, $2, now(), now()) RETURNING id",
             )
             .bind(project_id)
             .bind(workspace_id)
@@ -176,7 +176,7 @@ pub async fn create_issue(
     };
 
     let issue_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO issues (id, name, priority, state_id, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now()) RETURNING id",
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, '<p></p>', '{}', $2, false, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $4 AND state_id IS NOT DISTINCT FROM $3), 65535 - 10000) + 10000, COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $4), 0) + 1, $3, $4, $5, now(), now()) RETURNING id",
     )
     .bind(&name)
     .bind(&priority)
