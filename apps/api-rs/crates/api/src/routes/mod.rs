@@ -33,3 +33,4 @@ pub mod issue_dates;
 pub mod issue_archive_one;
 pub mod versions;
 pub mod reactions;
+pub mod draft;

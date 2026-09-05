@@ -325,6 +325,36 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/comments/:comment_id/reactions/:reaction_code/",
             delete(routes::reactions::comment_reaction_destroy),
         )
+        // Parity with `WorkspaceDraftIssueViewSet.list/create`
+        // (`views/workspace/draft.py:97-154`,
+        // `urls/workspace.py:202-206`): GET 200 paginated own-drafts-only
+        // `DraftIssueSerializer` + POST **201** (same 21 keys). Gate
+        // WORKSPACE ADMIN/MEMBER/GUEST (list/create AMG).
+        .route(
+            "/api/workspaces/:slug/draft-issues/",
+            get(routes::draft::list).post(routes::draft::create),
+        )
+        // Parity with `WorkspaceDraftIssueViewSet.retrieve/partial_update/
+        // destroy` (`draft.py:156-203`, `urls/workspace.py:207-211`):
+        // GET 200 detail (miss → 404 standard) + PATCH **204** (miss →
+        // 404 `{"error":"Issue not found"}` verbatim, NON-standard) +
+        // DELETE **204**. Gates WORKSPACE level: PATCH ADMIN+MEMBER+creator,
+        // retrieve ADMIN+creator, destroy ADMIN-or-creator.
+        .route(
+            "/api/workspaces/:slug/draft-issues/:pk/",
+            get(routes::draft::retrieve)
+                .patch(routes::draft::partial_update)
+                .delete(routes::draft::destroy),
+        )
+        // Parity with `WorkspaceDraftIssueViewSet.create_draft_to_issue`
+        // (`draft.py:205-311`, `urls/workspace.py:212-216`): POST **201**;
+        // no-project → 400
+        // `{"error":"Project is required to create an issue."}`. Gate
+        // WORKSPACE ADMIN+MEMBER (no creator requirement). Celery skipped.
+        .route(
+            "/api/workspaces/:slug/draft-to-issue/:draft_id/",
+            post(routes::draft::create_draft_to_issue),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/",
             get(routes::cycle::list).post(routes::cycle::create),
