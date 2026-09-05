@@ -63,8 +63,11 @@ echo "== writes =="
 check ws-create 201 -X POST -d "{\"name\":\"Smoke $SFX\",\"slug\":\"smoke-$SFX\"}" "$BASE/api/workspaces/"
 WS="smoke-$SFX"
 check ws-detail 200 "$BASE/api/workspaces/$WS/"
+check me-workspaces-200 200 "$BASE/api/users/me/workspaces/"
+check ws-invitations-200 200 "$BASE/api/users/me/workspaces/invitations/"
 check proj-create 201 -X POST -d '{"name":"Smoke Proj","identifier":"SMP"}' "$BASE/api/workspaces/$WS/projects/"
 PID=$(jid id)
+check project-roles-200 200 "$BASE/api/users/me/workspaces/$WS/project-roles/"
 check state-create 201 -X POST -d '{"name":"Todo","group":"backlog","color":"#ff0000"}' "$BASE/api/workspaces/$WS/projects/$PID/states/"
 SID=$(jid id)
 check issue-create 201 -X POST -d '{"name":"Smoke issue"}' "$BASE/api/workspaces/$WS/projects/$PID/issues/"
@@ -100,6 +103,9 @@ else
   check_auth csrf-200 200 "$BASE/auth/get-csrf-token/"
   check_auth forgot-smtp-400 400 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/forgot-password/"
   check_auth magic-smtp-400 400 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/magic-generate/"
+  # generate-code invalid gagal di validasi SEBELUM throttle Redis → tak makan budget.
+  # Pakai check (X-Api-Key) karena endpoint butuh AuthUser; check_auth tanpa kredensial → 401.
+  check email-gen-invalid-400 400 -X POST -d '{"email":"x"}' "$BASE/api/users/me/email/generate-code/"
   check_auth login-200 200 -c "$JAR" -X POST -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"$SMOKE_PASSWORD\"}" "$BASE/api/auth/login/"
   check_auth me-200 200 -b "$JAR" "$BASE/api/users/me/"
   check_auth refresh-200 200 -c "$JAR" -b "$JAR" -X POST "$BASE/api/auth/refresh/"
