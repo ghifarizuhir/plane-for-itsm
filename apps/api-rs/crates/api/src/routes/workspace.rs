@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
 
-use super::misc::user_id;
-
 /// Mirrors `plane/app/views/workspace/base.py:WorkSpaceViewSet` +Serializer
 /// `plane/app/serializers/workspace.py:WorkSpaceSerializer`.
 #[derive(Debug, Clone, Deserialize)]
@@ -145,9 +143,7 @@ pub async fn create(
     Json(body): Json<CreateWorkspace>,
 ) -> Result<(StatusCode, Json<WorkspaceOut>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = user_id(&st, &auth)
-        .await
-        .map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let color = format!("#{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
     let row = sqlx::query_as::<_, common::models::workspace::Workspace>(
         "INSERT INTO workspaces (id, name, slug, owner_id, timezone, background_color, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'UTC', $4, now(), now()) RETURNING id, name, slug",

@@ -54,6 +54,9 @@ pub fn validate_new_email(new_email: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Deprecated: AuthUser kini membawa UUID user langsung (`auth.0`).
+/// Dipertahankan hingga Task 6 selesai — jangan hapus dulu.
+#[allow(dead_code)]
 async fn user_id(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
     sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
         .bind(&auth.0)
@@ -78,9 +81,7 @@ pub async fn me(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     match me_row(&st, uid).await {
         Some(u) => Ok((StatusCode::OK, Json(json!({"id": u.id, "email": u.email, "first_name": u.first_name, "last_name": u.last_name})))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "User not found"})))),
@@ -94,9 +95,7 @@ pub async fn patch_me(
     Json(body): Json<UpdateUser>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_update(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     sqlx::query("UPDATE users SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), updated_at = now() WHERE id = $3")
         .bind(&body.first_name)
         .bind(&body.last_name)
@@ -114,9 +113,7 @@ pub async fn settings(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let row: Option<(serde_json::Value,)> =
         sqlx::query_as("SELECT theme FROM profiles WHERE user_id = $1")
             .bind(uid)
@@ -133,9 +130,7 @@ pub async fn instance_admin(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let is_admin: Option<(uuid::Uuid,)> =
         sqlx::query_as("SELECT id FROM instance_admins WHERE user_id = $1 LIMIT 1")
             .bind(uid)
@@ -149,14 +144,11 @@ pub async fn session(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    match user_id(&st, &auth).await {
-        Some(uid) => match me_row(&st, uid).await {
-            Some(u) => Ok((
-                StatusCode::OK,
-                Json(json!({"is_authenticated": true, "user": {"id": u.id, "email": u.email}})),
-            )),
-            None => Ok((StatusCode::OK, Json(json!({"is_authenticated": false})))),
-        },
+    match me_row(&st, auth.0).await {
+        Some(u) => Ok((
+            StatusCode::OK,
+            Json(json!({"is_authenticated": true, "user": {"id": u.id, "email": u.email}})),
+        )),
         None => Ok((StatusCode::OK, Json(json!({"is_authenticated": false})))),
     }
 }
@@ -167,9 +159,7 @@ pub async fn onboard(
     auth: AuthUser,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let flag = body.get("is_onboarded").and_then(|v| v.as_bool()).unwrap_or(false);
     sqlx::query("UPDATE profiles SET is_onboarded = $1, updated_at = now() WHERE user_id = $2")
         .bind(flag)
@@ -185,9 +175,7 @@ pub async fn tour_completed(
     auth: AuthUser,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let flag = body.get("is_tour_completed").and_then(|v| v.as_bool()).unwrap_or(false);
     sqlx::query("UPDATE profiles SET is_tour_completed = $1, updated_at = now() WHERE user_id = $2")
         .bind(flag)
@@ -202,9 +190,7 @@ pub async fn activities(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let rows: Vec<(uuid::Uuid, chrono::DateTime<chrono::Utc>)> =
         sqlx::query_as("SELECT id, created_at FROM issue_activities WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 50")
             .bind(uid)
@@ -221,9 +207,7 @@ pub async fn list_accounts(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let rows: Vec<(uuid::Uuid, String)> =
         sqlx::query_as("SELECT id, provider FROM accounts WHERE user_id = $1")
             .bind(uid)
@@ -240,9 +224,7 @@ pub async fn get_account(
     auth: AuthUser,
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let row: Option<(uuid::Uuid, String)> =
         sqlx::query_as("SELECT id, provider FROM accounts WHERE id = $1 AND user_id = $2")
             .bind(pk)
@@ -260,9 +242,7 @@ pub async fn delete_account(
     auth: AuthUser,
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     sqlx::query("DELETE FROM accounts WHERE id = $1 AND user_id = $2")
         .bind(pk)
         .bind(uid)
@@ -276,9 +256,7 @@ pub async fn profile(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     let row: Option<(uuid::Uuid, serde_json::Value, bool, bool)> =
         sqlx::query_as("SELECT id, theme, is_onboarded, is_tour_completed FROM profiles WHERE user_id = $1")
             .bind(uid)
@@ -298,9 +276,7 @@ pub async fn patch_profile(
     auth: AuthUser,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let Some(uid) = user_id(&st, &auth).await else {
-        return Ok((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))));
-    };
+    let uid = auth.0;
     if let Some(theme) = body.get("theme") {
         sqlx::query("UPDATE profiles SET theme = $1, updated_at = now() WHERE user_id = $2")
             .bind(theme)

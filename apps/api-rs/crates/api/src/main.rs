@@ -22,7 +22,7 @@ async fn main() {
     if let Err(e) = common::db::migrate(&pool).await {
         tracing::warn!(error=%e, "migrate failed");
     }
-    let redis = common::redis::create_redis(&cfg.redis_url).await;
+    let redis = redis::Client::open(cfg.redis_url.as_str()).expect("redis client open failed");
 
     let app = Router::new()
         .route("/health", get(routes::health::health))
@@ -356,6 +356,9 @@ async fn main() {
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
         .route("/api/timezones/", get(routes::misc::timezones))
+        .route("/api/auth/login/", post(routes::auth::login))
+        .route("/api/auth/refresh/", post(routes::auth::refresh))
+        .route("/api/auth/logout/", post(routes::auth::logout))
         .route(
             "/api/workspaces/:slug/export-issues/",
             post(routes::misc::create_export).get(routes::misc::export_history),
@@ -406,7 +409,7 @@ async fn main() {
             "/api/workspaces/:slug/analytic-view/",
             get(routes::analytic::list_views).post(routes::analytic::create_view),
         )
-        .with_state(state::AppState { pool, redis })
+        .with_state(state::AppState { pool, redis, config: cfg.clone() })
         .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 

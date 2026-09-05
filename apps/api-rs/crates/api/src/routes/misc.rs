@@ -43,6 +43,9 @@ pub async fn timezones() -> Json<Value> {
     Json(serde_json::from_str(DATA).unwrap_or(Value::Array(vec![])))
 }
 
+/// Deprecated: AuthUser kini membawa UUID user langsung (`auth.0`).
+/// Dipertahankan hingga Task 6 selesai — jangan hapus dulu.
+#[allow(dead_code)]
 pub(crate) async fn user_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
     let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
         .bind(&auth.0)
@@ -71,7 +74,7 @@ pub async fn create_export(
     Json(body): Json<CreateExport>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_export_provider(body.provider.as_deref()).map_err(|e| anyhow::anyhow!(e))?;
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     let projects = body.project.unwrap_or_default();
     sqlx::query(
         "INSERT INTO exporters (id, workspace_id, project, provider, \"type\", initiated_by_id, status, reason, key, token, created_at, updated_at) SELECT gen_random_uuid(), w.id, $1, $2, 'issue_exports', $3, 'queued', '', '', 'exp_' || replace(gen_random_uuid()::text, '-', ''), now(), now() FROM workspaces w WHERE w.slug = $4",
@@ -134,7 +137,7 @@ pub async fn list_tokens(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     let rows = sqlx::query_as::<_, common::models::misc::ApiToken>(
         "SELECT id, label FROM api_tokens WHERE user_id = $1 AND is_service = false AND deleted_at IS NULL ORDER BY created_at DESC",
     )
@@ -149,7 +152,7 @@ pub async fn create_token(
     auth: AuthUser,
     Json(body): Json<CreateApiToken>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     let label = default_token_label(body.label);
     // user_type mirrors Django: 1 for bot callers, else 0.
     let is_bot: (bool,) = sqlx::query_as("SELECT is_bot FROM users WHERE id = $1")
@@ -175,7 +178,7 @@ pub async fn get_token(
     auth: AuthUser,
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     let row: Option<common::models::misc::ApiToken> = sqlx::query_as(
         "SELECT id, label FROM api_tokens WHERE id = $1 AND user_id = $2 AND is_service = false AND deleted_at IS NULL",
     )
@@ -194,7 +197,7 @@ pub async fn delete_token(
     auth: AuthUser,
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     sqlx::query("UPDATE api_tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND is_service = false")
         .bind(pk)
         .bind(user)
@@ -233,7 +236,7 @@ pub async fn create_sticky(
     axum::extract::Path(slug): axum::extract::Path<String>,
     Json(body): Json<CreateSticky>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let user = user_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let user = auth.0;
     let row = sqlx::query_as::<_, common::models::misc::Sticky>(
         "INSERT INTO stickies (id, name, description, description_html, logo_props, color, sort_order, workspace_id, owner_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '{}', '<p></p>', '{}', $2, 65535, w.id, $3, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
     )

@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
 
-use super::misc::user_id;
-
 /// Mirrors `plane/app/serializers/cycle.py:CycleWriteSerializer.validate`
 /// + #9200 guard (archive requires end_date).
 #[derive(Debug, Clone, Deserialize)]
@@ -85,9 +83,7 @@ pub async fn create(
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     // Django `Cycle.save` (`plane/db/models/cycle.py:70-95`): sort_order =
     // min-10000 per project; owned_by = request user; version 1.
-    let owner = user_id(&st, &auth)
-        .await
-        .map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let row = sqlx::query_as::<_, common::models::cycle::Cycle>(
         "INSERT INTO cycles (id, name, description, project_id, workspace_id, owned_by_id, timezone, version, view_props, logo_props, progress_snapshot, sort_order, start_date, end_date, created_at, updated_at) SELECT gen_random_uuid(), $1, '', p.id, p.workspace_id, $2, 'UTC', 1, '{}', '{}', '{}', COALESCE((SELECT MIN(sort_order) FROM cycles WHERE project_id = p.id), 65535 + 10000) - 10000, $3, $4, now(), now() FROM projects p WHERE p.id = $5 RETURNING id, name",
     )
