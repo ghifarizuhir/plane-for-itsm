@@ -4,7 +4,7 @@
 # Requires: stack up (api on 8000), a valid token in api_tokens.
 # Usage: TOKEN=plane_api_... bash apps/api-rs/scripts/smoke.sh
 #
-# Auth smoke (Task 9): 7 cek siklus login/me/refresh/logout + login-bad +
+# Auth smoke (Task 9 + email-check): 10 cek siklus email-check/login/me/refresh/
 # oauth-start, setelah writes, sebelum cleanup. Kredensial dari env:
 #   SMOKE_EMAIL / SMOKE_PASSWORD (JANGAN di-commit).
 # Bila keduanya unset, cek auth DI-SKIP (bukan fail).
@@ -92,6 +92,11 @@ if [ -z "${SMOKE_EMAIL:-}" ] || [ -z "${SMOKE_PASSWORD:-}" ]; then
 else
   JAR=/tmp/smoke_jar
   rm -f "$JAR"
+  # email-check (paritas Django EmailCheckEndpoint) dulu: hanya 2 hit agar
+  # total hit rate-limit IP (5/mnt) tetap aman bersama login+login-bad.
+  check_auth email-check-200 200 -X POST -d "{\"email\":\"$SMOKE_EMAIL\"}" "$BASE/auth/email-check/"
+  grep -q '"existing":true' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   email-check-body -> existing:true"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED email-check-body"; echo "FAIL email-check-body: $(head -c 200 /tmp/smoke_body)"; }
+  check_auth email-check-bad-400 400 -X POST -d '{"email":"bukan-email"}' "$BASE/auth/email-check/"
   check_auth login-200 200 -c "$JAR" -X POST -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"$SMOKE_PASSWORD\"}" "$BASE/api/auth/login/"
   check_auth me-200 200 -b "$JAR" "$BASE/api/users/me/"
   check_auth refresh-200 200 -c "$JAR" -b "$JAR" -X POST "$BASE/api/auth/refresh/"

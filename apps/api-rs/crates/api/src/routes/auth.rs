@@ -1,6 +1,6 @@
 // crates/api/src/routes/auth.rs
 //
-// Session auth: `POST /api/auth/login|refresh|logout/`.
+// Session auth: `POST /api/auth/login|refresh|logout/`, `POST /auth/email-check/`.
 //
 // - login: email+password lawan hash Django → 200 `{id, email}` + 2 Set-Cookie
 //   (access JWT 15 mnt, refresh opaque 30 hari di Redis).
@@ -81,6 +81,87 @@ fn read_cookie(headers: &HeaderMap, names: &[&str]) -> Option<String> {
 
 fn family_key(family: &str) -> String {
     format!("auth:family:{family}")
+}
+
+#[derive(Deserialize)]
+pub struct EmailCheckBody {
+    pub email: Option<String>,
+}
+
+/// Bentuk error Django `AuthenticationException.get_error_dict()`
+/// (`apps/api/plane/authentication/adapter/error.py`).
+fn auth_error(code: i32, message: &str) -> Json<Value> {
+    Json(json!({"error_code": code, "error_message": message}))
+}
+
+/// Validasi email sederhana selaras `django.core.validators.validate_email`
+/// untuk kebutuhan email-check (frontend sudah validasi client-side):
+/// satu `@`, lokal+domain tak kosong, domain memuat titik, tanpa spasi.
+fn email_valid(email: &str) -> bool {
+    if email.is_empty() || email.len() > 254 || email.contains(' ') {
+        return false;
+    }
+    let mut parts = email.split('@');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(local), Some(domain), None) => {
+            !local.is_empty() && !domain.is_empty() && domain.contains('.')
+        }
+        _ => false,
+    }
+}
+
+/// POST /auth/email-check/ — paritas `EmailCheckEndpoint`
+/// (`apps/api/plane/authentication/views/app/check.py`): publik, 200
+/// `{existing, status: MAGIC_CODE|CREDENTIAL}`; gagal → 400
+/// `{error_code, error_message}` (5000/5010/5005).
+pub async fn email_check(
+    State(st): State<AppState>,
+    Json(body): Json<EmailCheckBody>,
+) -> (StatusCode, Json<Value>) {
+    let setup: Option<bool> = sqlx::query_scalar(
+        "SELECT is_setup_done FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(&st.pool)
+    .await
+    .unwrap_or(None);
+    if setup != Some(true) {
+        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+    }
+    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    if email.is_empty() {
+        return (StatusCode::BAD_REQUEST, auth_error(5010, "EMAIL_REQUIRED"));
+    }
+    if !email_valid(&email) {
+        return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
+    }
+    let autoset: Option<bool> =
+        sqlx::query_scalar("SELECT is_password_autoset FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(&st.pool)
+            .await
+            .unwrap_or(None);
+    // Django membaca konfigurasi instance dengan fallback env
+    // (`get_configuration_value`); Rust membaca env langsung seperti
+    // `routes::instance` (AppConfig hanya membawa field auth/frontend).
+    let smtp_configured = !std::env::var("EMAIL_HOST").unwrap_or_default().is_empty();
+    let magic_enabled = std::env::var("ENABLE_MAGIC_LINK_LOGIN").unwrap_or_else(|_| "1".to_string()) == "1";
+    let magic = smtp_configured && magic_enabled;
+    match autoset {
+        Some(is_autoset) => (
+            StatusCode::OK,
+            Json(json!({
+                "existing": true,
+                "status": if is_autoset && magic { "MAGIC_CODE" } else { "CREDENTIAL" },
+            })),
+        ),
+        None => (
+            StatusCode::OK,
+            Json(json!({
+                "existing": false,
+                "status": if magic { "MAGIC_CODE" } else { "CREDENTIAL" },
+            })),
+        ),
+    }
 }
 
 /// POST /api/auth/login/ — email+password lawan hash Django.
@@ -920,6 +1001,18 @@ mod tests {
             .to_str()
             .unwrap()
             .to_string()
+    }
+
+    #[test]
+    fn email_valid_shapes() {
+        assert!(email_valid("user@example.com"));
+        assert!(email_valid("a.b+tag@sub.domain.co"));
+        assert!(!email_valid(""));
+        assert!(!email_valid("plainaddress"));
+        assert!(!email_valid("@nodomain.com"));
+        assert!(!email_valid("user@nodot"));
+        assert!(!email_valid("a@b@c.com"));
+        assert!(!email_valid("user @example.com"));
     }
 
     #[test]

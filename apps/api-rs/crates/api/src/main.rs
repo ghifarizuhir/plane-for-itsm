@@ -411,10 +411,11 @@ async fn main() {
             get(routes::analytic::list_views).post(routes::analytic::create_view),
         );
 
-    // Login + OAuth callback di-limit per-IP (5/mnt); refresh/logout/start bebas.
+    // Login + OAuth callback + email-check di-limit per-IP (5/mnt); refresh/logout/start bebas.
     let auth_router = Router::new()
         .route("/api/auth/login/", post(routes::auth::login))
         .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
+        .route("/auth/email-check/", post(routes::auth::email_check))
         .route_layer(axum_middleware::from_fn_with_state(
             IpRateLimiter::new(5, std::time::Duration::from_secs(60)),
             ip_rate_limit_middleware,
