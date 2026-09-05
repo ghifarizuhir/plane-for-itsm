@@ -9,3 +9,12 @@ fn config_from_env_defaults() {
     assert!(cfg.redis_url.contains("redis"));
     assert_eq!(cfg.port, 8001);
 }
+
+#[test]
+fn cookie_secure_defaults_off() {
+    std::env::remove_var("COOKIE_SECURE");
+    std::env::remove_var("FRONTEND_URL");
+    let cfg = common::config::AppConfig::from_env();
+    assert!(!cfg.cookie_secure);
+    assert_eq!(cfg.frontend_url, "http://localhost:3000");
+}

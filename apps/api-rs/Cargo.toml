@@ -20,6 +20,10 @@ jsonwebtoken = "9"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
+pbkdf2 = { version = "0.12" }
+sha2 = "0.10"
+base64 = "0.22"
+reqwest = { version = "0.12", features = ["json", "rustls-tls-manual-roots"] }
 
 [profile.release]
 lto = true
