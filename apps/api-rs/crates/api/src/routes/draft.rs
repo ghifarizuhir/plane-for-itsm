@@ -1303,8 +1303,8 @@ pub async fn create_draft_to_issue(
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, created_by_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now())",
+        "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, created_by_id, deleted, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, now(), now())",
     )
     .bind(sequence)
     .bind(issue_id)
