@@ -189,10 +189,14 @@ pub fn verify_django_password(password: &str, encoded: &str) -> bool {
                 Ok(b) => b,
                 Err(_) => return false,
             };
-            let mut out = vec![0u8; expected.len()];
+            // Fix review kritis: digest Django SHA-256 selalu 32 byte — tolak digest
+            // kosong/salah-panjang (fold kosong bernilai 0 sehingga lolos sebagai true).
+            if expected.len() != 32 /* SHA-256 output */ {
+                return false;
+            }
+            let mut out = [0u8; 32];
             pbkdf2_hmac::<Sha256>(password.as_bytes(), salt.as_bytes(), iter, &mut out);
-            out.len() == expected.len()
-                && out.iter().zip(expected.iter()).fold(0, |a, (x, y)| a | (x ^ y)) == 0
+            out.iter().zip(expected.iter()).fold(0, |a, (x, y)| a | (x ^ y)) == 0
         }
         _ => false,
     }
