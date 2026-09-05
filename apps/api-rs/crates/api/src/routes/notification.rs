@@ -40,21 +40,12 @@ pub struct MarkAllRead {
     pub r#type: Option<String>,
 }
 
-async fn receiver_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
-    let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))?;
-    id.ok_or((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))
-}
-
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
 ) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     let rows = sqlx::query_as::<_, common::models::notification::Notification>(
         "SELECT n.id, n.title, n.read_at, n.archived_at FROM notifications n JOIN workspaces w ON w.id = n.workspace_id WHERE w.slug = $1 AND n.receiver_id = $2 AND n.deleted_at IS NULL ORDER BY n.created_at DESC",
     )
@@ -74,7 +65,7 @@ pub async fn unread(
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
 ) -> Result<Json<Value>, common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     let total: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM notifications n JOIN workspaces w ON w.id = n.workspace_id WHERE w.slug = $1 AND n.receiver_id = $2 AND n.read_at IS NULL AND n.archived_at IS NULL AND n.snoozed_till IS NULL AND n.sender NOT ILIKE '%mentioned%' AND n.deleted_at IS NULL",
     )
@@ -101,7 +92,7 @@ pub async fn mark_all_read(
     axum::extract::Path(slug): axum::extract::Path<String>,
     Json(body): Json<MarkAllRead>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     // Mirrors the viewset's snoozed/archived/type filter variants.
     let type_filter = match body.r#type.as_deref().unwrap_or("all") {
         "watching" => "AND n.entity_identifier IN (SELECT issue_id FROM issue_subscribers s JOIN workspaces w2 ON w2.id = s.workspace_id WHERE w2.slug = $1 AND s.subscriber_id = $2)",
@@ -153,7 +144,7 @@ pub async fn mark_read(
     auth: AuthUser,
     axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     if !toggle(&st, &_slug, receiver, pk, "read_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
@@ -165,7 +156,7 @@ pub async fn mark_unread(
     auth: AuthUser,
     axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     if !toggle(&st, &_slug, receiver, pk, "read_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
@@ -177,7 +168,7 @@ pub async fn archive(
     auth: AuthUser,
     axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     if !toggle(&st, &_slug, receiver, pk, "archived_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
@@ -189,7 +180,7 @@ pub async fn unarchive(
     auth: AuthUser,
     axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     if !toggle(&st, &_slug, receiver, pk, "archived_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
@@ -200,7 +191,7 @@ pub async fn get_preferences(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<Value>, common::errors::AppError> {
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     let row: Option<(bool, bool, bool, bool, bool)> = sqlx::query_as(
         "SELECT property_change, state_change, comment, mention, issue_completed FROM user_notification_preferences WHERE user_id = $1 AND deleted_at IS NULL LIMIT 1",
     )
@@ -225,7 +216,7 @@ pub async fn patch_preferences(
     Json(body): Json<HashMap<String, Value>>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_preference_patch(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let receiver = receiver_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let receiver = auth.0;
     // Upsert one row per user; only known keys can appear (validated above).
     sqlx::query(
         "INSERT INTO user_notification_preferences (id, user_id, property_change, state_change, comment, mention, issue_completed, created_at, updated_at) VALUES (gen_random_uuid(), $1, true, true, true, true, true, now(), now()) ON CONFLICT DO NOTHING",

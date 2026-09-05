@@ -64,17 +64,6 @@ pub fn validate_favorite_create(body: &CreateFavorite) -> Result<(), String> {
     Ok(())
 }
 
-/// Django always has a real request.user; the strangler resolves the owner
-/// from `api_tokens` (X-Api-Key path). Unresolvable tokens → 401.
-async fn owner_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
-    let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))?;
-    id.ok_or((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))
-}
-
 async fn list_views(
     st: &AppState,
     slug: &str,
@@ -121,7 +110,7 @@ pub async fn create(
     Json(body): Json<CreateView>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = owner_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let access = body.access.unwrap_or(1);
 
     // NOT NULL JSON columns get '{}' (Django Python-side defaults).
@@ -146,7 +135,7 @@ pub async fn create_global(
     Json(body): Json<CreateView>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = owner_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let access = body.access.unwrap_or(1);
 
     let row = sqlx::query_as::<_, common::models::view::IssueView>(
@@ -187,7 +176,7 @@ pub async fn create_favorite(
     Json(body): Json<CreateFavorite>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_favorite_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = owner_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let view_id = body.view.unwrap();
 
     let existing: Option<uuid::Uuid> = sqlx::query_scalar(
@@ -250,10 +239,8 @@ async fn view_detail_row(
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
     };
     // Guest gate mirrors `IssueViewViewSet.retrieve`.
-    let uid: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await?;
+    // AuthUser identitas sudah tervalidasi di extractor.
+    let uid: Option<uuid::Uuid> = Some(auth.0);
     if let (Some(uid), Some(pid)) = (uid, project_id) {
         let role: Option<i16> = sqlx::query_scalar(
             "SELECT role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",

@@ -82,15 +82,6 @@ pub fn clamp_size(size: i64) -> i64 {
     size.min(FILE_SIZE_LIMIT)
 }
 
-async fn user_id(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
-    sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-}
-
 async fn find_asset(
     st: &AppState,
     slug: &str,
@@ -115,9 +106,7 @@ async fn check_project_access(
     let Some(project_id) = asset.project_id else {
         return Ok(true);
     };
-    let Some(uid) = user_id(st, auth).await else {
-        return Ok(false);
-    };
+    let uid = auth.0;
     let allowed: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM project_members WHERE member_id = $1 AND workspace_id = $2 AND project_id = $3 AND is_active = true AND deleted_at IS NULL)",
     )

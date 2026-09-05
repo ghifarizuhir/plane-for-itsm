@@ -434,8 +434,3 @@ async fn main() {
     tracing::info!("rust-api listening on {}", cfg.port);
     axum::serve(listener, app).await.unwrap();
 }
-
-// helper for tests
-pub async fn test_app() -> Router {
-    Router::new().route("/health", get(routes::health::health))
-}

@@ -54,18 +54,6 @@ pub fn validate_new_email(new_email: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Deprecated: AuthUser kini membawa UUID user langsung (`auth.0`).
-/// Dipertahankan hingga Task 6 selesai — jangan hapus dulu.
-#[allow(dead_code)]
-async fn user_id(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
-    sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-}
-
 async fn me_row(st: &AppState, uid: uuid::Uuid) -> Option<MeOut> {
     let row: Option<(uuid::Uuid, Option<String>, String, String)> =
         sqlx::query_as("SELECT id, email, first_name, last_name FROM users WHERE id = $1")

@@ -73,15 +73,6 @@ pub struct EntitySearchQuery {
     pub project_id: Option<uuid::Uuid>,
 }
 
-async fn caller(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
-    sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-}
-
 fn like_pattern(query: Option<&str>) -> String {
     match query {
         Some(q) if !q.trim().is_empty() => format!("%{}%", q.replace(['%', '_'], "")),
@@ -107,19 +98,10 @@ pub async fn global_search(
     axum::extract::Query(q): axum::extract::Query<GlobalSearchQuery>,
 ) -> Result<Json<Value>, common::errors::AppError> {
     let entities = parse_entities(q.entities.as_deref());
-    let user = caller(&st, &auth).await;
+    // AuthUser identitas sudah tervalidasi di extractor — selalu ada.
+    let user = auth.0;
     let pattern = like_pattern(q.search.as_deref());
     let mut results = serde_json::Map::new();
-
-    // Without a resolvable caller there are no memberships → empty result
-    // sets (safe default; Django would 403 at permission level).
-    if user.is_none() {
-        for e in &entities {
-            results.insert(e.clone(), Value::Array(vec![]));
-        }
-        return Ok(Json(Value::Object(results)));
-    }
-    let user = user.unwrap();
 
     for entity in &entities {
         let rows: Vec<Value> = match entity.as_str() {
@@ -179,16 +161,13 @@ pub async fn issue_search(
     axum::extract::Path((_slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     axum::extract::Query(q): axum::extract::Query<GlobalSearchQuery>,
 ) -> Result<Json<Value>, common::errors::AppError> {
-    let user = caller(&st, &auth).await;
-    if user.is_none() {
-        return Ok(Json(json!({"results": []})));
-    }
+    let user = auth.0;
     let pattern = like_pattern(q.search.as_deref());
     let seqs = integer_tokens(q.search.as_deref());
     let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         "SELECT i.id, i.name FROM issues i JOIN project_members pm ON pm.project_id = i.project_id WHERE pm.member_id = $1 AND pm.is_active = true AND i.project_id = $2 AND (i.name ILIKE $3 OR ($4::bigint[] IS NOT NULL AND i.sequence_id = ANY($4))) AND i.deleted_at IS NULL ORDER BY i.created_at DESC LIMIT 100",
     )
-    .bind(user.unwrap()).bind(project_id).bind(&pattern).bind(if seqs.is_empty() { None } else { Some(seqs) })
+    .bind(user).bind(project_id).bind(&pattern).bind(if seqs.is_empty() { None } else { Some(seqs) })
     .fetch_all(&st.pool).await?;
     Ok(Json(json!({"results": rows.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>()})))
 }

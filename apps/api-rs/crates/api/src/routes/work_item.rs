@@ -515,10 +515,8 @@ pub async fn workspace_issue_search(
     axum::extract::Path(slug): axum::extract::Path<String>,
     axum::extract::Query(q): axum::extract::Query<crate::routes::search::GlobalSearchQuery>,
 ) -> Result<Json<Value>, common::errors::AppError> {
-    let user: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await?;
+    // AuthUser identitas sudah tervalidasi di extractor — selalu ada.
+    let user: Option<uuid::Uuid> = Some(auth.0);
     if user.is_none() {
         return Ok(Json(json!({"results": []})));
     }

@@ -40,15 +40,6 @@ pub fn validate_create(body: &CreatePage) -> Result<(), String> {
     Ok(())
 }
 
-async fn owner_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
-    let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))?;
-    id.ok_or((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))
-}
-
 pub async fn list(
     State(st): State<AppState>,
     _auth: AuthUser,
@@ -87,7 +78,7 @@ pub async fn create(
     Json(body): Json<CreatePage>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = owner_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     let access = body.access.unwrap_or(0);
 
     let page: common::models::page::Page = sqlx::query_as(
@@ -118,7 +109,7 @@ pub async fn create_favorite(
     auth: AuthUser,
     axum::extract::Path((slug, project_id, page_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let owner = owner_id(&st, &auth).await.map_err(|(c, j)| anyhow::anyhow!("{}: {}", c, j.0))?;
+    let owner = auth.0;
     sqlx::query(
         "INSERT INTO user_favorites (id, entity_type, entity_identifier, user_id, is_folder, sequence, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), 'page', $1, $2, false, 65535, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 ON CONFLICT DO NOTHING",
     )

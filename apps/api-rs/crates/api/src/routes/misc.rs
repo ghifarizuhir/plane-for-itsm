@@ -43,18 +43,6 @@ pub async fn timezones() -> Json<Value> {
     Json(serde_json::from_str(DATA).unwrap_or(Value::Array(vec![])))
 }
 
-/// Deprecated: AuthUser kini membawa UUID user langsung (`auth.0`).
-/// Dipertahankan hingga Task 6 selesai — jangan hapus dulu.
-#[allow(dead_code)]
-pub(crate) async fn user_id(st: &AppState, auth: &AuthUser) -> Result<uuid::Uuid, (StatusCode, Json<Value>)> {
-    let id: Option<uuid::Uuid> = sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .map_err(|_| (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))?;
-    id.ok_or((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid api key"}))))
-}
-
 // ---- exporter ----
 
 #[derive(Debug, Clone, Deserialize, Default)]

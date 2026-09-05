@@ -234,15 +234,6 @@ pub fn guard_destroy_role(requester_role: i16, target_role: i16) -> Result<(), S
     Ok(())
 }
 
-async fn requester_id(st: &AppState, auth: &AuthUser) -> Option<uuid::Uuid> {
-    sqlx::query_scalar("SELECT user_id FROM api_tokens WHERE token = $1")
-        .bind(&auth.0)
-        .fetch_optional(&st.pool)
-        .await
-        .ok()
-        .flatten()
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct PatchMember {
     pub role: i16,
@@ -285,7 +276,7 @@ pub async fn patch(
     let Some(target) = target else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
     };
-    let uid = requester_id(&st, &auth).await;
+    let uid: Option<uuid::Uuid> = Some(auth.0);
     let requester: Option<common::models::member::ProjectMember> = match uid {
         Some(uid) => sqlx::query_as(
             "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
@@ -325,7 +316,7 @@ pub async fn destroy(
     let Some(target) = target else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
     };
-    let uid = requester_id(&st, &auth).await;
+    let uid: Option<uuid::Uuid> = Some(auth.0);
     let requester: Option<common::models::member::ProjectMember> = match uid {
         Some(uid) => sqlx::query_as(
             "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",

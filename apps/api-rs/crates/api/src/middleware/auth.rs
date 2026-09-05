@@ -2,6 +2,7 @@ use axum::{
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
     response::{IntoResponse, Response},
+    Json,
 };
 
 use crate::state::AppState;
@@ -18,7 +19,13 @@ impl FromRequestParts<AppState> for AuthUser {
     type Rejection = Response;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let unauthorized = || (StatusCode::UNAUTHORIZED, "missing or invalid auth").into_response();
+        let unauthorized = || {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "missing or invalid auth"})),
+            )
+                .into_response()
+        };
         // 1. Bearer JWT
         if let Some(tok) = parts
             .headers
