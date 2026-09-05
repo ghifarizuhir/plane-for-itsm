@@ -13,7 +13,6 @@
 use axum::{
     extract::{Host, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
-    response::Redirect,
     Json,
 };
 use serde::Deserialize;
@@ -312,25 +311,33 @@ fn pct_encode(s: &str) -> String {
     out
 }
 
-/// 302 yang tak pernah panic walau URL tak valid (jatuh ke `/`).
-fn safe_redirect(url: String) -> Redirect {
-    if axum::http::HeaderValue::from_str(&url).is_ok() {
-        Redirect::to(&url)
-    } else {
-        tracing::warn!("oauth redirect URL invalid, falling back to /");
-        Redirect::to("/")
+/// Header `Location` untuk 302 Found ala Django — tak pernah panic walau URL
+/// tak valid (jatuh ke `/`). Dipakai bersama `StatusCode::FOUND` karena
+/// `axum::response::Redirect::to` mengirim 303, sementara spec + Django +
+/// smoke Task-9 menuntut 302.
+fn safe_redirect(url: String) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    match axum::http::HeaderValue::from_str(&url) {
+        Ok(value) => {
+            headers.insert(header::LOCATION, value);
+        }
+        Err(_) => {
+            tracing::warn!("oauth redirect URL invalid, falling back to /");
+            headers.insert(header::LOCATION, axum::http::HeaderValue::from_static("/"));
+        }
     }
+    headers
 }
 
 fn frontend_base(config: &common::config::AppConfig) -> String {
     config.frontend_url.trim_end_matches('/').to_string()
 }
 
-fn oauth_error_redirect(config: &common::config::AppConfig) -> Redirect {
+fn oauth_error_redirect(config: &common::config::AppConfig) -> HeaderMap {
     safe_redirect(format!("{}/sign-in?error=oauth", frontend_base(config)))
 }
 
-fn oauth_disabled_redirect(config: &common::config::AppConfig) -> Redirect {
+fn oauth_disabled_redirect(config: &common::config::AppConfig) -> HeaderMap {
     safe_redirect(format!("{}/?error=oauth_disabled", frontend_base(config)))
 }
 
@@ -656,13 +663,13 @@ pub async fn oauth_start(
     Host(host): Host,
     headers: HeaderMap,
     Query(q): Query<OAuthStartQuery>,
-) -> (HeaderMap, Redirect) {
+) -> (StatusCode, HeaderMap) {
     let Some(kind) = provider_kind(&provider) else {
-        return (HeaderMap::new(), oauth_error_redirect(&st.config));
+        return (StatusCode::FOUND, oauth_error_redirect(&st.config));
     };
     let (client_id, client_secret) = provider_creds(&st.config, kind);
     if client_id.is_empty() || client_secret.is_empty() {
-        return (HeaderMap::new(), oauth_disabled_redirect(&st.config));
+        return (StatusCode::FOUND, oauth_disabled_redirect(&st.config));
     }
     let redirect_uri = oauth_redirect_uri(&headers, &host, &st.config, kind);
     let state = uuid::Uuid::new_v4().simple().to_string();
@@ -672,7 +679,7 @@ pub async fn oauth_start(
         Ok(conn) => conn,
         Err(e) => {
             tracing::warn!(error=%e, "oauth start: redis unavailable");
-            return (HeaderMap::new(), oauth_error_redirect(&st.config));
+            return (StatusCode::FOUND, oauth_error_redirect(&st.config));
         }
     };
     if let Err(e) = redis::cmd("SET")
@@ -684,7 +691,7 @@ pub async fn oauth_start(
         .await
     {
         tracing::warn!(error=%e, "oauth start: state store failed");
-        return (HeaderMap::new(), oauth_error_redirect(&st.config));
+        return (StatusCode::FOUND, oauth_error_redirect(&st.config));
     }
     let http = http_client();
     let url = match kind {
@@ -701,7 +708,7 @@ pub async fn oauth_start(
         }
         .auth_url(&state, &redirect_uri),
     };
-    (HeaderMap::new(), safe_redirect(url))
+    (StatusCode::FOUND, safe_redirect(url))
 }
 
 /// GET /api/auth/oauth/:provider/callback/ — tukar code → sesi → 302 next.
@@ -711,8 +718,8 @@ pub async fn oauth_callback(
     Host(host): Host,
     headers: HeaderMap,
     Query(q): Query<OAuthCallbackQuery>,
-) -> (HeaderMap, Redirect) {
-    let fail = || (HeaderMap::new(), oauth_error_redirect(&st.config));
+) -> (StatusCode, HeaderMap) {
+    let fail = || (StatusCode::FOUND, oauth_error_redirect(&st.config));
     let Some(kind) = provider_kind(&provider) else {
         return fail();
     };
@@ -800,7 +807,8 @@ pub async fn oauth_callback(
     };
     let mut out = HeaderMap::new();
     set_cookies(&mut out, &access, &raw_rt, st.config.cookie_secure);
-    (out, safe_redirect(next))
+    out.extend(safe_redirect(next));
+    (StatusCode::FOUND, out)
 }
 
 #[cfg(test)]
@@ -914,7 +922,7 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
-        assert!(resp.status().is_redirection());
+        assert_eq!(resp.status(), StatusCode::FOUND);
         assert_eq!(location_of(&resp), "http://web:3000/sign-in?error=oauth");
     }
 
@@ -930,7 +938,7 @@ mod tests {
                 .body(Body::empty())
                 .unwrap();
             let resp = app.oneshot(req).await.unwrap();
-            assert!(resp.status().is_redirection(), "{provider} must 302");
+            assert_eq!(resp.status(), StatusCode::FOUND, "{provider} must 302");
             assert_eq!(location_of(&resp), "http://web:3000/?error=oauth_disabled");
         }
     }
@@ -949,7 +957,7 @@ mod tests {
                 .body(Body::empty())
                 .unwrap();
             let resp = app.clone().oneshot(req).await.unwrap();
-            assert!(resp.status().is_redirection(), "{uri} must 302");
+            assert_eq!(resp.status(), StatusCode::FOUND, "{uri} must 302");
             assert_eq!(
                 location_of(&resp),
                 "http://web:3000/sign-in?error=oauth",
@@ -969,7 +977,7 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
-        assert!(resp.status().is_redirection());
+        assert_eq!(resp.status(), StatusCode::FOUND);
         assert_eq!(location_of(&resp), "http://web:3000/sign-in?error=oauth");
     }
 
@@ -992,7 +1000,7 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
-        assert!(resp.status().is_redirection());
+        assert_eq!(resp.status(), StatusCode::FOUND);
         let loc = location_of(&resp);
         assert!(
             loc.starts_with("https://github.com/login/oauth/authorize?"),
