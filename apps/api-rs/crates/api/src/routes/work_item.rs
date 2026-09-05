@@ -516,10 +516,7 @@ pub async fn workspace_issue_search(
     axum::extract::Query(q): axum::extract::Query<crate::routes::search::GlobalSearchQuery>,
 ) -> Result<Json<Value>, common::errors::AppError> {
     // AuthUser identitas sudah tervalidasi di extractor — selalu ada.
-    let user: Option<uuid::Uuid> = Some(auth.0);
-    if user.is_none() {
-        return Ok(Json(json!({"results": []})));
-    }
+    let user = auth.0;
     let pattern = match &q.search {
         Some(s) if !s.trim().is_empty() => format!("%{}%", s.replace(['%', '_'], "")),
         _ => "%".to_string(),
@@ -528,7 +525,7 @@ pub async fn workspace_issue_search(
         "SELECT i.id, i.name FROM issues i JOIN project_members pm ON pm.project_id = i.project_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND pm.member_id = $2 AND pm.is_active = true AND i.name ILIKE $3 AND i.deleted_at IS NULL ORDER BY i.created_at DESC LIMIT 100",
     )
     .bind(&slug)
-    .bind(user.unwrap())
+    .bind(user)
     .bind(&pattern)
     .fetch_all(&st.pool)
     .await?;

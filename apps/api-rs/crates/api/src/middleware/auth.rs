@@ -49,7 +49,13 @@ impl FromRequestParts<AppState> for AuthUser {
             .bind(key.trim())
             .fetch_optional(&state.pool)
             .await
-            .map_err(|_| unauthorized())?;
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "internal server error"})),
+                )
+                    .into_response()
+            })?;
             if let Some((uid,)) = row {
                 return Ok(AuthUser(uid));
             }

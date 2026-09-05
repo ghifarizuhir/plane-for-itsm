@@ -240,8 +240,8 @@ async fn view_detail_row(
     };
     // Guest gate mirrors `IssueViewViewSet.retrieve`.
     // AuthUser identitas sudah tervalidasi di extractor.
-    let uid: Option<uuid::Uuid> = Some(auth.0);
-    if let (Some(uid), Some(pid)) = (uid, project_id) {
+    let uid = auth.0;
+    if let Some(pid) = project_id {
         let role: Option<i16> = sqlx::query_scalar(
             "SELECT role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
         )

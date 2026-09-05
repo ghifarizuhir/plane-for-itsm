@@ -276,17 +276,13 @@ pub async fn patch(
     let Some(target) = target else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
     };
-    let uid: Option<uuid::Uuid> = Some(auth.0);
-    let requester: Option<common::models::member::ProjectMember> = match uid {
-        Some(uid) => sqlx::query_as(
-            "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
-        )
-        .bind(project_id)
-        .bind(uid)
-        .fetch_optional(&st.pool)
-        .await?,
-        None => None,
-    };
+    let requester: Option<common::models::member::ProjectMember> = sqlx::query_as(
+        "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+    )
+    .bind(project_id)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await?;
     let is_self = requester.as_ref().map(|r| r.id == target.id).unwrap_or(false);
     // Project-admin stands in for the workspace-admin bypass.
     let is_admin = requester.as_ref().map(|r| r.role == 20).unwrap_or(false);
@@ -316,17 +312,13 @@ pub async fn destroy(
     let Some(target) = target else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project member not found"}))));
     };
-    let uid: Option<uuid::Uuid> = Some(auth.0);
-    let requester: Option<common::models::member::ProjectMember> = match uid {
-        Some(uid) => sqlx::query_as(
-            "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
-        )
-        .bind(project_id)
-        .bind(uid)
-        .fetch_optional(&st.pool)
-        .await?,
-        None => None,
-    };
+    let requester: Option<common::models::member::ProjectMember> = sqlx::query_as(
+        "SELECT id, member_id, role FROM project_members WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+    )
+    .bind(project_id)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await?;
     let is_self = requester.as_ref().map(|r| r.id == target.id).unwrap_or(false);
     if let Err(e) = guard_destroy_self(is_self) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
