@@ -442,6 +442,11 @@ async fn main() {
         crate::middleware::origin::origin_middleware,
     ));
 
+    // CORS paling luar: preflight dijawab sebelum origin/rate logic.
+    // allow-credentials + origin eksplisit agar cookie auth lintas-port menempel.
+    let cors = crate::middleware::cors::cors_layer_from_env(&cfg.frontend_url);
+    let app = app.layer(cors);
+
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", cfg.port))
         .await
         .unwrap();
