@@ -3,14 +3,37 @@
 # Exercises reads + writes end-to-end, then cleans up created rows.
 # Requires: stack up (api on 8000), a valid token in api_tokens.
 # Usage: TOKEN=plane_api_... bash apps/api-rs/scripts/smoke.sh
+#
+# Auth smoke (Task 9): 7 cek siklus login/me/refresh/logout + login-bad +
+# oauth-start, setelah writes, sebelum cleanup. Kredensial dari env:
+#   SMOKE_EMAIL / SMOKE_PASSWORD (JANGAN di-commit).
+# Bila keduanya unset, cek auth DI-SKIP (bukan fail).
+# Buat user smoke sekali via SQL (hash format Django
+# `pbkdf2_sha256$1000000$salt$b64`, 1M iterasi ~1 dtk di python):
+#   HASH=$(python3 -c "import hashlib,base64,secrets; s=secrets.token_hex(6); \
+#     h=hashlib.pbkdf2_hmac('sha256',b'GANTI-PASSWORD',s.encode(),1000000); \
+#     print('pbkdf2_sha256\$1000000\$'+s+'\$'+base64.b64encode(h).decode())")
+#   docker exec plane-db psql -U plane -d plane -c "INSERT INTO users (id, email, \
+#     username, password, first_name, last_name, display_name, avatar, date_joined, \
+#     token, user_timezone, last_location, created_location, last_login_ip, \
+#     last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, \
+#     is_superuser, is_managed, is_password_expired, is_email_verified, \
+#     is_password_autoset, is_bot, is_email_valid, is_password_reset_required, \
+#     created_at, updated_at) VALUES (gen_random_uuid(), 'smoke@example.com', \
+#     'smoke', '$HASH', '', '', 'smoke', '', now(), '', 'UTC', '', '', '', '', \
+#     'password', '', true, false, false, false, false, true, false, false, true, \
+#     false, now(), now());"
 set -u
 BASE="${BASE:-http://127.0.0.1:8000}"
 TOKEN="${TOKEN:?set TOKEN to a valid api_tokens.token value}"
-H=(-s -m 10 -H "X-Api-Key: $TOKEN" -H 'Content-Type: application/json')
+# Harus SAMA dengan FRONTEND_URL server: middleware origin menolak semua mutasi
+# (POST/PATCH/PUT/DELETE) tanpa `Origin:` yang cocok → 403 {"error":"bad origin"}.
+FRONTEND="${FRONTEND:-http://localhost:3000}"
+H=(-s -m 10 -H "X-Api-Key: $TOKEN" -H 'Content-Type: application/json' -H "Origin: $FRONTEND")
 PASS=0; FAIL=0; FAILED=""
 SFX="smoke$RANDOM"
 
-NAH=(-s -m 10 -H 'Content-Type: application/json')
+NAH=(-s -m 10 -H 'Content-Type: application/json' -H "Origin: $FRONTEND")
 check() { # check <label> <expected_status> <curl_args...>
   local label="$1" want="$2"; shift 2
   local code body args=("${H[@]}")
@@ -21,6 +44,15 @@ check() { # check <label> <expected_status> <curl_args...>
   else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
 }
 jid() { python3 -c "import json,sys; d=json.load(open('/tmp/smoke_body')); v=d.get('$1','') if isinstance(d,dict) else ''; print(v)" 2>/dev/null; }
+check_auth() { # check_auth <label> <expected_status> <curl_args...> — murni cookie sesi, TANPA X-Api-Key
+  # (AuthUser fallback ke X-Api-Key: memakai check biasa membuat post-logout-401
+  # mustahil karena api key tetap valid setelah logout).
+  local label="$1" want="$2"; shift 2
+  local code
+  code=$(curl "${NAH[@]}" -o /tmp/smoke_body -w '%{http_code}' "$@")
+  if [ "$code" = "$want" ]; then PASS=$((PASS+1)); echo "ok   $label -> $code";
+  else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
+}
 
 echo "== reads =="
 check health 200 "$BASE/health"
@@ -53,6 +85,25 @@ check token-create 201 -X POST -d '{"label":"smoke2"}' "$BASE/api/users/api-toke
 check export-create 200 -X POST -d '{"provider":"csv"}' "$BASE/api/workspaces/$WS/export-issues/"
 check notif-unread 200 "$BASE/api/workspaces/$WS/users/notifications/unread/"
 check search 200 "$BASE/api/workspaces/$WS/search/?query=smoke"
+
+echo "== auth =="
+if [ -z "${SMOKE_EMAIL:-}" ] || [ -z "${SMOKE_PASSWORD:-}" ]; then
+  echo "skip auth checks (SMOKE_EMAIL/SMOKE_PASSWORD unset)"
+else
+  JAR=/tmp/smoke_jar
+  rm -f "$JAR"
+  check_auth login-200 200 -c "$JAR" -X POST -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"$SMOKE_PASSWORD\"}" "$BASE/api/auth/login/"
+  check_auth me-200 200 -b "$JAR" "$BASE/api/users/me/"
+  check_auth refresh-200 200 -c "$JAR" -b "$JAR" -X POST "$BASE/api/auth/refresh/"
+  # NOTE: logout memakai -c + -b (menyimpang dari cuplikan plan Task 9 yang hanya
+  # -b): tanpa -c, jar tidak menyimpan Set-Cookie clear sehingga post-logout-401
+  # tetap mengirim cookie lama dan gagal (access JWT stateless masih valid 15 mnt).
+  check_auth logout-200 200 -c "$JAR" -b "$JAR" -X POST "$BASE/api/auth/logout/"
+  check_auth post-logout-401 401 -b "$JAR" "$BASE/api/users/me/"
+  check_auth login-bad-401 401 -X POST -d "{\"email\":\"$SMOKE_EMAIL\",\"password\":\"__bad__smoke__\"}" "$BASE/api/auth/login/"
+  check oauth-start-302 302 "$BASE/api/auth/oauth/github/start/"
+  rm -f "$JAR"
+fi
 
 echo "== cleanup =="
 docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label = 'smoke2';" 2>&1 | head -n 1
