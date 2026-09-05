@@ -2801,6 +2801,39 @@ pub(crate) fn delete_message(n: i64) -> String {
     format!("{n} issues were deleted")
 }
 
+/// Shared `Issue.issue_objects` scope predicate for the four `bulk_delete`
+/// statements (`db/models/issue.py:92-101`): live rows +
+/// `exclude(state__group='triage')` + `exclude(archived_at__isnull=False)`
+/// + `exclude(project__archived_at__isnull=False)` + `exclude(is_draft)`.
+/// `{a}` is the issues-table alias; the states table is always aliased `s`.
+/// The triage form mirrors the list endpoints (`s."group" <> 'triage'` in
+/// WHERE position, dropping NULL-state rows exactly like Django's
+/// `exclude`); there is no `s.deleted_at` predicate — forward-FK lookups
+/// don't apply `StateManager` (I2 item 2 precedent). The project check
+/// mirrors the list precedent (`archived_at` + `deleted_at` via `EXISTS`).
+pub(crate) fn bulk_delete_scope_sql(a: &str) -> String {
+    format!(
+        "{a}.deleted_at IS NULL AND {a}.archived_at IS NULL AND {a}.is_draft = false \
+         AND s.\"group\" <> 'triage' \
+         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = {a}.project_id \
+           AND p.archived_at IS NULL AND p.deleted_at IS NULL)"
+    )
+}
+
+/// The FILTERED pre-delete issue set shared by the `bulk_delete` COUNT,
+/// both bridge UPDATEs (`issue__in=issues`, `base.py:786-789`), and the
+/// final soft-delete UPDATE. Binds stay positional: `$1` project,
+/// `$2` workspace slug, `$3` ids.
+pub(crate) fn bulk_delete_issue_set_sql() -> String {
+    format!(
+        "SELECT i.id FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.project_id = $1 \
+         AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND i.id = ANY($3) AND {}",
+        bulk_delete_scope_sql("i")
+    )
+}
+
 /// DELETE `/api/workspaces/:slug/projects/:project_id/bulk-delete-issues/`
 /// — parity with Django `BulkDeleteIssuesEndpoint.delete`
 /// (`plane/app/views/issue/base.py:773-797`, `urls/issue.py:94-96`).
@@ -2816,19 +2849,18 @@ pub(crate) fn delete_message(n: i64) -> String {
 ///   the pre-delete queryset) → soft-delete `cycle_issues` bridges
 ///   (`base.py:786`) + `module_issues` bridges (`base.py:789`) → soft-delete
 ///   the issues (`base.py:792`) → 200 `{"message": "{n} issues were deleted"}`
-///   (`base.py:794-797`). Bridge scope mirrors `issue__in=issues` via an
-///   issue-subquery (same ws+project+ids+live set).
+///   (`base.py:794-797`). All four statements share the FILTERED
+///   `Issue.issue_objects` set (`bulk_delete_issue_set_sql` /
+///   `bulk_delete_scope_sql`): triage/archived/draft/project-archived
+///   issues are counted by NEITHER `n` NOR touched — Django spares them.
 /// - FE `bulkDeleteIssues` (`issue.service.ts:347-360`) sends an axios
 ///   DELETE with body — Axum's `Json` extractor reads DELETE bodies
 ///   (live-curl proof deferred to T13).
 ///
 /// Deviations: bridge deletes are soft-deletes (`deleted_at=now()`, Django's
 /// `SoftDeletionQuerySet.delete`, `mixins.py:48-53` — NOT hard `DELETE`s);
-/// the issue scope is ws slug + project + `id = ANY(ids)` + live
-/// (`deleted_at IS NULL`) and does NOT apply `IssueManager`'s
-/// triage/archived/draft/project-archived exclusions
-/// (`db/models/issue.py:92-101`) per the batch scope; Celery/activity writes
-/// are skipped (batch-wide precedent: Rust never writes activities).
+/// Celery/activity writes are skipped (batch-wide precedent: Rust never
+/// writes activities).
 pub async fn bulk_delete(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -2850,51 +2882,45 @@ pub async fn bulk_delete(
         ));
     }
     let mut tx = st.pool.begin().await?;
+    let issue_set = bulk_delete_issue_set_sql();
     // PRE-delete queryset count (`total_issues = len(issues)`, `base.py:782`).
-    let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issues \
-         WHERE project_id = $1 \
-         AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
-         AND id = ANY($3) AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(&slug)
-    .bind(&body.issue_ids)
-    .fetch_one(&mut *tx)
-    .await?;
+    let total: (i64,) = sqlx::query_as(&format!("SELECT COUNT(*) FROM ({issue_set}) AS sub"))
+        .bind(project_id)
+        .bind(&slug)
+        .bind(&body.issue_ids)
+        .fetch_one(&mut *tx)
+        .await?;
     // `CycleIssue.objects.filter(issue__in=issues).delete()` (`base.py:786`).
-    sqlx::query(
+    sqlx::query(&format!(
         "UPDATE cycle_issues SET deleted_at = now() WHERE deleted_at IS NULL \
-         AND issue_id IN (SELECT id FROM issues \
-           WHERE project_id = $1 \
-           AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
-           AND id = ANY($3) AND deleted_at IS NULL)",
-    )
+         AND issue_id IN ({issue_set})"
+    ))
     .bind(project_id)
     .bind(&slug)
     .bind(&body.issue_ids)
     .execute(&mut *tx)
     .await?;
     // `ModuleIssue.objects.filter(issue__in=issues).delete()` (`base.py:789`).
-    sqlx::query(
+    sqlx::query(&format!(
         "UPDATE module_issues SET deleted_at = now() WHERE deleted_at IS NULL \
-         AND issue_id IN (SELECT id FROM issues \
-           WHERE project_id = $1 \
-           AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
-           AND id = ANY($3) AND deleted_at IS NULL)",
-    )
+         AND issue_id IN ({issue_set})"
+    ))
     .bind(project_id)
     .bind(&slug)
     .bind(&body.issue_ids)
     .execute(&mut *tx)
     .await?;
     // `issues.delete()` (`base.py:792`): soft-delete via the default manager.
-    sqlx::query(
-        "UPDATE issues SET deleted_at = now() \
-         WHERE project_id = $1 \
-         AND workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
-         AND id = ANY($3) AND deleted_at IS NULL",
-    )
+    // `FROM states s` with the join condition in WHERE position mirrors the
+    // list endpoints' triage form (NULL-state rows drop like Django's
+    // `exclude`).
+    sqlx::query(&format!(
+        "UPDATE issues i SET deleted_at = now() FROM states s \
+         WHERE s.id = i.state_id AND i.project_id = $1 \
+         AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
+         AND i.id = ANY($3) AND {}",
+        bulk_delete_scope_sql("i")
+    ))
     .bind(project_id)
     .bind(&slug)
     .bind(&body.issue_ids)
@@ -3079,6 +3105,40 @@ mod bulk_tests {
         assert!(allows(Some(15)));
         assert!(!allows(Some(5)));
         assert!(!allows(None));
+    }
+
+    #[test]
+    fn bulk_delete_scope_sql_matches_issue_manager() {
+        // `Issue.issue_objects` (`db/models/issue.py:92-101`): live rows +
+        // `exclude(state__group='triage')` + `exclude(archived_at__isnull=False)`
+        // + `exclude(project__archived_at__isnull=False)` + `exclude(is_draft)`.
+        // Triage form mirrors the list endpoints (`s."group" <> 'triage'` in
+        // WHERE position, dropping NULL-state rows like Django `exclude`).
+        let pred = bulk_delete_scope_sql("i");
+        for needle in [
+            "i.deleted_at IS NULL",
+            "i.archived_at IS NULL",
+            "i.is_draft = false",
+            "s.\"group\" <> 'triage'",
+            "p.archived_at IS NULL",
+            "p.deleted_at IS NULL",
+        ] {
+            assert!(pred.contains(needle), "{needle}");
+        }
+        // No state-deleted predicate: forward-FK lookups don't apply
+        // `StateManager` (I2 item 2 precedent).
+        assert!(!pred.contains("s.deleted_at"), "{pred}");
+    }
+
+    #[test]
+    fn bulk_delete_issue_set_sql_is_shared_filtered_set() {
+        // Django `issue__in=issues` inherits the FILTERED pre-delete
+        // queryset (`base.py:781-789`): both bridge UPDATEs must use this
+        // same subquery, not bare ids.
+        let sub = bulk_delete_issue_set_sql();
+        assert!(sub.contains("LEFT JOIN states s ON s.id = i.state_id"), "{sub}");
+        assert!(sub.contains("i.id = ANY($3)"), "{sub}");
+        assert!(sub.contains(&bulk_delete_scope_sql("i")), "{sub}");
     }
 
     #[test]
