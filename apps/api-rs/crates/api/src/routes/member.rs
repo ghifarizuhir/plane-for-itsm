@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::routes::project::{deny, guard_leave, missing, project_role};
 
 /// Mirrors `plane/api/serializers/member.py:ProjectMemberSerializer`
 /// served by `plane/api/urls/member.py`
@@ -333,4 +334,92 @@ pub async fn destroy(
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+/// POST `/api/workspaces/:slug/projects/:project_id/members/leave/` — parity
+/// with Django `ProjectMemberViewSet.leave`
+/// (`plane/app/views/project/member.py:323-349`,
+/// `plane/app/urls/project.py:88-89` `{"post": "leave"}` — POST only).
+///
+/// Gate: `@allow_permission([ADMIN, MEMBER, GUEST])` (level PROJECT,
+/// `permissions/base.py:53-59`) passes for any ACTIVE membership, so a
+/// missing row AND an inactive row both 403 via the decorator — the inner
+/// `get(... is_active=True)` 404 (`ObjectDoesNotExist` → 404 in
+/// `views/project/base.py`) is unreachable except on races. Mirror: no
+/// active row (`project_role` → None) → `deny()` 403 (covers both cases).
+/// Sole active admin (`role == 20` and project-wide active-admin count ≤ 1)
+/// → 400 with the verbatim message via T0 `guard_leave`. Else
+/// `is_active = false` (+ `updated_at = now()`, `destroy` precedent above;
+/// Django `save()` bumps `auto_now`) → 204.
+///
+/// FE: `apps/web/core/services/user.service.ts:253-259` `leaveProject` POSTs
+/// this path, then unsets permissions + projectMap (FE-side only).
+pub async fn leave_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((_slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = project_role(&st.pool, auth.0, project_id).await?;
+    let Some(role) = role else {
+        return Ok(deny());
+    };
+    // Active-admin count mirrors the Django filter
+    // (`workspace__slug, project_id, role=20, is_active=True` over the
+    // default `SoftDeletionManager`, i.e. `deleted_at IS NULL`;
+    // `project_id` is globally unique so the slug join is redundant —
+    // `project_role` precedent). An inactive leaver still counts in this
+    // query, but they can never reach it (gate above denies them).
+    let admin_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND role = 20 AND is_active = true AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if let Err(e) = guard_leave(role == 20, admin_count) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    let n = sqlx::query(
+        "UPDATE project_members SET is_active = false, updated_at = now() WHERE project_id = $1 AND member_id = $2 AND is_active = true",
+    )
+    .bind(project_id)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        // Race: membership deactivated between gate and update. Django's
+        // `get()` would 404 here (`ObjectDoesNotExist`).
+        return Ok(missing());
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+#[cfg(test)]
+mod leave_tests {
+    // Reuses T0 `guard_leave` (`crate::routes::project`) exactly — no second
+    // helper. Role maps to `is_admin` (`role == 20`); the count is the
+    // project-wide active-admin count.
+    use crate::routes::project::guard_leave;
+
+    #[test]
+    fn sole_admin_leave_matrix_matches_django() {
+        // Mirrors `plane/app/views/project/member.py:332-345`: verbatim 400
+        // (grammar quirks included) when the leaver is the only active admin.
+        assert_eq!(
+            guard_leave(true, 1).unwrap_err(),
+            "You cannot leave the project as your the only admin of the project you will have to either delete the project or create an another admin"
+        );
+        assert!(guard_leave(true, 2).is_ok());
+        // Non-admins (15/5) never hit the guard — count is irrelevant.
+        assert!(guard_leave(false, 99).is_ok());
+        assert!(guard_leave(false, 1).is_ok());
+    }
+
+    #[test]
+    fn leave_handler_exists_for_post_route() {
+        // Wiring guard: `main.rs` registers
+        // `POST .../members/leave/` → `leave_project` (Django
+        // `urls/project.py:88-89` maps `{"post": "leave"}` only).
+        let _ = super::leave_project;
+    }
 }

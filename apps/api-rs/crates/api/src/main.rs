@@ -237,6 +237,15 @@ async fn main() {
                 .patch(routes::member::patch)
                 .delete(routes::member::destroy),
         )
+        // Parity with `ProjectMemberViewSet.leave`
+        // (`views/project/member.py:323-349`, `urls/project.py:88-89`
+        // `{"post": "leave"}` — POST only): static `leave` wins over `:pk`
+        // in Axum (no conflict; live-curl proof deferred to T13). No
+        // `project-members/leave/` alias — Django defines none.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/members/leave/",
+            post(routes::member::leave_project),
+        )
         // Parity with `ProjectMemberUserEndpoint`
         // (`views/project/member.py:352-362`, `urls/project.py:97-101`):
         // static `me` wins over `:pk` in Axum (no conflict; live-curl
