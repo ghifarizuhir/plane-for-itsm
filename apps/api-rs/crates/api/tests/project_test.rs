@@ -5,6 +5,7 @@ fn rejects_empty_name() {
     let p = CreateProject {
         name: "".to_string(),
         identifier: "ABC".to_string(),
+        project_lead: None,
     };
     assert!(validate_create(&p).is_err());
 }
@@ -16,6 +17,7 @@ fn rejects_name_with_forbidden_chars() {
         let p = CreateProject {
             name: bad.to_string(),
             identifier: "ABC".to_string(),
+            project_lead: None,
         };
         assert!(validate_create(&p).is_err(), "name {bad} must be rejected");
     }
@@ -28,6 +30,7 @@ fn rejects_bad_identifier() {
         let p = CreateProject {
             name: "Good Name".to_string(),
             identifier: bad.to_string(),
+            project_lead: None,
         };
         assert!(
             validate_create(&p).is_err(),
@@ -41,6 +44,7 @@ fn accepts_valid_project() {
     let p = CreateProject {
         name: "Backend".to_string(),
         identifier: "BE".to_string(),
+        project_lead: None,
     };
     assert!(validate_create(&p).is_ok());
 }
