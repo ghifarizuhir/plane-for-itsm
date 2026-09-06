@@ -103,6 +103,33 @@ async fn main() {
             "/api/workspaces/:slug/user-favorite-projects/:project_id/",
             delete(routes::project::fav_remove),
         )
+        // Parity with `WorkspaceFavoriteEndpoint` list/create
+        // (`views/workspace/favorite.py:23-67`,
+        // `urls/workspace.py:187-191`): GET 200 `UserFavoriteSerializer[]`
+        // (`parent__isnull` + project-member gate; `?all` ignored) + POST
+        // **200** (dup entity → 200 existing; race → 400
+        // `{"error":"Favorite already exists"}`). Gate WORKSPACE
+        // ADMIN/MEMBER (`deny()` 403; Guest → 403); bad slug → 200 `[]`.
+        .route(
+            "/api/workspaces/:slug/user-favorites/",
+            get(routes::favorite::list).post(routes::favorite::create),
+        )
+        // Parity with `WorkspaceFavoriteEndpoint` patch/delete
+        // (`favorite.py:69-82`, `urls/workspace.py:192-196`): PATCH 200 +
+        // DELETE **204** HARD (`soft=False`). Lookup user+slug+pk, miss →
+        // 404 `missing()` (Django 500s — sane mapping, see `favorite.rs`).
+        .route(
+            "/api/workspaces/:slug/user-favorites/:fid/",
+            patch(routes::favorite::patch).delete(routes::favorite::destroy),
+        )
+        // Parity with `WorkspaceFavoriteGroupEndpoint.get`
+        // (`favorite.py:85-97`, `urls/workspace.py:197-201`): GET 200
+        // children of the folder + member gate (no page exclusion, unlike
+        // the list twin). Same WORKSPACE ADMIN/MEMBER gate.
+        .route(
+            "/api/workspaces/:slug/user-favorites/:fid/group/",
+            get(routes::favorite::group),
+        )
         .route(
             "/api/workspaces/:slug/projects/:pk/",
             get(routes::project::detail)
@@ -863,6 +890,16 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-views/",
             get(routes::view::list_favorites).post(routes::view::create_favorite),
+        )
+        // Parity with `IssueViewFavoriteViewSet.destroy`
+        // (`views/view/base.py:435-444`, `urls/views.py:61-64`): DELETE
+        // **204** HARD (`soft=False`), miss → 404. Gate project
+        // ADMIN/MEMBER (+ ws-admin fallback). The POST twin stays on the
+        // pre-existing `view.rs` handler; NO GET is added here (locked §4
+        // broken-list rule — the pre-existing collection GET is untouched).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/user-favorite-views/:view_id/",
+            delete(routes::favorite::view_fav_destroy),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/pages/",

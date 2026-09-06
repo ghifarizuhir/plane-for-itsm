@@ -4,6 +4,7 @@ pub mod auth;
 pub mod auth_compat;
 pub mod cycle;
 pub mod estimate;
+pub mod favorite;
 pub mod intake;
 pub mod invite;
 pub mod member;
