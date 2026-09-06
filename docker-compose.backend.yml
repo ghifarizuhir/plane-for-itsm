@@ -1,0 +1,111 @@
+# Backend code services (need build). Requires infra network/volumes.
+# Usage:
+#   # Build once (single Rust compile, reused by worker/beat):
+#   docker compose -f docker-compose.infra.yml -f docker-compose.backend.yml build api migrator
+#   docker compose -f docker-compose.infra.yml -f docker-compose.backend.yml up -d
+services:
+  api:
+    container_name: api-rs
+    image: plane-api-rs:local
+    build:
+      context: ./apps/api-rs
+      dockerfile: Dockerfile.rs
+    restart: always
+    command: /usr/local/bin/api
+    env_file:
+      - ./apps/api/.env
+    environment:
+      PORT: 8000
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+    networks:
+      - plane-net
+    ports:
+      - "8000:8000"
+
+  worker:
+    container_name: worker-rs
+    # Reuse image built by `api` (same Dockerfile.rs).
+    image: plane-api-rs:local
+    restart: always
+    command: /usr/local/bin/worker
+    env_file:
+      - ./apps/api/.env
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+    networks:
+      - plane-net
+
+  beat-worker:
+    container_name: beat-rs
+    # Reuse image built by `api` (same Dockerfile.rs).
+    image: plane-api-rs:local
+    restart: always
+    command: /usr/local/bin/beat
+    env_file:
+      - ./apps/api/.env
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+    networks:
+      - plane-net
+
+  migrator:
+    container_name: plane-migrator
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.api
+    restart: "no"
+    command: ./bin/docker-entrypoint-migrator.sh
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+    networks:
+      - plane-net
+
+  # Django fallback, opt-in only.
+  api-legacy:
+    container_name: api-legacy
+    profiles: ["legacy"]
+    image: plane-api:local
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.api
+    restart: always
+    command: ./bin/docker-entrypoint-api.sh
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+    networks:
+      - plane-net
+
+networks:
+  plane-net:
+    name: plane-net
+    driver: bridge

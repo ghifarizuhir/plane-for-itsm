@@ -63,60 +63,61 @@ services:
     ports:
       - "5432:5432"
 
+  # Rust backend (apps/api-rs). Skema DB tetap via `migrator` Django di bawah.
   api:
+    image: plane-api-rs:local
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile.dev
+      context: ./apps/api-rs
+      dockerfile: Dockerfile.rs
       args:
         DOCKER_BUILDKIT: 1
     restart: unless-stopped
     networks:
       - dev_env
-    volumes:
-      - ./apps/api:/code
-    command: ./bin/docker-entrypoint-api-local.sh
+    command: /usr/local/bin/api
     env_file:
       - ./apps/api/.env
+    environment:
+      PORT: 8000
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
     depends_on:
       - plane-db
       - plane-redis
-      - plane-mq
     ports:
       - "8000:8000"
 
   worker:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile.dev
-      args:
-        DOCKER_BUILDKIT: 1
+    # Reuse image built by `api` (same Dockerfile.rs).
+    image: plane-api-rs:local
     restart: unless-stopped
     networks:
       - dev_env
-    volumes:
-      - ./apps/api:/code
-    command: ./bin/docker-entrypoint-worker.sh
+    command: /usr/local/bin/worker
     env_file:
       - ./apps/api/.env
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
     depends_on:
       - api
       - plane-db
       - plane-redis
 
   beat-worker:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile.dev
-      args:
-        DOCKER_BUILDKIT: 1
+    # Reuse image built by `api` (same Dockerfile.rs).
+    image: plane-api-rs:local
     restart: unless-stopped
     networks:
       - dev_env
-    volumes:
-      - ./apps/api:/code
-    command: ./bin/docker-entrypoint-beat.sh
+    command: /usr/local/bin/beat
     env_file:
       - ./apps/api/.env
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
     depends_on:
       - api
       - plane-db

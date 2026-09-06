@@ -17,7 +17,7 @@ import { EmojiPicker, EmojiIconPickerTypes, Logo } from "@plane/propel/emoji-ico
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { EFileAssetType } from "@plane/types";
-import type { IProject, IWorkspace } from "@plane/types";
+import type { IProject } from "@plane/types";
 import { CustomSelect, TextArea } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 import { CoverImage } from "@/components/common/cover-image";
@@ -64,7 +64,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
   } = useForm<IProject>({
     defaultValues: {
       ...project,
-      workspace: (project.workspace as IWorkspace).id,
+      workspace: typeof project.workspace === "string" ? project.workspace : project.workspace?.id,
     },
   });
   // derived values
@@ -75,7 +75,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
     if (project && projectId !== getValues("id")) {
       reset({
         ...project,
-        workspace: (project.workspace as IWorkspace).id,
+        workspace: typeof project.workspace === "string" ? project.workspace : project.workspace?.id,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,6 +98,7 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
           title: t("toast.success"),
           message: t("project_settings.general.toast.success"),
         });
+        return undefined;
       })
       .catch((err) => {
         try {
@@ -191,8 +192,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
       await projectService
         .checkProjectIdentifierAvailability(workspaceSlug, payload.identifier ?? "")
         .then(async (res) => {
-          if (res.exists) setError("identifier", { message: t("common.identifier_already_exists") });
-          else await handleUpdateChange(payload);
+          if (res.exists) return setError("identifier", { message: t("common.identifier_already_exists") });
+          return handleUpdateChange(payload);
         });
     else await handleUpdateChange(payload);
     setTimeout(() => {
@@ -431,8 +432,8 @@ export function ProjectDetailsForm(props: IProjectDetailsForm) {
                 <>
                   <TimezoneSelect
                     value={value}
-                    onChange={(value: string) => {
-                      onChange(value);
+                    onChange={(timezone: string) => {
+                      onChange(timezone);
                     }}
                     error={Boolean(errors.timezone)}
                     buttonClassName="!border-subtle !shadow-none font-medium rounded-md"

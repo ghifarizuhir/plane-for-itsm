@@ -1,2 +1,7 @@
 target
 .git
+.env
+.env.*
+Dockerfile.rs
+README.md
+*.log

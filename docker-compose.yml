@@ -51,8 +51,10 @@ services:
     env_file:
       - ./apps/api/.env
     depends_on:
-      - plane-db
-      - plane-redis
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
 
   # Rust cutover: primary api on 8000 (proxy upstreams api:8000 unchanged).
   # SECRET_KEY wiring (shared with Django, no second secret): `setup.sh`
@@ -62,6 +64,7 @@ services:
   # exact value Django used to encrypt.
   api:
     container_name: api-rs
+    image: plane-api-rs:local
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -76,8 +79,10 @@ services:
       DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
       REDIS_URL: redis://plane-redis:6379
     depends_on:
-      - plane-db
-      - plane-redis
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
 
@@ -85,11 +90,9 @@ services:
   # plane:jobs Redis Stream; plane-mq removed below).
   worker:
     container_name: worker-rs
-    build:
-      context: ./apps/api-rs
-      dockerfile: Dockerfile.rs
-      args:
-        DOCKER_BUILDKIT: 1
+    # Reuse image built by `api` (same Dockerfile.rs). Build once:
+    #   docker compose build api && docker compose up -d api worker beat-worker
+    image: plane-api-rs:local
     restart: always
     command: /usr/local/bin/worker
     env_file:
@@ -99,16 +102,15 @@ services:
       DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
       REDIS_URL: redis://plane-redis:6379
     depends_on:
-      - plane-db
-      - plane-redis
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
 
   beat-worker:
     container_name: beat-rs
-    build:
-      context: ./apps/api-rs
-      dockerfile: Dockerfile.rs
-      args:
-        DOCKER_BUILDKIT: 1
+    # Reuse image built by `api` (same Dockerfile.rs).
+    image: plane-api-rs:local
     restart: always
     command: /usr/local/bin/beat
     env_file:
@@ -118,8 +120,10 @@ services:
       DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
       REDIS_URL: redis://plane-redis:6379
     depends_on:
-      - plane-db
-      - plane-redis
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
 
   migrator:
     container_name: plane-migrator
@@ -133,8 +137,10 @@ services:
     env_file:
       - ./apps/api/.env
     depends_on:
-      - plane-db
-      - plane-redis
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
 
   live:
     container_name: plane-live
@@ -161,6 +167,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-plane} -d ${POSTGRES_DB:-plane}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   plane-redis:
     container_name: plane-redis
@@ -170,6 +181,11 @@ services:
       - "6379:6379"
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # plane-mq (RabbitMQ) removed: Rust worker/beat use the plane:jobs
   # Redis Stream. api-legacy async publish paths need a broker if re-enabled.

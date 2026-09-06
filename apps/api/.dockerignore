@@ -1,0 +1,18 @@
+# Keep build context small: never send local runtime junk to the daemon.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+.env
+.env.*
+!.env.example
+plane/logs/
+plane/static-assets/collected-static/
+static-assets/
+*.rdb
+*.log
+.git

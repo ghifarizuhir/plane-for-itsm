@@ -13,7 +13,7 @@ import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IProject, IUserLite, IWorkspace } from "@plane/types";
+import type { IProject, IUserLite } from "@plane/types";
 import { Switch } from "@makeplane/propel/components/switch";
 import { Loader } from "@plane/ui";
 // constants
@@ -80,12 +80,13 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
   useEffect(() => {
     if (!currentProjectDetails) return;
 
+    const workspace = currentProjectDetails.workspace;
     reset({
       ...currentProjectDetails,
       default_assignee:
         (currentProjectDetails.default_assignee as IUserLite)?.id ?? currentProjectDetails.default_assignee,
       project_lead: (currentProjectDetails.project_lead as IUserLite)?.id ?? currentProjectDetails.project_lead,
-      workspace: (currentProjectDetails.workspace as IWorkspace).id,
+      workspace: typeof workspace === "string" ? workspace : workspace?.id,
     });
   }, [currentProjectDetails, reset]);
 
@@ -114,6 +115,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
           type: TOAST_TYPE.SUCCESS,
           message: t("project_settings.general.toast.success"),
         });
+        return undefined;
       })
       .catch((err) => {
         console.error(err);
@@ -132,6 +134,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
           type: TOAST_TYPE.SUCCESS,
           message: t("project_settings.general.toast.success"),
         });
+        return undefined;
       })
       .catch((err) => {
         console.error(err);
