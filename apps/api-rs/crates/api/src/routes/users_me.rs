@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::middleware::auth::AuthUser;
+use crate::routes::member::deny_detail;
 use crate::state::AppState;
 
 pub fn email_code_throttle_key(uid: &uuid::Uuid) -> String {
@@ -907,8 +908,8 @@ pub fn project_roles_map(pairs: Vec<(String, i32)>) -> Value {
 /// GET /api/users/me/workspaces/:slug/project-roles/ — paritas
 /// `UserProjectRolesEndpoint.get`: keanggotaan workspace aktif disyaratkan
 /// dulu, lalu peta `{project_id: role}` proyek ber-membership aktif.
-/// Bukan member ATAU slug tak dikenal → 403 (sengaja tak dibedakan,
-/// sama seperti kegagalan izin).
+/// Bukan member ATAU slug tak dikenal → 403 stock DRF `{"detail": ...}`
+/// (sengaja tak dibedakan, sama seperti kegagalan izin).
 pub async fn my_project_roles(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -932,7 +933,11 @@ pub async fn my_project_roles(
         }
     };
     if member != Some(true) {
-        return (StatusCode::FORBIDDEN, Json(json!({"error": "forbidden"})));
+        // Stock DRF permission deny body (`WorkspaceUserPermission`,
+        // `permissions/workspace.py:103-110`): `{"detail": ...}`, bukan
+        // `{"error": ...}`. Slug tak dikenal mengalir ke sini juga (403
+        // tak dibedakan — `views/project/member.py:365-377`).
+        return deny_detail();
     }
     // Hanya proyek dengan membership proyek aktif + membership workspace aktif.
     let pairs: Vec<(uuid::Uuid, i16)> = match sqlx::query_as(
@@ -1012,5 +1017,19 @@ mod tests {
     fn roles_map_shape() {
         let v = project_roles_map(vec![("pid".into(), 15)]);
         assert_eq!(v["pid"], 15);
+    }
+
+    #[test]
+    fn project_roles_nonmember_deny_is_drf_detail() {
+        // `my_project_roles` mendelegasikan deny non-member (dan slug tak
+        // dikenal — 403 tak dibedakan) ke `deny_detail()`: body harus stock
+        // DRF `{"detail": ...}` (`views/project/member.py:365-377` +
+        // `permissions/workspace.py:103-110`), BUKAN `{"error": ...}`.
+        let (s, j) = deny_detail();
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        assert_eq!(
+            j.0,
+            json!({"detail": "You do not have permission to perform this action."})
+        );
     }
 }

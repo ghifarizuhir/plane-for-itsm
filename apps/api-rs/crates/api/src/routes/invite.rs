@@ -703,9 +703,12 @@ fn default_ws_member_props() -> (Value, Value, Value) {
 /// `{"message":"Workspace Invitation Accepted"}`; reject → `responded_at`
 /// set, row kept, 200 `{"message":"Workspace Invitation was not accepted"}`.
 ///
-/// Documented skips: `user.last_workspace_id` (`:204-206`) — the live
-/// `users` table has NO such column (verified via `\d`/information_schema;
-/// Django would error there too); celery/cache decorators.
+/// Documented skips: `user.last_workspace_id` (`:204-206`) — the `User`
+/// model declares NO such field (`db/models/user.py:56-140`; the column
+/// lives on `profiles.last_workspace_id`, `user.py:236`), so Django's
+/// `user.save()` persists only concrete fields and the assignment is a
+/// SILENT NO-OP. Rust's skip therefore MATCHES observable Django behavior
+/// (parity, not a deviation); celery/cache decorators.
 pub async fn ws_join_post(
     State(st): State<AppState>,
     auth: AuthUser,
