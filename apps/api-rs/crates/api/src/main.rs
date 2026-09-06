@@ -1529,7 +1529,7 @@ async fn main() {
     ));
 
     let app = app.route_layer(axum_middleware::from_fn_with_state(
-        cfg.frontend_url.clone(),
+        crate::middleware::origin::allowed_origins_from_env(&cfg.frontend_url),
         crate::middleware::origin::origin_middleware,
     ));
 
