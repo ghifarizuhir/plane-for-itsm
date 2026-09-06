@@ -1,6 +1,7 @@
 // crates/api/src/routes/auth.rs
 //
-// Session auth: `POST /api/auth/login|refresh|logout/`, `POST /auth/email-check/`.
+// Session auth: `POST /api/auth/login|refresh|logout/`, `POST /auth/email-check/`,
+// `POST /auth/sign-out/` (302 Django-parity, tanpa `/api`).
 //
 // - login: email+password lawan hash Django → 200 `{id, email}` + 2 Set-Cookie
 //   (access JWT 15 mnt, refresh opaque 30 hari di Redis).
@@ -11,7 +12,7 @@
 //
 // 401 generik selalu `{"error": ...}`.
 use axum::{
-    extract::{Host, Path, Query, State},
+    extract::{ConnectInfo, Host, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     Json,
 };
@@ -393,6 +394,108 @@ pub async fn logout(
     let mut headers = HeaderMap::new();
     clear_cookies(&mut headers, st.config.cookie_secure);
     Ok((StatusCode::OK, headers, Json(json!({"message": "Logged out"}))))
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/sign-out/ — paritas `SignOutAuthEndpoint.post`
+// (`apps/api/plane/authentication/views/app/signout.py:16-28`, mounted di
+// `auth/` TANPA prefix `/api` per `plane/urls.py:23`).
+//
+// - Authed: stamp `users.last_logout_ip` + `last_logout_time=now()`
+//   (`:20-23`), flush sesi, lalu **302** ke app base (`:26`).
+// - Unauthed (lookup gagal → `except` `:19,27-28`): 302 IDENTIK. Tak pernah
+//   401, tak pernah JSON body.
+// - Metode selain POST → 405 `Allow: POST` (router hanya `post()`, default
+//   Axum — tanpa handler khusus).
+//
+// Target URL: Django `settings.APP_BASE_URL` bila set, else
+// `settings.WEB_URL or settings.APP_BASE_URL` (`host.py:24,56-61`; env di
+// `settings/common.py:404-418`) → Rust `APP_BASE_URL` env bila set, else
+// `config.frontend_url` (`FRONTEND_URL` — satu-satunya URL frontend yang
+// dibawa AppConfig, dipakai semua redirect auth di file ini).
+fn app_base_url(config: &common::config::AppConfig) -> String {
+    let raw = std::env::var("APP_BASE_URL").unwrap_or_default();
+    let base = raw.trim().trim_end_matches('/');
+    if base.is_empty() {
+        frontend_base(config)
+    } else {
+        base.to_string()
+    }
+}
+
+/// POST /auth/sign-out/ — selalu 302 (authed maupun unauthed).
+pub async fn sign_out(
+    State(st): State<AppState>,
+    addr: Option<ConnectInfo<std::net::SocketAddr>>,
+    headers: HeaderMap,
+) -> (StatusCode, HeaderMap) {
+    // IP klien ala Django `get_client_ip` (`utils/ip_address.py:199-205`):
+    // X-Forwarded-For pertama, else peer socket. Stamp best-effort.
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|xff| xff.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| addr.map(|a| a.0.ip().to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string());
+    // uid dari cookie akses (polos maupun `__Host-`); tak valid → None =
+    // jalur unauthed Django (redirect identik, bukan 401).
+    let uid = read_cookie(&headers, &["plane_at", "__Host-plane_at"])
+        .and_then(|raw| authn::decode_access(raw.trim(), &st.config.jwt_secret).ok());
+    if let Some(uid) = uid {
+        // Best-effort `user.last_logout_ip/time` + `save()` (`:20-23`).
+        // Gagal (DB down) → tetap 302 (cermin `except Exception → redirect`).
+        let _ = sqlx::query(
+            "UPDATE users SET last_logout_ip = $1, last_logout_time = now(), updated_at = now() WHERE id = $2",
+        )
+        .bind(&ip)
+        .bind(uid)
+        .execute(&st.pool)
+        .await;
+    }
+    // Best-effort revoke refresh — analog `logout(request)` session flush
+    // untuk dunia stateless (lihat `logout` di atas untuk bentuk strict-nya;
+    // di sini kegagalan Redis tak boleh jadi 500).
+    if let Some(raw) = read_cookie(&headers, &["plane_rt", "__Host-plane_rt"]) {
+        if let Ok(mut conn) = st.redis_client().await {
+            let hash = authn::sha256hex(raw.trim());
+            let val: Option<String> = redis::cmd("GET")
+                .arg(authn::refresh_key(&hash))
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(None);
+            let _: redis::RedisResult<()> = redis::cmd("DEL")
+                .arg(authn::refresh_key(&hash))
+                .query_async(&mut conn)
+                .await;
+            if let Some(val) = val {
+                if let Some((_, family)) = val.split_once(':') {
+                    let _: redis::RedisResult<()> = redis::cmd("SREM")
+                        .arg(family_key(family))
+                        .arg(&hash)
+                        .query_async(&mut conn)
+                        .await;
+                }
+            }
+        }
+    }
+    // 302 + clear cookies: reuse helper E8 (`user::cleared_cookie_headers`
+    // — 4 nama plane_* incl `__Host-`, hormat `cookie_secure`; JANGAN fork)
+    // + expire legacy `session-id` (Django `SESSION_COOKIE_NAME`,
+    // `settings/common.py:374`).
+    let mut out = crate::routes::user::cleared_cookie_headers(st.config.cookie_secure);
+    let legacy = if st.config.cookie_secure {
+        "session-id=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax"
+    } else {
+        "session-id=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"
+    };
+    if let Ok(val) = legacy.parse() {
+        out.append("set-cookie", val);
+    }
+    out.extend(safe_redirect(app_base_url(&st.config)));
+    (StatusCode::FOUND, out)
 }
 
 // ---------------------------------------------------------------------------
@@ -955,7 +1058,12 @@ pub async fn oauth_callback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{body::Body, http::Request, routing::get, Router};
+    use axum::{
+        body::Body,
+        http::Request,
+        routing::{get, post},
+        Router,
+    };
     use tower::ServiceExt as _;
 
     fn test_config(client_id: &str, client_secret: &str) -> common::config::AppConfig {
@@ -992,6 +1100,121 @@ mod tests {
             .route("/api/auth/oauth/:provider/start/", get(oauth_start))
             .route("/api/auth/oauth/:provider/callback/", get(oauth_callback))
             .with_state(state)
+    }
+
+    fn sign_out_router(state: AppState) -> Router {
+        Router::new()
+            .route("/auth/sign-out/", post(sign_out))
+            .with_state(state)
+    }
+
+    fn set_cookies_of(resp: &axum::response::Response) -> Vec<String> {
+        resp.headers()
+            .get_all("set-cookie")
+            .iter()
+            .map(|v| v.to_str().unwrap().to_string())
+            .collect()
+    }
+
+    /// POST /auth/sign-out/ tanpa kredensial → 302 ke app base + 5
+    /// Set-Cookie clear (4 plane_* incl `__Host-` + legacy `session-id`),
+    /// body kosong. Tanpa DB/Redis (lazy pool, tanpa cookie → tanpa I/O).
+    #[tokio::test]
+    async fn sign_out_unauthenticated_302_with_clears() {
+        std::env::remove_var("APP_BASE_URL");
+        let app = sign_out_router(test_state(test_config("id", "secret")));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(location_of(&resp), "http://web:3000");
+        let cookies = set_cookies_of(&resp);
+        for name in [
+            "plane_at",
+            "__Host-plane_at",
+            "plane_rt",
+            "__Host-plane_rt",
+            "session-id",
+        ] {
+            assert!(
+                cookies.iter().any(|c| c.starts_with(&format!("{name}=;"))),
+                "missing clear for {name}: {cookies:?}"
+            );
+        }
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(body.is_empty(), "sign-out must have no JSON body");
+    }
+
+    /// Authed (JWT valid) tapi DB/Redis down → tetap 302 identik, bukan
+    /// 401/500 (cermin Django `except Exception → same redirect`).
+    #[tokio::test]
+    async fn sign_out_authenticated_302_without_infra() {
+        std::env::remove_var("APP_BASE_URL");
+        let cfg = test_config("id", "secret");
+        let uid = uuid::Uuid::new_v4();
+        let at = authn::encode_access(&uid, &cfg.jwt_secret, ACCESS_TTL_SECS);
+        let app = sign_out_router(test_state(cfg));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .header("cookie", format!("plane_at={at}"))
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(location_of(&resp), "http://web:3000");
+        let cookies = set_cookies_of(&resp);
+        assert!(
+            cookies.iter().any(|c| c.starts_with("session-id=;")),
+            "missing session-id clear: {cookies:?}"
+        );
+    }
+
+    /// Varian secure: semua 5 clear membawa `Secure` (cermin
+    /// `user::cleared_cookie_headers(true)` + legacy `session-id`).
+    #[tokio::test]
+    async fn sign_out_secure_clears_carry_secure() {
+        std::env::remove_var("APP_BASE_URL");
+        let mut cfg = test_config("id", "secret");
+        cfg.cookie_secure = true;
+        let app = sign_out_router(test_state(cfg));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let cookies = set_cookies_of(&resp);
+        assert_eq!(cookies.len(), 5, "expected 5 clears: {cookies:?}");
+        for c in &cookies {
+            assert!(c.contains("; Secure"), "missing Secure: {c}");
+        }
+    }
+
+    /// Metode selain POST → 405 dengan `Allow: POST` (Axum default).
+    #[tokio::test]
+    async fn sign_out_get_405_allows_post() {
+        let app = sign_out_router(test_state(test_config("id", "secret")));
+        let req = Request::builder()
+            .uri("/auth/sign-out/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
+        let allow = resp
+            .headers()
+            .get("allow")
+            .expect("405 must carry Allow")
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(allow.contains("POST"), "unexpected Allow: {allow}");
     }
 
     fn location_of(resp: &axum::response::Response) -> String {

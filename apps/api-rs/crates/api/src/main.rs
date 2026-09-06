@@ -1179,6 +1179,10 @@ async fn main() {
         .route("/api/auth/logout/", post(routes::auth::logout))
         // Tanpa throttle selaras Django (`ChangePasswordEndpoint` tanpa throttle_classes).
         .route("/auth/change-password/", post(routes::auth_compat::change_password))
+        // Parity `SignOutAuthEndpoint.post` (`authentication/views/app/signout.py:16-28`,
+        // mounted `auth/` tanpa `/api` per `plane/urls.py:23`): POST-only → 405
+        // `Allow: POST` untuk metode lain (default Axum). Selalu 302, tanpa body.
+        .route("/auth/sign-out/", post(routes::auth::sign_out))
         .route("/auth/set-password/", post(routes::auth_compat::set_password))
         .route("/auth/get-csrf-token/", get(routes::auth_compat::csrf_token))
         .route("/api/auth/oauth/:provider/start/", get(routes::auth::oauth_start))
