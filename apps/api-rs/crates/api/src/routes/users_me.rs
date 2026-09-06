@@ -3,7 +3,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use serde::Deserialize;
@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 
 use crate::middleware::auth::AuthUser;
 use crate::routes::member::deny_detail;
+use crate::routes::user::{cleared_cookie_headers, fetch_me, me_json};
 use crate::state::AppState;
 
 pub fn email_code_throttle_key(uid: &uuid::Uuid) -> String {
@@ -152,12 +153,14 @@ pub struct UpdateEmailBody {
     pub code: Option<String>,
 }
 
-/// PATCH /api/users/me/email/ — paritas `UserEndpoint.update_email`.
+/// PATCH /api/users/me/email/ — paritas `UserEndpoint.update_email`
+/// (`user/base.py:224-250`): sukses = 200 FULL `UserMeSerializer` (bentuk
+/// SAMA dengan `GET /api/users/me/`) + sesi di-flush (`logout(request)`).
 pub async fn update_email(
     State(st): State<AppState>,
     auth: AuthUser,
     Json(body): Json<UpdateEmailBody>,
-) -> (StatusCode, Json<Value>) {
+) -> (StatusCode, HeaderMap, Json<Value>) {
     // Galat DB = 500; hanya user yang benar-benar hilang yang jadi 401.
     let row: Option<(String,)> = match sqlx::query_as("SELECT email FROM users WHERE id = $1")
         .bind(auth.0)
@@ -167,32 +170,32 @@ pub async fn update_email(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "update-email: current-email lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
         }
     };
     let Some((current,)) = row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (StatusCode::UNAUTHORIZED, HeaderMap::new(), Json(json!({"error": "invalid credentials"})));
     };
     let email = match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
         Ok(e) => e,
-        Err(err) => return err,
+        Err((s, j)) => return (s, HeaderMap::new(), j),
     };
     let code = body.code.unwrap_or_default().trim().to_string();
     if code.is_empty() {
-        return (StatusCode::BAD_REQUEST, plain_error("Verification code is required"));
+        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Verification code is required"));
     }
     let mut conn = match st.redis_client().await {
         Ok(c) => c,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))),
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"}))),
     };
     let key = email_code_key(&auth.0, &email);
     let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await.unwrap_or(None);
     let Some(raw) = cached else {
-        return (StatusCode::BAD_REQUEST, plain_error("Verification code has expired or is invalid"));
+        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Verification code has expired or is invalid"));
     };
     let stored: String = serde_json::from_str::<Value>(&raw).ok().and_then(|v| v.get("token").and_then(|t| t.as_str()).map(str::to_string)).unwrap_or_default();
     if stored != code {
-        return (StatusCode::BAD_REQUEST, plain_error("Invalid verification code"));
+        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Invalid verification code"));
     }
     // Cek ulang duplikat (bisa diambil user lain antara generate dan update);
     // galat DB = 500 agar tak fail-open menimpa email duplikat.
@@ -202,33 +205,32 @@ pub async fn update_email(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "update-email: duplicate-email recheck failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
         }
     };
     if taken == Some(true) {
-        return (StatusCode::BAD_REQUEST, plain_error("An account with this email already exists"));
+        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("An account with this email already exists"));
     }
     let upd = sqlx::query("UPDATE users SET email = $1, is_email_verified = false, updated_at = now() WHERE id = $2")
         .bind(&email).bind(auth.0).execute(&st.pool).await;
     if upd.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
     }
     let _: () = redis::cmd("DEL").arg(&key).query_async(&mut conn).await.unwrap_or(());
-    // Tanpa logout server-side: sesi Rust stateless (JWT ≤15 mnt, refresh
-    // me-resolve uid → email baru berlaku otomatis); frontend sign-out sendiri.
-    let back: Option<(String, String, String)> =
-        match sqlx::query_as("SELECT email, first_name, last_name FROM users WHERE id = $1")
-            .bind(auth.0).fetch_optional(&st.pool).await
-        {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!(error = %e, "update-email: re-read after update failed");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
-            }
-        };
-    match back {
-        Some((email, first, last)) => (StatusCode::OK, Json(json!({"id": auth.0, "email": email, "first_name": first, "last_name": last}))),
-        None => (StatusCode::NOT_FOUND, Json(json!({"error": "User not found"}))),
+    // `logout(request)` (`user/base.py:241`): flush sesi via clear-cookie
+    // headers `plane_at`/`plane_rt` (cermin `auth::logout`), flag `Secure`
+    // mengikuti `cookie_secure` (`common/src/config.rs:9`).
+    let headers = cleared_cookie_headers(st.config.cookie_secure);
+    // Sukses = FULL UserMe, SAMA dengan `GET /api/users/me/`
+    // (`UserMeSerializer(user).data`, `user/base.py:249`) — via builder yang
+    // sama (`fetch_me`/`me_json`), bukan bentuk kedua yang di-fork.
+    match fetch_me(&st.pool, auth.0).await {
+        Ok(Some(r)) => (StatusCode::OK, headers, Json(me_json(&r))),
+        Ok(None) => (StatusCode::NOT_FOUND, HeaderMap::new(), Json(json!({"error": "User not found"}))),
+        Err(e) => {
+            tracing::warn!(error = %e, "update-email: re-read after update failed");
+            (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})))
+        }
     }
 }
 
@@ -969,6 +971,7 @@ pub async fn my_project_roles(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routes::user::MeRow;
 
     #[test]
     fn email_code_throttle_key_format() {
@@ -1031,5 +1034,68 @@ mod tests {
             j.0,
             json!({"detail": "You do not have permission to perform this action."})
         );
+    }
+
+    #[test]
+    fn update_email_returns_full_user_me_shape() {
+        // Sukses `update_email` HARUS memakai builder yang SAMA dengan
+        // `GET /api/users/me/` (`fetch_me`/`me_json` di `routes::user`,
+        // `UserMeSerializer(user).data` di `user/base.py:249`): 18 kunci unik,
+        // bukan `{id, email, first_name, last_name}` yang di-fork.
+        let r = MeRow {
+            id: uuid::Uuid::nil(),
+            avatar: None,
+            cover_image: None,
+            avatar_asset: Some("a".into()),
+            cover_asset: None,
+            date_joined: chrono::Utc::now(),
+            display_name: "d".into(),
+            email: Some("new@x.io".into()),
+            first_name: "f".into(),
+            last_name: "l".into(),
+            is_active: true,
+            is_bot: false,
+            is_email_verified: false,
+            user_timezone: "UTC".into(),
+            username: "u".into(),
+            is_password_autoset: false,
+            last_login_medium: "email".into(),
+            last_login_time: None,
+        };
+        let v = me_json(&r);
+        for k in [
+            "id", "avatar", "cover_image", "avatar_url", "cover_image_url",
+            "date_joined", "display_name", "email", "first_name", "last_name",
+            "is_active", "is_bot", "is_email_verified", "user_timezone",
+            "username", "is_password_autoset", "last_login_medium", "last_login_time",
+        ] {
+            assert!(v.get(k).is_some(), "missing {k}");
+        }
+        assert_eq!(v.as_object().expect("objek").len(), 18);
+        assert_eq!(v["email"], json!("new@x.io"));
+    }
+
+    #[test]
+    fn update_email_clears_session_cookies() {
+        // Jalur sukses `update_email` memanggil
+        // `cleared_cookie_headers(st.config.cookie_secure)` (cermin
+        // `logout(request)` di `user/base.py:241`): kedua cookie sesi
+        // (`plane_at`/`plane_rt`, polos + `__Host-`) di-clear; flag `Secure`
+        // hanya bila `cookie_secure`.
+        for secure in [false, true] {
+            let h = cleared_cookie_headers(secure);
+            let set: Vec<String> = h
+                .get_all("set-cookie")
+                .iter()
+                .map(|v| v.to_str().expect("ascii").to_string())
+                .collect();
+            assert_eq!(set.len(), 4, "secure={secure}: {set:?}");
+            for name in ["plane_at", "__Host-plane_at", "plane_rt", "__Host-plane_rt"] {
+                let v = set.iter().find(|v| v.starts_with(&format!("{name}=;")));
+                assert!(v.is_some(), "secure={secure}: {name} tak di-clear: {set:?}");
+                assert!(v.expect("ada").contains("Max-Age=0"), "harus expired: {set:?}");
+                assert_eq!(v.expect("ada").contains("Secure"), secure, "{set:?}");
+            }
+        }
     }
 }

@@ -14,7 +14,8 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::Deserialize;
@@ -313,28 +314,28 @@ fn internal() -> (StatusCode, Json<Value>) {
 // ============================================================================
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct MeRow {
-    id: uuid::Uuid,
-    avatar: Option<String>,
-    cover_image: Option<String>,
-    avatar_asset: Option<String>,
-    cover_asset: Option<String>,
-    date_joined: chrono::DateTime<chrono::Utc>,
-    display_name: String,
-    email: Option<String>,
-    first_name: String,
-    last_name: String,
-    is_active: bool,
-    is_bot: bool,
-    is_email_verified: bool,
-    user_timezone: String,
-    username: String,
-    is_password_autoset: bool,
-    last_login_medium: String,
-    last_login_time: Option<chrono::DateTime<chrono::Utc>>,
+pub(crate) struct MeRow {
+    pub(crate) id: uuid::Uuid,
+    pub(crate) avatar: Option<String>,
+    pub(crate) cover_image: Option<String>,
+    pub(crate) avatar_asset: Option<String>,
+    pub(crate) cover_asset: Option<String>,
+    pub(crate) date_joined: chrono::DateTime<chrono::Utc>,
+    pub(crate) display_name: String,
+    pub(crate) email: Option<String>,
+    pub(crate) first_name: String,
+    pub(crate) last_name: String,
+    pub(crate) is_active: bool,
+    pub(crate) is_bot: bool,
+    pub(crate) is_email_verified: bool,
+    pub(crate) user_timezone: String,
+    pub(crate) username: String,
+    pub(crate) is_password_autoset: bool,
+    pub(crate) last_login_medium: String,
+    pub(crate) last_login_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-fn me_json(r: &MeRow) -> Value {
+pub(crate) fn me_json(r: &MeRow) -> Value {
     let avatar_url = r.avatar_asset.clone().or_else(|| r.avatar.clone());
     let cover_url = r.cover_asset.clone().or_else(|| r.cover_image.clone());
     json!({
@@ -359,7 +360,7 @@ fn me_json(r: &MeRow) -> Value {
     })
 }
 
-async fn fetch_me(pool: &sqlx::PgPool, uid: uuid::Uuid) -> Result<Option<MeRow>, sqlx::Error> {
+pub(crate) async fn fetch_me(pool: &sqlx::PgPool, uid: uuid::Uuid) -> Result<Option<MeRow>, sqlx::Error> {
     sqlx::query_as::<_, MeRow>(
         "SELECT u.id, u.avatar, u.cover_image, fa.asset AS avatar_asset, fc.asset AS cover_asset, \
                 u.date_joined, u.display_name, u.email, u.first_name, u.last_name, \
@@ -1716,19 +1717,21 @@ type ExportRow = (
 /// `ExportWorkspaceUserActivityEndpoint.post` (`workspace/base.py`).
 /// Body `{date}` wajib → 400 `{"error":"Date is required"}`; Guest → 403
 /// `{"error":...}` (allow_permission); cap 10000; QUOTE_ALL; header verbatim.
+/// Sukses = 200 RAW CSV bytes (`text/csv` + disposition), BUKAN JSON string.
 pub async fn export_activity(
     State(st): State<AppState>,
     auth: AuthUser,
     Path((slug, target)): Path<(String, uuid::Uuid)>,
     Json(body): Json<ExportBody>,
-) -> Result<(StatusCode, HeaderMap, Json<Value>), common::errors::AppError> {
+) -> Result<Response, common::errors::AppError> {
     let date = body.date.unwrap_or_default().trim().to_string();
     if date.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
             HeaderMap::new(),
             Json(json!({"error": DATE_REQUIRED_MSG})),
-        ));
+        )
+            .into_response());
     }
     // Non-safe → ADMIN/MEMBER; Guest/non-member → 403 `{"error":...}`.
     let role = ws_member_role(&st.pool, auth.0, &slug)
@@ -1741,7 +1744,8 @@ pub async fn export_activity(
                 StatusCode::FORBIDDEN,
                 HeaderMap::new(),
                 Json(json!({"error": FORBIDDEN_MSG})),
-            ))
+            )
+                .into_response())
         }
     }
     // Tanggal `%Y-%m-%d`; sampah → 400 detail-msg (Django `__date` parse
@@ -1751,7 +1755,8 @@ pub async fn export_activity(
             StatusCode::BAD_REQUEST,
             HeaderMap::new(),
             Json(json!({"error": "Please provide valid detail"})),
-        ));
+        )
+            .into_response());
     }
     let rows: Vec<ExportRow> = sqlx::query_as(
         "SELECT u.display_name, p.identifier, i.sequence_id, p.name, a.created_at, a.updated_at, \
@@ -1801,16 +1806,17 @@ pub async fn export_activity(
         out.push_str(&csv_line_quoted_all(&row));
     }
     let mut h = HeaderMap::new();
-    h.insert("content-type", "text/csv".parse().unwrap());
+    h.insert(header::CONTENT_TYPE, "text/csv".parse().unwrap());
     h.insert(
-        "content-disposition",
+        header::CONTENT_DISPOSITION,
         "attachment; filename=\"workspace-user-activity.csv\""
             .parse()
             .unwrap(),
     );
-    // Body CSV dibungkus JSON string agar signature tetap Json (lapisan
-    // transport mengembalikan text/csv via content-type di atas).
-    Ok((StatusCode::OK, h, Json(Value::String(out))))
+    // Body = RAW CSV bytes (Django `HttpResponse(csv, content_type="text/csv")`);
+    // JANGAN dibungkus `Json(Value::String)` (itu mengemit JSON string
+    // ber-quote, bukan CSV mentah).
+    Ok((StatusCode::OK, h, out).into_response())
 }
 
 // ============================================================================
@@ -2081,6 +2087,33 @@ mod tests {
         assert_eq!(sanitize_csv_value(""), "");
         let line = csv_line_quoted_all(&["a\"b".to_string(), "=c".to_string()]);
         assert_eq!(line, "\"a\"\"b\",\"'=c\"\r\n");
+    }
+
+    #[test]
+    fn export_body_is_raw_csv_not_json_string() {
+        // Sukses export = RAW CSV bytes (`text/csv`), BUKAN `Json(Value::String)`
+        // (itu mengemit `"\"Actor name\",..."` — JSON string ber-quote).
+        // QUOTE_ALL tetap: header pun dikutip → body mentah diawali `"Actor`,
+        // sedangkan versi JSON diawali `"\"` (quote + backslash).
+        let header: Vec<String> = ACTIVITY_CSV_HEADER.iter().map(|s| s.to_string()).collect();
+        let mut raw = csv_line_quoted_all(&header);
+        raw.push_str(&csv_line_quoted_all(&[
+            "Ada".to_string(),
+            "PRJ - 1".to_string(),
+            "Proj".to_string(),
+            "2026-01-01T00:00:00+00:00".to_string(),
+            "2026-01-02T00:00:00+00:00".to_string(),
+            "created".to_string(),
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+        ]));
+        assert!(raw.starts_with("\"Actor name\",\"Issue ID\""), "body=\n{raw}");
+        assert!(!raw.contains("\\\""), "tak boleh ada escape JSON: {raw}");
+        assert!(raw.contains("\r\n\""), "baris data dikutip setelah CRLF");
+        let wrapped = serde_json::to_string(&raw).expect("json wrap");
+        assert!(wrapped.starts_with("\"\\\""), "bentuk bug lama: {wrapped}");
+        assert_ne!(raw.as_bytes()[0], b'\\');
     }
 
     #[test]
