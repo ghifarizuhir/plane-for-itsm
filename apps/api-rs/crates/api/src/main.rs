@@ -1292,6 +1292,69 @@ async fn main() {
             "/api/workspaces/:slug/analytic-view/",
             get(routes::analytic::list_views).post(routes::analytic::create_view),
         )
+        // Parity with `AdvanceAnalyticsEndpoint.get`
+        // (`views/analytic/advance.py:104-119`, `urls/analytic.py:61-63`):
+        // GET 200 `?tab=overview|work-items` (default overview; invalid →
+        // 400 `{"message": "Invalid tab"}`). Gate WORKSPACE ADMIN/MEMBER
+        // (`deny()` 403).
+        .route("/api/workspaces/:slug/advance-analytics/", get(routes::analytic::advance_overview))
+        // Parity with `AdvanceAnalyticsStatsEndpoint.get`
+        // (`advance.py:158-169`, `urls/analytic.py:66-68`): GET 200
+        // per-project state-group counts (only `?type=work-items`, else 400
+        // `{"message": "Invalid type"}`). Gate WORKSPACE ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/advance-analytics-stats/",
+            get(routes::analytic::advance_stats),
+        )
+        // Parity with `AdvanceAnalyticsChartEndpoint.get`
+        // (`advance.py:285-318`, `urls/analytic.py:71-73`): GET 200
+        // `?type=projects|custom-work-items|work-items` (default projects;
+        // invalid → 400 Invalid type). Gate WORKSPACE ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/advance-analytics-charts/",
+            get(routes::analytic::advance_charts),
+        )
+        // Parity with `ProjectAdvanceAnalyticsEndpoint.get`
+        // (`views/analytic/project_analytics.py:84-94`,
+        // `urls/analytic.py:76-78`): GET 200 work-item stats scoped to the
+        // project (+ optional `?cycle_id|module_id` id__in scoping; unknown
+        // → zero counts, no 404). Gate project ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/advance-analytics/",
+            get(routes::analytic::project_advance),
+        )
+        // Parity with `ProjectAdvanceAnalyticsStatsEndpoint.get`
+        // (`project_analytics.py:165-179`, `urls/analytic.py:81-83`): GET 200
+        // per-assignee counts (only `?type=work-items`). Gate project
+        // ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/advance-analytics-stats/",
+            get(routes::analytic::project_advance_stats),
+        )
+        // Parity with `ProjectAdvanceAnalyticsChartEndpoint.get`
+        // (`project_analytics.py:317-367`, `urls/analytic.py:86-88`): GET 200
+        // `?type=custom-work-items|work-items` (default `projects` → 400
+        // Invalid type). Gate project ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/advance-analytics-charts/",
+            get(routes::analytic::project_advance_charts),
+        )
+        // Parity with `DeployBoardViewSet` (`views/project/base.py:535-576`,
+        // `urls/project.py:113-118`): list GET 200 (no board → 200 null) +
+        // create POST upsert **200**; retrieve GET 200 + PATCH 200 + DELETE
+        // **204** soft. Gates: SAFE reads = any active member, POST =
+        // workspace ADMIN/MEMBER, PATCH/DELETE = project ADMIN/MEMBER
+        // (DRF 403 `{"detail": ...}` denies).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-deploy-boards/",
+            get(routes::analytic::deploy_list).post(routes::analytic::deploy_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-deploy-boards/:pk/",
+            get(routes::analytic::deploy_retrieve)
+                .patch(routes::analytic::deploy_patch)
+                .delete(routes::analytic::deploy_destroy),
+        )
         // Parity with `WorkspaceUserPropertiesEndpoint`
         // (`views/workspace/user.py:252-269`,
         // `serializers/workspace.py:174-178`): GET 200 + PATCH 200 full
