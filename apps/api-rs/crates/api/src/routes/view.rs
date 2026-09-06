@@ -2,6 +2,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::routes::project::{deny, project_role, ws_role, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Mirrors `plane/app/views/view/` (IssueViewViewSet list/create +
@@ -62,6 +63,40 @@ pub fn validate_favorite_create(body: &CreateFavorite) -> Result<(), String> {
         return Err("view is required".to_string());
     }
     Ok(())
+}
+
+/// `plane/app/views/base.py:92-97` (Django `IntegrityError` → 400; favorite dup).
+pub const PAYLOAD_INVALID_MSG: &str = "The payload is not valid";
+
+/// Mirrors `@allow_permission([ROLE.ADMIN, ROLE.MEMBER])`
+/// (`plane/app/permissions/base.py:40-59`) — GUEST (5) denied.
+pub fn guard_am(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) | Some(15) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// Gate for the view-favorite AM endpoint: allowed project role 20/15
+/// outright, else the workspace-ADMIN fallback
+/// (`plane/app/permissions/base.py:61-78` — any active project membership +
+/// workspace ADMIN), mirroring `cycle.rs:gate_am`. Anything else denies.
+async fn gate_am(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+    pid: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let role = project_role(pool, user, pid).await?;
+    let ws_admin = ws_role(pool, user, slug)
+        .await
+        .map(|r| r == Some(20))
+        .unwrap_or(false);
+    Ok(guard_am(role).is_ok() || (role.is_some() && ws_admin))
+}
+
+fn is_constraint_violation(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db) if db.code().is_some_and(|c| c.starts_with("23")))
 }
 
 async fn list_views(
@@ -175,32 +210,39 @@ pub async fn create_favorite(
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateFavorite>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    validate_favorite_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let owner = auth.0;
-    let view_id = body.view.unwrap();
-
-    let existing: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM user_favorites WHERE project_id = $1 AND entity_type = 'view' AND entity_identifier = $2 AND user_id = $3 AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(view_id)
-    .bind(owner)
-    .fetch_optional(&st.pool)
-    .await?;
-    if let Some(id) = existing {
-        return Ok((StatusCode::CONFLICT, Json(json!({"error": "View already favorited", "id": id}))));
+    // `@allow_permission([ROLE.ADMIN, ROLE.MEMBER])`
+    // (`plane/app/views/view/base.py:419`): project ADMIN (20) / MEMBER (15)
+    // only; GUEST (5) / non-member → 403 `deny()`
+    // (`plane/app/permissions/base.py:81-84`).
+    if !gate_am(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
     }
+    // `plane/app/views/view/base.py:420-427`: NO body validation —
+    // `request.data.get("view")` passes None straight through
+    // (`user_favorites.entity_identifier` is nullable) and still 204s.
+    let view_id: Option<uuid::Uuid> = body.view;
+    let owner = auth.0;
 
-    let row = sqlx::query_as::<_, common::models::view::UserFavorite>(
-        "INSERT INTO user_favorites (id, entity_type, entity_identifier, user_id, is_folder, sequence, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), 'view', $1, $2, false, 65535, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, entity_identifier",
+    let r = sqlx::query(
+        "INSERT INTO user_favorites (id, entity_type, entity_identifier, user_id, is_folder, sequence, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), 'view', $1, $2, false, 65535, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4",
     )
     .bind(view_id)
     .bind(owner)
     .bind(project_id)
     .bind(&slug)
-    .fetch_one(&st.pool)
-    .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "view": row.entity_identifier}))))
+    .execute(&st.pool)
+    .await;
+    // Dup → 400 `{"error": "The payload is not valid"}` (Django
+    // `IntegrityError` → `plane/app/views/base.py:92-97`); unique index
+    // `(entity_type, entity_identifier, user_id) WHERE deleted_at IS NULL`.
+    match r {
+        Ok(_) => Ok((StatusCode::NO_CONTENT, Json(Value::Null))),
+        Err(e) if is_constraint_violation(&e) => Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": PAYLOAD_INVALID_MSG})),
+        )),
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -326,4 +368,50 @@ pub async fn destroy(
     .execute(&st.pool)
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+#[cfg(test)]
+mod view_e6_tests {
+    use super::*;
+    use crate::routes::project::deny;
+
+    #[test]
+    fn fav_gate_allows_admin_member_only() {
+        // `@allow_permission([ROLE.ADMIN, ROLE.MEMBER])`
+        // (`permissions/base.py:40-59`): project ADMIN (20) / MEMBER (15)
+        // pass; GUEST (5) / non-member → 403 `deny()`.
+        assert!(guard_am(Some(20)).is_ok());
+        assert!(guard_am(Some(15)).is_ok());
+        assert!(guard_am(Some(5)).is_err());
+        assert!(guard_am(None).is_err());
+    }
+
+    #[test]
+    fn fav_dup_maps_to_400_payload_invalid() {
+        // Django `IntegrityError` → `views/base.py:92-97`: a duplicate
+        // favorite is 400 `{"error": "The payload is not valid"}` — never
+        // the 409 `View already favorited` shape.
+        assert_eq!(PAYLOAD_INVALID_MSG, "The payload is not valid");
+        assert!(!PAYLOAD_INVALID_MSG.contains("favorited"));
+    }
+
+    #[test]
+    fn fav_deny_is_403_permissions_error() {
+        // `permissions/base.py:81-84`: the AM-gate deny body.
+        let (status, body) = deny();
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            body.0,
+            json!({"error": "You don't have the required permissions."})
+        );
+    }
+
+    #[test]
+    fn fav_missing_view_deserializes_to_none() {
+        // `view/base.py:421-424`: `request.data.get("view")` passes None
+        // straight through (`entity_identifier` is nullable) — the handler
+        // stores NULL and still returns 204, with no validation error.
+        let body: CreateFavorite = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(body.view, None);
+    }
 }
