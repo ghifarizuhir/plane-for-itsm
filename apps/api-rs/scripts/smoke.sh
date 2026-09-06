@@ -83,7 +83,7 @@ check estimate-create 201 -X POST -d '{"name":"Smoke est","type":"points"}' "$BA
 EID=$(jid id)
 check estimate-point 201 -X POST -d '{"key":1,"value":"1"}' "$BASE/api/workspaces/$WS/projects/$PID/estimates/$EID/estimate-points/"
 check sticky-create 201 -X POST -d '{"name":"Smoke sticky","color":"#ff0000"}' "$BASE/api/workspaces/$WS/stickies/"
-check invite-create 200 -X POST -d '{"email":"smoke@example.com","role":15}' "$BASE/api/workspaces/$WS/invitations/"
+check invite-create 200 -X POST -d '{"emails":[{"email":"smoke@example.com","role":15}]}' "$BASE/api/workspaces/$WS/invitations/"
 grep -q 'Emails sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   invite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED invite-body"; echo "FAIL invite-body: $(head -c 200 /tmp/smoke_body)"; }
 check token-create 201 -X POST -d '{"label":"smoke2"}' "$BASE/api/users/api-tokens/"
 check export-create 200 -X POST -d '{"provider":"csv"}' "$BASE/api/workspaces/$WS/export-issues/"
@@ -331,13 +331,13 @@ check e5-ws-leave-guard 400 -X POST "$BASE/api/workspaces/$WS/members/leave/"
 check e5-proj-members 200 "$BASE/api/workspaces/$WS/projects/$PID/members/"
 check e5-proj-bulk-empty 400 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/members/"
 PROLE=$(curl -s -m 10 -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/workspaces/$WS/projects/$PID/project-members/me/" | python3 -c "import json,sys; print(json.load(sys.stdin).get('role',''))" 2>/dev/null)
-TUID=$(docker exec plane-db psql -U plane -d plane -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-member-$SFX@example.com', 'tempmem$SFX', '!', '', '', 'tempmem', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | tr -d ' \n')
+TUID=$(docker exec plane-db psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-member-$SFX@example.com', 'tempmem$SFX', '!', '', '', 'tempmem', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
 docker exec plane-db psql -U plane -d plane -q -c "INSERT INTO workspace_members (id, workspace_id, member_id, role, view_props, default_props, issue_props, is_active, explored_features, getting_started_checklist, tips, created_at, updated_at) SELECT gen_random_uuid(), w.id, '$TUID', 15, '{}', '{}', '{}', true, '{}', '{}', '{}', now(), now() FROM workspaces w WHERE w.slug='$WS';" 2>&1 | head -n 1
 check e5-proj-bulk-add 201 -X POST -d "{\"members\":[{\"member_id\":\"$TUID\",\"role\":15}]}" "$BASE/api/workspaces/$WS/projects/$PID/members/"
 PMID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT pm.id FROM project_members pm JOIN projects p ON p.id=pm.project_id JOIN workspaces w ON w.id=p.workspace_id WHERE w.slug='$WS' AND p.id='$PID' AND pm.member_id='$TUID' AND pm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 check e5-proj-patch-ladder 403 -X PATCH -d "{\"role\":$PROLE}" "$BASE/api/workspaces/$WS/projects/$PID/members/$PMID/"
 check e5-proj-member-del 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/members/$PMID/"
-check e5-ws-invite-create 200 -X POST -d "{\"email\":\"temp-join-$SFX@example.com\",\"role\":5}" "$BASE/api/workspaces/$WS/invitations/"
+check e5-ws-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"temp-join-$SFX@example.com\",\"role\":5}]}" "$BASE/api/workspaces/$WS/invitations/"
 grep -q 'Emails sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-wsinvite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-wsinvite-body"; echo "FAIL e5-wsinvite-body: $(head -c 200 /tmp/smoke_body)"; }
 check e5-ws-invite-list 200 "$BASE/api/workspaces/$WS/invitations/"
 INVID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
@@ -348,7 +348,7 @@ check e5-ws-join-accept 200 -X POST -d "{\"token\":\"$INVTOK\",\"accepted\":true
 grep -q 'Workspace Invitation Accepted' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-join-body -> Accepted"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-body"; echo "FAIL e5-join-body: $(head -c 200 /tmp/smoke_body)"; }
 INVLEFT=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT COUNT(*) FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com';" 2>/dev/null | tr -d ' \n')
 if [ "$INVLEFT" = "0" ]; then PASS=$((PASS+1)); echo "ok   e5-join-row-deleted -> 0"; else FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-row-deleted($INVLEFT)"; echo "FAIL e5-join-row-deleted -> $INVLEFT"; fi
-check e5-proj-invite-create 200 -X POST -d "{\"email\":\"temp-proj-$SFX@example.com\",\"role\":10}" "$BASE/api/workspaces/$WS/projects/$PID/invitations/"
+check e5-proj-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"temp-proj-$SFX@example.com\",\"role\":10}]}" "$BASE/api/workspaces/$WS/projects/$PID/invitations/"
 grep -q 'Email sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-projinvite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-projinvite-body"; echo "FAIL e5-projinvite-body: $(head -c 200 /tmp/smoke_body)"; }
 check e5-proj-invite-list 200 "$BASE/api/workspaces/$WS/projects/$PID/invitations/"
 PINVID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM project_member_invites WHERE email='temp-proj-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
@@ -365,7 +365,12 @@ check e6-fav-invalid 400 -X POST -d '{}' "$BASE/api/workspaces/$WS/user-favorite
 check e6-fav-list 200 "$BASE/api/workspaces/$WS/user-favorites/"
 check e6-fav-folder 200 -X POST -d '{"entity_type":"project","is_folder":true,"name":"smoke-folder"}' "$BASE/api/workspaces/$WS/user-favorites/"
 FOLD=$(jid id)
-check e6-fav-child 200 -X POST -d "{\"entity_type\":\"project\",\"entity_identifier\":\"$PID\",\"name\":\"smoke-child\",\"parent\":\"$FOLD\"}" "$BASE/api/workspaces/$WS/user-favorites/"
+# R8 adjudication (T12): Django's dup check (views/workspace/favorite.py:43-54)
+# scopes on (workspace, user, entity_type, entity_identifier) WITHOUT parent,
+# so Rosa/parity backends dedup a same-entity child to the parent FID. The
+# fixture therefore uses a DISTINCT entity_identifier ($FOLD, a valid UUID
+# unlike $PID) so the child gets its own id and the del-child/del sequence holds.
+check e6-fav-child 200 -X POST -d "{\"entity_type\":\"project\",\"entity_identifier\":\"$FOLD\",\"name\":\"smoke-child\",\"parent\":\"$FOLD\"}" "$BASE/api/workspaces/$WS/user-favorites/"
 CHILD=$(jid id)
 check e6-fav-group 200 "$BASE/api/workspaces/$WS/user-favorites/$FOLD/group/"
 check e6-fav-patch 200 -X PATCH -d '{"name":"smoke-fav2"}' "$BASE/api/workspaces/$WS/user-favorites/$FID/"
@@ -457,7 +462,7 @@ grep -q 'issue_completed_month_wise' /tmp/smoke_body && { PASS=$((PASS+1)); echo
 check e10-projstats 200 "$BASE/api/workspaces/$WS/project-stats/"
 grep -q 'total_issues' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e10-projstats-body -> total_issues"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e10-projstats-body"; echo "FAIL e10-projstats-body: $(head -c 200 /tmp/smoke_body)"; }
 check e10-adv 200 "$BASE/api/workspaces/$WS/advance-analytics/"
-grep -q 'completed_work_items' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e10-adv-body -> completed_work_items"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e10-adv-body"; echo "FAIL e10-adv-body: $(head -c 200 /tmp/smoke_body)"; }
+grep -q 'total_work_items' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e10-adv-body -> total_work_items"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e10-adv-body"; echo "FAIL e10-adv-body: $(head -c 200 /tmp/smoke_body)"; }
 check e10-adv-badtab 400 "$BASE/api/workspaces/$WS/advance-analytics/?tab=nope"
 check e10-adv-stats 200 "$BASE/api/workspaces/$WS/advance-analytics-stats/?type=work-items"
 check e10-adv-charts 200 "$BASE/api/workspaces/$WS/advance-analytics-charts/"
