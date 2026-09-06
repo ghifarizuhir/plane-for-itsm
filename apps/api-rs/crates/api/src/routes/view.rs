@@ -58,6 +58,10 @@ pub fn guard_guest_access(is_guest: bool, guest_view_all: bool, is_owner: bool) 
     Ok(())
 }
 
+// Kept for `tests/view_test.rs` per user (E6): the favorite handler
+// intentionally skips validation (NULL passthrough), so routes never call
+// this — but the integration test still exercises it.
+#[allow(dead_code)]
 pub fn validate_favorite_create(body: &CreateFavorite) -> Result<(), String> {
     if body.view.is_none() {
         return Err("view is required".to_string());
@@ -95,8 +99,38 @@ async fn gate_am(
     Ok(guard_am(role).is_ok() || (role.is_some() && ws_admin))
 }
 
+/// Pure SQLSTATE check behind [`is_constraint_violation`]: class `23`
+/// (integrity constraint violation — Django `IntegrityError` → 400).
+/// Split out so unit tests can exercise the dup-arm mapping without
+/// constructing a `sqlx::Error` (which has no public test constructor).
+fn is_constraint_violation_code(code: &str) -> bool {
+    code.starts_with("23")
+}
+
 fn is_constraint_violation(e: &sqlx::Error) -> bool {
-    matches!(e, sqlx::Error::Database(db) if db.code().is_some_and(|c| c.starts_with("23")))
+    matches!(e, sqlx::Error::Database(db) if db.code().is_some_and(|c| is_constraint_violation_code(&c)))
+}
+
+/// Pure dup→400 mapping for the favorite insert (`views/base.py:92-97`):
+/// `true` (constraint violation) → 400 `PAYLOAD_INVALID_MSG`,
+/// `false` (insert ok) → 204. The handler delegates here so unit tests
+/// fail if the dup-arm mapping breaks.
+fn favorite_insert_outcome(is_dup: bool) -> (StatusCode, Json<Value>) {
+    if is_dup {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": PAYLOAD_INVALID_MSG})),
+        )
+    } else {
+        (StatusCode::NO_CONTENT, Json(Value::Null))
+    }
+}
+
+/// Pure extraction of the favorite target (`view/base.py:420-427`):
+/// `request.data.get("view")` passes None straight through
+/// (`entity_identifier` is nullable) — no validation, NULL still 204s.
+fn favorite_entity_identifier(body: &CreateFavorite) -> Option<uuid::Uuid> {
+    body.view
 }
 
 async fn list_views(
@@ -220,7 +254,7 @@ pub async fn create_favorite(
     // `plane/app/views/view/base.py:420-427`: NO body validation —
     // `request.data.get("view")` passes None straight through
     // (`user_favorites.entity_identifier` is nullable) and still 204s.
-    let view_id: Option<uuid::Uuid> = body.view;
+    let view_id: Option<uuid::Uuid> = favorite_entity_identifier(&body);
     let owner = auth.0;
 
     let r = sqlx::query(
@@ -236,11 +270,8 @@ pub async fn create_favorite(
     // `IntegrityError` → `plane/app/views/base.py:92-97`); unique index
     // `(entity_type, entity_identifier, user_id) WHERE deleted_at IS NULL`.
     match r {
-        Ok(_) => Ok((StatusCode::NO_CONTENT, Json(Value::Null))),
-        Err(e) if is_constraint_violation(&e) => Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": PAYLOAD_INVALID_MSG})),
-        )),
+        Ok(_) => Ok(favorite_insert_outcome(false)),
+        Err(e) if is_constraint_violation(&e) => Ok(favorite_insert_outcome(true)),
         Err(e) => Err(e.into()),
     }
 }
@@ -390,9 +421,20 @@ mod view_e6_tests {
     fn fav_dup_maps_to_400_payload_invalid() {
         // Django `IntegrityError` → `views/base.py:92-97`: a duplicate
         // favorite is 400 `{"error": "The payload is not valid"}` — never
-        // the 409 `View already favorited` shape.
-        assert_eq!(PAYLOAD_INVALID_MSG, "The payload is not valid");
+        // the 409 `View already favorited` shape. Exercises the real
+        // pure helpers the handler delegates to, so the test fails if
+        // either the SQLSTATE check or the dup-arm mapping breaks.
+        assert!(is_constraint_violation_code("23505"));
+        assert!(!is_constraint_violation_code("22000"));
+
+        let (status, body) = favorite_insert_outcome(true);
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body.0, json!({"error": "The payload is not valid"}));
         assert!(!PAYLOAD_INVALID_MSG.contains("favorited"));
+
+        let (status, body) = favorite_insert_outcome(false);
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(body.0, Value::Null);
     }
 
     #[test]
@@ -411,7 +453,17 @@ mod view_e6_tests {
         // `view/base.py:421-424`: `request.data.get("view")` passes None
         // straight through (`entity_identifier` is nullable) — the handler
         // stores NULL and still returns 204, with no validation error.
+        // Exercises the real extraction helper (not just serde), so the
+        // NULL-passthrough contract breaks loudly if it changes. No DB
+        // infra needed: the helper is pure.
         let body: CreateFavorite = serde_json::from_value(json!({})).unwrap();
         assert_eq!(body.view, None);
+        assert_eq!(favorite_entity_identifier(&body), None);
+
+        let id = uuid::Uuid::new_v4();
+        let body: CreateFavorite =
+            serde_json::from_value(json!({ "view": id })).unwrap();
+        assert_eq!(body.view, Some(id));
+        assert_eq!(favorite_entity_identifier(&body), Some(id));
     }
 }
