@@ -999,12 +999,17 @@ async fn main() {
             "/api/assets/v2/workspaces/:slug/projects/:project_id/download/:asset_id/",
             get(routes::asset::project_download),
         )
+        // Parity with the issue-attachment V2 surface
+        // (`app/views/issue/attachment.py` `IssueAttachmentV2Endpoint`,
+        // `app/urls/issue.py:137-146`): byte-identical `assets/v2` paths —
+        // POST presign + GET list on the collection, 302 GET / PATCH
+        // complete / DELETE on the member.
         .route(
-            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/",
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/",
             post(routes::asset::issue_presign).get(routes::asset::issue_list),
         )
         .route(
-            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/:pk/",
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/:pk/",
             get(routes::asset::issue_get)
                 .patch(routes::asset::issue_complete)
                 .delete(routes::asset::issue_delete),

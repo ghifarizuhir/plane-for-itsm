@@ -797,7 +797,12 @@ async fn check_project_access(
 /// `get_entity_id_field` (`v2.py:206-236,551-578,782-813`): map
 /// `(entity_type, entity_identifier)` to the FK column. Identifiers that are
 /// not UUIDs are skipped (Django would crash with a 500 here — sane +
-/// documented).
+/// documented). `DRAFT_*` selects NO column: Django's workspace-presign
+/// (`v2.py:206-236`) and duplicate (`v2.py:782-813`) `get_entity_id_field`
+/// have no DRAFT branch → `{}` → FK stays NULL (only the project-presign
+/// `v2.py:576-577` `DRAFT_ISSUE_DESCRIPTION` branch binds `draft_issue_id`,
+/// and the shared presign/duplicate inserts below intentionally leave it
+/// NULL for uniform DRAFT handling).
 fn entity_fk_fragment(entity_type: &str, entity_id: Option<&str>) -> (&'static str, Option<uuid::Uuid>) {
     let id = entity_id.and_then(|s| s.parse::<uuid::Uuid>().ok());
     let col = match entity_type {
@@ -807,7 +812,6 @@ fn entity_fk_fragment(entity_type: &str, entity_id: Option<&str>) -> (&'static s
         "ISSUE_ATTACHMENT" | "ISSUE_DESCRIPTION" => "issue_id",
         "PAGE_DESCRIPTION" => "page_id",
         "COMMENT_DESCRIPTION" => "comment_id",
-        "DRAFT_ISSUE_ATTACHMENT" | "DRAFT_ISSUE_DESCRIPTION" => "draft_issue_id",
         _ => "",
     };
     (col, id)
@@ -917,12 +921,15 @@ pub async fn ws_presign(
         .bind(&key).bind(size_limit as f64).bind(ws.id).bind(fk_id).bind(auth.0)
         .bind(entity_type).bind(entity_id)
         .fetch_one(&st.pool).await?,
+        // No FK column (covers `DRAFT_*`): Django's workspace-presign
+        // `get_entity_id_field` (`v2.py:206-236`) has no DRAFT branch → `{}`
+        // → FK stays NULL.
         _ => sqlx::query_as(
-            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, draft_issue_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, false, false, false, '{}', now(), now()) RETURNING id",
+            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, false, false, false, '{}', now(), now()) RETURNING id",
         )
         .bind(json!({"name": name, "type": mime, "size": size_limit}))
-        .bind(&key).bind(size_limit as f64).bind(ws.id).bind(fk_id).bind(auth.0)
+        .bind(&key).bind(size_limit as f64).bind(ws.id).bind(auth.0)
         .bind(entity_type).bind(entity_id)
         .fetch_one(&st.pool).await?,
     };
@@ -1068,13 +1075,8 @@ pub async fn project_presign(
         .bind(json!({"name": name, "type": mime, "size": size_limit})).bind(&key).bind(size_limit as f64)
         .bind(ws.id).bind(project_id).bind(fk_id).bind(auth.0).bind(entity_type).bind(entity_id)
         .fetch_one(&st.pool).await?,
-        "draft_issue_id" => sqlx::query_as(
-            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, project_id, draft_issue_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, false, false, false, '{}', now(), now()) RETURNING id",
-        )
-        .bind(json!({"name": name, "type": mime, "size": size_limit})).bind(&key).bind(size_limit as f64)
-        .bind(ws.id).bind(project_id).bind(fk_id).bind(auth.0).bind(entity_type).bind(entity_id)
-        .fetch_one(&st.pool).await?,
+        // No FK column (covers `DRAFT_*` → FK stays NULL, matching the
+        // workspace-presign / duplicate Django behavior).
         _ => sqlx::query_as(
             "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, project_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, false, false, false, '{}', now(), now()) RETURNING id",
@@ -1821,10 +1823,13 @@ pub async fn duplicate(
              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, false, false, false, now(), now()) RETURNING id",
         ).bind(&attrs).bind(&dest_key).bind(src.size).bind(ws.id).bind(auth.0).bind(entity_type).bind(project_id).bind(fk_id).bind(&src.storage_metadata)
         .fetch_one(&st.pool).await?,
+        // No FK column (covers `DRAFT_*`): Django's duplicate
+        // `get_entity_id_field` (`v2.py:782-813`) has no DRAFT branch → `{}`
+        // → FK stays NULL.
         _ => sqlx::query_as(
-            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, created_by_id, entity_type, project_id, draft_issue_id, storage_metadata, is_uploaded, is_deleted, is_archived, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, false, false, false, now(), now()) RETURNING id",
-        ).bind(&attrs).bind(&dest_key).bind(src.size).bind(ws.id).bind(auth.0).bind(entity_type).bind(project_id).bind(fk_id).bind(&src.storage_metadata)
+            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, created_by_id, entity_type, project_id, storage_metadata, is_uploaded, is_deleted, is_archived, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, false, false, false, now(), now()) RETURNING id",
+        ).bind(&attrs).bind(&dest_key).bind(src.size).bind(ws.id).bind(auth.0).bind(entity_type).bind(project_id).bind(&src.storage_metadata)
         .fetch_one(&st.pool).await?,
     };
     let conf = s3_conf();
@@ -2239,6 +2244,46 @@ mod e9_tests {
         assert!(!is_image_mime("application/pdf"));
     }
 
+    #[test]
+    fn issue_attachment_asset_url_matches_served_v2_route() {
+        // `plane/db/models/asset.py:92-93`: ISSUE_ATTACHMENT →
+        // `/api/assets/v2/workspaces/{slug}/projects/{project_id}/issues/{issue_id}/attachments/{id}/`.
+        // This must equal a SERVED route (`main.rs` issue-attachment routes,
+        // Django `app/urls/issue.py:137-146` `IssueAttachmentV2Endpoint`).
+        let id = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let pid = uuid::Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+        let iid = uuid::Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap();
+        let url = asset_url_for(
+            Some("ISSUE_ATTACHMENT"),
+            id,
+            Some("ws-slug"),
+            Some(pid),
+            Some(iid),
+        );
+        let s = url.as_str().expect("asset_url is a string");
+        assert!(s.starts_with("/api/assets/v2/workspaces/"), "v2 prefix: {s}");
+        assert_eq!(
+            s,
+            format!("/api/assets/v2/workspaces/ws-slug/projects/{pid}/issues/{iid}/attachments/{id}/")
+        );
+    }
+
+    #[test]
+    fn draft_entity_binds_no_fk() {
+        // Django `get_entity_id_field` (`v2.py:206-236` workspace presign,
+        // `v2.py:782-813` duplicate) has NO DRAFT branch → `{}` → FK stays
+        // NULL. `DRAFT_*` must therefore select no FK column.
+        let eid = "44444444-4444-4444-4444-444444444444";
+        let (col_a, _) = entity_fk_fragment("DRAFT_ISSUE_ATTACHMENT", Some(eid));
+        let (col_d, _) = entity_fk_fragment("DRAFT_ISSUE_DESCRIPTION", Some(eid));
+        assert_eq!(col_a, "", "DRAFT_ISSUE_ATTACHMENT binds no FK");
+        assert_eq!(col_d, "", "DRAFT_ISSUE_DESCRIPTION binds no FK");
+        // Regression pin: the non-DRAFT mapping is unchanged.
+        let (col_i, id_i) = entity_fk_fragment("ISSUE_ATTACHMENT", Some(eid));
+        assert_eq!(col_i, "issue_id");
+        assert_eq!(id_i.unwrap().to_string(), eid);
+    }
+
     /// Test-only SigV4-signed empty-body PUT (bucket creation for the live
     /// test below): `PUT {path}` with `host`, `x-amz-content-sha256`,
     /// `x-amz-date` signed headers.
@@ -2281,6 +2326,32 @@ mod e9_tests {
             .map_err(|e| e.to_string())
     }
 
+    /// Scoped process-env snapshot for the live-MinIO test below: restores
+    /// every touched var on drop (including assertion panics), so the
+    /// mutation never leaks into parallel unit tests.
+    struct EnvGuard {
+        saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn snapshot(keys: &[&'static str]) -> Self {
+            Self {
+                saved: keys.iter().map(|k| (*k, std::env::var_os(k))).collect(),
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in self.saved.drain(..) {
+                match v {
+                    Some(val) => std::env::set_var(k, val),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    }
+
     /// LIVE PROOF — MinIO round-trip through the real signing code.
     /// Gated on `E9_LIVE_MINIO_URL` (e.g. `http://172.27.0.5:9000`); returns
     /// immediately when unset (CI-safe). Uses the repo's MinIO credentials
@@ -2294,6 +2365,17 @@ mod e9_tests {
             Ok(v) => v,
             Err(_) => return,
         };
+        // Snapshot + restore every var this test mutates (Drop restores even
+        // on assertion panic).
+        let _env = EnvGuard::snapshot(&[
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_S3_BUCKET_NAME",
+            "USE_MINIO",
+            "AWS_S3_ENDPOINT_URL",
+            "AWS_REGION",
+            "MINIO_ENDPOINT_URL",
+        ]);
         std::env::set_var("AWS_ACCESS_KEY_ID", "access-key");
         std::env::set_var("AWS_SECRET_ACCESS_KEY", "secret-key");
         std::env::set_var("AWS_S3_BUCKET_NAME", "uploads");
@@ -2358,5 +2440,51 @@ mod e9_tests {
         assert_eq!(res.status(), 200, "presigned GET status");
         let back = res.bytes().await.expect("read body").to_vec();
         assert_eq!(back, body_bytes, "round-trip bytes");
+
+        // Best-effort cleanup: DELETE the proof object so no `e9-live/`
+        // objects remain in the bucket (errors ignored — bucket cleanliness
+        // is verified out-of-band).
+        let _ = s3_signed_delete(&conf, &endpoint, &format!("/uploads/{key}")).await;
+    }
+
+    /// Test-only SigV4-signed empty-body DELETE (proof-object cleanup for
+    /// the live test above): `DELETE {path}` with `host`,
+    /// `x-amz-content-sha256`, `x-amz-date` signed headers.
+    async fn s3_signed_delete(
+        conf: &S3Conf,
+        endpoint: &str,
+        path: &str,
+    ) -> Result<reqwest::StatusCode, String> {
+        let now = Utc::now();
+        let (amzdate, datestamp) = amz_dates(now);
+        let scope = format!("{datestamp}/{}/s3/aws4_request", conf.region);
+        let host = endpoint_authority(endpoint).to_string();
+        let payload_hash = sha256_hex(b"");
+        let canon_headers =
+            format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amzdate}\n");
+        let signed_headers = "host;x-amz-content-sha256;x-amz-date";
+        let canonical_req =
+            format!("DELETE\n{path}\n\n{canon_headers}\n{signed_headers}\n{payload_hash}");
+        let sts = format!(
+            "AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}",
+            sha256_hex(canonical_req.as_bytes())
+        );
+        let signing = derive_signing_key(&conf.secret, &datestamp, &conf.region, "s3");
+        let signature = hex::encode(hmac_sha256(&signing, sts.as_bytes()));
+        let auth = format!(
+            "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",
+            conf.access, scope, signed_headers, signature
+        );
+        let url = format!("{}{path}", endpoint.trim_end_matches('/'));
+        reqwest::Client::new()
+            .delete(&url)
+            .header("host", &host)
+            .header("x-amz-date", &amzdate)
+            .header("x-amz-content-sha256", &payload_hash)
+            .header("authorization", &auth)
+            .send()
+            .await
+            .map(|r| r.status())
+            .map_err(|e| e.to_string())
     }
 }
