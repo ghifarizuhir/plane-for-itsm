@@ -61,7 +61,7 @@ services:
   # so Rust Fernet (`instance_admin.rs:fernet_secret`) decrypts with the
   # exact value Django used to encrypt.
   api:
-    container_name: api
+    container_name: api-rs
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -84,7 +84,7 @@ services:
   # Django celery worker/beat removed (superseded by Rust worker on the
   # plane:jobs Redis Stream; plane-mq removed below).
   worker:
-    container_name: bgworker
+    container_name: worker-rs
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -103,7 +103,7 @@ services:
       - plane-redis
 
   beat-worker:
-    container_name: beatworker
+    container_name: beat-rs
     build:
       context: ./apps/api-rs
       dockerfile: Dockerfile.rs
@@ -150,6 +150,8 @@ services:
     image: postgres:15.7-alpine
     restart: always
     command: postgres -c 'max_connections=100'
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     env_file:
@@ -164,6 +166,8 @@ services:
     container_name: plane-redis
     image: valkey/valkey:7.2.11-alpine
     restart: always
+    ports:
+      - "6379:6379"
     volumes:
       - redisdata:/data
 
@@ -174,6 +178,9 @@ services:
     image: minio/minio
     restart: always
     command: server /export --console-address ":9090"
+    ports:
+      - "9000:9000"
+      - "9090:9090"
     volumes:
       - uploads:/export
     environment:
