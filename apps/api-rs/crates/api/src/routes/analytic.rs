@@ -2150,9 +2150,9 @@ fn deploy_json(r: &DeployRow) -> Value {
     })
 }
 
-const DEPLOY_COLS: &str = "id, created_at, updated_at, created_by_id, updated_by_id, workspace_id, \
-    project_id, entity_identifier, entity_name, anchor, is_comments_enabled, \
-    is_reactions_enabled, is_votes_enabled, intake_id, view_props, is_activity_enabled, is_disabled";
+const DEPLOY_COLS: &str = "d.id, d.created_at, d.updated_at, d.created_by_id, d.updated_by_id, d.workspace_id, \
+    d.project_id, d.entity_identifier, d.entity_name, d.anchor, d.is_comments_enabled, \
+    d.is_reactions_enabled, d.is_votes_enabled, d.intake_id, d.view_props, d.is_activity_enabled, d.is_disabled";
 
 /// Merges the nested details into a base `deploy_json` object:
 /// `project_details` = `ProjectLiteSerializer`

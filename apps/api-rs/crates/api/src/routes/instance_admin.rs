@@ -179,7 +179,9 @@ fn refresh_cookie_raw(headers: &HeaderMap) -> Option<String> {
 // ============================================================================
 
 /// Pure decision bit: the role threshold (`role__gte=15`).
-pub fn gate_role_allowed(role: Option<i16>) -> bool {
+/// `instance_admins.role` is **integer** (INT4 — `\d instance_admins`),
+/// unlike the smallint workspace/project member roles, so this takes `i32`.
+pub fn gate_role_allowed(role: Option<i32>) -> bool {
     role.map(|r| r >= 15).unwrap_or(false)
 }
 
@@ -198,7 +200,7 @@ async fn instance_admin_allowed(pool: &PgPool, uid: uuid::Uuid) -> Result<bool, 
     let Some(iid) = instance_id(pool).await? else {
         return Ok(false);
     };
-    let role: Option<i16> = sqlx::query_scalar(
+    let role: Option<i32> = sqlx::query_scalar(
         "SELECT role FROM instance_admins WHERE instance_id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
     .bind(iid)

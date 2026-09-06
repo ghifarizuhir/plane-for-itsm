@@ -2453,11 +2453,11 @@ pub async fn duplicate(
     let row: Option<(uuid::Uuid,)> = sqlx::query_as(
         "INSERT INTO pages (id, name, description_json, description_binary, description_html, \
          description_stripped, owned_by_id, created_by_id, updated_by_id, workspace_id, color, \
-         parent_id, archived_at, is_locked, view_props, logo_props, is_global, sort_order, \
+         access, parent_id, archived_at, is_locked, view_props, logo_props, is_global, sort_order, \
          external_id, external_source, created_at, updated_at) \
          SELECT gen_random_uuid(), p.name || ' (Copy)', p.description_json, NULL, \
          p.description_html, p.description_stripped, $2, $2, $2, p.workspace_id, p.color, \
-         p.parent_id, p.archived_at, p.is_locked, p.view_props, p.logo_props, p.is_global, \
+         p.access, p.parent_id, p.archived_at, p.is_locked, p.view_props, p.logo_props, p.is_global, \
          p.sort_order, p.external_id, p.external_source, now(), now() \
          FROM pages p WHERE p.id = $1 AND p.deleted_at IS NULL RETURNING id",
     )

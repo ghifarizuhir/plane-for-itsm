@@ -293,7 +293,7 @@ async fn view_detail_row(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let row: Option<(uuid::Uuid, String, Option<uuid::Uuid>)> = if let Some(pid) = project_id {
         sqlx::query_as(
-            "SELECT v.id, v.name, v.owned_by_id FROM views v WHERE v.id = $1 AND v.project_id = $2 AND v.deleted_at IS NULL",
+            "SELECT v.id, v.name, v.owned_by_id FROM issue_views v WHERE v.id = $1 AND v.project_id = $2 AND v.deleted_at IS NULL",
         )
         .bind(pk)
         .bind(pid)
@@ -301,7 +301,7 @@ async fn view_detail_row(
         .await?
     } else {
         sqlx::query_as(
-            "SELECT v.id, v.name, v.owned_by_id FROM views v JOIN workspaces w ON w.id = v.workspace_id WHERE v.id = $1 AND w.slug = $2 AND v.deleted_at IS NULL",
+            "SELECT v.id, v.name, v.owned_by_id FROM issue_views v JOIN workspaces w ON w.id = v.workspace_id WHERE v.id = $1 AND w.slug = $2 AND v.deleted_at IS NULL",
         )
         .bind(pk)
         .bind(slug)
@@ -371,7 +371,7 @@ pub async fn patch(
         }
     }
     let n = sqlx::query(
-        "UPDATE views SET name = COALESCE($1, name), access = COALESCE($2, access), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
+        "UPDATE issue_views SET name = COALESCE($1, name), access = COALESCE($2, access), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
     )
     .bind(&body.name)
     .bind(body.access)
@@ -392,7 +392,7 @@ pub async fn destroy(
     axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     sqlx::query(
-        "UPDATE views SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+        "UPDATE issue_views SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)

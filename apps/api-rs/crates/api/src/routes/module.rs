@@ -448,28 +448,28 @@ fn module_select(archived_only: bool) -> String {
          COALESCE(ARRAY(SELECT DISTINCT mm.member_id FROM module_members mm \
             WHERE mm.module_id = m.id AND mm.deleted_at IS NULL), '{{}}') AS member_ids, \
          m.view_props, m.sort_order, m.external_source, m.external_id, m.logo_props, \
-         {completed_pt} AS completed_estimate_points, \
-         {total_pt} AS total_estimate_points, \
-         {total} AS total_issues, \
-         EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'module' \
-            AND uf.entity_identifier = m.id AND uf.user_id = $3 AND uf.project_id = m.project_id \
-            AND uf.deleted_at IS NULL) AS is_favorite, \
-         {cancelled} AS cancelled_issues, \
-         {completed} AS completed_issues, \
-         {started} AS started_issues, \
-         {unstarted} AS unstarted_issues, \
-         {backlog} AS backlog_issues, \
-         m.created_at, m.updated_at, m.archived_at \
-         FROM modules m JOIN workspaces w ON w.id = m.workspace_id \
-         WHERE m.project_id = $1 AND w.slug = $2 AND m.deleted_at IS NULL {arch}",
-        completed_pt = points_sub("x", "AND s.\"group\" = 'completed'"),
-        total_pt = points_sub("x", ""),
-        total = count_sub("x", ""),
-        cancelled = count_sub("x", "AND s.\"group\" = 'cancelled'"),
-        completed = count_sub("x", "AND s.\"group\" = 'completed'"),
-        started = count_sub("x", "AND s.\"group\" = 'started'"),
-        unstarted = count_sub("x", "AND s.\"group\" = 'unstarted'"),
-        backlog = count_sub("x", "AND s.\"group\" = 'backlog'"),
+          {completed_pt}, \
+          {total_pt}, \
+          {total}, \
+          EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'module' \
+             AND uf.entity_identifier = m.id AND uf.user_id = $3 AND uf.project_id = m.project_id \
+             AND uf.deleted_at IS NULL) AS is_favorite, \
+          {cancelled}, \
+          {completed}, \
+          {started}, \
+          {unstarted}, \
+          {backlog}, \
+          m.created_at, m.updated_at, m.archived_at \
+          FROM modules m JOIN workspaces w ON w.id = m.workspace_id \
+          WHERE m.project_id = $1 AND w.slug = $2 AND m.deleted_at IS NULL {arch}",
+        completed_pt = points_sub("completed_estimate_points", "AND s.\"group\" = 'completed'"),
+        total_pt = points_sub("total_estimate_points", ""),
+        total = count_sub("total_issues", ""),
+        cancelled = count_sub("cancelled_issues", "AND s.\"group\" = 'cancelled'"),
+        completed = count_sub("completed_issues", "AND s.\"group\" = 'completed'"),
+        started = count_sub("started_issues", "AND s.\"group\" = 'started'"),
+        unstarted = count_sub("unstarted_issues", "AND s.\"group\" = 'unstarted'"),
+        backlog = count_sub("backlog_issues", "AND s.\"group\" = 'backlog'"),
     )
 }
 

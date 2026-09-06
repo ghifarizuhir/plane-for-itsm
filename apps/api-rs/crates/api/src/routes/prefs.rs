@@ -396,9 +396,9 @@ fn ws_prop_json(r: &WsPropRow) -> Value {
     })
 }
 
-const WS_PROP_SELECT: &str = "id, created_at, updated_at, created_by_id, updated_by_id, \
-    user_id, workspace_id, deleted_at, filters, display_filters, display_properties, \
-    rich_filters, navigation_control_preference, navigation_project_limit";
+const WS_PROP_SELECT: &str = "p.id, p.created_at, p.updated_at, p.created_by_id, p.updated_by_id, \
+    p.user_id, p.workspace_id, p.deleted_at, p.filters, p.display_filters, p.display_properties, \
+    p.rich_filters, p.navigation_control_preference, p.navigation_project_limit";
 
 /// Validates `navigation_control_preference` for the user-properties PATCH
 /// (`plane/app/views/workspace/user.py:252-264` partial
@@ -919,6 +919,12 @@ fn quick_json(r: &QuickRow) -> Value {
 const QUICK_SELECT: &str = "l.id, l.created_at, l.updated_at, l.deleted_at, l.title, l.url, \
     l.metadata, l.created_by_id, l.owner_id, l.project_id, l.updated_by_id, l.workspace_id";
 
+/// Unaliased twin of [`QUICK_SELECT`] for `INSERT/UPDATE ... RETURNING`
+/// (no `FROM` alias `l` in scope there — `RETURNING l.id` 500s with
+/// `missing FROM-clause entry for table "l"`).
+const QUICK_RETURNING: &str = "id, created_at, updated_at, deleted_at, title, url, \
+    metadata, created_by_id, owner_id, project_id, updated_by_id, workspace_id";
+
 pub async fn quick_create(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -977,7 +983,7 @@ pub async fn quick_create(
         "INSERT INTO workspace_user_links (id, workspace_id, owner_id, created_by_id, \
          title, url, metadata, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $2, $3, $4, $5, now(), now()) \
-         RETURNING {QUICK_SELECT}"
+         RETURNING {QUICK_RETURNING}"
     ))
     .bind(ws_id)
     .bind(auth.0)
@@ -1111,7 +1117,7 @@ pub async fn quick_patch(
     }
     let next: Option<QuickRow> = sqlx::query_as(&format!(
         "UPDATE workspace_user_links SET title = $1, url = $2, metadata = $3, \
-         updated_at = now() WHERE id = $4 RETURNING {QUICK_SELECT}"
+         updated_at = now() WHERE id = $4 RETURNING {QUICK_RETURNING}"
     ))
     .bind(&title)
     .bind(&url)
@@ -1307,7 +1313,7 @@ pub async fn recent_list(
     // (`recent_visit.py:25-33`, `recent_visit.py:36`).
     let entity_filter: Option<&str> = q.entity_name.as_deref();
     let rows: Vec<RecentRow> = sqlx::query_as(
-        "SELECT id, entity_name, entity_identifier, visited_at FROM user_recent_visits v \
+        "SELECT v.id, v.entity_name, v.entity_identifier, v.visited_at FROM user_recent_visits v \
          JOIN workspaces w ON w.id = v.workspace_id \
          WHERE w.slug = $1 AND v.user_id = $2 AND v.deleted_at IS NULL \
          AND ($3::text IS NULL OR v.entity_name = $3) \
