@@ -952,6 +952,79 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/pages/:page_id/duplicate/",
             post(routes::page::duplicate),
         )
+        // Parity with the v2 asset surface (`app/views/asset/v2.py`,
+        // `app/urls/asset.py:48-113`): presign POSTs (200
+        // `{upload_data,asset_id,asset_url}`) for workspace / user / project /
+        // issue scopes, 204 completes with entity FK binding, 204 deletes,
+        // 302 presigned-GET singles/downloads, 200 `{exists}` check (+ legacy
+        // file-assets GET-check/DELETE/restore with the 200-miss quirk).
+        // Gate ADMIN/MEMBER/GUEST per row (WORKSPACE_LOGO presign needs
+        // workspace ADMIN); static serves AllowAny. See `routes/asset.rs`.
+        .route("/api/assets/v2/workspaces/:slug/", post(routes::asset::ws_presign))
+        .route(
+            "/api/assets/v2/workspaces/:slug/:asset_id/",
+            get(routes::asset::ws_get)
+                .patch(routes::asset::mark_uploaded)
+                .delete(routes::asset::soft_delete),
+        )
+        .route("/api/assets/v2/user-assets/", post(routes::asset::user_presign))
+        .route(
+            "/api/assets/v2/user-assets/:asset_id/",
+            patch(routes::asset::user_complete).delete(routes::asset::user_delete),
+        )
+        .route("/api/assets/v2/static/:asset_id/", get(routes::asset::static_get))
+        .route(
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/",
+            post(routes::asset::project_presign),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/:pk/",
+            get(routes::asset::project_get)
+                .patch(routes::asset::project_complete)
+                .delete(routes::asset::project_delete),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/:pk/bulk/",
+            post(routes::asset::bulk),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/duplicate-assets/:asset_id/",
+            post(routes::asset::duplicate),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/download/:asset_id/",
+            get(routes::asset::ws_download),
+        )
+        .route(
+            "/api/assets/v2/workspaces/:slug/projects/:project_id/download/:asset_id/",
+            get(routes::asset::project_download),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/",
+            post(routes::asset::issue_presign).get(routes::asset::issue_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/:pk/",
+            get(routes::asset::issue_get)
+                .patch(routes::asset::issue_complete)
+                .delete(routes::asset::issue_delete),
+        )
+        // Parity with the legacy file-assets (`app/views/asset/base.py`,
+        // `app/urls/asset.py:27-47`): GET-check (200 + `{error,status:False}`
+        // miss quirk), DELETE 204 soft, workspace restore 204. NO
+        // POST-create (no FE caller) and NO `user-assets/server/*`.
+        .route(
+            "/api/workspaces/file-assets/:workspace_id/:key/",
+            get(routes::asset::legacy_ws_get).delete(routes::asset::legacy_ws_delete),
+        )
+        .route(
+            "/api/workspaces/file-assets/:workspace_id/:key/restore/",
+            post(routes::asset::legacy_ws_restore),
+        )
+        .route(
+            "/api/users/file-assets/:key/",
+            get(routes::asset::legacy_user_get).delete(routes::asset::legacy_user_delete),
+        )
         .route(
             "/api/assets/v2/workspaces/:slug/check/:asset_id/",
             get(routes::asset::check),
@@ -959,10 +1032,6 @@ async fn main() {
         .route(
             "/api/assets/v2/workspaces/:slug/restore/:asset_id/",
             post(routes::asset::restore),
-        )
-        .route(
-            "/api/assets/v2/workspaces/:slug/:asset_id/",
-            axum::routing::patch(routes::asset::mark_uploaded).delete(routes::asset::soft_delete),
         )
         .route(
             "/api/workspaces/:slug/webhooks/",

@@ -55,6 +55,8 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "common",
+ "hex",
+ "hmac",
  "jsonwebtoken",
  "pbkdf2",
  "rand 0.9.5",
