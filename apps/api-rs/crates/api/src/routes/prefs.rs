@@ -214,10 +214,14 @@ pub fn validate_link_url(url: &str) -> Result<(), String> {
 }
 
 /// 400-vs-200 decision for the slug-check
-/// (`plane/app/views/workspace/base.py:215-224`): missing/empty slug →
-/// 400 `{"error": "Workspace Slug is required"}`.
+/// (`plane/app/views/workspace/base.py:215-224`): Django reads
+/// `request.GET.get("slug", False)` and guards
+/// `if not slug or slug == ""` — an EXACT comparison with NO trimming —
+/// so ONLY a missing param or exactly `""` → 400
+/// `{"error": "Workspace Slug is required"}`. Anything else (including
+/// whitespace-only) passes through to the 200 availability check.
 pub fn guard_slug_present(slug: Option<&str>) -> Result<String, String> {
-    match slug.map(str::trim) {
+    match slug {
         Some(s) if !s.is_empty() => Ok(s.to_string()),
         _ => Err(SLUG_REQUIRED_MSG.to_string()),
     }
@@ -396,6 +400,30 @@ const WS_PROP_SELECT: &str = "id, created_at, updated_at, created_by_id, updated
     user_id, workspace_id, deleted_at, filters, display_filters, display_properties, \
     rich_filters, navigation_control_preference, navigation_project_limit";
 
+/// Validates `navigation_control_preference` for the user-properties PATCH
+/// (`plane/app/views/workspace/user.py:252-264` partial
+/// `WorkspaceUserPropertiesSerializer`; choices
+/// `NavigationControlPreference`: ACCORDION/TABBED,
+/// `plane/db/models/workspace.py:311-313`). Returns the 400 message when
+/// invalid, `None` when valid. DRF `ChoiceField` message
+/// (`rest_framework/fields.py`,
+/// `invalid_choice = '"{input}" is not a valid choice.'`) with the
+/// submitted value interpolated; non-string JSON renders in its JSON form
+/// (DRF stringifies `input` the same way).
+fn nav_pref_error(value: &Value) -> Option<String> {
+    if value
+        .as_str()
+        .is_some_and(|s| s == "ACCORDION" || s == "TABBED")
+    {
+        return None;
+    }
+    let shown = value
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| value.to_string());
+    Some(format!("\"{shown}\" is not a valid choice."))
+}
+
 /// `get_or_create(user, workspace)` (`user.py:257-259,266-268`): single
 /// INSERT..SELECT with a predicate-matching `ON CONFLICT DO NOTHING`
 /// (mirrors the partial unique index
@@ -486,13 +514,10 @@ pub async fn user_props_patch(
         row.navigation_project_limit = n;
     }
     if let Some(v) = body.get("navigation_control_preference") {
-        let ok = v
-            .as_str()
-            .is_some_and(|s| s == "ACCORDION" || s == "TABBED");
-        if !ok {
+        if let Some(msg) = nav_pref_error(v) {
             return Ok((
                 StatusCode::BAD_REQUEST,
-                Json(json!({"navigation_control_preference": ["\"ACCORDION\" or \"TABBED\" is required."]})),
+                Json(json!({"navigation_control_preference": [msg]})),
             ));
         }
         row.navigation_control_preference = v.as_str().unwrap_or("ACCORDION").to_string();
@@ -744,6 +769,40 @@ pub async fn home_list(
     ))
 }
 
+/// Parses `is_enabled` for the home PATCH (`home.py:74-77` partial
+/// `WorkspaceHomePreferenceSerializer`,
+/// `serializers/workspace.py:332-336`). Absent keeps the current value;
+/// present-but-wrong-type → DRF `BooleanField` serializer error
+/// (`rest_framework/fields.py`,
+/// `BooleanField.default_error_messages = {invalid: "Must be a valid boolean."}`,
+/// from `models.BooleanField`). Source note: message quoted from DRF's
+/// `BooleanField` (model field `is_enabled = models.BooleanField`,
+/// `db/models/workspace.py:391`).
+fn home_bool_opt(value: Option<&Value>, cur: bool) -> Result<bool, String> {
+    match value {
+        None => Ok(cur),
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| "Must be a valid boolean.".to_string()),
+    }
+}
+
+/// Parses `sort_order` for the home PATCH (same serializer). Absent keeps
+/// the current value; present-but-wrong-type → DRF `FloatField`
+/// serializer error (`rest_framework/fields.py`,
+/// `FloatField.default_error_messages = {invalid: "A valid number is required."}`,
+/// from `models.FloatField`). Source note: message quoted from DRF's
+/// `FloatField` (model field `sort_order = models.FloatField`,
+/// `db/models/workspace.py:393`).
+fn home_order_opt(value: Option<&Value>, cur: f64) -> Result<f64, String> {
+    match value {
+        None => Ok(cur),
+        Some(v) => v
+            .as_f64()
+            .ok_or_else(|| "A valid number is required.".to_string()),
+    }
+}
+
 pub async fn home_patch(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -771,8 +830,24 @@ pub async fn home_patch(
     // `key,is_enabled,sort_order`): `config` is READ-ONLY — present in
     // the body or not, it is never written.
     let new_key = body.get("key").and_then(Value::as_str).unwrap_or(&cur.key);
-    let new_enabled = body.get("is_enabled").and_then(Value::as_bool).unwrap_or(cur.is_enabled);
-    let new_order = body.get("sort_order").and_then(Value::as_f64).unwrap_or(cur.sort_order);
+    let new_enabled = match home_bool_opt(body.get("is_enabled"), cur.is_enabled) {
+        Ok(b) => b,
+        Err(msg) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"is_enabled": [msg]})),
+            ));
+        }
+    };
+    let new_order = match home_order_opt(body.get("sort_order"), cur.sort_order) {
+        Ok(n) => n,
+        Err(msg) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"sort_order": [msg]})),
+            ));
+        }
+    };
     let res = sqlx::query(
         "UPDATE workspace_home_preferences SET key = $1, is_enabled = $2, sort_order = $3, \
          updated_at = now() WHERE workspace_id = \
@@ -1541,7 +1616,6 @@ struct PmDetailRow {
     is_active: bool,
     ws_name: String,
     ws_slug: String,
-    ws_id: uuid::Uuid,
     ws_logo: Option<String>,
     proj_identifier: String,
     proj_name: String,
@@ -1580,29 +1654,30 @@ fn ws_detail_json(w: &WsDetailRow) -> Value {
 /// `WorkspaceLiteSerializer`/`ProjectLiteSerializer`/`UserLiteSerializer`
 /// lite shapes, `workspace.py:86-90`, `project.py:100-111`,
 /// `user.py:141-153`; asset-resolved `*_url` keys fall back to null/raw
-/// columns as above).
+/// columns as above). The declared nested fields OVERRIDE the raw FK ids,
+/// so the nested objects live under exactly `workspace`/`project`/`member`
+/// (no `*_detail` keys, no separate id keys).
 fn pm_detail_json(p: &PmDetailRow) -> Value {
     json!({
         "id": p.id, "created_at": p.created_at, "updated_at": p.updated_at,
         "created_by": opt_id(&p.created_by_id), "updated_by": opt_id(&p.updated_by_id),
         "deleted_at": p.deleted_at,
-        "member": p.member_id.map(|u| json!(u)).unwrap_or(Value::Null),
         "comment": p.comment.as_ref().map(|s| json!(s)).unwrap_or(Value::Null),
-        "role": p.role, "project": p.project_id, "workspace": p.workspace_id,
+        "role": p.role,
         "view_props": p.view_props, "default_props": p.default_props,
         "sort_order": p.sort_order, "preferences": p.preferences,
         "is_active": p.is_active,
-        "workspace_detail": json!({
-            "name": p.ws_name, "slug": p.ws_slug, "id": p.ws_id,
+        "workspace": json!({
+            "name": p.ws_name, "slug": p.ws_slug, "id": p.workspace_id,
             "logo_url": p.ws_logo.as_ref().map(|s| json!(s)).unwrap_or(Value::Null),
         }),
-        "project_detail": json!({
+        "project": json!({
             "id": p.project_id, "identifier": p.proj_identifier, "name": p.proj_name,
             "cover_image": p.proj_cover.as_ref().map(|s| json!(s)).unwrap_or(Value::Null),
             "cover_image_url": Value::Null, "logo_props": p.proj_logo_props,
             "description": p.proj_description,
         }),
-        "member_detail": json!({
+        "member": json!({
             "id": p.member_id.map(|u| json!(u)).unwrap_or(Value::Null),
             "first_name": p.u_first.as_ref().map(|s| json!(s)).unwrap_or(Value::Null),
             "last_name": p.u_last.as_ref().map(|s| json!(s)).unwrap_or(Value::Null),
@@ -1662,7 +1737,7 @@ pub async fn last_visited(
         "SELECT pm.id, pm.created_at, pm.updated_at, pm.created_by_id, pm.updated_by_id, \
          pm.deleted_at, pm.member_id, pm.comment, pm.role, pm.project_id, pm.workspace_id, \
          pm.view_props, pm.default_props, pm.sort_order, pm.preferences, pm.is_active, \
-         w.name AS ws_name, w.slug AS ws_slug, w.id AS ws_id, w.logo AS ws_logo, \
+          w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
          p.identifier AS proj_identifier, p.name AS proj_name, p.cover_image AS proj_cover, \
          p.logo_props AS proj_logo_props, p.description AS proj_description, \
          u.first_name AS u_first, u.last_name AS u_last, u.avatar AS u_avatar, \
@@ -1700,7 +1775,7 @@ mod tests {
         let keys: Vec<&str> = d.iter().map(|(k, _, _)| k.as_str()).collect();
         assert_eq!(keys, SIDEBAR_KEYS);
         for (k, pinned, _) in &d {
-            assert_eq!(*pinned, matches!(k.as_str(), "drafts" | "your_work" | "stickies"));
+            assert_eq!(*pinned, sidebar_pinned(k));
         }
         let orders: Vec<f64> = d.iter().map(|(_, _, s)| *s).collect();
         assert_eq!(orders, vec![65535.0, 75535.0, 85535.0, 95535.0, 105535.0, 115535.0, 125535.0]);
@@ -1756,13 +1831,21 @@ mod tests {
 
     #[test]
     fn slug_check_guards_and_status() {
-        // `base.py:215-224`.
+        // `base.py:218`: `if not slug or slug == ""` — an EXACT comparison,
+        // NO trimming: only a missing param or exactly `""` → 400.
         assert!(guard_slug_present(None).is_err());
-        assert!(guard_slug_present(Some("  ")).is_err());
+        assert!(guard_slug_present(Some("")).is_err());
         assert_eq!(
             guard_slug_present(None).unwrap_err(),
             "Workspace Slug is required"
         );
+        assert_eq!(
+            guard_slug_present(Some("")).unwrap_err(),
+            "Workspace Slug is required"
+        );
+        // Whitespace-only is truthy in Django → passes through to the 200
+        // availability check (likely `{"status": true}`).
+        assert_eq!(guard_slug_present(Some("  ")).unwrap(), "  ".to_string());
         assert!(slug_available(false, "fresh-slug"));
         assert!(!slug_available(true, "fresh-slug"));
         assert!(!slug_available(false, "admin"));
@@ -1807,5 +1890,120 @@ mod tests {
         assert!(guard_amg(Some(5)).is_ok());
         assert!(guard_amg(Some(10)).is_err());
         assert!(guard_amg(None).is_err());
+    }
+
+    #[test]
+    fn pm_detail_uses_django_serializer_keys() {
+        // `serializers/project.py:156-163`: `ProjectMemberSerializer` nests
+        // as `workspace`/`project`/`member` (`fields = "__all__"`, so every
+        // model column plus exactly those three nested keys).
+        let row = PmDetailRow {
+            id: uuid::Uuid::nil(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            created_by_id: None,
+            updated_by_id: None,
+            deleted_at: None,
+            member_id: Some(uuid::Uuid::nil()),
+            comment: None,
+            role: 15,
+            project_id: uuid::Uuid::nil(),
+            workspace_id: uuid::Uuid::nil(),
+            view_props: json!({}),
+            default_props: json!({}),
+            sort_order: 1.0,
+            preferences: json!({}),
+            is_active: true,
+            ws_name: "WS".to_string(),
+            ws_slug: "ws-slug".to_string(),
+            ws_logo: None,
+            proj_identifier: "P".to_string(),
+            proj_name: "Proj".to_string(),
+            proj_cover: None,
+            proj_logo_props: json!({}),
+            proj_description: "d".to_string(),
+            u_first: Some("A".to_string()),
+            u_last: None,
+            u_avatar: None,
+            u_is_bot: Some(false),
+            u_display: Some("A".to_string()),
+        };
+        let v = pm_detail_json(&row);
+        let keys: std::collections::BTreeSet<&str> = v
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let expected: std::collections::BTreeSet<&str> = [
+            "id",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
+            "member",
+            "comment",
+            "role",
+            "project",
+            "workspace",
+            "view_props",
+            "default_props",
+            "sort_order",
+            "preferences",
+            "is_active",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(keys, expected);
+        assert!(v.get("workspace_detail").is_none());
+        assert!(v.get("project_detail").is_none());
+        assert!(v.get("member_detail").is_none());
+        // Inner lite shapes stay intact under the renamed keys.
+        assert_eq!(v["workspace"]["slug"], json!("ws-slug"));
+        assert_eq!(v["project"]["identifier"], json!("P"));
+        assert_eq!(v["member"]["first_name"], json!("A"));
+    }
+
+    #[test]
+    fn home_patch_rejects_mistyped_fields() {
+        // `home.py:74-77` partial-serializer errors: DRF `BooleanField`
+        // (`rest_framework/fields.py`, `invalid: "Must be a valid boolean."`)
+        // and DRF `FloatField` (`invalid: "A valid number is required."`).
+        assert_eq!(
+            home_bool_opt(Some(&json!("yes")), true),
+            Err("Must be a valid boolean.".to_string())
+        );
+        assert_eq!(
+            home_order_opt(Some(&json!("abc")), 1.0),
+            Err("A valid number is required.".to_string())
+        );
+        // Serializer-error body shape per field.
+        assert_eq!(
+            json!({"is_enabled": [home_bool_opt(Some(&json!("yes")), true).unwrap_err()]}),
+            json!({"is_enabled": ["Must be a valid boolean."]})
+        );
+        assert_eq!(
+            json!({"sort_order": [home_order_opt(Some(&json!("abc")), 1.0).unwrap_err()]}),
+            json!({"sort_order": ["A valid number is required."]})
+        );
+        // Absent keeps current; valid values pass through unchanged.
+        assert_eq!(home_bool_opt(None, true), Ok(true));
+        assert_eq!(home_bool_opt(Some(&json!(false)), true), Ok(false));
+        assert_eq!(home_order_opt(None, 1.0), Ok(1.0));
+        assert_eq!(home_order_opt(Some(&json!(2.5)), 1.0), Ok(2.5));
+    }
+
+    #[test]
+    fn nav_pref_bad_choice_uses_drf_message() {
+        // DRF `ChoiceField` (`rest_framework/fields.py`,
+        // `invalid_choice: '"{input}" is not a valid choice.'`) with the
+        // submitted value interpolated.
+        assert_eq!(
+            nav_pref_error(&json!("FOO")),
+            Some("\"FOO\" is not a valid choice.".to_string())
+        );
+        assert_eq!(nav_pref_error(&json!("ACCORDION")), None);
+        assert_eq!(nav_pref_error(&json!("TABBED")), None);
     }
 }
