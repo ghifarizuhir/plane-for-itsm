@@ -723,9 +723,61 @@ async fn main() {
         )
         .route("/api/workspaces/:slug/members/", get(routes::member::list_workspace_members))
         .route("/api/workspaces/:slug/members-lite/", get(routes::member::list_workspace_members))
+        // Parity with `WorkSpaceMemberViewSet.leave`
+        // (`views/workspace/member.py:160-205`, `urls/workspace.py:103-105`
+        // `{"post": "leave"}` — POST only): static `leave` wins over `:pk`
+        // in Axum (no conflict; `members/leave/` project precedent above).
+        .route("/api/workspaces/:slug/members/leave/", post(routes::member::ws_leave))
+        // Parity with `WorkSpaceMemberViewSet.retrieve/partial_update/
+        // destroy` (`views/workspace/member.py:57-150`,
+        // `urls/workspace.py:98-100`): GET 200 (miss → 404 verbatim) +
+        // PATCH 200 (role==5 cascades project roles) + DELETE **204**
+        // (soft-deactivate). Gate ADMIN for write paths.
+        .route(
+            "/api/workspaces/:slug/members/:pk/",
+            get(routes::member::ws_member_detail)
+                .patch(routes::member::ws_member_patch)
+                .delete(routes::member::ws_member_destroy),
+        )
+        // Parity with `WorkspaceMemberUserEndpoint.get`
+        // (`views/workspace/member.py:217-234`,
+        // `urls/workspace.py:113-115`): GET 200 (non-member → 200 null).
+        .route(
+            "/api/workspaces/:slug/workspace-members/me/",
+            get(routes::member::ws_me),
+        )
+        // Parity with `WorkspaceProjectMemberEndpoint.get`
+        // (`views/workspace/member.py:237-266`,
+        // `urls/workspace.py:93-95`): GET 200 `{project_id: [...]}`;
+        // non-member → DRF 403 `{"detail": ...}`.
+        .route("/api/workspaces/:slug/project-members/", get(routes::member::ws_project_members))
+        // Parity with `WorkspaceInvitationsViewset` list/create
+        // (`views/workspace/invite.py:52-128`,
+        // `urls/workspace.py:66-68`): GET 200 (ADMIN/MEMBER, guest → DRF
+        // 403) + POST **200** `{"message":"Emails sent successfully"}`.
+        // Celery sends skipped.
         .route(
             "/api/workspaces/:slug/invitations/",
-            get(routes::member::list_invites).post(routes::member::create_invite),
+            get(routes::invite::ws_list).post(routes::invite::ws_create),
+        )
+        // Parity with `WorkspaceInvitationsViewset.retrieve/partial_update/
+        // destroy` (`urls/workspace.py:71-73`): GET 200 + PATCH 200
+        // (role/accepted writable) + DELETE **204** (HARD delete,
+        // `invite.py:130-133` — verified, no soft override).
+        .route(
+            "/api/workspaces/:slug/invitations/:pk/",
+            get(routes::invite::ws_detail)
+                .patch(routes::invite::ws_patch)
+                .delete(routes::invite::ws_destroy),
+        )
+        // Parity with `WorkspaceJoinEndpoint`
+        // (`views/workspace/invite.py:149-233`,
+        // `urls/workspace.py:82-84`): GET 200 public shape (no auth, no
+        // token/email needed; token+invite_link omitted) + POST 200
+        // accept/reject (token equality → 403s; anon → generic 401).
+        .route(
+            "/api/workspaces/:slug/invitations/:pk/join/",
+            get(routes::invite::ws_join_get).post(routes::invite::ws_join_post),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/views/",
@@ -765,6 +817,40 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/members/leave/",
             post(routes::member::leave_project),
+        )
+        // Parity with `ProjectMemberPreferenceEndpoint`
+        // (`views/project/member.py:382-408`, `urls/project.py:128-130`):
+        // GET 200 + PATCH 200 (body IS the preferences object, merged
+        // shallow); miss → 404. Gate ADMIN/MEMBER/GUEST.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/preferences/member/:member_id/",
+            get(routes::member::pref_get).patch(routes::member::pref_patch),
+        )
+        // Parity with `ProjectInvitationsViewset` list/create
+        // (`views/project/invite.py:56-116`, `urls/project.py:53-55`): GET
+        // 200 (IsAuthenticated-only) + POST **200**
+        // `{"message":"Email sent successfully"}` (gate ADMIN; role-vs-ws
+        // check → intended 400 — Django returns 200 by omitting `status=`,
+        // plus two crash bugs fixed; see `invite.rs` E5f header).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/invitations/",
+            get(routes::invite::proj_list).post(routes::invite::proj_create),
+        )
+        // Parity with `ProjectInvitationsViewset.retrieve/destroy`
+        // (`urls/project.py:58-61`): GET 200 + DELETE **204** (HARD delete
+        // — default DRF destroy, no soft override). IsAuthenticated-only.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/invitations/:pk/",
+            get(routes::invite::proj_detail).delete(routes::invite::proj_destroy),
+        )
+        // Parity with `ProjectJoinEndpoint`
+        // (`views/project/invite.py:195-286`, `urls/project.py:73-75`):
+        // GET 200 public shape (NO email/token keys) + POST 200
+        // accept/reject (non-bool `accepted` → verbatim 400; ws role cap +
+        // role-keeping reactivation quirks replicated).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/join/:pk/",
+            get(routes::invite::proj_join_get).post(routes::invite::proj_join_post),
         )
         // Parity with `ProjectMemberUserEndpoint`
         // (`views/project/member.py:352-362`, `urls/project.py:97-101`):

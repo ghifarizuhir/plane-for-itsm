@@ -5,6 +5,7 @@ pub mod auth_compat;
 pub mod cycle;
 pub mod estimate;
 pub mod intake;
+pub mod invite;
 pub mod member;
 pub mod misc;
 pub mod notification;
