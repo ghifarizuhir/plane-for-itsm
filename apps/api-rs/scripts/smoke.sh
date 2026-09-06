@@ -44,6 +44,13 @@ check() { # check <label> <expected_status> <curl_args...>
   else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
 }
 jid() { python3 -c "import json,sys; d=json.load(open('/tmp/smoke_body')); v=d.get('$1','') if isinstance(d,dict) else ''; print(v)" 2>/dev/null; }
+check_as() { # check_as <token> <label> <expected_status> <curl_args...> — seperti check tapi dengan X-Api-Key lain (penerima undangan)
+  local tok="$1" label="$2" want="$3"; shift 3
+  local code
+  code=$(curl -s -m 10 -H "X-Api-Key: $tok" -H 'Content-Type: application/json' -H "Origin: $FRONTEND" -o /tmp/smoke_body -w '%{http_code}' "$@")
+  if [ "$code" = "$want" ]; then PASS=$((PASS+1)); echo "ok   $label -> $code";
+  else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
+}
 check_auth() { # check_auth <label> <expected_status> <curl_args...> — murni cookie sesi, TANPA X-Api-Key
   # (AuthUser fallback ke X-Api-Key: memakai check biasa membuat post-logout-401
   # mustahil karena api key tetap valid setelah logout).
@@ -335,7 +342,14 @@ TUID=$(docker exec plane-db psql -U plane -d plane -q -t -A -c "INSERT INTO user
 docker exec plane-db psql -U plane -d plane -q -c "INSERT INTO workspace_members (id, workspace_id, member_id, role, view_props, default_props, issue_props, is_active, explored_features, getting_started_checklist, tips, created_at, updated_at) SELECT gen_random_uuid(), w.id, '$TUID', 15, '{}', '{}', '{}', true, '{}', '{}', '{}', now(), now() FROM workspaces w WHERE w.slug='$WS';" 2>&1 | head -n 1
 check e5-proj-bulk-add 201 -X POST -d "{\"members\":[{\"member_id\":\"$TUID\",\"role\":15}]}" "$BASE/api/workspaces/$WS/projects/$PID/members/"
 PMID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT pm.id FROM project_members pm JOIN projects p ON p.id=pm.project_id JOIN workspaces w ON w.id=p.workspace_id WHERE w.slug='$WS' AND p.id='$PID' AND pm.member_id='$TUID' AND pm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
-check e5-proj-patch-ladder 403 -X PATCH -d "{\"role\":$PROLE}" "$BASE/api/workspaces/$WS/projects/$PID/members/$PMID/"
+# Ladder adjudication (T12-retry): Django's project PATCH gates
+# (views/project/member.py:219-281) ALL carry `not is_workspace_admin`, and
+# the smoke requester (workspace creator) IS a ws-admin -> bypass -> 200 on
+# BOTH backends. Expecting 403 here contradicts Django itself, so the fixture
+# asserts the bypass outcome (200 + role applied) instead of the guard.
+check e5-proj-patch-ladder 200 -X PATCH -d "{\"role\":$PROLE}" "$BASE/api/workspaces/$WS/projects/$PID/members/$PMID/"
+APPLIED=$(python3 -c "import json; print(json.load(open('/tmp/smoke_body')).get('role',''))" 2>/dev/null)
+if [ -n "$PROLE" ] && [ "$APPLIED" = "$PROLE" ]; then PASS=$((PASS+1)); echo "ok   e5-ladder-body -> role:$APPLIED"; else FAIL=$((FAIL+1)); FAILED="$FAILED e5-ladder-body($APPLIED)"; echo "FAIL e5-ladder-body -> $APPLIED want $PROLE"; fi
 check e5-proj-member-del 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/members/$PMID/"
 check e5-ws-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"temp-join-$SFX@example.com\",\"role\":5}]}" "$BASE/api/workspaces/$WS/invitations/"
 grep -q 'Emails sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-wsinvite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-wsinvite-body"; echo "FAIL e5-wsinvite-body: $(head -c 200 /tmp/smoke_body)"; }
@@ -344,7 +358,15 @@ INVID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM wor
 INVTOK=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT token FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 check_auth e5-ws-join-get 200 "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
 check e5-ws-join-badtoken 403 -X POST -d '{"token":"deadbeef","accepted":true}' "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
-check e5-ws-join-accept 200 -X POST -d "{\"token\":\"$INVTOK\",\"accepted\":true}" "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
+# Join-accept adjudication (T12-retry): Django (workspace/invite.py:170-174,
+# anti-hijack 6220ba990) + Rust mirror REQUIRE accepter email == invitee
+# email, so accepting a temp-join-* invite as the TOKEN user is 403 on BOTH
+# backends. The fixture creates the invitee user, mints their own api token,
+# and accepts AS the invitee -> exercises the real 200 + hard-delete path.
+JUID=$(docker exec plane-db psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-join-$SFX@example.com', 'tempjoin$SFX', '!', '', '', 'tempjoin', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
+JTOK="plane_api_$(cat /proc/sys/kernel/random/uuid | tr -d '-')"
+docker exec plane-db psql -U plane -d plane -q -c "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), 'smoke-join-$SFX', '', '$JTOK', '$JUID', 0, true, false, '60/min', NULL, now(), now());" 2>&1 | head -n 1
+check_as "$JTOK" e5-ws-join-accept 200 -X POST -d "{\"token\":\"$INVTOK\",\"accepted\":true}" "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
 grep -q 'Workspace Invitation Accepted' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-join-body -> Accepted"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-body"; echo "FAIL e5-join-body: $(head -c 200 /tmp/smoke_body)"; }
 INVLEFT=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT COUNT(*) FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com';" 2>/dev/null | tr -d ' \n')
 if [ "$INVLEFT" = "0" ]; then PASS=$((PASS+1)); echo "ok   e5-join-row-deleted -> 0"; else FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-row-deleted($INVLEFT)"; echo "FAIL e5-join-row-deleted -> $INVLEFT"; fi
@@ -536,8 +558,8 @@ docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE 
 docker exec plane-db psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
 docker exec plane-db psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
 docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE 'smoke-%'); DELETE FROM workspaces WHERE slug LIKE 'smoke-%';" 2>&1 | head -n 1
-echo "== temp-user cleanup (E5 second member) =="
-docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM project_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%'); DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%'); DELETE FROM users WHERE email LIKE 'temp-member-%';" 2>&1 | head -n 1
+echo "== temp-user cleanup (E5 second member + E5 join invitee) =="
+docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label LIKE 'smoke-join-%'; DELETE FROM project_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%';" 2>&1 | head -n 1
 echo "== leftover-proof (must all be 0) =="
 proof_zero() { # proof_zero <label> <sql>
   local label="$1" sql="$2" n
