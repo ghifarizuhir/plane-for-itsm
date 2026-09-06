@@ -20,7 +20,7 @@ import { Banner } from "@/components/common/banner";
 import { FormHeader } from "@/components/instance/form-header";
 import { AuthBanner } from "./auth-banner";
 import { AuthHeader } from "./auth-header";
-import { authErrorHandler } from "./auth-helpers";
+import { authErrorHandler, EErrorAlertType } from "./auth-helpers";
 
 // error codes
 enum EErrorCodes {
@@ -35,6 +35,27 @@ type TError = {
   type: EErrorCodes | undefined;
   message: string | undefined;
 };
+
+// Local fallback for admin error codes outside `EAdminAuthErrorCodes`
+// (kept local — `packages/constants` is out of scope): 5000
+// INSTANCE_NOT_CONFIGURED + 5021 PASSWORD_TOO_WEAK
+// (`authentication/adapter/error.py:7,17`).
+const LOCAL_ADMIN_AUTH_FALLBACK: Record<string, TAdminAuthErrorInfo> = {
+  "5000": {
+    type: EErrorAlertType.BANNER_ALERT,
+    code: "5000" as EAdminAuthErrorCodes,
+    title: "Instance not configured",
+    message: "Instance is not configured. Please complete the setup first.",
+  },
+  "5021": {
+    type: EErrorAlertType.BANNER_ALERT,
+    code: "5021" as EAdminAuthErrorCodes,
+    title: "Password too weak",
+    message: "Password is too weak. Please choose a stronger password.",
+  },
+};
+
+const localAdminAuthFallback = (code: string): TAdminAuthErrorInfo | undefined => LOCAL_ADMIN_AUTH_FALLBACK[code];
 
 // form data
 type TFormData = {
@@ -86,7 +107,9 @@ export function InstanceSignInForm() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const code = data?.error_code !== undefined ? String(data.error_code) : undefined;
-        const detail = code ? authErrorHandler(code as EAdminAuthErrorCodes) : undefined;
+        const detail = code
+          ? (authErrorHandler(code as EAdminAuthErrorCodes) ?? localAdminAuthFallback(code))
+          : undefined;
         if (detail) setErrorInfo(detail);
         else setSubmitError(data?.error_message || "Something went wrong. Please try again.");
         return;
@@ -125,13 +148,14 @@ export function InstanceSignInForm() {
   }, [errorCode, errorMessage]);
 
   const isButtonDisabled = useMemo(
-    () => (!isSubmitting && formData.email && formData.password ? false : true),
+    () => isSubmitting || !formData.email || !formData.password,
     [formData.email, formData.password, isSubmitting]
   );
 
   useEffect(() => {
     if (errorCode) {
-      const errorDetail = authErrorHandler(errorCode?.toString() as EAdminAuthErrorCodes);
+      const errorDetail =
+        authErrorHandler(errorCode?.toString() as EAdminAuthErrorCodes) ?? localAdminAuthFallback(errorCode);
       if (errorDetail) {
         setErrorInfo(errorDetail);
       }
@@ -169,7 +193,6 @@ export function InstanceSignInForm() {
                   value={formData.email}
                   onChange={(e) => handleFormChange("email", e.target.value)}
                   autoComplete="off"
-                  autoFocus
                 />
               </InputGroup>
             </div>

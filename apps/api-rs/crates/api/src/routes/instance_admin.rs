@@ -34,6 +34,7 @@
 use axum::{
     extract::{ConnectInfo, Query, State},
     http::{HeaderMap, StatusCode},
+    response::IntoResponse,
     Json,
 };
 use serde::Deserialize;
@@ -82,8 +83,6 @@ pub const INSTANCE_NOT_REGISTERED_MSG: &str = "Instance is not registered yet";
 pub const PAYLOAD_INVALID_MSG: &str = "The payload is not valid";
 /// DRF permission-class deny body (mirrors `cycle.rs:PERMISSION_DETAIL_MSG`).
 pub const PERMISSION_DETAIL_MSG: &str = "You do not have permission to perform this action.";
-/// `license/api/views/base.py:104-108` (ValidationError shape for PATCH).
-pub const VALID_DETAIL_MSG: &str = "Please provide valid detail";
 /// `license/api/views/configuration.py:93` (missing receiver_email).
 pub const RECEIVER_REQUIRED_MSG: &str = "Receiver email is required";
 /// `license/api/views/configuration.py:129` (SMTP success).
@@ -369,15 +368,17 @@ pub async fn sign_in(
     if iid.is_none() {
         return err(INSTANCE_NOT_CONFIGURED_CODE, "INSTANCE_NOT_CONFIGURED");
     }
-    let email = body.email.unwrap_or_default().trim().to_lowercase();
+    let email_raw = body.email.unwrap_or_default();
     let password = body.password.unwrap_or_default();
-    // `admin.py:292` (`if not email or not password`).
-    if email.is_empty() || password.is_empty() {
+    // `admin.py:292` (`if not email or not password`) — raw values, before
+    // the `strip().lower()` at `admin.py:305` (see `admin_signin_missing`).
+    if admin_signin_missing(&email_raw, &password) {
         return err(
             REQUIRED_ADMIN_EMAIL_PASSWORD_CODE,
             "REQUIRED_ADMIN_EMAIL_PASSWORD",
         );
     }
+    let email = email_raw.trim().to_lowercase();
     // `admin.py:305-318` (validate_email).
     if !crate::routes::auth::email_valid(&email) {
         return err(INVALID_ADMIN_EMAIL_CODE, "INVALID_ADMIN_EMAIL");
@@ -451,6 +452,23 @@ pub async fn sign_in(
     Ok((StatusCode::OK, cookies, Json(admin_me_json(&me))))
 }
 
+/// `admin.py:292` (`if not email or not password`) runs on the RAW form
+/// values, BEFORE `email.strip().lower()` (`admin.py:305`) — a
+/// whitespace-only email passes this gate and fails later as
+/// INVALID_ADMIN_EMAIL.
+pub fn admin_signin_missing(email: &str, password: &str) -> bool {
+    email.is_empty() || password.is_empty()
+}
+
+/// `admin.py:124-132` (sign-up): the required gate runs on the RAW form
+/// values (`if not email or not password or not first_name`), BEFORE
+/// `email.strip().lower()` (`admin.py:153-154`) — a whitespace-only email
+/// passes the gate and fails later as 5160 (INVALID_ADMIN_EMAIL), not
+/// 5155 (REQUIRED_ADMIN_EMAIL_PASSWORD_FIRST_NAME).
+pub fn admin_signup_missing(email: &str, password: &str, first_name: &str) -> bool {
+    email.is_empty() || password.is_empty() || first_name.is_empty()
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct AdminSignUpBody {
     pub email: Option<String>,
@@ -516,19 +534,22 @@ pub async fn sign_up(
     if setup_done || admin_exists {
         return err(ADMIN_ALREADY_EXIST_CODE, "ADMIN_ALREADY_EXIST");
     }
-    let email = body.email.unwrap_or_default().trim().to_lowercase();
+    let email_raw = body.email.unwrap_or_default();
     let password = body.password.unwrap_or_default();
-    let first_name = body.first_name.unwrap_or_default();
+    let first_name_raw = body.first_name.unwrap_or_default();
     let last_name = body.last_name.unwrap_or_default();
     let company_name = body.company_name.unwrap_or_default();
     let telemetry = parse_telemetry(body.is_telemetry_enabled.as_ref());
-    // `admin.py:131-151` (email+password+first_name required).
-    if email.is_empty() || password.is_empty() || first_name.trim().is_empty() {
+    // `admin.py:131-151` (email+password+first_name required — raw values,
+    // before the `strip().lower()` at `admin.py:153-154`; see
+    // `admin_signup_missing`).
+    if admin_signup_missing(&email_raw, &password, &first_name_raw) {
         return err(
             REQUIRED_ADMIN_EMAIL_PASSWORD_FIRST_NAME_CODE,
             "REQUIRED_ADMIN_EMAIL_PASSWORD_FIRST_NAME",
         );
     }
+    let email = email_raw.trim().to_lowercase();
     // `admin.py:153-173` (validate_email).
     if !crate::routes::auth::email_valid(&email) {
         return err(INVALID_ADMIN_EMAIL_CODE, "INVALID_ADMIN_EMAIL");
@@ -590,7 +611,7 @@ pub async fn sign_up(
     .bind(&email)
     .bind(&username)
     .bind(&hash)
-    .bind(first_name.trim())
+    .bind(first_name_raw.trim())
     .bind(&last_name)
     .bind(&display_name)
     .bind(&token)
@@ -874,14 +895,16 @@ pub async fn admins_create(
 
 /// DELETE /api/instances/admins/:pk/ — `InstanceAdminEndpoint.delete`
 /// (`admin.py:83-87`): **204** even when nothing matches (Django
-/// `filter().delete()` never raises).
+/// `filter().delete()` never raises). Bare `StatusCode::NO_CONTENT` with
+/// a truly-empty body (E6/E10 convention: `Json(null)` on 204 violates
+/// RFC 9110 §15.3.5).
 pub async fn admins_delete(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+) -> Result<impl IntoResponse, common::errors::AppError> {
     if !instance_admin_allowed(&st.pool, auth.0).await? {
-        return Ok(deny_detail());
+        return Ok(deny_detail().into_response());
     }
     if let Some(iid) = instance_id(&st.pool).await? {
         sqlx::query("DELETE FROM instance_admins WHERE instance_id = $1 AND id = $2")
@@ -890,7 +913,7 @@ pub async fn admins_delete(
             .execute(&st.pool)
             .await?;
     }
-    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 /// Locked: NO `GET .../admins/:pk/` route in Django — fall through to the
@@ -1055,11 +1078,12 @@ pub async fn instance_patch(
             None => {
                 // Read-only (`id,email,last_checked_at,is_setup_done`,
                 // audit columns) or unknown keys are ignored; a KNOWN key
-                // with an unparseable type is a validation 400.
+                // with an unparseable type is a DRF serializer-errors field
+                // map (`instance.py:169`), not `{"detail": ...}`.
                 if is_instance_writable_key(key) {
                     return Ok((
                         StatusCode::BAD_REQUEST,
-                        Json(json!({"detail": VALID_DETAIL_MSG})),
+                        Json(instance_patch_field_error(key)),
                     ));
                 }
             }
@@ -1140,6 +1164,12 @@ pub async fn instance_patch(
 }
 
 fn is_instance_writable_key(key: &str) -> bool {
+    is_instance_text_key(key) || is_instance_flag_key(key)
+}
+
+/// Text columns (`CharField`/`TextField` in `license/models/instance.py:22-40`,
+/// serialized by `serializers/instance.py:11-17`).
+fn is_instance_text_key(key: &str) -> bool {
     matches!(
         key,
         "instance_name"
@@ -1150,13 +1180,37 @@ fn is_instance_writable_key(key: &str) -> bool {
             | "edition"
             | "domain"
             | "namespace"
-            | "is_telemetry_enabled"
+    )
+}
+
+/// Flag columns (`BooleanField` in `license/models/instance.py:22-40`).
+fn is_instance_flag_key(key: &str) -> bool {
+    matches!(
+        key,
+        "is_telemetry_enabled"
             | "is_support_required"
             | "is_signup_screen_visited"
             | "is_verified"
             | "is_test"
             | "is_current_version_deprecated"
     )
+}
+
+/// DRF serializer-errors field map for a known key with an unparseable value
+/// (Django `instance.py:169` returns `serializer.errors`, not
+/// `{"detail": ...}`):
+/// - text keys → DRF `CharField.default_error_messages['invalid']`
+///   (`rest_framework/fields.py`) → `["Not a valid string."]` (same shape
+///   as the E7 precedent `{"company_role": ["Not a valid string."]}`,
+///   `member.rs`);
+/// - flag keys → DRF `BooleanField.default_error_messages['invalid']`
+///   (`rest_framework/fields.py`) → `["Must be a valid boolean."]`.
+pub fn instance_patch_field_error(key: &str) -> Value {
+    if is_instance_flag_key(key) {
+        json!({ key: ["Must be a valid boolean."] })
+    } else {
+        json!({ key: ["Not a valid string."] })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1176,6 +1230,13 @@ fn fernet_secret() -> String {
     // Django `settings.SECRET_KEY` (`settings/common.py:32` — env
     // `SECRET_KEY`). Must match Django's value or stored secrets won't
     // decrypt (documented wiring requirement, not a fallback).
+    //
+    // Shared-secret wiring (single value, no second secret): `setup.sh`
+    // appends the generated `SECRET_KEY` to `apps/api/.env`, and
+    // `docker-compose.yml` gives the Rust `api`/`worker`/`beat` services
+    // that SAME file via `env_file`, so this reads the exact value Django
+    // used to encrypt. Local `cargo` runs must export `SECRET_KEY` from
+    // that file (api-rs loads no `.env` by itself).
     std::env::var("SECRET_KEY").unwrap_or_default()
 }
 
@@ -1331,11 +1392,14 @@ struct ConfigRow {
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// `license/api/serializers/configuration.py:15-21` (decrypt on read).
+/// `license/api/serializers/configuration.py:15-21` (decrypt on read —
+/// ONLY when encrypted AND non-null; a NULL value stays JSON `null`, the
+/// way DRF renders `None`, for encrypted rows and plain rows alike).
 fn config_json(r: &ConfigRow, secret: &str) -> Value {
     let value = match (&r.value, r.is_encrypted) {
-        (Some(v), true) => decrypt_data(v, secret),
-        (v, _) => v.clone().unwrap_or_default(),
+        (Some(v), true) => Value::String(decrypt_data(v, secret)),
+        (Some(v), false) => Value::String(v.clone()),
+        (None, _) => Value::Null,
     };
     json!({
         "id": r.id,
@@ -1441,13 +1505,13 @@ pub async fn configs_patch(
 /// Body wrapper so the failure branch carries
 /// `{"error": "Failed to disable email configuration"}` verbatim
 /// (`configuration.py:82-85`) while success stays bodyless (Django
-/// `Response(status=200)`).
+/// `Response(status=200)` — bare `StatusCode::OK`, not `Json(null)`).
 pub async fn disable_email_with_body(
     State(st): State<AppState>,
     auth: AuthUser,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+) -> Result<impl IntoResponse, common::errors::AppError> {
     if !instance_admin_allowed(&st.pool, auth.0).await? {
-        return Ok(deny_detail());
+        return Ok(deny_detail().into_response());
     }
     match sqlx::query(
         "UPDATE instance_configurations SET value = CASE WHEN key = 'ENABLE_SMTP' THEN '0' ELSE '' END, \
@@ -1457,13 +1521,14 @@ pub async fn disable_email_with_body(
     .execute(&st.pool)
     .await
     {
-        Ok(_) => Ok((StatusCode::OK, Json(Value::Null))),
+        Ok(_) => Ok(StatusCode::OK.into_response()),
         Err(e) => {
             tracing::warn!(error=%e, "disable-email: update failed");
             Ok((
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": DISABLE_EMAIL_FAILED_MSG})),
-            ))
+            )
+                .into_response())
         }
     }
 }
@@ -1560,6 +1625,14 @@ async fn load_email_config(pool: &PgPool) -> EmailConfig {
 /// Pure decision bit for the permanent-5xx branch: SMTP 535 (authentication
 /// rejected) → invalid-credentials; a message naming the sender → from
 /// address invalid; any other 5xx → recipients refused.
+///
+/// NOTE (Gap-6 waiver, kept deliberately): lettre 0.11 exposes only the
+/// `is_permanent()` predicate plus the SMTP `status()` code — no
+/// per-recipient response detail like smtplib's `SMTPRecipientsRefused`
+/// vs `SMTPSenderRefused` — so the sender-vs-recipient split is a
+/// message-text heuristic that can misclassify in either direction (a
+/// sender refusal without sender wording lands on recipients-refused,
+/// and a recipient refusal naming the sender lands on from-invalid).
 pub fn smtp_body_for_permanent(code_5xx: bool, is_535: bool, display: &str) -> Value {
     if is_535 {
         return json!({"error": "Invalid credentials provided"});
@@ -1598,6 +1671,11 @@ pub fn smtp_body_for_io(kind: std::io::ErrorKind) -> Option<Value> {
 /// plus the SMTP `status()` code, so:
 /// - timeout (socket or the 30s overall budget) → TimeoutError body;
 /// - client/build error → BadHeader body;
+/// - shut-down pooled transport → SMTPServerDisconnected body
+///   (`configuration.py:147-151`; lettre 0.11 `Kind::TransportShutdown`,
+///   `error.rs:119-120,206-208`, via `is_transport_shutdown()`,
+///   `error.rs:80-83` — the closest disconnect/connection-closed signal
+///   the pinned version exposes);
 /// - permanent 535 → SMTPAuthenticationError body; other 5xx split
 ///   sender-vs-recipient by message (see `smtp_body_for_permanent`);
 /// - connection/TLS/network leftovers → SMTPConnectError body, with the
@@ -1612,6 +1690,9 @@ pub fn smtp_error_body(err: &lettre::transport::smtp::Error) -> Value {
     }
     if err.is_client() {
         return json!({"error": "Invalid email header."});
+    }
+    if err.is_transport_shutdown() {
+        return json!({"error": "SMTP server disconnected unexpectedly."});
     }
     if err.is_permanent() {
         let code = err.status();
@@ -1921,10 +2002,9 @@ const INSTANCE_WS_SELECT: &str = "w.id, w.created_at, w.updated_at, w.name, w.lo
     w.organization_size, w.timezone, w.background_color, fa.asset AS logo_asset, \
     w.owner_id, u.email AS owner_email, u.first_name AS owner_first_name, \
     u.last_name AS owner_last_name, \
-    (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id AND p.deleted_at IS NULL) AS total_projects, \
+    (SELECT COUNT(*) FROM projects p WHERE p.workspace_id = w.id) AS total_projects, \
     (SELECT COUNT(*) FROM workspace_members wm JOIN users u2 ON u2.id = wm.member_id \
-     WHERE wm.workspace_id = w.id AND u2.is_bot = false AND wm.is_active = true \
-     AND wm.deleted_at IS NULL) AS total_members";
+     WHERE wm.workspace_id = w.id AND u2.is_bot = false AND wm.is_active = true) AS total_members";
 
 /// `license/api/serializers/workspace.py:17-21` + `Meta fields="__all__"`
 /// (owner nested `UserLiteSerializer`: id/email/first/last).
@@ -2019,9 +2099,13 @@ pub async fn workspaces_list(
     } else {
         match page_window(page, limit) {
             Err(()) => {
+                // `BadPaginationError` → `ParseError(detail="Error in
+                // parsing")` (`utils/paginator.py:708-711`, no trailing
+                // period — same literal as `draft.rs`/`issue_lists.rs`/
+                // `issue_query.rs`).
                 return Ok((
                     StatusCode::BAD_REQUEST,
-                    Json(json!({"detail": "Invalid cursor parameter."})),
+                    Json(json!({"detail": "Error in parsing"})),
                 ));
             }
             Ok(PageWindow::BeyondEnd) => (
@@ -2227,6 +2311,13 @@ pub struct SlugCheckQuery {
     pub slug: Option<String>,
 }
 
+/// `workspace.py:25` (`if not slug or slug == ""`): only a missing/empty
+/// slug 400s — a whitespace-only slug is NOT trimmed here, so it 200s with
+/// its availability status.
+pub fn slug_check_missing(slug: &str) -> bool {
+    slug.is_empty()
+}
+
 /// GET /api/instances/workspace-slug-check/ —
 /// `InstanceWorkSpaceAvailabilityCheckEndpoint.get` (`workspace.py:19-32`):
 /// missing → 400 verbatim; else 200 `{"status"}` = NOT(iexact-exists OR
@@ -2240,8 +2331,8 @@ pub async fn slug_check(
         return Ok(deny_detail());
     }
     let slug = q.slug.unwrap_or_default();
-    // `workspace.py:25-29`.
-    if slug.trim().is_empty() {
+    // `workspace.py:25-29` (no trim — whitespace-only 200s).
+    if slug_check_missing(&slug) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": SLUG_CHECK_REQUIRED_MSG})),
@@ -2416,6 +2507,71 @@ mod tests {
     }
 
     #[test]
+    fn slug_check_whitespace_is_not_missing() {
+        // Django `workspace.py:25` (`if not slug or slug == ""`): only a
+        // missing/empty slug 400s — whitespace-only is a real slug that
+        // 200s (Django does NOT strip here).
+        assert!(slug_check_missing(""));
+        assert!(!slug_check_missing(" "));
+        assert!(!slug_check_missing("acme"));
+    }
+
+    #[test]
+    fn signup_required_checks_raw_values() {
+        // Django `admin.py:124-132`: the required gate runs on RAW form
+        // values, BEFORE `email.strip().lower()` (`:154`) — whitespace-only
+        // email passes the gate and fails later as 5160, not 5155.
+        assert!(!admin_signup_missing(" ", "pw", "First"));
+        assert!(admin_signup_missing("", "pw", "First"));
+        assert!(admin_signup_missing("a@b.c", "", "First"));
+        assert!(!admin_signin_missing(" ", "pw"));
+        assert!(admin_signin_missing("", "pw"));
+    }
+
+    #[test]
+    fn config_null_stays_null() {
+        // `serializers/configuration.py:15-21`: only ENCRYPTED non-null
+        // values are decrypted — a non-encrypted NULL renders as JSON
+        // `null` (DRF `None`), not `""`.
+        let mk = |value: Option<String>, is_encrypted: bool| ConfigRow {
+            id: uuid::Uuid::new_v4(),
+            key: "X".to_string(),
+            value,
+            category: "c".to_string(),
+            is_encrypted,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        assert_eq!(
+            config_json(&mk(None, false), "secret")["value"],
+            Value::Null
+        );
+        assert_eq!(config_json(&mk(None, true), "secret")["value"], Value::Null);
+        assert_eq!(
+            config_json(&mk(Some("v".to_string()), false), "secret")["value"],
+            json!("v")
+        );
+    }
+
+    #[test]
+    fn instance_patch_invalid_type_is_field_map() {
+        // Django `instance.py:169` returns DRF `serializer.errors` (a
+        // per-field map), not `{"detail": ...}`.
+        assert_eq!(
+            instance_patch_field_error("domain"),
+            json!({"domain": ["Not a valid string."]})
+        );
+        assert_eq!(
+            instance_patch_field_error("is_test"),
+            json!({"is_test": ["Must be a valid boolean."]})
+        );
+        // The inputs that reach the error branch are exactly the
+        // unparseable ones.
+        assert!(parse_instance_patch_value("domain", &json!({"a": 1})).is_none());
+        assert!(parse_instance_patch_value("is_test", &json!({"a": 1})).is_none());
+    }
+
+    #[test]
     fn instance_patch_allowlist() {
         // Read-only keys (`serializers/instance.py:17`) are not writable.
         for k in ["id", "email", "last_checked_at", "is_setup_done", "nope"] {
@@ -2438,6 +2594,34 @@ mod tests {
             Some(InstancePatchVal::Text(None))
         );
         assert!(parse_instance_patch_value("is_test", &json!("maybe")).is_none());
+    }
+
+    #[test]
+    fn smtp_disconnect_maps_to_server_disconnected_body() {
+        // Django `configuration.py:147-151` (`SMTPServerDisconnected` →
+        // `{"error": "SMTP server disconnected unexpectedly."}`).
+        // lettre 0.11 has no connection-closed variant — a dead pooled
+        // transport surfaces as `Kind::TransportShutdown`
+        // (`error.rs:119-120,206-208`, `is_transport_shutdown`,
+        // `error.rs:80-83`). Shutting a pooled `SmtpTransport` down and
+        // then sending reproduces that exact error value with no network.
+        use lettre::Transport;
+        let transport = lettre::SmtpTransport::builder_dangerous("127.0.0.1")
+            .port(1)
+            .build();
+        transport.shutdown();
+        let msg = lettre::Message::builder()
+            .from("Plane <plane@example.com>".parse().unwrap())
+            .to("to@example.com".parse().unwrap())
+            .subject("t")
+            .body(String::from("b"))
+            .unwrap();
+        let err = transport.send(&msg).unwrap_err();
+        assert!(err.is_transport_shutdown());
+        assert_eq!(
+            smtp_error_body(&err),
+            json!({"error": "SMTP server disconnected unexpectedly."})
+        );
     }
 
     #[test]
@@ -2470,6 +2654,41 @@ mod tests {
             )
         );
         assert_eq!(smtp_body_for_io(ErrorKind::ConnectionRefused), None);
+    }
+
+    #[test]
+    fn workspace_annotations_match_django_filters() {
+        // Django `workspace.py:41-54`: the project-count annotation has NO
+        // deleted filter and the member-count annotation filters only
+        // `member__is_bot=False, is_active=True` — neither carries a
+        // `deleted_at IS NULL` predicate.
+        assert!(
+            !INSTANCE_WS_SELECT.contains("p.deleted_at IS NULL"),
+            "project count must not filter deleted_at"
+        );
+        assert!(
+            !INSTANCE_WS_SELECT.contains("wm.deleted_at IS NULL"),
+            "member count must not filter deleted_at"
+        );
+    }
+
+    #[test]
+    fn empty_body_convention() {
+        // Gap-3 pin: `admins_delete` returns bare
+        // `StatusCode::NO_CONTENT` and `disable_email_with_body` success
+        // returns bare `StatusCode::OK` (E6/E10 convention, cf.
+        // `analytic.rs:destroy_204_has_empty_body`) — axum renders no
+        // content-type and zero bytes, unlike `(status, Json(null))`
+        // (Django `Response(status=200)` / 204 carry no body; RFC 9110
+        // §15.3.5 forbids a body on 204).
+        for status in [StatusCode::OK, StatusCode::NO_CONTENT] {
+            let resp = status.into_response();
+            assert_eq!(resp.status(), status);
+            assert!(resp
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .is_none());
+        }
     }
 
     #[test]

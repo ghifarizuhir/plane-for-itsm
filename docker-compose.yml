@@ -55,6 +55,11 @@ services:
       - plane-redis
 
   # Rust cutover: primary api on 8000 (proxy upstreams api:8000 unchanged).
+  # SECRET_KEY wiring (shared with Django, no second secret): `setup.sh`
+  # appends the generated SECRET_KEY to `apps/api/.env`, and this service
+  # (like `worker`/`beat` below) consumes that SAME file via `env_file`,
+  # so Rust Fernet (`instance_admin.rs:fernet_secret`) decrypts with the
+  # exact value Django used to encrypt.
   api:
     container_name: api
     build:

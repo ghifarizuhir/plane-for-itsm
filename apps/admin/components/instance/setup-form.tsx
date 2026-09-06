@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { HideOutline, ShowOutline } from "@makeplane/propel/icons";
 // plane internal packages
 import { API_BASE_URL, E_PASSWORD_STRENGTH } from "@plane/constants";
-import type { EAdminAuthErrorCodes } from "@plane/constants";
+import type { EAdminAuthErrorCodes, TAdminAuthErrorInfo } from "@plane/constants";
 import { Button } from "@makeplane/propel/components/button";
 import { Checkbox } from "@makeplane/propel/components/checkbox";
 import { Input, InputGroup } from "@makeplane/propel/components/input";
@@ -22,7 +22,8 @@ import { AuthHeader } from "@/app/(all)/(home)/auth-header";
 import { PasswordStrengthIndicator } from "@/components/common/password-strength-indicator";
 import { Banner } from "../common/banner";
 import { FormHeader } from "./form-header";
-import { authErrorHandler } from "@/app/(all)/(home)/auth-helpers";
+import { AuthBanner } from "@/app/(all)/(home)/auth-banner";
+import { authErrorHandler, EErrorAlertType } from "@/app/(all)/(home)/auth-helpers";
 
 // error codes
 enum EErrorCodes {
@@ -38,6 +39,27 @@ type TError = {
   type: EErrorCodes | undefined;
   message: string | undefined;
 };
+
+// Local fallback for admin error codes outside `EAdminAuthErrorCodes`
+// (kept local — `packages/constants` is out of scope): 5000
+// INSTANCE_NOT_CONFIGURED + 5021 PASSWORD_TOO_WEAK
+// (`authentication/adapter/error.py:7,17`).
+const LOCAL_ADMIN_AUTH_FALLBACK: Record<string, TAdminAuthErrorInfo> = {
+  "5000": {
+    type: EErrorAlertType.BANNER_ALERT,
+    code: "5000" as EAdminAuthErrorCodes,
+    title: "Instance not configured",
+    message: "Instance is not configured. Please complete the setup first.",
+  },
+  "5021": {
+    type: EErrorAlertType.BANNER_ALERT,
+    code: "5021" as EAdminAuthErrorCodes,
+    title: "Password too weak",
+    message: "Password is too weak. Please choose a stronger password.",
+  },
+};
+
+const localAdminAuthFallback = (code: string): TAdminAuthErrorInfo | undefined => LOCAL_ADMIN_AUTH_FALLBACK[code];
 
 // form data
 type TFormData = {
@@ -70,7 +92,7 @@ export function InstanceSetupForm() {
   const lastNameParam = searchParams?.get("last_name") || undefined;
   const companyParam = searchParams?.get("company") || undefined;
   const emailParam = searchParams?.get("email") || undefined;
-  const isTelemetryEnabledParam = (searchParams?.get("is_telemetry_enabled") === "True" ? true : false) || true;
+  const isTelemetryEnabledParam = searchParams?.get("is_telemetry_enabled") === "True" || true;
   const errorCode = searchParams?.get("error_code") || undefined;
   const errorMessage = searchParams?.get("error_message") || undefined;
   // state
@@ -82,6 +104,7 @@ export function InstanceSetupForm() {
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
+  const [errorInfo, setErrorInfo] = useState<TAdminAuthErrorInfo | undefined>(undefined);
   const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
@@ -115,12 +138,14 @@ export function InstanceSetupForm() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const code = data?.error_code !== undefined ? String(data.error_code) : undefined;
-        const detail = code ? authErrorHandler(code as EAdminAuthErrorCodes) : undefined;
-        setSubmitError(
-          detail && typeof detail.message === "string"
-            ? detail.message
-            : (data?.error_message ?? "Something went wrong. Please try again.")
-        );
+        const detail = code
+          ? (authErrorHandler(code as EAdminAuthErrorCodes) ?? localAdminAuthFallback(code))
+          : undefined;
+        // Render `detail.message` as-is (string AND JSX-capable ReactNode,
+        // e.g. the 5180/5185 sign-in links) via AuthBanner instead of
+        // falling back to the raw code string for non-string messages.
+        if (detail) setErrorInfo(detail);
+        else setSubmitError(data?.error_message ?? "Something went wrong. Please try again.");
         return;
       }
       await fetchCurrentUser().catch(() => undefined);
@@ -164,14 +189,12 @@ export function InstanceSetupForm() {
 
   const isButtonDisabled = useMemo(
     () =>
-      !isSubmitting &&
-      formData.first_name &&
-      formData.email &&
-      formData.password &&
-      getPasswordStrength(formData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID &&
-      formData.password === formData.confirm_password
-        ? false
-        : true,
+      isSubmitting ||
+      !formData.first_name ||
+      !formData.email ||
+      !formData.password ||
+      getPasswordStrength(formData.password) !== E_PASSWORD_STRENGTH.STRENGTH_VALID ||
+      formData.password !== formData.confirm_password,
     [formData.confirm_password, formData.email, formData.first_name, formData.password, isSubmitting]
   );
 
@@ -194,6 +217,7 @@ export function InstanceSetupForm() {
               <Banner type="error" message={errorData?.message} />
             )}
           {submitError && <Banner type="error" message={submitError} />}
+          {errorInfo && <AuthBanner bannerData={errorInfo} handleBannerData={setErrorInfo} />}
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="flex flex-col items-center gap-4 sm:flex-row">
               <div className="w-full space-y-1">
@@ -215,7 +239,6 @@ export function InstanceSetupForm() {
                       }
                     }}
                     autoComplete="off"
-                    autoFocus
                     maxLength={50}
                   />
                 </InputGroup>
@@ -258,7 +281,7 @@ export function InstanceSetupForm() {
                   placeholder="name@company.com"
                   value={formData.email}
                   onChange={(e) => handleFormChange("email", e.target.value)}
-                  aria-invalid={errorData.type && errorData.type === EErrorCodes.INVALID_EMAIL ? true : false}
+                  aria-invalid={!!(errorData.type && errorData.type === EErrorCodes.INVALID_EMAIL)}
                   autoComplete="off"
                 />
               </InputGroup>
@@ -303,7 +326,7 @@ export function InstanceSetupForm() {
                   placeholder="New password"
                   value={formData.password}
                   onChange={(e) => handleFormChange("password", e.target.value)}
-                  aria-invalid={errorData.type && errorData.type === EErrorCodes.INVALID_PASSWORD ? true : false}
+                  aria-invalid={!!(errorData.type && errorData.type === EErrorCodes.INVALID_PASSWORD)}
                   onFocus={() => setIsPasswordInputFocused(true)}
                   onBlur={() => setIsPasswordInputFocused(false)}
                   autoComplete="new-password"
