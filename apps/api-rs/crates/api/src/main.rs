@@ -1176,7 +1176,73 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/analytic-view/",
             get(routes::analytic::list_views).post(routes::analytic::create_view),
-        );
+        )
+        // Parity with `WorkspaceUserPropertiesEndpoint`
+        // (`views/workspace/user.py:252-269`,
+        // `serializers/workspace.py:174-178`): GET 200 + PATCH 200 full
+        // `__all__` object, `get_or_create` (never 404 on the row).
+        // Gate = any ACTIVE ws member (`WorkspaceViewerPermission`,
+        // DRF 403 `{"detail": ...}` deny).
+        .route(
+            "/api/workspaces/:slug/user-properties/",
+            get(routes::prefs::user_props_get).patch(routes::prefs::user_props_patch),
+        )
+        // Parity with `WorkspaceUserPreferenceViewSet`
+        // (`views/workspace/user_preference.py:18-103`): GET 200 dict
+        // (auto-creates missing keys) + PATCH 200 `{"message": ...}`
+        // (skips unknown keys). Gate AMG (`deny()` 403). NO `:key/`
+        // route — Django defines none.
+        .route(
+            "/api/workspaces/:slug/sidebar-preferences/",
+            get(routes::prefs::sidebar_get).patch(routes::prefs::sidebar_patch),
+        )
+        // Parity with `WorkspaceHomePreferenceViewSet`
+        // (`views/workspace/home.py:24-79`): GET 200 list (auto-creates
+        // the 3 keys) + PATCH 200 per key (partial, `config` read-only;
+        // miss → 400 `{"detail": "Preference not found"}`). Gate AMG.
+        .route("/api/workspaces/:slug/home-preferences/", get(routes::prefs::home_list))
+        .route("/api/workspaces/:slug/home-preferences/:key/", patch(routes::prefs::home_patch))
+        // Parity with `QuickLinkViewSet`
+        // (`views/workspace/quick_link.py:24-61`): POST **201** + LIST/GET/
+        // PATCH 200 + DELETE **204**; PATCH miss → 404 `detail` twin,
+        // GET miss → 404 `error` twin; owner-scoped. Gate AMG.
+        .route(
+            "/api/workspaces/:slug/quick-links/",
+            get(routes::prefs::quick_list).post(routes::prefs::quick_create),
+        )
+        .route(
+            "/api/workspaces/:slug/quick-links/:pk/",
+            get(routes::prefs::quick_detail)
+                .patch(routes::prefs::quick_patch)
+                .delete(routes::prefs::quick_destroy),
+        )
+        // Parity with `UserRecentVisitViewSet.list`
+        // (`views/workspace/recent_visit.py:25-33`): GET 200 (forced
+        // allowlist, cap 20, no pagination; reads only — NO POST/DELETE).
+        // Gate AMG.
+        .route("/api/workspaces/:slug/recent-visits/", get(routes::prefs::recent_list))
+        // Parity with `WorkspaceMemberUserViewsEndpoint.post`
+        // (`views/workspace/member.py:208-212`): POST **204** overwriting
+        // the member's `view_props`; non-member → 404. POST-only.
+        .route("/api/workspaces/:slug/workspace-views/", post(routes::prefs::views_post))
+        // Parity with `WorkspaceEstimatesEndpoint.get`
+        // (`views/workspace/estimate.py:22`): GET 200
+        // `WorkspaceEstimateSerializer[]` (project-estimate ids for the
+        // slug + points). Gate safe-branch = any ACTIVE ws member (DRF
+        // 403 `detail` deny). NO 2h cache (documented in `prefs.rs`).
+        .route("/api/workspaces/:slug/estimates/", get(routes::prefs::ws_estimates))
+        // Parity with `WorkSpaceAvailabilityCheckEndpoint`
+        // (`views/workspace/base.py:215-224`): GET 200 `{"status"}`;
+        // missing slug → 400. IsAuthenticated only, no ws gate.
+        .route("/api/workspace-slug-check/", get(routes::prefs::slug_check))
+        // Parity with `UnsplashEndpoint`
+        // (`views/external/base.py:215-243`): GET 200 `[]` without a key,
+        // else upstream passthrough. IsAuthenticated only.
+        .route("/api/unsplash/", get(routes::prefs::unsplash))
+        // Parity with `UserLastProjectWithWorkspaceEndpoint`
+        // (`views/workspace/user.py:68-95`): GET 200 (null shape when no
+        // workspace). GET-only. IsAuthenticated only.
+        .route("/api/users/last-visited-workspace/", get(routes::prefs::last_visited));
 
     // Login + OAuth callback + email-check di-limit per-IP (5/mnt); refresh/logout/start bebas.
     let auth_router = Router::new()

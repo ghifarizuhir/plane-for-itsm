@@ -37,3 +37,4 @@ pub mod versions;
 pub mod reactions;
 pub mod draft;
 pub mod issue_lists;
+pub mod prefs;
