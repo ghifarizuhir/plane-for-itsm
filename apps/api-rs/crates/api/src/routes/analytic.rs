@@ -1,6 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -10,6 +11,7 @@ use serde_json::{json, Value};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::cycle::{guard_am, guard_amg};
+use super::history::{project_lite_json, workspace_lite_json};
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 
@@ -478,12 +480,20 @@ pub fn chart_window(date_filter: Option<&str>, today: NaiveDate) -> Option<(Naiv
 /// Parses the `?project_ids=` csv (`date_utils.py:150-151`,
 /// `advance.py:71-73`): split on comma; unparseable entries are dropped —
 /// same leniency as the pre-existing `project_stats` handler above.
+/// A present-but-empty value (`?project_ids=`) is falsy in Django
+/// (`advance.py:71`: `request.GET.get("project_ids", None)`) → behaves as
+/// ABSENT (workspace-member scope), NOT `Some([])` (which would match
+/// nothing and zero all counts).
 pub fn parse_project_ids(raw: Option<&str>) -> Option<Vec<uuid::Uuid>> {
-    raw.map(|s| {
+    let s = raw?;
+    if s.trim().is_empty() {
+        return None;
+    }
+    Some(
         s.split(',')
             .filter_map(|p| p.trim().parse::<uuid::Uuid>().ok())
-            .collect()
-    })
+            .collect(),
+    )
 }
 
 /// SQL fragments for one `build_chart` axis (`plane/utils/build_chart.py:
@@ -973,6 +983,25 @@ pub struct AdvanceQuery {
     pub end_date: Option<String>,
 }
 
+/// Pure SQL builder for `count_issues` (A1/A4): placeholders are dense
+/// `$1..=$5` matching the five binds (slug, user, ids, gte, lte) — the
+/// same numbering as the sibling `count_cycles`/`count_intake`/
+/// `count_projects` builders. (A `$N`-skip here leaves a placeholder
+/// unbound and 500s every call; pinned by
+/// `count_issues_sql_placeholders_dense`.)
+fn count_issues_sql(group: Option<&str>) -> String {
+    let member = pred_member("i.project_id", "$2");
+    let idf = pred_ids("i.project_id", "$3");
+    let range = pred_analytics_range("i.created_at", "$4", "$5");
+    let grp = group.map(|g| format!(" AND s.\"group\" = '{g}'")).unwrap_or_default();
+    format!(
+        "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id = i.project_id \
+         JOIN workspaces w ON w.id = i.workspace_id JOIN states s ON s.id = i.state_id \
+         WHERE w.slug = $1 AND {PRED_ISSUE_OBJECTS} AND {PRED_PROJECT_ALIVE} \
+         AND {member} AND {idf} AND {range}{grp}"
+    )
+}
+
 async fn count_issues(
     pool: &sqlx::PgPool,
     slug: &str,
@@ -982,16 +1011,7 @@ async fn count_issues(
     gte: Option<DateTime<Utc>>,
     lte: Option<DateTime<Utc>>,
 ) -> Result<i64, sqlx::Error> {
-    let member = pred_member("i.project_id", "$2");
-    let idf = pred_ids("i.project_id", "$3");
-    let range = pred_analytics_range("i.created_at", "$5", "$6");
-    let grp = group.map(|g| format!(" AND s.\"group\" = '{g}'")).unwrap_or_default();
-    let sql = format!(
-        "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id = i.project_id \
-         JOIN workspaces w ON w.id = i.workspace_id JOIN states s ON s.id = i.state_id \
-         WHERE w.slug = $1 AND {PRED_ISSUE_OBJECTS} AND {PRED_PROJECT_ALIVE} \
-         AND {member} AND {idf} AND {range}{grp}"
-    );
+    let sql = count_issues_sql(group);
     sqlx::query_scalar(&sql)
         .bind(slug)
         .bind(user)
@@ -1567,8 +1587,27 @@ pub struct ProjectAdvanceQuery {
     pub end_date: Option<String>,
 }
 
-fn parse_opt_uuid(raw: Option<&str>) -> Option<uuid::Uuid> {
-    raw?.trim().parse::<uuid::Uuid>().ok()
+/// Parses an optional `?cycle_id=`/`?module_id=` UUID param (A4/A5/A6):
+/// absent → `Ok(None)`; present must parse — Django feeds the raw string
+/// into a UUID-filtered ORM (`project_analytics.py:62-72`) so garbage
+/// raises `ValidationError` → DRF 400. The message mirrors DRF's `UUIDField`
+/// (`'"%(value)s" is not a valid UUID.'`). Valid-but-unknown UUIDs are
+/// `Ok(Some)` and keep the current zeros behavior downstream.
+pub fn parse_uuid_query(raw: Option<&str>) -> Result<Option<uuid::Uuid>, String> {
+    match raw {
+        None => Ok(None),
+        Some(s) => s
+            .trim()
+            .parse::<uuid::Uuid>()
+            .map(Some)
+            .map_err(|_| format!("'{s}' is not a valid UUID.")),
+    }
+}
+
+/// 400 with the DRF `ValidationError` list body (`["<msg>"]`) for invalid
+/// UUID query params — NOT the `{"message": ...}` shape used by tab/type.
+pub fn uuid_400(msg: String) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(json!([msg])))
 }
 
 /// Counts issues in an explicit id set with the `issue_objects` aliveness
@@ -1637,11 +1676,19 @@ pub async fn project_advance(
     let (gte, lte) = window.map(|w| (Some(w.gte), Some(w.lte))).unwrap_or((None, None));
     // `get_work_items_stats` (`:58-82`): `cycle_id` wins over `module_id`
     // wins over the project scope. Unknown ids yield empty sets → zero
-    // counts, never 404. (Unparseable ids are treated as unknown — sane
-    // leniency; Django would 400 on the UUID cast.)
+    // counts, never 404; unparseable ids 400 (Django's UUID-cast
+    // `ValidationError` → DRF 400).
     let ids = parse_project_ids(None);
+    let cid = match parse_uuid_query(q.cycle_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
+    let mid = match parse_uuid_query(q.module_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
     let groups = [None, Some("started"), Some("backlog"), Some("unstarted"), Some("completed")];
-    if let Some(cid) = parse_opt_uuid(q.cycle_id.as_deref()) {
+    if let Some(cid) = cid {
         let link_ids = scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &ids).await?;
         let mut counts = [0; 5];
         for (i, g) in groups.iter().enumerate() {
@@ -1649,7 +1696,7 @@ pub async fn project_advance(
         }
         return Ok((StatusCode::OK, Json(work_items_json(counts))));
     }
-    if let Some(mid) = parse_opt_uuid(q.module_id.as_deref()) {
+    if let Some(mid) = mid {
         let link_ids = scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &ids).await?;
         let mut counts = [0; 5];
         for (i, g) in groups.iter().enumerate() {
@@ -1731,10 +1778,19 @@ pub async fn project_advance_stats(
     // (`module.rs` avatar CASE). DISTINCT counts, ordered by display_name.
     // (Issues without assignees form the NULL row via the LEFT JOINs —
     // Django's `F("assignees__...")` outer join, mirrored literally.)
-    let scope = if let Some(cid) = parse_opt_uuid(q.cycle_id.as_deref()) {
+    // Unparseable cycle/module ids 400 (Django's UUID-cast ValidationError).
+    let cid = match parse_uuid_query(q.cycle_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
+    let mid = match parse_uuid_query(q.module_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
+    let scope = if let Some(cid) = cid {
         let link_ids = scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &parse_project_ids(None)).await?;
         format!("AND i.id = ANY('{{{}}}'::uuid[])", link_ids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","))
-    } else if let Some(mid) = parse_opt_uuid(q.module_id.as_deref()) {
+    } else if let Some(mid) = mid {
         let link_ids = scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &parse_project_ids(None)).await?;
         format!("AND i.id = ANY('{{{}}}'::uuid[])", link_ids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","))
     } else {
@@ -1826,9 +1882,18 @@ pub async fn project_advance_charts(
             },
         };
         let mut ids = parse_project_ids(None);
-        if let Some(cid) = parse_opt_uuid(q.cycle_id.as_deref()) {
+        // Unparseable cycle/module ids 400 (Django's UUID-cast ValidationError).
+        let chart_cid = match parse_uuid_query(q.cycle_id.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Ok(uuid_400(e)),
+        };
+        let chart_mid = match parse_uuid_query(q.module_id.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Ok(uuid_400(e)),
+        };
+        if let Some(cid) = chart_cid {
             ids = Some(scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &ids).await?);
-        } else if let Some(mid) = parse_opt_uuid(q.module_id.as_deref()) {
+        } else if let Some(mid) = chart_mid {
             ids = Some(scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &ids).await?);
         }
         // Feed the id__in set through the shared custom-chart path: stash
@@ -1840,8 +1905,15 @@ pub async fn project_advance_charts(
         return Ok((StatusCode::OK, Json(out)));
     }
     // `work-items` → `work_item_completion_chart` (`:183-315`).
-    let cid = parse_opt_uuid(q.cycle_id.as_deref());
-    let mid = parse_opt_uuid(q.module_id.as_deref());
+    // Unparseable cycle/module ids 400 (Django's UUID-cast ValidationError).
+    let cid = match parse_uuid_query(q.cycle_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
+    let mid = match parse_uuid_query(q.module_id.as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok(uuid_400(e)),
+    };
     if let Some(cid) = cid {
         // Daily series over the CYCLE's link rows (`:192-202,223-258`):
         // the cycle lookup is unscoped (`.filter(id=...).first()`); a
@@ -2054,8 +2126,8 @@ struct DeployRow {
 
 /// `DeployBoardSerializer` (`serializers/project.py:247-254`):
 /// `fields = "__all__"` with read-only `workspace/project/anchor`, plus the
-/// nested `project_details`/`workspace_detail` (omitted here — two extra
-/// queries for FE-optional data; documented deviation). FKs render as ids.
+/// nested `project_details`/`workspace_detail` merged in by
+/// `deploy_json_with_details`. FKs render as ids.
 fn deploy_json(r: &DeployRow) -> Value {
     json!({
         "id": r.id,
@@ -2082,10 +2154,96 @@ const DEPLOY_COLS: &str = "id, created_at, updated_at, created_by_id, updated_by
     project_id, entity_identifier, entity_name, anchor, is_comments_enabled, \
     is_reactions_enabled, is_votes_enabled, intake_id, view_props, is_activity_enabled, is_disabled";
 
-/// Scoped lookup: the project's board in this workspace (`list` filters
-/// `entity_name="project", entity_identifier=project_id, workspace__slug`,
-/// `views/project/base.py:541-543`; retrieve/patch/delete tighten
-/// Django's unscoped pk lookup to the same scope — documented).
+/// Merges the nested details into a base `deploy_json` object:
+/// `project_details` = `ProjectLiteSerializer`
+/// (`serializers/project.py:100-111`: id, identifier, name, cover_image,
+/// cover_image_url, logo_props, description) and `workspace_detail` =
+/// `WorkspaceLiteSerializer` (`serializers/workspace.py:86-90`: name, slug,
+/// id, logo_url) — both built with the shared `history.rs` lite builders.
+fn deploy_json_with_details(row: &DeployRow, project_details: Value, workspace_detail: Value) -> Value {
+    let mut v = deploy_json(row);
+    if let Value::Object(ref mut m) = v {
+        m.insert("project_details".to_string(), project_details);
+        m.insert("workspace_detail".to_string(), workspace_detail);
+    }
+    v
+}
+
+/// One `projects` row shaped for `ProjectLiteSerializer` (column set mirrors
+/// the `my_membership` lite SELECT in `project.rs`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct DeployProjLite {
+    id: uuid::Uuid,
+    identifier: String,
+    name: String,
+    cover_image: Option<String>,
+    cover_asset_id: Option<uuid::Uuid>,
+    cover_entity_type: Option<String>,
+    logo_props: Value,
+    description: String,
+}
+
+/// One `workspaces` row shaped for `WorkspaceLiteSerializer`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct DeployWsLite {
+    id: uuid::Uuid,
+    name: String,
+    slug: String,
+    logo: Option<String>,
+    logo_asset_id: Option<uuid::Uuid>,
+    logo_entity_type: Option<String>,
+}
+
+/// Full deploy-board object for list/retrieve/create/patch responses: base
+/// `__all__` + nested details. A NULL `project` FK (never for project
+/// boards, which set it on create) renders `project_details: null`, like
+/// DRF's null-source nested serializer.
+async fn deploy_json_full(pool: &sqlx::PgPool, row: &DeployRow) -> Result<Value, sqlx::Error> {
+    let project_details = match row.project_id {
+        Some(pid) => {
+            let p: Option<DeployProjLite> = sqlx::query_as(
+                "SELECT p.id, p.identifier, p.name, p.cover_image, \
+                 p.cover_image_asset_id AS cover_asset_id, pfa.entity_type AS cover_entity_type, \
+                 p.logo_props, p.description \
+                 FROM projects p LEFT JOIN file_assets pfa ON pfa.id = p.cover_image_asset_id \
+                 WHERE p.id = $1",
+            )
+            .bind(pid)
+            .fetch_optional(pool)
+            .await?;
+            p.map(|p| {
+                project_lite_json(
+                    p.id,
+                    &p.identifier,
+                    &p.name,
+                    &p.cover_image,
+                    p.cover_asset_id,
+                    p.cover_entity_type.as_deref(),
+                    &p.logo_props,
+                    &p.description,
+                )
+            })
+            .unwrap_or(Value::Null)
+        }
+        None => Value::Null,
+    };
+    let w: Option<DeployWsLite> = sqlx::query_as(
+        "SELECT w.id, w.name, w.slug, w.logo, w.logo_asset_id, wfa.entity_type AS logo_entity_type \
+         FROM workspaces w LEFT JOIN file_assets wfa ON wfa.id = w.logo_asset_id \
+         WHERE w.id = $1",
+    )
+    .bind(row.workspace_id)
+    .fetch_optional(pool)
+    .await?;
+    let workspace_detail = w
+        .map(|w| workspace_lite_json(w.id, &w.name, &w.slug, &w.logo, w.logo_asset_id, w.logo_entity_type.as_deref()))
+        .unwrap_or(Value::Null);
+    Ok(deploy_json_with_details(row, project_details, workspace_detail))
+}
+
+/// Scoped lookup for `list`/create-upsert: the project's board in this
+/// workspace (`entity_name="project", entity_identifier=project_id,
+/// workspace__slug`, `views/project/base.py:541-543`).
 async fn fetch_deploy(
     pool: &sqlx::PgPool,
     pid: uuid::Uuid,
@@ -2108,6 +2266,21 @@ async fn fetch_deploy(
     q.fetch_optional(pool).await
 }
 
+/// Unscoped pk lookup for retrieve/patch/delete. Django parity: the
+/// `DeployBoardViewSet` (`views/project/base.py:535-576`) defines NO custom
+/// `retrieve`/`patch`/`delete`, so DRF's default pk lookup applies — by pk
+/// only, with NO project/workspace scoping. (The URL `pid` still gates
+/// permission via `ProjectMemberPermission` and 404s unknown projects; only
+/// the row lookup ignores it.)
+fn deploy_pk_sql() -> String {
+    format!("SELECT {DEPLOY_COLS} FROM deploy_boards d WHERE d.id = $1 AND d.deleted_at IS NULL LIMIT 1")
+        .replacen("SELECT id,", "SELECT d.id,", 1)
+}
+
+async fn fetch_deploy_by_pk(pool: &sqlx::PgPool, pk: uuid::Uuid) -> Result<Option<DeployRow>, sqlx::Error> {
+    sqlx::query_as::<_, DeployRow>(&deploy_pk_sql()).bind(pk).fetch_optional(pool).await
+}
+
 pub async fn deploy_list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -2122,7 +2295,7 @@ pub async fn deploy_list(
     // `list` (`base.py:540-546`): `.first()` may be None → `serializer.data`
     // is `null` — Django returns 200 `null`, preserved here (NOT 404).
     match fetch_deploy(&st.pool, pid, &slug, None).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json(&row)))),
+        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
         None => Ok((StatusCode::OK, Json(Value::Null))),
     }
 }
@@ -2209,7 +2382,7 @@ pub async fn deploy_create(
     }
     tx.commit().await?;
     match fetch_deploy(&st.pool, pid, &slug, None).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json(&row)))),
+        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
         None => Ok(missing()),
     }
 }
@@ -2225,8 +2398,8 @@ pub async fn deploy_retrieve(
     if !gate_deploy_read(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny_detail());
     }
-    match fetch_deploy(&st.pool, pid, &slug, Some(pk)).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json(&row)))),
+    match fetch_deploy_by_pk(&st.pool, pk).await? {
+        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
         None => Ok(missing()),
     }
 }
@@ -2243,7 +2416,7 @@ pub async fn deploy_patch(
     if !gate_deploy_write(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny_detail());
     }
-    let Some(cur) = fetch_deploy(&st.pool, pid, &slug, Some(pk)).await? else {
+    let Some(cur) = fetch_deploy_by_pk(&st.pool, pk).await? else {
         return Ok(missing());
     };
     // `DeployBoardSerializer` (`serializers/project.py:247-254`):
@@ -2309,8 +2482,8 @@ pub async fn deploy_patch(
     .bind(cur.id)
     .execute(&st.pool)
     .await?;
-    match fetch_deploy(&st.pool, pid, &slug, Some(pk)).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json(&row)))),
+    match fetch_deploy_by_pk(&st.pool, pk).await? {
+        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
         None => Ok(missing()),
     }
 }
@@ -2319,29 +2492,26 @@ pub async fn deploy_destroy(
     State(st): State<AppState>,
     auth: AuthUser,
     Path((slug, pid, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+) -> Result<impl IntoResponse, common::errors::AppError> {
     if !project_in_workspace(&st.pool, pid, &slug).await? {
-        return Ok(missing());
+        return Ok(missing().into_response());
     }
     if !gate_deploy_write(&st.pool, auth.0, &slug, pid).await? {
-        return Ok(deny_detail());
+        return Ok(deny_detail().into_response());
     }
     // Default `ModelViewSet.destroy` is a soft delete here (the model uses
-    // the soft-deletion manager) → 204.
-    let res = sqlx::query(
-        "UPDATE deploy_boards d SET deleted_at = now() FROM workspaces w \
-         WHERE d.id = $1 AND d.workspace_id = w.id AND w.slug = $2 \
-         AND d.entity_name = 'project' AND d.entity_identifier = $3 AND d.deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(&slug)
-    .bind(pid)
-    .execute(&st.pool)
-    .await?;
-    if res.rows_affected() == 0 {
-        return Ok(missing());
+    // the soft-deletion manager) → 204. Lookup AND delete are by pk only
+    // (unscoped — see `deploy_pk_sql`); the URL `pid` only gates permission.
+    if fetch_deploy_by_pk(&st.pool, pk).await?.is_none() {
+        return Ok(missing().into_response());
     }
-    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+    sqlx::query("UPDATE deploy_boards SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    // Bare 204 with an EMPTY body (E6 convention, cf. `users_me.rs`) — a
+    // `Json(null)` body on 204 violates RFC 9110 §15.3.5.
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 
 // ============================================================================
@@ -2649,5 +2819,134 @@ mod tests {
         assert!(guard_deploy_write(Some(15)).is_ok());
         assert!(guard_deploy_write(Some(5)).is_err());
         assert!(guard_deploy_write(None).is_err());
+    }
+
+    #[test]
+    fn parse_project_ids_empty_is_absent() {
+        // `advance.py:71` — `request.GET.get("project_ids", None)` is falsy
+        // for a present-but-empty value → workspace-member scope (absent).
+        assert_eq!(parse_project_ids(None), None);
+        assert_eq!(parse_project_ids(Some("")), None);
+        assert_eq!(parse_project_ids(Some("   ")), None);
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(parse_project_ids(Some(&id.to_string())), Some(vec![id]));
+    }
+
+    #[test]
+    fn count_issues_sql_placeholders_dense() {
+        // Gap-1 regression: every `$N` in the built SQL must be dense
+        // `$1..=N` with N == bind count (5) — a skipped `$4` leaves `$6`
+        // unbound and 500s ALL A1/A4 calls.
+        for sql in [count_issues_sql(None), count_issues_sql(Some("started"))] {
+            let mut nums: Vec<u32> = vec![];
+            let b = sql.as_bytes();
+            let mut i = 0;
+            while i < b.len() {
+                if b[i] == b'$' {
+                    let mut j = i + 1;
+                    while j < b.len() && b[j].is_ascii_digit() {
+                        j += 1;
+                    }
+                    if j > i + 1 {
+                        nums.push(sql[i + 1..j].parse().unwrap());
+                    }
+                    i = j;
+                } else {
+                    i += 1;
+                }
+            }
+            nums.sort_unstable();
+            nums.dedup();
+            assert_eq!(nums, vec![1, 2, 3, 4, 5], "{sql}");
+        }
+    }
+
+    #[test]
+    fn deploy_json_nested_details() {
+        // `DeployBoardSerializer` (`serializers/project.py:247-254`):
+        // `__all__` + nested `project_details` (ProjectLite) /
+        // `workspace_detail` (WorkspaceLite).
+        let row = DeployRow {
+            id: uuid::Uuid::nil(),
+            created_at: "2026-09-06T00:00:00Z".parse().unwrap(),
+            updated_at: "2026-09-06T00:00:00Z".parse().unwrap(),
+            created_by_id: None,
+            updated_by_id: None,
+            workspace_id: uuid::Uuid::nil(),
+            project_id: Some(uuid::Uuid::nil()),
+            entity_identifier: Some(uuid::Uuid::nil()),
+            entity_name: Some("project".to_string()),
+            anchor: "abc".to_string(),
+            is_comments_enabled: false,
+            is_reactions_enabled: false,
+            is_votes_enabled: false,
+            intake_id: None,
+            view_props: deploy_default_views(),
+            is_activity_enabled: true,
+            is_disabled: false,
+        };
+        let proj = project_lite_json(
+            uuid::Uuid::nil(),
+            "WEB",
+            "Web",
+            &None,
+            None,
+            None,
+            &json!({}),
+            "",
+        );
+        let ws = workspace_lite_json(uuid::Uuid::nil(), "Ws", "ws", &None, None, None);
+        let v = deploy_json_with_details(&row, proj, ws);
+        let obj = v.as_object().unwrap();
+        let pd = obj.get("project_details").expect("project_details present");
+        for k in ["id", "identifier", "name", "cover_image", "cover_image_url", "logo_props", "description"] {
+            assert!(pd.get(k).is_some(), "project_details.{k}");
+        }
+        let wd = obj.get("workspace_detail").expect("workspace_detail present");
+        for k in ["name", "slug", "id", "logo_url"] {
+            assert!(wd.get(k).is_some(), "workspace_detail.{k}");
+        }
+        // Base `__all__` keys still present.
+        assert!(obj.get("anchor").is_some());
+    }
+
+    #[test]
+    fn deploy_pk_lookup_ignores_project_scope() {
+        // Django parity (`views/project/base.py:535-576` defines no custom
+        // retrieve/patch/delete): default pk lookup is UNSCOPED.
+        let sql = deploy_pk_sql();
+        assert!(sql.contains("d.id = $1"), "{sql}");
+        assert!(!sql.contains("$2"), "{sql}");
+        // No project/workspace scoping in the predicate (the SELECT list
+        // legitimately still projects `entity_identifier`).
+        let pred = sql.split_once("WHERE").map(|(_, w)| w).unwrap_or("");
+        assert!(!pred.contains("entity_identifier"), "{sql}");
+        assert!(!pred.contains("slug"), "{sql}");
+    }
+
+    #[test]
+    fn uuid_query_param_invalid_400s() {
+        // Django passes the raw string into a UUID-filtered ORM →
+        // ValidationError → DRF 400 (`project_analytics.py:62-72`).
+        assert_eq!(parse_uuid_query(None), Ok(None));
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(parse_uuid_query(Some(&id.to_string())), Ok(Some(id)));
+        let err = parse_uuid_query(Some("not-a-uuid")).unwrap_err();
+        assert_eq!(err, "'not-a-uuid' is not a valid UUID.");
+        let (status, body) = uuid_400(err);
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body.0, json!(["'not-a-uuid' is not a valid UUID."]));
+    }
+
+    #[test]
+    fn destroy_204_has_empty_body() {
+        // Gap-6 pin: `deploy_destroy` returns bare `StatusCode::NO_CONTENT`
+        // (E6 convention, cf. `users_me.rs`) — axum renders no content-type
+        // and zero bytes, unlike `(NO_CONTENT, Json(null))` (RFC 9110 §15.3.5:
+        // no body on 204).
+        use axum::response::IntoResponse;
+        let resp = StatusCode::NO_CONTENT.into_response();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert!(resp.headers().get(axum::http::header::CONTENT_TYPE).is_none());
     }
 }
