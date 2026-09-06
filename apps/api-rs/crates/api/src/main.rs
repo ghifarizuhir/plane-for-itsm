@@ -13,7 +13,9 @@ use axum::{
 };
 use serde_json::{json, Value};
 
-use crate::middleware::rate_limit::{ip_rate_limit_middleware, rate_limit_middleware, IpRateLimiter, RateLimiter};
+use crate::middleware::rate_limit::{
+    ip_rate_limit_middleware, rate_limit_middleware, IpRateLimiter, RateLimiter,
+};
 use tracing_subscriber::EnvFilter;
 
 // Django catch-all 404 body, byte-exact from
@@ -25,7 +27,10 @@ use tracing_subscriber::EnvFilter;
 // Axum fallback for unmatched routes (incl. non-UUID segments); existing
 // routes unaffected.
 async fn fallback_404() -> (StatusCode, Json<Value>) {
-    (StatusCode::NOT_FOUND, Json(json!({"error": "Page not found."})))
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({"error": "Page not found."})),
+    )
 }
 
 #[tokio::main]
@@ -1109,9 +1114,13 @@ async fn main() {
         )
         .route(
             "/api/users/me/",
-            get(routes::user::me).patch(routes::user::patch_me),
+            get(routes::user::me)
+                .patch(routes::user::patch_me)
+                .delete(routes::user::deactivate),
         )
-        .route("/api/users/session/", get(routes::user::session))
+        // Parity `UserSessionEndpoint` (`user/base.py:351-362`): AllowAny,
+        // never 401 (tanpa kredensial → 200 `{"is_authenticated": false}`).
+        .route("/api/users/session/", get(routes::user::session_allow_any))
         .route("/api/users/me/settings/", get(routes::user::settings))
         .route("/api/users/me/instance-admin/", get(routes::user::instance_admin))
         .route("/api/users/me/onboard/", patch(routes::user::onboard))
@@ -1152,6 +1161,38 @@ async fn main() {
         .route(
             "/api/users/me/accounts/:pk/",
             get(routes::user::get_account).delete(routes::user::delete_account),
+        )
+        // Parity E8d workspace-scoped user routes (`workspace/user.py:98-546`,
+        // `workspace/base.py:175-391`): stats (OPEN gate, unknown slug 200
+        // kosong), profile (404 non-member), activity GET (403 DRF detail),
+        // export POST (text/csv), graphs + dashboard.
+        .route(
+            "/api/workspaces/:slug/user-stats/:user_id/",
+            get(routes::user::user_stats),
+        )
+        .route(
+            "/api/workspaces/:slug/user-profile/:user_id/",
+            get(routes::user::user_profile),
+        )
+        .route(
+            "/api/workspaces/:slug/user-activity/:user_id/",
+            get(routes::user::user_activity),
+        )
+        .route(
+            "/api/workspaces/:slug/user-activity/:user_id/export/",
+            post(routes::user::export_activity),
+        )
+        .route(
+            "/api/users/me/workspaces/:slug/activity-graph/",
+            get(routes::user::activity_graph),
+        )
+        .route(
+            "/api/users/me/workspaces/:slug/issues-completed-graph/",
+            get(routes::user::issues_completed_graph),
+        )
+        .route(
+            "/api/users/me/workspaces/:slug/dashboard/",
+            get(routes::user::dashboard),
         )
         .route(
             "/api/users/api-tokens/",
@@ -1247,10 +1288,19 @@ async fn main() {
     // Login + OAuth callback + email-check di-limit per-IP (5/mnt); refresh/logout/start bebas.
     let auth_router = Router::new()
         .route("/api/auth/login/", post(routes::auth::login))
-        .route("/api/auth/oauth/:provider/callback/", get(routes::auth::oauth_callback))
+        .route(
+            "/api/auth/oauth/:provider/callback/",
+            get(routes::auth::oauth_callback),
+        )
         .route("/auth/email-check/", post(routes::auth::email_check))
-        .route("/auth/forgot-password/", post(routes::auth_compat::forgot_password))
-        .route("/auth/magic-generate/", post(routes::auth_compat::magic_generate))
+        .route(
+            "/auth/forgot-password/",
+            post(routes::auth_compat::forgot_password),
+        )
+        .route(
+            "/auth/magic-generate/",
+            post(routes::auth_compat::magic_generate),
+        )
         .route_layer(axum_middleware::from_fn_with_state(
             IpRateLimiter::new(5, std::time::Duration::from_secs(60)),
             ip_rate_limit_middleware,
@@ -1260,8 +1310,14 @@ async fn main() {
         .merge(auth_router)
         .merge(app)
         .fallback(fallback_404)
-        .with_state(state::AppState { pool, redis, config: cfg.clone() })
-        .layer(tower_http::limit::RequestBodyLimitLayer::new(5 * 1024 * 1024))
+        .with_state(state::AppState {
+            pool,
+            redis,
+            config: cfg.clone(),
+        })
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(
+            5 * 1024 * 1024,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     // Process-level burst backstop. Mirrors DRF throttle intent
@@ -1291,5 +1347,7 @@ async fn main() {
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 }
