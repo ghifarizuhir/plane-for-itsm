@@ -4,37 +4,47 @@
  * See the LICENSE file for details.
  */
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment } from "react";
 import { observer } from "mobx-react";
 import { useTheme as useNextTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import { AccessAndRolesOutline, LogOutOutline, PaletteOutline } from "@makeplane/propel/icons";
 import { Menu, Transition } from "@headlessui/react";
 // plane internal packages
 import { API_BASE_URL } from "@plane/constants";
 import { WorkspaceAvatar } from "@makeplane/propel/components/workspace-avatar";
-import { AuthService } from "@plane/services";
 import { getFileURL, cn } from "@plane/utils";
 // hooks
 import { useTheme, useUser } from "@/hooks/store";
 
-// service initialization
-const authService = new AuthService();
-
 export const AdminSidebarDropdown = observer(function AdminSidebarDropdown() {
+  // router
+  const router = useRouter();
   // store hooks
   const { isSidebarCollapsed } = useTheme();
   const { currentUser, signOut } = useUser();
   // hooks
   const { resolvedTheme, setTheme } = useNextTheme();
-  // state
-  const [csrfToken, setCsrfToken] = useState<string | undefined>(undefined);
 
   const handleThemeSwitch = () => {
     const newTheme = resolvedTheme === "dark" ? "light" : "dark";
     setTheme(newTheme);
   };
 
-  const handleSignOut = () => signOut();
+  // JSON sign-out (decision B): the backend clears the HttpOnly JWT cookies;
+  // the client then resets local state and navigates to sign-in.
+  const handleSignOut = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/api/instances/admins/sign-out/`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // best-effort — still reset local state below
+    }
+    signOut();
+    router.replace("/");
+  };
 
   const getSidebarMenuItems = () => (
     <Menu.Items
@@ -60,25 +70,18 @@ export const AdminSidebarDropdown = observer(function AdminSidebarDropdown() {
         </Menu.Item>
       </div>
       <div className="py-2">
-        <form method="POST" action={`${API_BASE_URL}/api/instances/admins/sign-out/`} onSubmit={handleSignOut}>
-          <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
-          <Menu.Item
-            as="button"
-            type="submit"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1 hover:bg-layer-1-hover"
-          >
-            <LogOutOutline className="h-4 w-4 stroke-[1.5]" />
-            Sign out
-          </Menu.Item>
-        </form>
+        <Menu.Item
+          as="button"
+          type="button"
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1 hover:bg-layer-1-hover"
+          onClick={handleSignOut}
+        >
+          <LogOutOutline className="h-4 w-4 stroke-[1.5]" />
+          Sign out
+        </Menu.Item>
       </div>
     </Menu.Items>
   );
-
-  useEffect(() => {
-    if (csrfToken === undefined)
-      void authService.requestCSRFToken().then((data) => data?.csrf_token && setCsrfToken(data.csrf_token));
-  }, [csrfToken]);
 
   return (
     <div className="flex max-h-header items-center gap-x-5 gap-y-2 border-b border-subtle px-4 py-2.5">

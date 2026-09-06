@@ -17,6 +17,7 @@ pub mod webhook;
 pub mod work_item;
 pub mod health;
 pub mod instance;
+pub mod instance_admin;
 pub mod issue_common;
 pub mod issue_query;
 pub mod issue_sub;

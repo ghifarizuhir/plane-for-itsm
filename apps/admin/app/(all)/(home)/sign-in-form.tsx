@@ -5,14 +5,15 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HideOutline, ShowOutline } from "@makeplane/propel/icons";
 // plane internal packages
 import type { EAdminAuthErrorCodes, TAdminAuthErrorInfo } from "@plane/constants";
 import { API_BASE_URL } from "@plane/constants";
 import { Button } from "@makeplane/propel/components/button";
 import { Input, InputGroup } from "@makeplane/propel/components/input";
-import { AuthService } from "@plane/services";
+// hooks
+import { useUser } from "@/hooks/store";
 // components
 import { Banner } from "@/components/common/banner";
 // local components
@@ -20,9 +21,6 @@ import { FormHeader } from "@/components/instance/form-header";
 import { AuthBanner } from "./auth-banner";
 import { AuthHeader } from "./auth-header";
 import { authErrorHandler } from "./auth-helpers";
-
-// service initialization
-const authService = new AuthService();
 
 // error codes
 enum EErrorCodes {
@@ -50,6 +48,10 @@ const defaultFromData: TFormData = {
 };
 
 export function InstanceSignInForm() {
+  // router
+  const router = useRouter();
+  // store hooks
+  const { fetchCurrentUser } = useUser();
   // search params
   const searchParams = useSearchParams();
   const emailParam = searchParams.get("email") || undefined;
@@ -57,18 +59,46 @@ export function InstanceSignInForm() {
   const errorMessage = searchParams.get("error_message") || undefined;
   // state
   const [showPassword, setShowPassword] = useState(false);
-  const [csrfToken, setCsrfToken] = useState<string | undefined>(undefined);
   const [formData, setFormData] = useState<TFormData>(defaultFromData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorInfo, setErrorInfo] = useState<TAdminAuthErrorInfo | undefined>(undefined);
+  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const handleFormChange = (key: keyof TFormData, value: string | boolean) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
-  useEffect(() => {
-    if (csrfToken === undefined)
-      authService.requestCSRFToken().then((data) => data?.csrf_token && setCsrfToken(data.csrf_token));
-  }, [csrfToken]);
+  // JSON sign-in (decision B): the Rust backend answers 200 + HttpOnly JWT
+  // cookies (`POST /api/instances/admins/sign-in/`) — no token handling in
+  // JS. Failures carry `{error_code, error_message}`; known codes reuse the
+  // existing admin error display, otherwise the raw message is bannered.
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(undefined);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/instances/admins/sign-in/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = data?.error_code !== undefined ? String(data.error_code) : undefined;
+        const detail = code ? authErrorHandler(code as EAdminAuthErrorCodes) : undefined;
+        if (detail) setErrorInfo(detail);
+        else setSubmitError(data?.error_message || "Something went wrong. Please try again.");
+        return;
+      }
+      await fetchCurrentUser().catch(() => undefined);
+      router.push("/general");
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (emailParam) setFormData((prev) => ({ ...prev, email: emailParam }));
@@ -117,19 +147,13 @@ export function InstanceSignInForm() {
             heading="Manage your Plane instance"
             subHeading="Configure instance-wide settings to secure your instance"
           />
-          <form
-            className="space-y-4"
-            method="POST"
-            action={`${API_BASE_URL}/api/instances/admins/sign-in/`}
-            onSubmit={() => setIsSubmitting(true)}
-            onError={() => setIsSubmitting(false)}
-          >
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {errorData.type && errorData?.message ? (
               <Banner type="error" message={errorData?.message} />
             ) : (
               <>{errorInfo && <AuthBanner bannerData={errorInfo} handleBannerData={setErrorInfo} />}</>
             )}
-            <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
+            {submitError && <Banner type="error" message={submitError} />}
 
             <div className="w-full space-y-1">
               <label className="text-13 font-medium text-tertiary" htmlFor="email">

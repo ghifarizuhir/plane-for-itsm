@@ -5,24 +5,24 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 // icons
 import { HideOutline, ShowOutline } from "@makeplane/propel/icons";
 // plane internal packages
 import { API_BASE_URL, E_PASSWORD_STRENGTH } from "@plane/constants";
+import type { EAdminAuthErrorCodes } from "@plane/constants";
 import { Button } from "@makeplane/propel/components/button";
 import { Checkbox } from "@makeplane/propel/components/checkbox";
 import { Input, InputGroup } from "@makeplane/propel/components/input";
-import { AuthService } from "@plane/services";
 import { getPasswordStrength, validatePersonName, validateCompanyName } from "@plane/utils";
+// hooks
+import { useUser } from "@/hooks/store";
 // components
 import { AuthHeader } from "@/app/(all)/(home)/auth-header";
 import { PasswordStrengthIndicator } from "@/components/common/password-strength-indicator";
 import { Banner } from "../common/banner";
 import { FormHeader } from "./form-header";
-
-// service initialization
-const authService = new AuthService();
+import { authErrorHandler } from "@/app/(all)/(home)/auth-helpers";
 
 // error codes
 enum EErrorCodes {
@@ -60,6 +60,10 @@ const defaultFromData: TFormData = {
 };
 
 export function InstanceSetupForm() {
+  // router
+  const router = useRouter();
+  // store hooks
+  const { fetchCurrentUser } = useUser();
   // search params
   const searchParams = useSearchParams();
   const firstNameParam = searchParams?.get("first_name") || undefined;
@@ -74,11 +78,11 @@ export function InstanceSetupForm() {
     password: false,
     retypePassword: false,
   });
-  const [csrfToken, setCsrfToken] = useState<string | undefined>(undefined);
   const [formData, setFormData] = useState<TFormData>(defaultFromData);
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
+  const [submitError, setSubmitError] = useState<string | undefined>(undefined);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -86,10 +90,47 @@ export function InstanceSetupForm() {
   const handleFormChange = (key: keyof TFormData, value: string | boolean) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
-  useEffect(() => {
-    if (csrfToken === undefined)
-      authService.requestCSRFToken().then((data) => data?.csrf_token && setCsrfToken(data.csrf_token));
-  }, [csrfToken]);
+  // JSON sign-up (decision B): `confirm_password` stays FE-only and no CSRF
+  // token is sent; failures reuse the admin error display when the code
+  // aligns, else the raw `error_message` is bannered.
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(undefined);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/instances/admins/sign-up/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          company_name: formData.company_name,
+          is_telemetry_enabled: formData.is_telemetry_enabled,
+        }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = data?.error_code !== undefined ? String(data.error_code) : undefined;
+        const detail = code ? authErrorHandler(code as EAdminAuthErrorCodes) : undefined;
+        setSubmitError(
+          detail && typeof detail.message === "string"
+            ? detail.message
+            : (data?.error_message ?? "Something went wrong. Please try again.")
+        );
+        return;
+      }
+      await fetchCurrentUser().catch(() => undefined);
+      router.push("/general");
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (firstNameParam) setFormData((prev) => ({ ...prev, first_name: firstNameParam }));
@@ -152,16 +193,8 @@ export function InstanceSetupForm() {
             ![EErrorCodes.INVALID_EMAIL, EErrorCodes.INVALID_PASSWORD].includes(errorData.type) && (
               <Banner type="error" message={errorData?.message} />
             )}
-          <form
-            className="space-y-4"
-            method="POST"
-            action={`${API_BASE_URL}/api/instances/admins/sign-up/`}
-            onSubmit={() => setIsSubmitting(true)}
-            onError={() => setIsSubmitting(false)}
-          >
-            <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
-            <input type="hidden" name="is_telemetry_enabled" value={formData.is_telemetry_enabled ? "True" : "False"} />
-
+          {submitError && <Banner type="error" message={submitError} />}
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="flex flex-col items-center gap-4 sm:flex-row">
               <div className="w-full space-y-1">
                 <label className="text-13 font-medium text-tertiary" htmlFor="first_name">

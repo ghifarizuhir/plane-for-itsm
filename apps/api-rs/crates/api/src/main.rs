@@ -1174,7 +1174,64 @@ async fn main() {
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
         .route("/api/timezones/", get(routes::misc::timezones))
-        .route("/api/instances/", get(routes::instance::get))
+        .route(
+            "/api/instances/",
+            get(routes::instance::get).patch(routes::instance_admin::instance_patch),
+        )
+        // E1 — instance-admin god-mode (JWT), paritas Django
+        // (`license/api/views/admin.py|instance.py|configuration.py|workspace.py`).
+        // JSON auth (sign-in/sign-up 200 + cookies, sign-out 200 + clears —
+        // NO 302); gate `InstanceAdmin(role>=15)` with the DRF
+        // `{"detail": ...}` deny. OUT (no Django route wired):
+        // `admins/session/`, `sign-up-screen-visited/`, `changelog/`.
+        // NO GET on `admins/:pk/` — the explicit GET below answers the
+        // 404 fallback body (Axum alone would 405 the DELETE-only route).
+        .route(
+            "/api/instances/admins/sign-in/",
+            post(routes::instance_admin::sign_in),
+        )
+        .route(
+            "/api/instances/admins/sign-up/",
+            post(routes::instance_admin::sign_up),
+        )
+        .route(
+            "/api/instances/admins/sign-out/",
+            post(routes::instance_admin::sign_out),
+        )
+        .route(
+            "/api/instances/admins/",
+            get(routes::instance_admin::admins_list).post(routes::instance_admin::admins_create),
+        )
+        .route(
+            "/api/instances/admins/:pk/",
+            delete(routes::instance_admin::admins_delete)
+                .get(routes::instance_admin::admin_pk_get_404),
+        )
+        .route(
+            "/api/instances/admins/me/",
+            get(routes::instance_admin::admins_me),
+        )
+        .route(
+            "/api/instances/configurations/",
+            get(routes::instance_admin::configs_list).patch(routes::instance_admin::configs_patch),
+        )
+        .route(
+            "/api/instances/configurations/disable-email-feature/",
+            delete(routes::instance_admin::disable_email_with_body),
+        )
+        .route(
+            "/api/instances/email-credentials-check/",
+            post(routes::instance_admin::email_check),
+        )
+        .route(
+            "/api/instances/workspaces/",
+            get(routes::instance_admin::workspaces_list)
+                .post(routes::instance_admin::workspaces_create),
+        )
+        .route(
+            "/api/instances/workspace-slug-check/",
+            get(routes::instance_admin::slug_check),
+        )
         .route("/api/auth/refresh/", post(routes::auth::refresh))
         .route("/api/auth/logout/", post(routes::auth::logout))
         // Tanpa throttle selaras Django (`ChangePasswordEndpoint` tanpa throttle_classes).

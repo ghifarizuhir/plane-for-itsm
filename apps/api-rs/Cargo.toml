@@ -26,6 +26,9 @@ hmac = "0.12"
 hex = "0.4"
 base64 = "0.22"
 reqwest = { version = "0.12", features = ["json", "rustls-tls-manual-roots"] }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "pool", "hostname", "rustls-tls"] }
+aes = "0.8"
+regex = "1"
 
 [profile.release]
 lto = true

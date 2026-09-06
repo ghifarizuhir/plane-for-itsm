@@ -12,14 +12,13 @@ import type {
   IInstanceAdmin,
   IInstanceConfiguration,
   IInstanceInfo,
-  TPage,
 } from "@plane/types";
 // api service
 import { APIService } from "../api.service";
 
 /**
  * Service class for managing instance-related operations
- * Handles retrieval of instance information and changelog
+ * Handles retrieval of instance information, admins, configurations and workspaces
  * @extends {APIService}
  */
 export class InstanceService extends APIService {
@@ -39,19 +38,6 @@ export class InstanceService extends APIService {
    */
   async info(): Promise<IInstanceInfo> {
     return this.get("/api/instances/", { validateStatus: null })
-      .then((response) => response.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  /**
-   * Fetches the changelog for the current instance
-   * @returns {Promise<TPage>} Promise resolving to the changelog page data
-   * @throws {Error} If the API request fails
-   */
-  async changelog(): Promise<TPage> {
-    return this.get("/api/instances/changelog/")
       .then((response) => response.data)
       .catch((error) => {
         throw error?.response?.data;
