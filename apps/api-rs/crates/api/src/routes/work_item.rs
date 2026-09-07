@@ -68,6 +68,8 @@ pub struct PatchLink {
     pub title: Option<String>,
     #[serde(default)]
     pub url: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -245,80 +247,334 @@ pub async fn delete_comment(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
-// ---- links ----
+// ---- links (parity with Django `IssueLinkViewSet`,
+// `plane/app/views/issue/link.py:26-113` +
+// `plane/app/serializers/issue.py:550-598`) ----
+
+/// `serializers/issue.py` `IssueLinkSerializer.create` dup branch.
+pub(crate) const LINK_DUP_MSG: &str = "URL already exists for this Issue";
+/// `serializers/issue.py` `IssueLinkSerializer.validate_url` branch.
+pub(crate) const LINK_INVALID_MSG: &str = "Invalid URL format.";
+
+pub(crate) fn normalize_link_url(url: &str) -> String {
+    if url.starts_with("http://") || url.starts_with("https://") { url.to_string() } else { format!("http://{url}") }
+}
+
+/// Mirrors `validate_url` (`serializers/issue.py`, Django `URLValidator`):
+/// absolute http(s) URL with a non-empty host (dot or `localhost`; no
+/// whitespace) — same hand-rolled shape as the `module.rs`
+/// `valid_link_url` precedent (Django additionally enforces TLD/IDNA
+/// rules; accepting e.g. `http://intranet` here is a documented leniency).
+pub(crate) fn valid_link_url(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"));
+    let Some(rest) = rest else {
+        return false;
+    };
+    let host = rest
+        .split(['/', '?', '#', ':'].as_ref())
+        .next()
+        .unwrap_or("");
+    if host.is_empty() || host.chars().any(char::is_whitespace) {
+        return false;
+    }
+    host.contains('.') || host.eq_ignore_ascii_case("localhost")
+}
+
+/// One `IssueLinkSerializer` row (`serializers/issue.py`, `fields =
+/// "__all__"` over `db/models/issue.py:371-381` + `created_by_detail`):
+/// id, workspace, project, issue, title, url, metadata, created_by,
+/// updated_by, created_at, updated_at + `created_by_detail`. The `cbf_*`
+/// columns come from the `LEFT JOIN users` on `created_by_id`. Local struct
+/// (not the shared 2-field `common::models::work_item::IssueLink`, which
+/// only carries `id, url`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct LinkRow {
+    pub id: uuid::Uuid,
+    pub workspace_id: uuid::Uuid,
+    pub project_id: uuid::Uuid,
+    pub issue_id: uuid::Uuid,
+    pub title: Option<String>,
+    pub url: String,
+    pub metadata: Value,
+    pub created_by_id: Option<uuid::Uuid>,
+    pub updated_by_id: Option<uuid::Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub cbf_id: Option<uuid::Uuid>,
+    pub cbf_first_name: Option<String>,
+    pub cbf_last_name: Option<String>,
+    pub cbf_display_name: Option<String>,
+}
+
+const LINK_SELECT: &str = "SELECT l.id, l.workspace_id, l.project_id, l.issue_id, \
+    l.title, l.url, l.metadata, l.created_by_id, l.updated_by_id, l.created_at, l.updated_at, \
+    u.id AS cbf_id, u.first_name AS cbf_first_name, u.last_name AS cbf_last_name, \
+    u.display_name AS cbf_display_name \
+    FROM issue_links l LEFT JOIN users u ON u.id = l.created_by_id";
+
+/// Serializes one row to the 12-key `IssueLinkSerializer` shape. FKs render
+/// as ids (`workspace`, `project`, `issue`, `created_by`, `updated_by`,
+/// null when unset). `created_by_detail` is the 4-key
+/// `{id,first_name,last_name,display_name}` object (null when `created_by`
+/// is null) — a subset of Django's 7-key `UserLiteSerializer`
+/// (`serializers/user.py:141-153`, which additionally carries
+/// `avatar`/`avatar_url`/`is_bot`); the 4-key shape is the Batch F T1
+/// contract.
+fn link_json(r: &LinkRow) -> Value {
+    json!({
+        "id": r.id,
+        "workspace": r.workspace_id,
+        "project": r.project_id,
+        "issue": r.issue_id,
+        "title": r.title,
+        "url": r.url,
+        "metadata": r.metadata,
+        "created_by": r.created_by_id,
+        "updated_by": r.updated_by_id,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by_detail": match r.cbf_id {
+            Some(uid) => json!({
+                "id": uid,
+                "first_name": r.cbf_first_name,
+                "last_name": r.cbf_last_name,
+                "display_name": r.cbf_display_name,
+            }),
+            None => Value::Null,
+        },
+    })
+}
+
+/// Shared PROJECT-level gate for link reads: `ProjectEntityPermission`
+/// (`link.py:29`) on a safe (GET) method passes any ACTIVE project member
+/// (`permissions/project.py:103-110`), i.e. roles 20/15/5, with the
+/// workspace-ADMIN fallback (`permissions/base.py:53-78`) — exactly the
+/// `history.rs` gate shape, reused via the same shared helpers.
+async fn link_read_gate(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// Non-safe (POST/PATCH/DELETE) branch of `ProjectEntityPermission`
+/// (`permissions/project.py:112-119`): ADMIN/MEMBER only — same shape as
+/// `guard_remove_relation`; GUEST and non-members fall to the
+/// workspace-ADMIN fallback applied by the caller via `project_gate_allows`.
+pub(crate) fn guard_link_write(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) | Some(15) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
+async fn link_write_gate(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        guard_link_write(member_role).is_ok(),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// Scoped detail fetch mirroring `get_queryset`
+/// (`link.py:31-45`): `workspace__slug + project_id + issue_id`, active
+/// project membership of the caller, project not archived, live row.
+async fn fetch_link(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+    pk: uuid::Uuid,
+) -> Result<Option<LinkRow>, sqlx::Error> {
+    sqlx::query_as::<_, LinkRow>(&format!(
+        "{LINK_SELECT} JOIN workspaces w ON w.id = l.workspace_id \
+        JOIN projects p ON p.id = l.project_id \
+        WHERE w.slug = $1 AND l.project_id = $2 AND l.issue_id = $3 AND l.id = $4 \
+        AND l.deleted_at IS NULL AND p.archived_at IS NULL"
+    ))
+    .bind(slug)
+    .bind(project_id)
+    .bind(issue_id)
+    .bind(pk)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn fetch_links(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+) -> Result<Vec<LinkRow>, sqlx::Error> {
+    sqlx::query_as::<_, LinkRow>(&format!(
+        "{LINK_SELECT} JOIN workspaces w ON w.id = l.workspace_id \
+        JOIN projects p ON p.id = l.project_id \
+        WHERE w.slug = $1 AND l.project_id = $2 AND l.issue_id = $3 \
+        AND l.deleted_at IS NULL AND p.archived_at IS NULL \
+        ORDER BY l.created_at DESC"
+    ))
+    .bind(slug)
+    .bind(project_id)
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+}
 
 pub async fn list_links(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
-) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::work_item::IssueLink>(
-        "SELECT id, url FROM issue_links WHERE project_id = $1 AND issue_id = $2 AND deleted_at IS NULL ORDER BY created_at",
-    )
-    .bind(project_id)
-    .bind(issue_id)
-    .fetch_all(&st.pool)
-    .await?;
-    Ok(Json(rows.into_iter().map(|l| json!({"id": l.id, "url": l.url})).collect()))
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !link_read_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let rows = fetch_links(&st.pool, &slug, project_id, issue_id).await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(link_json).collect::<Vec<_>>())),
+    ))
 }
 
 pub async fn create_link(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
-    Json(body): Json<CreateLink>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
+    // Raw `Value` (not `CreateLink`): the Django body additionally carries
+    // `metadata`, and `CreateLink`'s 2-field shape is frozen by
+    // `tests/work_item_test.rs` struct literals — metadata is read off the
+    // raw body (default `{}`) while required/title checks reuse
+    // `validate_link_create`.
+    Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    validate_link_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let title = body.get("title").and_then(Value::as_str).map(str::to_string);
+    let raw_url = body.get("url").and_then(Value::as_str).unwrap_or("");
+    // Django renders every serializer-validation failure as 400 (not 500).
+    if let Err(e) = validate_link_create(&CreateLink {
+        title: title.clone(),
+        url: raw_url.to_string(),
+    }) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
     if !issue_exists(&st, project_id, issue_id).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
     }
-    let row = sqlx::query_as::<_, common::models::work_item::IssueLink>(
-        "INSERT INTO issue_links (id, title, url, metadata, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, url",
+    // `to_internal_value` (`serializers/issue.py`): prepend `http://` when
+    // the scheme is missing, then `validate_url` (Django `URLValidator`).
+    let url = normalize_link_url(raw_url);
+    if !valid_link_url(&url) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_INVALID_MSG}))));
+    }
+    // `IssueLinkSerializer.create` dup branch (live rows only, same
+    // soft-delete precedent as the relations dup check in this file).
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issue_links WHERE url = $1 AND issue_id = $2 AND deleted_at IS NULL)",
     )
-    .bind(&body.title)
-    .bind(&body.url)
+    .bind(&url)
     .bind(issue_id)
-    .bind(project_id)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "url": row.url}))))
+    if dup {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_DUP_MSG}))));
+    }
+    let metadata = body.get("metadata").cloned().unwrap_or(json!({}));
+    let row: (uuid::Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_links (id, title, url, metadata, issue_id, project_id, workspace_id, created_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, $5, i.workspace_id, $6, now(), now() FROM issues i WHERE i.id = $4 RETURNING id",
+    )
+    .bind(&title)
+    .bind(&url)
+    .bind(&metadata)
+    .bind(issue_id)
+    .bind(project_id)
+    .bind(auth.0)
+    .fetch_one(&st.pool)
+    .await?;
+    // Django re-fetches through `get_queryset` before responding 201.
+    match fetch_link(&st.pool, &slug, project_id, issue_id, row.0).await? {
+        Some(link) => Ok((StatusCode::CREATED, Json(link_json(&link)))),
+        None => Err(anyhow::anyhow!("link vanished after insert").into()),
+    }
 }
 
 pub async fn get_link(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::work_item::IssueLink> = sqlx::query_as(
-        "SELECT id, url FROM issue_links WHERE id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .bind(issue_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some(l) => Ok((StatusCode::OK, Json(json!({"id": l.id, "url": l.url})))),
+    if !link_read_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    match fetch_link(&st.pool, &slug, project_id, issue_id, pk).await? {
+        Some(l) => Ok((StatusCode::OK, Json(link_json(&l)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"})))),
     }
 }
 
 pub async fn patch_link(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchLink>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let existing = fetch_link(&st.pool, &slug, project_id, issue_id, pk).await?;
+    if existing.is_none() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"}))));
+    }
     if let Some(title) = &body.title {
         if title.chars().count() > 255 {
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "title max length 255"}))));
         }
     }
+    // Mirror `to_internal_value` + `validate_url`, then the
+    // `IssueLinkSerializer.update` dup branch (excluding self) — only when
+    // `url` is part of the payload (Django reads
+    // `validated_data.get("url")`, absent → no match → no error).
+    let new_url = body.url.as_deref().map(normalize_link_url);
+    if let Some(url) = &new_url {
+        if !valid_link_url(url) {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_INVALID_MSG}))));
+        }
+        let dup: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM issue_links WHERE url = $1 AND issue_id = $2 AND id <> $3 AND deleted_at IS NULL)",
+        )
+        .bind(url)
+        .bind(issue_id)
+        .bind(pk)
+        .fetch_one(&st.pool)
+        .await?;
+        if dup {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_DUP_MSG}))));
+        }
+    }
     let n = sqlx::query(
-        "UPDATE issue_links SET title = COALESCE($1, title), url = COALESCE($2, url), updated_at = now() WHERE id = $3 AND project_id = $4 AND issue_id = $5 AND deleted_at IS NULL",
+        "UPDATE issue_links SET title = COALESCE($1, title), url = COALESCE($2, url), metadata = COALESCE($3, metadata), updated_by_id = $4, updated_at = now() WHERE id = $5 AND project_id = $6 AND issue_id = $7 AND deleted_at IS NULL",
     )
     .bind(&body.title)
-    .bind(&body.url)
+    .bind(&new_url)
+    .bind(&body.metadata)
+    .bind(auth.0)
     .bind(pk)
     .bind(project_id)
     .bind(issue_id)
@@ -328,22 +584,39 @@ pub async fn patch_link(
     if n == 0 {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"}))));
     }
-    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+    match fetch_link(&st.pool, &slug, project_id, issue_id, pk).await? {
+        Some(link) => Ok((StatusCode::OK, Json(link_json(&link)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"})))),
+    }
 }
 
 pub async fn delete_link(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    sqlx::query(
-        "UPDATE issue_links SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
+    if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    // DEVIATION: Django `destroy` (`link.py:94-113`) hard-deletes via
+    // `issue_link.delete()`; Rust soft-deletes (`deleted_at = now()`),
+    // keeping the batch-wide soft-delete precedent (same as comments and
+    // relations in this file). Wire status stays 204. Scoping mirrors
+    // `fetch_link` (`workspace__slug` + project not archived); 0 rows →
+    // 404 `missing()` (Django `.get()` (`link.py:98-99`) raises → 404).
+    let n = sqlx::query(
+        "UPDATE issue_links l SET deleted_at = now() FROM workspaces w JOIN projects p ON p.id = l.project_id WHERE l.id = $1 AND l.project_id = $2 AND l.issue_id = $3 AND l.deleted_at IS NULL AND w.id = l.workspace_id AND w.slug = $4 AND p.archived_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
     .bind(issue_id)
+    .bind(&slug)
     .execute(&st.pool)
-    .await?;
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -726,5 +999,37 @@ mod batch_d_d9_tests {
             false,
             true
         ));
+    }
+
+    #[test]
+    fn link_shape_matches_django_issue_link_serializer() {
+        let row = serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "workspace": "00000000-0000-0000-0000-000000000002",
+            "project": "00000000-0000-0000-0000-000000000003",
+            "issue": "00000000-0000-0000-0000-000000000004",
+            "title": null,
+            "url": "http://example.com",
+            "metadata": {},
+            "created_by": "00000000-0000-0000-0000-000000000005",
+            "updated_by": null,
+            "created_at": "2026-09-08T00:00:00Z",
+            "updated_at": "2026-09-08T00:00:00Z",
+            "created_by_detail": {"id": "00000000-0000-0000-0000-000000000005", "first_name": "A", "last_name": "B", "display_name": "A B"}
+        });
+        let keys: std::collections::BTreeSet<&str> = row.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+        assert_eq!(keys.len(), 12);
+    }
+
+    #[test]
+    fn link_url_normalize_prepends_http() {
+        assert_eq!(normalize_link_url("example.com/a"), "http://example.com/a");
+        assert_eq!(normalize_link_url("https://x.io"), "https://x.io");
+    }
+
+    #[test]
+    fn link_duplicate_url_error_matches_django() {
+        assert_eq!(LINK_DUP_MSG, "URL already exists for this Issue");
+        assert_eq!(LINK_INVALID_MSG, "Invalid URL format.");
     }
 }

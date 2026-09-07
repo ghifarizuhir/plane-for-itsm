@@ -44,6 +44,8 @@ paths=(
   "/api/workspaces/$WS/webhooks/"
   "/api/workspaces/$WS/users/notifications/"
   "/api/workspaces/$WS/users/notifications/unread/"
+  "/api/workspaces/$WS/projects/$P/issues/00000000-0000-0000-0000-000000000000/issue-links/"
+  "/api/workspaces/$WS/projects/$P/issues/00000000-0000-0000-0000-000000000000/issue-links/00000000-0000-0000-0000-000000000000/"
   "/api/users/me/notification-preferences/"
   "/api/users/me/"
   "/api/users/session/"

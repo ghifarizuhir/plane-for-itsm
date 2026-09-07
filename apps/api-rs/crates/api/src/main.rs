@@ -1104,6 +1104,16 @@ async fn main() {
                 .delete(routes::work_item::delete_link),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-links/",
+            get(routes::work_item::list_links).post(routes::work_item::create_link),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-links/:pk/",
+            get(routes::work_item::get_link)
+                .patch(routes::work_item::patch_link)
+                .delete(routes::work_item::delete_link),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/relations/",
             get(routes::work_item::list_relations).post(routes::work_item::create_relations),
         )
