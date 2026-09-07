@@ -665,6 +665,16 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issue-labels/",
             get(routes::label::issue_labels_list).post(routes::label::issue_labels_create),
         )
+        // Parity with `BulkCreateIssueLabelsEndpoint.post`
+        // (`views/issue/label.py:90-117`, `urls/issue.py:89-90`): POST-only
+        // (Django defines no GET — same POST-only precedent as
+        // `user-favorite-projects/` above); 201 `{"labels":
+        // [LabelSerializer…]}` with per-item Migrated defaults +
+        // random color; gate workspace ADMIN.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/bulk-create-labels/",
+            post(routes::label::bulk_create_labels),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/labels/",
             get(routes::label::list).post(routes::label::create),

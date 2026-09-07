@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::{
     middleware::auth::AuthUser,
-    routes::project::{deny, is_integrity_error, ws_role},
+    routes::project::{deny, is_integrity_error, missing, ws_role},
     state::AppState,
 };
 
@@ -513,6 +513,139 @@ pub async fn issue_labels_create(
     }
 }
 
+/// Batch F T4 defaults — quoted from
+/// `plane/app/views/issue/label.py:90-117`
+/// (`BulkCreateIssueLabelsEndpoint.post`): per-item `name` defaults to
+/// `"Migrated"`, `description` to `"Migrated Issue"` (plain `dict.get`
+/// defaults — no trim/validation, unlike the D11b single-create path).
+pub(crate) const BULK_LABEL_DEFAULT_NAME: &str = "Migrated";
+pub(crate) const BULK_LABEL_DEFAULT_DESC: &str = "Migrated Issue";
+
+/// Batch F T4 color — mirrors Django
+/// `f"#{random.randint(0, 0xFFFFFF + 1):06X}"` (`label.py:104`): uniform over
+/// `0..=0xFFFFFF`, 6 uppercase hex digits. `rand` 0.9 is already a direct
+/// dependency of the `api` crate (no new deps). Note Django regenerates the
+/// color per item and IGNORES any per-item `color` key — mirrored here.
+pub(crate) fn random_label_color() -> String {
+    let n: u32 = rand::random_range(0..=0xFFFFFF);
+    format!("#{n:06X}")
+}
+
+/// One `label_data` entry (`label.py:96-108`): only `name`/`description` are
+/// read (each defaulting per the constants above); every other key —
+/// including `color` — is ignored by Django and dropped here by serde,
+/// mirroring DRF. `None` (missing/null) → default, exactly like `dict.get`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BulkLabelItem {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// POST body `{label_data: [...]}` (`label.py:93`): missing → `[]` (Django
+/// `request.data.get("label_data", [])`).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BulkCreateLabelsBody {
+    #[serde(default)]
+    pub label_data: Vec<BulkLabelItem>,
+}
+
+/// POST `/api/workspaces/:slug/projects/:project_id/bulk-create-labels/` —
+/// parity with `BulkCreateIssueLabelsEndpoint.post` (`label.py:90-117`,
+/// `plane/app/urls/issue.py:89-90`).
+///
+/// - Gate: `@allow_permission([ROLE.ADMIN])` at the default level PROJECT
+///   (`permissions/base.py:19,53-78`) — project ADMIN (20) outright, else
+///   active project member who is a workspace ADMIN, else 403 `deny()`.
+///   Identical shape to the sibling `issue_labels_create` above (reuses
+///   `guard_issue_labels_create` + shared `project_gate_allows`).
+/// - Body `{label_data: [...]}` defaults to `[]`; empty → 201
+///   `{"labels": []}` (Django `bulk_create([])` → `[]`).
+/// - Bulk INSERT loops per-row `INSERT … ON CONFLICT DO NOTHING`,
+///   mirroring `bulk_create(..., batch_size=50, ignore_conflicts=True)`
+///   (conflicting rows are skipped, not errors).
+/// - Rows stamped `project_id` (path), `workspace_id` (from the project
+///   row — Django `project.workspace_id`), `created_by` + `updated_by` =
+///   request user; `parent_id` NULL, `color` fresh-random per item.
+/// - Re-SELECTs the created rows ordered like the issue-labels list
+///   (`ORDER BY sort_order ASC`) and returns **201** `{"labels":
+///   [LabelSerializer…]}` reusing `LabelSerializerRow` /
+///   `label_serializer_json` (same 7 keys).
+/// - Deviations: (1) `sort_order` uses this file's standard max+10000
+///   expression per row (same as both single-create paths) so the
+///   re-SELECT order is deterministic and preserves input order; Django's
+///   `bulk_create` bypasses `Label.save()`, leaving every row at the model
+///   default 65535. Same response ORDER, different stored values — flag
+///   for shadow-diff review. (2) Unknown project → 404 `missing()`; Django
+///   `Project.objects.get` raises → 500.
+pub async fn bulk_create_labels(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<BulkCreateLabelsBody>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        guard_issue_labels_create(member_role).is_ok(),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    let workspace_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&st.pool)
+            .await?;
+    let Some(workspace_id) = workspace_id else {
+        return Ok(missing());
+    };
+    let mut ids: Vec<uuid::Uuid> = Vec::with_capacity(body.label_data.len());
+    for item in &body.label_data {
+        let name = item
+            .name
+            .clone()
+            .unwrap_or_else(|| BULK_LABEL_DEFAULT_NAME.to_string());
+        let description = item
+            .description
+            .clone()
+            .unwrap_or_else(|| BULK_LABEL_DEFAULT_DESC.to_string());
+        let color = random_label_color();
+        let id: Option<uuid::Uuid> = sqlx::query_scalar(
+            "INSERT INTO labels (id, name, color, description, project_id, workspace_id, parent_id, sort_order, created_by_id, updated_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULL, COALESCE((SELECT MAX(sort_order) + 10000 FROM labels WHERE project_id = $4), 65535), $6, $6, now(), now()) \
+             ON CONFLICT DO NOTHING RETURNING id",
+        )
+        .bind(&name)
+        .bind(&color)
+        .bind(&description)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(auth.0)
+        .fetch_optional(&st.pool)
+        .await?;
+        if let Some(id) = id {
+            ids.push(id);
+        }
+    }
+    let rows: Vec<LabelSerializerRow> = sqlx::query_as(
+        "SELECT l.id, l.project_id, l.workspace_id, l.parent_id AS parent, l.name, l.color, l.sort_order \
+         FROM labels l \
+         WHERE l.project_id = $1 AND l.id = ANY($2) AND l.deleted_at IS NULL \
+         ORDER BY l.sort_order ASC",
+    )
+    .bind(project_id)
+    .bind(&ids)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"labels": rows.iter().map(label_serializer_json).collect::<Vec<_>>() })),
+    ))
+}
+
 #[cfg(test)]
 mod batch_d_d11_tests {
     use super::*;
@@ -625,5 +758,43 @@ mod batch_d_d11_tests {
             validate_issue_label_name(&Some(" Bug ".to_string())).unwrap(),
             "Bug".to_string()
         );
+    }
+
+    #[test]
+    fn bulk_label_defaults_match_django() {
+        assert_eq!(BULK_LABEL_DEFAULT_NAME, "Migrated");
+        assert_eq!(BULK_LABEL_DEFAULT_DESC, "Migrated Issue");
+        let c = random_label_color();
+        assert_eq!(c.len(), 7); // "#RRGGBB"
+        assert!(c.starts_with('#') && c[1..].chars().all(|x| x.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn bulk_create_gate_matches_project_level_admin() {
+        // `@allow_permission([ROLE.ADMIN])` at the default level PROJECT
+        // (`permissions/base.py:19,53-78`), same decorator as the sibling
+        // `LabelViewSet.create`: project ADMIN (20) passes outright; else an
+        // active project member who is a workspace ADMIN passes; anything
+        // else → 403 `deny()`. Reuses `guard_issue_labels_create` + shared
+        // `project_gate_allows`, so the pure decision is pinned here.
+        let allows = |member_role: Option<i16>, ws_admin: bool| {
+            project_gate_allows(
+                guard_issue_labels_create(member_role).is_ok(),
+                member_role.is_some(),
+                ws_admin,
+            )
+        };
+        // Discriminating: project ADMIN who is NOT a ws admin ⇒ allow.
+        assert!(allows(Some(20), false));
+        // Discriminating: ws ADMIN with NO project membership ⇒ deny
+        // (the fallback branch requires an active project membership).
+        assert!(!allows(None, true));
+        // Existing ws cases: ws ADMIN + project member ⇒ allow …
+        assert!(allows(Some(20), true));
+        assert!(allows(Some(15), true));
+        // … plain member / guest / outsider without ws-admin ⇒ deny.
+        assert!(!allows(Some(15), false));
+        assert!(!allows(Some(5), false));
+        assert!(!allows(None, false));
     }
 }
