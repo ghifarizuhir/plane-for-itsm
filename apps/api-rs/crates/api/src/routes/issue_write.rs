@@ -8,14 +8,64 @@ use super::issue_common::{IssueOut, fetch_project_member_role, is_workspace_admi
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
+///
+/// `state_id` uses lax deserialization: the web client sends `""` for
+/// "no state selected" (see `issue-modal/base.tsx` payload), while Django's
+/// `PrimaryKeyRelatedField(required=False, allow_null=True)` treats
+/// missing/null as `None`. Strict `Option<Uuid>` turns `""` into Axum's
+/// 422 `JsonRejection` (text/plain) before the handler runs — Django
+/// parity is `None` (no state) here, with the FK check only on `Some`.
+fn de_opt_uuid_lax<'de, D>(d: D) -> Result<Option<uuid::Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
+        Some(Value::String(s)) => uuid::Uuid::parse_str(s.trim()).map(Some).map_err(serde::de::Error::custom),
+        Some(other) => Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+    }
+}
+
+/// Same lax rule for id vectors: missing/null → `None`, `""` → `None`,
+/// otherwise a UUID array. Null/empty-string *elements* are skipped (sloppy
+/// client payload) so they don't 422; truly unknown UUIDs still reach the
+/// handler's project-membership count check → 400 (the #9526 rule).
+fn de_opt_uuid_vec_lax<'de, D>(d: D) -> Result<Option<Vec<uuid::Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
+        Some(Value::Array(items)) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Value::Null => continue,
+                    Value::String(s) if s.trim().is_empty() => continue,
+                    Value::String(s) => {
+                        out.push(uuid::Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
+                    }
+                    other => return Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+                }
+            }
+            Ok(Some(out))
+        }
+        Some(other) => Err(serde::de::Error::custom(format!("invalid UUID list: {other}"))),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateIssue {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_opt_uuid_vec_lax")]
     pub assignee_ids: Option<Vec<uuid::Uuid>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_opt_uuid_vec_lax")]
     pub label_ids: Option<Vec<uuid::Uuid>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_opt_uuid_lax")]
     pub state_id: Option<uuid::Uuid>,
 }
 

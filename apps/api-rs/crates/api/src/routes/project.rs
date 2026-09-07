@@ -343,7 +343,7 @@ pub async fn detail(
     axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     let row: Option<common::models::project::Project> = sqlx::query_as(
-        "SELECT id, name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
+        "SELECT p.id, p.name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
     )
     .bind(pk)
     .bind(&_slug)
