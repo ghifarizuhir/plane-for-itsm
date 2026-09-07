@@ -8,7 +8,9 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 /// Mirrors `plane/app/views/notification/base.py` for
 /// `plane/app/urls/notification.py`: list (receiver-scoped), unread counts,
 /// read/unread + archive/unarchive toggles, mark-all-read (with
-/// snoozed/archived/type variants), and notification-preference GET/PATCH.
+/// snoozed/archived/type variants), `:pk/` detail GET+PATCH+DELETE
+/// (`NotificationViewSet` retrieve/partial_update/destroy,
+/// `urls/notification.py:22-26`), and notification-preference GET/PATCH.
 /// Sending notifications is a worker concern (out of scope).
 pub const PREFERENCE_KEYS: [&str; 5] = [
     "property_change",
@@ -182,6 +184,143 @@ pub async fn unarchive(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
     if !toggle(&st, &_slug, receiver, pk, "archived_at", false).await? {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+    }
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+/// Extracts ONLY `snoozed_till` as a string from a PATCH body, mirroring
+/// Django's hardcoded `notification_data = {"snoozed_till":
+/// request.data.get("snoozed_till", None)}` (`base.py:160`): every other key
+/// (e.g. `read_at`) is ignored. Missing/non-string → None, which the caller
+/// binds as SQL NULL (same as Django's `.get(..., None)` default clearing
+/// the column).
+pub fn snoozed_till_from_body(body: &Value) -> Option<String> {
+    body.get("snoozed_till")?.as_str().map(|s| s.to_string())
+}
+
+/// Detail row: the `list` shape (`id, title, read_at, archived_at`) extended
+/// with the live `snoozed_till` column (verified in
+/// `migrations/0001_initial.sql`, `notifications.snoozed_till timestamptz` —
+/// the shared `common::models::notification::Notification` struct omits it,
+/// so the detail handlers use this local struct; `list` is untouched).
+/// Subset of Django's `NotificationSerializer(fields="__all__")`
+/// (`serializers/notification.py:14-22`) per file precedent — the FE
+/// `updateNotificationById` caller
+/// (`workspace-notification.service.ts:48-62`) only needs the row back.
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct NotificationDetail {
+    id: uuid::Uuid,
+    title: String,
+    read_at: Option<chrono::DateTime<chrono::Utc>>,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    snoozed_till: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+fn notification_detail_json(n: &NotificationDetail) -> Value {
+    json!({
+        "id": n.id,
+        "title": n.title,
+        "read_at": n.read_at,
+        "archived_at": n.archived_at,
+        "snoozed_till": n.snoozed_till,
+    })
+}
+
+/// Gate (all three detail handlers): mirrors the neighboring notification
+/// handlers — receiver-scoped `(workspace__slug, pk, receiver=user)` queries
+/// (`base.py:37-46` `get_queryset`), no explicit `ws_role` lookup. This
+/// carries Django's `@allow_permission([ADMIN, MEMBER, GUEST],
+/// level="WORKSPACE")`: a caller outside the workspace has no receiver rows
+/// under that slug, so every path misses → 404 (Django would 403 the
+/// non-member instead — normalized to the file's 404 precedent).
+async fn fetch_notification_detail(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pk: uuid::Uuid,
+    receiver: uuid::Uuid,
+) -> Result<Option<NotificationDetail>, common::errors::AppError> {
+    sqlx::query_as::<_, NotificationDetail>(
+        "SELECT n.id, n.title, n.read_at, n.archived_at, n.snoozed_till FROM notifications n JOIN workspaces w ON w.id = n.workspace_id WHERE w.slug = $1 AND n.id = $2 AND n.receiver_id = $3 AND n.deleted_at IS NULL",
+    )
+    .bind(slug)
+    .bind(pk)
+    .bind(receiver)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.into())
+}
+
+/// Parity with `NotificationViewSet.retrieve` (default DRF retrieve over the
+/// receiver-scoped queryset, `urls/notification.py:24`). Miss: Django's
+/// `.get()` raises → 500; mapped to the file's sane 404
+/// (`{"error": "Notification not found"}`, `mark_read` precedent).
+pub async fn get_notification(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    match fetch_notification_detail(&st.pool, &slug, pk, auth.0).await? {
+        Some(n) => Ok((StatusCode::OK, Json(notification_detail_json(&n)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
+}
+
+/// Parity with `NotificationViewSet.partial_update` (`base.py:156-166`):
+/// writes ONLY `snoozed_till` (see `snoozed_till_from_body`), extra keys
+/// ignored; **200** serializer row. Miss → 404. A present-but-invalid
+/// datetime string errors at the `$4::timestamptz` cast (500 via `AppError`;
+/// Django would 400 via serializer validation — unreachable from the FE,
+/// which sends ISO strings or null).
+pub async fn patch_notification(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let snoozed = snoozed_till_from_body(&body);
+    let n = sqlx::query(
+        "UPDATE notifications n SET snoozed_till = $4::timestamptz, updated_at = now() FROM workspaces w WHERE w.id = n.workspace_id AND w.slug = $1 AND n.id = $2 AND n.receiver_id = $3 AND n.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(pk)
+    .bind(auth.0)
+    .bind(snoozed)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+    }
+    // 200 serializer row (`base.py:165`); the row exists (we just updated
+    // it), re-read through the GET twin's scope (a concurrent delete
+    // racing us here misses → 404, never a panic).
+    match fetch_notification_detail(&st.pool, &slug, pk, auth.0).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
+}
+
+/// Parity with `NotificationViewSet.destroy` (DRF `ModelViewSet` default
+/// `destroy()` → `instance.delete()`, `urls/notification.py:24`). The
+/// `Notification` model soft-deletes in this codebase (`deleted_at` column;
+/// every read in this file filters `deleted_at IS NULL`), so the mapping is
+/// a soft-delete UPDATE — never a hard DELETE. **204**; miss → 404.
+pub async fn destroy_notification(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let n = sqlx::query(
+        "UPDATE notifications n SET deleted_at = now() FROM workspaces w WHERE w.id = n.workspace_id AND w.slug = $1 AND n.id = $2 AND n.receiver_id = $3 AND n.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(pk)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
@@ -378,5 +517,12 @@ mod tests {
         assert_eq!(v.as_object().expect("objek").len(), 14);
         assert_eq!(v["state_change"], json!(false));
         assert_eq!(v["workspace"], Value::Null);
+    }
+
+    #[test]
+    fn notification_patch_only_updates_snoozed_till() {
+        // Django hardcodes notification_data = {"snoozed_till": ...} (base.py:160).
+        let body = serde_json::json!({"snoozed_till": "2026-09-09T00:00:00Z", "read_at": "2026-09-08T00:00:00Z"});
+        assert_eq!(snoozed_till_from_body(&body), Some("2026-09-09T00:00:00Z".to_string()));
     }
 }

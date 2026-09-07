@@ -1101,6 +1101,22 @@ async fn main() {
             "/api/workspaces/:slug/users/notifications/:pk/archive/",
             post(routes::notification::archive).delete(routes::notification::unarchive),
         )
+        // Parity with `NotificationViewSet` detail actions
+        // (`views/notification/base.py:33-198`,
+        // `urls/notification.py:22-26`): GET 200 `retrieve` (miss → 404;
+        // Django `.get()` 500s — sane mapping, see `notification.rs`) +
+        // PATCH 200 `partial_update` (writes ONLY `snoozed_till`,
+        // `base.py:160`) + DELETE **204** `destroy` (soft-delete
+        // `deleted_at`). Gate WORKSPACE ADMIN/MEMBER/GUEST via the
+        // receiver-scoped queries (same as the sibling notification
+        // handlers). Static `unread`/`mark-all-read` siblings above win
+        // over `:pk` in Axum (same `members/leave/` precedent).
+        .route(
+            "/api/workspaces/:slug/users/notifications/:pk/",
+            get(routes::notification::get_notification)
+                .patch(routes::notification::patch_notification)
+                .delete(routes::notification::destroy_notification),
+        )
         .route(
             "/api/users/me/notification-preferences/",
             get(routes::notification::get_preferences).patch(routes::notification::patch_preferences),
