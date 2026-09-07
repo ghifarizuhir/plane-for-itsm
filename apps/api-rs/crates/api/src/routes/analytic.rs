@@ -40,8 +40,9 @@ use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 ///   `urls/project.py:113-118`): list/get-or-create upsert/retrieve/patch/
 ///   soft-delete.
 ///
-/// STAYS ON DJANGO: `analytics/`, `export-analytics/`,
-/// `saved-analytic-view/` (custom `build_graph_plot` histogram builder).
+/// STAYS ON DJANGO: none of the legacy surface — T9 ports `analytics/`,
+/// `export-analytics/`, `saved-analytic-view/` (SQL mirror of the custom
+/// `build_graph_plot` histogram builder) + `analytic-view/:pk/` detail.
 pub const VALID_X_AXIS: [&str; 12] = [
     "state_id",
     "state__group",
@@ -69,18 +70,40 @@ pub struct AxisParams {
     pub segment: Option<String>,
 }
 
+/// `base.py:47` — required-axes 400 `{"error": ...}`.
+pub const AXIS_REQUIRED_MSG: &str =
+    "x-axis and y-axis dimensions are required and the values should be valid";
+/// `base.py:54` — segment 400 `{"error": ...}`.
+pub const SEGMENT_INVALID_MSG: &str =
+    "Both segment and x axis cannot be same and segment should be valid";
+
+/// `base.py:246` (`ExportAnalyticsEndpoint.post`): success message wrapping
+/// the requesting user's email.
+pub fn export_message(email: &str) -> String {
+    format!("Once the export is ready it will be emailed to you at {email}")
+}
+
 /// Mirrors the axis guards in AnalyticsEndpoint.get / SavedAnalyticEndpoint.
 pub fn validate_axes(p: &AxisParams) -> Result<(), String> {
     match (&p.x_axis, &p.y_axis) {
         (Some(x), Some(y)) if VALID_X_AXIS.contains(&x.as_str()) && VALID_Y_AXIS.contains(&y.as_str()) => {}
-        _ => return Err("x-axis and y-axis dimensions are required and the values should be valid".to_string()),
+        _ => return Err(AXIS_REQUIRED_MSG.to_string()),
     }
-    if let Some(segment) = &p.segment {
-        if !VALID_X_AXIS.contains(&segment.as_str()) || Some(segment) == p.x_axis.as_ref() {
-            return Err("Both segment and x axis cannot be same and segment should be valid".to_string());
-        }
+    let x = p.x_axis.as_deref().unwrap_or("");
+    validate_segment(x, p.segment.as_deref())
+}
+
+/// Mirrors the segment guard (`base.py:52,208,237`): `if segment and ...`.
+/// A missing or EMPTY segment is falsy in Django and skipped — `?segment=`
+/// is ignored, not a 400. Anything else must be a valid field AND differ
+/// from the x axis.
+pub fn validate_segment(x_axis: &str, segment: Option<&str>) -> Result<(), String> {
+    match segment {
+        None => Ok(()),
+        Some(s) if s.is_empty() => Ok(()),
+        Some(s) if !VALID_X_AXIS.contains(&s) || s == x_axis => Err(SEGMENT_INVALID_MSG.to_string()),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2515,6 +2538,695 @@ pub async fn deploy_destroy(
 }
 
 // ============================================================================
+// T9 — analytics legacy surface (`views/analytic/base.py:37-248`,
+// `serializers/analytic.py:10-31`, `utils/analytics_plot.py:25-120`).
+// ============================================================================
+//
+// SCOPE NOTES (deliberate narrowings, all documented at the call site):
+// - Django applies `issue_filters(request.GET, "GET")` (a 463-line util,
+//   `plane/utils/issue_filters.py:428`) on top of the workspace scoping.
+//   Porting it is a follow-up: here the workspace slug scoping PLUS the
+//   `Issue.issue_objects` manager predicates (soft-delete, non-triage,
+//   non-archived, project alive, non-draft) are applied. Advanced
+//   query-param filters are IGNORED, not claimed.
+// - `saved-analytic-view` runs the view's stored `query` ORM-lookup dict in
+//   Django; arbitrary ORM lookups are not translated to SQL here (inventing
+//   translations would be unsound) — workspace scope + manager predicates
+//   apply. Follow-up.
+// - `export-analytics` skips the Celery `analytic_export_task.delay` call —
+//   NO email is sent; only the ack message is returned. Follow-up.
+// - PATCH `analytic-view` stores `query_dict` and resets `query = {}` when
+//   `query_dict` is supplied (the serializer recompute via `issue_filters`
+//   is the same follow-up as above). Deviation from Django noted below:
+//   Django's `update` reads the (buggy) `query_data` key and unconditionally
+//   overwrites `query`; we only reset when `query_dict` actually changes so
+//   a name-only PATCH cannot wipe saved filters.
+
+/// Monthly `dimension` for date axes (`analytics_plot.py:43-50`):
+/// `Concat(ExtractYear, "-", ExtractMonth)` — month NOT zero-padded
+/// (e.g. `"2026-9"`), mirrored literally.
+pub fn month_dim_expr(col: &str) -> String {
+    format!("EXTRACT(YEAR FROM {col})::int::text || '-' || EXTRACT(MONTH FROM {col})::int::text")
+}
+
+/// SQL parts for one `VALID_ANALYTICS_FIELDS` axis: the dimension SELECT
+/// expression, the extra JOIN fragment, and (date axes only) the raw column
+/// whose NULLs Django excludes (`analytics_plot.py:85-86`).
+/// Joins are LEFT so issues without the relation fall into the `"None"`
+/// bucket — matching Django's outer-join `F()` annotations. Through-model
+/// joins carry `deleted_at IS NULL`, same rule as the `chart_field`
+/// LABELS/ASSIGNEES joins above. All fragments are built from the const
+/// allow-list — no user input is interpolated.
+pub fn plot_axis_parts(axis: &str) -> Result<(String, String, Option<String>), String> {
+    if !VALID_X_AXIS.contains(&axis) {
+        return Err(format!("Invalid x_axis value: {axis}"));
+    }
+    let none: Option<String> = None;
+    let parts = match axis {
+        "state_id" => ("i.state_id::text".to_string(), String::new(), none),
+        "state__group" => ("s.\"group\"".to_string(), String::new(), none),
+        "labels__id" => (
+            "lab9.id::text".to_string(),
+            "LEFT JOIN issue_labels il9 ON il9.issue_id = i.id AND il9.deleted_at IS NULL \
+             LEFT JOIN labels lab9 ON lab9.id = il9.label_id"
+                .to_string(),
+            none,
+        ),
+        "assignees__id" => (
+            "au9.id::text".to_string(),
+            "LEFT JOIN issue_assignees ia9 ON ia9.issue_id = i.id AND ia9.deleted_at IS NULL \
+             LEFT JOIN users au9 ON au9.id = ia9.assignee_id"
+                .to_string(),
+            none,
+        ),
+        "estimate_point__value" => (
+            "epe.value".to_string(),
+            "LEFT JOIN estimate_points epe ON epe.id = i.estimate_point_id AND epe.deleted_at IS NULL".to_string(),
+            none,
+        ),
+        "issue_cycle__cycle_id" => (
+            "ci9.cycle_id::text".to_string(),
+            "LEFT JOIN cycle_issues ci9 ON ci9.issue_id = i.id AND ci9.deleted_at IS NULL".to_string(),
+            none,
+        ),
+        "issue_module__module_id" => (
+            "mi9.module_id::text".to_string(),
+            "LEFT JOIN module_issues mi9 ON mi9.issue_id = i.id AND mi9.deleted_at IS NULL".to_string(),
+            none,
+        ),
+        "priority" => ("i.priority".to_string(), String::new(), none),
+        "start_date" => (month_dim_expr("i.start_date"), String::new(), Some("i.start_date".to_string())),
+        "target_date" => (month_dim_expr("i.target_date"), String::new(), Some("i.target_date".to_string())),
+        "created_at" => (month_dim_expr("i.created_at"), String::new(), Some("i.created_at".to_string())),
+        "completed_at" => (month_dim_expr("i.completed_at"), String::new(), Some("i.completed_at".to_string())),
+        _ => return Err(format!("Invalid x_axis value: {axis}")),
+    };
+    Ok(parts)
+}
+
+/// Shared estimate-points join, needed when `y_axis == "estimate"` even if
+/// the x axis / segment is something else (Django traverses
+/// `estimate_point__value` for the `Sum`, `analytics_plot.py:111`).
+const ESTIMATE_JOIN: &str =
+    "LEFT JOIN estimate_points epe ON epe.id = i.estimate_point_id AND epe.deleted_at IS NULL";
+
+/// Builds `(dim_expr, seg_expr, from_where)` for the distribution queries.
+/// `$1` is the workspace slug. Base scope = workspace slug +
+/// `Issue.issue_objects` manager (`db/models/issue.py`: soft-delete,
+/// non-triage, non-archived, project-not-archived, non-draft) + project
+/// alive (`PRED_PROJECT_ALIVE`), reusing the A1 predicates.
+///
+/// NOTE: the distribution scope is NOT used for `total` — see
+/// `plot_total_scope` (axis/segment LEFT JOINs fan M2M rows out).
+fn plot_scope(x_axis: &str, y_axis: &str, segment: Option<&str>) -> Result<(String, Option<String>, String), String> {
+    let (dim, x_join, x_date) = plot_axis_parts(x_axis)?;
+    let (seg_expr, s_join) = match segment {
+        None => (None, String::new()),
+        Some(s) => {
+            let (d, j, _) = plot_axis_parts(s)?;
+            (Some(d), j)
+        }
+    };
+    let mut joins: Vec<String> = vec![];
+    for j in [x_join, s_join] {
+        if !j.is_empty() && !joins.contains(&j) {
+            joins.push(j);
+        }
+    }
+    // `y_axis == "estimate"` needs `epe` even when no axis does; dedupe
+    // covers `x_axis == "estimate_point__value"` (identical fragment).
+    if y_axis == "estimate" && !joins.iter().any(|j| j.contains("estimate_points epe")) {
+        joins.push(ESTIMATE_JOIN.to_string());
+    }
+    let join_sql = if joins.is_empty() { String::new() } else { format!(" {}", joins.join(" ")) };
+    let mut from_where = format!(
+        "FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id\
+         {join_sql} \
+         WHERE w.slug = $1 AND i.deleted_at IS NULL AND {PRED_ISSUE_OBJECTS} AND {PRED_PROJECT_ALIVE}"
+    );
+    // Date axes drop NULL dimensions (`analytics_plot.py:85-86`).
+    if let Some(col) = x_date {
+        from_where.push_str(&format!(" AND {col} IS NOT NULL"));
+    }
+    Ok((dim, seg_expr, from_where))
+}
+
+/// Join-free scope for `total` (`base.py:62-65`, `:194-195,215`): Django
+/// computes `total_issues = queryset.count()` BEFORE `build_graph_plot`
+/// adds the axis joins, so `total` is a distinct-issue count with NO fan-out
+/// (1 issue × 2 labels → `total: 1`, not 2). Same base predicates as
+/// `plot_scope` — workspace slug, `Issue.issue_objects` aliveness, project
+/// alive, date-axis NULL exclusion — WITHOUT any axis/segment LEFT JOINs.
+pub fn plot_total_scope(x_axis: &str) -> Result<String, String> {
+    let (_, _, x_date) = plot_axis_parts(x_axis)?;
+    let mut scope = format!(
+        "FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id \
+         WHERE w.slug = $1 AND i.deleted_at IS NULL AND {PRED_ISSUE_OBJECTS} AND {PRED_PROJECT_ALIVE}"
+    );
+    if let Some(col) = x_date {
+        scope.push_str(&format!(" AND {col} IS NOT NULL"));
+    }
+    Ok(scope)
+}
+
+/// One grouped row feeding `plot_distribution`.
+pub struct PlotPoint {
+    pub dim: Option<String>,
+    pub seg: Option<String>,
+    pub count: i64,
+    pub estimate: Option<f64>,
+}
+
+/// Sorts distribution keys (`analytics_plot.py:64-70`): `priority` uses the
+/// fixed `["low","medium","high","urgent","none"]` subset — keys outside it
+/// are DROPPED, mirroring the dict comprehension literally. Every other
+/// axis sorts ascending with `"none"` last (the `x[0] == "none"` tuple key;
+/// note it is lowercase `"none"` — a NULL bucket renders `"None"` and sorts
+/// alphabetically with the rest).
+pub fn sort_plot_keys(keys: Vec<String>, x_axis: &str) -> Vec<String> {
+    if x_axis == "priority" {
+        return ["low", "medium", "high", "urgent", "none"]
+            .iter()
+            .filter(|k| keys.iter().any(|x| x == **k))
+            .map(|s| s.to_string())
+            .collect();
+    }
+    let mut sorted = keys;
+    sorted.sort();
+    sorted.sort_by_key(|k| k == "none");
+    sorted
+}
+
+/// Assembles the `distribution` object (`analytics_plot.py:117-120`):
+/// `{dimension_str: [row, ...]}` where NULL dimensions key as `"None"`
+/// (`str(None)`) and rows carry `dimension` + (`segment` | `count` /
+/// `estimate`) exactly like the Django `values()` dicts.
+pub fn plot_distribution(points: Vec<PlotPoint>, y_axis: &str, x_axis: &str, segmented: bool) -> Value {
+    let mut order: Vec<String> = vec![];
+    let mut buckets: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+    for pt in points {
+        let key = pt.dim.clone().unwrap_or_else(|| "None".to_string());
+        let mut item = serde_json::Map::new();
+        item.insert(
+            "dimension".to_string(),
+            pt.dim.map(Value::String).unwrap_or(Value::Null),
+        );
+        if segmented {
+            item.insert("segment".to_string(), pt.seg.clone().map(Value::String).unwrap_or(Value::Null));
+        }
+        if y_axis == "estimate" {
+            item.insert("estimate".to_string(), pt.estimate.map(|e| json!(e)).unwrap_or(Value::Null));
+        } else {
+            item.insert("count".to_string(), json!(pt.count));
+        }
+        buckets
+            .entry(key.clone())
+            .or_insert_with(|| {
+                order.push(key.clone());
+                vec![]
+            })
+            .push(Value::Object(item));
+    }
+    let mut out = serde_json::Map::new();
+    for k in sort_plot_keys(order, x_axis) {
+        if let Some(v) = buckets.remove(&k) {
+            out.insert(k, Value::Array(v));
+        }
+    }
+    Value::Object(out)
+}
+
+struct PlotOutput {
+    total: i64,
+    distribution: Value,
+}
+
+/// Runs the total + distribution for `analytics/` and `saved-analytic-view`.
+/// `segment` empty-as-absent matches the Django falsy rule (see
+/// `validate_segment`). Callers must validate axes first; an invalid axis
+/// here becomes an `AppError` (unreachable on validated input).
+async fn run_plot(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    x_axis: &str,
+    y_axis: &str,
+    segment: Option<&str>,
+) -> Result<PlotOutput, common::errors::AppError> {
+    let seg = segment.filter(|s| !s.is_empty());
+    let (dim, seg_expr, fw) = plot_scope(x_axis, y_axis, seg).map_err(|e| anyhow::anyhow!(e))?;
+    // `total` counts DISTINCT issues on the join-free scope
+    // (`plot_total_scope`): the distribution's axis/segment LEFT JOINs fan
+    // M2M rows out (1 issue × N labels = N rows) and must not leak into the
+    // count — Django counts before `build_graph_plot` joins (`base.py:65`).
+    let total_scope = plot_total_scope(x_axis).map_err(|e| anyhow::anyhow!(e))?;
+    let total: i64 =
+        sqlx::query_scalar(&format!("SELECT COUNT(*) {total_scope}")).bind(slug).fetch_one(pool).await?;
+    let segmented = seg_expr.is_some();
+    let distribution = if y_axis == "estimate" {
+        if let Some(se) = seg_expr {
+            let rows: Vec<(Option<String>, Option<String>, Option<f64>)> = sqlx::query_as(&format!(
+                "SELECT {dim} AS d, {se} AS g, SUM(CAST(epe.value AS DOUBLE PRECISION)) AS e {fw} GROUP BY 1, 2 ORDER BY 1"
+            ))
+            .bind(slug)
+            .fetch_all(pool)
+            .await?;
+            plot_distribution(
+                rows.into_iter()
+                    .map(|(d, g, e)| PlotPoint { dim: d, seg: g, count: 0, estimate: e })
+                    .collect(),
+                y_axis,
+                x_axis,
+                segmented,
+            )
+        } else {
+            let rows: Vec<(Option<String>, Option<f64>)> = sqlx::query_as(&format!(
+                "SELECT {dim} AS d, SUM(CAST(epe.value AS DOUBLE PRECISION)) AS e {fw} GROUP BY 1 ORDER BY 1"
+            ))
+            .bind(slug)
+            .fetch_all(pool)
+            .await?;
+            plot_distribution(
+                rows.into_iter().map(|(d, e)| PlotPoint { dim: d, seg: None, count: 0, estimate: e }).collect(),
+                y_axis,
+                x_axis,
+                segmented,
+            )
+        }
+    } else if let Some(se) = seg_expr {
+        let rows: Vec<(Option<String>, Option<String>, i64)> =
+            sqlx::query_as(&format!("SELECT {dim} AS d, {se} AS g, COUNT(*) AS c {fw} GROUP BY 1, 2 ORDER BY 1"))
+                .bind(slug)
+                .fetch_all(pool)
+                .await?;
+        plot_distribution(
+            rows.into_iter().map(|(d, g, c)| PlotPoint { dim: d, seg: g, count: c, estimate: None }).collect(),
+            y_axis,
+            x_axis,
+            segmented,
+        )
+    } else {
+        let rows: Vec<(Option<String>, i64)> =
+            sqlx::query_as(&format!("SELECT {dim} AS d, COUNT(*) AS c {fw} GROUP BY 1 ORDER BY 1"))
+                .bind(slug)
+                .fetch_all(pool)
+                .await?;
+        plot_distribution(
+            rows.into_iter().map(|(d, c)| PlotPoint { dim: d, seg: None, count: c, estimate: None }).collect(),
+            y_axis,
+            x_axis,
+            segmented,
+        )
+    };
+    Ok(PlotOutput { total, distribution })
+}
+
+/// Workspace + `issue_objects` scope fragment for the extras lookups that
+/// use the aliveness manager (`base.py:72,95,133,147`).
+fn extras_scope() -> String {
+    format!(
+        "JOIN workspaces w ON w.id = i.workspace_id JOIN states s ON s.id = i.state_id \
+         JOIN projects p ON p.id = i.project_id \
+         WHERE w.slug = $1 AND i.deleted_at IS NULL AND {PRED_ISSUE_OBJECTS} AND {PRED_PROJECT_ALIVE}"
+    )
+}
+
+/// The five `extras` groups (`base.py:70-171`): each populated ONLY when the
+/// x axis or segment names it, else `{}` (Django initialises every group to
+/// `{}`, not `[]`).
+async fn analytics_extras(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    x_axis: &str,
+    segment: Option<&str>,
+) -> Result<Value, sqlx::Error> {
+    let seg = segment.filter(|s| !s.is_empty());
+    let want = |a: &str| x_axis == a || seg == Some(a);
+    let scope = extras_scope();
+
+    let state_details = if want("state_id") {
+        let rows: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(&format!(
+            "SELECT i.state_id, s.name, s.color FROM issues i {scope} \
+             GROUP BY i.state_id, s.name, s.color ORDER BY i.state_id"
+        ))
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
+        json!(rows
+            .into_iter()
+            .map(|(id, name, color)| json!({"state_id": id, "state__name": name, "state__color": color}))
+            .collect::<Vec<_>>())
+    } else {
+        json!({})
+    };
+
+    // NOTE `Issue.objects` (plain manager) here, not `issue_objects`
+    // (`base.py:82`): triage/archived/draft issues are INCLUDED; only the
+    // workspace + soft-delete scoping plus the two stated conditions apply.
+    let label_details = if want("labels__id") {
+        let rows: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
+            "SELECT l.id, l.color, l.name FROM issues i \
+             JOIN workspaces w ON w.id = i.workspace_id \
+             JOIN issue_labels il ON il.issue_id = i.id AND il.deleted_at IS NULL \
+             JOIN labels l ON l.id = il.label_id \
+             WHERE w.slug = $1 AND i.deleted_at IS NULL \
+             GROUP BY l.id, l.color, l.name ORDER BY l.id",
+        )
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
+        json!(rows
+            .into_iter()
+            .map(|(id, color, name)| json!({"labels__id": id, "labels__color": color, "labels__name": name}))
+            .collect::<Vec<_>>())
+    } else {
+        json!({})
+    };
+
+    // Avatar filter + `/api/assets/v2/static/<id>/` CASE mirror
+    // `base.py:97-130` literally (same expression as the A5 assignee-stats
+    // twin above).
+    let assignee_details = if want("assignees__id") {
+        let rows: Vec<(Option<uuid::Uuid>, Option<String>, Option<String>, Option<String>, Option<String>)> =
+            sqlx::query_as(&format!(
+                "SELECT u.id, \
+                  CASE WHEN u.avatar_asset_id IS NOT NULL \
+                       THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' \
+                       ELSE u.avatar END, \
+                  u.display_name, u.first_name, u.last_name \
+                 FROM issues i {scope} \
+                 JOIN issue_assignees ia ON ia.issue_id = i.id AND ia.deleted_at IS NULL \
+                 JOIN users u ON u.id = ia.assignee_id \
+                 WHERE (u.avatar IS NOT NULL OR u.avatar_asset_id IS NOT NULL) \
+                 GROUP BY u.id, u.avatar, u.avatar_asset_id, u.display_name, u.first_name, u.last_name \
+                 ORDER BY u.id"
+            ))
+            .bind(slug)
+            .fetch_all(pool)
+            .await?;
+        json!(rows
+            .into_iter()
+            .map(|(id, url, display, first, last)| json!({
+                "assignees__id": id,
+                "assignees__avatar_url": url,
+                "assignees__display_name": display,
+                "assignees__first_name": first,
+                "assignees__last_name": last,
+            }))
+            .collect::<Vec<_>>())
+    } else {
+        json!({})
+    };
+
+    let cycle_details = if want("issue_cycle__cycle_id") {
+        let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(&format!(
+            "SELECT ci.cycle_id, c.name FROM issues i {scope} \
+             JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.deleted_at IS NULL \
+             JOIN cycles c ON c.id = ci.cycle_id AND c.deleted_at IS NULL \
+             GROUP BY ci.cycle_id, c.name ORDER BY ci.cycle_id"
+        ))
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
+        json!(rows
+            .into_iter()
+            .map(|(id, name)| json!({"issue_cycle__cycle_id": id, "issue_cycle__cycle__name": name}))
+            .collect::<Vec<_>>())
+    } else {
+        json!({})
+    };
+
+    let module_details = if want("issue_module__module_id") {
+        let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(&format!(
+            "SELECT mi.module_id, m.name FROM issues i {scope} \
+             JOIN module_issues mi ON mi.issue_id = i.id AND mi.deleted_at IS NULL \
+             JOIN modules m ON m.id = mi.module_id AND m.deleted_at IS NULL \
+             GROUP BY mi.module_id, m.name ORDER BY mi.module_id"
+        ))
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
+        json!(rows
+            .into_iter()
+            .map(|(id, name)| json!({"issue_module__module_id": id, "issue_module__module__name": name}))
+            .collect::<Vec<_>>())
+    } else {
+        json!({})
+    };
+
+    Ok(json!({
+        "state_details": state_details,
+        "assignee_details": assignee_details,
+        "label_details": label_details,
+        "cycle_details": cycle_details,
+        "module_details": module_details,
+    }))
+}
+
+fn axes_400(msg: String) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(json!({"error": msg})))
+}
+
+/// `GET analytics/` (`base.py:37-173`): workspace ADMIN/MEMBER gate
+/// (`@allow_permission([ROLE.ADMIN, ROLE.MEMBER])` → `deny()` 403);
+/// required-axis + segment 400s; 200
+/// `{total, distribution, extras{state,assignee,label,cycle,module}}`.
+pub async fn workspace_analytics(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<AxisParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if let Err(e) = validate_axes(&q) {
+        return Ok(axes_400(e));
+    }
+    let x = q.x_axis.clone().unwrap_or_default();
+    let y = q.y_axis.clone().unwrap_or_default();
+    let seg = q.segment.clone();
+    let out = run_plot(&st.pool, &slug, &x, &y, seg.as_deref()).await?;
+    let extras = analytics_extras(&st.pool, &slug, &x, seg.as_deref()).await?;
+    Ok((StatusCode::OK, Json(json!({"total": out.total, "distribution": out.distribution, "extras": extras}))))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct SegmentQuery {
+    #[serde(default)]
+    pub segment: Option<String>,
+}
+
+/// `GET saved-analytic-view/:analytic_id/` (`base.py:189-219`): ADMIN/MEMBER
+/// gate; the view is looked up by pk + workspace slug (miss → 404); axes
+/// come from the stored `query_dict` (same 400s), `segment` from the query
+/// string; 200 `{total, distribution}` (NO extras).
+///
+/// The stored `query` ORM-lookup dict is NOT translated to SQL (see the T9
+/// header notes): workspace scope + `issue_objects` predicates apply.
+pub async fn saved_analytic(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, analytic_id)): Path<(String, uuid::Uuid)>,
+    Query(q): Query<SegmentQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(view) = fetch_analytic_view(&st.pool, analytic_id, &slug).await? else {
+        return Ok(missing());
+    };
+    let x = view.query_dict.get("x_axis").and_then(Value::as_str).unwrap_or("");
+    let y = view.query_dict.get("y_axis").and_then(Value::as_str).unwrap_or("");
+    if !VALID_X_AXIS.contains(&x) || !VALID_Y_AXIS.contains(&y) {
+        return Ok(axes_400(AXIS_REQUIRED_MSG.to_string()));
+    }
+    if let Err(e) = validate_segment(x, q.segment.as_deref()) {
+        return Ok(axes_400(e));
+    }
+    let out = run_plot(&st.pool, &slug, x, y, q.segment.as_deref()).await?;
+    Ok((StatusCode::OK, Json(json!({"total": out.total, "distribution": out.distribution}))))
+}
+
+/// `POST export-analytics/` (`base.py:222-248`): ADMIN/MEMBER gate; body
+/// `{x_axis, y_axis, segment?}` with the same validation 400s; 200 ack
+/// naming the requesting user's email.
+///
+/// NOTE the Celery `analytic_export_task.delay(...)` call is SKIPPED — no
+/// email is sent. Follow-up when a worker exists.
+pub async fn export_analytics(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<AxisParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if let Err(e) = validate_axes(&body) {
+        return Ok(axes_400(e));
+    }
+    let email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(auth.0)
+        .fetch_optional(&st.pool)
+        .await?
+        .flatten();
+    Ok((StatusCode::OK, Json(json!({"message": export_message(&email.unwrap_or_default())}))))
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct AnalyticViewRow {
+    id: uuid::Uuid,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    name: String,
+    description: String,
+    query: Value,
+    query_dict: Value,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    workspace_id: uuid::Uuid,
+}
+
+const ANALYTIC_VIEW_COLS: &str = "a.id, a.created_at, a.updated_at, a.name, a.description, a.query, \
+    a.query_dict, a.created_by_id, a.updated_by_id, a.workspace_id";
+
+/// Scoped lookup mirroring `AnalyticViewViewset.get_queryset`
+/// (`base.py:185-186`): pk + workspace slug, soft-deleted excluded.
+async fn fetch_analytic_view(
+    pool: &sqlx::PgPool,
+    pk: uuid::Uuid,
+    slug: &str,
+) -> Result<Option<AnalyticViewRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {ANALYTIC_VIEW_COLS} FROM analytic_views a \
+         JOIN workspaces w ON w.id = a.workspace_id \
+         WHERE a.id = $1 AND w.slug = $2 AND a.deleted_at IS NULL LIMIT 1"
+    ))
+    .bind(pk)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+}
+
+/// `AnalyticViewSerializer` (`serializers/analytic.py:10-14`):
+/// `fields = "__all__"`, FKs render as ids.
+fn analytic_view_json(r: &AnalyticViewRow) -> Value {
+    json!({
+        "id": r.id,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "name": r.name,
+        "description": r.description,
+        "query": r.query,
+        "query_dict": r.query_dict,
+        "created_by": r.created_by_id,
+        "updated_by": r.updated_by_id,
+        "workspace": r.workspace_id,
+    })
+}
+
+/// `GET analytic-view/:pk/` (ModelViewSet retrieve): ADMIN/MEMBER
+/// (`WorkSpaceAdminPermission` = roles 20/15, verified against
+/// `permissions/workspace.py`) → `deny()` 403; miss → 404.
+pub async fn analytic_view_detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    match fetch_analytic_view(&st.pool, pk, &slug).await? {
+        Some(row) => Ok((StatusCode::OK, Json(analytic_view_json(&row)))),
+        None => Ok(missing()),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchAnalyticView {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub query_dict: Option<Value>,
+}
+
+/// `PATCH analytic-view/:pk/` (partial_update): updatable `name`,
+/// `description`, `query_dict`. When `query_dict` is supplied it is stored
+/// and `query` reset to `{}` — the serializer's `issue_filters` recompute
+/// (`serializers/analytic.py:24-31`) is the documented T9 follow-up, so no
+/// filter semantics are invented. (Django's `update` reads the buggy
+/// `query_data` key and unconditionally overwrites `query`; we only reset
+/// on an actual `query_dict` change so a name-only PATCH cannot wipe saved
+/// filters — flagged deviation, safer.)
+pub async fn analytic_view_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<PatchAnalyticView>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(cur) = fetch_analytic_view(&st.pool, pk, &slug).await? else {
+        return Ok(missing());
+    };
+    if let Some(name) = body.name.as_deref() {
+        if name.trim().is_empty() {
+            return Ok(axes_400("name is required".to_string()));
+        }
+        if name.chars().count() > 255 {
+            return Ok(axes_400("name max length 255".to_string()));
+        }
+    }
+    let name = body.name.unwrap_or(cur.name);
+    let description = body.description.unwrap_or(cur.description);
+    let (query_dict, query) = match body.query_dict {
+        Some(qd) => (qd, json!({})),
+        None => (cur.query_dict, cur.query),
+    };
+    sqlx::query(
+        "UPDATE analytic_views SET name = $1, description = $2, query_dict = $3, query = $4, \
+         updated_by_id = $5, updated_at = now() WHERE id = $6 AND deleted_at IS NULL",
+    )
+    .bind(&name)
+    .bind(&description)
+    .bind(&query_dict)
+    .bind(&query)
+    .bind(auth.0)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    match fetch_analytic_view(&st.pool, pk, &slug).await? {
+        Some(row) => Ok((StatusCode::OK, Json(analytic_view_json(&row)))),
+        None => Ok(missing()),
+    }
+}
+
+/// `DELETE analytic-view/:pk/` (destroy): soft delete → bare 204
+/// (E6 convention, cf. `deploy_destroy`); miss → 404.
+pub async fn analytic_view_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, uuid::Uuid)>,
+) -> Result<impl IntoResponse, common::errors::AppError> {
+    if !gate_ws_am(&st.pool, auth.0, &slug).await? {
+        return Ok(deny().into_response());
+    }
+    if fetch_analytic_view(&st.pool, pk, &slug).await?.is_none() {
+        return Ok(missing().into_response());
+    }
+    sqlx::query("UPDATE analytic_views SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+// ============================================================================
 // Unit tests (pure surface — no DB).
 // ============================================================================
 
@@ -2948,5 +3660,146 @@ mod tests {
         let resp = StatusCode::NO_CONTENT.into_response();
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         assert!(resp.headers().get(axum::http::header::CONTENT_TYPE).is_none());
+    }
+
+    #[test]
+    fn analytics_axis_validation_matches_django() {
+        assert_eq!(AXIS_REQUIRED_MSG, "x-axis and y-axis dimensions are required and the values should be valid");
+        assert_eq!(SEGMENT_INVALID_MSG, "Both segment and x axis cannot be same and segment should be valid");
+    }
+
+    #[test]
+    fn export_analytics_message_shape() {
+        let msg = export_message("a@b.co");
+        assert_eq!(msg, "Once the export is ready it will be emailed to you at a@b.co");
+    }
+
+    #[test]
+    fn legacy_axes_match_django_allow_lists() {
+        // `analytics_plot.py:25-40`: 12 x fields + 2 y fields, order-exact.
+        assert_eq!(
+            VALID_X_AXIS,
+            [
+                "state_id",
+                "state__group",
+                "labels__id",
+                "assignees__id",
+                "estimate_point__value",
+                "issue_cycle__cycle_id",
+                "issue_module__module_id",
+                "priority",
+                "start_date",
+                "target_date",
+                "created_at",
+                "completed_at",
+            ]
+        );
+        assert_eq!(VALID_Y_AXIS, ["issue_count", "estimate"]);
+        // `validate_axes` surfaces the const messages.
+        let bad = AxisParams { x_axis: Some("nope".to_string()), y_axis: Some("issue_count".to_string()), segment: None };
+        assert_eq!(validate_axes(&bad).unwrap_err(), AXIS_REQUIRED_MSG);
+        let bad_seg = AxisParams {
+            x_axis: Some("priority".to_string()),
+            y_axis: Some("issue_count".to_string()),
+            segment: Some("priority".to_string()),
+        };
+        assert_eq!(validate_axes(&bad_seg).unwrap_err(), SEGMENT_INVALID_MSG);
+        // Empty `?segment=` is falsy-skipped (`base.py:52`), not a 400.
+        let empty_seg = AxisParams {
+            x_axis: Some("priority".to_string()),
+            y_axis: Some("issue_count".to_string()),
+            segment: Some(String::new()),
+        };
+        assert!(validate_axes(&empty_seg).is_ok());
+    }
+
+    #[test]
+    fn plot_axis_mapping() {
+        // Every valid axis maps; invalid rejected.
+        for axis in VALID_X_AXIS {
+            assert!(plot_axis_parts(axis).is_ok(), "{axis}");
+        }
+        assert!(plot_axis_parts("color").is_err());
+        // Monthly dimension is unpadded `Y-M` (`analytics_plot.py:43-50`).
+        assert_eq!(
+            month_dim_expr("i.created_at"),
+            "EXTRACT(YEAR FROM i.created_at)::int::text || '-' || EXTRACT(MONTH FROM i.created_at)::int::text"
+        );
+        // Date axes exclude NULLs; plain axes keep them.
+        assert!(plot_axis_parts("created_at").unwrap().2.is_some());
+        assert!(plot_axis_parts("priority").unwrap().2.is_none());
+        // Scope carries the workspace slug bind + manager predicates.
+        let (_, _, fw) = plot_scope("priority", "issue_count", None).unwrap();
+        assert!(fw.contains("w.slug = $1"), "{fw}");
+        assert!(fw.contains("triage"), "{fw}");
+        // Estimate y adds the epe join exactly once, even when the x axis
+        // already needs it.
+        let (_, _, fw) = plot_scope("estimate_point__value", "estimate", None).unwrap();
+        assert_eq!(fw.matches("estimate_points epe").count(), 1, "{fw}");
+        let (_, _, fw) = plot_scope("priority", "estimate", None).unwrap();
+        assert!(fw.contains("estimate_points epe"), "{fw}");
+    }
+
+    #[test]
+    fn total_scope_is_join_free() {
+        // Blocker pin (`base.py:62-65`): `total` is counted BEFORE
+        // `build_graph_plot` joins, so M2M axes must not fan it out —
+        // the total scope carries the base predicates with NO axis LEFT
+        // JOINs. Repro: 1 issue × 2 labels → total 1, not 2.
+        for axis in VALID_X_AXIS {
+            let scope = plot_total_scope(axis).unwrap();
+            assert!(!scope.contains("LEFT JOIN"), "{axis}: {scope}");
+            assert!(scope.contains("w.slug = $1"), "{axis}: {scope}");
+            assert!(scope.contains("triage"), "{axis}: {scope}");
+        }
+        assert!(plot_total_scope("nope").is_err());
+        // Date-axis NULL exclusion still applies (same-issue coverage as
+        // the distribution); plain axes carry no extra predicate.
+        assert!(
+            plot_total_scope("created_at").unwrap().contains("i.created_at IS NOT NULL"),
+            "{}",
+            plot_total_scope("created_at").unwrap()
+        );
+        assert!(!plot_total_scope("priority").unwrap().contains("IS NOT NULL"));
+    }
+
+    #[test]
+    fn plot_distribution_shape() {
+        // Ungrouped count: NULL dimension keys as "None" (str(None)).
+        let points = vec![
+            PlotPoint { dim: Some("high".to_string()), seg: None, count: 2, estimate: None },
+            PlotPoint { dim: None, seg: None, count: 1, estimate: None },
+        ];
+        let v = plot_distribution(points, "issue_count", "state__group", false);
+        // Non-priority axes sort ascending ("None" = str(None) sorts first).
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(keys, vec!["None", "high"]);
+        assert_eq!(v["high"], json!([{"dimension": "high", "count": 2}]));
+        assert_eq!(v["None"], json!([{"dimension": null, "count": 1}]));
+        // Priority keeps ONLY the fixed Django subset — anything else
+        // (incl. the "None" bucket) is dropped, mirroring the
+        // `{key: data[key] for key in order ...}` comprehension literally.
+        let points = vec![
+            PlotPoint { dim: Some("high".to_string()), seg: None, count: 2, estimate: None },
+            PlotPoint { dim: None, seg: None, count: 1, estimate: None },
+        ];
+        let v = plot_distribution(points, "issue_count", "priority", false);
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(keys, vec!["high"]);
+        // Non-priority axes sort ascending with "none" last.
+        assert_eq!(sort_plot_keys(vec!["b".to_string(), "none".to_string(), "a".to_string()], "state__group"), vec![
+            "a".to_string(),
+            "b".to_string(),
+            "none".to_string()
+        ]);
+        // Segmented estimate rows carry segment + estimate, no count.
+        let points = vec![PlotPoint {
+            dim: Some("high".to_string()),
+            seg: Some("low".to_string()),
+            count: 0,
+            estimate: Some(4.5),
+        }];
+        let v = plot_distribution(points, "estimate", "priority", true);
+        assert_eq!(v["high"], json!([{"dimension": "high", "segment": "low", "estimate": 4.5}]));
     }
 }

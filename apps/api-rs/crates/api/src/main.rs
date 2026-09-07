@@ -1424,6 +1424,29 @@ async fn main() {
             "/api/workspaces/:slug/analytic-view/",
             get(routes::analytic::list_views).post(routes::analytic::create_view),
         )
+        // Parity with `AnalyticsEndpoint.get`, `SavedAnalyticEndpoint.get`,
+        // `ExportAnalyticsEndpoint.post` (`views/analytic/base.py:37-248`,
+        // `urls/analytic.py:26-48`): required-axis + segment 400s
+        // (`{"error": ...}`), 200 `{total, distribution, extras?}`. Gate
+        // WORKSPACE ADMIN/MEMBER (`deny()` 403). Request-filter
+        // (`issue_filters`) + stored-query translation + the Celery export
+        // are documented follow-ups in `routes/analytic.rs` (T9 notes).
+        .route("/api/workspaces/:slug/analytics/", get(routes::analytic::workspace_analytics))
+        .route(
+            "/api/workspaces/:slug/saved-analytic-view/:analytic_id/",
+            get(routes::analytic::saved_analytic),
+        )
+        .route("/api/workspaces/:slug/export-analytics/", post(routes::analytic::export_analytics))
+        // Parity with `AnalyticViewViewset` detail
+        // (`base.py:176-186`, `urls/analytic.py:36-38`): GET 200 row +
+        // PATCH 200 row + DELETE 204 soft. Gate `WorkSpaceAdminPermission`
+        // = workspace ADMIN(20)+MEMBER(15) (`deny()` 403); miss → 404.
+        .route(
+            "/api/workspaces/:slug/analytic-view/:pk/",
+            get(routes::analytic::analytic_view_detail)
+                .patch(routes::analytic::analytic_view_patch)
+                .delete(routes::analytic::analytic_view_destroy),
+        )
         // Parity with `AdvanceAnalyticsEndpoint.get`
         // (`views/analytic/advance.py:104-119`, `urls/analytic.py:61-63`):
         // GET 200 `?tab=overview|work-items` (default overview; invalid →
