@@ -85,6 +85,10 @@ pub const SIDEBAR_UPDATED_MSG: &str = "Successfully updated";
 pub const INVALID_URL_MSG: &str = "Invalid URL format.";
 /// `plane/app/serializers/workspace.py:212-214,224-226` (create/update dup).
 pub const DUP_URL_MSG: &str = "URL already exists for this workspace and owner";
+/// `plane/app/views/project/base.py:481` (project-views POST, non-member →
+/// 403). EXACT Django string — deliberately NOT the repo-wide
+/// `project::FORBIDDEN_MSG` (`"You don't have the required permissions."`).
+pub const PROJECT_VIEWS_FORBIDDEN_MSG: &str = "Forbidden";
 
 /// `plane/utils/constants.py:5-64` (`RESTRICTED_WORKSPACE_SLUGS`) — full
 /// list, verbatim (incl. the `"mobile"`/`"monitor"`/`"config"` dupes).
@@ -1380,6 +1384,86 @@ pub async fn views_post(
 }
 
 // ============================================================================
+// Project-views (`project/base.py:474-495`). POST-only. Project-scoped copy
+// of `views_post` above.
+// ============================================================================
+
+pub async fn project_views_post(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // `Project.objects.get(pk=project_id, workspace__slug=slug)` — miss
+    // raises in Django (→ 500); Rust returns sane 404 `missing()` per repo
+    // precedent (documented deviation).
+    let project_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p \
+         JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_exists {
+        return Ok(missing());
+    }
+    // `ProjectMember.objects.filter(member=user, project=project,
+    // is_active=True).first()` — None → 403 `{"error": "Forbidden"}` EXACT
+    // (`base.py:480-481`; NOT the repo-wide `FORBIDDEN_MSG`).
+    let member_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM project_members pm \
+         JOIN projects p ON p.id = pm.project_id \
+         JOIN workspaces w ON w.id = pm.workspace_id \
+         WHERE pm.project_id = $1 AND w.slug = $2 AND pm.member_id = $3 \
+         AND pm.is_active = true AND pm.deleted_at IS NULL AND p.deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_one(&st.pool)
+    .await?;
+    if !member_exists {
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": PROJECT_VIEWS_FORBIDDEN_MSG})),
+        ));
+    }
+    // Each key falls back to the stored value when absent
+    // (`request.data.get(key, current)`, `base.py:488-491`); absent →
+    // COALESCE keeps the column. Column types verified in
+    // `migrations/0001_initial.sql` (`project_members`): `view_props`,
+    // `default_props`, `preferences` are `jsonb NOT NULL`, `sort_order` is
+    // `double precision NOT NULL` — hence `Option<Value>` × 3 +
+    // `Option<f64>`. A present-but-non-numeric `sort_order` keeps the
+    // stored value (Django would 500 coercing it at the DB layer).
+    let view_props: Option<Value> = body.get("view_props").cloned();
+    let default_props: Option<Value> = body.get("default_props").cloned();
+    let preferences: Option<Value> = body.get("preferences").cloned();
+    let sort_order: Option<f64> = body.get("sort_order").and_then(Value::as_f64);
+    sqlx::query(
+        "UPDATE project_members pm SET view_props = COALESCE($4, view_props), \
+         default_props = COALESCE($5, default_props), \
+         preferences = COALESCE($6, preferences), \
+         sort_order = COALESCE($7, sort_order), updated_at = now() \
+         FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE pm.project_id = p.id AND p.id = $1 AND w.slug = $2 \
+         AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .bind(auth.0)
+    .bind(&view_props)
+    .bind(&default_props)
+    .bind(&preferences)
+    .bind(sort_order)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+// ============================================================================
 // E7c — workspace estimates (`estimate.py:22`). GET-only; NO 2h cache
 // (Django `@cache_response(60*60*2)` — caching stays OUT, documented
 // deviation); NO POST/PATCH/DELETE on this path.
@@ -2011,5 +2095,10 @@ mod tests {
         );
         assert_eq!(nav_pref_error(&json!("ACCORDION")), None);
         assert_eq!(nav_pref_error(&json!("TABBED")), None);
+    }
+
+    #[test]
+    fn project_views_non_member_forbidden_matches_django() {
+        assert_eq!(PROJECT_VIEWS_FORBIDDEN_MSG, "Forbidden");
     }
 }

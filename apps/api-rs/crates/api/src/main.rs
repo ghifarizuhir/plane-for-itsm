@@ -1519,6 +1519,16 @@ async fn main() {
         // (`views/workspace/member.py:208-212`): POST **204** overwriting
         // the member's `view_props`; non-member → 404. POST-only.
         .route("/api/workspaces/:slug/workspace-views/", post(routes::prefs::views_post))
+        // Parity with `ProjectUserViewsEndpoint.post`
+        // (`views/project/base.py:474-495`): POST **204** merging
+        // `view_props`/`default_props`/`preferences`/`sort_order` (absent
+        // keys keep stored values); non-member → 403 `{"error":
+        // "Forbidden"}` EXACT; project miss → sane 404 (Django raises →
+        // 500). POST-only.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-views/",
+            post(routes::prefs::project_views_post),
+        )
         // Parity with `WorkspaceEstimatesEndpoint.get`
         // (`views/workspace/estimate.py:22`): GET 200
         // `WorkspaceEstimateSerializer[]` (project-estimate ids for the
