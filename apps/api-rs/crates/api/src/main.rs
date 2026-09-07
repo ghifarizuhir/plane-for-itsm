@@ -1117,6 +1117,17 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/relations/",
             get(routes::work_item::list_relations).post(routes::work_item::create_relations),
         )
+        // Parity with `IssueRelationViewSet.list/create`
+        // (`views/issue/relation.py:42-269`, `urls/issue.py`): GET 200 8
+        // fixed groups of 14-key rows + POST 201 serializer array (missing
+        // type → 400 `{"message"}`; dups silently skipped). The existing
+        // `relations/` (work-items) routes above keep pointing at the same
+        // handlers (documented superset/Django-parity change). NO DELETE —
+        // Django defines no `issue-relation/:relId/` route.
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-relation/",
+            get(routes::work_item::list_relations).post(routes::work_item::create_relations),
+        )
         // Parity with `IssueRelationViewSet.remove_relation`
         // (`views/issue/relation.py:271-293`, `urls/issue.py:240-244`):
         // POST **204**; relation found via the bidirectional OR-filter

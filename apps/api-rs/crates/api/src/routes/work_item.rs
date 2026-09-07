@@ -15,9 +15,11 @@ use super::issue_common::{fetch_project_member_role, is_workspace_admin, project
 /// - comments (`issue_comments`): list/create + detail get/patch/delete.
 ///   `comment_html` defaults to `<p></p>`, `comment_json` to `{}`.
 /// - links (`issue_links`): list/create + detail; url required, title 255.
-/// - relations (`issue_relations`): list grouped by type + bulk create
-///   `{relation_type, issues[]}` (IssueRelationCreateSerializer: 8 choices,
-///   min 1 issue); duplicate pair → 409.
+/// - relations (`issue_relations`): list grouped by type (8 fixed groups,
+///   14-key rows, `IssueRelationViewSet.list`) + bulk create
+///   `{relation_type, issues[]}` (missing type → 400; ws-scoped candidates;
+///   direction swap + actual-type mapping; dups silently skipped, 201
+///   serializer array).
 /// - activities (`issue_activities`): read-only list + detail get.
 /// - issue detail get/patch/delete (also serves `work-items/:pk/`).
 /// - `work-items/search/` (workspace-wide issue search) and
@@ -74,6 +76,9 @@ pub struct PatchLink {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRelation {
+    // Missing `issues` defaults to `[]` (Django
+    // `request.data.get("issues", [])`, `relation.py:217`).
+    #[serde(default)]
     pub issues: Vec<uuid::Uuid>,
     #[serde(default)]
     pub relation_type: Option<String>,
@@ -114,6 +119,11 @@ pub fn validate_link_create(body: &CreateLink) -> Result<(), String> {
     Ok(())
 }
 
+/// Pure body validator retained for the `work_item_test.rs` unit precedent.
+/// NOTE: `create_relations` does NOT call this — Django `create`
+/// (`relation.py:209-269`) performs no choice/count validation (missing type
+/// → 400, unknown types pass through the identity map, empty `issues` →
+/// 201 `[]`).
 pub fn validate_relation_create(body: &CreateRelation) -> Result<(), String> {
     if body.issues.is_empty() {
         return Err("At least one issue ID is required.".to_string());
@@ -620,79 +630,359 @@ pub async fn delete_link(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
-// ---- relations ----
+// ---- relations (parity with Django `IssueRelationViewSet.list/create`,
+// `plane/app/views/issue/relation.py:42-269`) ----
+
+/// Fixed 8 group keys of the list response (`relation.py:174-205`).
+pub fn relation_groups() -> [&'static str; 8] {
+    [
+        "blocking",
+        "blocked_by",
+        "duplicate",
+        "relates_to",
+        "start_after",
+        "start_before",
+        "finish_after",
+        "finish_before",
+    ]
+}
+
+/// Missing-`relation_type` branch (`relation.py:211-215`): 400 `{"message"}`.
+pub const RELATION_TYPE_REQUIRED_MSG: &str = "Issue relation type is required";
+
+/// Mirrors `get_actual_relation`
+/// (`plane/utils/issue_relation_mapper.py:19-32`): the stored type for a
+/// requested type; unknown types map to themselves (identity).
+pub fn map_actual_relation(relation_type: &str) -> String {
+    match relation_type {
+        "start_after" => "start_before",
+        "finish_after" => "finish_before",
+        "blocking" => "blocked_by",
+        "blocked_by" => "blocked_by",
+        "start_before" => "start_before",
+        "finish_before" => "finish_before",
+        "implemented_by" => "implemented_by",
+        "implements" => "implemented_by",
+        other => other,
+    }
+    .to_string()
+}
+
+/// Direction swap (`relation.py:232-236`): for these REQUESTED types the
+/// candidate becomes `issue_id` and the URL issue `related_issue_id`. The
+/// same set selects the `RelatedIssueSerializer` branch (`relation.py:260`);
+/// anything else uses `IssueRelationSerializer`.
+pub(crate) fn relation_swaps_direction(relation_type: &str) -> bool {
+    matches!(relation_type, "blocking" | "start_after" | "finish_after")
+}
+
+/// Shared PROJECT-level read gate for relation list: `ProjectEntityPermission`
+/// (`relation.py:40`) on a safe (GET) method passes any ACTIVE project member
+/// (20/15/5, `permissions/project.py:103-110`) with the workspace-ADMIN
+/// fallback — the `link_read_gate` shape.
+async fn relation_read_gate(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// Shared PROJECT-level write gate for relation create: non-safe (POST) →
+/// ADMIN/MEMBER only (`permissions/project.py:112-119`) + ws-admin fallback —
+/// the `remove_relation_gate` shape, reusing `guard_remove_relation`.
+async fn relation_write_gate(
+    pool: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        guard_remove_relation(member_role).is_ok(),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// One list row: the 14 `.values()` fields (`relation.py:157-172`) —
+/// `label_ids`/`assignee_ids` via the `SUB_SELECT_SQL` annotation precedent
+/// (live bridge rows; assignees need an active project membership, mirroring
+/// the `assignee__member_project__is_active` filter).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct RelationIssueRow {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub state_id: Option<uuid::Uuid>,
+    pub sort_order: f64,
+    pub priority: String,
+    pub sequence_id: i32,
+    pub project_id: uuid::Uuid,
+    pub label_ids: Vec<uuid::Uuid>,
+    pub assignee_ids: Vec<uuid::Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: Option<uuid::Uuid>,
+    pub updated_by: Option<uuid::Uuid>,
+}
+
+/// Serializes one row to the 14-key shape; `relation_type` is the resolved
+/// GROUP annotation (`Value("blocking", ...)` etc., `relation.py:176-204`),
+/// not a stored column.
+fn relation_issue_json(r: &RelationIssueRow, group: &str) -> Value {
+    json!({
+        "id": r.id,
+        "name": r.name,
+        "state_id": r.state_id,
+        "sort_order": r.sort_order,
+        "priority": r.priority,
+        "sequence_id": r.sequence_id,
+        "project_id": r.project_id,
+        "label_ids": r.label_ids,
+        "assignee_ids": r.assignee_ids,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by": r.created_by,
+        "updated_by": r.updated_by,
+        "relation_type": group,
+    })
+}
 
 pub async fn list_relations(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
-) -> Result<Json<Value>, common::errors::AppError> {
-    // Mirrors the grouped response: blocking / blocked_by / others.
-    let rows = sqlx::query_as::<_, common::models::work_item::IssueRelation>(
-        "SELECT r.id, r.related_issue_id, r.relation_type FROM issue_relations r JOIN issues i ON i.id = r.related_issue_id WHERE r.issue_id = $1 AND r.project_id = $2 AND r.deleted_at IS NULL AND i.deleted_at IS NULL",
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !relation_read_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    // Bidirectional live relation rows for this issue, workspace-scoped
+    // (`Q(issue_id=issue_id) | Q(related_issue=issue_id)`,
+    // `workspace__slug=slug`, `relation.py:43-51`).
+    #[derive(sqlx::FromRow)]
+    struct RelPair {
+        issue_id: uuid::Uuid,
+        related_issue_id: uuid::Uuid,
+        relation_type: String,
+    }
+    let pairs = sqlx::query_as::<_, RelPair>(
+        "SELECT r.issue_id, r.related_issue_id, r.relation_type FROM issue_relations r \
+        JOIN workspaces w ON w.id = r.workspace_id \
+        WHERE w.slug = $1 AND r.deleted_at IS NULL \
+        AND (r.issue_id = $2 OR r.related_issue_id = $2) \
+        ORDER BY r.created_at DESC",
     )
+    .bind(&slug)
     .bind(issue_id)
-    .bind(project_id)
     .fetch_all(&st.pool)
     .await?;
-    let mut blocking = vec![];
-    let mut blocked_by = vec![];
-    let mut others: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
-    for r in rows {
-        let v = json!({"id": r.related_issue_id});
-        match r.relation_type.as_str() {
-            "blocking" => blocking.push(v),
-            "blocked_by" => blocked_by.push(v),
-            t => others.entry(t.to_string()).or_default().push(v),
+    // Group membership per `relation.py:53-100`. Independent `if`s (not
+    // `else if`): a self-loop pair matches both of its sides, exactly like
+    // the Django filters. Stored types outside this table (e.g. unknown
+    // pass-through types) belong to NO group.
+    let mut buckets: std::collections::HashMap<&'static str, Vec<uuid::Uuid>> =
+        relation_groups().into_iter().map(|g| (g, Vec::new())).collect();
+    let mut push = |group: &'static str, id: uuid::Uuid| {
+        let v = buckets.entry(group).or_default();
+        if !v.contains(&id) {
+            v.push(id);
+        }
+    };
+    for p in &pairs {
+        if p.relation_type == "blocked_by" && p.related_issue_id == issue_id {
+            push("blocking", p.issue_id);
+        }
+        if p.relation_type == "blocked_by" && p.issue_id == issue_id {
+            push("blocked_by", p.related_issue_id);
+        }
+        if p.relation_type == "duplicate" && p.issue_id == issue_id {
+            push("duplicate", p.related_issue_id);
+        }
+        if p.relation_type == "duplicate" && p.related_issue_id == issue_id {
+            push("duplicate", p.issue_id);
+        }
+        if p.relation_type == "relates_to" && p.issue_id == issue_id {
+            push("relates_to", p.related_issue_id);
+        }
+        if p.relation_type == "relates_to" && p.related_issue_id == issue_id {
+            push("relates_to", p.issue_id);
+        }
+        if p.relation_type == "start_before" && p.related_issue_id == issue_id {
+            push("start_after", p.issue_id);
+        }
+        if p.relation_type == "start_before" && p.issue_id == issue_id {
+            push("start_before", p.related_issue_id);
+        }
+        if p.relation_type == "finish_before" && p.related_issue_id == issue_id {
+            push("finish_after", p.issue_id);
+        }
+        if p.relation_type == "finish_before" && p.issue_id == issue_id {
+            push("finish_before", p.related_issue_id);
         }
     }
+    let all: Vec<uuid::Uuid> = buckets.values().flatten().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let rows: Vec<RelationIssueRow> = if all.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_as(
+            "SELECT i.id, i.name, i.state_id, i.sort_order, i.priority, i.sequence_id, i.project_id, \
+            COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+              WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
+            COALESCE((SELECT array_agg(ia.assignee_id ORDER BY ia.created_at DESC) FROM issue_assignees ia \
+              WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL \
+              AND EXISTS(SELECT 1 FROM project_members pm \
+                WHERE pm.member_id = ia.assignee_id AND pm.is_active = true AND pm.deleted_at IS NULL)), '{}'::uuid[]) AS assignee_ids, \
+            i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by \
+            FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+            WHERE w.slug = $1 AND i.id = ANY($2) AND i.deleted_at IS NULL \
+            ORDER BY i.created_at DESC",
+        )
+        .bind(&slug)
+        .bind(&all)
+        .fetch_all(&st.pool)
+        .await?
+    };
+    let by_id: std::collections::HashMap<uuid::Uuid, &RelationIssueRow> =
+        rows.iter().map(|r| (r.id, r)).collect();
+    // All 8 keys always present (`relation.py:174-205`); rows ordered
+    // `-created_at` (the `Issue`/`IssueRelation` `Meta.ordering`).
     let mut out = serde_json::Map::new();
-    out.insert("blocking".to_string(), Value::Array(blocking));
-    out.insert("blocked_by".to_string(), Value::Array(blocked_by));
-    for (k, v) in others {
-        out.insert(k, Value::Array(v));
+    for group in relation_groups() {
+        let mut group_rows: Vec<&RelationIssueRow> = buckets[group]
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        group_rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        out.insert(
+            group.to_string(),
+            Value::Array(group_rows.iter().map(|r| relation_issue_json(r, group)).collect()),
+        );
     }
-    Ok(Json(Value::Object(out)))
+    Ok((StatusCode::OK, Json(Value::Object(out))))
+}
+
+/// One created row for the 201 response: the stored relation columns plus the
+/// candidate-issue columns backing both serializers (`IssueRelationSerializer`
+/// `serializers/issue.py:402-431` reads the `related_issue` side,
+/// `RelatedIssueSerializer` `issue.py:442-464` the `issue` side — both sides
+/// resolve to the candidate here, so the 11 wire keys are identical;
+/// `assignee_ids` is write-only → excluded on read).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub(crate) struct CreatedRelationRow {
+    pub id: uuid::Uuid,
+    pub project_id: uuid::Uuid,
+    pub sequence_id: i32,
+    pub name: String,
+    pub relation_type: String,
+    pub state_id: Option<uuid::Uuid>,
+    pub priority: String,
+    pub created_by: Option<uuid::Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub updated_by: Option<uuid::Uuid>,
+}
+
+fn created_relation_json(r: &CreatedRelationRow) -> Value {
+    json!({
+        "id": r.id,
+        "project_id": r.project_id,
+        "sequence_id": r.sequence_id,
+        "name": r.name,
+        "relation_type": r.relation_type,
+        "state_id": r.state_id,
+        "priority": r.priority,
+        "created_by": r.created_by,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "updated_by": r.updated_by,
+    })
 }
 
 pub async fn create_relations(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
     Json(body): Json<CreateRelation>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    validate_relation_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    if !relation_write_gate(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(requested) = body.relation_type.clone() else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": RELATION_TYPE_REQUIRED_MSG}))));
+    };
     if !issue_exists(&st, project_id, issue_id).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
     }
-    let relation_type = body.relation_type.clone().unwrap();
-    let mut created = vec![];
-    for related in &body.issues {
-        let dup: (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM issue_relations WHERE issue_id = $1 AND related_issue_id = $2 AND deleted_at IS NULL)",
+    // Django `Project.objects.get(pk=project_id)` (`relation.py:218`) supplies
+    // `workspace_id`; a missing project misses here → 404 `missing()` (Django
+    // would 500 on `DoesNotExist`; sane mapping).
+    let ws_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT workspace_id FROM projects WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(ws_id) = ws_id else {
+        return Ok(missing());
+    };
+    // Candidates scoped to `workspace__slug` ONLY — cross-project allowed
+    // (`relation.py:222-227`). Input order is preserved for the response.
+    let scoped: std::collections::HashSet<uuid::Uuid> = if body.issues.is_empty() {
+        std::collections::HashSet::new()
+    } else {
+        sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT i.id FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+            WHERE w.slug = $1 AND i.id = ANY($2) AND i.deleted_at IS NULL",
         )
-        .bind(issue_id)
-        .bind(related)
-        .fetch_one(&st.pool)
-        .await?;
-        if dup.0 {
-            return Ok((
-                StatusCode::CONFLICT,
-                Json(json!({"error": "Relation already exists for this issue pair"})),
-            ));
-        }
-        let row: (uuid::Uuid,) = sqlx::query_as(
-            "INSERT INTO issue_relations (id, issue_id, related_issue_id, relation_type, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $1 RETURNING id",
+        .bind(&slug)
+        .bind(&body.issues)
+        .fetch_all(&st.pool)
+        .await?
+        .into_iter()
+        .collect()
+    };
+    let actual = map_actual_relation(&requested);
+    let swapped = relation_swaps_direction(&requested);
+    let mut out = Vec::new();
+    for cand in body.issues.iter().filter(|id| scoped.contains(id)) {
+        let (fwd, back) = if swapped { (*cand, issue_id) } else { (issue_id, *cand) };
+        // `bulk_create(..., ignore_conflicts=True)` (`relation.py:229-246`):
+        // per-candidate `ON CONFLICT DO NOTHING` (partial unique index on
+        // live `(issue_id, related_issue_id)`) → duplicates silently skipped,
+        // input order preserved. `relation_type` is the MAPPED actual type.
+        let row: Option<CreatedRelationRow> = sqlx::query_as(
+            "WITH ins AS ( \
+              INSERT INTO issue_relations (id, issue_id, related_issue_id, relation_type, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+              VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $6, now(), now()) \
+              ON CONFLICT DO NOTHING RETURNING id, relation_type, created_by_id, created_at, updated_at, updated_by_id \
+            ) SELECT c.id AS id, c.project_id, c.sequence_id, c.name, ins.relation_type, c.state_id, c.priority, \
+              ins.created_by_id AS created_by, ins.created_at, ins.updated_at, ins.updated_by_id AS updated_by \
+            FROM ins JOIN issues c ON c.id = $7",
         )
-        .bind(issue_id)
-        .bind(related)
-        .bind(&relation_type)
+        .bind(fwd)
+        .bind(back)
+        .bind(&actual)
         .bind(project_id)
-        .fetch_one(&st.pool)
+        .bind(ws_id)
+        .bind(auth.0)
+        .bind(*cand)
+        .fetch_optional(&st.pool)
         .await?;
-        created.push(row.0);
+        if let Some(r) = row {
+            out.push(created_relation_json(&r));
+        }
     }
-    Ok((StatusCode::CREATED, Json(json!({"ids": created}))))
+    // Empty `issues` → 201 `[]`; serializer branch (`relation.py:260`) is
+    // selected by the REQUESTED type but both wire shapes are identical here.
+    Ok((StatusCode::CREATED, Json(Value::Array(out))))
 }
 
 /// PROJECT-level role check for `remove-relation`: mirrors
@@ -1031,5 +1321,25 @@ mod batch_d_d9_tests {
     fn link_duplicate_url_error_matches_django() {
         assert_eq!(LINK_DUP_MSG, "URL already exists for this Issue");
         assert_eq!(LINK_INVALID_MSG, "Invalid URL format.");
+    }
+
+    #[test]
+    fn relation_list_has_eight_groups() {
+        // Django `relation.py:174-205` — keys are fixed.
+        let groups = ["blocking", "blocked_by", "duplicate", "relates_to", "start_after", "start_before", "finish_after", "finish_before"];
+        assert_eq!(relation_groups(), groups);
+    }
+
+    #[test]
+    fn relation_create_requires_relation_type() {
+        assert_eq!(RELATION_TYPE_REQUIRED_MSG, "Issue relation type is required");
+    }
+
+    #[test]
+    fn relation_direction_maps_actual_type() {
+        // Verified against apps/api/plane/utils/issue_relation_mapper.py:19-32.
+        assert_eq!(map_actual_relation("blocking"), "blocked_by");
+        assert_eq!(map_actual_relation("blocked_by"), "blocked_by");
+        assert_eq!(map_actual_relation("relates_to"), "relates_to");
     }
 }
