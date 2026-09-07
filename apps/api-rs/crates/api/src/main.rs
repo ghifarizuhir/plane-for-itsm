@@ -1014,6 +1014,20 @@ async fn main() {
                 .patch(routes::asset::issue_complete)
                 .delete(routes::asset::issue_delete),
         )
+        // Parity with the legacy `IssueAttachmentEndpoint`
+        // (`app/views/issue/attachment.py:32-92`, `app/urls/issue.py`): GET
+        // list (200 array, plain-manager filter — NO is_uploaded/deleted
+        // exclusion) + DELETE `:pk/` HARD delete (204, ADMIN-or-creator).
+        // NO POST — legacy multipart create is excluded per Batch E (no FE
+        // caller; the V2 presign covers uploads).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-attachments/",
+            get(routes::asset::issue_attachment_list),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-attachments/:pk/",
+            delete(routes::asset::issue_attachment_delete),
+        )
         // Parity with the legacy file-assets (`app/views/asset/base.py`,
         // `app/urls/asset.py:27-47`): GET-check (200 + `{error,status:False}`
         // miss quirk), DELETE 204 soft, workspace restore 204. NO

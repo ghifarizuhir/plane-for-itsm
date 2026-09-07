@@ -14,7 +14,7 @@ use crate::{
     middleware::auth::AuthUser,
     routes::{
         issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows},
-        project::{deny, missing, ws_role},
+        project::{deny, missing, ws_role, FORBIDDEN_MSG},
     },
     state::AppState,
 };
@@ -1659,6 +1659,131 @@ pub async fn issue_list(
     ))
 }
 
+// ============================================================================
+// Batch F T3 — legacy `IssueAttachmentEndpoint` (Django
+// `plane/app/views/issue/attachment.py:32-92`, serializer
+// `plane/app/serializers/issue.py:616-630`).
+//
+// POST-create (legacy multipart upload, `attachment.py:37-60`) is EXCLUDED
+// per Batch E precedent: no FE caller, and the V2 presign (`issue_presign`
+// above) covers uploads. No POST is wired on the legacy route.
+// ============================================================================
+
+/// Legacy miss body, byte-exact from `attachment.py:68-71`
+/// (`{"error": "Issue attachment not found."}`, 404). Identical string to
+/// the V2 `ISSUE_ATTACHMENT_MISSING_MSG` above (same Django lines serve the
+/// legacy delete); kept as a separate const so the legacy handlers do not
+/// couple to the V2 endpoint's symbol.
+pub(crate) const ISSUE_ATTACHMENT_MISS_MSG: &str = "Issue attachment not found.";
+
+pub(crate) fn attachment_delete_gate(role: i16, is_creator: bool) -> Result<(), String> {
+    match (role, is_creator) {
+        (20, _) | (15 | 5, true) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// Legacy `IssueAttachmentEndpoint.get` (`attachment.py:88-92`): 200 array of
+/// `IssueAttachmentSerializer` (`__all__` + read-only `asset_url`, rendered
+/// here via the shared `full_asset_json`). The Django filter is the
+/// plain-manager `filter(issue_id, workspace__slug, project_id)` — NO
+/// `is_uploaded` / `is_deleted` / `entity_type` conditions (legacy
+/// semantics; the V2 twin adds `is_uploaded=True` + `entity_type`). Gate
+/// ADMIN/MEMBER/GUEST = any active project member (+ ws-admin fallback),
+/// via the shared `gate_project_roles`.
+pub async fn issue_attachment_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, issue_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let Some(ws) = workspace_by_slug(&st.pool, &slug).await? else {
+        return Ok(missing());
+    };
+    if !project_in_workspace(&st.pool, project_id, ws.id).await? {
+        return Ok(missing());
+    }
+    if !gate_project_roles(&st.pool, auth.0, &slug, project_id, AMG).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE issue_id = $1 AND project_id = $2 \
+         AND workspace_id = $3 ORDER BY created_at DESC"
+    ))
+    .bind(issue_id)
+    .bind(project_id)
+    .bind(ws.id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(|r| full_asset_json(r, Some(&slug)))
+            .collect::<Vec<_>>())),
+    ))
+}
+
+/// Legacy `IssueAttachmentEndpoint.delete` (`attachment.py:62-86`): HARD
+/// delete (`issue_attachment.asset.delete(save=False);
+/// issue_attachment.delete()`) — a real `DELETE FROM file_assets`, UNLIKE
+/// the V2 twin (`issue_delete` above) which soft-deletes (`is_deleted=True`,
+/// `attachment.py:154-156`). Miss → 404 `ISSUE_ATTACHMENT_MISS_MSG`. 204 on
+/// success (activity Celery tasks skipped per contract).
+///
+/// Gate `allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)`:
+/// project-ADMIN passes, otherwise only the row's creator passes
+/// (`attachment_delete_gate`). DEVIATION (documented): Django's decorator
+/// additionally grants the ws-admin fallback (`permissions/base.py:64-78`,
+/// any project membership + workspace ADMIN); this handler keeps
+/// ADMIN-or-creator only (stricter — a ws-admin non-creator without project
+/// ADMIN gets 403 where Django would allow).
+pub async fn issue_attachment_delete(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, issue_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let Some(ws) = workspace_by_slug(&st.pool, &slug).await? else {
+        return Ok(missing());
+    };
+    if !project_in_workspace(&st.pool, project_id, ws.id).await? {
+        return Ok(missing());
+    }
+    // Legacy plain-manager lookup (no `deleted_at`/`is_uploaded` exclusion —
+    // Django `.filter(...).first()` sees soft-deleted rows too).
+    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
+        "SELECT created_by_id FROM file_assets WHERE id = $1 AND workspace_id = $2 \
+         AND project_id = $3 AND issue_id = $4",
+    )
+    .bind(pk)
+    .bind(ws.id)
+    .bind(project_id)
+    .bind(issue_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((created_by,)) = row else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ISSUE_ATTACHMENT_MISS_MSG})),
+        ));
+    };
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let is_creator = created_by == Some(auth.0);
+    // No project membership: Django's creator bypass still passes a workspace
+    // member who created the row, so creator-without-membership is allowed.
+    let allowed = match role {
+        Some(r) => attachment_delete_gate(r, is_creator).is_ok(),
+        None => is_creator,
+    };
+    if !allowed {
+        return Ok(deny());
+    }
+    sqlx::query("DELETE FROM file_assets WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 /// `StaticFileAssetEndpoint.get` (`v2.py:491-533`): **AllowAny** (no auth);
 /// not-uploaded → 404; non-static entity → 400; script MIME → `attachment`
 /// else `inline`; 302.
@@ -2486,5 +2611,29 @@ mod e9_tests {
             .await
             .map(|r| r.status())
             .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn issue_attachment_delete_miss_message_matches_django() {
+        assert_eq!(ISSUE_ATTACHMENT_MISS_MSG, "Issue attachment not found.");
+    }
+
+    #[test]
+    fn issue_attachment_creator_gate_roles() {
+        // allow_permission([ROLE.ADMIN], creator=True): ADMIN-or-creator.
+        // NOTE (Batch F T3): the plan text asserted
+        // `attachment_delete_gate(5, true).is_err()`, but that contradicts its
+        // own `(20, _) | (15 | 5, true)` gate snippet AND Django
+        // `permissions/base.py:23-38` (the creator bypass is role-agnostic:
+        // any workspace member who created the row passes, GUEST included)
+        // AND the `cycle::destroy` / `module` / V2 `issue_delete`
+        // precedents. Corrected here: GUEST creator passes, GUEST
+        // non-creator denies.
+        assert!(attachment_delete_gate(20, true).is_ok());
+        assert!(attachment_delete_gate(20, false).is_ok());
+        assert!(attachment_delete_gate(15, true).is_ok());
+        assert!(attachment_delete_gate(15, false).is_err());
+        assert!(attachment_delete_gate(5, true).is_ok());
+        assert!(attachment_delete_gate(5, false).is_err());
     }
 }
