@@ -1202,28 +1202,77 @@ pub async fn workspace_issue_search(
 
 pub async fn get_by_identifier(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, ident)): axum::extract::Path<(String, String)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // `<project_identifier>-<sequence>`: project.identifier + issue.sequence_id.
-    let (proj_ident, seq) = match ident.rsplit_once('-') {
-        Some((p, s)) => (p, s.parse::<i32>().ok()),
-        None => return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Work item not found"})))),
+    // Parity with Django `IssueDetailIdentifierEndpoint`
+    // (`plane/app/views/issue/base.py`, URL `plane/app/urls/issue.py:281`
+    // `work-items/<project_identifier>-<issue_identifier>/`). Axum cannot
+    // express `:a-:b` in one segment, so the `:ident/` route shape stays and
+    // the constraint is enforced here.
+    let Ok((proj_ident, seq_raw)) = resolve_identifier(&ident) else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": INVALID_IDENTIFIER_MSG}))));
     };
-    let Some(seq) = seq else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Work item not found"}))));
-    };
-    let row: Option<(uuid::Uuid, String)> = sqlx::query_as(
-        "SELECT i.id, i.name FROM issues i JOIN projects p ON p.id = i.project_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND p.identifier = $2 AND i.sequence_id = $3 AND i.deleted_at IS NULL",
+    // Project lookup: `identifier__iexact` + `workspace__slug` (miss → 404).
+    let project_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+        WHERE w.slug = $1 AND LOWER(p.identifier) = LOWER($2) AND p.deleted_at IS NULL",
     )
     .bind(&slug)
-    .bind(proj_ident)
+    .bind(&proj_ident)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(project_id) = project_id else {
+        return Ok(missing());
+    };
+    // Active project membership required (miss → 403, exact message).
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if role.is_none() {
+        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": IDENTIFIER_FORBIDDEN_MSG}))));
+    }
+    // `strict_str_to_int`-shaped identifiers that overflow `i32` match no
+    // row (Django queries the ORM `sequence_id` with the unbounded int) →
+    // 404, not 400.
+    let Ok(seq) = seq_raw.parse::<i32>() else {
+        return Ok(missing());
+    };
+    let issue_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT i.id FROM issues i WHERE i.project_id = $1 AND i.sequence_id = $2 AND i.deleted_at IS NULL",
+    )
+    .bind(project_id)
     .bind(seq)
     .fetch_optional(&st.pool)
     .await?;
-    match row {
-        Some((id, name)) => Ok((StatusCode::OK, Json(json!({"id": id, "name": name})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Work item not found"})))),
+    let Some(issue_id) = issue_id else {
+        return Ok(missing());
+    };
+    // Same serializer shape as the detail endpoint — delegate to `get_issue`.
+    get_issue(State(st), auth, axum::extract::Path((slug, project_id, issue_id))).await
+}
+
+/// `IssueDetailIdentifierEndpoint` identifier errors
+/// (`plane/app/views/issue/base.py`): non-integer `issue_identifier` → 400.
+pub(crate) const INVALID_IDENTIFIER_MSG: &str = "Invalid issue identifier";
+/// Non-member access → 403.
+pub(crate) const IDENTIFIER_FORBIDDEN_MSG: &str = "You are not allowed to view this issue";
+
+/// Splits `<project_identifier>-<issue_identifier>` and enforces Django's
+/// strict-int constraint on the issue part (`str.isdigit()` semantics, plus
+/// `strict_str_to_int`'s accepted leading `-`): all-ASCII-digits, or `-`
+/// followed by all-ASCII-digits, non-empty. Axum cannot express `:a-:b` in
+/// one segment, so the `:ident/` route shape is kept and this runs in the
+/// handler.
+pub(crate) fn resolve_identifier(ident: &str) -> Result<(String, String), ()> {
+    let (project_identifier, issue_identifier) = ident.split_once('-').ok_or(())?;
+    let digits_ok = (!issue_identifier.is_empty()
+        && issue_identifier.chars().all(|c| c.is_ascii_digit()))
+        || (issue_identifier.len() > 1
+            && issue_identifier.starts_with('-')
+            && issue_identifier[1..].chars().all(|c| c.is_ascii_digit()));
+    if digits_ok {
+        Ok((project_identifier.to_string(), issue_identifier.to_string()))
+    } else {
+        Err(())
     }
 }
 
@@ -1341,5 +1390,18 @@ mod batch_d_d9_tests {
         assert_eq!(map_actual_relation("blocking"), "blocked_by");
         assert_eq!(map_actual_relation("blocked_by"), "blocked_by");
         assert_eq!(map_actual_relation("relates_to"), "relates_to");
+    }
+
+    #[test]
+    fn identifier_split_and_strict_int_match_django() {
+        assert_eq!(resolve_identifier("ABC-123"), Ok(("ABC".to_string(), "123".to_string())));
+        assert!(resolve_identifier("ABC-xyz").is_err()); // not an int
+        assert!(resolve_identifier("ABC").is_err());     // no dash
+    }
+
+    #[test]
+    fn identifier_errors_match_django() {
+        assert_eq!(INVALID_IDENTIFIER_MSG, "Invalid issue identifier");
+        assert_eq!(IDENTIFIER_FORBIDDEN_MSG, "You are not allowed to view this issue");
     }
 }
