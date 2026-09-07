@@ -8,7 +8,7 @@ mod state;
 use axum::{
     http::StatusCode,
     middleware as axum_middleware,
-    routing::{delete, get, patch, post, put},
+    routing::{delete, get, head, patch, post, put},
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -980,6 +980,7 @@ async fn main() {
         // file-assets GET-check/DELETE/restore with the 200-miss quirk).
         // Gate ADMIN/MEMBER/GUEST per row (WORKSPACE_LOGO presign needs
         // workspace ADMIN); static serves AllowAny. See `routes/asset.rs`.
+        .route("/:bucket/*rest", get(routes::s3proxy::proxy_to_minio).post(routes::s3proxy::proxy_to_minio).put(routes::s3proxy::proxy_to_minio).delete(routes::s3proxy::proxy_to_minio).head(routes::s3proxy::proxy_to_minio))
         .route("/api/assets/v2/workspaces/:slug/", post(routes::asset::ws_presign))
         .route(
             "/api/assets/v2/workspaces/:slug/:asset_id/",

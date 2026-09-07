@@ -42,6 +42,73 @@ pub fn proxy_target(bucket: &str, rest: &str, raw_query: Option<&str>) -> Option
     Some(url)
 }
 
+use axum::{
+    body::{Body, Bytes},
+    extract::{Path, RawQuery},
+    http::{HeaderMap, Method, StatusCode},
+    response::{IntoResponse, Response},
+};
+use serde_json::json;
+
+static HTTP: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+
+fn http() -> &'static reqwest::Client {
+    HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .expect("s3proxy client")
+    })
+}
+
+/// Forward mentah ke MinIO. Tanpa auth gate: otorisasi dibawa signature
+/// SigV4 di query/form (persis seperti Caddy `Caddyfile.ce:20-21` yang juga
+/// tidak meng-gate). Body sudah dibatasi 5MB oleh RequestBodyLimitLayer.
+pub async fn proxy_to_minio(
+    Path((bucket, rest)): Path<(String, String)>,
+    method: Method,
+    headers: HeaderMap,
+    RawQuery(query): RawQuery,
+    body: Bytes,
+) -> Response {
+    let Some(url) = proxy_target(&bucket, &rest, query.as_deref()) else {
+        return (
+            StatusCode::NOT_FOUND,
+            axum::Json(json!({"error": "Page not found."})),
+        )
+            .into_response();
+    };
+    let mut req = http().request(method, url).body(body);
+    if let Some(ct) = headers.get(axum::http::header::CONTENT_TYPE).cloned() {
+        req = req.header(axum::http::header::CONTENT_TYPE, ct);
+    }
+    let upstream = match req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "s3proxy upstream unreachable");
+            return (
+                StatusCode::BAD_GATEWAY,
+                axum::Json(json!({"error": "Object storage unreachable."})),
+            )
+                .into_response();
+        }
+    };
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let mut resp = Response::builder().status(status);
+    for h in [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::CONTENT_DISPOSITION,
+        axum::http::header::ETAG,
+    ] {
+        if let Some(v) = upstream.headers().get(h.clone()).cloned() {
+            resp = resp.header(h, v);
+        }
+    }
+    let bytes = upstream.bytes().await.unwrap_or_default();
+    resp.body(Body::from(bytes)).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
