@@ -105,7 +105,17 @@ pub async fn proxy_to_minio(
             resp = resp.header(h, v);
         }
     }
-    let bytes = upstream.bytes().await.unwrap_or_default();
+    let bytes = match upstream.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, "s3proxy upstream body failed");
+            return (
+                StatusCode::BAD_GATEWAY,
+                axum::Json(json!({"error": "Object storage unreachable."})),
+            )
+                .into_response();
+        }
+    };
     resp.body(Body::from(bytes)).unwrap()
 }
 
