@@ -4,6 +4,9 @@ use serde_json::{json, Value};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
 
+use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
+use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
+
 /// Mirrors `plane/app/serializers/estimate.py:EstimateSerializer` /
 /// `plane/api/serializers/estimate.py` served by both
 /// `plane/app/urls/estimate.py` (BulkEstimatePointEndpoint list/create)
@@ -345,4 +348,124 @@ pub async fn destroy_point(
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+/// Empty-body helper for `project_estimates` below, mirroring
+/// `ProjectEstimatePointEndpoint.get`
+/// (`plane/app/views/estimate/base.py:34-46`): a project whose
+/// `estimate_id IS NULL` responds 200 with an empty JSON array.
+pub(crate) fn project_estimates_shape(estimate_id: Option<uuid::Uuid>) -> String {
+    match estimate_id {
+        // `estimate/base.py:46`: `return Response([], ...)`.
+        None => "[]".to_string(),
+        // `estimate/base.py:38-45`: rows serialized from the DB by the
+        // handler — never rendered through this helper.
+        Some(_) => String::new(),
+    }
+}
+
+/// PROJECT-level role check: mirrors `@allow_permission([ROLE.ADMIN,
+/// ROLE.MEMBER])` (`estimate/base.py:35`, default `level="PROJECT"` —
+/// `permissions/base.py:17`): roles 20/15 pass; anything else (incl.
+/// GUEST 5 and non-member) falls to the workspace-ADMIN fallback applied
+/// by the caller via the shared `project_gate_allows` (same shape as D5
+/// `guard_issue_dates`).
+pub(crate) fn guard_project_estimates(role: Option<i16>) -> Result<(), String> {
+    match role {
+        Some(20) | Some(15) => Ok(()),
+        _ => Err(FORBIDDEN_MSG.to_string()),
+    }
+}
+
+/// One row of the `project-estimates/` response. Field order mirrors the
+/// contract `EstimatePointSerializer.__all__` key order
+/// (`plane/app/serializers/estimate.py:20-32`, columns verified against
+/// `apps/api-rs/migrations/0001_initial.sql` `estimate_points` DDL);
+/// struct serialization preserves declaration order. FK ids alias to
+/// serializer names (`estimate_id AS estimate`, … — `versions.rs`
+/// `LIST_COLUMNS` precedent). `deleted_at` is excluded per the contract;
+/// live rows only (`deleted_at IS NULL`, default-manager scope).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ProjectEstimatePointRow {
+    pub id: uuid::Uuid,
+    pub estimate: uuid::Uuid,
+    pub workspace: uuid::Uuid,
+    pub project: uuid::Uuid,
+    pub key: i32,
+    pub value: String,
+    pub description: String,
+    pub created_by: Option<uuid::Uuid>,
+    pub updated_by: Option<uuid::Uuid>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// GET `/api/workspaces/:slug/projects/:project_id/project-estimates/` —
+/// parity with `ProjectEstimatePointEndpoint.get`
+/// (`plane/app/views/estimate/base.py:34-46`,
+/// `plane/app/urls/estimate.py:17-18`): project lookup by
+/// `workspace__slug + pk`; `estimate_id IS NULL` → 200 `[]`, else 200
+/// `EstimatePointSerializer` array filtered
+/// `estimate_id + project_id + workspace(slug)` (`ORDER BY value`,
+/// `EstimatePoint.Meta.ordering`).
+/// Gate ADMIN/MEMBER + ws-admin fallback via shared `project_gate_allows`
+/// (same shape as D5 `guard_issue_dates`).
+/// Sane mapping (documented): Django `.get()` on a missing project raises
+/// → 500; Rust returns 404 `missing()` (`project.rs` precedent).
+pub async fn project_estimates(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        guard_project_estimates(member_role).is_ok(),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
+        "SELECT p.estimate_id FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((estimate_id,)) = row else {
+        return Ok(missing());
+    };
+    // Django `estimate/base.py:38-46`: NULL estimate → 200 `[]`.
+    let Some(estimate_id) = estimate_id else {
+        let body: Value =
+            serde_json::from_str(&project_estimates_shape(None)).unwrap_or(Value::Null);
+        return Ok((StatusCode::OK, Json(body)));
+    };
+    let rows: Vec<ProjectEstimatePointRow> = sqlx::query_as(
+        "SELECT ep.id, ep.estimate_id AS estimate, ep.workspace_id AS workspace, \
+         ep.project_id AS project, ep.key, ep.value, ep.description, \
+         ep.created_by_id AS created_by, ep.updated_by_id AS updated_by, \
+         ep.created_at, ep.updated_at FROM estimate_points ep \
+         JOIN workspaces w ON w.id = ep.workspace_id \
+         WHERE ep.estimate_id = $1 AND ep.project_id = $2 AND w.slug = $3 \
+         AND ep.deleted_at IS NULL ORDER BY ep.value ASC",
+    )
+    .bind(estimate_id)
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((StatusCode::OK, Json(json!(rows))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_estimates_no_estimate_returns_empty_list() {
+        // Django returns `[]` when project.estimate_id is null (estimate/base.py:38-45).
+        assert_eq!(project_estimates_shape(None).as_str(), "[]");
+    }
 }

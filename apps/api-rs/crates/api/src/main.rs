@@ -711,6 +711,16 @@ async fn main() {
                 .patch(routes::estimate::patch_point)
                 .delete(routes::estimate::destroy_point),
         )
+        // Parity with `ProjectEstimatePointEndpoint.get`
+        // (`views/estimate/base.py:34-46`, `urls/estimate.py:17-18`):
+        // GET 200 `EstimatePointSerializer[]` for the project's active
+        // estimate (`estimate_id IS NULL` → 200 `[]`); project miss → 404
+        // `missing()` (Django 500s — sane mapping). Gate ADMIN/MEMBER (+
+        // ws-admin fallback).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/project-estimates/",
+            get(routes::estimate::project_estimates),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/intakes/",
             get(routes::intake::list).post(routes::intake::create),
