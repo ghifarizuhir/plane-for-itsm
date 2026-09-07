@@ -1506,6 +1506,24 @@ async fn main() {
             "/api/workspaces/:slug/sidebar-preferences/",
             get(routes::prefs::sidebar_get).patch(routes::prefs::sidebar_patch),
         )
+        // Parity with `WorkspaceThemeViewSet`
+        // (`views/workspace/base.py:322-336`, `urls/workspace.py:122-131`,
+        // `serializers/workspace.py:167-171`): GET 200 list + POST 201 +
+        // GET 200 detail + PATCH 200 + DELETE 204 (soft). Gate workspace
+        // ADMIN (20) + MEMBER (15) via `theme_gate` (Django
+        // `WorkSpaceAdminPermission`) → `deny()`; miss → `missing()`.
+        // Row key is `colors` (live `workspace_themes` column), not `theme`
+        // — see `routes/themes.rs`.
+        .route(
+            "/api/workspaces/:slug/workspace-themes/",
+            get(routes::themes::list).post(routes::themes::create),
+        )
+        .route(
+            "/api/workspaces/:slug/workspace-themes/:pk/",
+            get(routes::themes::detail)
+                .patch(routes::themes::patch)
+                .delete(routes::themes::destroy),
+        )
         // Parity with `WorkspaceHomePreferenceViewSet`
         // (`views/workspace/home.py:24-79`): GET 200 list (auto-creates
         // the 3 keys) + PATCH 200 per key (partial, `config` read-only;

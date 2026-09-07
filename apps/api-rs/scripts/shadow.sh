@@ -67,6 +67,8 @@ paths=(
   "/api/timezones/"
   "/api/users/api-tokens/"
   "/api/workspaces/$WS/stickies/"
+  "/api/workspaces/$WS/workspace-themes/"
+  "/api/workspaces/$WS/workspace-themes/00000000-0000-0000-0000-000000000000/"
 )
 fail=0
 for path in "${paths[@]}"; do
