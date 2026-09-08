@@ -458,6 +458,22 @@ echo "--- E9 assets ---"
 check e9-ws-presign 200 -X POST -d '{"entity_type":"PROJECT_COVER","name":"smoke.png","type":"image/png","size":1024}' "$BASE/api/assets/v2/workspaces/$WS/"
 AIDS=$(jid asset_id)
 grep -q 'upload_data' /tmp/smoke_body && grep -q 'asset_url' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e9-ws-triple -> upload_data+asset_url"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e9-ws-triple"; echo "FAIL e9-ws-triple: $(head -c 200 /tmp/smoke_body)"; }
+# E9 round-trip lewat proxy S3 (Task 3 s3-upload-proxy): presign -> POST multipart
+# ke $UPURL (jalur proxy `/:bucket/*rest` di api-rs) -> PATCH complete -> GET 302.
+# Pakai aset KHUSUS ($AIDRT), bukan $AIDS: PATCH complete menandai is_uploaded
+# sehingga e9-download-notuploaded (404) di bawah tetap menguji $AIDS yang murni.
+check e9-rt-presign 200 -X POST -d '{"entity_type":"PROJECT_COVER","name":"smoke-rt.png","type":"image/png","size":11}' "$BASE/api/assets/v2/workspaces/$WS/"
+AIDRT=$(jid asset_id)
+UPURL=$(python3 -c "import json; print(json.load(open('/tmp/smoke_body')).get('upload_data', {}).get('url', ''))")
+echo "$UPURL" | grep -q '/uploads/$' && { PASS=$((PASS+1)); echo "ok   e9-proxy-url -> bucket path"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e9-proxy-url"; echo "FAIL e9-proxy-url: $UPURL"; }
+printf 'smoke-bytes' > /tmp/smoke_up.bin
+CURL_FIELDS=()
+while IFS= read -r line; do CURL_FIELDS+=(-F "$line"); done < <(python3 -c "import json; [print(f'{k}={v}') for k, v in json.load(open('/tmp/smoke_body'))['upload_data']['fields'].items()]")
+UPCODE=$(curl -s -o /tmp/smoke_up_resp -w "%{http_code}" -H "Origin: $FRONTEND" -X POST "${CURL_FIELDS[@]}" -F "file=@/tmp/smoke_up.bin;type=image/png" "$UPURL")
+[ "$UPCODE" = "204" ] && { PASS=$((PASS+1)); echo "ok   e9-proxy-post -> 204"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e9-proxy-post"; echo "FAIL e9-proxy-post: $UPCODE $(head -c 200 /tmp/smoke_up_resp)"; }
+check e9-ws-complete 204 -X PATCH -d '{}' "$BASE/api/assets/v2/workspaces/$WS/$AIDRT/"
+check e9-ws-get-redirect 302 "$BASE/api/assets/v2/workspaces/$WS/$AIDRT/"
+check e9-rt-del 204 -X DELETE "$BASE/api/assets/v2/workspaces/$WS/$AIDRT/"
 check e9-user-presign 200 -X POST -d '{"entity_type":"USER_AVATAR","name":"smoke.png","type":"image/png","size":1024}' "$BASE/api/assets/v2/user-assets/"
 AIDU=$(jid asset_id)
 check e9-proj-presign 200 -X POST -d '{"entity_type":"ISSUE_ATTACHMENT","name":"smoke.png","type":"image/png","size":1024}' "$BASE/api/assets/v2/workspaces/$WS/projects/$PID/"
