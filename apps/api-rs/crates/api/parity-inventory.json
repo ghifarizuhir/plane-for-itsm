@@ -731,6 +731,71 @@
           "batch_task": "Batch H T1",
           "out_scope": false,
           "notes": "PUT-only-in-Django: as_view maps put->update (workspace.py:58) but Rust registers get/patch/delete only (main.rs:57-62) so PUT 405; GET full serializer member-scoped (base.py:63-79) vs {id,name,slug} auth-only (workspace.rs:237-258); PATCH ADMIN-only partial_update (base.py:156-158) vs auth-only name-only returning {slug} (workspace.rs:260-286); DELETE 204 both sides with profile-cleanup parity (Django remove_last_workspace_ids_from_user_settings base.py:160-172 vs Rust UPDATE profiles SET last_workspace_id=NULL workspace.rs:306-309 + soft-delete workspace.rs:310-313); recorded delta is ADMIN gate only (base.py:167 vs auth-only workspace.rs:288-291); FE getWorkspace in 2 page.tsx files so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/invitations/",
+          "django_source": "app/urls/workspace.py:65",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::invite::ws_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceInvitations" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "inviteWorkspace" },
+            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "invite" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T2",
+          "out_scope": false,
+          "notes": "GET list 200 full-serializer array ordered -created_at (invite.py:44-50, Meta ordering models/workspace.py:255) vs ws_list ORDER BY created_at DESC + ws_invite_json (invite.rs:395-406,271-287); POST 200 {message} (invite.py:128 vs invite.rs:49,522); error literals byte-exact 'Emails are required' (invite.py:56), higher-role (invite.py:64), already-member (invite.py:81) vs invite.rs:42,44,46; gate ADMIN+MEMBER 20/15 (permissions/workspace.py:58-67 vs gate_ws_invite invite.rs:211-221); MISMATCH: 400 already-member workspace_users rows are full WorkSpaceMemberSerializer rows w/ nested member object (serializers/workspace.py:93-98, invite.py:82) vs Rust minimal {id,member,role,email} (invite.rs:535-537); sane-mapping: garbage role Django int() 500 vs Rust 400 (invite.rs:412-433), token payload opaque equality-only (invite.py:95-99,155), celery skipped; FE workspaceInvitations GET (workspace.service.ts:164-165) + inviteWorkspace POST (workspace.service.ts:78-79) + invite POST (invitation.service.ts:55-56), called from multiple components/stores so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/invitations/:pk/",
+          "django_source": "app/urls/workspace.py:70",
+          "rust_status": "implemented",
+          "rust_handler": "routes::invite::ws_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceInvitations" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceInvitation" },
+            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T2",
+          "out_scope": false,
+          "notes": "verified WorkspaceInvitationsViewset.retrieve/partial_update/destroy (invite.py:130-133) vs ws_detail/ws_patch/ws_destroy (invite.rs:557-660, main.rs:821-823): GET/PATCH 200 full row; PATCH writable role+accepted with DRF-choice/bool 400 shapes (invite.rs:591-616); DELETE 204 both; gate 20/15 both; DB-level deviation Django instance .delete() SOFT (mixins.py:72-76) vs Rust hard DELETE (invite.rs:647-655), unobservable via API (SoftDeletionManager filters mixins.py:56-58); FE updateWorkspaceInvitation PATCH + deleteWorkspaceInvitations DELETE (workspace.service.ts:180,192) + destroy DELETE (invitation.service.ts:84), no GET :pk/ caller, multiple pages so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/users/me/workspaces/invitations/",
+          "django_source": "app/urls/workspace.py:76",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::users_me::my_workspace_invitations",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "joinWorkspaces" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "userWorkspaceInvitations" },
+            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "userInvitations" },
+            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "joinMany" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T2",
+          "out_scope": false,
+          "notes": "MISMATCH GET 200 rows: Django full WorkSpaceMemberInviteSerializer rows incl created_at/updated_at/created_by/updated_by + workspace lite + invite_link (invite.py:236-243, serializers/workspace.py, ordered -created_at models/workspace.py:255) vs Rust 9-key rows {id,email,accepted,token,message,responded_at,role,workspace,invite_link} (users_me.rs:390-411); match parts: bare array no pagination, email scope + ORDER BY created_at DESC (users_me.rs:371-379), POST 204 activate + bulk_create(ignore_conflicts) + delete-invites in single tx (invite.py:247-283 vs users_me.rs:451-557), empty-list 204 both (invite.py:248 vs users_me.rs:471-473); sane-mapping: non-UUID invitations Django filter 500 vs Rust extractor 4xx; repo-wide grep users/me/workspaces/invitations hits workspace.service.ts:97,113 + invitation.service.ts:27,117 (callers present, not absent); multiple page callers so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/invitations/:pk/join/",
+          "django_source": "app/urls/workspace.py:81",
+          "rust_status": "implemented",
+          "rust_handler": "routes::invite::ws_join_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspaceInvitation" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "joinWorkspace" },
+            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "join" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T2",
+          "out_scope": false,
+          "notes": "verified WorkspaceJoinEndpoint.get/post (invite.py:149-233, AllowAny invite.py:137, class has get+post only so methods GET,POST) vs ws_join_get/ws_join_post (invite.rs:670-808, main.rs:832): GET 200 public 10-key exact incl email, token+invite_link omitted (invite.py:227-233 + PublicSerializer serializers/workspace.py vs ws_invite_public_json invite.rs:293-306); POST token-403 (invite.py:155-159 vs invite.rs:53,721-728), invitee-email-403 (invite.py:170-174 vs invite.rs:57,735-741), responded-400 (invite.py:222-225 vs invite.rs:60,743-748), accept reactivate-or-create + invite-delete 200 (invite.py:177-214 vs invite.rs:759-803), reject 200 row-kept (invite.py:217-220 vs invite.rs:804-807), Python-truthy accepted (invite.py:178 vs invite.rs:180-189); documented deviations: anon+bad-token Django 403 token-first vs Rust AuthUser-generic-401-first (invite.py:155-169 vs invite.rs:713-728, locked 401-generic rule), last_workspace_id assignment silent no-op skip (invite.py:204-206 vs invite.rs:706-711), accept-delete Django soft (mixins.py:72-76) vs Rust hard (invite.rs:797-801) unobservable; FE getWorkspaceInvitation GET-join (workspace.service.ts:172) + joinWorkspace POST-join (workspace.service.ts:86) + join POST-join (invitation.service.ts:100), multiple pages so fe_pages []"
         }
       ]
     },
