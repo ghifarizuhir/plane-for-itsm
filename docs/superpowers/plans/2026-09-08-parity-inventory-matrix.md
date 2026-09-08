@@ -329,7 +329,7 @@ fn rust_routes_parses_main_rs() {
 #[test]
 fn wildcard_segments_normalizes_params_and_templates() {
     let fe = wildcard_segments("/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/issue-relation/", true);
-    assert_eq!(fe, ["api", "workspaces", "*", "projects", "*", "*", "*", "issue-relation"]);
+    assert_eq!(fe, ["api", "workspaces", "*", "projects", "*", "issues", "*", "issue-relation"]);
     let matrix = wildcard_segments("/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-relation/", false);
     assert_eq!(matrix, ["api", "workspaces", "*", "projects", "*", "issues", "*", "issue-relation"]);
 }
