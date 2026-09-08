@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "domains": {
+    "issue": {
+      "rust_module": "routes/work_item.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-links/",
+          "django_source": "app/urls/issue.py:109-114",
+          "rust_status": "implemented",
+          "rust_handler": "routes::work_item::list_links",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "fetchIssueLinks" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "createIssueLink" }
+          ],
+          "fe_pages": ["issue-detail"],
+          "batch_task": "Batch F T1",
+          "out_scope": false,
+          "notes": "POST create normalizes URL + dup-400"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-links/:pk/",
+          "django_source": "app/urls/issue.py:109-114",
+          "rust_status": "implemented",
+          "rust_handler": "routes::work_item::get_link",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "updateIssueLink" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "deleteIssueLink" }
+          ],
+          "fe_pages": ["issue-detail"],
+          "batch_task": "Batch F T1",
+          "out_scope": false,
+          "notes": "DELETE is soft delete (documented deviation)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-relation/",
+          "django_source": "app/urls/issue.py:235-244",
+          "rust_status": "implemented",
+          "rust_handler": "routes::work_item::list_relations",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_relation.service.ts", "method": "listIssueRelations" },
+            { "service": "apps/web/core/services/issue/issue_relation.service.ts", "method": "createIssueRelations" }
+          ],
+          "fe_pages": ["issue-detail"],
+          "batch_task": "Batch F T2",
+          "out_scope": false,
+          "notes": "GET returns 8 fixed groups; POST 201 array, dups skipped"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-attachments/",
+          "django_source": "app/urls/issue.py:126-131",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::issue_attachment_list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T3",
+          "out_scope": false,
+          "notes": "GET only; legacy POST-create OUT (V2 presign covers uploads)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-attachments/:pk/",
+          "django_source": "app/urls/issue.py:126-131",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::issue_attachment_delete",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T3",
+          "out_scope": false,
+          "notes": "DELETE only; hard delete; ADMIN-or-creator gate"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/work-items/:ident/",
+          "django_source": "app/urls/issue.py:281",
+          "rust_status": "implemented",
+          "rust_handler": "routes::work_item::get_by_identifier",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T10",
+          "out_scope": false,
+          "notes": "constraint enforced in handler (strict int + iexact + member gate); route shape :ident"
+        }
+      ]
+    },
+    "label": {
+      "rust_module": "routes/label.rs",
+      "endpoints": [
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/bulk-create-labels/",
+          "django_source": "app/urls/issue.py:88",
+          "rust_status": "implemented",
+          "rust_handler": "routes::label::bulk_create_labels",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T4",
+          "out_scope": false,
+          "notes": "workspace ADMIN gate; default name Migrated / desc Migrated Issue"
+        }
+      ]
+    },
+    "estimate": {
+      "rust_module": "routes/estimate.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/project-estimates/",
+          "django_source": "app/urls/estimate.py:16",
+          "rust_status": "implemented",
+          "rust_handler": "routes::estimate::project_estimates",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T5",
+          "out_scope": false,
+          "notes": "project.estimate_id null -> 200 []"
+        }
+      ]
+    },
+    "project": {
+      "rust_module": "routes/prefs.rs",
+      "endpoints": [
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/project-views/",
+          "django_source": "app/urls/project.py:92",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::project_views_post",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T6",
+          "out_scope": false,
+          "notes": "POST only; non-member 403"
+        }
+      ]
+    },
+    "notification": {
+      "rust_module": "routes/notification.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/users/notifications/:pk/",
+          "django_source": "app/urls/notification.py:22",
+          "rust_status": "implemented",
+          "rust_handler": "routes::notification::get_notification",
+          "fe_evidence": [{ "service": "packages/services/src/workspace/notification.service.ts", "method": "update" }],
+          "fe_pages": ["notification"],
+          "batch_task": "Batch F T7",
+          "out_scope": false,
+          "notes": "PATCH hardcodes snoozed_till only; DELETE soft"
+        }
+      ]
+    },
+    "workspace": {
+      "rust_module": "routes/themes.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/workspace-themes/",
+          "django_source": "app/urls/workspace.py:122-127",
+          "rust_status": "implemented",
+          "rust_handler": "routes::themes::list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T8",
+          "out_scope": false,
+          "notes": "workspace ADMIN gate"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/workspace-themes/:pk/",
+          "django_source": "app/urls/workspace.py:122-127",
+          "rust_status": "implemented",
+          "rust_handler": "routes::themes::detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T8",
+          "out_scope": false,
+          "notes": "DELETE soft via deleted_at"
+        }
+      ]
+    },
+    "analytics": {
+      "rust_module": "routes/analytic.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/analytics/",
+          "django_source": "app/urls/analytic.py:25-45",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::workspace_analytics",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T9",
+          "out_scope": false,
+          "notes": "x_axis+y_axis validation, segment != x_axis"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/saved-analytic-view/:analytic_id/",
+          "django_source": "app/urls/analytic.py:25-45",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::saved_analytic",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T9",
+          "out_scope": false,
+          "notes": ""
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/export-analytics/",
+          "django_source": "app/urls/analytic.py:25-45",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::export_analytics",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T9",
+          "out_scope": false,
+          "notes": "Celery export skipped; 200 message only"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/analytic-view/:pk/",
+          "django_source": "app/urls/analytic.py:25-45",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::analytic_view_detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch F T9",
+          "out_scope": false,
+          "notes": "workspace ADMIN gate; DELETE soft"
+        }
+      ]
+    }
+  }
+}
