@@ -466,6 +466,64 @@
           "batch_task": "Batch G T8",
           "out_scope": false,
           "notes": "verified DeletedIssuesListViewSet.get (base.py:800-813) vs deleted_list (issue_query.rs:2434-2468): ADMIN/MEMBER/GUEST gate (base.py:801 vs issue_query.rs:2440-2448); all_objects archived-or-deleted scope + updated_at__gt (base.py:806-811 vs issue_query.rs:2456-2466); 200 bare UUID array unpaginated (base.py:810-813 vs issue_query.rs:2466-2467); invalid updated_at__gt 400 {error: Please provide valid detail} (views/base.py:182-186 vs parse_deleted_updated_at_gt issue_query.rs:2383-2412); FE getDeletedIssues (issue.service.ts:89-97) zero callers"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/versions/",
+          "django_source": "app/urls/issue.py:256",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::issue_versions_list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch G T9",
+          "out_scope": false,
+          "notes": "verified IssueVersionEndpoint.get list (version.py:46-74) vs issue_versions_list (versions.rs:591-624): GET 200 10-key cursor page (version.py:48-59 vs VERSION_LIST_KEYS versions.rs:106-117, envelope global_paginator.py:75-85 vs VersionEnvelope versions.rs:375-385); ADMIN/MEMBER/GUEST gate (version.py:36 vs guard_versions versions.rs:190-195); no issue pre-check, unknown issue 200 empty page both sides (versions.rs:586-590); cursor ValueError 500 GENERIC_500_MSG both sides (views/base.py:200-209 vs cursor_500 versions.rs:251-256); FE repo-wide grep issues/.*versions|versions/ over apps/web/core/services + packages/services/src shows no issues/:id/versions caller (only pages + description-versions hits)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/versions/:pk/",
+          "django_source": "app/urls/issue.py:261",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::issue_version_detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch G T9",
+          "out_scope": false,
+          "notes": "verified IssueVersionEndpoint.get single (version.py:38-44) vs issue_version_detail (versions.rs:630-660): GET 200 full snapshot IssueVersionDetailSerializer 31 fields name-twice (serializers/issue.py:981-1016) vs ISSUE_VERSION_DETAIL_KEYS 30 name-once (versions.rs:123-154); miss 404 via DoesNotExist (views/base.py:92-96) vs missing() (versions.rs:656-659); ADMIN/MEMBER/GUEST gate (version.py:36 vs guard_versions versions.rs:190-195); FE repo-wide grep shows no issues/:id/versions caller"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/work-items/:work_item_id/description-versions/",
+          "django_source": "app/urls/issue.py:266",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::desc_versions_list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/work_item_version.service.ts",
+              "method": "listDescriptionVersions"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T9",
+          "out_scope": false,
+          "notes": "verified WorkItemDescriptionVersionEndpoint.get list (version.py:118-144) vs desc_versions_list (versions.rs:667-703): GET 200 10-key page .order_by(-created_at) (version.py:133-135 vs versions.rs:692-701); ADMIN/MEMBER/GUEST gate (version.py:86 vs guard_versions versions.rs:190-195); project 404 (version.py:88 vs fetch_gate_project versions.rs:509-520) + issue 404 (version.py:89 vs fetch_owner_issue versions.rs:535-552) before guest 403 {error} (version.py:102-105 vs DESC_GUEST_MSG versions.rs:101,577-582); FE listDescriptionVersions (work_item_version.service.ts:23-35) called from multiple component files (peek-overview/issue-detail.tsx:150-151, issue-detail/main-content.tsx:152-153), not one page"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/work-items/:work_item_id/description-versions/:pk/",
+          "django_source": "app/urls/issue.py:271",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::desc_version_detail",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/work_item_version.service.ts",
+              "method": "retrieveDescriptionVersion"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T9",
+          "out_scope": false,
+          "notes": "verified WorkItemDescriptionVersionEndpoint.get single (version.py:107-116) vs desc_version_detail (versions.rs:705-743): GET 200 14-key IssueDescriptionVersionDetailSerializer (serializers/issue.py:1020-1038) vs DESC_VERSION_DETAIL_KEYS (versions.rs:159-174); miss 404 vs missing() (versions.rs:739-742); same project-404/issue-404/guest-403 chain (version.py:88-105 vs desc_gate_chain versions.rs:560-584); FE retrieveDescriptionVersion (work_item_version.service.ts:37-50) called from multiple component files, not one page"
         }
       ]
     },
