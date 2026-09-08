@@ -1080,6 +1080,51 @@
           "batch_task": "Batch H T6",
           "out_scope": false,
           "notes": "verified WorkspaceFavoriteGroupEndpoint.get (favorite.py:85-97) vs group (favorite.rs:931-960, main.rs:134-137): class has get only (ws.py:197-201 plain as_view) so GET-only; GET 200 both; children parent_id=favorite_id (favorite.py:88 vs favorite.rs:939-954); member gate project-null pass with NO page exclusion unlike the list twin (favorite.py:88-94 vs favorite.rs:939-948); 10-key serializer rows (serializers/favorite.py:64-75 vs render_rows favorite.rs:364-374); gate WORKSPACE ADMIN/MEMBER (favorite.py:86 vs guard_ws_am favorite.rs:79-84); unknown folder -> 200 [] both (Django filters without existence check vs fetch_all favorite.rs:954); FE getGroupedFavorites GET group/ (favorite.service.ts:55-61) + packages groupedList (:93-99); sidebar/store fan-out so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/draft-issues/",
+          "django_source": "app/urls/workspace.py:202",
+          "rust_status": "implemented",
+          "rust_handler": "routes::draft::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "getIssues" },
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "createIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T7",
+          "out_scope": false,
+          "notes": "verified WorkspaceDraftIssueViewSet.list+create (draft.py:97-154) vs list/create (draft.rs:676-754,777-938, main.rs:398-400): GET 200 paginated own-drafts-only + POST 201 both (draft.py:105-109,153 vs draft.rs:753,935); 21-key DraftIssueSerializer rows incl description_html, create re-reads same 21 keys via .values() (draft.py:127-149, serializers/draft.py:300-335 vs draft_json draft.rs:263-287); validation byte-exact start>target non_field_errors + state/parent/estimate messages + IntegrityError {error:The payload is not valid} (serializers/draft.py:72-77,112-138, views/base.py:80-84 vs draft.rs:106-116,788-819,859-866); gate WORKSPACE ADMIN/MEMBER/GUEST (draft.py:98,111 vs guard_list_create draft.rs:122-127); known non-key deviations: ?issue_filters narrowed Django-only (draft.py:100, utils/issue_filters.py:428-463), assignee_ids drops member_project__is_active refinement (draft.py:74-77), datetimes RFC3339 UTC vs per-user-tz; FE getIssues GET (workspace_draft.service.ts:18-27) + createIssue POST (:37-46); store fan-out (issue.store.ts + root.tsx/draft-issue-block/form.tsx/header.tsx/page.tsx) so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/draft-issues/:pk/",
+          "django_source": "app/urls/workspace.py:207",
+          "rust_status": "implemented",
+          "rust_handler": "routes::draft::retrieve",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "getIssueById" },
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "updateIssue" },
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "deleteIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T7",
+          "out_scope": false,
+          "notes": "verified WorkspaceDraftIssueViewSet.retrieve+partial_update+destroy (draft.py:156-203) vs retrieve/partial_update/destroy (draft.rs:948-961,974-1126,1136-1162, main.rs:408-412): retrieve 200 21-key detail (detail serializer dedupes description_html, serializers/draft.py:337-342) miss 404 standard (draft.py:190-194 vs missing() draft.rs:959); PATCH 204 miss 404 {error:Issue not found} verbatim NON-standard (draft.py:166,183 vs PATCH_MISS_MSG draft.rs:102,986); DELETE 204 soft-delete (draft.py:199-203, mixins.py:48-53 vs draft.rs:1157-1161); gates retrieve ADMIN+creator (draft.py:186 vs guard_retrieve draft.rs:149-154), PATCH ADMIN/MEMBER+creator (draft.py:156-161 vs guard_patch draft.rs:135-140), destroy ADMIN-or-creator model=DraftIssue (draft.py:199 vs may_destroy draft.rs:174-176); project_id re-scope + cycle_id not_provided PATCH semantics (draft.py:168,176 vs draft.rs:989,1084); FE getIssueById GET (workspace_draft.service.ts:29-35) + updateIssue PATCH (:48-58) + deleteIssue DELETE (:60-66); store fan-out so fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/draft-to-issue/:draft_id/",
+          "django_source": "app/urls/workspace.py:212",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::draft::create_draft_to_issue",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "moveIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T7",
+          "out_scope": false,
+          "notes": "MISMATCH response keys: Django returns full IssueCreateSerializer __all__ (serializers/issue.py:105, draft.py:309 serializer.data) vs Rust minimal 9-key 201 subset id/name/project_id/workspace_id/sequence_id/state_id/priority/assignee_ids/label_ids (draft.rs:1388-1401); match parts: POST 201 both (draft.py:309 vs draft.rs:1388); no-project 400 {error:Project is required to create an issue.} verbatim (draft.py:209-212 vs NO_PROJECT_MSG draft.rs:104,1199-1202); name required/blank + start>target + state/parent/estimate verbatims (serializers/issue.py:124-197, db/models/issue.py:136 vs validate_convert_name draft.rs:206-212, check_state/check_parent/check_estimate draft.rs:584-643); gate WORKSPACE ADMIN/MEMBER no creator (draft.py:205 vs guard_convert draft.rs:160-165); miss unknown :draft_id Django .first()->None.project_id 500 (draft.py:207-209 no None branch) normalized to 404 missing() (draft.rs:1196-1198) per sane-4xx rule (H6 favorite_id precedent); cycle/module side-writes + FileAsset re-point + draft soft-delete mirrored, Celery issue_activity skipped per Batch C (draft.py:227-307 vs draft.rs:1342-1386); FE moveIssue POST draft-to-issue/ (workspace_draft.service.ts:68-74) via store moveIssue (issue.store.ts:63,339-343) + issue-modal/form.tsx:126,282; multi-caller so fe_pages []"
         }
       ]
     },
