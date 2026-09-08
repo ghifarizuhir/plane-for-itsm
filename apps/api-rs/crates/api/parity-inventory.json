@@ -682,6 +682,52 @@
           "batch_task": "Batch F T8",
           "out_scope": false,
           "notes": "DELETE soft via deleted_at"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspace-slug-check/",
+          "django_source": "app/urls/workspace.py:43",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::slug_check",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch H T1",
+          "out_scope": false,
+          "notes": "verified WorkSpaceAvailabilityCheckEndpoint.get (base.py:214-225) vs slug_check (prefs.rs:1578-1600): GET-only, 400 'Workspace Slug is required' (base.py:220 vs prefs.rs:81), 200 {status} (base.py:225 vs prefs.rs:1599), IsAuthenticated-only (base.py:150 vs AuthUser); FE caller workspaceSlugCheck @ apps/web/core/services/workspace.service.ts:200-201 (+slugCheck @ packages/services/src/workspace/workspace.service.ts:113-114, instances twin excluded) hits /api/workspace-slug-check/?slug= but fe_evidence left [] because the tripwire segment-matcher treats ?slug= as an extra segment and fails gate-green"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/",
+          "django_source": "app/urls/workspace.py:48",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::workspace::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "createWorkspace" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "create" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T1",
+          "out_scope": false,
+          "notes": "GET list returns full WorkSpaceSerializer __all__+total_members/role (serializers/workspace.py:43) member-scoped ordered by name (base.py:63-79, AMG gate base.py:152-154) vs Rust {id,name,slug} unscoped all-workspaces (workspace.rs:124-142); POST Django 400 name/slug/length/URL checks (base.py:103-119) + 403 DISABLE_WORKSPACE_CREATION (base.py:92-96) + 409 slug conflict (base.py:145-150) + 201 serializer.data+total_members+role (base.py:131-139) vs Rust validate_create errors map to 500 AppError (common/src/errors.rs:17-19), no DISABLE check, unique-violation 500 internal error (workspace.rs:172-175), 201 {id,name,slug} (workspace.rs:219-226); FE repo-wide grep bare api/workspaces/ hits only POST create callers, no GET list caller"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/",
+          "django_source": "app/urls/workspace.py:53",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::workspace::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspace" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspace" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspace" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "retrieve" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "update" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T1",
+          "out_scope": false,
+          "notes": "PUT-only-in-Django: as_view maps put->update (workspace.py:58) but Rust registers get/patch/delete only (main.rs:57-62) so PUT 405; GET full serializer member-scoped (base.py:63-79) vs {id,name,slug} auth-only (workspace.rs:237-258); PATCH ADMIN-only partial_update (base.py:156-158) vs auth-only name-only returning {slug} (workspace.rs:260-286); DELETE ADMIN + profile cleanup 204 (base.py:167-172) vs auth-only soft-delete 204 null (workspace.rs:288-315); FE getWorkspace in 2 page.tsx files so fe_pages []"
         }
       ]
     },
