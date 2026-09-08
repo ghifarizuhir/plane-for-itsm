@@ -184,6 +184,47 @@
           "batch_task": "Batch G T2",
           "out_scope": false,
           "notes": "GET returns {id,name} only (label.rs:166) vs LabelSerializer 7 keys (serializers/issue.py:365-371); PATCH 200 {id} (label.rs:207) vs 200 serializer.data (label.py:81); no permission gates (label.rs:153,171,210) vs ProjectBasePermission + ADMIN (label.py:26,58,85)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/bulk-delete-issues/",
+          "django_source": "app/urls/issue.py:93",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_write::bulk_delete",
+          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "bulkDeleteIssues" }],
+          "fe_pages": [],
+          "batch_task": "Batch G T3",
+          "out_scope": false,
+          "notes": "verified BulkDeleteIssuesEndpoint.delete (base.py:773-797) vs bulk_delete (issue_write.rs:274-342): ADMIN-only gate (base.py:774 vs issue_write.rs:283-287), 400 'Issue IDs are required' (base.py:778-779 vs issue_write.rs:288-291), 200 {message} pre-delete count (base.py:794-797 vs issue_write.rs:338-341)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/bulk-archive-issues/",
+          "django_source": "app/urls/issue.py:98",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_write::bulk_archive",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "bulkArchiveIssues" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T3",
+          "out_scope": false,
+          "notes": "verified BulkArchiveIssuesEndpoint.post (archive.py:305-343) vs bulk_archive (issue_write.rs:370-432): ADMIN/MEMBER gate (archive.py:306,308 vs issue_write.rs:376-379), 400 empty ids (archive.py:312-313 vs issue_write.rs:380-383), 400 INVALID_ARCHIVE_STATE_GROUP 4091 (archive.py:319-327, error_codes.py:7 vs issue_write.rs:398-412), 200 {archived_at} date-only (archive.py:343 vs issue_write.rs:428-431)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/sub-issues/",
+          "django_source": "app/urls/issue.py:104",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_sub::sub_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "subIssues" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "addSubIssues" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T3",
+          "out_scope": false,
+          "notes": "verified SubIssuesEndpoint.get/post (sub_issue.py:37-207,210-275) vs sub_list/sub_add (issue_sub.rs:438-541,574-669): GET any-member gate (sub_issue.py:34 vs issue_sub.rs:451-454), 26-key values rows (sub_issue.py:147-175 vs issue_sub.rs:202-230), 200 {sub_issues,state_distribution} (sub_issue.py:200-207,272-275 vs issue_sub.rs:533-540,661-668); POST ADMIN/MEMBER gate (permissions/project.py:112-119 vs issue_sub.rs:586-589), 404 parent (sub_issue.py:217-221 vs issue_sub.rs:610-616), 400 empty ids (sub_issue.py:224-228 vs issue_sub.rs:590-593)"
         }
       ]
     },
