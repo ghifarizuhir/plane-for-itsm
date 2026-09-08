@@ -459,7 +459,7 @@ check e9-ws-presign 200 -X POST -d '{"entity_type":"PROJECT_COVER","name":"smoke
 AIDS=$(jid asset_id)
 grep -q 'upload_data' /tmp/smoke_body && grep -q 'asset_url' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e9-ws-triple -> upload_data+asset_url"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e9-ws-triple"; echo "FAIL e9-ws-triple: $(head -c 200 /tmp/smoke_body)"; }
 # E9 round-trip lewat proxy S3 (Task 3 s3-upload-proxy): presign -> POST multipart
-# ke $UPURL (jalur proxy `/:bucket/*rest` di api-rs) -> PATCH complete -> GET 302.
+# ke $UPURL (jalur proxy `/:bucket`, `/:bucket/` di api-rs) -> PATCH complete -> GET 302.
 # Pakai aset KHUSUS ($AIDRT), bukan $AIDS: PATCH complete menandai is_uploaded
 # sehingga e9-download-notuploaded (404) di bawah tetap menguji $AIDS yang murni.
 check e9-rt-presign 200 -X POST -d '{"entity_type":"PROJECT_COVER","name":"smoke-rt.png","type":"image/png","size":11}' "$BASE/api/assets/v2/workspaces/$WS/"
