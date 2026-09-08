@@ -254,6 +254,52 @@
           "batch_task": "Batch G T4",
           "out_scope": false,
           "notes": "GET 200 {id,comment_html} (work_item.rs:216) vs full IssueCommentSerializer.data; PATCH 200 {id} (work_item.rs:241) vs 200 serializer.data (comment.py:141), no edited_at bump (comment.py:116-117); _auth-only no gates (work_item.rs:203,222,245) vs ADMIN+creator allow_permission (comment.py:109,144); DELETE 204 match on status (comment.py:160 vs work_item.rs:257)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/",
+          "django_source": "app/urls/issue.py:175",
+          "rust_status": "implemented",
+          "rust_handler": "routes::subscribe::subscribers_list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch G T5",
+          "out_scope": false,
+          "notes": "verified IssueSubscriberViewSet.list (subscriber.py:52-57) vs subscribers_list (subscribe.rs:292-329): 200 list of ProjectMemberLiteSerializer rows (project.py:237-244 keys member/id/is_subscribed) matches subscriber_member_json (subscribe.rs:68-90, UserLite user.py:141-153); safe-method ProjectEntityPermission gate (subscriber.py:20) matches role.is_none deny incl. GUEST reads (subscribe.rs:301-304); is_subscribed computed as EXISTS per member (subscribe.rs:311-313) while Django passes no annotation (subscriber.py:52-57)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/:subscriber_id/",
+          "django_source": "app/urls/issue.py:180",
+          "rust_status": "implemented",
+          "rust_handler": "routes::subscribe::subscriber_remove",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch G T5",
+          "out_scope": false,
+          "notes": "verified IssueSubscriberViewSet.destroy (subscriber.py:59-67) vs subscriber_remove (subscribe.rs:344-374): DELETE 204 + 404 miss via .get DoesNotExist (base.py:92-96) matches missing() (subscribe.rs:370-372); :subscriber_id is subscriber user id filter (subscriber.py:60-65) matches bind subscriber_id (subscribe.rs:358-367); unsafe-branch ADMIN(20)/MEMBER(15) ProjectEntityPermission (project.py:96-119) matches guard_subscriber_remove (subscribe.rs:33-38,355)"
+        },
+        {
+          "methods": ["GET", "POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/subscribe/",
+          "django_source": "app/urls/issue.py:185",
+          "rust_status": "implemented",
+          "rust_handler": "routes::subscribe::subscription_status",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssueNotificationSubscriptionStatus"
+            },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "subscribeToIssueNotifications" },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "unsubscribeFromIssueNotifications"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T5",
+          "out_scope": false,
+          "notes": "verified IssueSubscriberViewSet subscription_status/subscribe/unsubscribe (subscriber.py:69-104) vs subscription_status/subscribe/unsubscribe (subscribe.rs:141-274): GET 200 {subscribed} EXISTS (subscriber.py:97-104 vs subscribe.rs:141-166, subscribed_body subscribe.rs:14-16); POST duplicate 400 {message} (subscriber.py:76-79 vs subscribe.rs:209-214, DUP_SUBSCRIBE_MSG subscribe.rs:10) else 201 IssueSubscriberSerializer __all__ (issue.py:974-978 vs subscriber_json subscribe.rs:115-129); DELETE 204 soft-delete + 404 miss (subscriber.py:87-95 vs subscribe.rs:245-274); Lite gate any-active-member incl. GUEST (subscriber.py:22-28, project.py:136-146) matches guard_lite (subscribe.rs:22-27)"
         }
       ]
     },
