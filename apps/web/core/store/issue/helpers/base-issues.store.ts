@@ -1267,6 +1267,14 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     groupedIssues: TIssues;
     groupedIssueCount: TGroupedIssueCount;
   } {
+    if (Array.isArray(issueResponse)) {
+      const issueList = issueResponse as unknown as TIssue[];
+      return {
+        issueList,
+        groupedIssues: { [ALL_ISSUES]: issueList.map((issue) => issue.id) },
+        groupedIssueCount: { [ALL_ISSUES]: issueList.length },
+      };
+    }
     const issueResult = issueResponse?.results;
 
     // if undefined return empty objects
