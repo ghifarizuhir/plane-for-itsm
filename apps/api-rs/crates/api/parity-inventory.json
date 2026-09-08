@@ -84,6 +84,76 @@
           "batch_task": "Batch F T10",
           "out_scope": false,
           "notes": "constraint enforced in handler (strict int + iexact + member gate); route shape :ident"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/list/",
+          "django_source": "app/urls/issue.py:37",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_query::list_by_ids",
+          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieveIssues" }],
+          "fe_pages": [],
+          "batch_task": "Batch G T1",
+          "out_scope": false,
+          "notes": "verified IssueListEndpoint vs list_by_ids"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/",
+          "django_source": "app/urls/issue.py:42",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_query::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "createIssue" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesFromServer" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesWithParams" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T1",
+          "out_scope": false,
+          "notes": "verified IssueViewSet.list 12-key paginated envelope vs list; POST vs issue_write::create 201"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues-detail/",
+          "django_source": "app/urls/issue.py:47",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_query::list_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesFromServer" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T1",
+          "out_scope": false,
+          "notes": "verified IssueDetailEndpoint vs list_detail"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/v2/issues/",
+          "django_source": "app/urls/issue.py:54",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_lists::v2_issues",
+          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesForSync" }],
+          "fe_pages": [],
+          "batch_task": "Batch G T1",
+          "out_scope": false,
+          "notes": "verified IssuePaginatedViewSet vs v2_issues"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:pk/",
+          "django_source": "app/urls/issue.py:59",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::work_item::get_issue",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieve" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "patchIssue" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "deleteIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T1",
+          "out_scope": false,
+          "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716)"
         }
       ]
     },
