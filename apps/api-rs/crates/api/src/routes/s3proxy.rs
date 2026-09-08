@@ -64,11 +64,12 @@ fn http() -> &'static reqwest::Client {
 /// Forward mentah ke MinIO. Tanpa auth gate: otorisasi dibawa signature
 /// SigV4 di query/form (persis seperti Caddy `Caddyfile.ce:20-21` yang juga
 /// tidak meng-gate). Body sudah dibatasi 5MB oleh RequestBodyLimitLayer.
-pub async fn proxy_to_minio(
-    Path((bucket, rest)): Path<(String, String)>,
+async fn proxy_inner(
+    bucket: String,
+    rest: String,
     method: Method,
     headers: HeaderMap,
-    RawQuery(query): RawQuery,
+    query: Option<String>,
     body: Bytes,
 ) -> Response {
     let Some(url) = proxy_target(&bucket, &rest, query.as_deref()) else {
@@ -117,6 +118,26 @@ pub async fn proxy_to_minio(
         }
     };
     resp.body(Body::from(bytes)).unwrap()
+}
+
+pub async fn proxy_to_minio(
+    Path((bucket, rest)): Path<(String, String)>,
+    method: Method,
+    headers: HeaderMap,
+    RawQuery(query): RawQuery,
+    body: Bytes,
+) -> Response {
+    proxy_inner(bucket, rest, method, headers, query, body).await
+}
+
+pub async fn proxy_to_minio_root(
+    Path(bucket): Path<String>,
+    method: Method,
+    headers: HeaderMap,
+    RawQuery(query): RawQuery,
+    body: Bytes,
+) -> Response {
+    proxy_inner(bucket, String::new(), method, headers, query, body).await
 }
 
 #[cfg(test)]

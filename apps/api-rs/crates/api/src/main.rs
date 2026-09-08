@@ -981,6 +981,8 @@ async fn main() {
         // Gate ADMIN/MEMBER/GUEST per row (WORKSPACE_LOGO presign needs
         // workspace ADMIN); static serves AllowAny. See `routes/asset.rs`.
         .route("/:bucket/*rest", get(routes::s3proxy::proxy_to_minio).post(routes::s3proxy::proxy_to_minio).put(routes::s3proxy::proxy_to_minio).delete(routes::s3proxy::proxy_to_minio).head(routes::s3proxy::proxy_to_minio))
+        .route("/:bucket", get(routes::s3proxy::proxy_to_minio_root).post(routes::s3proxy::proxy_to_minio_root).put(routes::s3proxy::proxy_to_minio_root).delete(routes::s3proxy::proxy_to_minio_root).head(routes::s3proxy::proxy_to_minio_root))
+        .route("/:bucket/", get(routes::s3proxy::proxy_to_minio_root).post(routes::s3proxy::proxy_to_minio_root).put(routes::s3proxy::proxy_to_minio_root).delete(routes::s3proxy::proxy_to_minio_root).head(routes::s3proxy::proxy_to_minio_root))
         .route("/api/assets/v2/workspaces/:slug/", post(routes::asset::ws_presign))
         .route(
             "/api/assets/v2/workspaces/:slug/:asset_id/",
