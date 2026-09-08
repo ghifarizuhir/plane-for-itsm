@@ -367,6 +367,60 @@
           "batch_task": "Batch G T6",
           "out_scope": false,
           "notes": "verified CommentReactionViewSet.destroy (comment.py:212-239) vs comment_reaction_destroy (reactions.rs:445-475): DELETE 204 soft-delete + 404 miss via DoesNotExist (base.py:92-96) matches missing() (reactions.rs:471-473); :reaction_code str scoped (slug,project,comment,reaction,actor=user) (comment.py:214-220 vs reactions.rs:458-462); AMG gate (comment.py:212 vs guard_reactions reactions.rs:30-35)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/history/",
+          "django_source": "app/urls/issue.py:149",
+          "rust_status": "implemented",
+          "rust_handler": "routes::history::history",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssueActivities" },
+            { "service": "apps/web/core/services/issue/issue_activity.service.ts", "method": "getIssueActivities" },
+            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "getIssueComments" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T7",
+          "out_scope": false,
+          "notes": "verified IssueActivityEndpoint.get (activity.py:24-86) vs history (history.rs:667-742): GET 200 three branches (?activity_type=issue-property/comment else merged created_at ASC) (activity.py:66-86 vs history_branch history.rs:50-56); AMG gate (activity.py:29 vs gate history.rs:75-88); source_data prefetch only on property branch (activity.py:67-73 vs history.rs:537-553,689-695) + comment_reactions prefetch (activity.py:58-63 vs history.rs:622-641), is_member SkipField omission matches comment_json (history.rs:418); bad created_at__gt 400 {error} both sides (history.rs:680-686)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/meta/",
+          "django_source": "app/urls/issue.py:276",
+          "rust_status": "implemented",
+          "rust_handler": "routes::history::meta",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssueMetaFromURL" }
+          ],
+          "fe_pages": ["issue-detail"],
+          "batch_task": "Batch G T7",
+          "out_scope": false,
+          "notes": "verified IssueMetaEndpoint.get (base.py:1186-1198) vs meta (history.rs:758-792): GET 200 {sequence_id, project_identifier}; PROJECT AMG gate (base.py:1187 vs history.rs:767); miss 404 via DoesNotExist (views/base.py:92-96) matches missing() (history.rs:790); FE called from exactly one page file (issues/(detail)/[issueId]/page.tsx:29)"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-properties/",
+          "django_source": "app/urls/issue.py:216",
+          "rust_status": "implemented",
+          "rust_handler": "routes::userprops::project_props_get",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch G T7",
+          "out_scope": false,
+          "notes": "verified ProjectUserDisplayPropertyEndpoint (base.py:743-770: patch get-or-create + partial serializer 200, get get_or_create 200; AMG base.py:744,766) vs project_props_get (userprops.rs:373-392) + project_props_patch (userprops.rs:400-456, both registered main.rs:271-274): same 200s incl autocreate-never-404, 15-key serializer set (userprops.rs:201-219), non-numeric sort_order 400 (views/base.py:100-104 vs validate_project_prop_patch userprops.rs:99-104); FE: grep user-properties in apps/web/core/services hits only workspace/epics/cycle/module variants, packages/services/src zero hits => fe_evidence []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issue-dates/",
+          "django_source": "app/urls/issue.py:251",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_dates::bulk_update_dates",
+          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "updateIssueDates" }],
+          "fe_pages": [],
+          "batch_task": "Batch G T7",
+          "out_scope": false,
+          "notes": "verified IssueBulkUpdateDateEndpoint.post (base.py:1106-1183) vs bulk_update_dates (issue_dates.rs:144-275): POST 200 {message Issues updated successfully} (base.py:1183 vs issue_dates.rs:63,274); start>target 400 {message} (base.py:1150 vs issue_dates.rs:65,240-243); ADMIN/MEMBER gate (base.py:1126-1127 vs guard_issue_dates issue_dates.rs:79-84); unknown ids skipped (base.py:1142-1143 vs issue_dates.rs:227-229); empty updates 200; missing id 400 KeyError (views/base.py:194-198 vs KEY_MISSING_MSG issue_dates.rs:68,177-183)"
         }
       ]
     },
