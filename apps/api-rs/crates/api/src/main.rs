@@ -124,7 +124,7 @@ async fn main() {
         // DELETE **204** HARD (`soft=False`). Lookup user+slug+pk, miss →
         // 404 `missing()` (Django 500s — sane mapping, see `favorite.rs`).
         .route(
-            "/api/workspaces/:slug/user-favorites/:fid/",
+            "/api/workspaces/:slug/user-favorites/:favorite_id/",
             patch(routes::favorite::patch).delete(routes::favorite::destroy),
         )
         // Parity with `WorkspaceFavoriteGroupEndpoint.get`
@@ -132,7 +132,7 @@ async fn main() {
         // children of the folder + member gate (no page exclusion, unlike
         // the list twin). Same WORKSPACE ADMIN/MEMBER gate.
         .route(
-            "/api/workspaces/:slug/user-favorites/:fid/group/",
+            "/api/workspaces/:slug/user-favorites/:favorite_id/group/",
             get(routes::favorite::group),
         )
         .route(

@@ -1031,6 +1031,55 @@
           "batch_task": "Batch H T5",
           "out_scope": false,
           "notes": "heuristic: unannotated read_only is_favorite/status Django rendering unverifiable without live Django - CycleSerializer declares both (serializers/cycle.py:48-58,62-88) but this view annotates neither (cycle.py:22-107) and Cycle has no status attr (models/cycle.py:60-86); project-level annotates both (views/cycle/base.py:113,153) which the workspace view skips; Rust omits both per model-keys-only (cycle.rs:2532-2534,2576-2600); verified parts: GET 200 both (cycle.py:108-109 vs cycle.rs:2574-2601, main.rs:522), 6 issue-count annotations (cycle.py:34-104 vs cycle.rs:2539-2568), viewer any-active gate (cycle.py:20, permissions/workspace.py:93-100 vs ws_role + deny_detail cycle.rs:2529-2531), member-projects + archived exclusions, -created_at order (cycle.py:105 vs cycle.rs:2568); FE getWorkspaceCycles (cycle.service.ts:81-82) + packages twin (cycle.service.ts:52-53) both hit workspace-level cycles/, store-only/zero callers so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/user-favorites/",
+          "django_source": "app/urls/workspace.py:187",
+          "rust_status": "implemented",
+          "rust_handler": "routes::favorite::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "getFavorites" },
+            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "addFavorite" },
+            { "service": "packages/services/src/user/favorite.service.ts", "method": "list" },
+            { "service": "packages/services/src/user/favorite.service.ts", "method": "add" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T6",
+          "out_scope": false,
+          "notes": "verified WorkspaceFavoriteEndpoint.get+post (favorite.py:23-67) vs list/create (favorite.rs:451-472,595-706, main.rs:118-121): plain as_view() (ws.py:187-191, no method dict) effective GET+POST since patch/delete take favorite_id (favorite.py:70,79); GET 200 + POST 200 (not 201) both (favorite.py:35,54-64 vs favorite.rs:468-471,702-705); 10-key UserFavoriteSerializer exact (serializers/favorite.py:64-75 vs FavoriteOut favorite.rs:190-202); get scope parent__isnull + project-member gate, ?all ignored (favorite.py:26-33 vs FAV_LIST_SQL favorite.rs:428-436); dup entity_identifier -> 200 existing (favorite.py:43-54 vs favorite.rs:617-639); race IntegrityError -> 400 {error:Favorite already exists} byte-exact (favorite.py:66-67 vs FAVORITE_EXISTS_MSG favorite.rs:61,692-696); serializer errors -> 400 field-keyed (favorite.py:65 vs validate_create favorite.rs:496-582); sequence max+10000 (db/models/favorite.py:52-63 vs next_sequence_live favorite.rs:109-114,665-673); gate WORKSPACE ADMIN/MEMBER Guest->403 (favorite.py:23,37 vs guard_ws_am favorite.rs:79-84 + deny()); bad slug -> 200 [] both by contract (get never fetches Workspace vs favorite.rs:456-460); FE getFavorites GET + ?all (favorite.service.ts:43-53) + addFavorite POST (:19-25) + packages list (:74-84) + add (:28-34) all hit user-favorites/; callers fan out via favorite.store.ts + sidebar favorites components (multi-caller) so fe_pages []"
+        },
+        {
+          "methods": ["PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/user-favorites/:favorite_id/",
+          "django_source": "app/urls/workspace.py:192",
+          "rust_status": "implemented",
+          "rust_handler": "routes::favorite::patch",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "updateFavorite" },
+            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "deleteFavorite" },
+            { "service": "packages/services/src/user/favorite.service.ts", "method": "update" },
+            { "service": "packages/services/src/user/favorite.service.ts", "method": "remove" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T6",
+          "out_scope": false,
+          "notes": "verified WorkspaceFavoriteEndpoint.patch+delete (favorite.py:69-82) vs patch/destroy (favorite.rs:718-918, main.rs:126-129): plain as_view() (ws.py:192-196, no method dict) effective PATCH+DELETE since get/post take slug-only (favorite.py:24,38); PATCH 200 partial serializer -> 400 (favorite.py:72-76 vs favorite.rs:744-864 + field_errors :123); DELETE 204 HARD soft=False (favorite.py:79-82 vs favorite.rs:904-917); lookup user+slug+pk (favorite.py:71,80 vs favorite.rs:727-737,904-913); parent/project_id FK Invalid-pk 400 (serializers/favorite.py:60-76 vs invalid_pk_msg favorite.rs:67-69,840-864); gate WORKSPACE ADMIN/MEMBER (favorite.py:69,78 vs guard_ws_am favorite.rs:79-84); miss Django .get() uncaught DoesNotExist -> 500 normalized to 404 missing() (favorite.rs:738-740,914-916) per sane-4xx rule (remove-relation/user-profile precedent); FE updateFavorite PATCH (favorite.service.ts:27-33) + deleteFavorite DELETE (:35-41) + packages update (:44-50) + remove (:59-65) all hit user-favorites/{id}/; multi-caller store+sidebar so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/user-favorites/:favorite_id/group/",
+          "django_source": "app/urls/workspace.py:197",
+          "rust_status": "implemented",
+          "rust_handler": "routes::favorite::group",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "getGroupedFavorites" },
+            { "service": "packages/services/src/user/favorite.service.ts", "method": "groupedList" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T6",
+          "out_scope": false,
+          "notes": "verified WorkspaceFavoriteGroupEndpoint.get (favorite.py:85-97) vs group (favorite.rs:931-960, main.rs:134-137): class has get only (ws.py:197-201 plain as_view) so GET-only; GET 200 both; children parent_id=favorite_id (favorite.py:88 vs favorite.rs:939-954); member gate project-null pass with NO page exclusion unlike the list twin (favorite.py:88-94 vs favorite.rs:939-948); 10-key serializer rows (serializers/favorite.py:64-75 vs render_rows favorite.rs:364-374); gate WORKSPACE ADMIN/MEMBER (favorite.py:86 vs guard_ws_am favorite.rs:79-84); unknown folder -> 200 [] both (Django filters without existence check vs fetch_all favorite.rs:954); FE getGroupedFavorites GET group/ (favorite.service.ts:55-61) + packages groupedList (:93-99); sidebar/store fan-out so fe_pages []"
         }
       ]
     },
