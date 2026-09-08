@@ -796,6 +796,92 @@
           "batch_task": "Batch H T2",
           "out_scope": false,
           "notes": "verified WorkspaceJoinEndpoint.get/post (invite.py:149-233, AllowAny invite.py:137, class has get+post only so methods GET,POST) vs ws_join_get/ws_join_post (invite.rs:670-808, main.rs:832): GET 200 public 10-key exact incl email, token+invite_link omitted (invite.py:227-233 + PublicSerializer serializers/workspace.py vs ws_invite_public_json invite.rs:293-306); POST token-403 (invite.py:155-159 vs invite.rs:53,721-728), invitee-email-403 (invite.py:170-174 vs invite.rs:57,735-741), responded-400 (invite.py:222-225 vs invite.rs:60,743-748), accept reactivate-or-create + invite-delete 200 (invite.py:177-214 vs invite.rs:759-803), reject 200 row-kept (invite.py:217-220 vs invite.rs:804-807), Python-truthy accepted (invite.py:178 vs invite.rs:180-189); documented deviations: anon+bad-token Django 403 token-first vs Rust AuthUser-generic-401-first (invite.py:155-169 vs invite.rs:713-728, locked 401-generic rule), last_workspace_id assignment silent no-op skip (invite.py:204-206 vs invite.rs:706-711), accept-delete Django soft (mixins.py:72-76) vs Rust hard (invite.rs:797-801) unobservable; FE getWorkspaceInvitation GET-join (workspace.service.ts:172) + joinWorkspace POST-join (workspace.service.ts:86) + join POST-join (invitation.service.ts:100), multiple pages so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/members/",
+          "django_source": "app/urls/workspace.py:87",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::list_workspace_members",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceMembers" },
+            { "service": "packages/services/src/workspace/member.service.ts", "method": "list" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "verified WorkSpaceMemberViewSet.list (member.py:46-55, AMG gate :45, admin shape iff requester role>5 :51-54) vs list_workspace_members (member.rs:705-727, gate_ws_amg :710, sees_admin_shape>5 :713, main.rs:776): GET 200 both; [{id,member,role}] with 7-key lite (user.py:141-152) / 9-key admin (user.py:156-169) exact; no is_active filter either side, soft-deleted excluded via SoftDeletionManager (mixins.py:56-58) vs explicit deleted_at IS NULL; -created_at ordering both (model Meta workspace.py:227 vs ORDER BY member.rs:718); FE fetchWorkspaceMembers GET bare members/ (workspace.service.ts:136-137) + list GET bare members/ (member.service.ts:46-47), detail-style callers assigned to :pk/ entry; callers span layout+component+store so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/project-members/",
+          "django_source": "app/urls/workspace.py:92",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::ws_project_members",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "verified WorkspaceProjectMemberEndpoint.get, class has get only (member.py:237-266), vs ws_project_members (member.rs:1089-1140, main.rs:805): GET 200 both; {project_id:[{id,role,member,original_role,created_at}]} with project popped (member.py:261) vs stripped (member.rs:1133-1138), keys per ProjectMemberRoleSerializer (project.py:188-194), member FK as PK both; gate WorkspaceEntityPermission active-member + DRF 403 detail (permissions/workspace.py:74-83) vs ws_role+deny_detail (member.rs:1094-1097); project scoping equivalent (Django global-then-intersect :245-254 vs Rust slug-scoped :1099-1107, same key set); FE grep project-members over apps/web/core/services + packages/services/src (apps/admin/src absent) hit only project-scoped project-members/me/ (project-member.service.ts:39), workspace path caller absent so fe_evidence []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/members/:pk/",
+          "django_source": "app/urls/workspace.py:97",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::member::ws_member_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceMember" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceMember" },
+            { "service": "packages/services/src/workspace/member.service.ts", "method": "update" },
+            { "service": "packages/services/src/workspace/member.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "MISMATCH DELETE sole-project-admin guard: Django compares project_projectmember__member_id=workspace_member.id, the WorkspaceMember ROW id not the user id (member.py:122-141, esp :128), so the guard can only fire on UUID coincidence (dead code) and Django proceeds to 204; Rust uses the user id (sole_project_admin_exists member.rs:434-449, call :953-960) so the same target returns 400 SOLE_PROJ_ADMIN_USER_MSG verbatim (member.py:138 vs member.rs:48). GET/PATCH verified: retrieve 200 + 404 verbatim (member.py:57-74) vs ws_member_detail/ws_member_patch/ws_member_destroy (member.rs:732-760,766-901,909-977, main.rs:788-793); PATCH ADMIN gate, self-400 (member.py:81-85), role==5 cascade (member.py:88-89 vs member.rs:851-861); garbage role Django int() 500 (member.py:88) vs Rust 400 locked sane-4xx rule; full PATCH shape omits always-null deleted_at (H2 __all__ precedent). FE updateWorkspaceMember PATCH detail (workspace.service.ts:144-149) + deleteWorkspaceMember DELETE detail (workspace.service.ts:156-157) + update PATCH detail (member.service.ts:62-63) + destroy DELETE detail (member.service.ts:77-78), store-only callers so fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/members/leave/",
+          "django_source": "app/urls/workspace.py:102",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::ws_leave",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "leaveWorkspace" }],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "verified WorkSpaceMemberViewSet.leave (member.py:160-205, AMG gate :160, POST only per urls :102-106) vs ws_leave (member.rs:983-1042, main.rs:782): 204 soft-deactivate project+ws rows both (:197-205 vs :1023-1041); sole-ws-admin 400 verbatim (:165-174 vs :1000-1015) + sole-project-admin 400 verbatim (:176-195, correct request.user.id :182, vs :1016-1022); FE leaveWorkspace POST members/leave/ (user.service.ts:237-238), component+store callers so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/last-visited-workspace/",
+          "django_source": "app/urls/workspace.py:107",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::last_visited",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "getLastActiveWorkspaceAndProjects" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "lastVisited" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "verified UserLastProjectWithWorkspaceEndpoint.get, class has get only (user.py:68-95, auth-only no permission_classes), vs last_visited (prefs.rs:1782-1851, main.rs:1609): GET 200 both; null-shape exact (user.py:74-78 vs last_visited_null prefs.rs:271-273, unit-tested :1968-1974); workspace_details keys = Workspace fields + logo_url property (workspace.py:119-149) vs ws_detail_json (prefs.rs:1728-1740, declared-but-unannotated total_members/role skipped); project_details nested lite keys per ProjectMemberSerializer (project.py:156-163) vs pm_detail_json (prefs.rs:1750-1780, *_url value fallbacks only); stale last_workspace_id Django 500 (user.py:80) vs Rust 404 locked sane-4xx rule (prefs.rs:1811-1812); FE getLastActiveWorkspaceAndProjects GET (workspace.service.ts:104-105) + lastVisited GET (packages workspace.service.ts:99-100), no page callers so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/workspace-members/me/",
+          "django_source": "app/urls/workspace.py:112",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::ws_me",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceMemberMe" },
+            { "service": "packages/services/src/workspace/member.service.ts", "method": "myInfo" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T3",
+          "out_scope": false,
+          "notes": "verified WorkspaceMemberUserEndpoint.get, class has get only (member.py:217-234, no membership gate plain BaseAPIView), vs ws_me (member.rs:1053-1082, main.rs:797-800): GET 200 both, non-member 200 null both (Django .first()->None :228-234 vs explicit null :1069-1071); full shape + draft_issue_count (WorkspaceMemberMeSerializer workspace.py:101-106, member FK as PK, draft subquery :221-231) vs ws_me_json (member.rs:561-567) + deleted_at-filtered count (:1073-1080); always-null deleted_at key omitted per H2 __all__ precedent; FE workspaceMemberMe GET workspace-members/me/ (workspace.service.ts:120-121) + myInfo GET (member.service.ts:32-33), store-only callers so fe_pages []"
         }
       ]
     },
