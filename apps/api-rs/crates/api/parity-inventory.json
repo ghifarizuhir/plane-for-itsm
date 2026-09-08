@@ -154,6 +154,36 @@
           "batch_task": "Batch G T1",
           "out_scope": false,
           "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issue-labels/",
+          "django_source": "app/urls/issue.py:71",
+          "rust_status": "implemented",
+          "rust_handler": "routes::label::issue_labels_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "getProjectLabels" },
+            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "createIssueLabel" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T2",
+          "out_scope": false,
+          "notes": "verified LabelViewSet vs issue_labels_list/issue_labels_create"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issue-labels/:pk/",
+          "django_source": "app/urls/issue.py:76",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::label::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "patchIssueLabel" },
+            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "deleteIssueLabel" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T2",
+          "out_scope": false,
+          "notes": "GET returns {id,name} only (label.rs:166) vs LabelSerializer 7 keys (serializers/issue.py:365-371); PATCH 200 {id} (label.rs:207) vs 200 serializer.data (label.py:81); no permission gates (label.rs:153,171,210) vs ProjectBasePermission + ADMIN (label.py:26,58,85)"
         }
       ]
     },
