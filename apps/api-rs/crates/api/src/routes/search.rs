@@ -155,6 +155,43 @@ pub async fn global_search(
     Ok(Json(json!({"results": results})))
 }
 
+/// One row of the project issue-search result, mirroring Django
+/// `IssueSearchEndpoint.get` `.values(...)` keys
+/// (`plane/app/views/search/issue.py:146-160`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SearchIssueRow {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub sequence_id: i32,
+    pub project__name: String,
+    pub project__identifier: String,
+    pub project_id: uuid::Uuid,
+    pub workspace__slug: String,
+    pub state__name: Option<String>,
+    pub state__group: Option<String>,
+    pub state__color: Option<String>,
+}
+
+/// Maps a [`SearchIssueRow`] to the bare-array item the web modals consume
+/// (`ISearchIssueResponse`). Extracted so `search_test` covers the shape
+/// without a live DB.
+pub fn build_search_issue_item(row: SearchIssueRow) -> Value {
+    json!({
+        "id": row.id,
+        "name": row.name,
+        "start_date": row.start_date,
+        "sequence_id": row.sequence_id,
+        "project__name": row.project__name,
+        "project__identifier": row.project__identifier,
+        "project_id": row.project_id,
+        "workspace__slug": row.workspace__slug,
+        "state__name": row.state__name,
+        "state__group": row.state__group,
+        "state__color": row.state__color,
+    })
+}
+
 pub async fn issue_search(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -164,12 +201,18 @@ pub async fn issue_search(
     let user = auth.0;
     let pattern = like_pattern(q.search.as_deref());
     let seqs = integer_tokens(q.search.as_deref());
-    let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
-        "SELECT i.id, i.name FROM issues i JOIN project_members pm ON pm.project_id = i.project_id WHERE pm.member_id = $1 AND pm.is_active = true AND i.project_id = $2 AND (i.name ILIKE $3 OR ($4::bigint[] IS NOT NULL AND i.sequence_id = ANY($4))) AND i.deleted_at IS NULL ORDER BY i.created_at DESC LIMIT 100",
+    // Django `IssueSearchEndpoint.get` (`plane/app/views/search/issue.py`)
+    // returns a BARE array via `Response(issues.values(...))` — NOT a
+    // `{"results": [...]}` envelope. `projectIssuesSearch` passes
+    // `response?.data` straight into `setIssues`, so an envelope object
+    // crashed every consumer (`issues.map is not a function`).
+    let rows: Vec<SearchIssueRow> = sqlx::query_as(
+        "SELECT i.id, i.name, i.start_date, i.sequence_id, p.name AS project__name, p.identifier AS project__identifier, i.project_id, w.slug AS workspace__slug, s.name AS state__name, s.\"group\" AS state__group, s.color AS state__color FROM issues i JOIN projects p ON p.id = i.project_id JOIN workspaces w ON w.id = i.workspace_id LEFT JOIN states s ON s.id = i.state_id JOIN project_members pm ON pm.project_id = i.project_id WHERE pm.member_id = $1 AND pm.is_active = true AND i.project_id = $2 AND (i.name ILIKE $3 OR ($4::bigint[] IS NOT NULL AND i.sequence_id = ANY($4))) AND i.deleted_at IS NULL ORDER BY i.created_at DESC LIMIT 100",
     )
     .bind(user).bind(project_id).bind(&pattern).bind(if seqs.is_empty() { None } else { Some(seqs) })
     .fetch_all(&st.pool).await?;
-    Ok(Json(json!({"results": rows.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>()})))
+    let items: Vec<Value> = rows.into_iter().map(build_search_issue_item).collect();
+    Ok(Json(Value::Array(items)))
 }
 
 pub async fn entity_search(
