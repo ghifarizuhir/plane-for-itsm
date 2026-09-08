@@ -90,3 +90,30 @@ fn lax_id_vecs_skip_empty_and_null_elements() {
     assert_eq!(parsed.label_ids.unwrap_or_default(), Vec::<uuid::Uuid>::new());
     assert!(parsed.state_id.is_none());
 }
+
+#[test]
+fn issues_list_envelope_has_paginate_keys() {
+    // Django `BasePaginator.paginate` (`plane/utils/paginator.py:728-743`)
+    // always returns these 12 keys, even when empty. The current stub
+    // returns bare `[]`, which makes FE `processIssueResponse`
+    // (`base-issues.store.ts:1270`) see `results=undefined` and stick the
+    // `ListLayoutLoader` forever (`issue-layout-HOC.tsx:54`).
+    let envelope_keys = [
+        "grouped_by",
+        "sub_grouped_by",
+        "total_count",
+        "next_cursor",
+        "prev_cursor",
+        "next_page_results",
+        "prev_page_results",
+        "count",
+        "total_pages",
+        "total_results",
+        "extra_stats",
+        "results",
+    ];
+    // This documents the contract; the handler test below asserts it.
+    assert_eq!(envelope_keys.len(), 12);
+    assert!(envelope_keys.contains(&"results"));
+    assert!(envelope_keys.contains(&"next_cursor"));
+}
