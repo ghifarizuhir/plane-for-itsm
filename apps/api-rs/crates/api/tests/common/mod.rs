@@ -86,6 +86,36 @@ pub fn segments_match(fe: &[String], matrix: &[String]) -> bool {
     fe.iter().zip(matrix.iter()).all(|(f, m)| f == "*" || m == "*" || f == m)
 }
 
+/// Strip the query string from an extracted FE URL template.
+///
+/// Only a `?` outside `${...}` placeholders starts a query string
+/// (e.g. `/api/workspace-slug-check/?slug=${slug}` -> `/api/workspace-slug-check/`).
+/// A `?` inside a placeholder is a JS ternary
+/// (e.g. `${... ? "links" : "issue-links"}`) and must be kept.
+fn strip_fe_query(url: &str) -> &str {
+    let bytes = url.as_bytes();
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'$' && bytes.get(i + 1) == Some(&b'{') {
+            depth += 1;
+            i += 2;
+            continue;
+        }
+        if depth > 0 {
+            if bytes[i] == b'{' {
+                depth += 1;
+            } else if bytes[i] == b'}' {
+                depth -= 1;
+            }
+        } else if bytes[i] == b'?' {
+            return &url[..i];
+        }
+        i += 1;
+    }
+    url
+}
+
 /// Extract `/api/...` URL template strings from a TS file (one URL per line).
 pub fn fe_urls_in_file(path: &Path) -> Vec<String> {
     let src = std::fs::read_to_string(path).unwrap_or_default();
@@ -97,6 +127,7 @@ pub fn fe_urls_in_file(path: &Path) -> Vec<String> {
         let url = &rest[..end];
         let url = url
             .trim_end_matches(|c: char| c.is_whitespace() || c == ',' || c == ')' || c == '`' || c == '"');
+        let url = strip_fe_query(url);
         if url.starts_with("/api/") && url.len() > 5 {
             out.push(url.to_string());
         }

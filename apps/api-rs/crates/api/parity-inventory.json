@@ -689,11 +689,14 @@
           "django_source": "app/urls/workspace.py:43",
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::slug_check",
-          "fe_evidence": [],
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceSlugCheck" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "slugCheck" }
+          ],
           "fe_pages": [],
           "batch_task": "Batch H T1",
           "out_scope": false,
-          "notes": "verified WorkSpaceAvailabilityCheckEndpoint.get (base.py:214-225) vs slug_check (prefs.rs:1578-1600): GET-only, 400 'Workspace Slug is required' (base.py:220 vs prefs.rs:81), 200 {status} (base.py:225 vs prefs.rs:1599), IsAuthenticated-only (base.py:150 vs AuthUser); FE caller workspaceSlugCheck @ apps/web/core/services/workspace.service.ts:200-201 (+slugCheck @ packages/services/src/workspace/workspace.service.ts:113-114, instances twin excluded) hits /api/workspace-slug-check/?slug= but fe_evidence left [] because the tripwire segment-matcher treats ?slug= as an extra segment and fails gate-green"
+          "notes": "verified WorkSpaceAvailabilityCheckEndpoint.get (base.py:214-225) vs slug_check (prefs.rs:1578-1600): GET-only, 400 'Workspace Slug is required' (base.py:220 vs prefs.rs:81), 200 {status} (base.py:225 vs prefs.rs:1599), IsAuthenticated-only (base.py:150 vs AuthUser); FE caller workspaceSlugCheck @ apps/web/core/services/workspace.service.ts:200-201 (+slugCheck @ packages/services/src/workspace/workspace.service.ts:113-114, instances twin excluded) hits /api/workspace-slug-check/?slug=; fe_evidence attached and tripwire gate-green after the fe_urls_in_file query-strip fix (? stripped outside ${...} only, JS ternaries kept)"
         },
         {
           "methods": ["GET", "POST"],

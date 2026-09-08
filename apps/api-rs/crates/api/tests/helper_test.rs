@@ -50,3 +50,35 @@ fn fe_urls_in_file_finds_api_urls() {
     let urls = fe_urls_in_file(&file);
     assert!(urls.iter().any(|u| u.contains("issue-relation")), "should find issue-relation URL, got: {urls:?}");
 }
+
+#[test]
+fn fe_urls_in_file_strips_query_string() {
+    let root = repo_root();
+    let file = root.join("apps/web/core/services/workspace.service.ts");
+    let urls = fe_urls_in_file(&file);
+    let slug_check: Vec<&String> = urls.iter().filter(|u| u.contains("workspace-slug-check")).collect();
+    assert!(!slug_check.is_empty(), "expected a slug-check URL in workspace.service.ts");
+    for u in &slug_check {
+        assert!(!u.contains('?'), "query string must be stripped, got: {u}");
+    }
+    let matrix = wildcard_segments("/api/workspace-slug-check/", false);
+    assert!(slug_check.iter().any(|u| segments_match(&wildcard_segments(u, true), &matrix)),
+        "stripped slug-check URL must match the inventory path");
+}
+
+#[test]
+fn fe_urls_in_file_keeps_ternary_placeholder() {
+    // issue.service.ts builds URLs with a JS ternary inside ${...}; the `?`
+    // there is NOT a query string and must survive extraction.
+    let root = repo_root();
+    let file = root.join("apps/web/core/services/issue/issue.service.ts");
+    let urls = fe_urls_in_file(&file);
+    let links: Vec<&String> = urls.iter().filter(|u| u.contains("issue-links")).collect();
+    assert!(!links.is_empty(), "expected an issue-links URL in issue.service.ts");
+    for u in &links {
+        assert!(u.contains('?'), "ternary placeholder must be kept, got: {u}");
+    }
+    let link_matrix = wildcard_segments("/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-links/:pk/", false);
+    assert!(links.iter().any(|u| segments_match(&wildcard_segments(u, true), &link_matrix)),
+        "ternary issue-links URL must still match the inventory path");
+}
