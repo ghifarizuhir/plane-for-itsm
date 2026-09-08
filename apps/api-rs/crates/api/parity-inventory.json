@@ -424,6 +424,48 @@
           "batch_task": "Batch G T7",
           "out_scope": false,
           "notes": "verified IssueBulkUpdateDateEndpoint.post (base.py:1106-1183) vs bulk_update_dates (issue_dates.rs:144-275): POST 200 {message Issues updated successfully} (base.py:1183 vs issue_dates.rs:63,274); start>target 400 {message} (base.py:1150 vs issue_dates.rs:65,240-243); ADMIN/MEMBER gate (base.py:1126-1127 vs guard_issue_dates issue_dates.rs:79-84); unknown ids skipped (base.py:1142-1143 vs issue_dates.rs:227-229); empty updates 200; missing id 400 KeyError (views/base.py:194-198 vs KEY_MISSING_MSG issue_dates.rs:68,177-183)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archived-issues/",
+          "django_source": "app/urls/issue.py:223",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::issue_query::archived_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "getArchivedIssues" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T8",
+          "out_scope": false,
+          "notes": "flat path verified IssueArchiveViewSet.list (archive.py:97-138,210-218) vs archived_list (issue_query.rs:2684-2799): ADMIN/MEMBER gate (archive.py:106 vs issue_query.rs:2696-2700); group_by==sub_group_by 400 byte-exact (archive.py:143-147 vs issue_query.rs:2472-2488,2701-2703); invalid group_by 400 {detail} (paginator.py:690-699 vs issue_query.rs:2516-2533,2717-2719); MISMATCH: truthy group_by Django 200 grouped-dict via GroupedOffsetPaginator/SubGroupedOffsetPaginator (archive.py:148-209) vs Rust 400 {error: Grouped pagination is not supported} (issue_query.rs:2545,2720-2727); FE getArchivedIssues (issue_archive.service.ts:22-24) called only from archived/issue.store.ts:111,152 (store, not a page)"
+        },
+        {
+          "methods": ["GET", "POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:pk/archive/",
+          "django_source": "app/urls/issue.py:228",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_archive_one::retrieve",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "archiveIssue" },
+            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "restoreIssue" },
+            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "retrieveArchivedIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T8",
+          "out_scope": false,
+          "notes": "verified IssueArchiveViewSet retrieve/archive/unarchive (archive.py:220-302) vs retrieve/archive/unarchive (issue_archive_one.rs:206-375): GET archived-scope 404 {error: The required object does not exist.} (archive.py:97-103,248-252 vs issue_archive_one.rs:251-266); POST state-group 400 {error} key not error_code (archive.py:257-263 vs issue_archive_one.rs:293-325) + 200 {archived_at} date-only (archive.py:278 vs issue_archive_one.rs:339); DELETE archived-scope 204 empty (archive.py:280-302 vs issue_archive_one.rs:359-375); ADMIN/MEMBER gates (archive.py:220,256,280 vs guard_archive_one issue_archive_one.rs:132-137); FE archiveIssue POST (issue_archive.service.ts:36-43) via base-issues.store.ts:626, restoreIssue DELETE (:50-51) via archived/issue.store.ts:190, retrieveArchivedIssue GET (:58-64) zero callers"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/deleted-issues/",
+          "django_source": "app/urls/issue.py:246",
+          "rust_status": "implemented",
+          "rust_handler": "routes::issue_query::deleted_list",
+          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "getDeletedIssues" }],
+          "fe_pages": [],
+          "batch_task": "Batch G T8",
+          "out_scope": false,
+          "notes": "verified DeletedIssuesListViewSet.get (base.py:800-813) vs deleted_list (issue_query.rs:2434-2468): ADMIN/MEMBER/GUEST gate (base.py:801 vs issue_query.rs:2440-2448); all_objects archived-or-deleted scope + updated_at__gt (base.py:806-811 vs issue_query.rs:2456-2466); 200 bare UUID array unpaginated (base.py:810-813 vs issue_query.rs:2466-2467); invalid updated_at__gt 400 {error: Please provide valid detail} (views/base.py:182-186 vs parse_deleted_updated_at_gt issue_query.rs:2383-2412); FE getDeletedIssues (issue.service.ts:89-97) zero callers"
         }
       ]
     },
