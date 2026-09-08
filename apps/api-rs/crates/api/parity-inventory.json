@@ -404,11 +404,14 @@
           "django_source": "app/urls/issue.py:216",
           "rust_status": "implemented",
           "rust_handler": "routes::userprops::project_props_get",
-          "fe_evidence": [],
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProjectUserProperties" },
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "updateProjectUserProperties" }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T7",
           "out_scope": false,
-          "notes": "verified ProjectUserDisplayPropertyEndpoint (base.py:743-770: patch get-or-create + partial serializer 200, get get_or_create 200; AMG base.py:744,766) vs project_props_get (userprops.rs:373-392) + project_props_patch (userprops.rs:400-456, both registered main.rs:271-274): same 200s incl autocreate-never-404, 15-key serializer set (userprops.rs:201-219), non-numeric sort_order 400 (views/base.py:100-104 vs validate_project_prop_patch userprops.rs:99-104); FE: grep user-properties in apps/web/core/services hits only workspace/epics/cycle/module variants, packages/services/src zero hits => fe_evidence []"
+          "notes": "verified ProjectUserDisplayPropertyEndpoint (base.py:743-770: patch get-or-create + partial serializer 200, get get_or_create 200; AMG base.py:744,766) vs project_props_get (userprops.rs:373-392) + project_props_patch (userprops.rs:400-456, both registered main.rs:271-274): same 200s incl autocreate-never-404, 15-key serializer set (userprops.rs:201-219), non-numeric sort_order 400 (views/base.py:100-104 vs validate_project_prop_patch userprops.rs:99-104); FE: getProjectUserProperties GET (project.service.ts:101-102) + updateProjectUserProperties PATCH (project.service.ts:109-114) hit exactly projects/:project_id/user-properties/"
         },
         {
           "methods": ["POST"],
