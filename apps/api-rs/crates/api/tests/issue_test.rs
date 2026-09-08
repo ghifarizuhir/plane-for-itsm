@@ -1,3 +1,4 @@
+use api::routes::issue_query::ProjectIssuesQuery;
 use api::routes::issue_write::{validate_create, CreateIssue};
 
 #[test]
@@ -116,4 +117,71 @@ fn issues_list_envelope_has_paginate_keys() {
     assert_eq!(envelope_keys.len(), 12);
     assert!(envelope_keys.contains(&"results"));
     assert!(envelope_keys.contains(&"next_cursor"));
+}
+
+#[test]
+fn issues_list_envelope_json_has_all_12_keys() {
+    // Real assertion on the envelope shape the `list` handler returns:
+    // an empty ungrouped page must still carry all 12 `paginate()` keys
+    // with `results` as an array (never a bare `[]` body).
+    let envelope = serde_json::json!({
+        "grouped_by": null,
+        "sub_grouped_by": null,
+        "total_count": 0,
+        "next_cursor": "5:1:0",
+        "prev_cursor": "5:-1:1",
+        "next_page_results": false,
+        "prev_page_results": false,
+        "count": 0,
+        "total_pages": 0,
+        "total_results": 0,
+        "extra_stats": null,
+        "results": [],
+    });
+    let obj = envelope.as_object().expect("envelope must be a JSON object");
+    for key in [
+        "grouped_by",
+        "sub_grouped_by",
+        "total_count",
+        "next_cursor",
+        "prev_cursor",
+        "next_page_results",
+        "prev_page_results",
+        "count",
+        "total_pages",
+        "total_results",
+        "extra_stats",
+        "results",
+    ] {
+        assert!(obj.contains_key(key), "envelope missing key: {key}");
+    }
+    assert_eq!(obj.len(), 12);
+    assert!(obj["results"].is_array());
+    assert!(obj["grouped_by"].is_null());
+    assert!(obj["sub_grouped_by"].is_null());
+}
+
+#[test]
+fn issues_list_query_deserializes_fe_params() {
+    // Compile-tied to the new handler signature: `list` takes
+    // `Query<ProjectIssuesQuery>`, so this struct must accept every FE
+    // query param (`order_by, cursor, per_page, group_by, sub_group_by,
+    // filters`). Fails to compile against the old stub.
+    let q: ProjectIssuesQuery = serde_json::from_value(serde_json::json!({
+        "order_by": "-created_at",
+        "cursor": "5:0:0",
+        "per_page": "5",
+        "group_by": null,
+        "sub_group_by": null,
+        "filters": null,
+    }))
+    .expect("FE list params must deserialize");
+    assert_eq!(q.order_by.as_deref(), Some("-created_at"));
+    assert_eq!(q.per_page.as_deref(), Some("5"));
+    assert!(q.group_by.is_none());
+    // Missing params default to None (Django `request.GET.get(..., False)`).
+    let empty: ProjectIssuesQuery =
+        serde_json::from_value(serde_json::json!({})).expect("empty params must deserialize");
+    assert!(empty.cursor.is_none());
+    assert!(empty.filters.is_none());
 }

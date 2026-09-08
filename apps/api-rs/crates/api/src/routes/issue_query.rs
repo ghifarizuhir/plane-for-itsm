@@ -6,7 +6,7 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
 use super::issue_common::{
-    ArchiveRow, DetailEnvelope, IssueDetailRow, IssueListRow, IssueOut, IssueRelationItem,
+    ArchiveRow, DetailEnvelope, IssueDetailRow, IssueListRow, IssueRelationItem,
     PageWindow, detail_order_expr, fetch_guest_scoped, fetch_project_member_role,
     is_workspace_admin, next_cursor_str, page_window, parse_cursor, parse_per_page,
     prev_cursor_str, project_gate_allows, sanitize_order_by, total_pages,
@@ -15,22 +15,139 @@ use super::issue_common::{
 use super::issue_common::{build_cursor, parse_python_int};
 
 
+/// Query params for `GET .../issues/` (ungrouped `IssueViewSet.list`,
+/// `plane/app/views/issue/base.py:266-402`). Field names match the FE query
+/// (`order_by, cursor, per_page, group_by, sub_group_by, filters`).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ProjectIssuesQuery {
+    #[serde(default)]
+    pub order_by: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub per_page: Option<String>,
+    #[serde(default)]
+    pub group_by: Option<String>,
+    #[serde(default)]
+    pub sub_group_by: Option<String>,
+    #[serde(default)]
+    pub filters: Option<String>,
+}
+
 pub async fn list(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-) -> Result<Json<Vec<IssueOut>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::issue::Issue>(
-        "SELECT id, name FROM issues WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Query(q): axum::extract::Query<ProjectIssuesQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // 1. PROJECT gate ADMIN(20)/MEMBER(15)/GUEST(5) + ws-admin fallback (base.py:265).
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    // 2. Project must exist with slug scope (base.py:271), else 404.
+    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM projects WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
     )
-    .bind(_project_id)
-    .fetch_all(&st.pool)
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
     .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|i| IssueOut { id: i.id, name: i.name })
-            .collect(),
-    ))
+    if exists.is_none() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
+    }
+    // 3. Grouped branches out of scope for this fix: Django uses
+    // GroupedOffsetPaginator/SubGroupedOffsetPaginator. Return explicit 400
+    // so FE never gets a shape it can't parse (YAGNI: ungrouped covers list layout).
+    if q.group_by.as_deref().is_some_and(|s| !s.is_empty() && s != "null" && s != "None") {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "group_by not supported in Rust cutover yet"}))));
+    }
+    // 4. Cursor pagination byte-exact with BasePaginator (paginator.py:643-681).
+    let per_page = match parse_per_page(q.per_page.as_deref()) {
+        Ok(v) => v,
+        Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
+    };
+    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor = match parse_cursor(&cursor_raw) {
+        Ok(c) => c,
+        Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
+    };
+    let limit = per_page.min(1000);
+    let window = match page_window(cursor.page, limit) {
+        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Ok(w) => w,
+    };
+    if limit <= 0 {
+        return Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": GENERIC_500_MSG}))));
+    }
+    // 5. Guest scoping: GUEST role on non-view-all project sees own rows only.
+    let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await.unwrap_or(false);
+    // 6. Order expr: fixed `-created_at` path for this slice (same deviation
+    // as documented for rich `issue_filters()` below); `order_by`/`filters`/
+    // `sub_group_by` accepted-and-ignored here.
+    let _ = (q.order_by.clone(), q.filters.clone(), q.sub_group_by.clone());
+    // 7. Count + page using IssueListRow 26-key SELECT (issue_common.rs:20-47).
+    // NOTE: full legacy `issue_filters()` + rich filters ignored in this
+    // slice (same deviation as list_detail docs); base visibility only:
+    // not deleted, not archived, not draft.
+    let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
+        "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
+    );
+    count_qb.push_bind(project_id);
+    count_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false");
+    if guest_scoped {
+        count_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
+    }
+    let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
+    // `BeyondEnd` (unbounded page) slices to `[]` in Django and returns an
+    // empty page with a 200 — no page query needed.
+    let offset_opt: Option<i64> = match window {
+        PageWindow::Rows(offset) => Some(offset),
+        PageWindow::BeyondEnd => None,
+    };
+    let rows: Vec<IssueListRow> = match offset_opt {
+        Some(offset) => {
+            let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(
+                "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
+            );
+            page_qb.push_bind(project_id);
+            page_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false");
+            if guest_scoped {
+                page_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
+            }
+            page_qb.push(" ORDER BY i.created_at DESC LIMIT ").push_bind(limit);
+            page_qb.push(" OFFSET ").push_bind(offset);
+            page_qb.build_query_as().fetch_all(&st.pool).await?
+        }
+        None => Vec::new(),
+    };
+    let results: Vec<Value> = rows.into_iter().map(|r| json!(r)).collect();
+    let count = results.len() as i64;
+    // 8. 12-key paginate() envelope (paginator.py:728-743), ungrouped.
+    let has_next = match offset_opt {
+        Some(off) => (off + count) < total,
+        None => false,
+    };
+    let envelope = json!({
+        "grouped_by": null,
+        "sub_grouped_by": null,
+        "total_count": total,
+        "next_cursor": next_cursor_str(limit, cursor.page),
+        "prev_cursor": prev_cursor_str(limit, cursor.page),
+        "next_page_results": has_next,
+        "prev_page_results": cursor.page > 0,
+        "count": count,
+        "total_pages": total_pages(total, limit),
+        "total_results": total,
+        "extra_stats": null,
+        "results": results,
+    });
+    Ok((StatusCode::OK, Json(envelope)))
 }
 
 /// Query params for `list_by_ids`: Django reads
