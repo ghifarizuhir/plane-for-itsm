@@ -1,4 +1,4 @@
-use api::routes::issue_query::ProjectIssuesQuery;
+use api::routes::issue_query::{build_ungrouped_envelope, ProjectIssuesQuery};
 use api::routes::issue_write::{validate_create, CreateIssue};
 
 #[test]
@@ -124,20 +124,7 @@ fn issues_list_envelope_json_has_all_12_keys() {
     // Real assertion on the envelope shape the `list` handler returns:
     // an empty ungrouped page must still carry all 12 `paginate()` keys
     // with `results` as an array (never a bare `[]` body).
-    let envelope = serde_json::json!({
-        "grouped_by": null,
-        "sub_grouped_by": null,
-        "total_count": 0,
-        "next_cursor": "5:1:0",
-        "prev_cursor": "5:-1:1",
-        "next_page_results": false,
-        "prev_page_results": false,
-        "count": 0,
-        "total_pages": 0,
-        "total_results": 0,
-        "extra_stats": null,
-        "results": [],
-    });
+    let envelope = build_ungrouped_envelope(0, 5, 0, vec![]);
     let obj = envelope.as_object().expect("envelope must be a JSON object");
     for key in [
         "grouped_by",

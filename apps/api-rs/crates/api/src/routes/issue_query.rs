@@ -34,6 +34,35 @@ pub struct ProjectIssuesQuery {
     pub filters: Option<String>,
 }
 
+/// 12-key `paginate()` envelope for the ungrouped `list` (`paginator.py:728-743`).
+/// Extracted so the shape is asserted against the real constructor, not a
+/// local literal.
+pub fn build_ungrouped_envelope(total: i64, limit: i64, page: i128, results: Vec<Value>) -> Value {
+    let count = results.len() as i64;
+    // Same `has_next` as the handler: `(offset + count) < total`, with
+    // `BeyondEnd` (unbounded page) yielding an empty page and `false`.
+    let offset = page.saturating_mul(i128::from(limit));
+    let has_next = if offset < 0 || offset > i128::from(i64::MAX) {
+        false
+    } else {
+        (offset + i128::from(count)) < i128::from(total)
+    };
+    json!({
+        "grouped_by": null,
+        "sub_grouped_by": null,
+        "total_count": total,
+        "next_cursor": next_cursor_str(limit, page),
+        "prev_cursor": prev_cursor_str(limit, page),
+        "next_page_results": has_next,
+        "prev_page_results": page > 0,
+        "count": count,
+        "total_pages": total_pages(total, limit),
+        "total_results": total,
+        "extra_stats": null,
+        "results": results,
+    })
+}
+
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -86,11 +115,11 @@ pub async fn list(
         return Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": GENERIC_500_MSG}))));
     }
     // 5. Guest scoping: GUEST role on non-view-all project sees own rows only.
-    let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await.unwrap_or(false);
+    let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
     // 6. Order expr: fixed `-created_at` path for this slice (same deviation
     // as documented for rich `issue_filters()` below); `order_by`/`filters`/
     // `sub_group_by` accepted-and-ignored here.
-    let _ = (q.order_by.clone(), q.filters.clone(), q.sub_group_by.clone());
+    let _ = (&q.order_by, &q.filters, &q.sub_group_by);
     // 7. Count + page using IssueListRow 26-key SELECT (issue_common.rs:20-47).
     // NOTE: full legacy `issue_filters()` + rich filters ignored in this
     // slice (same deviation as list_detail docs); base visibility only:
@@ -99,7 +128,7 @@ pub async fn list(
         "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
     );
     count_qb.push_bind(project_id);
-    count_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false");
+    count_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
     if guest_scoped {
         count_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
     }
@@ -116,7 +145,7 @@ pub async fn list(
                 "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
             );
             page_qb.push_bind(project_id);
-            page_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false");
+            page_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
             if guest_scoped {
                 page_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
             }
@@ -127,26 +156,8 @@ pub async fn list(
         None => Vec::new(),
     };
     let results: Vec<Value> = rows.into_iter().map(|r| json!(r)).collect();
-    let count = results.len() as i64;
     // 8. 12-key paginate() envelope (paginator.py:728-743), ungrouped.
-    let has_next = match offset_opt {
-        Some(off) => (off + count) < total,
-        None => false,
-    };
-    let envelope = json!({
-        "grouped_by": null,
-        "sub_grouped_by": null,
-        "total_count": total,
-        "next_cursor": next_cursor_str(limit, cursor.page),
-        "prev_cursor": prev_cursor_str(limit, cursor.page),
-        "next_page_results": has_next,
-        "prev_page_results": cursor.page > 0,
-        "count": count,
-        "total_pages": total_pages(total, limit),
-        "total_results": total,
-        "extra_stats": null,
-        "results": results,
-    });
+    let envelope = build_ungrouped_envelope(total, limit, cursor.page, results);
     Ok((StatusCode::OK, Json(envelope)))
 }
 
