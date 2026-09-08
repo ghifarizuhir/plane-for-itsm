@@ -300,6 +300,73 @@
           "batch_task": "Batch G T5",
           "out_scope": false,
           "notes": "verified IssueSubscriberViewSet subscription_status/subscribe/unsubscribe (subscriber.py:69-104) vs subscription_status/subscribe/unsubscribe (subscribe.rs:141-274): GET 200 {subscribed} EXISTS (subscriber.py:97-104 vs subscribe.rs:141-166, subscribed_body subscribe.rs:14-16); POST duplicate 400 {message} (subscriber.py:76-79 vs subscribe.rs:209-214, DUP_SUBSCRIBE_MSG subscribe.rs:10) else 201 IssueSubscriberSerializer __all__ (issue.py:974-978 vs subscriber_json subscribe.rs:115-129); DELETE 204 soft-delete + 404 miss (subscriber.py:87-95 vs subscribe.rs:245-274); Lite gate any-active-member incl. GUEST (subscriber.py:22-28, project.py:136-146) matches guard_lite (subscribe.rs:22-27)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/reactions/",
+          "django_source": "app/urls/issue.py:192",
+          "rust_status": "implemented",
+          "rust_handler": "routes::reactions::issue_reactions_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "createIssueReaction" },
+            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "listIssueReactions" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T6",
+          "out_scope": false,
+          "notes": "verified IssueReactionViewSet list/create (reaction.py:29-62) vs issue_reactions_list/issue_reaction_create (reactions.rs:187-290): GET 200 plain array ordered -created_at, no pagination (reaction.py:42, base.py:48, settings no PAGINATION) matches ORDER BY created_at DESC (reactions.rs:209); POST 201 IssueReactionSerializer __all__ + actor_detail UserLite (serializers/issue.py:649-655, user.py:141-153) matches issue_reaction_json (reactions.rs:136-155); dup 400 {error} via base IntegrityError handler (base.py:80-84, ISSUE_DUP_MSG reactions.rs:16); DRF required/blank (validate_reaction reactions.rs:49-57); AMG gate (reaction.py:45 vs guard_reactions reactions.rs:30-35 + ws-admin fallback reactions.rs:72-85)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/reactions/:reaction_code/",
+          "django_source": "app/urls/issue.py:197",
+          "rust_status": "implemented",
+          "rust_handler": "routes::reactions::issue_reaction_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "deleteIssueReaction" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T6",
+          "out_scope": false,
+          "notes": "verified IssueReactionViewSet.destroy (reaction.py:64-85) vs issue_reaction_destroy (reactions.rs:304-334): DELETE 204 soft-delete + 404 miss via DoesNotExist (base.py:92-96) matches missing() (reactions.rs:330-332); :reaction_code str scoped (slug,project,issue,reaction,actor=user) (reaction.py:66-72 vs reactions.rs:317-321); AMG gate (reaction.py:64 vs guard_reactions reactions.rs:30-35)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/comments/:comment_id/reactions/",
+          "django_source": "app/urls/issue.py:204",
+          "rust_status": "implemented",
+          "rust_handler": "routes::reactions::comment_reactions_list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "createIssueCommentReaction"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "listIssueCommentReactions"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T6",
+          "out_scope": false,
+          "notes": "verified CommentReactionViewSet list/create (comment.py:167-210) vs comment_reactions_list/comment_reaction_create (reactions.rs:340-437): GET 200 plain array ordered -created_at, no pagination (comment.py:179) matches ORDER BY created_at DESC (reactions.rs:362); POST 201 CommentReactionSerializer 12 keys incl display_name (serializers/issue.py:666-685) matches comment_reaction_json (history.rs:397-412); dup 400 {error} explicit IntegrityError catch (comment.py:206-208, COMMENT_DUP_MSG reactions.rs:22); DRF required/blank (validate_reaction reactions.rs:49-57); AMG gate (comment.py:183 vs guard_reactions reactions.rs:30-35 + ws-admin fallback reactions.rs:72-85)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/comments/:comment_id/reactions/:reaction_code/",
+          "django_source": "app/urls/issue.py:209",
+          "rust_status": "implemented",
+          "rust_handler": "routes::reactions::comment_reaction_destroy",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "deleteIssueCommentReaction"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T6",
+          "out_scope": false,
+          "notes": "verified CommentReactionViewSet.destroy (comment.py:212-239) vs comment_reaction_destroy (reactions.rs:445-475): DELETE 204 soft-delete + 404 miss via DoesNotExist (base.py:92-96) matches missing() (reactions.rs:471-473); :reaction_code str scoped (slug,project,comment,reaction,actor=user) (comment.py:214-220 vs reactions.rs:458-462); AMG gate (comment.py:212 vs guard_reactions reactions.rs:30-35)"
         }
       ]
     },
