@@ -141,6 +141,26 @@ services:
       - plane-db
       - plane-redis
 
+  proxy:
+    container_name: plane-proxy
+    build:
+      context: ./apps/proxy
+      dockerfile: Dockerfile.ce
+    restart: unless-stopped
+    networks:
+      - dev_env
+    ports:
+      - "8080:80"
+    environment:
+      FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+      SITE_ADDRESS: ":80"
+      CERT_EMAIL: ""
+      TRUSTED_PROXIES: 0.0.0.0/0
+    depends_on:
+      - api
+      - plane-minio
+
 volumes:
   redisdata:
   uploads:
