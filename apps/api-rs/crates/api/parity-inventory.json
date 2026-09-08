@@ -524,6 +524,65 @@
           "batch_task": "Batch G T9",
           "out_scope": false,
           "notes": "verified WorkItemDescriptionVersionEndpoint.get single (version.py:107-116) vs desc_version_detail (versions.rs:705-743): GET 200 14-key IssueDescriptionVersionDetailSerializer (serializers/issue.py:1020-1038) vs DESC_VERSION_DETAIL_KEYS (versions.rs:159-174); miss 404 vs missing() (versions.rs:739-742); same project-404/issue-404/guest-403 chain (version.py:88-105 vs desc_gate_chain versions.rs:560-584); FE retrieveDescriptionVersion (work_item_version.service.ts:37-50) called from multiple component files, not one page"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/",
+          "django_source": "app/urls/issue.py:137",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::issue_list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue_attachment.service.ts",
+              "method": "uploadIssueAttachment"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_attachment.service.ts",
+              "method": "getIssueAttachments"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T10",
+          "out_scope": false,
+          "notes": "verified IssueAttachmentV2Endpoint.get list (attachment.py:193-203) vs issue_list (asset.rs:1635-1660): GET 200 array, uploaded ISSUE_ATTACHMENT filter (attachment.py:194-200 vs asset.rs:1649-1653) + AMG gate (attachment.py:172 vs asset.rs:1646); POST presign (attachment.py:99-147) vs issue_presign (asset.rs:1105-1184): POST 200 {upload_data, asset_id, attachment, asset_url} (attachment.py:139-147 vs asset.rs:1175-1183), mime 400 {error, status:false} byte-exact (attachment.py:105-109 vs INVALID_FILE_TYPE_MSG asset.rs:157,1122-1126), size clamp min(size, FILE_SIZE_LIMIT) (attachment.py:103,118 vs asset.rs:1143-1149), key {wsid}/{hex}-{name} (attachment.py:115 vs ws_asset_key asset.rs:212-214), AMG gate (attachment.py:99 vs asset.rs:1118); wired post(issue_presign).get(issue_list) (main.rs:1030-1033); unknown issue: Rust 404 missing() (asset.rs:1130-1141) vs Django FK 500 (sane-mapping deviation); FE uploadIssueAttachment (issue_attachment.service.ts:43-69, incl. private updateIssueAttachmentUploadStatus issue_attachment.service.ts:28-41) + getIssueAttachments (issue_attachment.service.ts:71-79) via attachment.store.ts:131,155 from multiple components, not one page"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/:pk/",
+          "django_source": "app/urls/issue.py:142",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::asset::issue_get",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue_attachment.service.ts",
+              "method": "updateIssueAttachmentUploadStatus"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_attachment.service.ts",
+              "method": "deleteIssueAttachment"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T10",
+          "out_scope": false,
+          "notes": "MISMATCH DELETE: Django soft-deletes is_deleted=True + deleted_at (attachment.py:150-156) -> 204, Rust HARD DELETE FROM file_assets (asset.rs:1521-1522) -> 204 (declared DEVIATION asset.rs:1486-1493); observable: DELETE-twice 204 Django vs 404 Rust (asset.rs:1512-1514), GET-after-DELETE 302 Django (.get finds soft-deleted row, is_uploaded still true, attachment.py:173-191) vs 404 Rust (asset.rs:1617-1619), collection GET includes soft-deleted row Django (no is_deleted filter attachment.py:194-200) vs excludes Rust (deleted_at IS NULL asset.rs:1649-1653); match parts: GET not-uploaded 400 {error, status:false} byte-exact (attachment.py:179-183 vs asset.rs:1620-1624) else 302 (attachment.py:191 vs asset.rs:1630), miss 404 via DoesNotExist base handler vs missing(), PATCH 204 both (attachment.py:205-234 vs issue_complete asset.rs:1350-1374), gates GET/PATCH AMG (attachment.py:172,205 vs asset.rs:1609,1361) + DELETE ADMIN-or-creator (attachment.py:149 vs asset.rs:1515-1520); wired get(issue_get).patch(issue_complete).delete(issue_delete) (main.rs:1034-1039); FE updateIssueAttachmentUploadStatus (issue_attachment.service.ts:28-41) + deleteIssueAttachment (issue_attachment.service.ts:81-94) via attachment.store.ts:188 from multiple components, not one page"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/remove-relation/",
+          "django_source": "app/urls/issue.py:240",
+          "rust_status": "implemented",
+          "rust_handler": "routes::work_item::remove_relation",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue_relation.service.ts",
+              "method": "deleteIssueRelation"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T10",
+          "out_scope": false,
+          "notes": "verified IssueRelationViewSet.remove_relation (relation.py:271-293) vs remove_relation (work_item.rs:1050-1081): POST 204 both (relation.py:293 vs work_item.rs:1080), bidirectional OR-filter match (relation.py:274-278 vs work_item.rs:1062-1072, ORDER BY created_at DESC LIMIT 1 = Meta.ordering -created_at), ProjectEntityPermission POST non-safe ADMIN/MEMBER + ws-admin fallback (relation.py:40) vs remove_relation_gate (work_item.rs:1014-1027, guard_remove_relation work_item.rs:994); miss/missing-related_issue -> Rust 404 missing() (work_item.rs:1059-1075) vs Django unhandled AttributeError 500, no miss branch (relation.py:271-281; intentional sane-mapping deviation per main.rs:1184-1193); FE deleteIssueRelation posts remove-relation/ (issue_relation.service.ts:38-49) via relation.store.ts:243, no single page file; issue.service.ts:194 deleteIssueRelation hits DELETE issue-relation/:relId/ with no Django route (FE-dead, stays out per main.rs:1173-1179), not evidence here"
         }
       ]
     },
