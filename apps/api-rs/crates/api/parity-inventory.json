@@ -225,6 +225,35 @@
           "batch_task": "Batch G T3",
           "out_scope": false,
           "notes": "verified SubIssuesEndpoint.get/post (sub_issue.py:37-207,210-275) vs sub_list/sub_add (issue_sub.rs:438-541,574-669): GET any-member gate (sub_issue.py:34 vs issue_sub.rs:451-454), 26-key values rows (sub_issue.py:147-175 vs issue_sub.rs:202-230), 200 {sub_issues,state_distribution} (sub_issue.py:200-207,272-275 vs issue_sub.rs:533-540,661-668); POST ADMIN/MEMBER gate (permissions/project.py:112-119 vs issue_sub.rs:586-589), 404 parent (sub_issue.py:217-221 vs issue_sub.rs:610-616), 400 empty ids (sub_issue.py:224-228 vs issue_sub.rs:590-593)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/comments/",
+          "django_source": "app/urls/issue.py:156",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::work_item::list_comments",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "createIssueComment" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T4",
+          "out_scope": false,
+          "notes": "GET returns 2-key {id,comment_html} rows (work_item.rs:178) vs IssueCommentSerializer full-detail fields=__all__ + actor/issue/project/workspace details (serializers/issue.py:697-716); POST 201 {id,comment_html} (work_item.rs:199) vs 201 serializer.data (comment.py:106); _auth-only no gates (work_item.rs:167,183) vs member queryset gate (comment.py:35-61) + ADMIN/MEMBER/GUEST create gate with guest-view 400 'You are not allowed to comment on the issue' (comment.py:63-81)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/comments/:pk/",
+          "django_source": "app/urls/issue.py:161",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::work_item::get_comment",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "patchIssueComment" },
+            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "deleteIssueComment" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch G T4",
+          "out_scope": false,
+          "notes": "GET 200 {id,comment_html} (work_item.rs:216) vs full IssueCommentSerializer.data; PATCH 200 {id} (work_item.rs:241) vs 200 serializer.data (comment.py:141), no edited_at bump (comment.py:116-117); _auth-only no gates (work_item.rs:203,222,245) vs ADMIN+creator allow_permission (comment.py:109,144); DELETE 204 match on status (comment.py:160 vs work_item.rs:257)"
         }
       ]
     },
