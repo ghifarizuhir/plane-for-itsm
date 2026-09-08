@@ -79,7 +79,9 @@
           "django_source": "app/urls/issue.py:281",
           "rust_status": "implemented",
           "rust_handler": "routes::work_item::get_by_identifier",
-          "fe_evidence": [],
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieveWithIdentifier" }
+          ],
           "fe_pages": [],
           "batch_task": "Batch F T10",
           "out_scope": false,
