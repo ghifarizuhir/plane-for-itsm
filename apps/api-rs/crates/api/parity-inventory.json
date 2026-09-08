@@ -882,6 +882,68 @@
           "batch_task": "Batch H T3",
           "out_scope": false,
           "notes": "verified WorkspaceMemberUserEndpoint.get, class has get only (member.py:217-234, no membership gate plain BaseAPIView), vs ws_me (member.rs:1053-1082, main.rs:797-800): GET 200 both, non-member 200 null both (Django .first()->None :228-234 vs explicit null :1069-1071); full shape + draft_issue_count (WorkspaceMemberMeSerializer workspace.py:101-106, member FK as PK, draft subquery :221-231) vs ws_me_json (member.rs:561-567) + deleted_at-filtered count (:1073-1080); always-null deleted_at key omitted per H2 __all__ precedent; FE workspaceMemberMe GET workspace-members/me/ (workspace.service.ts:120-121) + myInfo GET (member.service.ts:32-33), store-only callers so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/user-stats/:user_id/",
+          "django_source": "app/urls/workspace.py:132",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::user_stats",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileData" }],
+          "fe_pages": ["profile"],
+          "batch_task": "Batch H T4",
+          "out_scope": false,
+          "notes": "verified WorkspaceUserProfileStatsEndpoint.get, class has get only (user.py:405-529, no permission_classes auth-only), vs user_stats (user.rs:1308-1458, main.rs:1378-1381): GET 200 both, unknown slug 200 zeros both (Django empty-filter zeros vs explicit zeros user.rs:1314-1324); 9 response keys exact (user.py:517-529 vs USER_STATS_KEYS user.rs:74-84, emit user.rs:1449-1456); state/priority item keys {state_group,state_count}/{priority,priority_count} (user.py:417-444 vs user.rs:1450-1451) + cycle__name/id/project_id values (user.py:504-515 vs user.rs:1430,1445); FE getUserProfileData GET user-stats/ (user.service.ts:160-166), sole caller profile/[userId]/page.tsx:32 so fe_pages [profile]"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/user-activity/:user_id/",
+          "django_source": "app/urls/workspace.py:137",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::user_activity",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileActivity" }],
+          "fe_pages": [],
+          "batch_task": "Batch H T4",
+          "out_scope": false,
+          "notes": "verified WorkspaceUserActivityEndpoint.get, class has get only (user.py:375-402, WorkspaceEntityPermission :376), vs user_activity (user.rs:1556-1694, main.rs:1386-1389): GET 200 both; safe-method gate any-active-member + 403 DRF detail both (permissions/workspace.py:79-83 vs ws_member_role+deny_detail user.rs:1562-1568,281-288); field exclusion comment/vote/reaction/draft (user.py:382 vs user.rs:1618) + repeatable project filter (user.py:379,390-391 vs user.rs:1607-1613) + order_by sanitize default -created_at (user.py:394-398 vs user.rs:1598-1604) + cursor paginate envelope (global_paginator.py:33-73 vs user.rs:1683-1693); FE getUserProfileActivity GET user-activity/ (user.service.ts:179-194) called from two component files (workspace-activity-list.tsx:40, overview/activity.tsx:38) so fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/user-activity/:user_id/export/",
+          "django_source": "app/urls/workspace.py:142",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::export_activity",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "downloadProfileActivity" }],
+          "fe_pages": [],
+          "batch_task": "Batch H T4",
+          "out_scope": false,
+          "notes": "verified ExportWorkspaceUserActivityEndpoint.post, class has post only (base.py:339-391, WorkspaceEntityPermission :340), vs export_activity (user.rs:1721-1820, main.rs:1390-1393): POST both; unsafe-method gate Admin/Member 20/15 both (permissions/workspace.py:85-90 vs user.rs:1737-1750); missing date 400 {error:Date is required} byte-exact (base.py:351-352 vs DATE_REQUIRED_MSG user.rs:52,1727-1735); garbage date Django filter-crash normalized to 400 {error} (user.rs:1754-1760) per sane-4xx rule; cap 10000 (base.py:361 vs user.rs:1774) + 9-col header verbatim QUOTE_ALL (base.py:342-373 vs ACTIVITY_CSV_HEADER user.rs:60-70,1783-1789) + raw CSV bytes text/csv + disposition (base.py:389-390 vs user.rs:1808-1819); FE downloadProfileActivity POST export/ (user.service.ts:196-208) sole caller download-button.tsx:35 (component, not a page) so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/user-profile/:user_id/",
+          "django_source": "app/urls/workspace.py:147",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::user_profile",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileProjectsSegregation" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T4",
+          "out_scope": false,
+          "notes": "verified WorkspaceUserProfileEndpoint.get, class has get only (user.py:280-372, no permission_classes), vs user_profile (user.rs:1464-1549, main.rs:1382-1385): GET 200 both; requester/target membership .get() (user.py:282-290, unhandled DoesNotExist = 500 under default handler per exception.py:17-34) normalized to 404 {error:User not found} (user.rs:1469-1500) per sane-4xx rule; role>=15 project_data gate both (user.py:293 vs user.rs:1502); project item keys id/logo_props/created+assigned+completed+pending_issues (user.py:347-354 vs user.rs:1528-1534); user_data 8 keys exact (user.py:360-369 vs user.rs:1542-1547, avatar/cover asset-fallback value-only); FE getUserProfileProjectsSegregation GET user-profile/ (user.service.ts:168-177) sole caller profile/[userId]/layout.tsx:48 (layout, not a page) so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/user-issues/:user_id/",
+          "django_source": "app/urls/workspace.py:152",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::issue_lists::user_issues",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileIssues" }],
+          "fe_pages": [],
+          "batch_task": "Batch H T4",
+          "out_scope": false,
+          "notes": "flat path verified WorkspaceUserProfileIssuesEndpoint.get (user.py:98-249, WorkspaceViewerPermission :99) vs user_issues (issue_lists.rs:721-822, main.rs:85-88): viewer gate any-active-member both (permissions/workspace.py:93-100 vs ws_role+guard_user_issues issue_lists.rs:215-220,727-730); assignee-or-creator-or-subscriber scope + requester active-project-member (user.py:139-147); group_by==sub_group_by 400 byte-exact (user.py:176-181 vs issue_lists.rs:732-734, GROUPBY_SAME_MSG :107); allowlist 400 {detail} (paginator.py:690-699 vs issue_lists.rs:746-748); MISMATCH: truthy group_by Django 200 grouped-dict via GroupedOffsetPaginator/SubGroupedOffsetPaginator (user.py:173-241) vs Rust 400 {error:Grouped pagination is not supported} (issue_query.rs:2545, issue_lists.rs:749-754) per archived-issues precedent; FE getUserProfileIssues GET user-issues/ (user.service.ts:210-227) called only from profile/issue.store.ts:154,205 (store, not a page) so fe_pages []"
         }
       ]
     },
