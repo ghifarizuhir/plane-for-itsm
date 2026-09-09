@@ -1929,6 +1929,66 @@
           "batch_task": "Batch K T1",
           "out_scope": false,
           "notes": "verified TransferCycleIssueEndpoint.post (base.py:596-622) vs transfer (cycle.rs:1910-2027, main.rs:476-477): 200 {'message':'Success'} both (base.py:622 vs cycle.rs:2026); progress-snapshot written on SOURCE cycle both (cycle_transfer_issues.py:408-436 pk=cycle_id vs cycle.rs:2002-2012 bind cid); move backlog/unstarted/started only both (cycle_transfer_issues.py:437-444 vs cycle.rs:2013-2019); 400s verbatim: missing new_cycle_id (base.py:600 vs cycle.rs:45,1927-1932), completed target (cycle_transfer_issues.py:60-65 vs cycle.rs:47,255-260), missing source (cycle_transfer_issues.py:144-148 vs cycle.rs:49,1970-1974); bad target Django 500 (None.end_date) vs Rust 404 missing() sane-4xx (cycle.rs:1944-1946); AM gate both (base.py:595 vs gate_am cycle.rs:1919)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/",
+          "django_source": "app/urls/cycle.py:40",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::cycle::cycle_issues_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCycleIssues" },
+            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "getCycleIssues" },
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "addIssueToCycle" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T2",
+          "out_scope": false,
+          "notes": "MISMATCH grouped 200 dict shapes unhandled: Django list (issue.py:110-222) serves flat paginated 200 plus grouped/sub-grouped dict 200s (issue.py:143-220 via issue_queryset_grouper issue.py:141) vs Rust flat envelope only (cycle_issues_list cycle.rs:1191, main.rs:439-440); group_by==sub_group_by 400 verbatim both (issue.py:146-150 vs GROUP_DUP_MSG cycle.rs:39,1206-1208); POST verified create 201 {message:success} both (issue.py:224-317 vs cycle_issues_create cycle.rs:1326-1411, main.rs:439-440: missing-issues 400 issue.py:227-228 vs guard_issues_present, completed-cycle 400 issue.py:232-236 vs guard_cycle_open); AM gate both (issue.py:109,223 vs gate_am); FE getCycleIssues GET (cycle.service.ts web + packages twin) + addIssueToCycle POST (issue.service.ts:147-159)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/:issue_id/",
+          "django_source": "app/urls/cycle.py:45",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::cycle::cycle_issue_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "removeIssueFromCycle" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T2",
+          "out_scope": false,
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get->retrieve put->update patch->partial_update (cycle.py:45-55) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py, only list/create/destroy at issue.py:110,224,320; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:446-447); DELETE verified 204 always even 0 rows both (issue.py:320-343 .filter().delete() soft-delete vs cycle_issue_destroy cycle.rs:1413 UPDATE deleted_at); AM gate both (issue.py:319 vs gate_am); FE removeIssueFromCycle DELETE only (issue.service.ts:162-169), no FE GET/PUT/PATCH caller so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/",
+          "django_source": "app/urls/cycle.py:62",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::cycle::fav_create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "addCycleToFavorites" },
+            { "service": "packages/services/src/cycle/cycle-operations.service.ts", "method": "addToFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T2",
+          "out_scope": false,
+          "notes": "MISMATCH GET list unhandled: Django routes get->list (cycle.py:62-65) served by DRF default with user+slug-scoped get_queryset (base.py:562-569) vs Rust post-only route (main.rs:463-464) so GET has no handler; POST verified create 204 (base.py:572-579 vs fav_create cycle.rs:1500, main.rs:463-464): AM gate both (base.py:571 vs gate_am), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (views/base.py:80-84 vs PAYLOAD_INVALID_MSG cycle.rs:55), NO cycle-existence check either side (base.py:573-577 vs cycle.rs cid parse-or-400)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/:cycle_id/",
+          "django_source": "app/urls/cycle.py:67",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::fav_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "removeCycleFromFavorites" },
+            { "service": "packages/services/src/cycle/cycle-operations.service.ts", "method": "removeFromFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T2",
+          "out_scope": false,
+          "notes": "verified CycleFavoriteViewSet.destroy (base.py:582-591, urls cycle.py:67-70) vs fav_destroy (cycle.rs:1546, main.rs:467-468): DELETE 204 hard delete soft=False both (base.py:590 vs cycle.rs DELETE); miss 404 DoesNotExist (views/base.py:92-96 vs missing() on 0 rows); user+slug+project+entity filter both (base.py:583-589 vs cycle.rs project/entity_type/user/slug/cycle_id predicate); AM gate both (base.py:581 vs gate_am)"
         }
       ]
     }
