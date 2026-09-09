@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "domains": {
     "issue": {
       "rust_module": "routes/work_item.rs",
@@ -11,8 +11,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::work_item::list_links",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "fetchIssueLinks" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "createIssueLink" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "fetchIssueLinks"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "createIssueLink"
+            }
           ],
           "fe_pages": ["issue-detail"],
           "batch_task": "Batch F T1",
@@ -26,8 +32,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::work_item::get_link",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "updateIssueLink" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "deleteIssueLink" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "updateIssueLink"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "deleteIssueLink"
+            }
           ],
           "fe_pages": ["issue-detail"],
           "batch_task": "Batch F T1",
@@ -41,8 +53,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::work_item::list_relations",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_relation.service.ts", "method": "listIssueRelations" },
-            { "service": "apps/web/core/services/issue/issue_relation.service.ts", "method": "createIssueRelations" }
+            {
+              "service": "apps/web/core/services/issue/issue_relation.service.ts",
+              "method": "listIssueRelations"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_relation.service.ts",
+              "method": "createIssueRelations"
+            }
           ],
           "fe_pages": ["issue-detail"],
           "batch_task": "Batch F T2",
@@ -80,7 +98,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::work_item::get_by_identifier",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieveWithIdentifier" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "retrieveWithIdentifier"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T4",
@@ -93,7 +114,12 @@
           "django_source": "app/urls/issue.py:37",
           "rust_status": "implemented",
           "rust_handler": "routes::issue_query::list_by_ids",
-          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieveIssues" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "retrieveIssues"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T1",
           "out_scope": false,
@@ -106,9 +132,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::issue_query::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "createIssue" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesFromServer" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesWithParams" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "createIssue"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssuesFromServer"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssuesWithParams"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T1",
@@ -122,7 +157,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::issue_query::list_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesFromServer" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssuesFromServer"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T1",
@@ -135,7 +173,12 @@
           "django_source": "app/urls/issue.py:54",
           "rust_status": "implemented",
           "rust_handler": "routes::issue_lists::v2_issues",
-          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssuesForSync" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssuesForSync"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T1",
           "out_scope": false,
@@ -148,9 +191,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::work_item::get_issue",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieve" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "patchIssue" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "deleteIssue" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "patchIssue"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "deleteIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T1",
@@ -164,8 +216,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::label::issue_labels_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "getProjectLabels" },
-            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "createIssueLabel" }
+            {
+              "service": "apps/web/core/services/issue/issue_label.service.ts",
+              "method": "getProjectLabels"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_label.service.ts",
+              "method": "createIssueLabel"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T2",
@@ -179,8 +237,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::label::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "patchIssueLabel" },
-            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "deleteIssueLabel" }
+            {
+              "service": "apps/web/core/services/issue/issue_label.service.ts",
+              "method": "patchIssueLabel"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_label.service.ts",
+              "method": "deleteIssueLabel"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T2",
@@ -193,7 +257,12 @@
           "django_source": "app/urls/issue.py:93",
           "rust_status": "implemented",
           "rust_handler": "routes::issue_write::bulk_delete",
-          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "bulkDeleteIssues" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "bulkDeleteIssues"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T3",
           "out_scope": false,
@@ -206,7 +275,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::issue_write::bulk_archive",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "bulkArchiveIssues" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "bulkArchiveIssues"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T3",
@@ -220,8 +292,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::issue_sub::sub_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "subIssues" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "addSubIssues" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "subIssues"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "addSubIssues"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T3",
@@ -235,7 +313,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::work_item::list_comments",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "createIssueComment" }
+            {
+              "service": "apps/web/core/services/issue/issue_comment.service.ts",
+              "method": "createIssueComment"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T4",
@@ -249,8 +330,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::work_item::get_comment",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "patchIssueComment" },
-            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "deleteIssueComment" }
+            {
+              "service": "apps/web/core/services/issue/issue_comment.service.ts",
+              "method": "patchIssueComment"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_comment.service.ts",
+              "method": "deleteIssueComment"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T4",
@@ -292,7 +379,10 @@
               "service": "apps/web/core/services/issue/issue.service.ts",
               "method": "getIssueNotificationSubscriptionStatus"
             },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "subscribeToIssueNotifications" },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "subscribeToIssueNotifications"
+            },
             {
               "service": "apps/web/core/services/issue/issue.service.ts",
               "method": "unsubscribeFromIssueNotifications"
@@ -310,8 +400,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::reactions::issue_reactions_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "createIssueReaction" },
-            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "listIssueReactions" }
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "createIssueReaction"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "listIssueReactions"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T6",
@@ -325,7 +421,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::reactions::issue_reaction_destroy",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_reaction.service.ts", "method": "deleteIssueReaction" }
+            {
+              "service": "apps/web/core/services/issue/issue_reaction.service.ts",
+              "method": "deleteIssueReaction"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T6",
@@ -377,9 +476,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::history::history",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssueActivities" },
-            { "service": "apps/web/core/services/issue/issue_activity.service.ts", "method": "getIssueActivities" },
-            { "service": "apps/web/core/services/issue/issue_comment.service.ts", "method": "getIssueComments" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssueActivities"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_activity.service.ts",
+              "method": "getIssueActivities"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_comment.service.ts",
+              "method": "getIssueComments"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T7",
@@ -393,7 +501,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::history::meta",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "getIssueMetaFromURL" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getIssueMetaFromURL"
+            }
           ],
           "fe_pages": ["issue-detail"],
           "batch_task": "Batch G T7",
@@ -407,8 +518,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::userprops::project_props_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProjectUserProperties" },
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "updateProjectUserProperties" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getProjectUserProperties"
+            },
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "updateProjectUserProperties"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T7",
@@ -421,7 +538,12 @@
           "django_source": "app/urls/issue.py:251",
           "rust_status": "implemented",
           "rust_handler": "routes::issue_dates::bulk_update_dates",
-          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "updateIssueDates" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "updateIssueDates"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T7",
           "out_scope": false,
@@ -434,7 +556,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::issue_query::archived_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "getArchivedIssues" }
+            {
+              "service": "apps/web/core/services/issue/issue_archive.service.ts",
+              "method": "getArchivedIssues"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T8",
@@ -448,9 +573,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::issue_archive_one::retrieve",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "archiveIssue" },
-            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "restoreIssue" },
-            { "service": "apps/web/core/services/issue/issue_archive.service.ts", "method": "retrieveArchivedIssue" }
+            {
+              "service": "apps/web/core/services/issue/issue_archive.service.ts",
+              "method": "archiveIssue"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_archive.service.ts",
+              "method": "restoreIssue"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue_archive.service.ts",
+              "method": "retrieveArchivedIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch G T8",
@@ -463,7 +597,12 @@
           "django_source": "app/urls/issue.py:246",
           "rust_status": "implemented",
           "rust_handler": "routes::issue_query::deleted_list",
-          "fe_evidence": [{ "service": "apps/web/core/services/issue/issue.service.ts", "method": "getDeletedIssues" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "getDeletedIssues"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch G T8",
           "out_scope": false,
@@ -627,8 +766,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::estimate::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/estimate.service.ts", "method": "fetchProjectEstimates" },
-            { "service": "apps/web/core/services/estimate.service.ts", "method": "createEstimate" }
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "fetchProjectEstimates"
+            },
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "createEstimate"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T1",
@@ -642,8 +787,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::estimate::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/estimate.service.ts", "method": "fetchEstimateById" },
-            { "service": "apps/web/core/services/estimate.service.ts", "method": "deleteEstimate" }
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "fetchEstimateById"
+            },
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "deleteEstimate"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T1",
@@ -656,7 +807,12 @@
           "django_source": "app/urls/estimate.py:31",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::estimate::create_point",
-          "fe_evidence": [{ "service": "apps/web/core/services/estimate.service.ts", "method": "createEstimatePoint" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "createEstimatePoint"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
@@ -668,7 +824,12 @@
           "django_source": "app/urls/estimate.py:36",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::estimate::patch_point",
-          "fe_evidence": [{ "service": "apps/web/core/services/estimate.service.ts", "method": "updateEstimatePoint" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "updateEstimatePoint"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
@@ -698,8 +859,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::project::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProjectsLite" },
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "createProject" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getProjectsLite"
+            },
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "createProject"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T1",
@@ -712,7 +879,12 @@
           "django_source": "app/urls/project.py:30",
           "rust_status": "implemented",
           "rust_handler": "routes::project::project_details",
-          "fe_evidence": [{ "service": "apps/web/core/services/project/project.service.ts", "method": "getProjects" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getProjects"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch I T1",
           "out_scope": false,
@@ -725,9 +897,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::project::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProject" },
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "updateProject" },
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "deleteProject" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getProject"
+            },
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "updateProject"
+            },
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "deleteProject"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T1",
@@ -781,7 +962,12 @@
           "django_source": "app/urls/project.py:62",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::users_me::my_project_invitations",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "joinProject" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "joinProject"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch I T2",
           "out_scope": false,
@@ -794,8 +980,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::users_me::my_project_roles",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspaceUserProjectsRole" },
-            { "service": "packages/services/src/workspace/member.service.ts", "method": "getWorkspaceUserProjectsRole" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getWorkspaceUserProjectsRole"
+            },
+            {
+              "service": "packages/services/src/workspace/member.service.ts",
+              "method": "getWorkspaceUserProjectsRole"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T2",
@@ -821,7 +1013,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::member::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "fetchProjectMembers" },
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "fetchProjectMembers"
+            },
             {
               "service": "apps/web/core/services/project/project-member.service.ts",
               "method": "bulkAddMembersToProject"
@@ -839,9 +1034,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::member::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "getProjectMember" },
-            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "updateProjectMember" },
-            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "deleteProjectMember" }
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "getProjectMember"
+            },
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "updateProjectMember"
+            },
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "deleteProjectMember"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T3",
@@ -854,7 +1058,12 @@
           "django_source": "app/urls/project.py:87",
           "rust_status": "implemented",
           "rust_handler": "routes::member::leave_project",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "leaveProject" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "leaveProject"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch I T3",
           "out_scope": false,
@@ -867,7 +1076,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::project::my_membership",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "projectMemberMe" }
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "projectMemberMe"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T3",
@@ -881,8 +1093,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::project::fav_add",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "getUserProjectFavorites" },
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "addProjectToFavorites" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getUserProjectFavorites"
+            },
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "addProjectToFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T4",
@@ -896,7 +1114,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::project::fav_remove",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "removeProjectFromFavorites" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "removeProjectFromFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T4",
@@ -914,7 +1135,10 @@
               "service": "apps/web/core/services/project/project-publish.service.ts",
               "method": "fetchPublishSettings"
             },
-            { "service": "apps/web/core/services/project/project-publish.service.ts", "method": "publishProject" }
+            {
+              "service": "apps/web/core/services/project/project-publish.service.ts",
+              "method": "publishProject"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T4",
@@ -932,7 +1156,10 @@
               "service": "apps/web/core/services/project/project-publish.service.ts",
               "method": "updatePublishSettings"
             },
-            { "service": "apps/web/core/services/project/project-publish.service.ts", "method": "unpublishProject" }
+            {
+              "service": "apps/web/core/services/project/project-publish.service.ts",
+              "method": "unpublishProject"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T4",
@@ -946,8 +1173,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::project::archive",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-archive.service.ts", "method": "archiveProject" },
-            { "service": "apps/web/core/services/project/project-archive.service.ts", "method": "restoreProject" }
+            {
+              "service": "apps/web/core/services/project/project-archive.service.ts",
+              "method": "archiveProject"
+            },
+            {
+              "service": "apps/web/core/services/project/project-archive.service.ts",
+              "method": "restoreProject"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch I T4",
@@ -977,7 +1210,12 @@
           "django_source": "app/urls/notification.py:22",
           "rust_status": "implemented",
           "rust_handler": "routes::notification::get_notification",
-          "fe_evidence": [{ "service": "packages/services/src/workspace/notification.service.ts", "method": "update" }],
+          "fe_evidence": [
+            {
+              "service": "packages/services/src/workspace/notification.service.ts",
+              "method": "update"
+            }
+          ],
           "fe_pages": ["notification"],
           "batch_task": "Batch F T7",
           "out_scope": false,
@@ -990,7 +1228,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::notification::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace-notification.service.ts", "method": "fetchNotifications" }
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "fetchNotifications"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T2",
@@ -1080,7 +1321,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::notification::get_preferences",
           "fe_evidence": [
-            { "service": "apps/web/core/services/user.service.ts", "method": "currentUserEmailNotificationSettings" },
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "currentUserEmailNotificationSettings"
+            },
             {
               "service": "apps/web/core/services/user.service.ts",
               "method": "updateCurrentUserEmailNotificationSettings"
@@ -1127,8 +1371,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::slug_check",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceSlugCheck" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "slugCheck" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "workspaceSlugCheck"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "slugCheck"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T1",
@@ -1142,8 +1392,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::workspace::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "createWorkspace" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "create" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "createWorkspace"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "create"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T1",
@@ -1157,12 +1413,30 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::workspace::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspace" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspace" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspace" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "retrieve" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "update" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getWorkspace"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspace"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "deleteWorkspace"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T1",
@@ -1176,9 +1450,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::invite::ws_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceInvitations" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "inviteWorkspace" },
-            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "invite" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "workspaceInvitations"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "inviteWorkspace"
+            },
+            {
+              "service": "packages/services/src/workspace/invitation.service.ts",
+              "method": "invite"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T2",
@@ -1192,9 +1475,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::invite::ws_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceInvitations" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceInvitation" },
-            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "deleteWorkspaceInvitations"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspaceInvitation"
+            },
+            {
+              "service": "packages/services/src/workspace/invitation.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T2",
@@ -1208,10 +1500,22 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::users_me::my_workspace_invitations",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "joinWorkspaces" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "userWorkspaceInvitations" },
-            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "userInvitations" },
-            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "joinMany" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "joinWorkspaces"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "userWorkspaceInvitations"
+            },
+            {
+              "service": "packages/services/src/workspace/invitation.service.ts",
+              "method": "userInvitations"
+            },
+            {
+              "service": "packages/services/src/workspace/invitation.service.ts",
+              "method": "joinMany"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T2",
@@ -1225,9 +1529,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::invite::ws_join_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspaceInvitation" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "joinWorkspace" },
-            { "service": "packages/services/src/workspace/invitation.service.ts", "method": "join" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getWorkspaceInvitation"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "joinWorkspace"
+            },
+            {
+              "service": "packages/services/src/workspace/invitation.service.ts",
+              "method": "join"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T2",
@@ -1241,8 +1554,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::member::list_workspace_members",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceMembers" },
-            { "service": "packages/services/src/workspace/member.service.ts", "method": "list" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchWorkspaceMembers"
+            },
+            {
+              "service": "packages/services/src/workspace/member.service.ts",
+              "method": "list"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T3",
@@ -1265,18 +1584,31 @@
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/members/:pk/",
           "django_source": "app/urls/workspace.py:97",
-          "rust_status": "shape_mismatch",
+          "rust_status": "deviation_accepted",
           "rust_handler": "routes::member::ws_member_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceMember" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceMember" },
-            { "service": "packages/services/src/workspace/member.service.ts", "method": "update" },
-            { "service": "packages/services/src/workspace/member.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspaceMember"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "deleteWorkspaceMember"
+            },
+            {
+              "service": "packages/services/src/workspace/member.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "packages/services/src/workspace/member.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T3",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "MISMATCH DELETE sole-project-admin guard: Django compares project_projectmember__member_id=workspace_member.id, the WorkspaceMember ROW id not the user id (member.py:122-141, esp :128), so the guard can only fire on UUID coincidence (dead code) and Django proceeds to 204; Rust uses the user id (sole_project_admin_exists member.rs:434-449, call :953-960) so the same target returns 400 SOLE_PROJ_ADMIN_USER_MSG verbatim (member.py:138 vs member.rs:48). GET/PATCH verified: retrieve 200 + 404 verbatim (member.py:57-74) vs ws_member_detail/ws_member_patch/ws_member_destroy (member.rs:732-760,766-901,909-977, main.rs:788-793); PATCH ADMIN gate, self-400 (member.py:81-85), role==5 cascade (member.py:88-89 vs member.rs:851-861); garbage role Django int() 500 (member.py:88) vs Rust 400 locked sane-4xx rule; full PATCH shape omits always-null deleted_at (H2 __all__ precedent). FE updateWorkspaceMember PATCH detail (workspace.service.ts:144-149) + deleteWorkspaceMember DELETE detail (workspace.service.ts:156-157) + update PATCH detail (member.service.ts:62-63) + destroy DELETE detail (member.service.ts:77-78), store-only callers so fe_pages []"
+          "notes": "DECISION F0 (deviation_accepted, ADR F0-2): Rust sengaja beda, Django bug. MISMATCH DELETE sole-project-admin guard: Django compares project_projectmember__member_id=workspace_member.id, the WorkspaceMember ROW id not the user id (member.py:122-141, esp :128), so the guard can only fire on UUID coincidence (dead code) and Django proceeds to 204; Rust uses the user id (sole_project_admin_exists member.rs:434-449, call :953-960) so the same target returns 400 SOLE_PROJ_ADMIN_USER_MSG verbatim (member.py:138 vs member.rs:48). GET/PATCH verified: retrieve 200 + 404 verbatim (member.py:57-74) vs ws_member_detail/ws_member_patch/ws_member_destroy (member.rs:732-760,766-901,909-977, main.rs:788-793); PATCH ADMIN gate, self-400 (member.py:81-85), role==5 cascade (member.py:88-89 vs member.rs:851-861); garbage role Django int() 500 (member.py:88) vs Rust 400 locked sane-4xx rule; full PATCH shape omits always-null deleted_at (H2 __all__ precedent). FE updateWorkspaceMember PATCH detail (workspace.service.ts:144-149) + deleteWorkspaceMember DELETE detail (workspace.service.ts:156-157) + update PATCH detail (member.service.ts:62-63) + destroy DELETE detail (member.service.ts:77-78), store-only callers so fe_pages []",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-deviation-accepted.md"
         },
         {
           "methods": ["POST"],
@@ -1284,7 +1616,12 @@
           "django_source": "app/urls/workspace.py:102",
           "rust_status": "implemented",
           "rust_handler": "routes::member::ws_leave",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "leaveWorkspace" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "leaveWorkspace"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch H T3",
           "out_scope": false,
@@ -1297,8 +1634,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::last_visited",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "getLastActiveWorkspaceAndProjects" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "lastVisited" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getLastActiveWorkspaceAndProjects"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "lastVisited"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T3",
@@ -1312,8 +1655,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::member::ws_me",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "workspaceMemberMe" },
-            { "service": "packages/services/src/workspace/member.service.ts", "method": "myInfo" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "workspaceMemberMe"
+            },
+            {
+              "service": "packages/services/src/workspace/member.service.ts",
+              "method": "myInfo"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T3",
@@ -1326,7 +1675,12 @@
           "django_source": "app/urls/workspace.py:132",
           "rust_status": "implemented",
           "rust_handler": "routes::user::user_stats",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileData" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getUserProfileData"
+            }
+          ],
           "fe_pages": ["profile"],
           "batch_task": "Batch H T4",
           "out_scope": false,
@@ -1338,7 +1692,12 @@
           "django_source": "app/urls/workspace.py:137",
           "rust_status": "implemented",
           "rust_handler": "routes::user::user_activity",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileActivity" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getUserProfileActivity"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch H T4",
           "out_scope": false,
@@ -1350,7 +1709,12 @@
           "django_source": "app/urls/workspace.py:142",
           "rust_status": "implemented",
           "rust_handler": "routes::user::export_activity",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "downloadProfileActivity" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "downloadProfileActivity"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch H T4",
           "out_scope": false,
@@ -1363,7 +1727,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::user::user_profile",
           "fe_evidence": [
-            { "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileProjectsSegregation" }
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getUserProfileProjectsSegregation"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T4",
@@ -1376,7 +1743,12 @@
           "django_source": "app/urls/workspace.py:152",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::issue_lists::user_issues",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getUserProfileIssues" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getUserProfileIssues"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch H T4",
           "out_scope": false,
@@ -1389,7 +1761,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::label::ws_labels",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue_label.service.ts", "method": "getWorkspaceIssueLabels" }
+            {
+              "service": "apps/web/core/services/issue/issue_label.service.ts",
+              "method": "getWorkspaceIssueLabels"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1403,8 +1778,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::user_props_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceFilters" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "patchWorkspaceFilters" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchWorkspaceFilters"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "patchWorkspaceFilters"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1418,7 +1799,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::workspace::ws_states",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-state.service.ts", "method": "getWorkspaceStates" }
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "getWorkspaceStates"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1432,7 +1816,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::ws_estimates",
           "fe_evidence": [
-            { "service": "apps/web/core/services/estimate.service.ts", "method": "fetchWorkspaceEstimates" }
+            {
+              "service": "apps/web/core/services/estimate.service.ts",
+              "method": "fetchWorkspaceEstimates"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1446,8 +1833,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::workspace_modules",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "getWorkspaceModules" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "workspaceModulesList" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "getWorkspaceModules"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "workspaceModulesList"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1461,8 +1854,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::workspace_cycles",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "getWorkspaceCycles" },
-            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "getWorkspaceCycles" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "getWorkspaceCycles"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle.service.ts",
+              "method": "getWorkspaceCycles"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T5",
@@ -1476,10 +1875,22 @@
           "rust_status": "implemented",
           "rust_handler": "routes::favorite::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "getFavorites" },
-            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "addFavorite" },
-            { "service": "packages/services/src/user/favorite.service.ts", "method": "list" },
-            { "service": "packages/services/src/user/favorite.service.ts", "method": "add" }
+            {
+              "service": "apps/web/core/services/favorite/favorite.service.ts",
+              "method": "getFavorites"
+            },
+            {
+              "service": "apps/web/core/services/favorite/favorite.service.ts",
+              "method": "addFavorite"
+            },
+            {
+              "service": "packages/services/src/user/favorite.service.ts",
+              "method": "list"
+            },
+            {
+              "service": "packages/services/src/user/favorite.service.ts",
+              "method": "add"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T6",
@@ -1493,10 +1904,22 @@
           "rust_status": "implemented",
           "rust_handler": "routes::favorite::patch",
           "fe_evidence": [
-            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "updateFavorite" },
-            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "deleteFavorite" },
-            { "service": "packages/services/src/user/favorite.service.ts", "method": "update" },
-            { "service": "packages/services/src/user/favorite.service.ts", "method": "remove" }
+            {
+              "service": "apps/web/core/services/favorite/favorite.service.ts",
+              "method": "updateFavorite"
+            },
+            {
+              "service": "apps/web/core/services/favorite/favorite.service.ts",
+              "method": "deleteFavorite"
+            },
+            {
+              "service": "packages/services/src/user/favorite.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "packages/services/src/user/favorite.service.ts",
+              "method": "remove"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T6",
@@ -1510,8 +1933,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::favorite::group",
           "fe_evidence": [
-            { "service": "apps/web/core/services/favorite/favorite.service.ts", "method": "getGroupedFavorites" },
-            { "service": "packages/services/src/user/favorite.service.ts", "method": "groupedList" }
+            {
+              "service": "apps/web/core/services/favorite/favorite.service.ts",
+              "method": "getGroupedFavorites"
+            },
+            {
+              "service": "packages/services/src/user/favorite.service.ts",
+              "method": "groupedList"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T6",
@@ -1525,8 +1954,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::draft::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "getIssues" },
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "createIssue" }
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "getIssues"
+            },
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "createIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T7",
@@ -1540,9 +1975,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::draft::retrieve",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "getIssueById" },
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "updateIssue" },
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "deleteIssue" }
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "getIssueById"
+            },
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "updateIssue"
+            },
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "deleteIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T7",
@@ -1556,7 +2000,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::draft::create_draft_to_issue",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/workspace_draft.service.ts", "method": "moveIssue" }
+            {
+              "service": "apps/web/core/services/issue/workspace_draft.service.ts",
+              "method": "moveIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T7",
@@ -1570,7 +2017,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::views_post",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceView" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspaceView"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1584,8 +2034,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::quick_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceLinks" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "createWorkspaceLink" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchWorkspaceLinks"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "createWorkspaceLink"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1599,8 +2055,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::quick_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceLink" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceLink" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspaceLink"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "deleteWorkspaceLink"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1614,7 +2076,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::home_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceWidgets" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchWorkspaceWidgets"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1628,7 +2093,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::home_patch",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceWidget" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateWorkspaceWidget"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1642,7 +2110,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::recent_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceRecents" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchWorkspaceRecents"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1656,8 +2127,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::misc::list_stickies",
           "fe_evidence": [
-            { "service": "apps/web/core/services/sticky.service.ts", "method": "getStickies" },
-            { "service": "apps/web/core/services/sticky.service.ts", "method": "createSticky" }
+            {
+              "service": "apps/web/core/services/sticky.service.ts",
+              "method": "getStickies"
+            },
+            {
+              "service": "apps/web/core/services/sticky.service.ts",
+              "method": "createSticky"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1671,9 +2148,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::misc::get_sticky",
           "fe_evidence": [
-            { "service": "apps/web/core/services/sticky.service.ts", "method": "getSticky" },
-            { "service": "apps/web/core/services/sticky.service.ts", "method": "updateSticky" },
-            { "service": "apps/web/core/services/sticky.service.ts", "method": "deleteSticky" }
+            {
+              "service": "apps/web/core/services/sticky.service.ts",
+              "method": "getSticky"
+            },
+            {
+              "service": "apps/web/core/services/sticky.service.ts",
+              "method": "updateSticky"
+            },
+            {
+              "service": "apps/web/core/services/sticky.service.ts",
+              "method": "deleteSticky"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1687,8 +2173,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::prefs::sidebar_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchSidebarNavigationPreferences" },
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateBulkSidebarPreferences" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "fetchSidebarNavigationPreferences"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateBulkSidebarPreferences"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch H T8",
@@ -1885,8 +2377,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchAll" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "create" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "fetchAll"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "create"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T1",
@@ -1900,9 +2398,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchById" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "update" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "remove" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "fetchById"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "remove"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T1",
@@ -1916,8 +2423,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::desc_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchDescriptionBinary" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "updateDescription" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "fetchDescriptionBinary"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "updateDescription"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T1",
@@ -1931,7 +2444,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::versions_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page-version.service.ts", "method": "fetchAllVersions" }
+            {
+              "service": "apps/web/core/services/page/project-page-version.service.ts",
+              "method": "fetchAllVersions"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T1",
@@ -1945,7 +2461,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::version_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page-version.service.ts", "method": "fetchVersionById" }
+            {
+              "service": "apps/web/core/services/page/project-page-version.service.ts",
+              "method": "fetchVersionById"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T1",
@@ -1959,8 +2478,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::create_favorite",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "addToFavorites" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "removeFromFavorites" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "addToFavorites"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "removeFromFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T2",
@@ -1974,8 +2499,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::archive",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "archive" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "restore" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "archive"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "restore"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T2",
@@ -1989,8 +2520,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::lock",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "lock" },
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "unlock" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "lock"
+            },
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "unlock"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T2",
@@ -2004,7 +2541,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::page::access",
           "fe_evidence": [
-            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "updateAccess" }
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "updateAccess"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T2",
@@ -2017,7 +2557,12 @@
           "django_source": "app/urls/page.py:72",
           "rust_status": "implemented",
           "rust_handler": "routes::page::duplicate",
-          "fe_evidence": [{ "service": "apps/web/core/services/page/project-page.service.ts", "method": "duplicate" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/page/project-page.service.ts",
+              "method": "duplicate"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T2",
           "out_scope": false,
@@ -2035,9 +2580,18 @@
           "rust_status": "implemented",
           "rust_handler": "routes::user::me",
           "fe_evidence": [
-            { "service": "apps/web/core/services/user.service.ts", "method": "currentUser" },
-            { "service": "apps/web/core/services/user.service.ts", "method": "updateUser" },
-            { "service": "apps/web/core/services/user.service.ts", "method": "deactivateAccount" }
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "currentUser"
+            },
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "updateUser"
+            },
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "deactivateAccount"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
@@ -2062,7 +2616,12 @@
           "django_source": "app/urls/user.py:33",
           "rust_status": "implemented",
           "rust_handler": "routes::user::settings",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "currentUserSettings" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "currentUserSettings"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
           "out_scope": false,
@@ -2075,7 +2634,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::user::instance_admin",
           "fe_evidence": [
-            { "service": "apps/web/core/services/user.service.ts", "method": "currentUserInstanceAdminStatus" }
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "currentUserInstanceAdminStatus"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
@@ -2088,7 +2650,12 @@
           "django_source": "app/urls/user.py:59",
           "rust_status": "implemented",
           "rust_handler": "routes::user::onboard",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "updateUserOnBoard" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "updateUserOnBoard"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
           "out_scope": false,
@@ -2100,7 +2667,12 @@
           "django_source": "app/urls/user.py:61",
           "rust_status": "implemented",
           "rust_handler": "routes::user::tour_completed",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "updateUserTourCompleted" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "updateUserTourCompleted"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
           "out_scope": false,
@@ -2113,8 +2685,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::user::profile",
           "fe_evidence": [
-            { "service": "apps/web/core/services/user.service.ts", "method": "getCurrentUserProfile" },
-            { "service": "apps/web/core/services/user.service.ts", "method": "updateCurrentUserProfile" }
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getCurrentUserProfile"
+            },
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "updateCurrentUserProfile"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T3",
@@ -2139,7 +2717,12 @@
           "django_source": "app/urls/user.py:38",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::users_me::generate_email_code",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "generateEmailCode" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "generateEmailCode"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T4",
           "out_scope": false,
@@ -2151,7 +2734,12 @@
           "django_source": "app/urls/user.py:43",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::users_me::update_email",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "verifyEmailCode" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "verifyEmailCode"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T4",
           "out_scope": false,
@@ -2163,7 +2751,12 @@
           "django_source": "app/urls/user.py:51",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::user::list_accounts",
-          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getCurrentUserAccounts" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "getCurrentUserAccounts"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch M T4",
           "out_scope": false,
@@ -2188,8 +2781,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::users_me::my_workspaces",
           "fe_evidence": [
-            { "service": "apps/web/core/services/workspace.service.ts", "method": "userWorkspaces" },
-            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "list" }
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "userWorkspaces"
+            },
+            {
+              "service": "packages/services/src/workspace/workspace.service.ts",
+              "method": "list"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch M T4",
@@ -2243,7 +2842,12 @@
           "django_source": "app/urls/search.py:12",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::search::global_search",
-          "fe_evidence": [{ "service": "apps/web/core/services/workspace.service.ts", "method": "searchWorkspace" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "searchWorkspace"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch J T3",
           "out_scope": false,
@@ -2256,7 +2860,10 @@
           "rust_status": "constraint_mismatch",
           "rust_handler": "routes::search::issue_search",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project.service.ts", "method": "projectIssuesSearch" }
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "projectIssuesSearch"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T3",
@@ -2269,7 +2876,12 @@
           "django_source": "app/urls/search.py:22",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::search::entity_search",
-          "fe_evidence": [{ "service": "apps/web/core/services/workspace.service.ts", "method": "searchEntity" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "searchEntity"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch J T3",
           "out_scope": false,
@@ -2284,37 +2896,50 @@
           "methods": ["GET"],
           "path": "/api/unsplash/",
           "django_source": "app/urls/external.py:13",
-          "rust_status": "shape_mismatch",
+          "rust_status": "deviation_accepted",
           "rust_handler": "routes::prefs::unsplash",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "getUnsplashImages" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "getUnsplashImages"
+            }
+          ],
           "fe_pages": [],
-          "batch_task": "Batch J T3",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "verified UnsplashEndpoint.get (views/external/base.py:215-243) vs unsplash (prefs.rs:1616-1664, main.rs:1605): no UNSPLASH_ACCESS_KEY -> 200 [] both (base.py:226-227, prefs.rs:1626-1628); else passthrough upstream status+JSON both (base.py:242-243, prefs.rs:1653-1658); Django page $ bug page=${page} (base.py:235) fixed in rust unsplash_url (prefs.rs:258-264); upstream unreachable/non-JSON Django 500 (raised exception) vs rust 502 {error} sane mapping (prefs.rs:1644-1663); IsAuthenticated-only both (views/base.py:150)"
+          "notes": "DECISION F0 (deviation_accepted, ADR F0-2): Rust sengaja beda, Django bug. verified UnsplashEndpoint.get (views/external/base.py:215-243) vs unsplash (prefs.rs:1616-1664, main.rs:1605): no UNSPLASH_ACCESS_KEY -> 200 [] both (base.py:226-227, prefs.rs:1626-1628); else passthrough upstream status+JSON both (base.py:242-243, prefs.rs:1653-1658); Django page $ bug page=${page} (base.py:235) fixed in rust unsplash_url (prefs.rs:258-264); upstream unreachable/non-JSON Django 500 (raised exception) vs rust 502 {error} sane mapping (prefs.rs:1644-1663); IsAuthenticated-only both (views/base.py:150)",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-deviation-accepted.md"
         },
         {
           "methods": ["POST"],
           "path": "/api/workspaces/:slug/projects/:project_id/ai-assistant/",
           "django_source": "app/urls/external.py:14",
-          "rust_status": "missing",
+          "rust_status": "stays_on_django",
           "rust_handler": "",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch J T3",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "GPTIntegrationEndpoint.post (views/external/base.py:148-181): 400 LLM provider API key and model are required (base.py:153-157)/Task is required (base.py:159-161), 500 An internal error has occurred. (base.py:164-168), 200 {response,response_html,project_detail,workspace_detail} (base.py:173-181); ADMIN+MEMBER project gate (base.py:149); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22 (external LLM proxies out of scope); no FE caller found"
+          "notes": "GPTIntegrationEndpoint.post (views/external/base.py:148-181): 400 LLM provider API key and model are required (base.py:153-157)/Task is required (base.py:159-161), 500 An internal error has occurred. (base.py:164-168), 200 {response,response_html,project_detail,workspace_detail} (base.py:173-181); ADMIN+MEMBER project gate (base.py:149); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22 (external LLM proxies out of scope); no FE caller found",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-stays-on-django.md"
         },
         {
           "methods": ["POST"],
           "path": "/api/workspaces/:slug/ai-assistant/",
           "django_source": "app/urls/external.py:19",
-          "rust_status": "missing",
+          "rust_status": "stays_on_django",
           "rust_handler": "",
-          "fe_evidence": [{ "service": "apps/web/core/services/ai.service.ts", "method": "createGptTask" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai.service.ts",
+              "method": "createGptTask"
+            }
+          ],
           "fe_pages": [],
-          "batch_task": "Batch J T3",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212): same 400s (base.py:189-197)/500 An internal error has occurred. (base.py:199-204), 200 {response,response_html} only (base.py:206-212); ADMIN+MEMBER WORKSPACE gate (base.py:185); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22; FE ai.service.ts createGptTask posts this URL (ai.service.ts:29-35)"
+          "notes": "WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212): same 400s (base.py:189-197)/500 An internal error has occurred. (base.py:199-204), 200 {response,response_html} only (base.py:206-212); ADMIN+MEMBER WORKSPACE gate (base.py:185); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22; FE ai.service.ts createGptTask posts this URL (ai.service.ts:29-35)",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-stays-on-django.md"
         }
       ]
     },
@@ -2327,7 +2952,12 @@
           "django_source": "app/urls/timezone.py:11",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::misc::timezones",
-          "fe_evidence": [{ "service": "apps/web/core/services/timezone.service.ts", "method": "fetch" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/timezone.service.ts",
+              "method": "fetch"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch J T4",
           "out_scope": false,
@@ -2345,7 +2975,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::misc::export_history",
           "fe_evidence": [
-            { "service": "apps/web/core/services/project/project-export.service.ts", "method": "csvExport" }
+            {
+              "service": "apps/web/core/services/project/project-export.service.ts",
+              "method": "csvExport"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch J T4",
@@ -2364,10 +2997,22 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::cycle::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "createCycle" },
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCyclesWithParams" },
-            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "create" },
-            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "getWithParams" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "createCycle"
+            },
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "getCyclesWithParams"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle.service.ts",
+              "method": "create"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle.service.ts",
+              "method": "getWithParams"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T1",
@@ -2381,9 +3026,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::cycle::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCycleDetails" },
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "patchCycle" },
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "deleteCycle" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "getCycleDetails"
+            },
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "patchCycle"
+            },
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "deleteCycle"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T1",
@@ -2396,7 +3050,12 @@
           "django_source": "app/urls/cycle.py:57",
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::date_check",
-          "fe_evidence": [{ "service": "apps/web/core/services/cycle.service.ts", "method": "cycleDateCheck" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "cycleDateCheck"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch K T1",
           "out_scope": false,
@@ -2408,7 +3067,12 @@
           "django_source": "app/urls/cycle.py:72",
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::transfer",
-          "fe_evidence": [{ "service": "apps/web/core/services/cycle.service.ts", "method": "transferIssues" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "transferIssues"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch K T1",
           "out_scope": false,
@@ -2421,9 +3085,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::cycle::cycle_issues_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCycleIssues" },
-            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "getCycleIssues" },
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "addIssueToCycle" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "getCycleIssues"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle.service.ts",
+              "method": "getCycleIssues"
+            },
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "addIssueToCycle"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T2",
@@ -2437,7 +3110,10 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::cycle::cycle_issue_destroy",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue/issue.service.ts", "method": "removeIssueFromCycle" }
+            {
+              "service": "apps/web/core/services/issue/issue.service.ts",
+              "method": "removeIssueFromCycle"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T2",
@@ -2451,8 +3127,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::cycle::fav_create",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "addCycleToFavorites" },
-            { "service": "packages/services/src/cycle/cycle-operations.service.ts", "method": "addToFavorites" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "addCycleToFavorites"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-operations.service.ts",
+              "method": "addToFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T2",
@@ -2466,8 +3148,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::fav_destroy",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "removeCycleFromFavorites" },
-            { "service": "packages/services/src/cycle/cycle-operations.service.ts", "method": "removeFromFavorites" }
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "removeCycleFromFavorites"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-operations.service.ts",
+              "method": "removeFromFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T2",
@@ -2481,8 +3169,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::userprops::cycle_props_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "fetchCycleIssueFilters" },
-            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "patchCycleIssueFilters" }
+            {
+              "service": "apps/web/core/services/issue_filter.service.ts",
+              "method": "fetchCycleIssueFilters"
+            },
+            {
+              "service": "apps/web/core/services/issue_filter.service.ts",
+              "method": "patchCycleIssueFilters"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T3",
@@ -2496,10 +3190,22 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::archive",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "archiveCycle" },
-            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "restoreCycle" },
-            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "archive" },
-            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "restore" }
+            {
+              "service": "apps/web/core/services/cycle_archive.service.ts",
+              "method": "archiveCycle"
+            },
+            {
+              "service": "apps/web/core/services/cycle_archive.service.ts",
+              "method": "restoreCycle"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-archive.service.ts",
+              "method": "archive"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-archive.service.ts",
+              "method": "restore"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T3",
@@ -2513,8 +3219,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::archived_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "getArchivedCycles" },
-            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "list" }
+            {
+              "service": "apps/web/core/services/cycle_archive.service.ts",
+              "method": "getArchivedCycles"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-archive.service.ts",
+              "method": "list"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T3",
@@ -2528,8 +3240,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::archived_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "getArchivedCycleDetails" },
-            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "retrieve" }
+            {
+              "service": "apps/web/core/services/cycle_archive.service.ts",
+              "method": "getArchivedCycleDetails"
+            },
+            {
+              "service": "packages/services/src/cycle/cycle-archive.service.ts",
+              "method": "retrieve"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T3",
@@ -2543,7 +3261,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::progress",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "workspaceActiveCyclesProgress" },
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "workspaceActiveCyclesProgress"
+            },
             {
               "service": "packages/services/src/cycle/cycle-analytics.service.ts",
               "method": "workspaceActiveCyclesProgress"
@@ -2561,7 +3282,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::cycle::analytics",
           "fe_evidence": [
-            { "service": "apps/web/core/services/cycle.service.ts", "method": "workspaceActiveCyclesAnalytics" },
+            {
+              "service": "apps/web/core/services/cycle.service.ts",
+              "method": "workspaceActiveCyclesAnalytics"
+            },
             {
               "service": "packages/services/src/cycle/cycle-analytics.service.ts",
               "method": "workspaceActiveCyclesAnalytics"
@@ -2584,10 +3308,22 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "getModules" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "createModule" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "projectModulesList" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "create" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "getModules"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "createModule"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "projectModulesList"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "create"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T4",
@@ -2601,13 +3337,34 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "updateModule" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "getModuleDetails" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "patchModule" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "deleteModule" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "retrieve" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "update" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "updateModule"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "getModuleDetails"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "patchModule"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "deleteModule"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T4",
@@ -2621,8 +3378,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::issue_modules_create",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "addModulesToIssue" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "addModulesToIssue" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "addModulesToIssue"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "addModulesToIssue"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T4",
@@ -2636,10 +3399,22 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::issues_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "getModuleIssues" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "addIssuesToModule" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "getModuleIssues" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "addIssuesToModule" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "getModuleIssues"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "addIssuesToModule"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "getModuleIssues"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "addIssuesToModule"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T4",
@@ -2653,8 +3428,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::issue_destroy",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "removeIssuesFromModuleBulk" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "removeIssuesFromModuleBulk" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "removeIssuesFromModuleBulk"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "removeIssuesFromModuleBulk"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T4",
@@ -2668,8 +3449,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::links_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "createModuleLink" },
-            { "service": "packages/services/src/module/link.service.ts", "method": "create" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "createModuleLink"
+            },
+            {
+              "service": "packages/services/src/module/link.service.ts",
+              "method": "create"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2683,10 +3470,22 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::link_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "updateModuleLink" },
-            { "service": "apps/web/core/services/module.service.ts", "method": "deleteModuleLink" },
-            { "service": "packages/services/src/module/link.service.ts", "method": "update" },
-            { "service": "packages/services/src/module/link.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "updateModuleLink"
+            },
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "deleteModuleLink"
+            },
+            {
+              "service": "packages/services/src/module/link.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "packages/services/src/module/link.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2700,8 +3499,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::fav_create",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "addModuleToFavorites" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "addModuleToFavorites" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "addModuleToFavorites"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "addModuleToFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2715,8 +3520,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::fav_destroy",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module.service.ts", "method": "removeModuleFromFavorites" },
-            { "service": "packages/services/src/module/module.service.ts", "method": "removeModuleFromFavorites" }
+            {
+              "service": "apps/web/core/services/module.service.ts",
+              "method": "removeModuleFromFavorites"
+            },
+            {
+              "service": "packages/services/src/module/module.service.ts",
+              "method": "removeModuleFromFavorites"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2730,8 +3541,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::userprops::module_props_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "fetchModuleIssueFilters" },
-            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "patchModuleIssueFilters" }
+            {
+              "service": "apps/web/core/services/issue_filter.service.ts",
+              "method": "fetchModuleIssueFilters"
+            },
+            {
+              "service": "apps/web/core/services/issue_filter.service.ts",
+              "method": "patchModuleIssueFilters"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2745,8 +3562,14 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::archive",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module_archive.service.ts", "method": "archiveModule" },
-            { "service": "apps/web/core/services/module_archive.service.ts", "method": "restoreModule" }
+            {
+              "service": "apps/web/core/services/module_archive.service.ts",
+              "method": "archiveModule"
+            },
+            {
+              "service": "apps/web/core/services/module_archive.service.ts",
+              "method": "restoreModule"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2760,7 +3583,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::archived_list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module_archive.service.ts", "method": "getArchivedModules" }
+            {
+              "service": "apps/web/core/services/module_archive.service.ts",
+              "method": "getArchivedModules"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2774,7 +3600,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::module::archived_detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/module_archive.service.ts", "method": "getArchivedModuleDetails" }
+            {
+              "service": "apps/web/core/services/module_archive.service.ts",
+              "method": "getArchivedModuleDetails"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch K T5",
@@ -2865,9 +3694,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::intake::list_issues",
           "fe_evidence": [
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "list" },
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "create" },
-            { "service": "packages/services/src/intake/issue.service.ts", "method": "list" }
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "list"
+            },
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "create"
+            },
+            {
+              "service": "packages/services/src/intake/issue.service.ts",
+              "method": "list"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch L T2",
@@ -2881,10 +3719,22 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::intake::detail_issue",
           "fe_evidence": [
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "retrieve" },
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "update" },
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "updateIssue" },
-            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "destroy" }
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "updateIssue"
+            },
+            {
+              "service": "apps/web/core/services/inbox/inbox-issue.service.ts",
+              "method": "destroy"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch L T2",
@@ -3173,7 +4023,12 @@
           "django_source": "app/urls/asset.py:49-53",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::ws_presign",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadWorkspaceAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "uploadWorkspaceAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
           "out_scope": false,
@@ -3186,9 +4041,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::asset::ws_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/file.service.ts", "method": "updateWorkspaceAssetUploadStatus" },
-            { "service": "apps/web/core/services/file.service.ts", "method": "deleteWorkspaceAsset" },
-            { "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetSrc" }
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "updateWorkspaceAssetUploadStatus"
+            },
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "deleteWorkspaceAsset"
+            },
+            {
+              "service": "packages/utils/src/editor/common.ts",
+              "method": "getEditorAssetSrc"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
@@ -3201,7 +4065,12 @@
           "django_source": "app/urls/asset.py:59-63",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::user_presign",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadUserAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "uploadUserAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
           "out_scope": false,
@@ -3214,8 +4083,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::asset::user_complete",
           "fe_evidence": [
-            { "service": "apps/web/core/services/file.service.ts", "method": "updateUserAssetUploadStatus" },
-            { "service": "apps/web/core/services/file.service.ts", "method": "deleteUserAsset" }
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "updateUserAssetUploadStatus"
+            },
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "deleteUserAsset"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
@@ -3228,7 +4103,12 @@
           "django_source": "app/urls/asset.py:69-73",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::asset::restore",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "restoreNewAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "restoreNewAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
           "out_scope": false,
@@ -3252,7 +4132,12 @@
           "django_source": "app/urls/asset.py:79-83",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::asset::project_presign",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadProjectAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "uploadProjectAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
           "out_scope": false,
@@ -3265,8 +4150,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::asset::project_get",
           "fe_evidence": [
-            { "service": "apps/web/core/services/file.service.ts", "method": "updateProjectAssetUploadStatus" },
-            { "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetSrc" }
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "updateProjectAssetUploadStatus"
+            },
+            {
+              "service": "packages/utils/src/editor/common.ts",
+              "method": "getEditorAssetSrc"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
@@ -3280,7 +4171,10 @@
           "rust_status": "implemented",
           "rust_handler": "routes::asset::bulk",
           "fe_evidence": [
-            { "service": "apps/web/core/services/file.service.ts", "method": "updateBulkProjectAssetsUploadStatus" }
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "updateBulkProjectAssetsUploadStatus"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
@@ -3293,7 +4187,12 @@
           "django_source": "app/urls/asset.py:94-98",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::check",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "checkIfAssetExists" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "checkIfAssetExists"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T1",
           "out_scope": false,
@@ -3303,13 +4202,14 @@
           "methods": ["POST"],
           "path": "/api/workspaces/:slug/file-assets/",
           "django_source": "app/urls/asset.py:27-31",
-          "rust_status": "missing",
+          "rust_status": "stays_on_django",
           "rust_handler": "",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T2",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "FileAssetEndpoint.post (base.py:38-46): POST-only route (GET/DELETE need workspace_id+asset_key kwargs, asset.py:27-31); 201 serializer.data (base.py:45) / 400 errors (base.py:46); multipart+JSON parsers (base.py:19); WorkspaceMemberPermission slug branch + IsAuthenticated (base.py:20, workspace.py:113+); unknown slug 404 via .get() (base.py:41); NO rust handler and NO main.rs route, legacy POST-create deliberately excluded per main.rs:1054-1057 (no FE caller); no FE caller found"
+          "notes": "FileAssetEndpoint.post (base.py:38-46): POST-only route (GET/DELETE need workspace_id+asset_key kwargs, asset.py:27-31); 201 serializer.data (base.py:45) / 400 errors (base.py:46); multipart+JSON parsers (base.py:19); WorkspaceMemberPermission slug branch + IsAuthenticated (base.py:20, workspace.py:113+); unknown slug 404 via .get() (base.py:41); NO rust handler and NO main.rs route, legacy POST-create deliberately excluded per main.rs:1054-1057 (no FE caller); no FE caller found",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-stays-on-django.md"
         },
         {
           "methods": ["GET", "DELETE"],
@@ -3317,7 +4217,12 @@
           "django_source": "app/urls/asset.py:32-36",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::legacy_ws_get",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "deleteOldWorkspaceAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "deleteOldWorkspaceAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T2",
           "out_scope": false,
@@ -3327,25 +4232,32 @@
           "methods": ["POST"],
           "path": "/api/users/file-assets/",
           "django_source": "app/urls/asset.py:37",
-          "rust_status": "missing",
+          "rust_status": "stays_on_django",
           "rust_handler": "",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T2",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "UserAssetsEndpoint.post (base.py:81-86): POST-only route (asset.py:37); 201 serializer.data (base.py:85) / 400 errors (base.py:86); multipart parsers (base.py:68); IsAuthenticated default, no view-level permission_classes (settings/common.py:145); NO rust handler and NO main.rs route, legacy POST-create excluded per main.rs:1054-1057; no FE caller found"
+          "notes": "UserAssetsEndpoint.post (base.py:81-86): POST-only route (asset.py:37); 201 serializer.data (base.py:85) / 400 errors (base.py:86); multipart parsers (base.py:68); IsAuthenticated default, no view-level permission_classes (settings/common.py:145); NO rust handler and NO main.rs route, legacy POST-create excluded per main.rs:1054-1057; no FE caller found",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-stays-on-django.md"
         },
         {
           "methods": ["GET", "DELETE"],
           "path": "/api/users/file-assets/:key/",
           "django_source": "app/urls/asset.py:38-42",
-          "rust_status": "shape_mismatch",
+          "rust_status": "deviation_accepted",
           "rust_handler": "routes::asset::legacy_user_get",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "deleteOldUserAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "deleteOldUserAsset"
+            }
+          ],
           "fe_pages": [],
-          "batch_task": "Batch N T2",
+          "batch_task": "Batch F0",
           "out_scope": false,
-          "notes": "MISMATCH GET-hit 500: verified UserAssetsEndpoint.get/delete (base.py:70-79/88-92) vs legacy_user_get/legacy_user_delete (asset.rs:2234-2259/2263-2280, main.rs:1066-1069): Django asset_key vs main.rs :key, recorded :key (asset.py:39 vs main.rs:1067); GET-hit Django 500 Something went wrong (base.py:73 serializes queryset WITHOUT many=True on plain ModelSerializer serializers/asset.py:9-13, AttributeError falls through views/base.py:101-109) vs Rust 200 {data:single,status:true} (asset.rs:2252-2258); GET-miss 200 {error,status:False} quirk verbatim both (base.py:76-79 vs asset.rs:2246-2250); DELETE 204 is_deleted-only both (base.py:89-92 vs asset.rs:2268-2279); DELETE-miss Django 404 (views/base.py:92-96) vs Rust 404 missing() identical (project.rs:16-18); created_by=request.user scope both (base.py:71,89 vs asset.rs:2240-2244,2268-2272); FE deleteOldUserAsset DELETE (file.service.ts:227-234); GET no FE caller"
+          "notes": "DECISION F0 (deviation_accepted, ADR F0-2): Rust sengaja beda, Django bug. MISMATCH GET-hit 500: verified UserAssetsEndpoint.get/delete (base.py:70-79/88-92) vs legacy_user_get/legacy_user_delete (asset.rs:2234-2259/2263-2280, main.rs:1066-1069): Django asset_key vs main.rs :key, recorded :key (asset.py:39 vs main.rs:1067); GET-hit Django 500 Something went wrong (base.py:73 serializes queryset WITHOUT many=True on plain ModelSerializer serializers/asset.py:9-13, AttributeError falls through views/base.py:101-109) vs Rust 200 {data:single,status:true} (asset.rs:2252-2258); GET-miss 200 {error,status:False} quirk verbatim both (base.py:76-79 vs asset.rs:2246-2250); DELETE 204 is_deleted-only both (base.py:89-92 vs asset.rs:2268-2279); DELETE-miss Django 404 (views/base.py:92-96) vs Rust 404 missing() identical (project.rs:16-18); created_by=request.user scope both (base.py:71,89 vs asset.rs:2240-2244,2268-2272); FE deleteOldUserAsset DELETE (file.service.ts:227-234); GET no FE caller",
+          "adr": "docs/superpowers/decisions/2026-09-10-f0-deviation-accepted.md"
         },
         {
           "methods": ["POST"],
@@ -3353,7 +4265,12 @@
           "django_source": "app/urls/asset.py:43-47",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::legacy_ws_restore",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "restoreOldEditorAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "restoreOldEditorAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T2",
           "out_scope": false,
@@ -3365,7 +4282,12 @@
           "django_source": "app/urls/asset.py:99-103",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::duplicate",
-          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "duplicateAsset" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/file.service.ts",
+              "method": "duplicateAsset"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T2",
           "out_scope": false,
@@ -3377,7 +4299,12 @@
           "django_source": "app/urls/asset.py:104-108",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::ws_download",
-          "fe_evidence": [{ "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetDownloadSrc" }],
+          "fe_evidence": [
+            {
+              "service": "packages/utils/src/editor/common.ts",
+              "method": "getEditorAssetDownloadSrc"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T2",
           "out_scope": false,
@@ -3389,7 +4316,12 @@
           "django_source": "app/urls/asset.py:109-113",
           "rust_status": "implemented",
           "rust_handler": "routes::asset::project_download",
-          "fe_evidence": [{ "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetDownloadSrc" }],
+          "fe_evidence": [
+            {
+              "service": "packages/utils/src/editor/common.ts",
+              "method": "getEditorAssetDownloadSrc"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T2",
           "out_scope": false,
@@ -3407,8 +4339,14 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::webhook::list",
           "fe_evidence": [
-            { "service": "apps/web/core/services/webhook.service.ts", "method": "fetchWebhooksList" },
-            { "service": "apps/web/core/services/webhook.service.ts", "method": "createWebhook" }
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "fetchWebhooksList"
+            },
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "createWebhook"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T3",
@@ -3422,9 +4360,18 @@
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::webhook::detail",
           "fe_evidence": [
-            { "service": "apps/web/core/services/webhook.service.ts", "method": "fetchWebhookDetails" },
-            { "service": "apps/web/core/services/webhook.service.ts", "method": "updateWebhook" },
-            { "service": "apps/web/core/services/webhook.service.ts", "method": "deleteWebhook" }
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "fetchWebhookDetails"
+            },
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "updateWebhook"
+            },
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "deleteWebhook"
+            }
           ],
           "fe_pages": [],
           "batch_task": "Batch N T3",
@@ -3437,7 +4384,12 @@
           "django_source": "app/urls/webhook.py:21-25",
           "rust_status": "shape_mismatch",
           "rust_handler": "routes::webhook::regenerate",
-          "fe_evidence": [{ "service": "apps/web/core/services/webhook.service.ts", "method": "regenerateSecretKey" }],
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/webhook.service.ts",
+              "method": "regenerateSecretKey"
+            }
+          ],
           "fe_pages": [],
           "batch_task": "Batch N T3",
           "out_scope": false,
