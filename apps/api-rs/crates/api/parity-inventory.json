@@ -1769,7 +1769,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/projects/:project_id/search-issues/",
           "django_source": "app/urls/search.py:17",
-          "rust_status": "implemented",
+          "rust_status": "constraint_mismatch",
           "rust_handler": "routes::search::issue_search",
           "fe_evidence": [
             { "service": "apps/web/core/services/project/project.service.ts", "method": "projectIssuesSearch" }
