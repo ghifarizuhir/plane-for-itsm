@@ -2176,6 +2176,126 @@
           "batch_task": "Batch K T4",
           "out_scope": false,
           "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/module-links/",
+          "django_source": "app/urls/module.py:59",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::links_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "createModuleLink" },
+            { "service": "packages/services/src/module/link.service.ts", "method": "create" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleLinkViewSet.list/create (app/views/module/base.py:762-788, urls/module.py:59-62) vs links_list/links_create (module.rs:1999/2026, main.rs:567-570): GET 200 -created_at order both (app/views/module/base.py:786 vs fetch_links); POST 201 both (serializers/module.py:188-192 vs StatusCode::CREATED); http:// prepend when scheme missing both (serializers/module.py:170-176 vs normalize_link_url); bad-url 400 field errors both (serializers/module.py:178-186 vs INVALID_URL_MSG module.rs:41); dup url+module 400 {error:URL already exists.} both (serializers/module.py:190-191 vs URL_EXISTS_MSG module.rs:43); SAFE GET any-active-member incl GUEST both (app/views/module/base.py:763 ProjectEntityPermission vs gate_safe), unsafe POST AM both (vs gate_entity_write); no FE GET caller (create-only callers) so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/module-links/:pk/",
+          "django_source": "app/urls/module.py:64",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::link_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "updateModuleLink" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "deleteModuleLink" },
+            { "service": "packages/services/src/module/link.service.ts", "method": "update" },
+            { "service": "packages/services/src/module/link.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleLinkViewSet retrieve/update/partial_update/destroy (urls/module.py:64-74 mapping all four onto ModuleLinkSerializer.update serializers/module.py:194-203, no view overrides in app/views/module/base.py:762-788) vs link_detail/link_put/link_patch/link_destroy (module.rs:2100/2221/2203/2236, main.rs:575-581): GET 200 + PUT/PATCH 200 both; dup-on-update 400 sic {error:URL already exists for this Issue} both (serializers/module.py:196-201 vs URL_EXISTS_ISSUE_MSG module.rs:46); bad-url 400 field errors both (serializers/module.py:178-186 vs INVALID_URL_MSG); DELETE 204 soft both (Django default soft-delete cf hard-delete soft=False call sites app/views/module/base.py:746,821 vs soft UPDATE deleted_at module.rs:2236+); same entity gate both (SAFE GET vs gate_safe, unsafe AM vs gate_entity_write); Rust PUT mirrors PATCH (module.rs:2221-2235) matching Django shared serializer.update path — FE updates via PATCH only (updateModuleLink module.service.ts:176-191 + update link.service.ts:54-71) so no FE-exercised PUT delta, fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/",
+          "django_source": "app/urls/module.py:76",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::module::fav_create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "addModuleToFavorites" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "addModuleToFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "MISMATCH GET list unhandled: Django routes get->list (urls/module.py:76-79) served by DRF default with user+slug-scoped get_queryset (app/views/module/base.py:795-802) vs Rust post-only route (main.rs:588-591) so GET has no handler; POST verified create 204 (app/views/module/base.py:804-811 vs fav_create module.rs:2265, main.rs:588-591): Lite gate both (app/views/module/base.py:793 vs gate_lite), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (app/views/base.py:80-84 vs PAYLOAD_INVALID_MSG module.rs:48), NO module-existence check either side (app/views/module/base.py:805-810 vs mid parse-or-400)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/:module_id/",
+          "django_source": "app/urls/module.py:81",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::fav_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "removeModuleFromFavorites" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "removeModuleFromFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleFavoriteViewSet.destroy (app/views/module/base.py:813-822, urls/module.py:81-84) vs fav_destroy (module.rs:2313, main.rs:592-595): DELETE 204 hard delete soft=False both (app/views/module/base.py:821 vs DELETE FROM); miss 404 .get DoesNotExist (app/views/base.py:92-96 vs missing() on 0 rows); user+slug+project+entity filter both (app/views/module/base.py:814-820 vs project/entity_type/user/slug/module predicate); Lite gate both (app/views/module/base.py:793 vs gate_lite)"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/user-properties/",
+          "django_source": "app/urls/module.py:86",
+          "rust_status": "implemented",
+          "rust_handler": "routes::userprops::module_props_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "fetchModuleIssueFilters" },
+            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "patchModuleIssueFilters" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleUserPropertiesEndpoint (app/views/module/base.py:825-855, urls/module.py:86-89) vs module_props_get (userprops.rs:608) + module_props_patch (userprops.rs:653, main.rs:286-289): GET 200 get_or_create both (app/views/module/base.py:848-855 vs INSERT-then-fetch); PATCH 201 serializer row both (app/views/module/base.py:844 vs StatusCode::CREATED userprops.rs:690); PATCH merges only 4 keys filters/rich_filters/display_filters/display_properties both (app/views/module/base.py:835-841 vs pick_or); PATCH miss 404 .get DoesNotExist (app/views/base.py:92-96 vs missing()); AMG gate both (app/views/module/base.py:827,847 vs guard_userprops 20/15/5 userprops.rs:66-71)"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/archive/",
+          "django_source": "app/urls/module.py:91",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::archive",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module_archive.service.ts", "method": "archiveModule" },
+            { "service": "apps/web/core/services/module_archive.service.ts", "method": "restoreModule" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleArchiveUnarchiveEndpoint.post/delete (app/views/module/archive.py:544-565, urls/module.py:91-94) vs archive/unarchive (module.rs:2401/2459, main.rs:600-603): POST 200 {archived_at} both (app/views/module/archive.py:559 vs format_archived_at str); wrong-status 400 verbatim {error:Only completed or cancelled modules can be archived} both (app/views/module/archive.py:546-550 vs ARCHIVE_STATUS_MSG module.rs:39 guard_archive_status); POST clears favorites all users both (app/views/module/archive.py:553-558 vs tx soft-delete favorites); DELETE 204 both with no status check (app/views/module/archive.py:561-565 vs module.rs:2459+); miss 404 .get DoesNotExist (app/views/base.py:92-96 vs missing() normalize-crash); NO GET on this path either side; AM gate both (ProjectEntityPermission unsafe vs gate_entity_write)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archived-modules/",
+          "django_source": "app/urls/module.py:96",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::archived_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module_archive.service.ts", "method": "getArchivedModules" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleArchiveUnarchiveEndpoint.get pk=None branch (app/views/module/archive.py:258-293, urls/module.py:96-99) vs archived_list (module.rs:2347, main.rs:610-613): archived-only scope both (app/views/module/archive.py:181 archived_at__isnull=False vs archived_at IS NOT NULL module_select); list OMITS logo_props/estimate_points both (app/views/module/archive.py:261-290 .values() vs module_archived_json module.rs:407-433); order -is_favorite,-created_at both (app/views/module/archive.py:255 vs ORDER BY is_favorite DESC, created_at DESC); SAFE gate any-active-member both (ProjectEntityPermission vs gate_safe)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archived-modules/:pk/",
+          "django_source": "app/urls/module.py:101",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::archived_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module_archive.service.ts", "method": "getArchivedModuleDetails" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T5",
+          "out_scope": false,
+          "notes": "verified ModuleArchiveUnarchiveEndpoint.get pk branch (app/views/module/archive.py:294-542, urls/module.py:101-104) vs archived_detail (module.rs:2381, main.rs:614-617): detail ModuleDetailSerializer + links/sub-issues/distribution/estimate_distribution both (app/views/module/archive.py:294-309,318,431-542 vs detail_body); estimate_distribution only with points estimate both; completion_chart only when dated both; miss/non-archived 404 — Django None-serialize crash normalized to missing() (module.rs:2381+ fetch_row archived_only); archived-only scope both; SAFE gate any-active-member both (ProjectEntityPermission vs gate_safe)"
         }
       ]
     }
