@@ -3283,6 +3283,66 @@
           "notes": "verified ProjectAssetDownloadEndpoint.get (v2.py:898-919) vs project_download (asset.rs:1999-2028, main.rs:1021-1024): GET 302 attachment+filename both (v2.py:913-919 vs asset.rs:2023-2027); miss 404 The requested asset could not be found verbatim both (v2.py:907-910 vs asset.rs:2020-2022); uploaded-only + (slug,project_id) scope both (v2.py:901-906 vs asset.rs:2014-2019); project AMG gate both (v2.py:898 allow_permission PROJECT vs asset.rs:2005-2013 project_in_workspace+gate_project_roles); FE getEditorAssetDownloadSrc project branch (packages/utils/src/editor/common.ts:35-44, project template :39)"
         }
       ]
+    },
+    "webhook": {
+      "rust_module": "routes/webhook.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/webhooks/",
+          "django_source": "app/urls/webhook.py:15-20",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::webhook::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/webhook.service.ts", "method": "fetchWebhooksList" },
+            { "service": "apps/web/core/services/webhook.service.ts", "method": "createWebhook" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T3",
+          "out_scope": false,
+          "notes": "MISMATCH keys + invalid-URL status + gate: verified WebhookEndpoint.get/post (base.py:22-79) vs list/create (webhook.rs:60-110, main.rs:1079-1081): GET 200 array full WebhookSerializer rows minus secret_key (fields= allowlist dead per serializers/webhook.py:57-79, no show_secret_key base.py:45-60) vs Rust 3-key {id,url,is_active} rows (webhook.rs:71-75); POST 201 full row WITH secret_key (show_secret_key base.py:27, popped only when flag unset serializers/webhook.py:77-79) vs Rust 201 {id,url,is_active} no secret (webhook.rs:110); dup (workspace,url) 409 URL already exists for the workspace verbatim both (base.py:33-38, partial-unique models/webhook.py:57-60 vs webhook.rs:93-95); schema/domain messages verbatim both (models/webhook.py:21-31 vs webhook.rs:46-56) BUT invalid URL Django 400 serializer.errors vs Rust 500 {error} via anyhow->AppError (errors.rs:19), over-1024 Django 400 max_length (models/webhook.py:36) vs Rust 500 url max length 1024 (webhook.rs:43-45); ADMIN-only gate (base.py:21,41) vs _auth-only unused (webhook.rs:62,80); FE fetchWebhooksList GET + createWebhook POST (webhook.service.ts:19-41)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/webhooks/:pk/",
+          "django_source": "app/urls/webhook.py:16-20",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::webhook::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/webhook.service.ts", "method": "fetchWebhookDetails" },
+            { "service": "apps/web/core/services/webhook.service.ts", "method": "updateWebhook" },
+            { "service": "apps/web/core/services/webhook.service.ts", "method": "deleteWebhook" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T3",
+          "out_scope": false,
+          "notes": "MISMATCH DELETE-miss + miss-strings: verified WebhookEndpoint.get/patch/delete (base.py:42-111) vs detail/patch/destroy (webhook.rs:160-219, main.rs:1083-1086): GET 200 full row minus secret (base.py:63-79) vs Rust 3-key {id,url,is_active} (webhook.rs:173-176); PATCH 200 full row minus secret (base.py:102-105) vs Rust 200 {id} only (webhook.rs:204); DELETE 204 both when row exists (base.py:108-111 vs webhook.rs:219); miss Django 404 The required object does not exist (base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:177,202); DELETE-miss Rust silent 204 no-op no rows_affected check (webhook.rs:207-219) vs Django 404; ADMIN-only gate (base.py:41,81,107) vs _auth-only unused (webhook.rs:162,183,209); FE fetchWebhookDetails GET + updateWebhook PATCH + deleteWebhook DELETE (webhook.service.ts:27-57)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/webhooks/:pk/regenerate/",
+          "django_source": "app/urls/webhook.py:21-25",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::webhook::regenerate",
+          "fe_evidence": [{ "service": "apps/web/core/services/webhook.service.ts", "method": "regenerateSecretKey" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T3",
+          "out_scope": false,
+          "notes": "MISMATCH miss-string + keys: verified WebhookSecretRegenerateEndpoint.post (base.py:116-121) vs regenerate (webhook.rs:113-129, main.rs:1089-1090): Django 200 full serializer WITH secret_key (show_secret_key base.py:120) vs Rust 200 {id,secret_key} 2-key only (webhook.rs:126); secret format plane_wh_<32hex> both (generate_token models/webhook.py:17-18 vs SQL plane_wh_||gen_random_uuid webhook.rs:119); miss Django 404 The required object does not exist (base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:127); ADMIN-only gate (base.py:115) vs _auth-only unused (webhook.rs:115); FE regenerateSecretKey (webhook.service.ts:59-65)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/webhook-logs/:webhook_id/",
+          "django_source": "app/urls/webhook.py:26-30",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::webhook::list_logs",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T3",
+          "out_scope": false,
+          "notes": "MISMATCH keys + gate: verified WebhookLogsEndpoint.get (base.py:126-129) vs list_logs (webhook.rs:131-148, main.rs:1092): Django 200 array WebhookLogSerializer fields=__all__ (serializers/webhook.py:98-102; workspace,webhook,event_type,request_method,request_headers,request_body,response_status,response_headers,response_body) vs Rust 200 array 2-key {id,event_type} (webhook.rs:143-147); Django webhook_id == main.rs :webhook_id verbatim; empty filter -> [] both, no miss path; ADMIN-only gate (base.py:125) vs _auth-only unused (webhook.rs:133); no FE caller found -> fe_evidence []"
+        }
+      ]
     }
   }
 }
