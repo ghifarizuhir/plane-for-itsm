@@ -2019,6 +2019,105 @@
           "batch_task": "Batch M T3",
           "out_scope": false,
           "notes": "verified UserActivityEndpoint.get (views/user/base.py:381-396) vs activities (routes/user.rs:1210-1296, main.rs:1337): GET paginated envelope 12 keys both (paginator.py:730-742 grouped_by/sub_grouped_by/total_count/next_cursor/prev_cursor/next_page_results/prev_page_results/count/total_pages/total_results/extra_stats/results vs user.rs:1287-1294); actor=self both (base.py:383 vs user.rs:1254-1265 actor_id); order_by sanitized vs ACTIVITY_ORDER_BY_ALLOWLIST default -created_at both (base.py:387-392, order_queryset.py:51-54 vs sanitize_activity_order_by user.rs:240-260); IssueActivitySerializer results (base.py:395 vs activity_json user.rs:1170-1178); per_page=0 Django 500 vs Rust empty 200 documented normalize-crash (user.rs:1234-1248); no FE caller (repo-wide grep me/activities 0 hits); fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/users/me/email/generate-code/",
+          "django_source": "app/urls/user.py:38",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::users_me::generate_email_code",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "generateEmailCode" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "MISMATCH vs UserEndpoint.generate_email_verification_code (views/user/base.py:137-174, urls/user.py:38, main.rs:1339-1342 post(generate_email_code) routes/users_me.rs:79-148): (c) 5th error 'Failed to generate verification code. Please try again.' (400 on cache/celery exception, base.py:169-174) absent in Rust — Redis/DB failure maps to 500 {'error':'internal error'} (users_me.rs:103-106,142-144); throttle 429 body differs — DRF default throttled detail vs 429 {'error_code':5900,'error_message':'RATE_LIMIT_EXCEEDED'} (users_me.rs:131-133), same 3/hour budget (EmailVerificationThrottle rate_limit.py:93-100 via get_throttles base.py:67-73 vs INCR emailcode:throttle:{uid} + EXPIRE 3600 users_me.rs:109-130); match: 4 _validate_new_email errors byte-exact (base.py:106-133 vs validate_new_email users_me.rs:41-75), 200 {'message':'Verification code sent to email'} (base.py:165-168 vs users_me.rs:147), 10-min TTL (timeout=600 base.py:160 vs EX 600 users_me.rs:135-141), 6-digit code (randbelow base.py:157 vs new_email_code users_me.rs:26-29); cache-key format internal-only (magic_email_update_{uid}_{email} vs emailcode:{uid}:{email}); celery delivery (base.py:163) vs pending-SMTP log (users_me.rs:146) side-effect only; FE generateEmailCode POSTs exact URL (user.service.ts:277-283); fe_pages []"
+        },
+        {
+          "methods": ["PATCH"],
+          "path": "/api/users/me/email/",
+          "django_source": "app/urls/user.py:43",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::users_me::update_email",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "verifyEmailCode" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "MISMATCH vs UserEndpoint.update_email (views/user/base.py:176-250, urls/user.py:43, main.rs:1343-1346 patch(update_email) routes/users_me.rs:159-235): (c) 'Failed to verify code. Please try again.' (corrupt-cache branch, base.py:218-222) absent in Rust — parse failure falls through to 'Invalid verification code' (users_me.rs:196-199); match: shared _validate_new_email 4 errors (base.py:187-189 vs users_me.rs:179-182), 'Verification code is required' (base.py:191-195 vs users_me.rs:183-186), 'Verification code has expired or is invalid' (base.py:202-207 vs users_me.rs:192-195), 'Invalid verification code' (base.py:212-216 vs users_me.rs:197-199), duplicate recheck 'An account with this email already exists' (base.py:224-229 vs users_me.rs:211-213), success sets email + is_email_verified=False (base.py:230-235 vs users_me.rs:214-218), cache delete (base.py:238 vs users_me.rs:219), logout(request) (base.py:241) vs cleared-cookie headers plane_at/plane_rt (users_me.rs:220-223), 200 full UserMeSerializer via shared fetch_me/me_json builder (base.py:249-250 vs users_me.rs:227-228, locked by tests users_me.rs:1040-1091); confirmation emails celery (base.py:243-246) vs no-SMTP side-effect only; FE verifyEmailCode PATCHes exact URL body {email,code} (user.service.ts:285-291); fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/accounts/",
+          "django_source": "app/urls/user.py:51",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::user::list_accounts",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "getCurrentUserAccounts" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "MISMATCH vs AccountEndpoint.get list branch (views/user/base.py:399-408, urls/user.py:51, main.rs:1367-1369 get(list_accounts) routes/user.rs:1049-1063): (b) item FK key 'user' (pk, AccountSerializer __all__ serializers/user.py:208-212 over Account db/models/user.py:271-295) vs 'user_id' (to_jsonb raw column user.rs:1053-1056); match: GET-only both (AccountEndpoint has get+delete only, NO POST in Django — methods stay GET), 200 array both, user-scoped both (base.py:406 vs WHERE user_id user.rs:1054); FE getCurrentUserAccounts GETs exact URL (user.service.ts:79-80); fe_pages []"
+        },
+        {
+          "methods": ["GET", "DELETE"],
+          "path": "/api/users/me/accounts/:pk/",
+          "django_source": "app/urls/user.py:52",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::user::get_account",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "MISMATCH vs AccountEndpoint.get(pk)/delete (views/user/base.py:400-404,410-413, urls/user.py:52, main.rs:1371-1374 get(get_account).delete(delete_account) routes/user.rs:1065-1112): (c) miss 404 {'error':'The required object does not exist.'} (BaseAPIView.handle_exception ObjectDoesNotExist views/base.py:189-193) vs 404 {'error':'Account not found'} (user.rs:1082-1085,1106-1109), sticky-precedent string delta; match: scoped Account.objects.get(pk,user) (base.py:402,411) vs WHERE id+user_id (user.rs:1071,1095), DELETE 204 both (base.py:413 vs user.rs:1111), same 'user' vs 'user_id' item-key delta as collection entry; delete handler routes::user::delete_account; repo-wide grep accounts/${ shows no detail caller so fe_evidence []; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/workspaces/",
+          "django_source": "app/urls/user.py:67",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::users_me::my_workspaces",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "userWorkspaces" },
+            { "service": "packages/services/src/workspace/workspace.service.ts", "method": "list" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "MISMATCH vs UserWorkSpacesEndpoint.get (views/workspace/base.py:175-211, urls/user.py:67, main.rs:1347-1350 get(my_workspaces) routes/users_me.rs:263-327): (b) owner pk (FK default, WorkSpaceSerializer serializers/workspace.py:43-83 declares no nesting) vs nested {id,email,first_name,last_name} (users_me.rs:315-320); organization_size null (models/workspace.py:137 null=True) vs '' (unwrap_or_default users_me.rs:309); ?fields= subset + name-search/owner filters (base.py:181,205-209) ignored — my_workspaces takes no Query extractor (users_me.rs:265-268); match: active-membership scoping (base.py:193-203 vs JOIN workspace_members is_active users_me.rs:284-289), annotated role + total_members (base.py:182-191,200 vs users_me.rs:259-260,321-322), GET 200 array; logo_url equivalent via actual column (fa.asset fallback w.logo users_me.rs:238-240,274-287 vs logo_asset.asset_url property models/workspace.py:146-154); FE userWorkspaces (workspace.service.ts:38-44) + packages WorkspaceService.list (packages/services/src/workspace/workspace.service.ts:30-36, method is 'list' not 'userWorkspaces' — plan-hint variance recorded) both GET exact URL; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/workspaces/:slug/activity-graph/",
+          "django_source": "app/urls/user.py:70",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::activity_graph",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "verified UserActivityGraphEndpoint.get (views/workspace/user.py:532-546, urls/user.py:70, main.rs:1395-1398 get(activity_graph) routes/user.rs:1827-1852): me-scoped actor=request.user + slug filter + 6-month window (user.py:534-539 vs WHERE actor_id+slug+6 months user.rs:1832-1838), keys {created_date,activity_count} ordered ASC (user.py:540-544 vs user.rs:1845-1851); handler in user.rs NOT users_me.rs (me-scoped graph, user-domain per plan rationale); repo-wide grep shows no caller so fe_evidence []; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/workspaces/:slug/issues-completed-graph/",
+          "django_source": "app/urls/user.py:75",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::issues_completed_graph",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "verified UserIssueCompletedGraphEndpoint.get (views/workspace/user.py:549-567, urls/user.py:75, main.rs:1399-1402 get(issues_completed_graph) routes/user.rs:1861-1890): ?month= default 1 (user.py:551 vs parse_month default+clamp user.rs:264-276), week=completed_week%4 aggregation (user.py:560-561 vs SQL %4 user.rs:1868-1875), keys {week,completed_count} ordered (user.py:562-564 vs user.rs:1883-1889), assignee+slug+completed_at scoping both; handler in user.rs NOT users_me.rs; repo-wide grep shows no caller so fe_evidence []; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/workspaces/:slug/dashboard/",
+          "django_source": "app/urls/user.py:80",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::dashboard",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T4",
+          "out_scope": false,
+          "notes": "verified UserWorkspaceDashboardEndpoint.get (views/workspace/base.py:233-319, urls/user.py:80, main.rs:1403-1406 get(dashboard) routes/user.rs:1893-2034): me-scoped (actor/assignees=request.user throughout) + ?month= (base.py:247, default 1 both) + 9-key response (base.py:306-318 vs user.rs:2024-2033: issue_activities 3-month window, completed_issues WeekInMonth FLOOR formula base.py:228-231,257-261 vs SQL FLOOR user.rs:1916-1933, assigned/pending/completed counts, issues_due_week ISO-week both, state_distribution, overdue/upcoming id/name/workspace__slug/project_id/target_date|start_date shapes); date-vs-datetime boundaries equivalent for DateField (target_date<now() iff <CURRENT_DATE, same for start_date>=); handler in user.rs NOT users_me.rs; FE dashboard.service.ts hits the DIFFERENT workspace-scoped /api/workspaces/:slug/dashboard/ (dashboard.service.ts:19) so fe_evidence [] recorded deliberately; fe_pages []"
         }
       ]
     },
