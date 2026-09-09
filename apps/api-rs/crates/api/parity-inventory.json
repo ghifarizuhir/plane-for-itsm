@@ -1747,6 +1747,119 @@
           "batch_task": "Batch F T9",
           "out_scope": false,
           "notes": "workspace ADMIN gate; DELETE soft"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/analytic-view/",
+          "django_source": "app/urls/analytic.py:30-34",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::analytic::list_views",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "MISMATCH keys + POST semantics + gate: verified AnalyticViewViewset.list/create (app/views/analytic/base.py:176-186, app/urls/analytic.py:30-34) vs list_views/create_view (routes/analytic.rs:267-306, main.rs:1426-1429): GET 200 array of full AnalyticViewSerializer rows (fields=__all__, app/serializers/analytic.py:10-14) vs [{id,name}] only; POST query is read-only, built from query_dict via issue_filters (app/serializers/analytic.py:16-22; workspace bound in perform_create base.py:181-183) vs Rust requires+stores body.query (validate_view_create analytic.rs:119-130); POST 201 both (Django full row vs Rust {id,name}); WorkSpaceAdminPermission ADMIN+MEMBER (app/permissions/workspace.py:61-71) vs no Rust gate. No FE caller."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/default-analytics/",
+          "django_source": "app/urls/analytic.py:50-54",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::analytic::default_analytics",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "MISMATCH gate + filters + user keys: verified DefaultAnalyticsEndpoint.get (app/views/analytic/base.py:251-388, app/urls/analytic.py:50-54) vs default_analytics (routes/analytic.rs:132-200, main.rs:1424): 10-key payload both; workspace AMG gate (base.py:252) vs no Rust gate; Django applies issue_filters(request.GET) (base.py:254) vs Rust takes no query params; user lists Django {first/last/display/id + avatar_url CASE + count} (base.py:284-369) vs Rust {id,display_name,count}; pending_issue_user unbounded (base.py:347-369, no [:5] slice) vs Rust LIMIT 5 (analytic.rs:173); Django-tz year (base.py:275) vs EXTRACT(YEAR FROM now()) both. No FE caller."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/project-stats/",
+          "django_source": "app/urls/analytic.py:55-59",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::analytic::project_stats",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "getProjectAnalyticsCount"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "MISMATCH gate (FE-exercised per K4): verified ProjectStatsEndpoint.get (app/views/analytic/base.py:391-455, app/urls/analytic.py:55-59) vs project_stats (routes/analytic.rs:211-265, main.rs:1425): workspace AMG gate (base.py:392) vs no Rust gate; fields + project_ids params, no-valid-field -> all 5 defaults, 200 array of {id,...} both; completed incl cancelled both (base.py:422-428); FE-live via getProjectAnalyticsCount (project.service.ts:71-82, literal /project-stats/ URL)."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/advance-analytics/",
+          "django_source": "app/urls/analytic.py:60-64",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::advance_overview",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified AdvanceAnalyticsEndpoint.get (app/views/analytic/advance.py:43-119, app/urls/analytic.py:60-64) vs advance_overview (routes/analytic.rs:1169-1217, main.rs:1458): WORKSPACE ADMIN+MEMBER gate both (advance.py:104 vs gate_ws_am analytic.rs:882-886); ?tab= default overview, invalid -> 400 {message: Invalid tab} both (advance.py:107-119 vs resolve_advance_tab analytic.rs:385-396, INVALID_TAB_MSG :308); 8-key overview / 5-key work-items {count} shapes both (advance.py:66-102 vs overview_json/work_items_json :410-427); date_filter/project_ids params both. FE caller getAdvanceAnalytics builds URL dynamically via processUrl (apps/web/core/services/analytics.service.ts:23-111, no literal URL) -> fe_evidence [] per tripwire rule."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/advance-analytics-stats/",
+          "django_source": "app/urls/analytic.py:65-69",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::advance_stats",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified AdvanceAnalyticsStatsEndpoint.get (app/views/analytic/advance.py:122-169, app/urls/analytic.py:65-69) vs advance_stats (routes/analytic.rs:1251-1294, main.rs:1463-1466): ADMIN+MEMBER both (advance.py:158 vs gate_ws_am); ?type=work-items default and only valid, else 400 {message: Invalid type} both (advance.py:161-169 vs resolve_advance_type + INVALID_TYPE_MSG analytic.rs:312,398-405); per-project state-group counts {project_id, project__name, 5 counts} both (advance.py:144-156 vs project_stat_json); date_filter accepted-but-ineffective both (get() calls date-blind get_work_items_stats :144-156; date-filtered get_project_issues_stats :123-142 is dead code; Rust `let _ = q.date_filter`). FE caller getAdvanceAnalyticsStats via processUrl (analytics.service.ts:41-111) -> []."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/advance-analytics-charts/",
+          "django_source": "app/urls/analytic.py:70-74",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::advance_charts",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified AdvanceAnalyticsChartEndpoint.get (app/views/analytic/advance.py:172-318, app/urls/analytic.py:70-74) vs advance_charts (routes/analytic.rs:1357-1598, main.rs:1471-1474): ADMIN+MEMBER both (advance.py:285 vs gate_ws_am); ?type= default projects, group_by/x_axis default PRIORITY, invalid -> 400 {message: Invalid type} both (advance.py:287-318); 7-row project chart {key,name,count} both (advance.py:198-215 vs chart_count_row + title_case); custom-work-items axis errors 400 {detail} both (DRF ValidationError app/utils/build_chart.py:20,160-165 vs detail_400 analytic.rs:620-623); work-items monthly zero-fill {data,schema} both (advance.py:217-283). FE caller getAdvanceAnalyticsCharts via processUrl (analytics.service.ts:65-111) -> []."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/advance-analytics/",
+          "django_source": "app/urls/analytic.py:75-79",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::project_advance",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified ProjectAdvanceAnalyticsEndpoint.get (app/views/analytic/project_analytics.py:44-94, app/urls/analytic.py:75-79) vs project_advance (routes/analytic.rs:1684-1744, main.rs:1480-1483): project ADMIN+MEMBER + ws-admin fallback both (project_analytics.py:84, default level=PROJECT app/permissions/base.py:19-78 vs gate_project_am analytic.rs:889-898); cycle_id wins over module_id over project scope, unknown ids -> zero counts NO 404 both (project_analytics.py:58-82 vs scoped_link_ids + count_issue_ids); 5-key {count} shapes both. FE peek view prefixes /projects/:id via processUrl isPeekView (analytics.service.ts:91-109) -> []."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/advance-analytics-stats/",
+          "django_source": "app/urls/analytic.py:80-84",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::project_advance_stats",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified ProjectAdvanceAnalyticsStatsEndpoint.get (app/views/analytic/project_analytics.py:97-179, app/urls/analytic.py:80-84) vs project_advance_stats (routes/analytic.rs:1780-1848, main.rs:1488-1491): project ADMIN+MEMBER both (project_analytics.py:165 vs gate_project_am); ?type=work-items else 400 {message: Invalid type} both (project_analytics.py:168-179); per-assignee counts + avatar_url CASE (linked asset /api/assets/v2/static/<id>/ wins else legacy avatar, project_analytics.py:134-153) both; DISTINCT counts ordered by display_name both (project_analytics.py:155-162). Dynamic-URL FE caller (analytics.service.ts) -> []."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/advance-analytics-charts/",
+          "django_source": "app/urls/analytic.py:85-89",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::project_advance_charts",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T4",
+          "out_scope": false,
+          "notes": "verified ProjectAdvanceAnalyticsChartEndpoint.get (app/views/analytic/project_analytics.py:182-367, app/urls/analytic.py:85-89) vs project_advance_charts (routes/analytic.rs:1869+, main.rs:1496-1499): project ADMIN+MEMBER+GUEST - GUEST allowed here unlike sibling project advance/stats, mirrored by gate_project_amg (analytic.rs:900-908) so NOT a Django-Rust delta (project_analytics.py:317); default ?type=projects -> 400 Invalid type both (project_analytics.py:320 + resolve_advance_type); cycle/module scoping both (project_analytics.py:335-345); monthly zero-fill {data,schema} + cycle/module daily series both (project_analytics.py:183-315); missing cycle/module dates -> empty {data,schema} both. Dynamic-URL FE caller -> []."
         }
       ]
     },
