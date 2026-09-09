@@ -3050,6 +3050,143 @@
           "notes": "verified IssueViewFavoriteViewSet.destroy vs view_fav_destroy: Django DELETE-only destroy -> 204 hard delete soft=False scoped .get(project,user,workspace__slug,entity_type='view',entity_identifier=view_id) (app/views/view/base.py:429-439) vs Rust 204 hard DELETE same scope + miss->404 (routes/favorite.rs:973-1010); gates Django ADMIN/MEMBER (base.py:429) vs Rust gate_proj_am + project_in_workspace (favorite.rs); wired main.rs:926-927; FE removeViewFromFavorites (view.service.ts:80)"
         }
       ]
+    },
+    "asset": {
+      "rust_module": "routes/asset.rs",
+      "endpoints": [
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/workspaces/:slug/",
+          "django_source": "app/urls/asset.py:49-53",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::ws_presign",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadWorkspaceAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified WorkspaceFileAssetEndpoint.post (v2.py:340-415) vs ws_presign (asset.rs:827-947, main.rs:986): POST 200 {upload_data,asset_id,asset_url} both (v2.py:408-414 vs asset.rs:939-946); AMG workspace gate both (v2.py:340 vs asset.rs:834 gate_ws_roles AMG asset.rs:584); entity allowlist 400 {error,status:false} both (v2.py:349-353 vs asset.rs:838-843 INVALID_ENTITY_MSG asset.rs:150); WORKSPACE_LOGO admin-only 403 verbatim both (v2.py:356-364 vs asset.rs:844-848); image-mime 400 both (v2.py:367-381 vs asset.rs:849-855); size clamp min(FILE_SIZE_LIMIT,size) both (v2.py:384 vs asset.rs:865); key {wsid}/{hex}-{name} both (v2.py:390 vs asset.rs:871); entity FK incl no-DRAFT-branch {} both (v2.py:206-236 vs asset.rs:924-934); deviation: garbage size Django int() raises (v2.py:344) vs Rust 400 Invalid size (asset.rs:857-864 documented normalize-crash); FE uploadWorkspaceAsset (file.service.ts:72-97)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/assets/v2/workspaces/:slug/:asset_id/",
+          "django_source": "app/urls/asset.py:54-58",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::ws_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/file.service.ts", "method": "updateWorkspaceAssetUploadStatus" },
+            { "service": "apps/web/core/services/file.service.ts", "method": "deleteWorkspaceAsset" },
+            { "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetSrc" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified WorkspaceFileAssetEndpoint.get/patch/delete (v2.py:417-488) vs ws_get/mark_uploaded/soft_delete (asset.rs:1533-1561/1194-1258/1383-1424, main.rs:987-992): GET 302 attachment both (v2.py:482-488 vs asset.rs:1560); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:473-477 vs asset.rs:1553-1555); project-bound 403 You do not have access verbatim both (v2.py:422-426,449-453,466-470 vs asset.rs:1206-1208,1393-1395,1545-1547); PATCH/DELETE 204 both (v2.py:443,459 vs asset.rs:1257,1423) incl LOGO/COVER bind+unlink both (v2.py:249-314 vs asset.rs:1216-1248,1402-1417); AMG workspace gate both (v2.py:417,445,461 vs asset.rs:1200,1388,1539); deviations: PATCH Celery get_asset_object_metadata (v2.py:430-431) skipped in Rust (unobservable, 204 both); miss Django 404 The required object does not exist (base.py:188-192) vs Rust 404 Asset not found (asset.rs:1203-1205,1542-1544); DELETE-miss Rust silent 204 no-op (asset.rs:1391-1423) vs Django 404; FE updateWorkspaceAssetUploadStatus PATCH + deleteWorkspaceAsset DELETE (file.service.ts:64-70,99-105) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/user-assets/",
+          "django_source": "app/urls/asset.py:59-63",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::user_presign",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadUserAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified UserAssetsV2Endpoint.post (v2.py:111-170) vs user_presign (asset.rs:952-1006, main.rs:993): POST 200 {upload_data,asset_id,asset_url} both (v2.py:163-170 vs asset.rs:998-1005); IsAuthenticated only, no workspace scope and no gate either side (v2.py:111 undecorated vs asset.rs:952-957 AuthUser only); entity allowlist USER_AVATAR|USER_COVER else 400 Invalid entity type both (v2.py:122-126 vs asset.rs:958-964); image-mime 400 both (v2.py:129-143 vs asset.rs:965-971); size clamp both (v2.py:119 vs asset.rs:979); key {hex}-{name} both (v2.py:146 vs asset.rs:982); row user=request.user both (v2.py:149-156 vs asset.rs:984-994); garbage-size 400-vs-500 normalize deviation as ws_presign (v2.py:115 vs asset.rs:973-978); FE uploadUserAsset (file.service.ts:184-200)"
+        },
+        {
+          "methods": ["PATCH", "DELETE"],
+          "path": "/api/assets/v2/user-assets/:asset_id/",
+          "django_source": "app/urls/asset.py:64-68",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::user_complete",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/file.service.ts", "method": "updateUserAssetUploadStatus" },
+            { "service": "apps/web/core/services/file.service.ts", "method": "deleteUserAsset" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified UserAssetsV2Endpoint.patch/delete (v2.py:172-200) vs user_complete/user_delete (asset.rs:1263-1316/1428-1457, main.rs:994-997): PATCH/DELETE 204 both (v2.py:191,200 vs asset.rs:1315,1456); user-scoped user_id=request.user both (v2.py:174,194 vs asset.rs:1269-1275,1434-1439); avatar/cover bind+unlink incl prev-asset soft-delete both (v2.py:43-109 vs asset.rs:1279-1309,1443-1453); miss Django 404 The required object does not exist (base.py:188-192; plan-note 500 not observed) vs Rust sane 404 Asset not found (asset.rs:1276-1278,1440-1442); IsAuthenticated only either side; FE updateUserAssetUploadStatus PATCH + deleteUserAsset DELETE (file.service.ts:176-182,202-208)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/workspaces/:slug/restore/:asset_id/",
+          "django_source": "app/urls/asset.py:69-73",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::restore",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "restoreNewAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified AssetRestoreEndpoint.post (v2.py:536-545) vs restore (asset.rs:1853-1873, main.rs:1074-1077): POST 204 clears is_deleted/deleted_at both (v2.py:541-545 vs asset.rs:1861-1872); all_objects + workspace-slug scope both (v2.py:541 vs asset.rs:1862); miss Django 404 (base.py:188-192) vs Rust sane 404 Asset not found (asset.rs:1869-1871); AMG workspace gate both (v2.py:539 vs asset.rs:1858); FE restoreNewAsset (file.service.ts:236-244)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/assets/v2/static/:asset_id/",
+          "django_source": "app/urls/asset.py:74-78",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::static_get",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified StaticFileAssetEndpoint.get (v2.py:491-533) vs static_get (asset.rs:1790-1822, main.rs:998): AllowAny public, no auth either side (v2.py:494 vs asset.rs:1790-1794 no AuthUser); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:501-505 vs asset.rs:1804-1806); entity allowlist avatar/cover/logo/project-cover else 400 Invalid entity type both (v2.py:508-517 vs asset.rs:1807-1815); 302 both (v2.py:533 vs asset.rs:1821) with attachment disposition for script-capable MIME both (v2.py:523-526 vs asset.rs:1816-1817 disposition_for asset.rs:242); miss Django 404 (base.py:188-192) vs Rust sane 404 (asset.rs:1800-1803); no FE caller (URLs server-generated in avatar payloads)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/",
+          "django_source": "app/urls/asset.py:79-83",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::project_presign",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "uploadProjectAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified ProjectAssetEndpoint.post (v2.py:580-645) vs project_presign (asset.rs:1011-1099, main.rs:999-1002): POST 200 {upload_data,asset_id,asset_url} both (v2.py:638-645 vs asset.rs:1091-1098); project-level AMG gate both (v2.py:580 allow_permission default level PROJECT permissions/base.py:19 vs asset.rs:1024 gate_project_roles + project_in_workspace asset.rs:1018-1023); entity allowlist 400 both (v2.py:589-593 vs asset.rs:1027-1033); image-mime 400 both (v2.py:596-610 vs asset.rs:1034-1040); size clamp both (v2.py:613 vs asset.rs:1048); key {wsid}/{hex}-{name} both (v2.py:619 vs asset.rs:1051); entity_identifier FK incl DRAFT_ISSUE_DESCRIPTION branch both (v2.py:551-578 vs asset.rs:1052-1086); garbage-size normalize deviation as ws_presign (v2.py:584 vs asset.rs:1041-1047); FE uploadProjectAsset (file.service.ts:148-174)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/:pk/",
+          "django_source": "app/urls/asset.py:84-88",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::project_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/file.service.ts", "method": "updateProjectAssetUploadStatus" },
+            { "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetSrc" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified ProjectAssetEndpoint.get/patch/delete (v2.py:647-695) vs project_get/project_complete/project_delete (asset.rs:1565-1593/1320-1346/1460-1484, main.rs:1003-1008): GET 302 attachment both (v2.py:689-695 vs asset.rs:1592); not-uploaded 404 verbatim both (v2.py:680-684 vs asset.rs:1585-1587); PATCH/DELETE 204 both (v2.py:661,672 vs asset.rs:1345,1483); scoped workspace__slug+project_id both (v2.py:650,666,677 vs asset.rs:1335-1339,1474-1479,1580-1584); Django pk == main.rs :pk (asset.py:85 vs main.rs:1004); PATCH no entity binding either side (v2.py:647-661 vs asset.rs:1318-1319); project AMG gate both (v2.py:647,663,674 vs asset.rs:1332,1471,1577); miss Django 404 (base.py:188-192) vs Rust 404 (asset.rs:1340-1342,1480-1482,1585-1587); FE updateProjectAssetUploadStatus PATCH (file.service.ts:107-117) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29); DELETE no FE caller"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/:pk/bulk/",
+          "django_source": "app/urls/asset.py:89-93",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::bulk",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/file.service.ts", "method": "updateBulkProjectAssetsUploadStatus" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified ProjectBulkAssetEndpoint.post (v2.py:698-767) vs bulk (asset.rs:2035-2122, main.rs:1009-1012): POST 204 both (v2.py:767 vs asset.rs:2121); Django param entity_id vs main.rs :pk, recorded :pk (asset.py:90 vs main.rs:1010); empty ids 400 No asset ids provided verbatim both (v2.py:709-710 vs asset.rs:2059-2061); no-asset 404 The requested asset could not be found verbatim both (v2.py:730-733 vs asset.rs:2069-2071); own-uploads unassociated-or-same-project scope both (v2.py:720-724 vs asset.rs:2062-2068); first-asset entity drives binding both (v2.py:736-765 vs asset.rs:2073-2120) incl IntegrityError swallow on issue/comment/draft races both (v2.py:743-746,748-753,760-765 vs asset.rs:2088-2117) and ISSUE_ATTACHMENT no-op both (v2.py:767 fallthrough vs asset.rs:2119); project AMG gate both (v2.py:704 vs asset.rs:2047); FE updateBulkProjectAssetsUploadStatus (file.service.ts:133-146); FE-only variant /api/assets/v2/workspaces/:slug/:entity_id/bulk/ (updateBulkWorkspaceAssetsUploadStatus file.service.ts:119-131) in NEITHER Django nor Rust, notes only"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/assets/v2/workspaces/:slug/check/:asset_id/",
+          "django_source": "app/urls/asset.py:94-98",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::check",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "checkIfAssetExists" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T1",
+          "out_scope": false,
+          "notes": "verified AssetCheckEndpoint.get (v2.py:770-776) vs check (asset.rs:1832-1848, main.rs:1070-1073): GET 200 {exists} both (v2.py:776 vs asset.rs:1847); all_objects + deleted_at IS NULL both, is_deleted-only rows still count (v2.py:775 vs asset.rs:1840-1842); AMG workspace gate both (v2.py:773 vs asset.rs:1837); FE checkIfAssetExists (file.service.ts:246-257)"
+        }
+      ]
     }
   }
 }
