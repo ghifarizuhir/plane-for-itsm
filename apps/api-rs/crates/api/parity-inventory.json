@@ -696,6 +696,69 @@
           "batch_task": "Batch I T1",
           "out_scope": false,
           "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/invitations/",
+          "django_source": "app/urls/project.py:52",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::invite::proj_list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch I T2",
+          "out_scope": false,
+          "notes": "MISMATCH POST create: Django 500s on any non-empty body via `.filter(...).role` AttributeError (invite.py:65-67) vs Rust intended-validate path (invite.rs:871-898); role-mismatch returns 200 (missing status=, invite.py:69-70) vs Rust intended 400 DIFF_ROLE_MSG (invite.rs:885-890); `project_invitations.delay` on the bulk_create list crashes post-build (invite.py:107-114) vs Rust celery-skipped (invite.rs:917-918); match parts: ADMIN gate (invite.py:56 vs gate_project invite.rs:862-864), empty 400 'Emails are required' (invite.py:61-62 vs invite.rs:865-870), per-email validate + invalid-email 400 (invite.py:76-98 vs invite.rs:892-898), bulk ignore_conflicts (invite.py:101-103 vs invite.rs:899-916), 200 'Email sent successfully' (invite.py:116 vs invite.rs:51,918); GET list matches: IsAuthenticated-only (base.py:51 vs invite.rs:823), 200 full-serializer array ordered -created_at (models/project.py:204 vs invite.rs:829-843, proj_invite_json invite.rs:348-364 vs serializers/project.py:197-203); wired get(proj_list).post(proj_create) (main.rs:887-890); FE repo-wide grep projects/.*/invitations/ over apps/web + packages/services shows no workspace-scoped project-invitation caller (only workspace-invitation + users/me hits) so fe_evidence []"
+        },
+        {
+          "methods": ["GET", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/invitations/:pk/",
+          "django_source": "app/urls/project.py:57",
+          "rust_status": "implemented",
+          "rust_handler": "routes::invite::proj_detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch I T2",
+          "out_scope": false,
+          "notes": "verified ProjectInvitationsViewset.retrieve/destroy (default DRF actions, urls/project.py:57-61, IsAuthenticated-only base.py:51) vs proj_detail/proj_destroy (invite.rs:942-977, main.rs:894-897): GET 200 full ProjectMemberInviteSerializer incl project/workspace lite (serializers/project.py:197-203 vs proj_invite_json invite.rs:348-364); DELETE 204 HARD via default destroy, no delete override on ProjectMemberInvite (db/models/project.py:192-207 defines none; invite.rs:953-957) vs DELETE FROM (invite.rs:963-977); miss 404 both (base.py:92-96 DoesNotExist vs missing()); FE repo-wide grep shows no detail/cancel caller so fe_evidence []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/users/me/workspaces/:slug/projects/invitations/",
+          "django_source": "app/urls/project.py:62",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::users_me::my_project_invitations",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "joinProject" }],
+          "fe_pages": [],
+          "batch_task": "Batch I T2",
+          "out_scope": false,
+          "notes": "MISMATCH GET list: Django email-scoped only, no slug filter (invite.py:123-129), IsAuthenticated-only (base.py:51) vs Rust requires active ws membership (unknown slug 404 / non-member 403, users_me.rs:607-644) + scopes rows to path workspace (users_me.rs:645-658, documented users_me.rs:582-586); rows: full ProjectMemberInviteSerializer (serializers/project.py:197-203) vs custom 9-key rows with project{id,name}/workspace{id,name,slug,logo_url} (users_me.rs:667-689); match parts POST create: ADMIN/MEMBER WORKSPACE gate (invite.py:131-132 vs users_me.rs:769-791 403), SECRET-network 403 byte-exact (invite.py:141-146 vs users_me.rs:809-816), reactivate + bulk member/props ignore_conflicts in one tx (invite.py:157-187 vs users_me.rs:826-898), 201 'Projects joined successfully' (invite.py:189 vs users_me.rs:900); wired get(my_project_invitations).post(join_projects) (main.rs:1354-1357); FE joinProject POST (user.service.ts:245-246), no GET caller, callers span store+components so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/workspaces/:slug/project-roles/",
+          "django_source": "app/urls/project.py:67",
+          "rust_status": "implemented",
+          "rust_handler": "routes::users_me::my_project_roles",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "getWorkspaceUserProjectsRole" },
+            { "service": "packages/services/src/workspace/member.service.ts", "method": "getWorkspaceUserProjectsRole" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T2",
+          "out_scope": false,
+          "notes": "verified UserProjectRolesEndpoint.get (member.py:365-379, urls/project.py:67-71; class defines get only so methods GET) vs my_project_roles (users_me.rs:915-969, main.rs:1358-1361): WorkspaceUserPermission gate, non-member/unknown-slug 403 stock DRF {detail} (member.py:366 vs deny_detail users_me.rs:937-943); 200 {project_id: role} active-membership map (member.py:370-378 vs users_me.rs:944-968 via project_roles_map users_me.rs:904-908); FE getWorkspaceUserProjectsRole (workspace.service.ts:289-290 + member.service.ts:91-92) called only from base-permissions.store.ts:305 (store, not a page) so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/join/:pk/",
+          "django_source": "app/urls/project.py:72",
+          "rust_status": "implemented",
+          "rust_handler": "routes::invite::proj_join_get",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch I T2",
+          "out_scope": false,
+          "notes": "verified ProjectJoinEndpoint.get/post (invite.py:192-286, AllowAny :193, urls/project.py:72-76) vs proj_join_get/proj_join_post (invite.rs:989-1148, main.rs:903-906): GET 200 public 7-key, email+token omitted (PublicSerializer serializers/project.py:206-228 vs proj_invite_public_json invite.rs:368-378); POST token-403 (invite.py:201-205 vs invite.rs:69,1026-1033), anon-401 (invite.py:212-215 vs AuthUser extractor first invite.rs:999-1001, ordering deviation under locked 401-generic rule), invitee-email-403 (invite.py:216-220 vs invite.rs:57,1041-1046), non-bool accepted 400 verbatim (invite.py:224-228 vs invite.rs:71,1047-1057), double-respond 400 (invite.py:278-281 vs invite.rs:60,1058-1064), accept ws-cap + role-keeping reactivation 200 (invite.py:239-266 vs invite.rs:1074-1144), reject 200 (invite.py:273-276 vs invite.rs:1145-1147); miss 404 both (base.py:188-192 vs missing()); FE repo-wide grep projects/.*/join/ shows no caller so fe_evidence []"
         }
       ]
     },
