@@ -1912,6 +1912,116 @@
         }
       ]
     },
+    "user": {
+      "rust_module": "routes/user.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/users/me/",
+          "django_source": "app/urls/user.py:27",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::me",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/user.service.ts", "method": "currentUser" },
+            { "service": "apps/web/core/services/user.service.ts", "method": "updateUser" },
+            { "service": "apps/web/core/services/user.service.ts", "method": "deactivateAccount" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UserEndpoint retrieve/partial_update/deactivate (views/user/base.py:77-93,252-348) vs me/patch_me/deactivate (routes/user.rs:380-400,406-476,482-642, main.rs:1325-1329): GET 200 UserMeSerializer 17 keys both + cache_control private max_age=12 + vary_on_cookie both (base.py:75-77 vs cache_headers user.rs:104-109, me user.rs:385); PATCH writable minus read-only both + URL 400 field-errors both (serializers/user.py:15-56 vs validate_name user.rs:145-157, patch_me user.rs:413-420); DELETE guards 400 verbatim all three (instance-admin base.py:257-261 vs user.rs:488-510 DEACTIVATE_INSTANCE_ADMIN_MSG; sole-project-admin base.py:282-285 vs user.rs:531-539; sole-workspace-admin base.py:303-306 vs user.rs:560-566) + strip memberships/invites/sessions + profile reset + password reset/is_active=false + logout -> 204 both (base.py:308-348 vs user.rs:593-641 cleared_cookie_headers); FE currentUser GET (:55-62), updateUser PATCH (:112-118), deactivateAccount DELETE (:229-235) hit exactly users/me/; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/session/",
+          "django_source": "app/urls/user.py:31",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::session_allow_any",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UserSessionEndpoint.get (views/user/base.py:351-362) vs session_allow_any (routes/user.rs:669-686, main.rs:1332): AllowAny never 401 both (permission_classes AllowAny base.py:352 vs manual try_uid_from_headers user.rs:644-665, no AuthUser reject); unauth -> 200 {is_authenticated:false} both (base.py:362 vs user.rs:684); auth -> 200 {is_authenticated:true, user:UserMeSerializer} both (base.py:355-360 vs user.rs:678-681 me_json user.rs:338-361); no FE caller (repo-wide grep users/session 0 hits); fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/settings/",
+          "django_source": "app/urls/user.py:33",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::settings",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "currentUserSettings" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UserEndpoint.retrieve_user_settings (views/user/base.py:81-85) vs settings (routes/user.rs:899-976, main.rs:1333): 200 {id,email,workspace} both (UserMeSettingsSerializer serializers/user.py:90-138 vs user.rs:944-974); last_workspace branch 7 keys both (serializers/user.py:117-125 vs user.rs:946-951); fallback branch 5 keys both (serializers/user.py:132-138 vs user.rs:970-974); invites count both (serializers/user.py:99 vs user.rs:920-926); Django cache_control private max_age=12 + vary_on_cookie (base.py:81-82) not mirrored in Rust settings signature (user.rs:899-902 StatusCode+Json only) - headers out of recipe (a-d), documented; FE currentUserSettings (user.service.ts:95-102) hits exactly settings/ with ?t= cache-bust query stripped by tripwire; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/instance-admin/",
+          "django_source": "app/urls/user.py:55",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::instance_admin",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/user.service.ts", "method": "currentUserInstanceAdminStatus" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UserEndpoint.retrieve_instance_admin (views/user/base.py:87-90) vs instance_admin (routes/user.rs:983-994, main.rs:1334): 200 {is_instance_admin:bool} both (base.py:89-90 vs user.rs:993); FE currentUserInstanceAdminStatus (user.service.ts:87-93) hits exactly instance-admin/; fe_pages []"
+        },
+        {
+          "methods": ["PATCH"],
+          "path": "/api/users/me/onboard/",
+          "django_source": "app/urls/user.py:59",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::onboard",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "updateUserOnBoard" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UpdateUserOnBoardedEndpoint.patch (views/user/base.py:365-370) vs onboard (routes/user.rs:997-1016, main.rs:1335): PATCH 200 {message:Updated successfully} both (base.py:370 vs user.rs:1015 UPDATED_MSG user.rs:56); is_onboarded default false both (base.py:368 vs coerce_bool default user.rs:1002-1005); FE updateUserOnBoard body is_onboarded true (user.service.ts:120-128) hits exactly onboard/; fe_pages []"
+        },
+        {
+          "methods": ["PATCH"],
+          "path": "/api/users/me/tour-completed/",
+          "django_source": "app/urls/user.py:61",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::tour_completed",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "updateUserTourCompleted" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UpdateUserTourCompletedEndpoint.patch (views/user/base.py:373-378) vs tour_completed (routes/user.rs:1019-1040, main.rs:1336): PATCH 200 {message:Updated successfully} both (base.py:378 vs user.rs:1039 UPDATED_MSG); is_tour_completed default false both (base.py:376 vs user.rs:1024-1027); FE updateUserTourCompleted body is_tour_completed true (user.service.ts:130-138) hits exactly tour-completed/; fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/users/me/profile/",
+          "django_source": "app/urls/user.py:48",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::profile",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/user.service.ts", "method": "getCurrentUserProfile" },
+            { "service": "apps/web/core/services/user.service.ts", "method": "updateCurrentUserProfile" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified ProfileEndpoint get/patch (views/user/base.py:416-430) vs profile/patch_profile (routes/user.rs:693-714,718-892, main.rs:1363-1366): GET 200 ProfileSerializer both + cache_control private max_age=12 + vary_on_cookie both (base.py:417-422 vs cache_headers user.rs:104-109, profile user.rs:707); PATCH 200 profile json both (base.py:427-429 vs user.rs:886); invalid -> Django 400 serializer.errors (base.py:430) vs Rust fail-open ignore-invalid (bool coerce user.rs:765-782, text null/string user.rs:784-823, smallint/uuid user.rs:825-870) - no FE-invalid path exercised, documented deviation; user/user_id read-only ignored both (serializers/user.py:201-206 vs user.rs:871); FE getCurrentUserProfile GET (:64-70) + updateCurrentUserProfile PATCH (:71-77) hit exactly profile/; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/users/me/activities/",
+          "django_source": "app/urls/user.py:65",
+          "rust_status": "implemented",
+          "rust_handler": "routes::user::activities",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T3",
+          "out_scope": false,
+          "notes": "verified UserActivityEndpoint.get (views/user/base.py:381-396) vs activities (routes/user.rs:1210-1296, main.rs:1337): GET paginated envelope 12 keys both (paginator.py:730-742 grouped_by/sub_grouped_by/total_count/next_cursor/prev_cursor/next_page_results/prev_page_results/count/total_pages/total_results/extra_stats/results vs user.rs:1287-1294); actor=self both (base.py:383 vs user.rs:1254-1265 actor_id); order_by sanitized vs ACTIVITY_ORDER_BY_ALLOWLIST default -created_at both (base.py:387-392, order_queryset.py:51-54 vs sanitize_activity_order_by user.rs:240-260); IssueActivitySerializer results (base.py:395 vs activity_json user.rs:1170-1178); per_page=0 Django 500 vs Rust empty 200 documented normalize-crash (user.rs:1234-1248); no FE caller (repo-wide grep me/activities 0 hits); fe_pages []"
+        }
+      ]
+    },
     "search": {
       "rust_module": "routes/search.rs",
       "endpoints": [
