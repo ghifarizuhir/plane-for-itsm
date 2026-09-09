@@ -267,19 +267,26 @@ pub async fn destroy(
     _auth: AuthUser,
     axum::extract::Path((_slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django `.get` (`base.py:148`) miss → 404 (generic via `views/base.py:92-96`
+    // or sane-mapped) with NO side effects. Check existence FIRST: the old order
+    // deleted points before the estimate check, so a miss still wiped points.
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimates WHERE id = $1 AND project_id = $2)")
+        .bind(estimate_id)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await?;
+    if !exists {
+        return Ok(missing());
+    }
     sqlx::query("DELETE FROM estimate_points WHERE estimate_id = $1")
         .bind(estimate_id)
         .execute(&st.pool)
         .await?;
-    let n = sqlx::query("DELETE FROM estimates WHERE id = $1 AND project_id = $2")
+    sqlx::query("DELETE FROM estimates WHERE id = $1 AND project_id = $2")
         .bind(estimate_id)
         .bind(project_id)
         .execute(&st.pool)
-        .await?
-        .rows_affected();
-    if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate not found"}))));
-    }
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -334,6 +341,19 @@ pub async fn destroy_point(
     // Optional remap: issues pointing at the deleted point move to
     // `new_estimate_id`, else their estimate is cleared — mirrors
     // `plane/app/views/estimate/base.py:destroy`.
+    //
+    // Django checks point existence AFTER the issue remap (`base.py:242-252`)
+    // and misses with 404 `{"error": "Estimate point not found"}`. Rust checks
+    // FIRST so a miss has no destructive side effects (sane-mapping precedent);
+    // the miss string itself is Django-verbatim.
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimate_points WHERE id = $1 AND estimate_id = $2)")
+        .bind(point_id)
+        .bind(estimate_id)
+        .fetch_one(&st.pool)
+        .await?;
+    if !exists {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate point not found"}))));
+    }
     let new_point = body.get("new_estimate_id").and_then(|v| v.as_str()).and_then(
         |s| uuid::Uuid::parse_str(s).ok(),
     );

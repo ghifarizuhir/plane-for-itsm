@@ -691,7 +691,7 @@
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/issues/:issue_id/attachments/:pk/",
           "django_source": "app/urls/issue.py:142",
-          "rust_status": "shape_mismatch",
+          "rust_status": "deviation_accepted",
           "rust_handler": "routes::asset::issue_get",
           "fe_evidence": [
             {
@@ -704,9 +704,10 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch G T10",
+          "batch_task": "Batch F1",
           "out_scope": false,
-          "notes": "MISMATCH DELETE: Django soft-deletes is_deleted=True + deleted_at (attachment.py:150-156) -> 204, Rust HARD DELETE FROM file_assets (asset.rs:1521-1522) -> 204 (declared DEVIATION asset.rs:1486-1493); observable: DELETE-twice 204 Django vs 404 Rust (asset.rs:1512-1514), GET-after-DELETE 302 Django (.get finds soft-deleted row, is_uploaded still true, attachment.py:173-191) vs 404 Rust (asset.rs:1617-1619), collection GET includes soft-deleted row Django (no is_deleted filter attachment.py:194-200) vs excludes Rust (deleted_at IS NULL asset.rs:1649-1653); match parts: GET not-uploaded 400 {error, status:false} byte-exact (attachment.py:179-183 vs asset.rs:1620-1624) else 302 (attachment.py:191 vs asset.rs:1630), miss 404 via DoesNotExist base handler vs missing(), PATCH 204 both (attachment.py:205-234 vs issue_complete asset.rs:1350-1374), gates GET/PATCH AMG (attachment.py:172,205 vs asset.rs:1609,1361) + DELETE ADMIN-or-creator (attachment.py:149 vs asset.rs:1515-1520); wired get(issue_get).patch(issue_complete).delete(issue_delete) (main.rs:1034-1039); FE updateIssueAttachmentUploadStatus (issue_attachment.service.ts:28-41) + deleteIssueAttachment (issue_attachment.service.ts:81-94) via attachment.store.ts:188 from multiple components, not one page"
+          "notes": "DECISION F1-grup3 (deviation_accepted, ADR F1-grup3): V2 URL serves V1 HARD delete per E9 contract, Django-V2 soft deltas accepted. MISMATCH DELETE: Django soft-deletes is_deleted=True + deleted_at (attachment.py:150-156) -> 204, Rust HARD DELETE FROM file_assets (asset.rs:1521-1522) -> 204 (declared DEVIATION asset.rs:1486-1493); observable: DELETE-twice 204 Django vs 404 Rust (asset.rs:1512-1514), GET-after-DELETE 302 Django (.get finds soft-deleted row, is_uploaded still true, attachment.py:173-191) vs 404 Rust (asset.rs:1617-1619), collection GET includes soft-deleted row Django (no is_deleted filter attachment.py:194-200) vs excludes Rust (deleted_at IS NULL asset.rs:1649-1653); match parts: GET not-uploaded 400 {error, status:false} byte-exact (attachment.py:179-183 vs asset.rs:1620-1624) else 302 (attachment.py:191 vs asset.rs:1630), miss 404 via DoesNotExist base handler vs missing(), PATCH 204 both (attachment.py:205-234 vs issue_complete asset.rs:1350-1374), gates GET/PATCH AMG (attachment.py:172,205 vs asset.rs:1609,1361) + DELETE ADMIN-or-creator (attachment.py:149 vs asset.rs:1515-1520); wired get(issue_get).patch(issue_complete).delete(issue_delete) (main.rs:1034-1039); FE updateIssueAttachmentUploadStatus (issue_attachment.service.ts:28-41) + deleteIssueAttachment (issue_attachment.service.ts:81-94) via attachment.store.ts:188 from multiple components, not one page",
+          "adr": "docs/superpowers/decisions/2026-09-10-f1-group3-delete-semantics.md"
         },
         {
           "methods": ["POST"],
@@ -799,7 +800,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
-          "notes": "retrieve/partial_update 200 EstimateReadSerializer (base.py:103-144, bulk_update key/value only base.py:141) vs Rust {id,name} (estimate.rs:192-204)/{id} (estimate.rs:262); 400 'Estimate points are required' both (base.py:110-114, estimate.rs:62-67); Django .get() miss -> 500 vs Rust 404 'Estimate not found'; destroy 204 both but Django deleted_at-scoped (base.py:147-150) vs Rust hard DELETE incl points (estimate.rs:270-284); ProjectEntityPermission gate (permissions/project.py:88-116) vs Rust auth-only"
+          "notes": "retrieve/partial_update 200 EstimateReadSerializer (base.py:103-144, bulk_update key/value only base.py:141) vs Rust {id,name} (estimate.rs:192-204)/{id} (estimate.rs:262); 400 'Estimate points are required' both (base.py:110-114, estimate.rs:62-67); Django .get() miss -> 500 vs Rust 404 'Estimate not found'; destroy 204 both but Django deleted_at-scoped (base.py:147-150) vs Rust hard DELETE incl points (estimate.rs:270-284); ProjectEntityPermission gate (permissions/project.py:88-116) vs Rust auth-only | F1-grup3: destroy check-before-delete (miss 404 no side effects) + miss string unified to missing()."
         },
         {
           "methods": ["POST"],
@@ -833,7 +834,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
-          "notes": "partial_update 200 serializer.data (base.py:190-194) vs Rust 200 {id} (estimate.rs:320); destroy 200 updated-points array + key rearrange + issue_activity (base.py:241-268) vs Rust 204 + new_estimate_id re-point only (estimate.rs:334-351); Rust destroy never 404s vs Django 404 'Estimate point not found' (base.py:248-252); Rust also serves GET (main.rs:710) where Django 405 (superset); ADMIN/MEMBER gate (base.py:181,196) vs Rust auth-only"
+          "notes": "partial_update 200 serializer.data (base.py:190-194) vs Rust 200 {id} (estimate.rs:320); destroy 200 updated-points array + key rearrange + issue_activity (base.py:241-268) vs Rust 204 + new_estimate_id re-point only (estimate.rs:334-351); Rust destroy never 404s vs Django 404 'Estimate point not found' (base.py:248-252); Rust also serves GET (main.rs:710) where Django 405 (superset); ADMIN/MEMBER gate (base.py:181,196) vs Rust auth-only | F1-grup3: destroy miss check added (404 Estimate point not found verbatim, checked before remap); 200-array + key rearrange deferred to F2/F6."
         }
       ]
     },
