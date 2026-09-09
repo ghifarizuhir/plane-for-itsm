@@ -819,6 +819,98 @@
           "batch_task": "Batch I T3",
           "out_scope": false,
           "notes": "verified ProjectMemberUserEndpoint.get, class has get only (project/member.py:352-362, urls/project.py:97-100; IsAuthenticated-only BaseAPIView base.py:150) vs my_membership (project.rs:1242-1280, main.rs:912-913): AuthUser-only gate both; miss 404 DoesNotExist (views/base.py:92-96 vs missing() project.rs:1276-1279) with project_id+slug+member+is_active filter (:354-359 vs :1268-1269 + deleted_at IS NULL); 200 ProjectMemberSerializer __all__ (serializers/project.py:156-163 vs my_membership_json project.rs:1146-1223 incl deleted_at) with workspace/project/member lite (project.rs:1148-1201); datetime RFC3339 vs DRF ISO8601 same instants + non-WORKSPACE_LOGO/PROJECT_COVER/USER_AVATAR *_url null narrowing (project.rs:1053-1088,1237-1240) per cover_image precedent; FE projectMemberMe GET project-members/me/ (project-member.service.ts:38-39) via base-permissions.store.ts:284 (store, not a page) so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/user-favorite-projects/",
+          "django_source": "app/urls/project.py:102",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::project::fav_add",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "getUserProjectFavorites" },
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "addProjectToFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "MISMATCH GET list unhandled: Django routes GET->list (app/urls/project.py:102-105) with user+slug-scoped get_queryset (project/base.py:501-509, no serializer_class project/base.py:498-499) vs Rust post-only route (main.rs:103-105) so GET has no handler; POST verified create 204 (project/base.py:514-521) vs fav_add (project.rs:990-1017): AuthUser-only gate both (views/base.py:51 vs project.rs:974), 204 empty, integrity-class 400 {error: The payload is not valid} (views/base.py:80-84 vs project.rs:1011-1014), workspace slug-vs-project derivation deviation (project.rs:984-989); FE getUserProjectFavorites GET (project.service.ts:163-169, zero callers) + addProjectToFavorites POST (project.service.ts:171-177) via project.store.ts:457 from card.tsx:89,create/root.tsx:54 so fe_pages []"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/user-favorite-projects/:project_id/",
+          "django_source": "app/urls/project.py:107",
+          "rust_status": "implemented",
+          "rust_handler": "routes::project::fav_remove",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "removeProjectFromFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "verified ProjectFavoritesViewSet.destroy (project/base.py:523-531, urls/project.py:107-111) vs fav_remove (project.rs:1033-1051, main.rs:107-110): DELETE 204 hard delete soft=False both (base.py:531 vs project.rs:1038-1046 + deleted_at IS NULL invisible-row guard); miss 404 DoesNotExist (views/base.py:92-96 vs missing() project.rs:1047-1049) on user+slug+project filter (base.py:524-530 vs project.rs:1038-1040); AuthUser-only gate both (views/base.py:51 vs project.rs:1023); FE removeProjectFromFavorites DELETE (project.service.ts:179-185) via project.store.ts:486 from card.tsx:110 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/project-deploy-boards/",
+          "django_source": "app/urls/project.py:112",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::deploy_list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-publish.service.ts",
+              "method": "fetchPublishSettings"
+            },
+            { "service": "apps/web/core/services/project/project-publish.service.ts", "method": "publishProject" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "verified DeployBoardViewSet.list/create (project/base.py:540-576, urls/project.py:112-116) vs deploy_list/deploy_create (analytic.rs:2307-2411, main.rs:1506-1509): GET 200 single board or null (base.py:541-546 vs analytic.rs:2318-2323); POST 200 upsert get_or_create entity_name=project (base.py:564-576 vs analytic.rs:2362-2411) with view defaults (base.py:553-562 vs deploy_default_views analytic.rs:817-830) + flags (base.py:549-552 vs deploy_flags analytic.rs:844-849); gates SAFE any-project-member (permissions/project.py:56-64 vs gate_deploy_read analytic.rs:913-922) + POST ws ADMIN/MEMBER (permissions/project.py:65-76 vs gate_deploy_post analytic.rs:924-928); serializer __all__ + nested details (serializers/project.py:247-254 vs deploy_json_full analytic.rs:2224-2265); FE fetchPublishSettings GET (project-publish.service.ts:19-25) + publishProject POST (:27-37) via project-publish.store.ts:84-116 + modal.tsx:89-95 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/project-deploy-boards/:pk/",
+          "django_source": "app/urls/project.py:117",
+          "rust_status": "implemented",
+          "rust_handler": "routes::analytic::deploy_retrieve",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-publish.service.ts",
+              "method": "updatePublishSettings"
+            },
+            { "service": "apps/web/core/services/project/project-publish.service.ts", "method": "unpublishProject" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "verified DeployBoardViewSet.retrieve/partial_update/destroy (DRF defaults, no custom methods in project/base.py:535-538, urls/project.py:117-121) vs deploy_retrieve/deploy_patch/deploy_destroy (analytic.rs:2413-2538, main.rs:1510-1515): GET 200 + PATCH 200 full __all__ rows (serializers/project.py:247-254 vs deploy_json_full analytic.rs:2224-2265) with unscoped pk-only lookup both (base.py:535-538 vs fetch_deploy_by_pk analytic.rs:2292-2305, URL pid gates permission only); DELETE 204 soft both (default soft-delete destroy vs analytic.rs:2531-2537); gates SAFE reads any-member (permissions/project.py:56-64 vs gate_deploy_read analytic.rs:913-922) + PATCH/DELETE project ADMIN/MEMBER (permissions/project.py:80-87 vs gate_deploy_write analytic.rs:930-940); FE updatePublishSettings PATCH (project-publish.service.ts:39-53) + unpublishProject DELETE (:55-63) via project-publish.store.ts:139-180 + modal.tsx:95-101, no GET detail caller, so fe_pages []"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archive/",
+          "django_source": "app/urls/project.py:122",
+          "rust_status": "implemented",
+          "rust_handler": "routes::project::archive",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project-archive.service.ts", "method": "archiveProject" },
+            { "service": "apps/web/core/services/project/project-archive.service.ts", "method": "restoreProject" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "verified ProjectArchiveUnarchiveEndpoint.post/delete, class has post+delete only (project/base.py:427-441, urls/project.py:122-126) vs archive/unarchive (project.rs:487-544, main.rs:147-150): ADMIN/MEMBER gate both (base.py:429,436 via allow_permission vs guard_archive project.rs:323-324,492-494,528-530); POST 200 {archived_at} (base.py:434 vs project.rs:516) + favorites cleanup for (slug,project) all users (base.py:433 vs project.rs:508-514 soft-delete vs Django default delete); DELETE 204 (base.py:441 vs project.rs:543); miss 404 .get DoesNotExist (views/base.py:92-96 vs missing() project.rs:504-507,540-542); archived_at str() vs RFC3339 same instant per my_membership precedent; FE archiveProject POST (project-archive.service.ts:17-28) + restoreProject DELETE (:30-36) via project.store.ts:602-625 from archive-restore-modal.tsx:44,67 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/projects/:project_id/preferences/member/:member_id/",
+          "django_source": "app/urls/project.py:127",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::pref_get",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch I T4",
+          "out_scope": false,
+          "notes": "verified ProjectMemberPreferenceEndpoint.get/patch, class has get+patch only (project/member.py:382-408, urls/project.py:127-131) vs pref_get/pref_patch (member.rs:1795-1853, main.rs:877-880): GET 200 + PATCH 200 {preferences} merged shallow (serializers/project.py:166-175 validate_preferences vs merge_preferences member.rs:1832-1840); 4-key shape {preferences,project_id,member_id,workspace_id} (serializers/project.py:167-169 vs pref_json member.rs:1783-1790); AMG gate both (project/member.py:390,402 vs gate_project member.rs:1803,1826); miss 404 .get DoesNotExist (views/base.py:92-96 vs missing() member.rs:1806-1809,1829-1831) with no is_active filter (project/member.py:383-388 vs member.rs:1770-1774); FE repo-wide grep preferences/member shows no caller so fe_evidence []"
         }
       ]
     },
