@@ -2114,7 +2114,7 @@
           "methods": ["GET", "PUT", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/projects/:project_id/modules/:pk/",
           "django_source": "app/urls/module.py:25",
-          "rust_status": "implemented",
+          "rust_status": "shape_mismatch",
           "rust_handler": "routes::module::detail",
           "fe_evidence": [
             { "service": "apps/web/core/services/module.service.ts", "method": "updateModule" },
@@ -2128,7 +2128,7 @@
           "fe_pages": [],
           "batch_task": "Batch K T4",
           "out_scope": false,
-          "notes": "verified ModuleViewSet.retrieve/partial_update/destroy + DRF default update (base.py:395-759, urls module.py:24-35) vs detail/patch/update/destroy (module.rs:1263-1605, main.rs:528-532): full method parity — PUT wired (main.rs:530) sharing PATCH partial-style logic (module.rs:1524-1542; Django defines no update override, only create/list/retrieve/partial_update/destroy at base.py:295,354,396,652,724, so PUT falls back to DRF ModelViewSet.update per BaseViewSet views/base.py:48; Rust locks AM gate per §12 note module.rs:1524-1528); retrieve 200 + distribution/estimate_distribution/completion_chart both (base.py:396-649 vs detail_body module.rs:1202-1283), miss 404 Module not found both (base.py:414-415 vs MODULE_NOT_FOUND_MSG module.rs:29,1276-1281); PUT/PATCH 200 both (base.py:720 vs apply_update module.rs:1285), archived 400 verbatim both (base.py:663-667 vs guard_patch module.rs:109,1312-1317), dup-name-excl-self 400 both (serializers/module.py:94-100 vs module.rs:1331-1344); AM retrieve/patch (base.py:395,651 vs gate_am), destroy 204 ADMIN-or-creator both (base.py:723 vs module.rs:1552-1572); FE updateModule PUT (module.service.ts:42)"
+          "notes": "MISMATCH PUT gate+semantics: Django defines no update override (base.py:295,354,396,652,724), so PUT falls back to DRF ModelViewSet.update with IsAuthenticated-only gate (app/views/base.py:48-51; urls/module.py:24-35) — GUEST allowed, full-update semantics (name required, PUT-without-name → 400); Rust PUT shares PATCH partial-style logic (apply_update validates name only-if-present → 200) under AM gate (module.rs:1524-1542, main.rs:530) — GUEST 403; FE-live via updateModule PUT (module.service.ts:42). Verified ModuleViewSet.retrieve/partial_update/destroy (base.py:395-759, urls module.py:24-35) vs detail/patch/destroy (module.rs:1263-1605, main.rs:528-532); retrieve 200 + distribution/estimate_distribution/completion_chart both (base.py:396-649 vs detail_body module.rs:1202-1283), miss 404 Module not found both (base.py:414-415 vs MODULE_NOT_FOUND_MSG module.rs:29,1276-1281); PUT/PATCH 200 both (base.py:720 vs apply_update module.rs:1285), archived 400 verbatim both (base.py:663-667 vs guard_patch module.rs:109,1312-1317), dup-name-excl-self 400 both (serializers/module.py:94-100 vs module.rs:1331-1344); AM retrieve/patch (base.py:395,651 vs gate_am), destroy 204 ADMIN-or-creator both (base.py:723 vs module.rs:1552-1572); FE updateModule PUT (module.service.ts:42)"
         },
         {
           "methods": ["POST"],
@@ -2175,7 +2175,7 @@
           "fe_pages": [],
           "batch_task": "Batch K T4",
           "out_scope": false,
-          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages []"
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages []"
         }
       ]
     }
