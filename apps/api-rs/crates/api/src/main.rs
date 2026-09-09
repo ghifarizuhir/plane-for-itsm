@@ -706,7 +706,7 @@ async fn main() {
             post(routes::estimate::create_point),
         )
         .route(
-            "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/:point_id/",
+            "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/:estimate_point_id/",
             get(routes::estimate::detail)
                 .patch(routes::estimate::patch_point)
                 .delete(routes::estimate::destroy_point),

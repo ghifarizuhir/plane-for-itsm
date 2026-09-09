@@ -619,6 +619,60 @@
           "batch_task": "Batch F T5",
           "out_scope": false,
           "notes": "project.estimate_id null -> 200 []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/estimates/",
+          "django_source": "app/urls/estimate.py:21",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::estimate::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/estimate.service.ts", "method": "fetchProjectEstimates" },
+            { "service": "apps/web/core/services/estimate.service.ts", "method": "createEstimate" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T1",
+          "out_scope": false,
+          "notes": "list 200 EstimateReadSerializer (Estimate __all__ + points[], serializers/estimate.py:35-41) vs Rust [{id,name}] (estimate.rs:87-97); create 200 (base.py:101) vs Rust 201 (estimate.rs:133); Django nested body {estimate,estimate_points} (base.py:65-76) vs Rust flat {name,description,type} (estimate.rs:17-23); dup name Django 500 via estimate_unique_name_project_when_deleted_at_null (models/estimate.py:30-36) vs Rust 409 (estimate.rs:115-120); ProjectEntityPermission GET any-member/write ADMIN+MEMBER (permissions/project.py:88-116) vs Rust auth-only (estimate.rs:82-105)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/",
+          "django_source": "app/urls/estimate.py:26",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::estimate::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/estimate.service.ts", "method": "fetchEstimateById" },
+            { "service": "apps/web/core/services/estimate.service.ts", "method": "deleteEstimate" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T1",
+          "out_scope": false,
+          "notes": "retrieve/partial_update 200 EstimateReadSerializer (base.py:103-144, bulk_update key/value only base.py:141) vs Rust {id,name} (estimate.rs:192-204)/{id} (estimate.rs:262); 400 'Estimate points are required' both (base.py:110-114, estimate.rs:62-67); Django .get() miss -> 500 vs Rust 404 'Estimate not found'; destroy 204 both but Django deleted_at-scoped (base.py:147-150) vs Rust hard DELETE incl points (estimate.rs:270-284); ProjectEntityPermission gate (permissions/project.py:88-116) vs Rust auth-only"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/",
+          "django_source": "app/urls/estimate.py:31",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::estimate::create_point",
+          "fe_evidence": [{ "service": "apps/web/core/services/estimate.service.ts", "method": "createEstimatePoint" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T1",
+          "out_scope": false,
+          "notes": "create 200 EstimatePointSerializer __all__ (base.py:178-179, serializers/estimate.py:20-32) vs Rust 201 {id,key,value} (estimate.rs:163-166); 400 'Key and value are required' (base.py:157-161) + 404 'Estimate not found' (base.py:168-172) mirrored (estimate.rs:69-80,144-152); @allow_permission ADMIN/MEMBER (base.py:154) vs Rust auth-only (estimate.rs:136-141)"
+        },
+        {
+          "methods": ["PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/estimates/:estimate_id/estimate-points/:estimate_point_id/",
+          "django_source": "app/urls/estimate.py:36",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::estimate::patch_point",
+          "fe_evidence": [{ "service": "apps/web/core/services/estimate.service.ts", "method": "updateEstimatePoint" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T1",
+          "out_scope": false,
+          "notes": "partial_update 200 serializer.data (base.py:190-194) vs Rust 200 {id} (estimate.rs:320); destroy 200 updated-points array + key rearrange + issue_activity (base.py:241-268) vs Rust 204 + new_estimate_id re-point only (estimate.rs:334-351); Rust destroy never 404s vs Django 404 'Estimate point not found' (base.py:248-252); Rust also serves GET (main.rs:710) where Django 405 (superset); ADMIN/MEMBER gate (base.py:181,196) vs Rust auth-only"
         }
       ]
     },
