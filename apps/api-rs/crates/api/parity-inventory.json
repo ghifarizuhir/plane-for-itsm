@@ -1125,6 +1125,138 @@
           "batch_task": "Batch H T7",
           "out_scope": false,
           "notes": "MISMATCH response keys: Django returns full IssueCreateSerializer __all__ (serializers/issue.py:105, draft.py:309 serializer.data) vs Rust minimal 9-key 201 subset id/name/project_id/workspace_id/sequence_id/state_id/priority/assignee_ids/label_ids (draft.rs:1388-1401); match parts: POST 201 both (draft.py:309 vs draft.rs:1388); no-project 400 {error:Project is required to create an issue.} verbatim (draft.py:209-212 vs NO_PROJECT_MSG draft.rs:104,1199-1202); name required/blank + start>target + state/parent/estimate verbatims (serializers/issue.py:124-197, db/models/issue.py:136 vs validate_convert_name draft.rs:206-212, check_state/check_parent/check_estimate draft.rs:584-643); gate WORKSPACE ADMIN/MEMBER no creator (draft.py:205 vs guard_convert draft.rs:160-165); miss unknown :draft_id Django .first()->None.project_id 500 (draft.py:207-209 no None branch) normalized to 404 missing() (draft.rs:1196-1198) per sane-4xx rule (H6 favorite_id precedent); cycle/module side-writes + FileAsset re-point + draft soft-delete mirrored, Celery issue_activity skipped per Batch C (draft.py:227-307 vs draft.rs:1342-1386); FE moveIssue POST draft-to-issue/ (workspace_draft.service.ts:68-74) via store moveIssue (issue.store.ts:63,339-343) + issue-modal/form.tsx:126,282; multi-caller so fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/workspace-views/",
+          "django_source": "app/urls/workspace.py:117",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::views_post",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceView" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified WorkspaceMemberUserViewsEndpoint.post (member.py:209-214) vs views_post (prefs.rs:1358-1384, main.rs:1581): POST 204 both (member.py:214 vs prefs.rs:1383), view_props default {} both (member.py:211 vs prefs.rs:1368), miss incl non-member 404 (Django DoesNotExist via base.py:188-192 vs missing() prefs.rs:1380-1382), IsAuthenticated-only both (no permission classes vs AuthUser); FE updateWorkspaceView POST workspace-views/ (workspace.service.ts:128-129) zero callers so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/quick-links/",
+          "django_source": "app/urls/workspace.py:218",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::quick_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceLinks" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "createWorkspaceLink" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified QuickLinkViewSet.create/list (quick_link.py:24-31,61-65) vs quick_create/quick_list (prefs.rs:932-1029, main.rs:1563-1566): POST 201 + GET 200 serializer __all__ 12 keys (serializers/workspace.py:181-185 vs quick_json prefs.rs:906-921), URL prepend+validate+DUP 400s (serializers/workspace.py:187-217 vs normalize_link_url/validate_link_url prefs.rs:194-218 + dup check prefs.rs:971-983), owner-scoped -created_at both (quick_link.py:62, models workspace.py:354-371 vs prefs.rs:1015-1019), AMG gate both (quick_link.py:24,61 vs gate_ws_amg prefs.rs:938,1010); FE fetchWorkspaceLinks/createWorkspaceLink (workspace.service.ts:298-312) via link.store.ts:96,102 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/quick-links/:pk/",
+          "django_source": "app/urls/workspace.py:223",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::quick_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceLink" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "deleteWorkspaceLink" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified QuickLinkViewSet.retrieve/partial_update/destroy (quick_link.py:34-58) vs quick_detail/quick_patch/quick_destroy (prefs.rs:1031-1164, main.rs:1567-1572): GET/PATCH 200 serializer.data both (quick_link.py:41,50 vs prefs.rs:1052,1133), PATCH miss 404 detail twin (quick_link.py:43 vs quick_patch_miss prefs.rs:276-281,1078-1080), GET miss 404 error twin (quick_link.py:52 vs quick_detail_miss prefs.rs:283-289,1052-1054), DELETE 204 both (hard .delete() quick_link.py:56-58 vs soft UPDATE prefs.rs:1149-1164; second-DELETE 404 both sides), title 255 + url validate + dup-excluding-self 400s (serializers/workspace.py:194-231 vs prefs.rs:1088-1116), owner-scoped + AMG gate both; FE updateWorkspaceLink/deleteWorkspaceLink (workspace.service.ts:314-328) via link.store.ts:118,124 so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/home-preferences/",
+          "django_source": "app/urls/workspace.py:229",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::home_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceWidgets" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified WorkspaceHomePreferenceViewSet.get (home.py:23-65) vs home_list (prefs.rs:705-774, main.rs:1557): GET 200 list [{key,is_enabled,config,sort_order}] with auto-create of missing keys (home.py:39-60 vs prefs.rs:734-752), served keys HomeWidgetKeys minus quick_tutorial/new_at_plane (home.py:31-35, models workspace.py:377-382 vs HOME_KEYS prefs.rs:127), AMG gate both (home.py:23 vs prefs.rs:710); FE fetchWorkspaceWidgets GET home-preferences/ (workspace.service.ts:357-363) via home.ts:89 so fe_pages []"
+        },
+        {
+          "methods": ["PATCH"],
+          "path": "/api/workspaces/:slug/home-preferences/:key/",
+          "django_source": "app/urls/workspace.py:234",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::home_patch",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateWorkspaceWidget" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified WorkspaceHomePreferenceViewSet.patch (home.py:67-79) vs home_patch (prefs.rs:810-882, main.rs:1558): PATCH 200 partial key/is_enabled/sort_order with config read-only (serializers/workspace.py:332-336 vs prefs.rs:832-835,878-881), per-field Boolean/Float 400s (DRF fields vs home_bool_opt/home_order_opt prefs.rs:785-808), miss 400 {detail:Preference not found} NOT 404 both (home.py:79 vs home_patch_miss prefs.rs:291-297), AMG gate both (home.py:67 vs prefs.rs:816); FE updateWorkspaceWidget PATCH home-preferences per-key (workspace.service.ts:365-375) via home.ts:106,142 so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/recent-visits/",
+          "django_source": "app/urls/workspace.py:239",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::recent_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchWorkspaceRecents" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified UserRecentVisitViewSet.list (recent_visit.py:24-36) vs recent_list (prefs.rs:1306-1352, main.rs:1577): GET 200 [{id,entity_name,entity_identifier,entity_data,visited_at}] (serializers/workspace.py:308-314 vs prefs.rs:1345-1350), entity_name narrow then forced allowlist issue/page/project (recent_visit.py:28-33 vs prefs.rs:1319-1331 + recent_row_visible prefs.rs:245-252), cap 20 -created_at both (recent_visit.py:35-36, models recent_visit.py:36 vs prefs.rs:1325), entity_data per-type serializers with miss->null both (serializers/workspace.py:234-305,316-329 vs recent_issue/page/project_data prefs.rs:1190-1304), AMG gate both (recent_visit.py:24 vs prefs.rs:1312); FE fetchWorkspaceRecents (workspace.service.ts:344-354) via recents/index.tsx:52 + work-item-selection-page.tsx:53 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/stickies/",
+          "django_source": "app/urls/workspace.py:244",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::misc::list_stickies",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/sticky.service.ts", "method": "getStickies" },
+            { "service": "apps/web/core/services/sticky.service.ts", "method": "createSticky" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "MISMATCH vs WorkspaceStickyViewSet.list/create (sticky.py:31-52, main.rs:1414-1417): (b) Rust bare [{id,name}] array (misc.rs:207-238) vs Django StickySerializer __all__ (serializers/workspace.py:339-344) inside paginated envelope (sticky.py:47-52 paginate default_per_page 20); Rust drops query/cursor/per_page params (sticky.py:42-45 vs misc.rs:207-219 no params) and orders -created_at (misc.rs:213) vs -sort_order (sticky.py:43); (d) no gate, _auth unused (misc.rs:209,223) vs AMG (sticky.py:31,40), no owner scoping on list; (c) create skips description_html/binary 400s (serializers/workspace.py:346-361 vs misc.rs:221-238); match: POST 201 both (sticky.py:37 vs misc.rs:237); FE getStickies/createSticky (sticky.service.ts:18-43) via sticky.store.ts:105,183 so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/stickies/:pk/",
+          "django_source": "app/urls/workspace.py:249",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::misc::get_sticky",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/sticky.service.ts", "method": "getSticky" },
+            { "service": "apps/web/core/services/sticky.service.ts", "method": "updateSticky" },
+            { "service": "apps/web/core/services/sticky.service.ts", "method": "deleteSticky" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "MISMATCH vs WorkspaceStickyViewSet retrieve/partial_update/destroy (sticky.py:54-60 + BaseViewSet defaults, urls mapping workspace.py:249-253, main.rs:1418-1423): (b) Rust 200 {id,name} (misc.rs:240-256) / 200 {id} (misc.rs:258-278) vs Django StickySerializer __all__ data (serializers/workspace.py:339-344); (d) no gate, _auth unused (misc.rs:242,260,282) vs creator-only allow_permission creator model Sticky (sticky.py:54,58); (c) miss 404 {error:Sticky not found} (misc.rs:254,275) vs Django generic {error:The required object does not exist.} (base.py:92-96); match: DELETE 204 both (sticky.py:58-60 vs misc.rs:280-293); FE getSticky/updateSticky/deleteSticky (sticky.service.ts:45-67) via sticky.store.ts + use-operations.tsx, no single page so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/sidebar-preferences/",
+          "django_source": "app/urls/workspace.py:255",
+          "rust_status": "implemented",
+          "rust_handler": "routes::prefs::sidebar_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "fetchSidebarNavigationPreferences" },
+            { "service": "apps/web/core/services/workspace.service.ts", "method": "updateBulkSidebarPreferences" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch H T8",
+          "out_scope": false,
+          "notes": "verified WorkspaceUserPreferenceViewSet.get/patch (user_preference.py:25-103) vs sidebar_get/sidebar_patch (prefs.rs:567-689, main.rs:1531-1534): GET 200 dict {key:{is_pinned,sort_order}} with auto-create 65535+i*10000 pinned drafts/your_work/stickies (user_preference.py:33-79, models workspace.py:420-427 vs SIDEBAR_KEYS prefs.rs:114-122 + sidebar_sort_order prefs.rs:152-154), PATCH 200 {message:Successfully updated} skipping keyless/unknown keys (user_preference.py:82-103 vs prefs.rs:657-688 + SIDEBAR_UPDATED_MSG prefs.rs:83), AMG gate both (user_preference.py:25,81 vs prefs.rs:572,643); FE fetchSidebarNavigationPreferences GET + updateBulkSidebarPreferences PATCH (workspace.service.ts:377-383,397-406) via store index.ts:261,329; NOTE FE updateSidebarPreference PATCHes a sidebar-preferences per-key variant (workspace.service.ts:385-395) present in NEITHER Django (workspace.py:255-259 collection only) nor Rust (main.rs:1531-1534) - no entry invented; fe_pages []"
         }
       ]
     },
