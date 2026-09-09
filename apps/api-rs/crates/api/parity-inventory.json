@@ -2089,6 +2089,95 @@
           "notes": "verified CycleAnalyticsEndpoint.get (base.py:786-1049, urls cycle.py:101-105) vs analytics (cycle.rs:2412-2485, main.rs:513-515): 200 {assignees,labels,completion_chart} both (base.py:1042-1048 vs snapshot/live branches); snapshot distribution branch both (base.py:821-830 vs non-empty-snapshot); live points branch only with points estimate both (base.py:843 vs estimate_type gate); ?type= default issues both (base.py:789 vs unwrap_or issues), other type → empty shape both (fall-through); no-dates → 400 verbatim {error:Cycle has no start or end date} both (base.py:807-811 vs guard_cycle_dated NO_DATES_MSG cycle.rs:53,245); miss sane-404 (Django None.start_date crash vs CYCLE_NOT_FOUND_MSG); AMG gate both (base.py:787 vs gate_amg)"
         }
       ]
+    },
+    "module": {
+      "rust_module": "routes/module.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/",
+          "django_source": "app/urls/module.py:20",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "getModules" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "createModule" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "projectModulesList" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "create" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T4",
+          "out_scope": false,
+          "notes": "verified ModuleViewSet.list/create (base.py:294-393, urls module.py:19-23) vs list/create (module.rs:633-818, main.rs:524-525): list 200 array exact .values() key order incl logo_props (base.py:359-390 vs module_list_json module.rs:372-403), -is_favorite/-created_at order + archived-only + ?fields= projection both (base.py:291,355-357 vs module.rs:650,657); create 201 list-shape row both (base.py:350 vs module.rs:815); name required/blank/255 400s (serializers/module.py vs module.rs:681-698), date-order non_field_errors (serializers/module.py:55-62 vs guard_date_order module.rs:90,725-730), dup-name 400 (serializers/module.py:64-72 vs guard_dup_name module.rs:100,745-747); AMG list (base.py:353) vs gate_amg (module.rs:643), AM create (base.py:294) vs gate_am (module.rs:677); members bulk_create ignore_conflicts both, unknown-user drop sane-code (serializers/module.py:64-92 vs module.rs:793-810)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:pk/",
+          "django_source": "app/urls/module.py:25",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "updateModule" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "getModuleDetails" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "patchModule" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "deleteModule" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "retrieve" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "update" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T4",
+          "out_scope": false,
+          "notes": "verified ModuleViewSet.retrieve/partial_update/destroy + DRF default update (base.py:395-759, urls module.py:24-35) vs detail/patch/update/destroy (module.rs:1263-1605, main.rs:528-532): full method parity — PUT wired (main.rs:530) sharing PATCH partial-style logic (module.rs:1524-1542; Django defines no update override, only create/list/retrieve/partial_update/destroy at base.py:295,354,396,652,724, so PUT falls back to DRF ModelViewSet.update per BaseViewSet views/base.py:48; Rust locks AM gate per §12 note module.rs:1524-1528); retrieve 200 + distribution/estimate_distribution/completion_chart both (base.py:396-649 vs detail_body module.rs:1202-1283), miss 404 Module not found both (base.py:414-415 vs MODULE_NOT_FOUND_MSG module.rs:29,1276-1281); PUT/PATCH 200 both (base.py:720 vs apply_update module.rs:1285), archived 400 verbatim both (base.py:663-667 vs guard_patch module.rs:109,1312-1317), dup-name-excl-self 400 both (serializers/module.py:94-100 vs module.rs:1331-1344); AM retrieve/patch (base.py:395,651 vs gate_am), destroy 204 ADMIN-or-creator both (base.py:723 vs module.rs:1552-1572); FE updateModule PUT (module.service.ts:42)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/modules/",
+          "django_source": "app/urls/module.py:37",
+          "rust_status": "implemented",
+          "rust_handler": "routes::module::issue_modules_create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "addModulesToIssue" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "addModulesToIssue" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T4",
+          "out_scope": false,
+          "notes": "verified ModuleIssueViewSet.create_issue_modules (issue.py:256-323, urls module.py:36-40) vs issue_modules_create (module.rs:1868-1957, main.rs:550-551): POST 201 {message:success} always even with empty lists both (issue.py:323 vs module.rs:1956, no empty-gate); added modules NOT scoped to ws+project both (issue.py:264-278 bulk_create raw ids vs module.rs:1930-1945 FROM modules WHERE id=ANY with no ws/pid predicate — replicated as-is; unknown ids: Django IntegrityError→400 via views/base.py:80-84 vs Rust drop-unknown sane 201); removed_modules soft-delete both (issue.py:295-321 vs MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL module.rs:68-70); AM gate both (issue.py:256 vs gate_am module.rs:1878)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/",
+          "django_source": "app/urls/module.py:42",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::module::issues_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "getModuleIssues" },
+            { "service": "apps/web/core/services/module.service.ts", "method": "addIssuesToModule" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "getModuleIssues" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "addIssuesToModule" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T4",
+          "out_scope": false,
+          "notes": "MISMATCH grouped 200 dict shapes unhandled: Django list (issue.py:94-207) serves flat paginated 200 plus grouped/sub-grouped dict 200s (issue.py:126-198 via issue_queryset_grouper issue.py:124) vs Rust flat envelope only (issues_list module.rs:1666-1801, main.rs:542-543); group_by==sub_group_by 400 verbatim both (issue.py:129-133 vs GROUP_DUP_MSG module.rs:37,1680-1684); POST verified create_module_issues 201 {message:success} both (issue.py:211-254 vs issues_create module.rs:1803-1866, main.rs:542-543: empty-issues 400 both issue.py:213-214 vs guard_issues_present module.rs:127,1826-1831, issues re-scoped ws+project unknown-dropped both issue.py:217-223 vs module.rs:1846-1863); AM gate both (issue.py:95,209 vs gate_am)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/",
+          "django_source": "app/urls/module.py:47",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::module::issue_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/module.service.ts", "method": "removeIssuesFromModuleBulk" },
+            { "service": "packages/services/src/module/module.service.ts", "method": "removeIssuesFromModuleBulk" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T4",
+          "out_scope": false,
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages []"
+        }
+      ]
     }
   }
 }
