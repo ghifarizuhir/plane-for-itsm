@@ -1749,6 +1749,90 @@
           "notes": "workspace ADMIN gate; DELETE soft"
         }
       ]
+    },
+    "search": {
+      "rust_module": "routes/search.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/search/",
+          "django_source": "app/urls/search.py:12",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::search::global_search",
+          "fe_evidence": [{ "service": "apps/web/core/services/workspace.service.ts", "method": "searchWorkspace" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "verified GlobalSearchEndpoint.get (views/search/base.py:271-302) vs global_search (search.rs:94-156, main.rs:1127): 200 {results:{workspace,project,issue,cycle,module,issue_view,page,intake}} both; Django per-entity .values() keys e.g. projects name/id/identifier/workspace__slug (base.py:80), issues name/id/sequence_id/project__identifier/project_id/workspace__slug [:100] (base.py:107-114) vs rust {id,name} per bucket (workspace adds slug) LIMIT 10 (search.rs:107-150); params search/entities/workspace_search/project_id both, unknown entities ignored both (base.py:289-293, search.rs:35-52); IsAuthenticated-only both (views/base.py:150)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/search-issues/",
+          "django_source": "app/urls/search.py:17",
+          "rust_status": "implemented",
+          "rust_handler": "routes::search::issue_search",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "projectIssuesSearch" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "verified IssueSearchEndpoint.get (views/search/issue.py:99-161) vs issue_search (search.rs:195-216, main.rs:1128-1131): 200 bare array (no {results} envelope) with identical 11 .values() keys name/id/start_date/sequence_id/project__name/project__identifier/project_id/workspace__slug/state__name/state__group/state__color (issue.py:147-160, search.rs:158-193 build_search_issue_item); rust honors search text+sequence only, ignores optional parent/issue_relation/sub_issue/cycle/module/target_date filters (issue.py:123-139); guest role==5 created_by scoping (issue.py:141-144) not enforced in rust; IsAuthenticated-only both (views/base.py:150)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/entity-search/",
+          "django_source": "app/urls/search.py:22",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::search::entity_search",
+          "fe_evidence": [{ "service": "apps/web/core/services/workspace.service.ts", "method": "searchEntity" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "verified SearchEndpoint.get (views/search/base.py:308-730) vs entity_search (search.rs:218-233, main.rs:1132): Django query_type in {user_mention,project,issue,cycle,module,page} default user_mention, count default 5, optional project_id scoping (base.py:309-313) vs rust user_mention-only {user_mention:[{id,display_name}]} count clamp 1-50 (search.rs:224-232); Django user_mention keys member__avatar_url/member__display_name/member__id (base.py:360-364) vs rust id/display_name; WorkspaceUserPermission gate Django (base.py:306) vs auth-only rust"
+        }
+      ]
+    },
+    "external": {
+      "rust_module": "routes/prefs.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/unsplash/",
+          "django_source": "app/urls/external.py:13",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::prefs::unsplash",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "getUnsplashImages" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "verified UnsplashEndpoint.get (views/external/base.py:215-243) vs unsplash (prefs.rs:1616-1664, main.rs:1605): no UNSPLASH_ACCESS_KEY -> 200 [] both (base.py:226-227, prefs.rs:1626-1628); else passthrough upstream status+JSON both (base.py:242-243, prefs.rs:1653-1658); Django page $ bug page=${page} (base.py:235) fixed in rust unsplash_url (prefs.rs:258-264); upstream unreachable/non-JSON Django 500 (raised exception) vs rust 502 {error} sane mapping (prefs.rs:1644-1663); IsAuthenticated-only both (views/base.py:150)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/ai-assistant/",
+          "django_source": "app/urls/external.py:14",
+          "rust_status": "missing",
+          "rust_handler": "",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "GPTIntegrationEndpoint.post (views/external/base.py:148-181): 400 LLM provider API key and model are required (base.py:153-157)/Task is required (base.py:159-161), 500 An internal error has occurred. (base.py:164-168), 200 {response,response_html,project_detail,workspace_detail} (base.py:173-181); ADMIN+MEMBER project gate (base.py:149); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22 (external LLM proxies out of scope); no FE caller found"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/ai-assistant/",
+          "django_source": "app/urls/external.py:19",
+          "rust_status": "missing",
+          "rust_handler": "",
+          "fe_evidence": [{ "service": "apps/web/core/services/ai.service.ts", "method": "createGptTask" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T3",
+          "out_scope": false,
+          "notes": "WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212): same 400s (base.py:189-197)/500 An internal error has occurred. (base.py:199-204), 200 {response,response_html} only (base.py:206-212); ADMIN+MEMBER WORKSPACE gate (base.py:185); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22; FE ai.service.ts createGptTask posts this URL (ai.service.ts:29-35)"
+        }
+      ]
     }
   }
 }
