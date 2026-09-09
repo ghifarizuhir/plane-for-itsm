@@ -73,10 +73,18 @@ fn implemented_paths_are_registered_in_main_rs() {
         if ep["out_scope"].as_bool().unwrap_or(false) {
             continue;
         }
-        if matches!(ep["rust_status"].as_str(), Some("missing" | "shape_mismatch")) {
+        let path = ep["path"].as_str().expect("path string");
+        if ep["rust_status"].as_str() == Some("missing") {
             continue;
         }
-        let path = ep["path"].as_str().expect("path string");
+        // Narrow exception: matchit 0.7.3 rejects two params in one
+        // segment (`:a-:b` → TooManyParams), so only a composite-param
+        // path is exempt from registration.
+        if ep["rust_status"].as_str() == Some("shape_mismatch")
+            && path.split('/').any(|seg| seg.matches(':').count() > 1)
+        {
+            continue;
+        }
         if !routes.iter().any(|r| r == path) {
             missing.push(path.to_string());
         }
