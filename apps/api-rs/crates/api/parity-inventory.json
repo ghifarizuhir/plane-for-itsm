@@ -75,17 +75,17 @@
         },
         {
           "methods": ["GET"],
-          "path": "/api/workspaces/:slug/work-items/:ident/",
+          "path": "/api/workspaces/:slug/work-items/:project_identifier-:issue_identifier/",
           "django_source": "app/urls/issue.py:281",
-          "rust_status": "implemented",
+          "rust_status": "shape_mismatch",
           "rust_handler": "routes::work_item::get_by_identifier",
           "fe_evidence": [
             { "service": "apps/web/core/services/issue/issue.service.ts", "method": "retrieveWithIdentifier" }
           ],
           "fe_pages": [],
-          "batch_task": "Batch F T10",
+          "batch_task": "Batch J T4",
           "out_scope": false,
-          "notes": "constraint enforced in handler (strict int + iexact + member gate); route shape :ident"
+          "notes": "canonical Django path work-items/<project_identifier>-<issue_identifier>/ (issue.py:281) served by get_by_identifier via the :ident/ alias (main.rs:1249) - axum 0.7/matchit 0.7.3 cannot register :a-:b in one segment (TooManyParams, tree.rs:661; documented work_item.rs:1210); GET 200 detail; 400 'Invalid issue identifier' strict-int (base.py:1202-1215); project .get() identifier__iexact miss Django 500 -> rust missing() 404 sane mapping (base.py:1218); 403 'You are not allowed to view this issue' project-member gate (base.py:1220-1230); FE retrieveWithIdentifier (issue.service.ts:439)"
         },
         {
           "methods": ["GET"],
@@ -1831,6 +1831,42 @@
           "batch_task": "Batch J T3",
           "out_scope": false,
           "notes": "WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212): same 400s (base.py:189-197)/500 An internal error has occurred. (base.py:199-204), 200 {response,response_html} only (base.py:206-212); ADMIN+MEMBER WORKSPACE gate (base.py:185); NO rust handler and NO main.rs route -> STAYS ON DJANGO per search.rs:22; FE ai.service.ts createGptTask posts this URL (ai.service.ts:29-35)"
+        }
+      ]
+    },
+    "timezone": {
+      "rust_module": "routes/misc.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/timezones/",
+          "django_source": "app/urls/timezone.py:11",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::misc::timezones",
+          "fe_evidence": [{ "service": "apps/web/core/services/timezone.service.ts", "method": "fetch" }],
+          "fe_pages": [],
+          "batch_task": "Batch J T4",
+          "out_scope": false,
+          "notes": "verified TimezoneEndpoint.get (views/timezone/base.py:23-215) vs timezones (misc.rs:40-44, main.rs:1250): GET 200; Django 200 {timezones:[{label,value,utc_offset,gmt_offset}]} envelope sorted by offset+label (base.py:184-215) vs rust bare [{label,value}] array from codegen'd timezones.json; AllowAny both (base.py:24, no auth extractor in rust); Django AuthenticationThrottle (base.py:26) + cache_page(2h) (base.py:28) have no rust equivalent; FE timezone.service.ts fetch"
+        }
+      ]
+    },
+    "exporter": {
+      "rust_module": "routes/misc.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/export-issues/",
+          "django_source": "app/urls/exporter.py:11",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::misc::export_history",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project-export.service.ts", "method": "csvExport" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T4",
+          "out_scope": false,
+          "notes": "verified ExportIssuesEndpoint.post/get (views/exporter/base.py:18-84) vs create_export/export_history (misc.rs:58-104, main.rs:1321): POST 200 {message:'Once the export is ready you will be able to download it'} both (base.py:57-60); POST 400 {error:Provider 'x' not found.} csv/xlsx/json-only (base.py:31,61-65) vs rust validate_export_provider (misc.rs:24-30, None-case message differs); GET 200 only when BOTH per_page+cursor present else 400 {error:'per_page and cursor are required'} both (base.py:73-84 vs misc.rs:97-99); rust GET is LIMIT list without cursor pagination; ADMIN/MEMBER WORKSPACE gate Django (base.py:22,67) vs auth-only rust (history _auth unused); file generation stays on Django celery issue_export_task (base.py:49-56); FE project-export.service.ts csvExport POST-only (GET history has no FE caller)"
         }
       ]
     }

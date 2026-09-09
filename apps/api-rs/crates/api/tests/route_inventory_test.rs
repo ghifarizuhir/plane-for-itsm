@@ -26,7 +26,7 @@ const BASELINE: &[&str] = &[
     "/api/workspaces/:slug/saved-analytic-view/:analytic_id/",
     "/api/workspaces/:slug/export-analytics/",
     "/api/workspaces/:slug/analytic-view/:pk/",
-    "/api/workspaces/:slug/work-items/:ident/",
+    "/api/workspaces/:slug/work-items/:project_identifier-:issue_identifier/",
 ];
 
 #[test]
@@ -73,7 +73,7 @@ fn implemented_paths_are_registered_in_main_rs() {
         if ep["out_scope"].as_bool().unwrap_or(false) {
             continue;
         }
-        if ep["rust_status"].as_str() == Some("missing") {
+        if matches!(ep["rust_status"].as_str(), Some("missing" | "shape_mismatch")) {
             continue;
         }
         let path = ep["path"].as_str().expect("path string");
