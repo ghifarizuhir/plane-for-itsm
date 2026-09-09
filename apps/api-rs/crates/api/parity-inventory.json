@@ -1989,6 +1989,104 @@
           "batch_task": "Batch K T2",
           "out_scope": false,
           "notes": "verified CycleFavoriteViewSet.destroy (base.py:582-591, urls cycle.py:67-70) vs fav_destroy (cycle.rs:1546, main.rs:467-468): DELETE 204 hard delete soft=False both (base.py:590 vs cycle.rs DELETE); miss 404 DoesNotExist (views/base.py:92-96 vs missing() on 0 rows); user+slug+project+entity filter both (base.py:583-589 vs cycle.rs project/entity_type/user/slug/cycle_id predicate); AM gate both (base.py:581 vs gate_am)"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/user-properties/",
+          "django_source": "app/urls/cycle.py:77",
+          "rust_status": "implemented",
+          "rust_handler": "routes::userprops::cycle_props_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "fetchCycleIssueFilters" },
+            { "service": "apps/web/core/services/issue_filter.service.ts", "method": "patchCycleIssueFilters" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleUserPropertiesEndpoint (base.py:625-655, urls cycle.py:77-80) vs cycle_props_get (userprops.rs:489) + cycle_props_patch (userprops.rs:535, main.rs:279-281): GET 200 get_or_create both (base.py:647-655 vs INSERT-then-fetch userprops.rs:489-533); PATCH 201 serializer row both (base.py:644 vs StatusCode::CREATED); PATCH merges only 4 keys filters/rich_filters/display_filters/display_properties both (base.py:635-640 vs pick_or); PATCH miss 404 .get DoesNotExist (views/base.py:92-96 vs missing()); AMG gate both (base.py:626,646 vs guard_userprops 20/15/5 userprops.rs:66-71)"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/archive/",
+          "django_source": "app/urls/cycle.py:82",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::archive",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "archiveCycle" },
+            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "restoreCycle" },
+            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "archive" },
+            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "restore" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleArchiveUnarchiveEndpoint.post/delete (archive.py:586-611, urls cycle.py:81-85) vs archive/unarchive (cycle.rs:2177/2234, main.rs:497-499): POST 200 {archived_at} both (archive.py:604 vs cycle.rs archived_at str format); non-completed → 400 verbatim {error:Only completed cycles can be archived} both (archive.py:590-594 vs guard_archive ARCHIVE_ONLY_COMPLETED_MSG cycle.rs:51); POST clears favorites all users both (archive.py:598-603 vs cycle.rs tx); DELETE 204 both (archive.py:607-611 vs cycle.rs:2234); miss 404 .get DoesNotExist (views/base.py:92-96 vs missing() normalize-crash); NO GET on this path either side; AM gate both (archive.py:586,606 vs gate_am)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archived-cycles/",
+          "django_source": "app/urls/cycle.py:87",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::archived_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "getArchivedCycles" },
+            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "list" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleArchiveUnarchiveEndpoint.get pk=None branch (archive.py:271-304, urls cycle.py:86-90) vs archived_list (cycle.rs:2093, main.rs:485-487): archived-only scope both (archive.py:114-122 archived_at__isnull=False vs archived_at IS NOT NULL); list OMITS logo_props/version/created_by both (archive.py:275-302 .values() vs archived_list_json Nones cycle.rs:2062-2091); order -is_favorite,-created_at both (archive.py:303 vs ORDER BY is_favorite DESC, created_at DESC); AM gate both (archive.py:271 vs gate_am)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/archived-cycles/:pk/",
+          "django_source": "app/urls/cycle.py:92",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::archived_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle_archive.service.ts", "method": "getArchivedCycleDetails" },
+            { "service": "packages/services/src/cycle/cycle-archive.service.ts", "method": "retrieve" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleArchiveUnarchiveEndpoint.get pk branch (archive.py:305-584, urls cycle.py:91-95) vs archived_detail (cycle.rs:2123, main.rs:489-491): detail + distribution/estimate_distribution both (archive.py:337-353,455-582 vs cycle.rs distribution+estimate_distribution inserts); estimate_distribution only with points estimate both (archive.py:358-468 vs estimate_type branch); issues completion_chart only when dated both (archive.py:575-582 vs dated-gated chart); miss 404 — Django None-subscript crash normalized to missing() (cycle.rs:2143-2147); archived-only scope both; AM gate both (archive.py:271 vs gate_am)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/progress/",
+          "django_source": "app/urls/cycle.py:97",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::progress",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "workspaceActiveCyclesProgress" },
+            {
+              "service": "packages/services/src/cycle/cycle-analytics.service.ts",
+              "method": "workspaceActiveCyclesProgress"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleProgressEndpoint.get (base.py:658-783, urls cycle.py:96-100) vs progress (cycle.rs:2265-2404, main.rs:505-507): 12 keys both (base.py:767-782 vs cycle.rs 12-key json); snapshot counts win when present both (base.py:712-718 vs snap_live contains total_issues); points-estimate sums only, group sums or-0 + total may be null both (base.py:664-711,769-774 vs PtAgg nullable-total); miss 404 {error:Cycle not found} both (base.py:661-663 vs CYCLE_NOT_FOUND_MSG); AMG gate both (base.py:659 vs gate_amg); FE-only variant /cycles/:id/cycle-progress/ (workspaceActiveCyclesProgressPro cycle.service.ts:52-60 + packages:73-82) exists in NEITHER Django nor Rust — no entry"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/analytics/",
+          "django_source": "app/urls/cycle.py:102",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::analytics",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "workspaceActiveCyclesAnalytics" },
+            {
+              "service": "packages/services/src/cycle/cycle-analytics.service.ts",
+              "method": "workspaceActiveCyclesAnalytics"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T3",
+          "out_scope": false,
+          "notes": "verified CycleAnalyticsEndpoint.get (base.py:786-1049, urls cycle.py:101-105) vs analytics (cycle.rs:2412-2485, main.rs:513-515): 200 {assignees,labels,completion_chart} both (base.py:1042-1048 vs snapshot/live branches); snapshot distribution branch both (base.py:821-830 vs non-empty-snapshot); live points branch only with points estimate both (base.py:843 vs estimate_type gate); ?type= default issues both (base.py:789 vs unwrap_or issues), other type → empty shape both (fall-through); no-dates → 400 verbatim {error:Cycle has no start or end date} both (base.py:807-811 vs guard_cycle_dated NO_DATES_MSG cycle.rs:53,245); miss sane-404 (Django None.start_date crash vs CYCLE_NOT_FOUND_MSG); AMG gate both (base.py:787 vs gate_amg)"
         }
       ]
     }
