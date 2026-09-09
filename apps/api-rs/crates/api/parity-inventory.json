@@ -2442,6 +2442,91 @@
           "notes": "verified IntakeWorkItemDescriptionVersionEndpoint.get single branch (app/views/intake/base.py:602-611) vs intake_desc_version_detail (routes/versions.rs:793-828): GET-only, GET 200 full 14-key IssueDescriptionVersionDetailSerializer (app/serializers/issue.py:1023-1038 vs DESC_VERSION_DETAIL_KEYS routes/versions.rs:159-174); miss 404 both (Django DoesNotExist vs missing() routes/versions.rs:824-827); same project/issue-lookup + ADMIN/MEMBER/GUEST + guest-403 chain (app/views/intake/base.py:581-600 vs versions_gate + desc_gate_chain routes/versions.rs:262+,560-584); intake twin of Batch G T9 work-items single (app/urls/issue.py:271); wired main.rs:339-340; FE retrieveDescriptionVersion (intake-work_item_version.service.ts:33-46)"
         }
       ]
+    },
+    "state": {
+      "rust_module": "routes/state.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/states/",
+          "django_source": "app/urls/state.py:12",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::state::list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "getStates"
+            },
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "createState"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T3",
+          "out_scope": false,
+          "notes": "GET Django 200 full StateSerializer list (9 keys + per-group computed 'order', app/views/state/base.py:77-102, serializer app/serializers/state.py:12-30) + 'grouped=true' dict mode (base.py:91-100), triage excluded via get_queryset is_triage=False (base.py:39) vs Rust 200 [{id,name,group}] ordered by sequence, no grouped/order keys, no triage filter (routes/state.rs:56-76); POST Django 200 full shape (base.py:47-52) + dup-name 400 {'name': 'The state name is already taken'} (base.py:54-59) vs Rust 201 StateOut{id,name,group} (routes/state.rs:78-102) with no dup-name guard (validate_create covers name/group/color only, state.rs:37-54; failures -> 500 via anyhow AppError, common errors.rs:19); gates Django list ADMIN/MEMBER/GUEST (base.py:77) + create ADMIN (base.py:46) vs Rust auth-only (_auth unused, state.rs:56-83); wired main.rs:625-627; FE getStates/createState (project-state.service.ts:19-25,35-41)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/states/:pk/",
+          "django_source": "app/urls/state.py:17",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::state::detail",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "getState"
+            },
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "patchState"
+            },
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "deleteState"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T3",
+          "out_scope": false,
+          "notes": "retrieve Django DRF-default 200 full StateSerializer (auth-only via permission_classes IsAuthenticated, app/views/base.py:50) vs Rust 200 {id,name,group} (routes/state.rs:126-145); Rust 404 {'error': 'State not found'} (state.rs:143) has no Django equivalent; PATCH Django 200 full + dup-name 400 (base.py:61-75, gate ADMIN/MEMBER/GUEST) vs Rust 200 {id} (state.rs:147-178) with 400 {'error': 'Invalid name'}/{'error': 'Invalid group'} (state.rs:153-162) and no dup-name guard; DELETE guards verbatim-identical 400s ('Default state cannot be deleted', 'The state is not empty, only empty states can be deleted', base.py:117-130 vs guard_delete state.rs:106-114 + destroy state.rs:180-207) but Django ADMIN-only (base.py:113) + is_triage=False lookup scope (base.py:115) vs Rust auth-only with no triage filter (state.rs:180-191); 204 both; wired main.rs:629-633; FE getState/patchState/deleteState (project-state.service.ts:51-57,67-81); FE updateState PUTs states/:pk/ (project-state.service.ts:59-65) but PUT is served by NEITHER Django (state.py:17-20) NOR Rust -> no entry per recipe rule 6"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intake-state/",
+          "django_source": "app/urls/state.py:22",
+          "rust_status": "implemented",
+          "rust_handler": "routes::state::intake_state",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "getIntakeState"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T3",
+          "out_scope": false,
+          "notes": "verified IntakeStateEndpoint.get (app/views/state/base.py:136-146) vs intake_state (routes/state.rs:359-390): GET-only, 200 full 9-key StateSerializer both (order FloatField required=False skipped on single object, app/serializers/state.py:12-30 vs state_serializer_json None-branch state.rs:319-335); miss 404 {'error': 'Triage state not found'} verbatim both (base.py:140-144 vs TRIAGE_MISS_MSG state.rs:276,384-389); triage lookup soft-delete + group='triage' both (triage_objects base.py:139 vs SQL state.rs:373-378); gates match: Django PROJECT ADMIN/MEMBER/GUEST + ws-admin-member fallback (app/permissions/base.py:53-78) vs guard_intake_state 20/15/5 + project_gate_allows fallback (state.rs:284-289,364-372); wired main.rs:647-648; FE getIntakeState (project-state.service.ts:43-49)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/states/:pk/mark-default/",
+          "django_source": "app/urls/state.py:27",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::state::mark_default",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project-state.service.ts",
+              "method": "markDefault"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T3",
+          "out_scope": false,
+          "notes": "POST-only action both (state.py:27-31 vs post() main.rs:638-639); 204 both, blind clear+set updates both, triage excluded both (default-manager filter base.py:108-109 vs deleted_at IS NULL + group != 'triage' state.rs:255-269); GATE DELTA: Django PROJECT ADMIN incl ws-admin-member fallback (allow_permission [ADMIN] level PROJECT default, app/views/state/base.py:105-106 + app/permissions/base.py:53-78) vs Rust project_role==20 only with no ws-admin fallback (guard_mark_default state.rs:213-218, mark_default state.rs:250-253; ws-admin project MEMBER -> Django 204 vs Rust 403 deny()); FE-exercised (markDefault) -> shape_mismatch; FE markDefault (project-state.service.ts:27-33)"
+        }
+      ]
     }
   }
 }
