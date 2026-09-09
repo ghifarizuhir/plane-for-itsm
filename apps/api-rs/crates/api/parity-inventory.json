@@ -2298,6 +2298,83 @@
           "notes": "verified ModuleArchiveUnarchiveEndpoint.get pk branch (app/views/module/archive.py:294-542, urls/module.py:101-104) vs archived_detail (module.rs:2381, main.rs:614-617): detail ModuleDetailSerializer + links/sub-issues/distribution/estimate_distribution both (app/views/module/archive.py:294-309,318,431-542 vs detail_body); estimate_distribution only with points estimate both; completion_chart only when dated both; miss/non-archived 404 — Django None-serialize crash normalized to missing() (module.rs:2381+ fetch_row archived_only); archived-only scope both; SAFE gate any-active-member both (ProjectEntityPermission vs gate_safe)"
         }
       ]
+    },
+    "intake": {
+      "rust_module": "routes/intake.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intakes/",
+          "django_source": "app/urls/intake.py:16",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "GET Django returns SINGLE IntakeSerializer object 200 (app/views/intake/base.py:74-76, IntakeSerializer fields __all__ app/serializers/intake.py:17-24) vs Rust 200 array [{id,name}] (routes/intake.rs:68-84); POST Django 201 full shape via DRF default create + perform_create (app/views/intake/base.py:78-80) vs Rust 201 {id,name} only (routes/intake.rs:108-117); dup-name Django IntegrityError -> 400 {'error': 'The payload is not valid'} (app/views/base.py:80-84) vs Rust 409 {'error': 'Intake with the same name already exists in the project'} (routes/intake.rs:101-106); Django ADMIN/MEMBER gate (app/views/intake/base.py:73,78) vs Rust auth-only (routes/intake.rs:68-91); wired main.rs:725-726; FE grep 'intakes/' across apps/web + packages/services -> 0 hits"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intakes/:pk/",
+          "django_source": "app/urls/intake.py:21",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "retrieve/patch Django full IntakeSerializer shape via DRF defaults (serializer_class app/views/intake/base.py:58, __all__ app/serializers/intake.py:17-24) vs Rust detail {id,name} (routes/intake.rs:250-253) / patch {id} only (routes/intake.rs:280); patch validation Django full-serializer errors vs Rust 400 {'error': 'Invalid name'} (routes/intake.rs:262-266); DELETE default-intake guard verbatim both: 400 'You cannot delete the default intake' (app/views/intake/base.py:86-90 vs guard_delete routes/intake.rs:223-231 + destroy routes/intake.rs:298-300); Django ADMIN/MEMBER gate (app/views/intake/base.py:82) vs Rust auth-only; wired main.rs:729-732; FE grep 'intakes/' -> 0 hits"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intake-issues/",
+          "django_source": "app/urls/intake.py:26",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::list_issues",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "GET Django paginated IntakeIssueSerializer list (app/views/intake/base.py:222-226) + 404 {'error': 'Intake not found'} with no intake (app/views/intake/base.py:179-181) + status filter/order_by/guest scoping (app/views/intake/base.py:199-221) vs Rust 200 plain array [{id,status}] (routes/intake.rs:120-136); POST Django 200 full IntakeIssueDetailSerializer (app/views/intake/base.py:329-330) vs Rust 201 {id,status,issue_id} (routes/intake.rs:215-218); 'Name is required'/'Invalid priority' 400s match both (app/views/intake/base.py:230-241 vs validate_issue_create routes/intake.rs:56-66); triage-state lookup-or-create both (app/views/intake/base.py:246-256 vs routes/intake.rs:165-182); Django ADMIN/MEMBER/GUEST gate (app/views/intake/base.py:177,228) vs Rust auth-only; wired main.rs:745-746; FE grep 'intake-issues/' -> 0 hits (FE uses inbox-issues alias)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/",
+          "django_source": "app/urls/intake.py:31",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::detail_issue",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "retrieve Django full IntakeIssueDetailSerializer 200 (app/views/intake/base.py:506-550) incl guest 403 'You are not allowed to view this issue' (app/views/intake/base.py:534-548) vs Rust {id,status} with no guest gate (routes/intake.rs:308-324); PATCH Django pk = issue_id scoped by intake_id (app/views/intake/base.py:339-345) under ADMIN/creator decorator (app/views/intake/base.py:334) with in-view 403 'Only admin or creator can update the intake work items' (app/views/intake/base.py:361-365) + 400 'You cannot edit intake issues' (app/views/intake/base.py:367-374) vs Rust pk = intake-issue row id with verbatim guard_inbox_patch gates (routes/intake.rs:429-433,493-509) returning full detail shape 200 (routes/intake.rs:884-897); DELETE Django ADMIN/creator gate + cascade-deletes issue when status in [-2,-1,0,2] (app/views/intake/base.py:552-569) vs Rust destroy_issue mirrors cascade (routes/intake.rs:326-356) but auth-only; wired main.rs:749-752; FE grep 'intake-issues/' -> 0 hits"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/inboxes/",
+          "django_source": "app/urls/intake.py:36",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::list",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "identical IntakeViewSet twin of intakes/ (app/urls/intake.py:36-40) sharing Rust list/create (main.rs:735-736): same deltas as intakes/ entry — Django SINGLE IntakeSerializer object 200 (app/views/intake/base.py:74-76) vs Rust array [{id,name}] (routes/intake.rs:68-84); POST Django 201 full shape (app/views/intake/base.py:78-80) vs Rust 201 {id,name} (routes/intake.rs:108-117); dup-name Django 400 via IntegrityError (app/views/base.py:80-84) vs Rust 409 (routes/intake.rs:101-106); Django ADMIN/MEMBER gate vs Rust auth-only; FE grep 'inboxes/' across apps/web + packages/services -> 0 hits"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/inboxes/:pk/",
+          "django_source": "app/urls/intake.py:41",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::detail",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch L T1",
+          "out_scope": false,
+          "notes": "identical IntakeViewSet twin of intakes/:pk/ (app/urls/intake.py:41-45) sharing Rust detail/patch/destroy (main.rs:739-742): same deltas — Django full IntakeSerializer retrieve/patch via DRF defaults (app/views/intake/base.py:58) vs Rust {id,name}/{id} (routes/intake.rs:250-253,280); DELETE guard verbatim both 'You cannot delete the default intake' (app/views/intake/base.py:86-90 vs routes/intake.rs:223-231); Django ADMIN/MEMBER gate vs Rust auth-only; FE grep 'inboxes/' -> 0 hits"
+        }
+      ]
     }
   }
 }
