@@ -3185,6 +3185,102 @@
           "batch_task": "Batch N T1",
           "out_scope": false,
           "notes": "verified AssetCheckEndpoint.get (v2.py:770-776) vs check (asset.rs:1832-1848, main.rs:1070-1073): GET 200 {exists} both (v2.py:776 vs asset.rs:1847); all_objects + deleted_at IS NULL both, is_deleted-only rows still count (v2.py:775 vs asset.rs:1840-1842); AMG workspace gate both (v2.py:773 vs asset.rs:1837); FE checkIfAssetExists (file.service.ts:246-257)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/file-assets/",
+          "django_source": "app/urls/asset.py:27-31",
+          "rust_status": "missing",
+          "rust_handler": "",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "FileAssetEndpoint.post (base.py:38-46): POST-only route (GET/DELETE need workspace_id+asset_key kwargs, asset.py:27-31); 201 serializer.data (base.py:45) / 400 errors (base.py:46); multipart+JSON parsers (base.py:19); WorkspaceMemberPermission slug branch + IsAuthenticated (base.py:20, workspace.py:113+); unknown slug 404 via .get() (base.py:41); NO rust handler and NO main.rs route, legacy POST-create deliberately excluded per main.rs:1054-1057 (no FE caller); no FE caller found"
+        },
+        {
+          "methods": ["GET", "DELETE"],
+          "path": "/api/workspaces/file-assets/:workspace_id/:key/",
+          "django_source": "app/urls/asset.py:32-36",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::legacy_ws_get",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "deleteOldWorkspaceAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "verified FileAssetEndpoint.get/delete (base.py:26-36/48-53) vs legacy_ws_get/legacy_ws_delete (asset.rs:2150-2184/2189-2207, main.rs:1058-1061): Django asset_key vs main.rs :key, recorded :key (asset.py:33 vs main.rs:1059); key {workspace_id}/{key} both (base.py:27,49 vs asset.rs:2158,2197); GET hit 200 {data:list,status:True} both (base.py:30-31 vs asset.rs:2177-2183); GET miss 200 {error,status:False} quirk verbatim both (base.py:33-36 vs asset.rs:2165-2170 LEGACY_KEY_MISSING_MSG asset.rs:175); DELETE 204 is_deleted-only both (base.py:50-53 vs asset.rs:2198-2206); DELETE-miss Django 404 The required object does not exist (views/base.py:92-96) vs Rust 404 missing() identical string (project.rs:16-18); default-manager deleted_at scope both (mixins.py:56-67 vs asset.rs:2159-2161,2198); any-active-member workspace_id gate both (workspace.py:113+ vs asset.rs:2132-2145); FE deleteOldWorkspaceAsset DELETE (file.service.ts:218-225); GET no FE caller"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/users/file-assets/",
+          "django_source": "app/urls/asset.py:37",
+          "rust_status": "missing",
+          "rust_handler": "",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "UserAssetsEndpoint.post (base.py:81-86): POST-only route (asset.py:37); 201 serializer.data (base.py:85) / 400 errors (base.py:86); multipart parsers (base.py:68); IsAuthenticated default, no view-level permission_classes (settings/common.py:145); NO rust handler and NO main.rs route, legacy POST-create excluded per main.rs:1054-1057; no FE caller found"
+        },
+        {
+          "methods": ["GET", "DELETE"],
+          "path": "/api/users/file-assets/:key/",
+          "django_source": "app/urls/asset.py:38-42",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::asset::legacy_user_get",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "deleteOldUserAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "MISMATCH GET-hit 500: verified UserAssetsEndpoint.get/delete (base.py:70-79/88-92) vs legacy_user_get/legacy_user_delete (asset.rs:2234-2259/2263-2280, main.rs:1066-1069): Django asset_key vs main.rs :key, recorded :key (asset.py:39 vs main.rs:1067); GET-hit Django 500 Something went wrong (base.py:73 serializes queryset WITHOUT many=True on plain ModelSerializer serializers/asset.py:9-13, AttributeError falls through views/base.py:101-109) vs Rust 200 {data:single,status:true} (asset.rs:2252-2258); GET-miss 200 {error,status:False} quirk verbatim both (base.py:76-79 vs asset.rs:2246-2250); DELETE 204 is_deleted-only both (base.py:89-92 vs asset.rs:2268-2279); DELETE-miss Django 404 (views/base.py:92-96) vs Rust 404 missing() identical (project.rs:16-18); created_by=request.user scope both (base.py:71,89 vs asset.rs:2240-2244,2268-2272); FE deleteOldUserAsset DELETE (file.service.ts:227-234); GET no FE caller"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/file-assets/:workspace_id/:key/restore/",
+          "django_source": "app/urls/asset.py:43-47",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::legacy_ws_restore",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "restoreOldEditorAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "verified FileAssetViewSet.restore (base.py:59-64, {post:restore} asset.py:43-47) vs legacy_ws_restore (asset.rs:2211-2229, main.rs:1062-1065): Django asset_key vs main.rs :key, recorded :key (asset.py:44 vs main.rs:1063); key {workspace_id}/{key} both (base.py:60 vs asset.rs:2219); POST 204 clears is_deleted-only both (base.py:62-64 vs asset.rs:2220-2228); miss Django 404 The required object does not exist (views/base.py:188-192 BaseViewSet) vs Rust 404 missing() identical (project.rs:16-18); any-active-member workspace_id gate both (workspace.py:113+ vs asset.rs:2132-2145); FE restoreOldEditorAsset (file.service.ts:259-266)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/assets/v2/workspaces/:slug/duplicate-assets/:asset_id/",
+          "django_source": "app/urls/asset.py:99-103",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::duplicate",
+          "fe_evidence": [{ "service": "apps/web/core/services/file.service.ts", "method": "duplicateAsset" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "verified DuplicateAssetEndpoint.post (v2.py:815-865) vs duplicate (asset.rs:1879-1967, main.rs:1013-1016): POST 200 {asset_id} both (v2.py:865 vs asset.rs:1966); 400 Invalid entity type or entity id verbatim both (v2.py:821-825 vs asset.rs:1889-1892 INVALID_ENTITY_DUP_MSG asset.rs:152); 404 Project not found verbatim both (v2.py:830-831 vs asset.rs:1898-1901); 404 Asset not found verbatim both incl cross-workspace block (v2.py:835-842 vs asset.rs:1903-1910); entity allowlist = EntityTypeContext.values 10 both (models/asset.py:36-46 vs asset.rs:35-46 ENTITY_TYPES); get_entity_id_field FK incl no-DRAFT-branch {} both (v2.py:782-813 vs asset.rs:1914-1958); dest key {wsid}/{hex}-{name} both (v2.py:845 vs asset.rs:1913); copy+mark-uploaded both (v2.py:861-863 vs asset.rs:1960-1965); AMG workspace gate both (v2.py:815 vs asset.rs:1886); AssetRateThrottle (v2.py:28,780) skipped per contract, no Rust throttle; FE duplicateAsset (file.service.ts:284-298)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/assets/v2/workspaces/:slug/download/:asset_id/",
+          "django_source": "app/urls/asset.py:104-108",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::ws_download",
+          "fe_evidence": [{ "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetDownloadSrc" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "verified WorkspaceAssetDownloadEndpoint.get (v2.py:871-892) vs ws_download (asset.rs:1972-1995, main.rs:1017-1020): GET 302 attachment+filename both (v2.py:886-892 vs asset.rs:1990-1994); miss/not-uploaded 404 The requested asset could not be found verbatim both (v2.py:880-883 vs asset.rs:1987-1989 ASSET_MISSING_MSG asset.rs:163); uploaded-only + workspace__slug scope both (v2.py:874-878 vs asset.rs:1981-1986); AMG workspace gate both (v2.py:871 vs asset.rs:1978); FE getEditorAssetDownloadSrc ws branch (packages/utils/src/editor/common.ts:35-44, ws template :41)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/download/:asset_id/",
+          "django_source": "app/urls/asset.py:109-113",
+          "rust_status": "implemented",
+          "rust_handler": "routes::asset::project_download",
+          "fe_evidence": [{ "service": "packages/utils/src/editor/common.ts", "method": "getEditorAssetDownloadSrc" }],
+          "fe_pages": [],
+          "batch_task": "Batch N T2",
+          "out_scope": false,
+          "notes": "verified ProjectAssetDownloadEndpoint.get (v2.py:898-919) vs project_download (asset.rs:1999-2028, main.rs:1021-1024): GET 302 attachment+filename both (v2.py:913-919 vs asset.rs:2023-2027); miss 404 The requested asset could not be found verbatim both (v2.py:907-910 vs asset.rs:2020-2022); uploaded-only + (slug,project_id) scope both (v2.py:901-906 vs asset.rs:2014-2019); project AMG gate both (v2.py:898 allow_permission PROJECT vs asset.rs:2005-2013 project_in_workspace+gate_project_roles); FE getEditorAssetDownloadSrc project branch (packages/utils/src/editor/common.ts:35-44, project template :39)"
         }
       ]
     }
