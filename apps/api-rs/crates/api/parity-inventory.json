@@ -982,6 +982,114 @@
           "batch_task": "Batch F T7",
           "out_scope": false,
           "notes": "PATCH hardcodes snoozed_till only; DELETE soft"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/users/notifications/",
+          "django_source": "app/urls/notification.py:17",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::notification::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/workspace-notification.service.ts", "method": "fetchNotifications" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified NotificationViewSet.list (base.py:48-154) vs list (notification.rs:45-63, main.rs:1093): Django 200 NotificationSerializer __all__ (serializers/notification.py:14-22) over receiver-scoped qs (base.py:37-46) with snoozed/archived/read/type/mentioned filters (base.py:50-138), paginates only when per_page+cursor both present (base.py:141-154) else plain list; rust 200 bare [{id,title,read_at,archived_at}] with no filters/pagination; AMG WORKSPACE gate (base.py:48) vs rust receiver-scoped query with no ws_role lookup (non-member misses to empty, Django 403s)"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/users/notifications/:pk/read/",
+          "django_source": "app/urls/notification.py:27",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::notification::mark_read",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "markNotificationAsRead"
+            },
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "markNotificationAsUnread"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified mark_read POST sets read_at=now (base.py:168-174) / mark_unread DELETE clears read_at (base.py:176-182), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle read_at (notification.rs:122-142) via mark_read/mark_unread (notification.rs:144-166, main.rs:1100-1101) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:168,176) vs rust query-scoped; static route registered before :pk/ (main.rs:1100-1101 vs 1118) so no :pk shadowing (members/leave/ precedent)"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/users/notifications/:pk/archive/",
+          "django_source": "app/urls/notification.py:32",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::notification::archive",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "markNotificationAsArchived"
+            },
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "markNotificationAsUnArchived"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified archive POST sets archived_at=now (base.py:184-190) / unarchive DELETE clears (base.py:192-198), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle archived_at via archive/unarchive (notification.rs:168-190, main.rs:1104-1105) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:184,192) vs rust query-scoped; static route before :pk/ (main.rs:1104-1105 vs 1118)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/users/notifications/unread/",
+          "django_source": "app/urls/notification.py:37",
+          "rust_status": "implemented",
+          "rust_handler": "routes::notification::unread",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "fetchUnreadNotificationsCount"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified UnreadNotificationEndpoint.get (base.py:201-234) vs unread (notification.rs:65-89, main.rs:1094): 200 {total_unread_notifications_count (excludes sender ILIKE '%mentioned%'), mention_unread_notifications_count} both; read/archived/snoozed-null filters mirrored (base.py:207-226 vs notification.rs:71-84); AMG gate (base.py:204) vs rust receiver-scoped query; rust additionally filters deleted_at IS NULL; static route precedes :pk/ (main.rs:1094 vs 1118)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/users/notifications/mark-all-read/",
+          "django_source": "app/urls/notification.py:42",
+          "rust_status": "implemented",
+          "rust_handler": "routes::notification::mark_all_read",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace-notification.service.ts",
+              "method": "markAllNotificationsAsRead"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified MarkAllReadNotificationViewSet.create (base.py:237-293) vs mark_all_read (notification.rs:91-119, main.rs:1096-1097): 200 {\"message\": \"Successful\"} both (base.py:293 vs notification.rs:119); snoozed/archived/type watching-assigned-created filters mirrored (base.py:240-286 vs notification.rs:99-116); Django loop + bulk_update read_at (base.py:288-292) vs single UPDATE; AMG gate (base.py:238); created-type role<15 members get none() (base.py:278-281) not mirrored in rust; static route precedes :pk/"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/users/me/notification-preferences/",
+          "django_source": "app/urls/notification.py:47",
+          "rust_status": "implemented",
+          "rust_handler": "routes::notification::get_preferences",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/user.service.ts", "method": "currentUserEmailNotificationSettings" },
+            {
+              "service": "apps/web/core/services/user.service.ts",
+              "method": "updateCurrentUserEmailNotificationSettings"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch J T2",
+          "out_scope": false,
+          "notes": "verified UserNotificationPreferenceEndpoint.get/patch (base.py:296-313) vs get_preferences/patch_preferences (notification.rs:419-450, main.rs:1124-1125): GET+PATCH 200 full UserNotificationPreferenceSerializer __all__ (serializers/notification.py:25-28) vs rust full preference_json with 5 bools (notification.rs:351-368); Django .get() miss raises 500 vs rust get-or-create all-true defaults (notification.rs:388-399); PATCH 400 serializer.errors vs rust 400 {field: [msg]} incl 'Must be a valid boolean.' (notification.rs:404-417); auth-only both, no workspace role gate and no workspace URL context"
         }
       ]
     },
