@@ -2527,6 +2527,158 @@
           "notes": "POST-only action both (state.py:27-31 vs post() main.rs:638-639); 204 both, blind clear+set updates both, triage excluded both (default-manager filter base.py:108-109 vs deleted_at IS NULL + group != 'triage' state.rs:255-269); GATE DELTA: Django PROJECT ADMIN incl ws-admin-member fallback (allow_permission [ADMIN] level PROJECT default, app/views/state/base.py:105-106 + app/permissions/base.py:53-78) vs Rust project_role==20 only with no ws-admin fallback (guard_mark_default state.rs:213-218, mark_default state.rs:250-253; ws-admin project MEMBER -> Django 204 vs Rust 403 deny()); FE-exercised (markDefault) -> shape_mismatch; FE markDefault (project-state.service.ts:27-33)"
         }
       ]
+    },
+    "views": {
+      "rust_module": "routes/view.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/views/",
+          "django_source": "app/urls/views.py:17",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::view::list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "createView"
+            },
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "getViews"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "GET Django 200 full IssueViewSerializer list (fields='__all__' + read-only is_favorite, app/serializers/view.py:56-69; get_queryset owned_by|access=1 + is_favorite Exists annotate + order -is_favorite,name, app/views/view/base.py:269-293) + guest owned_by scoping when !guest_view_all_features (base.py:299-309) + ?fields= param (base.py:310-311) vs Rust 200 [{id,name}] no fav flag/guest filter/fields (routes/view.rs:136-165); POST Django 201 full shape via perform_create project_id+owned_by (base.py:266-267) + query built from filters in serializer.create (serializers/view.py:71-77) vs Rust 201 {id,name} (routes/view.rs:175-198); gates Django list ADMIN/MEMBER/GUEST (base.py:295) vs Rust auth-only (_auth unused, view.rs:159-165); wired main.rs:835-837; NOT project-views/ (Batch F T6); FE createView/getViews (view.service.ts:18,42)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/views/:pk/",
+          "django_source": "app/urls/views.py:22",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::view::detail",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "patchView"
+            },
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "deleteView"
+            },
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "getViewDetails"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "Django PUT (update, app/urls/views.py:27, DRF default full update) has NO Rust handler - main.rs:838-843 wires get/patch/delete only; detail Django 200 full serializer + 403 guest gate 'You are not allowed to view this issue' (app/views/view/base.py:315-347) vs Rust {id,name} + same 403 string via guard_guest_access (routes/view.rs:54-59,341-347); patch Django 200 full-shape + 'view is locked'/'Only the owner of the view can update the view' 400s (base.py:349-369) vs Rust 200 {id} + 'Invalid name'/'Invalid access' 400s (view.rs:357-387); destroy Django ADMIN+creator gate + UserFavorite/UserRecentVisit cascade (base.py:371-404) vs Rust blind soft-delete 204 (view.rs:389-402); FE getViewIssues (view.service.ts:58) calls views/:pk/issues/ present in NEITHER Django (app/urls/views.py) NOR Rust (main.rs) - no entry per recipe 6"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/views/",
+          "django_source": "app/urls/views.py:34",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::view::list_global",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "createView"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getAllViews"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "GET Django 200 full IssueViewSerializer list (WorkspaceViewViewSet: project__isnull + owned_by|access=1 + order_by allowlist, app/views/view/base.py:60-75; list ADMIN/MEMBER/GUEST WORKSPACE level + guest owned_by scoping, base.py:77-84; ?fields= param, base.py:80) vs Rust 200 [{id,name}] auth-only (routes/view.rs:167-173, list_views 136-157); POST Django 201 full shape via perform_create workspace+owned_by (base.py:56-58) vs Rust 201 {id,name} (view.rs:200-221); wired main.rs:845-847; NOT workspace-views/ (Batch H T8, POST-only prefs route); FE createView/getAllViews (workspace.service.ts:232,256)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/views/:pk/",
+          "django_source": "app/urls/views.py:39",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::view::detail_global",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "updateView"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "deleteView"
+            },
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getViewDetails"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "Django serves GET+PUT+PATCH+DELETE (app/urls/views.py:41-47) but Rust wires GET ONLY (main.rs:849-851 get(detail_global); no patch_global/destroy_global exist in routes/view.rs) - PUT/PATCH/DELETE unhandled; detail Django 200 full serializer + recent_visited (app/views/view/base.py:108-118, no permission gate on retrieve) vs Rust 200 {id,name} + 404 'View not found' (view.rs:349-355,287-313); Django partial_update lock/owner 400s (base.py:86-106) and destroy ADMIN+owner gate + UserFavorite cascade (base.py:120-141) have no Rust counterpart; FE updateView(PATCH)/deleteView/getViewDetails (workspace.service.ts:240,248,264)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/issues/",
+          "django_source": "app/urls/views.py:51",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::issue_lists::workspace_issues",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/workspace.service.ts",
+              "method": "getViewIssues"
+            },
+            {
+              "service": "packages/services/src/workspace/view.service.ts",
+              "method": "getViewIssues"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "Django WorkspaceViewIssuesViewSet.list: @gzip_page (app/views/view/base.py:221) + ComplexFilterBackend/IssueFilterSet + legacy issue_filters GET (base.py:227-233) + project permission filters (base.py:148-168,236-238) + annotations (cycle_id/link/attachment/sub-issues counts + assignee/label/module prefetches, base.py:170-216) + order_issue_queryset + paginated ViewIssueListSerializer envelope (base.py:240-259) vs Rust workspace_issues DetailEnvelope/ArchiveRow via push_ws_where + BasePaginator (routes/issue_lists.rs:616+) with no gzip and no legacy-filter stack; gates Django ADMIN/MEMBER/GUEST WORKSPACE (base.py:222) vs Rust ws-role guard; wired main.rs:74; FE getViewIssues (workspace.service.ts:272, expand-gated to /issues-detail/; packages twin view.service.ts:60)"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-views/",
+          "django_source": "app/urls/views.py:56",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::view::list_favorites",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "addViewToFavorites"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "Quirk: Django maps get->list (app/urls/views.py:58) but IssueViewFavoriteViewSet defines NO list method and NO serializer_class (app/views/view/base.py:407-417) -> DRF get_serializer AssertionError -> GET 500; Rust GET list_favorites returns 200 [{id,view}] (routes/view.rs:223-239) - Rust superset, methods=GET,POST per recipe 5; POST Django 204 create entity_identifier=request.data.view (base.py:419-427) vs Rust 204 + dup->400 'The payload is not valid' + NULL passthrough (view.rs:241-277); gates Django create ADMIN/MEMBER (base.py:419) vs Rust gate_am + ws-admin fallback (view.rs:88-100); wired main.rs:916-917; FE addViewToFavorites POST (view.service.ts:66)"
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-views/:view_id/",
+          "django_source": "app/urls/views.py:61",
+          "rust_status": "implemented",
+          "rust_handler": "routes::favorite::view_fav_destroy",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/view.service.ts",
+              "method": "removeViewFromFavorites"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T4",
+          "out_scope": false,
+          "notes": "verified IssueViewFavoriteViewSet.destroy vs view_fav_destroy: Django DELETE-only destroy -> 204 hard delete soft=False scoped .get(project,user,workspace__slug,entity_type='view',entity_identifier=view_id) (app/views/view/base.py:429-439) vs Rust 204 hard DELETE same scope + miss->404 (routes/favorite.rs:973-1010); gates Django ADMIN/MEMBER (base.py:429) vs Rust gate_proj_am + project_in_workspace (favorite.rs); wired main.rs:926-927; FE removeViewFromFavorites (view.service.ts:80)"
+        }
+      ]
     }
   }
 }
