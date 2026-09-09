@@ -1838,6 +1838,77 @@
           "batch_task": "Batch M T1",
           "out_scope": false,
           "notes": "verified PageVersionEndpoint.get detail branch (views/page/version.py:19-42) vs version_detail (routes/page.rs:2608-2642, main.rs:967-970): 200 detail both; miss 404 both (Django .distinct().get() DoesNotExist via handle_exception views/base.py:188-192 {error:The required object does not exist.} vs fetch_optional->missing() page.rs:2638-2641 same shape); active-link scoping both (version.py:29-39 vs page.rs:2622-2637); FE fetchVersionById (project-page-version.service.ts:27-38) hits exactly versions/:pk/; NOTE FE restoreVersion POSTs versions/:pk/restore/ (project-page-version.service.ts:40-48) present in NEITHER Django nor Rust - no entry invented; fe_pages []"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/favorite-pages/:page_id/",
+          "django_source": "app/urls/page.py:34",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::create_favorite",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "addToFavorites" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "removeFromFavorites" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T2",
+          "out_scope": false,
+          "notes": "verified PageFavoriteViewSet.create/destroy (app/views/page/base.py:487-510, app/urls/page.py:34) vs create_favorite/destroy_favorite (routes/page.rs:1877-1908,1914-1940, main.rs:943-946): POST+DELETE both 204 both (base.py:498,510 vs page.rs:1901,1939); duplicate POST -> IntegrityError 400 {error:The payload is not valid} both (app/views/base.py:80-84 vs is_constraint_violation page.rs:1900-1905; unique constraint db/models/favorite.py:34-40); destroy miss -> 404 {error:The required object does not exist.} both (ObjectDoesNotExist base.py:92-96 vs missing() page.rs:1936-1938); ADMIN/MEMBER gate 403 {error:You don't have the required permissions.} both (allow_permission base.py:490,500 + permissions/base.py:81-84 vs gate_am/guard_am page.rs:817-830,192-199); no page-existence check on create both (base.py:492-497 vs page.rs:1888); FE addToFavorites POST + removeFromFavorites DELETE (project-page.service.ts:89-103) hit exactly; NOTE FE fetchFavorites GETs /favorite-pages/ collection variant (service.ts:81-87) present in NEITHER Django nor Rust - no entry invented; fe_pages []"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/archive/",
+          "django_source": "app/urls/page.py:40",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::archive",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "archive" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "restore" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T2",
+          "out_scope": false,
+          "notes": "verified PageViewSet.archive/unarchive (app/views/page/base.py:323-381, app/urls/page.py:40) vs archive/unarchive (routes/page.rs:1960-2025,2030-2087, main.rs:947-950): POST 200 {archived_at} both (base.py:352 vs page.rs:2021-2024), DELETE 204 both (base.py:381 vs page.rs:2086); non-owner active role<=15 -> 400 verbatim both (Only the owner or admin can archive the page base.py:339 vs ARCHIVE_ONLY_MSG page.rs:42; sic un archive base.py:370 vs UNARCHIVE_ONLY_MSG page.rs:44; guard_archive_owner page.rs:161-174 + low_role_member page.rs:936-951 mirrors role__lte=15 base.py:333-336,364-367); recursive descendants CTE both (base.py:60-73 vs ARCHIVE_DESCENDANTS_SQL page.rs:1950-1954); unarchive clears archived parent (base.py:375-377 vs page.rs:2067-2078); archive deletes UserFavorite rows both (soft delete base.py:343-348 vs page.rs:1999-2008); ProjectPagePermission matrix both (permission_classes base.py:79 vs require_page_perm page.rs:877-895); archived_at format UTC vs naive-local documented deviation (E2 precedent); FE archive POST + restore DELETE (service.ts:113-133) hit exactly; NOTE FE fetchArchived GETs /archived-pages/ (service.ts:105-111) present in NEITHER Django nor Rust - no entry invented; fe_pages []"
+        },
+        {
+          "methods": ["POST", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/lock/",
+          "django_source": "app/urls/page.py:46",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::lock",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "lock" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "unlock" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T2",
+          "out_scope": false,
+          "notes": "verified PageViewSet.lock/unlock (app/views/page/base.py:261-284, app/urls/page.py:46) vs lock/unlock (routes/page.rs:2095-2124,2128-2157, main.rs:951-954): POST+DELETE both 204 both (base.py:271,284 vs page.rs:2123,2156); no ownership check beyond ProjectPagePermission both (permission_classes base.py:79 vs require_page_perm POST/DELETE matrix page.rs:85-115,877-895); miss -> 404 both (DoesNotExist via app/views/base.py:92-96 vs rows_affected==0 missing() page.rs:2120-2122,2153-2155); FE lock POST + unlock DELETE (service.ts:135-149) hit exactly; fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/access/",
+          "django_source": "app/urls/page.py:52",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::access",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "updateAccess" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T2",
+          "out_scope": false,
+          "notes": "verified PageViewSet.access (app/views/page/base.py:286-304, app/urls/page.py:52) vs access (routes/page.rs:2162-2223, main.rs:955-958): POST 204 both (base.py:304 vs page.rs:2222); body access default 0 with no 0/1 validation both (base.py:287,302 vs page.rs:2191-2210 raw store); non-owner access change -> 400 verbatim Access cannot be updated since this page is owned by someone else both (base.py:296-300 vs guard_access_change page.rs:145-156); ProjectPagePermission POST matrix both (base.py:79 vs require_page_perm page.rs:2171-2176); FE updateAccess POST (service.ts:60-71) hits exactly; fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/duplicate/",
+          "django_source": "app/urls/page.py:72",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::duplicate",
+          "fe_evidence": [{ "service": "apps/web/core/services/page/project-page.service.ts", "method": "duplicate" }],
+          "fe_pages": [],
+          "batch_task": "Batch M T2",
+          "out_scope": false,
+          "notes": "verified PageDuplicateEndpoint.post (app/views/page/base.py:596-654, app/urls/page.py:72) vs duplicate (routes/page.rs:2408-2491, main.rs:971-974): POST 201 PageDetailSerializer/detail-json both (base.py:653-654 vs page.rs:2487-2490); private non-owner -> 403 {error:Permission denied} both (base.py:605-606 vs page.rs:2436-2442 DUPLICATE_DENY_MSG); copy name + (Copy), description_binary None, ownership=requester, re-linked to ALL original project ids both (base.py:611-626 vs page.rs:2453-2485); page_transaction/S3 bg tasks skipped in Rust; ProjectPagePermission POST gate both (base.py:594 vs require_page_perm page.rs:2416-2421); FE duplicate POST (service.ts:177-183) hits exactly; NOTE FE move POSTs /pages/:page_id/move/ (service.ts:185-193) present in NEITHER Django nor Rust - no entry invented; fe_pages []"
         }
       ]
     },
