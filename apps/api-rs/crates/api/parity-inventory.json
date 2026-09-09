@@ -1869,6 +1869,68 @@
           "notes": "verified ExportIssuesEndpoint.post/get (views/exporter/base.py:18-84) vs create_export/export_history (misc.rs:58-104, main.rs:1321): POST 200 {message:'Once the export is ready you will be able to download it'} both (base.py:57-60); POST 400 {error:Provider 'x' not found.} csv/xlsx/json-only (base.py:31,61-65) vs rust validate_export_provider (misc.rs:24-30, None-case message differs); GET 200 only when BOTH per_page+cursor present else 400 {error:'per_page and cursor are required'} both (base.py:73-84 vs misc.rs:97-99); rust GET is LIMIT list without cursor pagination; ADMIN/MEMBER WORKSPACE gate Django (base.py:22,67) vs auth-only rust (history _auth unused); file generation stays on Django celery issue_export_task (base.py:49-56); FE project-export.service.ts csvExport POST-only (GET history has no FE caller)"
         }
       ]
+    },
+    "cycle": {
+      "rust_module": "routes/cycle.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/",
+          "django_source": "app/urls/cycle.py:23",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::cycle::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "createCycle" },
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCyclesWithParams" },
+            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "create" },
+            { "service": "packages/services/src/cycle/cycle.service.ts", "method": "getWithParams" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T1",
+          "out_scope": false,
+          "notes": "list 200 array .values() keys incl is_favorite/total/completed/cancelled/assignee_ids/status (base.py:239-265) vs cycle_list_json (cycle.rs:543-572); cycle_view=current branch (base.py:204-237) vs current_only SQL filter (cycle.rs:750-758); create 201 (base.py:327) incl logo_props (base.py:281-307) vs cycle_write_json omits logo_props+cancelled_issues (cycle.rs:574-576 intentional E2 deviation); datetimes project-tz (base.py:267,315) vs UTC RFC3339 (cycle.rs:767-769); both-or-neither 400 verbatim both (base.py:330-333 vs guard_both_dates cycle.rs:199-204); AMG list (base.py:183) vs gate_amg (cycle.rs:747), AM create (base.py:270) vs gate_am (cycle.rs:791); list/create (cycle.rs:738,782, main.rs:423-424)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:pk/",
+          "django_source": "app/urls/cycle.py:28",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::cycle::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "getCycleDetails" },
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "patchCycle" },
+            { "service": "apps/web/core/services/cycle.service.ts", "method": "deleteCycle" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch K T1",
+          "out_scope": false,
+          "notes": "PUT update served (cycle.py:28-38 via DRF UpdateModelMixin, no CycleViewSet.update override in base.py) with NO Rust PUT route/handler (main.rs:427-430 get/patch/delete only); retrieve 200 with sub_issues, no cancelled_issues (base.py:428-454) vs detail drops cancelled_issues + adds sub_issues count (cycle.rs:911-917); miss 404 'Cycle not found' both (base.py:459 vs CYCLE_NOT_FOUND_MSG cycle.rs:29,897-901); PATCH archived/completed 400s verbatim both (base.py:340-357 vs guard_patch cycle.rs:188-196,959-963); destroy 204 ADMIN-or-creator both (base.py:477-479 vs cycle.rs:1085-1090); FE has no PUT caller; detail/patch/destroy (cycle.rs:883,921,1062)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/date-check/",
+          "django_source": "app/urls/cycle.py:57",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::date_check",
+          "fe_evidence": [{ "service": "apps/web/core/services/cycle.service.ts", "method": "cycleDateCheck" }],
+          "fe_pages": [],
+          "batch_task": "Batch K T1",
+          "out_scope": false,
+          "notes": "verified CycleDateCheckEndpoint.post (base.py:522-556) vs date_check (cycle.rs:1443-1494, main.rs:454-455): overlap → 200 {error,status:false} verbatim NOT 4xx (base.py:548-554 vs date_check_result cycle.rs:109-118, DATECHECK_OVERLAP_MSG cycle.rs:43); missing-dates 400 verbatim both (base.py:527-530 vs guard_datecheck_present cycle.rs:237-242); overlap Q-filter (base.py:539-547 incl .exclude(pk=cycle_id)) vs SQL EXISTS + NULL-or-ne (cycle.rs:1476-1490); AM gate both (base.py:521 vs gate_am cycle.rs:1452)"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/transfer-issues/",
+          "django_source": "app/urls/cycle.py:72",
+          "rust_status": "implemented",
+          "rust_handler": "routes::cycle::transfer",
+          "fe_evidence": [{ "service": "apps/web/core/services/cycle.service.ts", "method": "transferIssues" }],
+          "fe_pages": [],
+          "batch_task": "Batch K T1",
+          "out_scope": false,
+          "notes": "verified TransferCycleIssueEndpoint.post (base.py:596-622) vs transfer (cycle.rs:1910-2027, main.rs:476-477): 200 {'message':'Success'} both (base.py:622 vs cycle.rs:2026); progress-snapshot written on SOURCE cycle both (cycle_transfer_issues.py:408-436 pk=cycle_id vs cycle.rs:2002-2012 bind cid); move backlog/unstarted/started only both (cycle_transfer_issues.py:437-444 vs cycle.rs:2013-2019); 400s verbatim: missing new_cycle_id (base.py:600 vs cycle.rs:45,1927-1932), completed target (cycle_transfer_issues.py:60-65 vs cycle.rs:47,255-260), missing source (cycle_transfer_issues.py:144-148 vs cycle.rs:49,1970-1974); bad target Django 500 (None.end_date) vs Rust 404 missing() sane-4xx (cycle.rs:1944-1946); AM gate both (base.py:595 vs gate_am cycle.rs:1919)"
+        }
+      ]
     }
   }
 }
