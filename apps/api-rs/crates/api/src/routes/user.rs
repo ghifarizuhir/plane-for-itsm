@@ -1079,10 +1079,8 @@ pub async fn get_account(
             })?;
     match row {
         Some(v) => Ok((StatusCode::OK, Json(v))),
-        None => Ok((
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "Account not found"})),
-        )),
+        // Django `.get` (`user/base.py:402`) miss → generic 404 via `views/base.py:92-96`.
+        None => Ok(missing()),
     }
 }
 
@@ -1103,10 +1101,8 @@ pub async fn delete_account(
         })?
         .rows_affected();
     if n == 0 {
-        return Ok((
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "Account not found"})),
-        ));
+        // Django `.get` (`user/base.py:411`) miss → generic 404 via `views/base.py:92-96`.
+        return Ok(missing());
     }
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }

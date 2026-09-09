@@ -2,7 +2,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::{middleware::auth::AuthUser, routes::project::missing, state::AppState};
 
 /// Mirrors `plane/app/views/webhook/base.py:WebhookEndpoint` list/create,
 /// `WebhookSecretRegenerateEndpoint` and `WebhookLogsEndpoint` for
@@ -124,7 +124,8 @@ pub async fn regenerate(
     .await?;
     match row {
         Some((id, secret)) => Ok((StatusCode::OK, Json(json!({"id": id, "secret_key": secret})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Webhook not found"})))),
+        // Django `.get` (`base.py:117`) miss → generic 404 via `views/base.py:92-96`.
+        None => Ok(missing()),
     }
 }
 
@@ -174,7 +175,8 @@ pub async fn detail(
             StatusCode::OK,
             Json(json!({"id": wh.id, "url": wh.url, "is_active": wh.is_active})),
         )),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Webhook not found"})))),
+        // Django `.get` (`base.py:63`) miss → generic 404 via `views/base.py:92-96`.
+        None => Ok(missing()),
     }
 }
 
@@ -199,7 +201,8 @@ pub async fn patch(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Webhook not found"}))));
+        // Django `.get` (`base.py:83`) miss → generic 404 via `views/base.py:92-96`.
+        return Ok(missing());
     }
     Ok((StatusCode::OK, Json(json!({"id": pk}))))
 }
@@ -209,12 +212,18 @@ pub async fn destroy(
     _auth: AuthUser,
     axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    sqlx::query(
+    // Django `.get` (`base.py:109`) miss → generic 404 via `views/base.py:92-96`
+    // (not a silent 204).
+    let n = sqlx::query(
         "UPDATE webhooks wh SET deleted_at = now() FROM workspaces w WHERE w.id = wh.workspace_id AND w.slug = $1 AND wh.id = $2 AND wh.deleted_at IS NULL",
     )
     .bind(&slug)
     .bind(pk)
     .execute(&st.pool)
-    .await?;
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }

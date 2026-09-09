@@ -1201,7 +1201,7 @@ pub async fn mark_uploaded(
         return Ok(deny());
     }
     let Some(asset) = find_asset(&st, &slug, asset_id).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     };
     if !check_project_access(&st, &auth, &asset).await? {
         return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))));
@@ -1274,7 +1274,7 @@ pub async fn user_complete(
     .fetch_optional(&st.pool)
     .await?;
     let Some(r) = full else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     };
     match r.entity_type.as_deref() {
         Some("USER_AVATAR") => {
@@ -1338,7 +1338,7 @@ pub async fn project_complete(
     .bind(pk).bind(ws.id).bind(project_id)
     .fetch_one(&st.pool).await?;
     if !exists {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     }
     sqlx::query("UPDATE file_assets SET is_uploaded = true, attributes = COALESCE($1, attributes) WHERE id = $2")
         .bind(&body.attributes).bind(pk).execute(&st.pool).await?;
@@ -1388,38 +1388,40 @@ pub async fn soft_delete(
     if !gate_ws_roles(&st.pool, auth.0, &slug, AMG).await? {
         return Ok(deny());
     }
-    // Django's asset_delete is a silent no-op when the row is missing.
-    if let Some(asset) = find_asset(&st, &slug, asset_id).await? {
-        if !check_project_access(&st, &auth, &asset).await? {
-            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))));
-        }
-        let full: Option<AssetRow> =
-            sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
-                .bind(asset_id)
-                .fetch_optional(&st.pool)
-                .await?;
-        if let Some(r) = full {
-            match r.entity_type.as_deref() {
-                Some("WORKSPACE_LOGO") => {
-                    if let Some(wsid) = r.workspace_id {
-                        sqlx::query("UPDATE workspaces SET logo_asset_id = NULL WHERE id = $1")
-                            .bind(wsid).execute(&st.pool).await?;
-                    }
-                }
-                Some("PROJECT_COVER") => {
-                    if let Some(pid) = r.project_id {
-                        sqlx::query("UPDATE projects SET cover_image_asset_id = NULL WHERE id = $1")
-                            .bind(pid).execute(&st.pool).await?;
-                    }
-                }
-                _ => {}
-            }
-        }
-        sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
-            .bind(asset_id)
-            .execute(&st.pool)
-            .await?;
+    // Django `.get` (`v2.py:447`) miss → generic 404 via `views/base.py:92-96`
+    // (not a silent 204).
+    let Some(asset) = find_asset(&st, &slug, asset_id).await? else {
+        return Ok(missing());
+    };
+    if !check_project_access(&st, &auth, &asset).await? {
+        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))));
     }
+    let full: Option<AssetRow> =
+        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
+            .bind(asset_id)
+            .fetch_optional(&st.pool)
+            .await?;
+    if let Some(r) = full {
+        match r.entity_type.as_deref() {
+            Some("WORKSPACE_LOGO") => {
+                if let Some(wsid) = r.workspace_id {
+                    sqlx::query("UPDATE workspaces SET logo_asset_id = NULL WHERE id = $1")
+                        .bind(wsid).execute(&st.pool).await?;
+                }
+            }
+            Some("PROJECT_COVER") => {
+                if let Some(pid) = r.project_id {
+                    sqlx::query("UPDATE projects SET cover_image_asset_id = NULL WHERE id = $1")
+                        .bind(pid).execute(&st.pool).await?;
+                }
+            }
+            _ => {}
+        }
+    }
+    sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
+        .bind(asset_id)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -1438,7 +1440,7 @@ pub async fn user_delete(
     .fetch_optional(&st.pool)
     .await?;
     let Some(r) = full else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     };
     match r.entity_type.as_deref() {
         Some("USER_AVATAR") => {
@@ -1478,7 +1480,7 @@ pub async fn project_delete(
     .bind(pk).bind(ws.id).bind(project_id)
     .execute(&st.pool).await?.rows_affected();
     if updated == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
@@ -1540,7 +1542,7 @@ pub async fn ws_get(
         return Ok(deny().into_response());
     }
     let Some(asset) = find_asset(&st, &slug, asset_id).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))).into_response());
+        return Ok(missing().into_response());
     };
     if !check_project_access(&st, &auth, &asset).await? {
         return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))).into_response());
@@ -1798,8 +1800,8 @@ pub async fn static_get(
             .fetch_optional(&st.pool)
             .await?;
     let Some(r) = full else {
-        // Django `.get` (`v2.py:498`) raises → 500; sane 404 (documented).
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))).into_response());
+        // Django `.get` (`v2.py:498`) miss → generic 404 via `views/base.py:92-96`.
+        return Ok(missing().into_response());
     };
     if !r.is_uploaded {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
@@ -1848,8 +1850,8 @@ pub async fn check(
 }
 
 /// `AssetRestoreEndpoint.post` (`v2.py:536-545`): clears `is_deleted` /
-/// `deleted_at` → 204. Miss → sane 404 (Django `all_objects.get` raises →
-/// 500; documented).
+/// `deleted_at` → 204. Miss (`all_objects.get` raises) → generic 404
+/// via `views/base.py:92-96`.
 pub async fn restore(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1867,7 +1869,7 @@ pub async fn restore(
     .await?
     .rows_affected();
     if updated == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Asset not found"}))));
+        return Ok(missing());
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
