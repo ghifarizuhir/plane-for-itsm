@@ -1750,6 +1750,97 @@
         }
       ]
     },
+    "page": {
+      "rust_module": "routes/page.rs",
+      "endpoints": [
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages-summary/",
+          "django_source": "app/urls/page.py:18",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::summary",
+          "fe_evidence": [],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PageViewSet.summary (views/page/base.py:436-484) vs summary (routes/page.rs:1169-1199, main.rs:940-942): 200 {public_pages,private_pages,archived_pages} both (base.py:468-482 vs page.rs:1195); guest role-5 + guest_view_all_features=false filters to owned pages both (base.py:455-466 vs guest_restricted page.rs:916-935); no FE caller (repo-wide grep pages-summary 0 hits); fe_pages []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/",
+          "django_source": "app/urls/page.py:23",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchAll" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "create" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PageViewSet.list/create (views/page/base.py:306-321,144-167) vs list/create (routes/page.rs:1215-1249,1273-1506, main.rs:929-932): GET 200 PageSerializer array with sanitized order_by allowlist both (base.py:112-119 vs sanitize_page_order_by page.rs:121) + parent-only roots (base.py:98); POST 201 PageDetailSerializer both (base.py:164-166) + page_transaction bg task skipped in Rust; FE fetchAll/create (project-page.service.ts:24-30,44-50) hit exactly pages/; fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/",
+          "django_source": "app/urls/page.py:28",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchById" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "update" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "remove" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PageViewSet.retrieve/partial_update/destroy (views/page/base.py:217-259,169-215,383-434) vs detail/patch/destroy (routes/page.rs:1517-1571,1579-1776,1783-1865, main.rs:933-938): locked PATCH 400 {error:Page is locked} both (base.py:178-179 vs page.rs:1611-1616); non-owner access change 400 quirk both (base.py:191-195,211-215 vs page.rs:1654-1659,1605-1610); DELETE requires archived-first 400 (base.py:391-395 vs page.rs:1811-1816) + owner/admin 403 (base.py:397-409 vs page.rs:1817-1823); GET guest gate 400 both (base.py:227-241 vs page.rs:1553-1558, 404-first normalize-crash documented page.rs:1550-1552); track_visit param + recent_visited_task bg side effect skipped in Rust (base.py:220,251-258); FE fetchById (track_visit param :32-42), update (:52-58), remove (:73-79) hit exactly pages/:page_id/; fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/description/",
+          "django_source": "app/urls/page.py:57",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::desc_get",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "fetchDescriptionBinary" },
+            { "service": "apps/web/core/services/page/project-page.service.ts", "method": "updateDescription" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PagesDescriptionViewSet.retrieve/partial_update (views/page/base.py:516-534,536-590) vs desc_get/desc_patch (routes/page.rs:2247-2292,2304-2396, main.rs:959-962): GET streams application/octet-stream binary both (base.py:532-534 vs page.rs:2283-2291); PATCH locked 400 {error_code:4701,error_message:PAGE_LOCKED} / archived 4702/PAGE_ARCHIVED both (base.py:545-561, error_codes.py:12-13 vs page.rs:2342-2353, PAGE_LOCKED_CODE/PAGE_ARCHIVED_CODE page.rs:52-54); success 200 {message:Updated successfully} both (base.py:588 vs page.rs:2396) + page_transaction/track_page_version bg tasks skipped in Rust; FE fetchDescriptionBinary GET octet-stream (:151-162) + updateDescription PATCH (:164-175) hit exactly description/; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/versions/",
+          "django_source": "app/urls/page.py:62",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::versions_list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page-version.service.ts", "method": "fetchAllVersions" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PageVersionEndpoint.get list branch (views/page/version.py:44-53) vs versions_list (routes/page.rs:2568-2603, main.rs:963-966): GET-only both (no POST in Django); scoped to active ProjectPage link for URL project both (version.py:45-50 GHSA-g49r/GHSA-ghcr fix vs page.rs:2582-2595 join project_pages deleted_at IS NULL); -created_at ordering both (PageVersion Meta ordering models/page.py:173 vs ORDER BY created_at DESC page.rs:2589); FE fetchAllVersions (project-page-version.service.ts:19-25) hits exactly versions/; fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/pages/:page_id/versions/:pk/",
+          "django_source": "app/urls/page.py:67",
+          "rust_status": "implemented",
+          "rust_handler": "routes::page::version_detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/page/project-page-version.service.ts", "method": "fetchVersionById" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch M T1",
+          "out_scope": false,
+          "notes": "verified PageVersionEndpoint.get detail branch (views/page/version.py:19-42) vs version_detail (routes/page.rs:2608-2642, main.rs:967-970): 200 detail both; miss 404 both (Django .distinct().get() DoesNotExist via handle_exception views/base.py:188-192 {error:The required object does not exist.} vs fetch_optional->missing() page.rs:2638-2641 same shape); active-link scoping both (version.py:29-39 vs page.rs:2622-2637); FE fetchVersionById (project-page-version.service.ts:27-38) hits exactly versions/:pk/; NOTE FE restoreVersion POSTs versions/:pk/restore/ (project-page-version.service.ts:40-48) present in NEITHER Django nor Rust - no entry invented; fe_pages []"
+        }
+      ]
+    },
     "search": {
       "rust_module": "routes/search.rs",
       "endpoints": [
