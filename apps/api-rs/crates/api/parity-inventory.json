@@ -2373,6 +2373,73 @@
           "batch_task": "Batch L T1",
           "out_scope": false,
           "notes": "identical IntakeViewSet twin of intakes/:pk/ (app/urls/intake.py:41-45) sharing Rust detail/patch/destroy (main.rs:739-742): same deltas — Django full IntakeSerializer retrieve/patch via DRF defaults (app/views/intake/base.py:58) vs Rust {id,name}/{id} (routes/intake.rs:250-253,280); DELETE guard verbatim both 'You cannot delete the default intake' (app/views/intake/base.py:86-90 vs routes/intake.rs:223-231); Django ADMIN/MEMBER gate vs Rust auth-only; FE grep 'inboxes/' -> 0 hits"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
+          "django_source": "app/urls/intake.py:46",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::list_issues",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "list" },
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "create" },
+            { "service": "packages/services/src/intake/issue.service.ts", "method": "list" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T2",
+          "out_scope": false,
+          "notes": "FE-facing IntakeIssueViewSet alias of intake-issues/ (app/urls/intake.py:46-50) sharing Rust list_issues/create_issue (main.rs:755-756): same deltas as intake-issues/ entry — GET Django paginated IntakeIssueSerializer list (app/views/intake/base.py:222-226) + 404 {'error': 'Intake not found'} with no intake (app/views/intake/base.py:179-181) + status filter/order_by/guest scoping (app/views/intake/base.py:199-221) vs Rust 200 plain array [{id,status}] (routes/intake.rs:120-136); POST Django 200 full IntakeIssueDetailSerializer (app/views/intake/base.py:329-330) vs Rust 201 {id,status,issue_id} (routes/intake.rs:215-218); 'Name is required'/'Invalid priority' 400s match both (app/views/intake/base.py:230-241 vs validate_issue_create routes/intake.rs:56-66); triage-state lookup-or-create both (app/views/intake/base.py:246-256 vs routes/intake.rs:165-182); Django ADMIN/MEMBER/GUEST gate (app/views/intake/base.py:177,228) vs Rust auth-only; FE list (inbox-issue.service.ts:20-28)/create (:40-49) + packages twin list (packages/services/src/intake/issue.service.ts:15-23)"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/",
+          "django_source": "app/urls/intake.py:51",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::intake::detail_issue",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "retrieve" },
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "update" },
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "updateIssue" },
+            { "service": "apps/web/core/services/inbox/inbox-issue.service.ts", "method": "destroy" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T2",
+          "out_scope": false,
+          "notes": "FE-facing IntakeIssueViewSet alias of intake-issues/:pk/ (app/urls/intake.py:51-55) sharing Rust detail_issue/patch_issue/destroy_issue (main.rs:759-762): same deltas — retrieve Django full IntakeIssueDetailSerializer 200 (app/views/intake/base.py:506-550) incl guest 403 'You are not allowed to view this issue' (app/views/intake/base.py:534-548) vs Rust {id,status} with no guest gate (routes/intake.rs:308-324); PATCH Django pk = issue_id scoped by intake_id (app/views/intake/base.py:339-345) under ADMIN/creator decorator (app/views/intake/base.py:334) with in-view 403 'Only admin or creator can update the intake work items' (app/views/intake/base.py:361-365) + 400 'You cannot edit intake issues' (app/views/intake/base.py:367-374) vs Rust pk = intake-issue row id with verbatim guard_inbox_patch gates (routes/intake.rs:429-433,493-509) returning full detail shape 200 (routes/intake.rs:884-897); DELETE Django ADMIN/creator gate + cascade-deletes issue when status in [-2,-1,0,2] (app/views/intake/base.py:552-569) vs Rust destroy_issue mirrors cascade (routes/intake.rs:326-356) but auth-only; FE retrieve (:30-38) appends ?expand=issue_inbox (tripwire strips query, fine), update (:51-62)/updateIssue (:64-77) both PATCH, destroy (:79-85) DELETE"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intake-work-items/:work_item_id/description-versions/",
+          "django_source": "app/urls/intake.py:56",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::intake_desc_versions_list",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/inbox/intake-work_item_version.service.ts",
+              "method": "listDescriptionVersions"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T2",
+          "out_scope": false,
+          "notes": "verified IntakeWorkItemDescriptionVersionEndpoint.get list branch (app/views/intake/base.py:613-640) vs intake_desc_versions_list (routes/versions.rs:749-785): GET-only, GET 200 cursor page of 10-key rows (required_fields app/views/intake/base.py:615-626 vs VERSION_LIST_KEYS routes/versions.rs:105-118) over issue_description_versions via paginate (app/views/intake/base.py:632-640 vs version_list_page + parse_version_cursor routes/versions.rs:231-260,414+); ADMIN/MEMBER/GUEST gate (app/views/intake/base.py:581) + guest 403 {'error': 'You are not allowed to view this issue'} (app/views/intake/base.py:586-600 vs desc_guest_gate routes/versions.rs:204-212 + DESC_GUEST_MSG routes/versions.rs:101, desc_gate_chain routes/versions.rs:560-584); intake twin of Batch G T9 work-items list (app/urls/issue.py:266, version.py:118-144) — only diff is Django intake has NO explicit order_by (app/views/intake/base.py:628-630) vs twin .order_by(-created_at) (version.py:133-135), Rust mirrors literally with no ordering (main.rs:331-333); wired main.rs:335-336; FE listDescriptionVersions (intake-work_item_version.service.ts:19-31)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/intake-work-items/:work_item_id/description-versions/:pk/",
+          "django_source": "app/urls/intake.py:61",
+          "rust_status": "implemented",
+          "rust_handler": "routes::versions::intake_desc_version_detail",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/inbox/intake-work_item_version.service.ts",
+              "method": "retrieveDescriptionVersion"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch L T2",
+          "out_scope": false,
+          "notes": "verified IntakeWorkItemDescriptionVersionEndpoint.get single branch (app/views/intake/base.py:602-611) vs intake_desc_version_detail (routes/versions.rs:793-828): GET-only, GET 200 full 14-key IssueDescriptionVersionDetailSerializer (app/serializers/issue.py:1023-1038 vs DESC_VERSION_DETAIL_KEYS routes/versions.rs:159-174); miss 404 both (Django DoesNotExist vs missing() routes/versions.rs:824-827); same project/issue-lookup + ADMIN/MEMBER/GUEST + guest-403 chain (app/views/intake/base.py:581-600 vs versions_gate + desc_gate_chain routes/versions.rs:262+,560-584); intake twin of Batch G T9 work-items single (app/urls/issue.py:271); wired main.rs:339-340; FE retrieveDescriptionVersion (intake-work_item_version.service.ts:33-46)"
         }
       ]
     }
