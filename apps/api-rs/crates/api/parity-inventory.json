@@ -759,6 +759,66 @@
           "batch_task": "Batch I T2",
           "out_scope": false,
           "notes": "verified ProjectJoinEndpoint.get/post (invite.py:192-286, AllowAny :193, urls/project.py:72-76) vs proj_join_get/proj_join_post (invite.rs:989-1148, main.rs:903-906): GET 200 public 7-key, email+token omitted (PublicSerializer serializers/project.py:206-228 vs proj_invite_public_json invite.rs:368-378); POST token-403 (invite.py:201-205 vs invite.rs:69,1026-1033), anon-401 (invite.py:212-215 vs AuthUser extractor first invite.rs:999-1001, ordering deviation under locked 401-generic rule), invitee-email-403 (invite.py:216-220 vs invite.rs:57,1041-1046), non-bool accepted 400 verbatim (invite.py:224-228 vs invite.rs:71,1047-1057), double-respond 400 (invite.py:278-281 vs invite.rs:60,1058-1064), accept ws-cap + role-keeping reactivation 200 (invite.py:239-266 vs invite.rs:1074-1144), reject 200 (invite.py:273-276 vs invite.rs:1145-1147); miss 404 both (base.py:188-192 vs missing()); FE repo-wide grep projects/.*/join/ shows no caller so fe_evidence []"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/members/",
+          "django_source": "app/urls/project.py:77",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "fetchProjectMembers" },
+            {
+              "service": "apps/web/core/services/project/project-member.service.ts",
+              "method": "bulkAddMembersToProject"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T3",
+          "out_scope": false,
+          "notes": "verified ProjectMemberViewSet.list/create (project/member.py:46-169, urls/project.py:77-80; list AMG :156 vs create ADMIN :46) vs list/create (member.rs:1192-1374, main.rs:765-766): AMG gate list (project/member.py:156 vs gate_project member.rs:1353) + ADMIN gate create (project/member.py:46 vs gate_project admin_only member.rs:1201); list 200 [{id,member,role}] (project/member.py:168 vs pm_role_short_json member.rs:593-599) over active non-bot + active-ws-membership filter (:159-166 vs EXISTS member.rs:1356-1364); create 201 RoleSerializer 6-key array (serializers/project.py:188-194 vs pm_role_json member.rs:580-589) with reactivate + bulk ignore_conflicts (:86-95,134-136 vs member.rs:1257-1323) + celery email skipped (:143-150); empty 400 'At least one member is required' (:55-59 vs member.rs:56,1206-1210), ws-admin-low 400 (:73-77 vs member.rs:57,1240-1244), ws-guest-high 400 (:79-83 vs member.rs:59,1247-1252); sane 404 missing() for unknown project/non-ws member (:52,70-72 .get vs member.rs:1198-1199,1235-1237); FE fetchProjectMembers GET (project-member.service.ts:18-19) + bulkAddMembersToProject POST (:26-31) via base-project-member.store.ts:291-313, callers span components so fe_pages []"
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/members/:pk/",
+          "django_source": "app/urls/project.py:82",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "getProjectMember" },
+            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "updateProjectMember" },
+            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "deleteProjectMember" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T3",
+          "out_scope": false,
+          "notes": "verified ProjectMemberViewSet.retrieve/partial_update/destroy (project/member.py:171-321, urls/project.py:82-85) vs detail/patch/destroy (member.rs:1418-1708, main.rs:853-856): AMG retrieve/patch (project/member.py:171,205 vs gate_project member.rs:1426,1480) + ADMIN destroy (:290 vs admin_only :1658); retrieve 200 admin iff requester>5 (:198-201 vs sees_admin_shape member.rs:195-197) + miss 404 'Project member not found' (:192-196 vs member.rs:53,1432-1436) with bot exclusion (:185 vs :1440-1445); patch 200 ProjectMemberSerializer (serializers/project.py:156-163 vs pm_full_json member.rs:674-694,1618) with self 400 (:220-224 vs member.rs:37,1565-1571), role 403s (:235-239,242-246,251-255 vs member.rs:61-67,230-253), ws-guest cap 400 (:258-262 vs :250-252), is_active 403s (:271-281 vs member.rs:68-72,254-263), garbage role 400 valid-detail (sane for int() 500 :248 vs member.rs:1527-1543); destroy 204 soft is_active=false (:319-321 vs :1703-1707) with self 400 sic-workspace (:307-311 vs member.rs:42,1693-1697) + lower 400 (:313-317 vs guard_destroy_role :180-185,1700-1702); FE getProjectMember GET (project-member.service.ts:46-47) + updateProjectMember PATCH (:54-60) + deleteProjectMember DELETE (:67-68) via base-project-member.store.ts:372-434, no single page so fe_pages []"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/members/leave/",
+          "django_source": "app/urls/project.py:87",
+          "rust_status": "implemented",
+          "rust_handler": "routes::member::leave_project",
+          "fe_evidence": [{ "service": "apps/web/core/services/user.service.ts", "method": "leaveProject" }],
+          "fe_pages": [],
+          "batch_task": "Batch I T3",
+          "out_scope": false,
+          "notes": "verified ProjectMemberViewSet.leave (project/member.py:323-349, urls/project.py:87-90 POST-only) vs leave_project (member.rs:1716-1750, main.rs:870-871): AMG gate (:323 vs gate_project :1724); sole-admin 400 verbatim (:332-345 vs guard_leave project.rs:60-62, call member.rs:1733-1735); else is_active=false 204 (:347-349 vs :1736-1749, race miss->missing() :1744-1748 for unreachable .get 404 :325-330); FE leaveProject POST members/leave/ (user.service.ts:253-254) via base-permissions.store.ts:344-346 from leave-project-modal + member-list-item so fe_pages []"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/project-members/me/",
+          "django_source": "app/urls/project.py:97",
+          "rust_status": "implemented",
+          "rust_handler": "routes::project::my_membership",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project-member.service.ts", "method": "projectMemberMe" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T3",
+          "out_scope": false,
+          "notes": "verified ProjectMemberUserEndpoint.get, class has get only (project/member.py:352-362, urls/project.py:97-100; IsAuthenticated-only BaseAPIView base.py:150) vs my_membership (project.rs:1242-1280, main.rs:912-913): AuthUser-only gate both; miss 404 DoesNotExist (views/base.py:92-96 vs missing() project.rs:1276-1279) with project_id+slug+member+is_active filter (:354-359 vs :1268-1269 + deleted_at IS NULL); 200 ProjectMemberSerializer __all__ (serializers/project.py:156-163 vs my_membership_json project.rs:1146-1223 incl deleted_at) with workspace/project/member lite (project.rs:1148-1201); datetime RFC3339 vs DRF ISO8601 same instants + non-WORKSPACE_LOGO/PROJECT_COVER/USER_AVATAR *_url null narrowing (project.rs:1053-1088,1237-1240) per cover_image precedent; FE projectMemberMe GET project-members/me/ (project-member.service.ts:38-39) via base-permissions.store.ts:284 (store, not a page) so fe_pages []"
         }
       ]
     },
