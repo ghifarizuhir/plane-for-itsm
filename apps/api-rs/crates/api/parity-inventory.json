@@ -636,6 +636,66 @@
           "batch_task": "Batch F T6",
           "out_scope": false,
           "notes": "POST only; non-member 403"
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/",
+          "django_source": "app/urls/project.py:25",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::project::list",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProjectsLite" },
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "createProject" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T1",
+          "out_scope": false,
+          "notes": "GET returns {id,name,identifier:''} (project.rs:151-166) vs 21-key .values() incl member_role/intake_count/sort_order (base.py:175-197); no ws gate, _auth unused (project.rs:148) vs ADMIN/MEMBER/GUEST allow_permission (base.py:145) + GUEST/MEMBER scope (base.py:199-222); POST 201 {id,name,identifier} (project.rs:284-287) vs ProjectListSerializer detail (base.py:310-311); no ADMIN/MEMBER create gate (project.rs:179) vs allow_permission (base.py:257); no ProjectIdentifier row (serializers/project.py:95) or dup-name/identifier 400s (serializers/project.py:39-75)"
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/details/",
+          "django_source": "app/urls/project.py:30",
+          "rust_status": "implemented",
+          "rust_handler": "routes::project::project_details",
+          "fe_evidence": [{ "service": "apps/web/core/services/project/project.service.ts", "method": "getProjects" }],
+          "fe_pages": [],
+          "batch_task": "Batch I T1",
+          "out_scope": false,
+          "notes": "verified ProjectViewSet.list_detail (base.py:101-143) vs project_details (project.rs:739-841, main.rs:92-95): any-member gate (base.py:101 vs project.rs:745-751), GUEST/MEMBER scope (base.py:105-128 vs project.rs:552-560,754-764), 44-key detail incl 8 annotations (serializers/project.py:115-140 vs project.rs:644-712); OUT: ?per_page+cursor page (base.py:130-140) + ?fields= (base.py:142), FE sends neither (project.service.ts:55-61)"
+        },
+        {
+          "methods": ["GET", "PUT", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:pk/",
+          "django_source": "app/urls/project.py:35",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::project::detail",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "getProject" },
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "updateProject" },
+            { "service": "apps/web/core/services/project/project.service.ts", "method": "deleteProject" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T1",
+          "out_scope": false,
+          "notes": "PUT update served (urls/project.py:40) with no Rust route/handler (main.rs:139-142 get/patch/delete only); GET {id,name} (project.rs:340-362) vs ProjectListSerializer detail (base.py:254), missing archived filter (base.py:227), SECRET 403 (base.py:236-239) + non-member 409 (base.py:241-244); PATCH 200 {id} (project.rs:440) vs serializer.data (base.py:378-379), no ws/project-ADMIN gate (project.rs:366) vs 403 (base.py:323-336), no intake auto-create (base.py:358-365); DELETE no gate (project.rs:443) vs ADMIN gate 403 (base.py:383-397), no favorites/deploy-board cleanup (base.py:414-417)"
+        },
+        {
+          "methods": ["GET", "DELETE"],
+          "path": "/api/workspaces/:slug/project-identifiers/",
+          "django_source": "app/urls/project.py:47",
+          "rust_status": "shape_mismatch",
+          "rust_handler": "routes::project::check_identifier",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/project/project.service.ts",
+              "method": "checkProjectIdentifierAvailability"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Batch I T1",
+          "out_scope": false,
+          "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only)"
         }
       ]
     },
