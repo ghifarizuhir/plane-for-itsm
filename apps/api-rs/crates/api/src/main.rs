@@ -646,6 +646,9 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/states/:pk/",
             get(routes::state::detail)
+                // FE `updateState` PUTs here (`project-state.service.ts:59`);
+                // PUT shares the PATCH core (F3 rationale).
+                .put(routes::state::patch)
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )

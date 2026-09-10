@@ -1,10 +1,11 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 use crate::{
     middleware::auth::AuthUser,
-    routes::project::{deny, project_role},
+    routes::project::{deny, missing},
     state::AppState,
 };
 
@@ -59,61 +60,118 @@ pub struct StateListQuery {
     pub grouped: Option<String>,
 }
 
+/// AMG gate for state reads/writes that allow guests (`list`, `patch`):
+/// roles 20/15/5 pass outright, plus any active member who is a workspace
+/// ADMIN (shared fallback, `permissions/base.py:64-78`).
+async fn gate_state_amg(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user, slug).await?;
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+/// ADMIN-only gate for state writes (`create`, `destroy`, `mark_default`):
+/// role 20 passes outright, plus the shared ws-admin fallback.
+async fn gate_state_admin(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user, slug).await?;
+    Ok(project_gate_allows(matches!(member_role, Some(20)), member_role.is_some(), ws_admin))
+}
+
+/// Full-row SELECT prefix for the 9 persisted `StateSerializer` keys
+/// (`serializers/state.py:12-30`), aliased for [`StateFullRow`].
+const STATE_FULL_SELECT_SQL: &str = "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence FROM states s";
+
 pub async fn list(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     axum::extract::Query(q): axum::extract::Query<StateListQuery>,
-) -> Result<Json<Value>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::state::State>(
-        "SELECT id, name, \"group\" FROM states WHERE project_id = $1 AND deleted_at IS NULL ORDER BY sequence ASC",
-    )
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django `list` (`state/base.py:77`): ADMIN/MEMBER/GUEST.
+    if !gate_state_amg(&st.pool, auth.0, &slug, _project_id).await? {
+        return Ok(deny());
+    }
+    // Triage excluded (`get_queryset` `is_triage=False`, `base.py:39`).
+    let rows: Vec<StateFullRow> = sqlx::query_as(&format!(
+        "{STATE_FULL_SELECT_SQL} WHERE s.project_id = $1 AND s.deleted_at IS NULL AND s.is_triage = false ORDER BY s.sequence ASC"
+    ))
     .bind(_project_id)
     .fetch_all(&st.pool)
     .await?;
-    let outs: Vec<StateOut> = rows
-        .into_iter()
-        .map(|s| StateOut {
-            id: s.id,
-            name: s.name,
-            group: s.group,
-        })
-        .collect();
-    // `?grouped=true` dict mode (`app/views/state/base.py:91-100`): rows
-    // grouped by `group` (insertion order = sequence order), each row
-    // carrying `order = index / group_count`. Row shape stays minimal
-    // (full serializer remains T1).
-    if q.grouped.as_deref() == Some("true") {
-        let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
-        for s in &outs {
-            let val = json!({"id": s.id, "name": s.name, "group": s.group});
-            match groups.iter_mut().find(|(g, _)| g == &s.group) {
-                Some((_, rows)) => rows.push(val),
-                None => groups.push((s.group.clone(), vec![val])),
-            }
-        }
-        let mut dict = serde_json::Map::new();
-        for (group, mut rows) in groups {
-            let count = rows.len() as f64;
-            for (index, row) in rows.iter_mut().enumerate() {
-                row["order"] = json!((index + 1) as f64 / count);
-            }
-            dict.insert(group, Value::Array(rows));
-        }
-        return Ok(Json(Value::Object(dict)));
+    // `order = index / group_count`, 1-based within each group
+    // (`base.py:82-88`) — present on the flat list too (the loop mutates
+    // `states` before the `grouped` check).
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for r in &rows {
+        *counts.entry(r.group.clone()).or_default() += 1;
     }
-    Ok(Json(json!(outs)))
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut ordered: Vec<(String, Value)> = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let n = seen.entry(r.group.clone()).or_insert(0);
+        *n += 1;
+        let count = counts.get(&r.group).copied().unwrap_or(1).max(1) as f64;
+        ordered.push((r.group.clone(), state_serializer_json(r, Some(*n as f64 / count))));
+    }
+    // `?grouped=true` dict mode (`base.py:91-100`).
+    if q.grouped.as_deref() == Some("true") {
+        let mut dict = serde_json::Map::new();
+        for (group, val) in ordered {
+            let slot = dict.entry(group).or_insert_with(|| Value::Array(Vec::new()));
+            if let Value::Array(items) = slot {
+                items.push(val);
+            }
+        }
+        return Ok((StatusCode::OK, Json(Value::Object(dict))));
+    }
+    Ok((StatusCode::OK, Json(Value::Array(ordered.into_iter().map(|(_, v)| v).collect()))))
 }
 
 pub async fn create(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateState>,
-) -> Result<(StatusCode, Json<StateOut>), common::errors::AppError> {
-    validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let row = sqlx::query_as::<_, common::models::state::State>(
-        "INSERT INTO states (id, name, description, \"group\", color, project_id, workspace_id, slug, sequence, \"default\", is_triage, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, $3, p.id, p.workspace_id, lower(regexp_replace($1, '[^a-zA-Z0-9]+', '-', 'g')), COALESCE((SELECT MAX(sequence) FROM states WHERE project_id = p.id), 0) + 15000, false, false, now(), now() FROM projects p WHERE p.id = $4 RETURNING id, name, \"group\"",
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django `create` (`state/base.py:46`): ADMIN-only.
+    if !gate_state_admin(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    // Django serializer 400s (never 500s) on invalid bodies; our messages
+    // stay custom, the status now matches.
+    if let Err(e) = validate_create(&body) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    // Django dup-name 400 (`state/base.py:54-59`): `{"name": [...]}` shape.
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM states WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&body.name)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"name": "The state name is already taken"})),
+        ));
+    }
+    let created: StateFullRow = sqlx::query_as(
+        "WITH ins AS (INSERT INTO states (id, name, description, \"group\", color, project_id, workspace_id, slug, sequence, \"default\", is_triage, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, $3, p.id, p.workspace_id, lower(regexp_replace($1, '[^a-zA-Z0-9]+', '-', 'g')), COALESCE((SELECT MAX(sequence) FROM states WHERE project_id = p.id), 0) + 15000, false, false, now(), now() FROM projects p WHERE p.id = $4 RETURNING id) SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence FROM states s JOIN ins ON ins.id = s.id",
     )
     .bind(&body.name)
     .bind(&body.group)
@@ -122,14 +180,7 @@ pub async fn create(
     .fetch_one(&st.pool)
     .await?;
     // Django `create` (`state/base.py:146`) returns 200 (not 201).
-    Ok((
-        StatusCode::OK,
-        Json(StateOut {
-            id: row.id,
-            name: row.name,
-            group: row.group,
-        }),
-    ))
+    Ok((StatusCode::OK, Json(state_serializer_json(&created, None))))
 }
 
 /// Mirrors `plane/app/views/state/base.py:destroy`: default states and
@@ -159,31 +210,50 @@ pub async fn detail(
     _auth: AuthUser,
     axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
-    let row: Option<common::models::state::State> = sqlx::query_as(
-        "SELECT id, name, \"group\" FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
+    // Django `retrieve` is DRF-default with auth-only permission
+    // (`views/base.py:50`): no gate. Miss → 404 `missing()` (DRF
+    // `{"detail"}` normalized per repo rule; unifies "State not found").
+    let row: Option<StateFullRow> = sqlx::query_as(&format!(
+        "{STATE_FULL_SELECT_SQL} WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL"
+    ))
     .bind(pk)
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
     match row {
-        Some(s) => Ok((
-            StatusCode::OK,
-            Json(serde_json::json!({"id": s.id, "name": s.name, "group": s.group})),
-        )),
-        None => Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "State not found"})))),
+        Some(s) => Ok((StatusCode::OK, Json(state_serializer_json(&s, None)))),
+        None => Ok(missing()),
     }
 }
 
 pub async fn patch(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    // Django `partial_update` (`state/base.py:61`): ADMIN/MEMBER/GUEST.
+    if !gate_state_amg(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
             return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+        }
+        // Django dup-name 400 (`state/base.py:61-75`): `{"name": [...]}` shape.
+        let dup: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE project_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL)",
+        )
+        .bind(project_id)
+        .bind(name)
+        .bind(pk)
+        .fetch_one(&st.pool)
+        .await?;
+        if dup {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"name": "The state name is already taken"})),
+            ));
         }
     }
     if let Some(group) = &body.group {
@@ -203,25 +273,41 @@ pub async fn patch(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "State not found"}))));
+        return Ok(missing());
     }
-    Ok((StatusCode::OK, Json(serde_json::json!({"id": pk}))))
+    // Django returns 200 full `StateSerializer`.
+    let row: Option<StateFullRow> = sqlx::query_as(&format!(
+        "{STATE_FULL_SELECT_SQL} WHERE s.id = $1 AND s.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(s) => Ok((StatusCode::OK, Json(state_serializer_json(&s, None)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn destroy(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    // Django `destroy` (`state/base.py:113`): ADMIN-only.
+    if !gate_state_admin(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    // Triage states are outside the lookup scope (`base.py:115`
+    // `is_triage=False`): a triage pk 404s.
     let row: Option<(bool,)> = sqlx::query_as(
-        "SELECT \"default\" FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+        "SELECT \"default\" FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND is_triage = false",
     )
     .bind(pk)
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
     let Some((is_default,)) = row else {
-        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "State not found"}))));
+        return Ok(missing());
     };
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM issues WHERE state_id = $1 AND deleted_at IS NULL")
         .bind(pk)
@@ -238,8 +324,10 @@ pub async fn destroy(
 }
 
 /// Mirrors `plane/app/views/state/base.py:104-106` (`mark_as_default`):
-/// `@allow_permission([ROLE.ADMIN])` (level PROJECT) — only project ADMIN
-/// (20) passes; MEMBER (15) / GUEST (5) / non-member → 403 via `deny()`.
+/// `@allow_permission([ROLE.ADMIN])` (level PROJECT) — project ADMIN (20)
+/// passes outright, plus any active project member who is a workspace ADMIN
+/// (shared fallback, `permissions/base.py:53-78`; FE-exercised via
+/// `markDefault`, K4-class primer).
 /// (`ROLE` values from `plane/app/permissions/base.py:13-16`.)
 pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
     match role {
@@ -252,7 +340,8 @@ pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
 /// — parity with Django `StateViewSet.mark_as_default`
 /// (`plane/app/views/state/base.py:104-110`).
 ///
-/// - Gate: PROJECT ADMIN (20) only via `project_role` + `guard_mark_default`;
+/// - Gate: PROJECT ADMIN (20) outright + shared ws-admin fallback via
+///   `fetch_project_member_role` + `guard_mark_default`;
 ///   MEMBER (15) / GUEST (5) / non-member → 403 `deny()`.
 /// - Two blind updates, both scoped to (workspace slug + project_id), in a
 ///   single tx: clear `"default"` where true, then set `"default"=true`
@@ -278,8 +367,9 @@ pub async fn mark_default(
     auth: AuthUser,
     axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
-    let role = project_role(&st.pool, auth.0, project_id).await?;
-    if guard_mark_default(role).is_err() {
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(guard_mark_default(role).is_ok(), role.is_some(), ws_admin) {
         return Ok(deny());
     }
     let mut tx = st.pool.begin().await?;
