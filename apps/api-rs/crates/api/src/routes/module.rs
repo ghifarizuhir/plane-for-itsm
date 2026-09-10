@@ -1956,6 +1956,90 @@ pub async fn issue_modules_create(
     Ok((StatusCode::CREATED, Json(json!({"message": "success"}))))
 }
 
+/// GET/PUT/PATCH `/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/`
+/// — parity with the DRF `ModelViewSet` defaults behind
+/// `get→retrieve put→update patch→partial_update` (`urls/module.py:47-57`; no
+/// retrieve/update overrides in `views/module/issue.py`). The join row's only
+/// writable field is the `issue` link (`ModuleIssueSerializer` read-only:
+/// workspace/project/created_by/updated_by, `serializers/module.py:137-149`);
+/// PUT/PATCH re-point it when `body.issue`/`body.issue_id` parses as UUID,
+/// else return the row unchanged. 200 join-row subset (full serializer +
+/// details stays T1); miss → 404 `missing()`. Gate AM mirrors the file's
+/// destroy twin. No FE GET/PUT/PATCH caller (DELETE only).
+pub async fn module_issue_detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pid, mid, iid)): Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !project_in_workspace(&st.pool, pid, &slug).await? {
+        return Ok(missing());
+    }
+    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
+        return Ok(deny());
+    }
+    let row: Option<(uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+        "SELECT mi.id, mi.module_id, mi.issue_id, mi.project_id FROM module_issues mi JOIN workspaces w ON w.id = mi.workspace_id WHERE w.slug = $1 AND mi.project_id = $2 AND mi.module_id = $3 AND mi.issue_id = $4 AND mi.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(pid)
+    .bind(mid)
+    .bind(iid)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some((id, module_id, issue_id, project_id)) => Ok((
+            StatusCode::OK,
+            Json(json!({"id": id, "module": module_id, "issue": issue_id, "project": project_id})),
+        )),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn module_issue_update(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pid, mid, iid)): Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !project_in_workspace(&st.pool, pid, &slug).await? {
+        return Ok(missing());
+    }
+    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
+        return Ok(deny());
+    }
+    if let Some(new_issue) = body
+        .get("issue")
+        .or_else(|| body.get("issue_id"))
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<uuid::Uuid>().ok())
+    {
+        // Dup re-point → 400 like Django's `IntegrityError` mapping
+        // (`views/base.py:80-84`).
+        match sqlx::query(
+            "UPDATE module_issues mi SET issue_id = $1, updated_at = now() FROM workspaces w WHERE w.id = mi.workspace_id AND w.slug = $2 AND mi.project_id = $3 AND mi.module_id = $4 AND mi.issue_id = $5 AND mi.deleted_at IS NULL",
+        )
+        .bind(new_issue)
+        .bind(&slug)
+        .bind(pid)
+        .bind(mid)
+        .bind(iid)
+        .execute(&st.pool)
+        .await
+        {
+            Ok(_) => {}
+            Err(e) if is_constraint_violation(&e) => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "The payload is not valid"})),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        }
+        return module_issue_detail(State(st), auth, Path((slug, pid, mid, new_issue))).await;
+    }
+    module_issue_detail(State(st), auth, Path((slug, pid, mid, iid))).await
+}
+
 pub async fn issue_destroy(
     State(st): State<AppState>,
     auth: AuthUser,

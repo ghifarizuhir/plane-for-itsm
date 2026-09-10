@@ -910,6 +910,48 @@ pub async fn check_identifier(
     ))
 }
 
+/// Mirrors `ProjectIdentifierEndpoint.delete`
+/// (`plane/app/views/project/base.py:456-471`): ADMIN/MEMBER workspace gate,
+/// 400 `Name is required` on empty, 400 when a live project already uses the
+/// identifier, else delete matching rows → 204.
+pub async fn delete_identifier(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    match role {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(deny()),
+    }
+    let name = normalize_ident(body.get("name").and_then(Value::as_str).unwrap_or(""));
+    if let Err(e) = validate_ident_name(&name) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
+    let in_use: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.identifier = $1 AND w.slug = $2 AND p.deleted_at IS NULL)",
+    )
+    .bind(&name)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Cannot delete an identifier of an existing project"})),
+        ));
+    }
+    sqlx::query(
+        "DELETE FROM project_identifiers pi USING workspaces w WHERE pi.workspace_id = w.id AND pi.name = $1 AND w.slug = $2 AND pi.deleted_at IS NULL",
+    )
+    .bind(&name)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 /// Mirrors `ProjectIdentifierEndpoint.get`
 /// (`plane/app/views/project/base.py:444-454`):
 /// `request.GET.get("name", "").strip().upper()`.

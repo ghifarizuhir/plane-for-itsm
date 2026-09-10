@@ -1410,6 +1410,93 @@ pub async fn cycle_issues_create(
     Ok((StatusCode::CREATED, Json(json!({"message": "success"}))))
 }
 
+/// GET/PUT/PATCH `/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/:issue_id/`
+/// — parity with the DRF `ModelViewSet` defaults behind
+/// `get→retrieve put→update patch→partial_update` (`urls/cycle.py:44-55`; no
+/// retrieve/update overrides in `views/cycle/issue.py`, only list/create/
+/// destroy). The join row's only writable field is the `issue` link
+/// (`CycleIssueSerializer` read-only: workspace/project/cycle,
+/// `serializers/cycle.py:92-99`); PUT/PATCH re-point it when
+/// `body.issue`/`body.issue_id` parses as UUID, else return the row unchanged.
+/// 200 join-row subset (full serializer + `issue_detail` stays T1);
+/// miss → 404 `missing()` (DRF `{"detail": ...}` normalized per repo rule).
+/// Gate AM mirrors the file's list/destroy twins (Django safe-branch GUEST
+/// reads stay T2). No FE GET/PUT/PATCH caller (DELETE only).
+pub async fn cycle_issue_detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pid, cid, iid)): Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !project_in_workspace(&st.pool, pid, &slug).await? {
+        return Ok(missing());
+    }
+    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
+        return Ok(deny());
+    }
+    let row: Option<(uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+        "SELECT ci.id, ci.cycle_id, ci.issue_id, ci.project_id FROM cycle_issues ci JOIN workspaces w ON w.id = ci.workspace_id WHERE w.slug = $1 AND ci.project_id = $2 AND ci.cycle_id = $3 AND ci.issue_id = $4 AND ci.deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .bind(pid)
+    .bind(cid)
+    .bind(iid)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some((id, cycle_id, issue_id, project_id)) => Ok((
+            StatusCode::OK,
+            Json(json!({"id": id, "cycle": cycle_id, "issue": issue_id, "project": project_id})),
+        )),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn cycle_issue_update(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pid, cid, iid)): Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !project_in_workspace(&st.pool, pid, &slug).await? {
+        return Ok(missing());
+    }
+    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
+        return Ok(deny());
+    }
+    if let Some(new_issue) = body
+        .get("issue")
+        .or_else(|| body.get("issue_id"))
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<uuid::Uuid>().ok())
+    {
+        // Dup re-point hits the partial unique
+        // `(issue_id, cycle_id, deleted_at)` → 400 like Django's
+        // `IntegrityError` mapping (`views/base.py:80-84`).
+        match sqlx::query(
+            "UPDATE cycle_issues ci SET issue_id = $1, updated_at = now() FROM workspaces w WHERE w.id = ci.workspace_id AND w.slug = $2 AND ci.project_id = $3 AND ci.cycle_id = $4 AND ci.issue_id = $5 AND ci.deleted_at IS NULL",
+        )
+        .bind(new_issue)
+        .bind(&slug)
+        .bind(pid)
+        .bind(cid)
+        .bind(iid)
+        .execute(&st.pool)
+        .await
+        {
+            Ok(_) => {}
+            Err(e) if is_constraint_violation(&e) => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "The payload is not valid"})),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        }
+        return cycle_issue_detail(State(st), auth, Path((slug, pid, cid, new_issue))).await;
+    }
+    cycle_issue_detail(State(st), auth, Path((slug, pid, cid, iid))).await
+}
+
 pub async fn cycle_issue_destroy(
     State(st): State<AppState>,
     auth: AuthUser,

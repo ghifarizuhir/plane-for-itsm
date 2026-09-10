@@ -328,6 +328,97 @@ pub async fn subscribers_list(
     Ok((StatusCode::OK, Json(Value::Array(out))))
 }
 
+/// POST `/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/`
+/// — parity with Django `IssueSubscriberViewSet.create` (DRF `ModelViewSet`
+/// default + `perform_create`, `subscriber.py:37-41`, `urls/issue.py:176-179`):
+/// body `subscriber` (user id) is saved with project/issue from the URL →
+/// **201** serializer row (`__all__`, `serializers/issue.py:974-978`).
+/// Gate mirrors the unsafe `ProjectEntityPermission` branch (ADMIN/MEMBER),
+/// same as `subscriber_remove`. Row shape is the minimal subset (full
+/// serializer stays T1); dup → 400 `INVALID_PAYLOAD_MSG`
+/// (`views/base.py:80-84` IntegrityError mapping).
+pub async fn subscriber_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if guard_subscriber_remove(role).is_err() {
+        return Ok(deny());
+    }
+    let subscriber: Option<uuid::Uuid> = body
+        .get("subscriber")
+        .or_else(|| body.get("subscriber_id"))
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse().ok());
+    let Some(subscriber) = subscriber else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Please provide valid detail"})),
+        ));
+    };
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issue_subscribers s JOIN workspaces w ON w.id = s.workspace_id WHERE w.slug = $1 AND s.project_id = $2 AND s.issue_id = $3 AND s.subscriber_id = $4 AND s.deleted_at IS NULL)",
+    )
+    .bind(&slug)
+    .bind(project_id)
+    .bind(issue_id)
+    .bind(subscriber)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": crate::routes::project::INVALID_PAYLOAD_MSG})),
+        ));
+    }
+    // DRF FK validation (`serializers/issue.py:974-978`) 400s unknown users;
+    // without this the INSERT would 500 on the FK constraint.
+    let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+        .bind(subscriber)
+        .fetch_one(&st.pool)
+        .await?;
+    if !user_exists {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Please provide valid detail"})),
+        ));
+    }
+    // Same FK-validation mapping for an unknown issue in this project.
+    let issue_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issues i JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.project_id = $2 AND i.id = $3 AND i.deleted_at IS NULL)",
+    )
+    .bind(&slug)
+    .bind(project_id)
+    .bind(issue_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if !issue_exists {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": crate::routes::project::INVALID_PAYLOAD_MSG})),
+        ));
+    }
+    let id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO issue_subscribers (id, subscriber_id, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id",
+    )
+    .bind(subscriber)
+    .bind(issue_id)
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"id": id, "subscriber": subscriber, "issue": issue_id, "project": project_id})),
+    ))
+}
+
 /// DELETE `/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/:subscriber_id/`
 /// — parity with Django `IssueSubscriberViewSet.destroy`
 /// (`plane/app/views/issue/subscriber.py:59-67`,

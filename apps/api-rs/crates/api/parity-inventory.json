@@ -354,7 +354,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T5",
           "out_scope": false,
-          "notes": "verified IssueSubscriberViewSet.list (subscriber.py:52-57) vs subscribers_list (subscribe.rs:292-329): 200 list of ProjectMemberLiteSerializer rows (project.py:237-244 keys member/id/is_subscribed) matches subscriber_member_json (subscribe.rs:68-90, UserLite user.py:141-153); safe-method ProjectEntityPermission gate (subscriber.py:20) matches role.is_none deny incl. GUEST reads (subscribe.rs:301-304); is_subscribed computed as EXISTS per member (subscribe.rs:311-313) while Django passes no annotation (subscriber.py:52-57); Django also maps POST create (DRF ModelViewSet default + perform_create subscriber.py:37-41, issue.py:177); no Rust handler → POST 405"
+          "notes": "verified IssueSubscriberViewSet.list (subscriber.py:52-57) vs subscribers_list (subscribe.rs:292-329): 200 list of ProjectMemberLiteSerializer rows (project.py:237-244 keys member/id/is_subscribed) matches subscriber_member_json (subscribe.rs:68-90, UserLite user.py:141-153); safe-method ProjectEntityPermission gate (subscriber.py:20) matches role.is_none deny incl. GUEST reads (subscribe.rs:301-304); is_subscribed computed as EXISTS per member (subscribe.rs:311-313) while Django passes no annotation (subscriber.py:52-57); Django also maps POST create (DRF ModelViewSet default + perform_create subscriber.py:37-41, issue.py:177); no Rust handler → POST 405 | T4-remainder: POST create wired (subscriber_create: AM gate, 201 minimal row; dup/FK maps to Django 400s)."
         },
         {
           "methods": ["DELETE"],
@@ -931,7 +931,7 @@
           "fe_pages": [],
           "batch_task": "Batch I T1",
           "out_scope": false,
-          "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only)"
+          "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only) | T4-remainder: DELETE wired (delete_identifier: AM-ws gate, 400s verbatim, 204)."
         },
         {
           "methods": ["GET", "POST"],
@@ -3119,7 +3119,7 @@
           "fe_pages": [],
           "batch_task": "Batch K T2",
           "out_scope": false,
-          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get->retrieve put->update patch->partial_update (cycle.py:45-55) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py, only list/create/destroy at issue.py:110,224,320; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:446-447); DELETE verified 204 always even 0 rows both (issue.py:320-343 .filter().delete() soft-delete vs cycle_issue_destroy cycle.rs:1413 UPDATE deleted_at); AM gate both (issue.py:319 vs gate_am); FE removeIssueFromCycle DELETE only (issue.service.ts:162-169), no FE GET/PUT/PATCH caller so fe_pages []"
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get->retrieve put->update patch->partial_update (cycle.py:45-55) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py, only list/create/destroy at issue.py:110,224,320; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:446-447); DELETE verified 204 always even 0 rows both (issue.py:320-343 .filter().delete() soft-delete vs cycle_issue_destroy cycle.rs:1413 UPDATE deleted_at); AM gate both (issue.py:319 vs gate_am); FE removeIssueFromCycle DELETE only (issue.service.ts:162-169), no FE GET/PUT/PATCH caller so fe_pages [] | T4-remainder: GET/PUT/PATCH wired (join-row retrieve + issue re-point; DRF-default miss normalized to missing())."
         },
         {
           "methods": ["GET", "POST"],
@@ -3441,7 +3441,7 @@
           "fe_pages": [],
           "batch_task": "Batch K T4",
           "out_scope": false,
-          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages []"
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages [] | T4-remainder: GET/PUT/PATCH wired (join-row retrieve + issue re-point; DRF-default miss normalized to missing())."
         },
         {
           "methods": ["GET", "POST"],

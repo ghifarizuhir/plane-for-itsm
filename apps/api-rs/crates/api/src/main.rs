@@ -95,7 +95,7 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/project-identifiers/",
-            get(routes::project::check_identifier),
+            get(routes::project::check_identifier).delete(routes::project::delete_identifier),
         )
         // Parity with `ProjectFavoritesViewSet` (`views/project/base.py:498-532`,
         // `urls/project.py:102-111`): POST-only collection + DELETE-only detail.
@@ -237,11 +237,11 @@ async fn main() {
         // Parity with `IssueSubscriberViewSet.list`
         // (`views/issue/subscriber.py:52-57`, `urls/issue.py:174-179`): GET
         // returns the `ProjectMemberLite` list (issues path ONLY). Django's
-        // URL also maps POST→create, but the Batch D plan scopes D1b to
-        // GET + DELETE only, so no POST handler is wired here.
+        // URL also maps POST→create (`IssueSubscriberViewSet.create`, DRF
+        // default + perform_create `subscriber.py:37-41`, `urls/issue.py:176`).
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/",
-            get(routes::subscribe::subscribers_list),
+            get(routes::subscribe::subscribers_list).post(routes::subscribe::subscriber_create),
         )
         // Parity with `IssueSubscriberViewSet.destroy`
         // (`views/issue/subscriber.py:59-67`, `urls/issue.py:180-184`):
@@ -448,9 +448,14 @@ async fn main() {
         // Parity with `CycleIssueViewSet.destroy`
         // (`views/cycle/issue.py:319-343`, `urls/cycle.py:44-55`): DELETE
         // **204** always, even with 0 rows (soft-delete). Gate ADMIN/MEMBER.
+        // GET/PUT/PATCH are the DRF `ModelViewSet` defaults
+        // (retrieve/update/partial_update over the join row).
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/:cycle_id/cycle-issues/:issue_id/",
-            delete(routes::cycle::cycle_issue_destroy),
+            get(routes::cycle::cycle_issue_detail)
+                .put(routes::cycle::cycle_issue_update)
+                .patch(routes::cycle::cycle_issue_update)
+                .delete(routes::cycle::cycle_issue_destroy),
         )
         // Parity with `CycleDateCheckEndpoint.post`
         // (`views/cycle/base.py:520-556`, `urls/cycle.py:56-60`): POST 200
@@ -561,9 +566,14 @@ async fn main() {
         // **204** always, even with 0 rows (soft-delete; missing link → 204
         // idempotent, Django `.first().module` crash normalized). Gate
         // ADMIN/MEMBER.
+        // GET/PUT/PATCH are the DRF `ModelViewSet` defaults
+        // (retrieve/update/partial_update over the join row).
         .route(
             "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/",
-            delete(routes::module::issue_destroy),
+            get(routes::module::module_issue_detail)
+                .put(routes::module::module_issue_update)
+                .patch(routes::module::module_issue_update)
+                .delete(routes::module::issue_destroy),
         )
         // Parity with `ModuleLinkViewSet.list/create`
         // (`views/module/base.py:762-788`, `urls/module.py:58-62`): GET 200
