@@ -2,7 +2,9 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder};
+use std::collections::HashMap;
 
+use crate::routes::grouped;
 use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -14,7 +16,6 @@ use super::issue_common::{
 use super::issue_query::{
     DetailIssuesQuery, GENERIC_500_MSG, apply_complex_filter, archive_group_by_allowlist_error,
     archive_group_by_conflict, archive_grouping_unsupported, parse_complex_filter,
-    ARCHIVE_GROUPING_UNSUPPORTED_MSG,
 };
 use super::versions::{VersionEnvelope, parse_version_cursor};
 
@@ -718,6 +719,75 @@ pub async fn workspace_issues(
 ///   handling as D12a, rows in non-grouped `issue_on_results` shape
 ///   (reused `ArchiveRow`; `module_ids` excludes archived modules per the
 ///   grouper).
+/// F5 grouped branch of [`user_issues`]: two-phase grouped 200
+/// (`workspace/user.py:184-233` via the shared [`grouped`] core). Same
+/// shape as the archived twin: key scan over the user scope, page-id fetch
+/// through [`USER_SELECT_SQL`].
+#[allow(clippy::too_many_arguments)]
+async fn grouped_user_response(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    uid: uuid::Uuid,
+    requester: uuid::Uuid,
+    group: &str,
+    sub: Option<&str>,
+    limit: i64,
+    page: i128,
+    order_expr: &str,
+    order_dir: &str,
+    tree: Option<&Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    const SCAN_FROM: &str = "FROM issues i LEFT JOIN states s ON s.id = i.state_id";
+    let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(super::issue_query::GROUP_SCAN_SELECT_SQL);
+    scan_qb.push(" ");
+    scan_qb.push(SCAN_FROM);
+    if let Err(e) = push_user_where(&mut scan_qb, slug, uid, requester, tree) {
+        return Ok(bad_request(json!({"message": e.message, "code": e.code})));
+    }
+    scan_qb.push(" ORDER BY ").push(order_expr).push(" ").push(order_dir).push(
+        " NULLS LAST, i.created_at DESC, i.id ASC",
+    );
+    let scan: Vec<ScanRow> = scan_qb.build_query_as().fetch_all(pool).await?;
+    let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
+        scan_universe(&scan, group)
+    } else {
+        group_universe(pool, group, slug, None).await?
+    };
+    let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
+        return Ok(bad_request(json!({"detail": "Error in parsing"})));
+    };
+    let page_ids: Vec<uuid::Uuid> = plan
+        .buckets
+        .iter()
+        .flat_map(|b| {
+            if sub.is_some() {
+                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+            } else {
+                b.page_ids.clone()
+            }
+        })
+        .collect();
+    let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
+    if !page_ids.is_empty() {
+        let mut rows_qb: QueryBuilder<Postgres> = QueryBuilder::new(USER_SELECT_SQL);
+        if let Err(e) = push_user_where(&mut rows_qb, slug, uid, requester, tree) {
+            return Ok(bad_request(json!({"message": e.message, "code": e.code})));
+        }
+        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
+        let rows: Vec<super::issue_common::ArchiveRow> = rows_qb.build_query_as().fetch_all(pool).await?;
+        for row in &rows {
+            if let Ok(v) = serde_json::to_value(row) {
+                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                    rows_by_id.insert(id, v);
+                }
+            }
+        }
+    }
+    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    Ok((StatusCode::OK, Json(env)))
+}
+
 pub async fn user_issues(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -742,16 +812,12 @@ pub async fn user_issues(
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
     };
     // Allowlist gate inside `paginate()` (`paginator.py:690-699`) precedes
-    // the window check; grouped shapes are OUT (Batch F).
+    // the window check.
     if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
         return Ok(bad_request(json!({"detail": msg})));
     }
-    if archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": ARCHIVE_GROUPING_UNSUPPORTED_MSG})),
-        ));
-    }
+    // Truthy grouped fields fall through to the F5 grouped branch below.
+    let grouped_mode = archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref());
     let limit = per_page.min(1000);
     let window = match page_window(cursor.page, limit) {
         Err(()) => return Ok(bad_request(json!({"detail": "Error in parsing"}))),
@@ -774,6 +840,25 @@ pub async fn user_issues(
         QueryBuilder::new("SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id");
     if let Err(e) = push_user_where(&mut count_qb, &slug, uid, auth.0, tree.as_ref()) {
         return Ok(bad_request(json!({"message": e.message, "code": e.code})));
+    }
+    // F5 grouped shapes: truthy `group_by` serves the Django
+    // Grouped/SubGroupedOffsetPaginator dict 200 (`user.py:184-233`) via the
+    // shared core, replacing the former 400.
+    if grouped_mode {
+        return grouped_user_response(
+            &st.pool,
+            &slug,
+            uid,
+            auth.0,
+            q.group_by.as_deref().unwrap_or(""),
+            q.sub_group_by.as_deref().filter(|s| !s.is_empty()),
+            limit,
+            cursor.page,
+            order_expr,
+            order_dir,
+            tree.as_ref(),
+        )
+        .await;
     }
     let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
 

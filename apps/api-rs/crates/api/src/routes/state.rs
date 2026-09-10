@@ -53,26 +53,56 @@ pub fn validate_create(body: &CreateState) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct StateListQuery {
+    #[serde(default)]
+    pub grouped: Option<String>,
+}
+
 pub async fn list(
     State(st): State<AppState>,
     _auth: AuthUser,
     axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-) -> Result<Json<Vec<StateOut>>, common::errors::AppError> {
+    axum::extract::Query(q): axum::extract::Query<StateListQuery>,
+) -> Result<Json<Value>, common::errors::AppError> {
     let rows = sqlx::query_as::<_, common::models::state::State>(
         "SELECT id, name, \"group\" FROM states WHERE project_id = $1 AND deleted_at IS NULL ORDER BY sequence ASC",
     )
     .bind(_project_id)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|s| StateOut {
-                id: s.id,
-                name: s.name,
-                group: s.group,
-            })
-            .collect(),
-    ))
+    let outs: Vec<StateOut> = rows
+        .into_iter()
+        .map(|s| StateOut {
+            id: s.id,
+            name: s.name,
+            group: s.group,
+        })
+        .collect();
+    // `?grouped=true` dict mode (`app/views/state/base.py:91-100`): rows
+    // grouped by `group` (insertion order = sequence order), each row
+    // carrying `order = index / group_count`. Row shape stays minimal
+    // (full serializer remains T1).
+    if q.grouped.as_deref() == Some("true") {
+        let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
+        for s in &outs {
+            let val = json!({"id": s.id, "name": s.name, "group": s.group});
+            match groups.iter_mut().find(|(g, _)| g == &s.group) {
+                Some((_, rows)) => rows.push(val),
+                None => groups.push((s.group.clone(), vec![val])),
+            }
+        }
+        let mut dict = serde_json::Map::new();
+        for (group, mut rows) in groups {
+            let count = rows.len() as f64;
+            for (index, row) in rows.iter_mut().enumerate() {
+                row["order"] = json!((index + 1) as f64 / count);
+            }
+            dict.insert(group, Value::Array(rows));
+        }
+        return Ok(Json(Value::Object(dict)));
+    }
+    Ok(Json(json!(outs)))
 }
 
 pub async fn create(

@@ -2,7 +2,9 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder};
+use std::collections::HashMap;
 
+use crate::routes::grouped;
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
 use super::issue_common::{
@@ -2532,16 +2534,10 @@ pub(crate) fn archive_group_by_allowlist_error(
     }
 }
 
-/// Known-gap 400 body for truthy `group_by` that survives the conflict +
-/// allowlist checks. Django would 200 with the `GroupedOffsetPaginator` /
-/// `SubGroupedOffsetPaginator` grouped-dict shape (`paginator.py:195-633`,
-/// FIELD_MAPPER key swaps, `archive.py:148-209`) — implementing that path
-/// is out of scope, so this endpoint 400s instead. Plain descriptive
-/// string (NOT a Django message): unreachable in the default FE flows
-/// (only 2 `getArchivedIssues` callers, both in `archived/issue.store.ts`
-/// flat flow; archived page is hardcoded list-layout, `groupedBy` never
-/// passed) — a user-set display `group_by` hits it. A lone `sub_group_by`
-/// is ignored (flat path), exactly like Django.
+/// Retired F5 response body, pinned by unit test: truthy `group_by` used to
+/// 400 with this message before the shared grouped core served the dict 200.
+/// Kept (not deleted) so the pin documents the behavior change.
+#[allow(dead_code)]
 pub(crate) const ARCHIVE_GROUPING_UNSUPPORTED_MSG: &str = "Grouped pagination is not supported";
 
 /// Truthiness mirrors Django's `if group_by:` (`archive.py:140`, where the
@@ -2681,6 +2677,91 @@ fn push_archive_where(
 /// `label_ids`/`assignee_ids` arrays carry `ORDER BY bridge.created_at
 /// DESC` (Django `ArrayAgg(DISTINCT …)` is unordered — set-equal, order
 /// deterministic); datetimes RFC3339 UTC (batch convention).
+
+/// Map an archive-WHERE build failure to the flat path's exact responses.
+fn archive_where_err(e: DetailWhereError) -> (StatusCode, Json<Value>) {
+    match e {
+        DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg)) => detail_400(json!({"error": msg})),
+        DetailWhereError::Legacy(LegacyFilterError::Server) => server_error(),
+        DetailWhereError::Complex(e) => detail_400(json!({"message": e.message, "code": e.code})),
+    }
+}
+
+/// Key-scan SELECT for grouped archive mode: every groupable key as text
+/// over the archive scope (same FROM/WHERE as the flat path). Arrays use the
+/// same bridge subqueries as `issue_queryset_grouper` (`grouper.py:52-90`);
+/// `cycle_id` mirrors the row annotation (latest bridge, `created_at DESC`).
+pub(crate) const GROUP_SCAN_SELECT_SQL: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date";
+
+/// F5 grouped branch of [`archived_list`]: two-phase grouped 200
+/// (`archive.py:148-209` via the shared [`grouped`] core). Phase 1 scans
+/// `(id + group keys)` over the full flat scope (same WHERE/ORDER);
+/// phase 2 fetches full [`ArchiveRow`]s for the page ids only.
+#[allow(clippy::too_many_arguments)]
+async fn grouped_archive_response(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    q: &DetailIssuesQuery,
+    group: &str,
+    sub: Option<&str>,
+    limit: i64,
+    page: i128,
+    order_expr: &str,
+    order_dir: &str,
+    tree: Option<&Value>,
+    today: chrono::NaiveDate,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(GROUP_SCAN_SELECT_SQL);
+    scan_qb.push(" FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id");
+    if let Err(e) = push_archive_where(&mut scan_qb, slug, project_id, q, tree, today) {
+        return Ok(archive_where_err(e));
+    }
+    scan_qb.push(" ORDER BY ").push(order_expr).push(" ").push(order_dir).push(
+        " NULLS LAST, i.created_at DESC, i.id ASC",
+    );
+    let scan: Vec<ScanRow> = scan_qb.build_query_as().fetch_all(pool).await?;
+    let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
+        scan_universe(&scan, group)
+    } else {
+        group_universe(pool, group, slug, Some(project_id)).await?
+    };
+    let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
+        return Ok(detail_400(json!({"detail": "Error in parsing"})));
+    };
+    // Phase 2: full rows for the page ids via the flat row query.
+    let page_ids: Vec<uuid::Uuid> = plan
+        .buckets
+        .iter()
+        .flat_map(|b| {
+            if sub.is_some() {
+                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+            } else {
+                b.page_ids.clone()
+            }
+        })
+        .collect();
+    let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
+    if !page_ids.is_empty() {
+        let mut rows_qb: QueryBuilder<Postgres> = QueryBuilder::new(ARCHIVE_SELECT_SQL);
+        if let Err(e) = push_archive_where(&mut rows_qb, slug, project_id, q, tree, today) {
+            return Ok(archive_where_err(e));
+        }
+        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
+        let rows: Vec<ArchiveRow> = rows_qb.build_query_as().fetch_all(pool).await?;
+        for row in &rows {
+            if let Ok(v) = serde_json::to_value(row) {
+                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                    rows_by_id.insert(id, v);
+                }
+            }
+        }
+    }
+    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    Ok((StatusCode::OK, Json(env)))
+}
+
 pub async fn archived_list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -2717,14 +2798,9 @@ pub async fn archived_list(
     if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
         return Ok(detail_400(json!({"detail": msg})));
     }
-    // Known gap (see `ARCHIVE_GROUPING_UNSUPPORTED_MSG`): truthy grouped
-    // fields that Django would grouped-paginate 200 400 here instead.
-    if archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": ARCHIVE_GROUPING_UNSUPPORTED_MSG})),
-        ));
-    }
+    // Truthy grouped fields fall through to the F5 grouped branch below
+    // (after limit/order/filter parsing); the predicate +
+    // `ARCHIVE_GROUPING_UNSUPPORTED_MSG` constant stay pinned by unit test.
     // `limit = min(limit, max_limit)` (`paginator.py:132`); offset-first
     // negative-window 400 mirrors I2 (`paginator.py:142-150, 708-711`).
     let limit = per_page.min(1000);
@@ -2748,6 +2824,27 @@ pub async fn archived_list(
     // `expand` has no archive reading (`issue_on_results` values only);
     // `fields` likewise unused here.
     let _ = (&q.fields, &q.expand);
+
+    // F5 grouped shapes: truthy `group_by` serves the Django
+    // Grouped/SubGroupedOffsetPaginator dict 200 via the shared core
+    // (`archive.py:148-209`), replacing the former 400.
+    if archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return grouped_archive_response(
+            &st.pool,
+            &slug,
+            project_id,
+            &q,
+            q.group_by.as_deref().unwrap_or(""),
+            q.sub_group_by.as_deref().filter(|s| !s.is_empty()),
+            limit,
+            cursor.page,
+            order_expr,
+            order_dir,
+            tree.as_ref(),
+            today,
+        )
+        .await;
+    }
 
     let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
         "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id",

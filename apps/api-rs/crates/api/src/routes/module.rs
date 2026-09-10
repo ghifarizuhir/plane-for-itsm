@@ -6,8 +6,10 @@ use axum::{
 use chrono::NaiveDate;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 use crate::routes::cycle::{burndown_chart, extract_date_part, format_archived_at, parse_point_value};
+use crate::routes::{grouped, issue_query::archive_group_by_allowlist_error};
 use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -1682,6 +1684,11 @@ pub async fn issues_list(
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": GROUP_DUP_MSG}))));
         }
     }
+    // Group-by allowlist inside `paginate()` (`paginator.py:690-699`):
+    // invalid fields 400 byte-exact (`{"detail"}`).
+    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
+    }
     let per_page = match parse_per_page(q.per_page.as_deref()) {
         Ok(v) => v,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
@@ -1710,8 +1717,22 @@ pub async fn issues_list(
         .await?;
     let total = total.0;
     let limit = per_page.max(0);
-    // Truthy `group_by` grouped shapes are OUT (flat envelope; E2 cycle
-    // precedent) — only the equality 400 above is Django-verbatim.
+    // F5 grouped shapes (`issue.py:126-198`): truthy `group_by` serves the
+    // Grouped/SubGroupedOffsetPaginator dict 200 via the shared core.
+    if q.group_by.as_deref().is_some_and(|s| !s.is_empty()) {
+        return grouped_module_response(
+            &st.pool,
+            &slug,
+            pid,
+            mid,
+            q.group_by.as_deref().unwrap_or(""),
+            q.sub_group_by.as_deref().filter(|s| !s.is_empty()),
+            limit,
+            page,
+            &order,
+        )
+        .await;
+    }
     let (rows, next, prev, next_has, prev_has, count, pages): (
         Vec<ModuleIssueRow>,
         String,
@@ -1966,6 +1987,67 @@ pub async fn issue_modules_create(
 /// else return the row unchanged. 200 join-row subset (full serializer +
 /// details stays T1); miss → 404 `missing()`. Gate AM mirrors the file's
 /// destroy twin. No FE GET/PUT/PATCH caller (DELETE only).
+/// F5 grouped branch of [`issues_list`]: two-phase grouped 200
+/// (`views/module/issue.py:126-198` via the shared [`grouped`] core). Row
+/// shape stays the flat [`ModuleIssueRow`] (full serializer remains T1).
+#[allow(clippy::too_many_arguments)]
+async fn grouped_module_response(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pid: uuid::Uuid,
+    mid: uuid::Uuid,
+    group: &str,
+    sub: Option<&str>,
+    limit: i64,
+    page: i128,
+    order: &str,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    const BASE: &str = "FROM issues i JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
+    const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi2.module_id::text) FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
+    // Twin of the flat row SELECT above (same columns, plus id filter).
+    const ROWS: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.sequence_id, i.project_id, i.parent_id, i.created_at, i.updated_at, (SELECT mi2.module_id FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL LIMIT 1) AS module_id, (SELECT COUNT(*) FROM issue_links il WHERE il.issue_id = i.id AND il.deleted_at IS NULL) AS link_count, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issues ch WHERE ch.parent_id = i.id AND ch.deleted_at IS NULL) AS sub_issues_count ";
+    let scan: Vec<ScanRow> = sqlx::query_as(&format!("{KEYS} {BASE} ORDER BY {order}, i.id ASC"))
+        .bind(mid)
+        .bind(pid)
+        .fetch_all(pool)
+        .await?;
+    let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
+        scan_universe(&scan, group)
+    } else {
+        group_universe(pool, group, slug, Some(pid)).await?
+    };
+    let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+    };
+    let page_ids: Vec<uuid::Uuid> = plan
+        .buckets
+        .iter()
+        .flat_map(|b| {
+            if sub.is_some() {
+                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+            } else {
+                b.page_ids.clone()
+            }
+        })
+        .collect();
+    let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
+    if !page_ids.is_empty() {
+        let rows: Vec<ModuleIssueRow> =
+            sqlx::query_as(&format!("{ROWS} {BASE} AND i.id = ANY($3)"))
+                .bind(mid)
+                .bind(pid)
+                .bind(&page_ids)
+                .fetch_all(pool)
+                .await?;
+        for r in &rows {
+            rows_by_id.insert(r.id, module_issue_json(r));
+        }
+    }
+    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    Ok((StatusCode::OK, Json(env)))
+}
+
 pub async fn module_issue_detail(
     State(st): State<AppState>,
     auth: AuthUser,
