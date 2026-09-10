@@ -401,6 +401,60 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
+/// Workspace-scoped PATCH twin of `patch` for `WorkspaceViewViewSet`
+/// (`app/views/view/base.py:87-106`, `app/urls/views.py:41-47`): same
+/// name/access validation, scoped by `(slug, pk)` like `detail_global`.
+/// The `is_locked`/owner-only 400s stay TODO with the project twin (T1/T2).
+pub async fn patch_global(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    Json(body): Json<PatchView>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() || name.chars().count() > 255 {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+        }
+    }
+    if let Some(access) = body.access {
+        if access != 0 && access != 1 {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid access"}))));
+        }
+    }
+    let n = sqlx::query(
+        "UPDATE issue_views v SET name = COALESCE($1, name), access = COALESCE($2, access), updated_at = now() FROM workspaces w WHERE w.id = v.workspace_id AND v.id = $3 AND w.slug = $4 AND v.deleted_at IS NULL",
+    )
+    .bind(&body.name)
+    .bind(body.access)
+    .bind(pk)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+    }
+    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+}
+
+/// Workspace-scoped DELETE twin of `destroy` for `WorkspaceViewViewSet.destroy`
+/// (`app/views/view/base.py:121-143`): blind soft-delete like the project twin.
+/// The `UserFavorite` cascade stays TODO with the project twin.
+pub async fn destroy_global(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    sqlx::query(
+        "UPDATE issue_views v SET deleted_at = now() FROM workspaces w WHERE w.id = v.workspace_id AND v.id = $1 AND w.slug = $2 AND v.deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 #[cfg(test)]
 mod view_e6_tests {
     use super::*;

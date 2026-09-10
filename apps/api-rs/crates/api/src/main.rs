@@ -138,6 +138,10 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:pk/",
             get(routes::project::detail)
+                // PUT shares the PATCH core (`module::update` precedent):
+                // partial-tolerant superset of DRF's full-update default, no
+                // FE PUT caller (FE uses PATCH), Django `urls/project.py:40`.
+                .put(routes::project::patch)
                 .patch(routes::project::patch)
                 .delete(routes::project::destroy),
         )
@@ -426,6 +430,8 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/cycles/:pk/",
             get(routes::cycle::detail)
+                // PUT shares the PATCH core, same F3 rationale as projects/:pk/.
+                .put(routes::cycle::patch)
                 .patch(routes::cycle::patch)
                 .delete(routes::cycle::destroy),
         )
@@ -838,6 +844,8 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/views/:pk/",
             get(routes::view::detail)
+                // PUT shares the PATCH core, same F3 rationale as projects/:pk/.
+                .put(routes::view::patch)
                 .patch(routes::view::patch)
                 .delete(routes::view::destroy),
         )
@@ -847,7 +855,12 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/views/:pk/",
-            get(routes::view::detail_global),
+            get(routes::view::detail_global)
+                // Django serves GET+PUT+PATCH+DELETE (`app/urls/views.py:41-47`);
+                // PUT shares the PATCH core, same F3 rationale as projects/:pk/.
+                .put(routes::view::patch_global)
+                .patch(routes::view::patch_global)
+                .delete(routes::view::destroy_global),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/members/:pk/",

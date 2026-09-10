@@ -914,7 +914,7 @@
           "fe_pages": [],
           "batch_task": "Batch I T1",
           "out_scope": false,
-          "notes": "PUT update served (urls/project.py:40) with no Rust route/handler (main.rs:139-142 get/patch/delete only); GET {id,name} (project.rs:340-362) vs ProjectListSerializer detail (base.py:254), missing archived filter (base.py:227), SECRET 403 (base.py:236-239) + non-member 409 (base.py:241-244); PATCH 200 {id} (project.rs:440) vs serializer.data (base.py:378-379), no ws/project-ADMIN gate (project.rs:366) vs 403 (base.py:323-336), no intake auto-create (base.py:358-365); DELETE no gate (project.rs:443) vs ADMIN gate 403 (base.py:383-397), no favorites/deploy-board cleanup (base.py:414-417)"
+          "notes": "PUT update served (urls/project.py:40) with no Rust route/handler (main.rs:139-142 get/patch/delete only); GET {id,name} (project.rs:340-362) vs ProjectListSerializer detail (base.py:254), missing archived filter (base.py:227), SECRET 403 (base.py:236-239) + non-member 409 (base.py:241-244); PATCH 200 {id} (project.rs:440) vs serializer.data (base.py:378-379), no ws/project-ADMIN gate (project.rs:366) vs 403 (base.py:323-336), no intake auto-create (base.py:358-365); DELETE no gate (project.rs:443) vs ADMIN gate 403 (base.py:383-397), no favorites/deploy-board cleanup (base.py:414-417) | F3: PUT wired (shares PATCH core, partial-tolerant superset of DRF full-update; no FE PUT caller)."
         },
         {
           "methods": ["GET", "DELETE"],
@@ -3043,7 +3043,7 @@
           "fe_pages": [],
           "batch_task": "Batch K T1",
           "out_scope": false,
-          "notes": "PUT update served (cycle.py:28-38 via DRF UpdateModelMixin, no CycleViewSet.update override in base.py) with NO Rust PUT route/handler (main.rs:427-430 get/patch/delete only); retrieve 200 with sub_issues, no cancelled_issues (base.py:428-454) vs detail drops cancelled_issues + adds sub_issues count (cycle.rs:911-917); miss 404 'Cycle not found' both (base.py:459 vs CYCLE_NOT_FOUND_MSG cycle.rs:29,897-901); PATCH archived/completed 400s verbatim both (base.py:340-357 vs guard_patch cycle.rs:188-196,959-963); destroy 204 ADMIN-or-creator both (base.py:477-479 vs cycle.rs:1085-1090); FE has no PUT caller; detail/patch/destroy (cycle.rs:883,921,1062)"
+          "notes": "PUT update served (cycle.py:28-38 via DRF UpdateModelMixin, no CycleViewSet.update override in base.py) with NO Rust PUT route/handler (main.rs:427-430 get/patch/delete only); retrieve 200 with sub_issues, no cancelled_issues (base.py:428-454) vs detail drops cancelled_issues + adds sub_issues count (cycle.rs:911-917); miss 404 'Cycle not found' both (base.py:459 vs CYCLE_NOT_FOUND_MSG cycle.rs:29,897-901); PATCH archived/completed 400s verbatim both (base.py:340-357 vs guard_patch cycle.rs:188-196,959-963); destroy 204 ADMIN-or-creator both (base.py:477-479 vs cycle.rs:1085-1090); FE has no PUT caller; detail/patch/destroy (cycle.rs:883,921,1062) | F3: PUT wired (shares PATCH core)."
         },
         {
           "methods": ["POST"],
@@ -3910,7 +3910,7 @@
           "fe_pages": [],
           "batch_task": "Batch L T4",
           "out_scope": false,
-          "notes": "Django PUT (update, app/urls/views.py:27, DRF default full update) has NO Rust handler - main.rs:838-843 wires get/patch/delete only; detail Django 200 full serializer + 403 guest gate 'You are not allowed to view this issue' (app/views/view/base.py:315-347) vs Rust {id,name} + same 403 string via guard_guest_access (routes/view.rs:54-59,341-347); patch Django 200 full-shape + 'view is locked'/'Only the owner of the view can update the view' 400s (base.py:349-369) vs Rust 200 {id} + 'Invalid name'/'Invalid access' 400s (view.rs:357-387); destroy Django ADMIN+creator gate + UserFavorite/UserRecentVisit cascade (base.py:371-404) vs Rust blind soft-delete 204 (view.rs:389-402); FE getViewIssues (view.service.ts:58) calls views/:pk/issues/ present in NEITHER Django (app/urls/views.py) NOR Rust (main.rs) - no entry per recipe 6"
+          "notes": "Django PUT (update, app/urls/views.py:27, DRF default full update) has NO Rust handler - main.rs:838-843 wires get/patch/delete only; detail Django 200 full serializer + 403 guest gate 'You are not allowed to view this issue' (app/views/view/base.py:315-347) vs Rust {id,name} + same 403 string via guard_guest_access (routes/view.rs:54-59,341-347); patch Django 200 full-shape + 'view is locked'/'Only the owner of the view can update the view' 400s (base.py:349-369) vs Rust 200 {id} + 'Invalid name'/'Invalid access' 400s (view.rs:357-387); destroy Django ADMIN+creator gate + UserFavorite/UserRecentVisit cascade (base.py:371-404) vs Rust blind soft-delete 204 (view.rs:389-402); FE getViewIssues (view.service.ts:58) calls views/:pk/issues/ present in NEITHER Django (app/urls/views.py) NOR Rust (main.rs) - no entry per recipe 6 | F3: PUT wired (shares PATCH core)."
         },
         {
           "methods": ["GET", "POST"],
@@ -3956,7 +3956,7 @@
           "fe_pages": [],
           "batch_task": "Batch L T4",
           "out_scope": false,
-          "notes": "Django serves GET+PUT+PATCH+DELETE (app/urls/views.py:41-47) but Rust wires GET ONLY (main.rs:849-851 get(detail_global); no patch_global/destroy_global exist in routes/view.rs) - PUT/PATCH/DELETE unhandled; detail Django 200 full serializer + recent_visited (app/views/view/base.py:108-118, no permission gate on retrieve) vs Rust 200 {id,name} + 404 'View not found' (view.rs:349-355,287-313); Django partial_update lock/owner 400s (base.py:86-106) and destroy ADMIN+owner gate + UserFavorite cascade (base.py:120-141) have no Rust counterpart; FE updateView(PATCH)/deleteView/getViewDetails (workspace.service.ts:240,248,264)"
+          "notes": "Django serves GET+PUT+PATCH+DELETE (app/urls/views.py:41-47) but Rust wires GET ONLY (main.rs:849-851 get(detail_global); no patch_global/destroy_global exist in routes/view.rs) - PUT/PATCH/DELETE unhandled; detail Django 200 full serializer + recent_visited (app/views/view/base.py:108-118, no permission gate on retrieve) vs Rust 200 {id,name} + 404 'View not found' (view.rs:349-355,287-313); Django partial_update lock/owner 400s (base.py:86-106) and destroy ADMIN+owner gate + UserFavorite cascade (base.py:120-141) have no Rust counterpart; FE updateView(PATCH)/deleteView/getViewDetails (workspace.service.ts:240,248,264) | F3: PUT+PATCH+DELETE wired via patch_global/destroy_global (ws scope); is_locked/owner + fav-cascade still TODO."
         },
         {
           "methods": ["GET"],
