@@ -150,30 +150,92 @@ pub struct PatchLabel {
     pub parent_id: Option<uuid::Uuid>,
 }
 
+/// One `LabelSerializer` row (`serializers/issue.py:365-371`: parent, name,
+/// color, id, project_id, workspace_id, sort_order — no description).
+fn label_json(
+    id: uuid::Uuid,
+    parent: Option<uuid::Uuid>,
+    name: &str,
+    color: &str,
+    project_id: Option<uuid::Uuid>,
+    workspace_id: uuid::Uuid,
+    sort_order: f64,
+) -> Value {
+    json!({
+        "id": id,
+        "parent": parent,
+        "name": name,
+        "color": color,
+        "project_id": project_id,
+        "workspace_id": workspace_id,
+        "sort_order": sort_order,
+    })
+}
+
+type LabelRow = (uuid::Uuid, Option<uuid::Uuid>, String, String, Option<uuid::Uuid>, uuid::Uuid, f64);
+
+/// Workspace+project member gate for safe label reads: any active project
+/// membership passes (Django `get_queryset` member filter +
+/// `ProjectBasePermission`), with the shared ws-admin fallback.
+async fn gate_label_read(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user, slug).await?;
+    Ok(project_gate_allows(member_role.is_some(), member_role.is_some(), ws_admin))
+}
+
+/// ADMIN-only gate for unsafe label writes (Django `@allow_permission([ROLE.ADMIN])`
+/// on create/partial_update/destroy).
+async fn gate_label_admin(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
+    let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(pool, user, slug).await?;
+    Ok(project_gate_allows(matches!(member_role, Some(20)), member_role.is_some(), ws_admin))
+}
+
 pub async fn detail(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::label::Label> = sqlx::query_as(
-        "SELECT id, name FROM labels WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    if !gate_label_read(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let row: Option<LabelRow> = sqlx::query_as(
+        "SELECT l.id, l.parent_id, l.name, l.color, l.project_id, l.workspace_id, l.sort_order FROM labels l JOIN workspaces w ON w.id = l.workspace_id WHERE l.id = $1 AND l.project_id = $2 AND w.slug = $3 AND l.deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
+    .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
     match row {
-        Some(l) => Ok((StatusCode::OK, Json(json!({"id": l.id, "name": l.name})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Label not found"})))),
+        Some((id, parent, name, color, pid, wsid, sort)) => {
+            Ok((StatusCode::OK, Json(label_json(id, parent, &name, &color, pid, wsid, sort))))
+        }
+        // Django `retrieve` miss → 404 (DRF `{"detail"}` normalized to
+        // `missing()` per repo rule; unifies the old "Label not found").
+        None => Ok(missing()),
     }
 }
 
 pub async fn patch(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchLabel>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_label_admin(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
@@ -202,23 +264,43 @@ pub async fn patch(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Label not found"}))));
+        return Ok(missing());
     }
-    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+    // Django `partial_update` (`label.py:81`) returns 200 `serializer.data`.
+    let row: Option<LabelRow> = sqlx::query_as(
+        "SELECT l.id, l.parent_id, l.name, l.color, l.project_id, l.workspace_id, l.sort_order FROM labels l WHERE l.id = $1 AND l.deleted_at IS NULL",
+    )
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some((id, parent, name, color, pid, wsid, sort)) => {
+            Ok((StatusCode::OK, Json(label_json(id, parent, &name, &color, pid, wsid, sort))))
+        }
+        None => Ok(missing()),
+    }
 }
 
 pub async fn destroy(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    sqlx::query(
+    if !gate_label_admin(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    // DRF `destroy` 404s on miss (`get_object`); the old blind 204 is fixed.
+    let n = sqlx::query(
         "UPDATE labels SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
     .execute(&st.pool)
-    .await?;
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 

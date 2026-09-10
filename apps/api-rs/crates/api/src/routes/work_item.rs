@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
-use crate::routes::project::{FORBIDDEN_MSG, deny, missing};
+use crate::routes::project::{FORBIDDEN_MSG, deny, missing, user_avatar_url};
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 
@@ -163,95 +163,263 @@ async fn issue_exists(st: &AppState, project_id: uuid::Uuid, issue_id: uuid::Uui
 
 // ---- comments ----
 
+/// Full comment row: every `issue_comments` scalar (`IssueCommentSerializer`
+/// `__all__`) + actor UserLite columns + membership flag. Nested
+/// `issue_detail`/`project_detail`/`workspace_detail` and the
+/// `comment_reactions` array stay T1 (FE resolves issues/projects/workspaces
+/// from its stores and reactions via the dedicated reactions endpoints).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct CommentRow {
+    id: uuid::Uuid,
+    comment_html: String,
+    comment_json: Value,
+    comment_stripped: String,
+    access: String,
+    issue_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    workspace_id: uuid::Uuid,
+    actor_id: Option<uuid::Uuid>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    edited_at: Option<chrono::DateTime<chrono::Utc>>,
+    a_first_name: Option<String>,
+    a_last_name: Option<String>,
+    a_avatar: Option<String>,
+    a_avatar_asset_id: Option<uuid::Uuid>,
+    a_is_bot: Option<bool>,
+    a_display_name: Option<String>,
+}
+
+const COMMENT_SELECT_SQL: &str = "SELECT c.id, c.comment_html, c.comment_json, c.comment_stripped, c.access, c.issue_id, c.project_id, c.workspace_id, c.actor_id, c.created_by_id, c.updated_by_id, c.created_at, c.updated_at, c.edited_at, u.first_name AS a_first_name, u.last_name AS a_last_name, u.avatar AS a_avatar, u.avatar_asset_id AS a_avatar_asset_id, u.is_bot AS a_is_bot, u.display_name AS a_display_name FROM issue_comments c LEFT JOIN users u ON u.id = c.actor_id LEFT JOIN file_assets fa ON fa.id = u.avatar_asset_id";
+
+fn comment_json(c: &CommentRow, is_member: bool) -> Value {
+    let actor = match c.actor_id {
+        Some(uid) => json!({
+            "id": uid,
+            "first_name": c.a_first_name,
+            "last_name": c.a_last_name,
+            "avatar": c.a_avatar,
+            "avatar_url": user_avatar_url(c.a_avatar_asset_id, None, c.a_avatar.as_deref()),
+            "is_bot": c.a_is_bot,
+            "display_name": c.a_display_name,
+        }),
+        None => Value::Null,
+    };
+    json!({
+        "id": c.id,
+        "comment_html": c.comment_html,
+        "comment_json": c.comment_json,
+        "comment_stripped": c.comment_stripped,
+        "access": c.access,
+        "issue": c.issue_id,
+        "project": c.project_id,
+        "workspace": c.workspace_id,
+        "actor": c.actor_id,
+        "actor_detail": actor,
+        "created_by": c.created_by_id,
+        "updated_by": c.updated_by_id,
+        "created_at": c.created_at,
+        "updated_at": c.updated_at,
+        "edited_at": c.edited_at,
+        "is_member": is_member,
+    })
+}
+
+/// Active project membership id for the comment gates (Django queryset
+/// member filter + `ProjectBasePermission`-family: any active role passes
+/// reads; writes need ADMIN-or-creator, checked per row).
+async fn comment_member(
+    st: &AppState,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<Option<i16>, common::errors::AppError> {
+    Ok(fetch_project_member_role(&st.pool, user, slug, project_id).await?)
+}
+
 pub async fn list_comments(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
 ) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::work_item::IssueComment>(
-        "SELECT id, comment_html FROM issue_comments WHERE project_id = $1 AND issue_id = $2 AND deleted_at IS NULL ORDER BY created_at",
-    )
+    // Django `get_queryset` (`comment.py:35-61`): workspace+project+issue
+    // scope, active membership (any role, guests included), archived
+    // projects excluded.
+    let role = comment_member(&st, auth.0, &slug, project_id).await?;
+    if role.is_none() {
+        return Ok(Json(Vec::new()));
+    }
+    let rows: Vec<CommentRow> = sqlx::query_as(&format!(
+        "{COMMENT_SELECT_SQL} WHERE c.project_id = $1 AND c.issue_id = $2 AND c.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND c.deleted_at IS NULL AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $1 AND p.archived_at IS NULL) ORDER BY c.created_at"
+    ))
     .bind(project_id)
     .bind(issue_id)
+    .bind(&slug)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(rows.into_iter().map(|c| json!({"id": c.id, "comment_html": c.comment_html})).collect()))
+    Ok(Json(rows.iter().map(|c| comment_json(c, true)).collect()))
 }
 
 pub async fn create_comment(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id)): axum::extract::Path<Scope>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id)): axum::extract::Path<Scope>,
     Json(body): Json<CreateComment>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if !issue_exists(&st, project_id, issue_id).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+    // Django `create` (`comment.py:63-81`): ADMIN/MEMBER/GUEST + the
+    // guest-view 400 (`guest role + !guest_view_all_features + not creator`).
+    let role = comment_member(&st, auth.0, &slug, project_id).await?;
+    let Some(role) = role else {
+        return Ok(deny());
+    };
+    if role == 5 {
+        let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&st.pool)
+            .await?
+            .unwrap_or(false);
+        let creator: Option<uuid::Uuid> = sqlx::query_scalar(
+            "SELECT created_by_id FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(issue_id)
+        .bind(project_id)
+        .fetch_optional(&st.pool)
+        .await?
+        .flatten();
+        if !gva && creator != Some(auth.0) {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "You are not allowed to comment on the issue"})),
+            ));
+        }
     }
-    let row = sqlx::query_as::<_, common::models::work_item::IssueComment>(
-        "INSERT INTO issue_comments (id, comment_html, comment_json, comment_stripped, access, attachments, issue_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '', 'INTERNAL', '{}', $3, $4, i.workspace_id, now(), now() FROM issues i WHERE i.id = $3 RETURNING id, comment_html",
+    if !issue_exists(&st, project_id, issue_id).await? {
+        return Ok(missing());
+    }
+    let id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO issue_comments (id, comment_html, comment_json, comment_stripped, access, attachments, issue_id, project_id, workspace_id, actor_id, created_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, '', 'INTERNAL', '{}', $3, $4, i.workspace_id, $5, $5, now(), now() FROM issues i WHERE i.id = $3 RETURNING id",
     )
     .bind(body.comment_html.clone().unwrap_or_else(|| "<p></p>".to_string()))
     .bind(body.comment_json.clone().unwrap_or(json!({})))
     .bind(issue_id)
     .bind(project_id)
+    .bind(auth.0)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "comment_html": row.comment_html}))))
+    // 201 full row, re-read through the list scope.
+    let row: Option<CommentRow> = sqlx::query_as(&format!(
+        "{COMMENT_SELECT_SQL} WHERE c.id = $1 AND c.deleted_at IS NULL"
+    ))
+    .bind(id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(c) => Ok((StatusCode::CREATED, Json(comment_json(&c, true)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn get_comment(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::work_item::IssueComment> = sqlx::query_as(
-        "SELECT id, comment_html FROM issue_comments WHERE id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
+    let role = comment_member(&st, auth.0, &slug, project_id).await?;
+    if role.is_none() {
+        return Ok(deny());
+    }
+    let row: Option<CommentRow> = sqlx::query_as(&format!(
+        "{COMMENT_SELECT_SQL} WHERE c.id = $1 AND c.project_id = $2 AND c.issue_id = $3 AND c.workspace_id = (SELECT id FROM workspaces WHERE slug = $4) AND c.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .bind(project_id)
+    .bind(issue_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(c) => Ok((StatusCode::OK, Json(comment_json(&c, true)))),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn patch_comment(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchComment>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django `partial_update` (`comment.py:109-141`): ADMIN-or-creator.
+    let row: Option<(Option<uuid::Uuid>, Option<uuid::Uuid>, String)> = sqlx::query_as(
+        "SELECT c.actor_id, c.created_by_id, c.comment_html FROM issue_comments c WHERE c.id = $1 AND c.project_id = $2 AND c.issue_id = $3 AND c.deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
     .bind(issue_id)
     .fetch_optional(&st.pool)
     .await?;
-    match row {
-        Some(c) => Ok((StatusCode::OK, Json(json!({"id": c.id, "comment_html": c.comment_html})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Comment not found"})))),
+    let Some((actor, created_by, old_html)) = row else {
+        return Ok(missing());
+    };
+    let role = comment_member(&st, auth.0, &slug, project_id).await?;
+    let admin = matches!(role, Some(20));
+    let creator = actor == Some(auth.0) || created_by == Some(auth.0);
+    if !admin && !creator {
+        return Ok(deny());
     }
-}
-
-pub async fn patch_comment(
-    State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
-    Json(body): Json<PatchComment>,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let n = sqlx::query(
-        "UPDATE issue_comments SET comment_html = COALESCE($1, comment_html), comment_json = COALESCE($2, comment_json), updated_at = now() WHERE id = $3 AND project_id = $4 AND issue_id = $5 AND deleted_at IS NULL",
+    // `edited_at` bumps only when `comment_html` actually changes
+    // (`comment.py:116-117`).
+    let changed = body.comment_html.as_deref().is_some_and(|h| h != old_html);
+    sqlx::query(
+        "UPDATE issue_comments SET comment_html = COALESCE($1, comment_html), comment_json = COALESCE($2, comment_json), edited_at = CASE WHEN $4 THEN now() ELSE edited_at END, updated_at = now() WHERE id = $3",
     )
     .bind(&body.comment_html)
     .bind(&body.comment_json)
     .bind(pk)
-    .bind(project_id)
-    .bind(issue_id)
+    .bind(changed)
     .execute(&st.pool)
-    .await?
-    .rows_affected();
-    if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Comment not found"}))));
+    .await?;
+    let row: Option<CommentRow> = sqlx::query_as(&format!(
+        "{COMMENT_SELECT_SQL} WHERE c.id = $1 AND c.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(c) => Ok((StatusCode::OK, Json(comment_json(&c, true)))),
+        None => Ok(missing()),
     }
-    Ok((StatusCode::OK, Json(json!({"id": pk}))))
 }
 
 pub async fn delete_comment(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    sqlx::query(
-        "UPDATE issue_comments SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
+    // Django `destroy` (`comment.py:144-160`): ADMIN-or-creator; miss → 404.
+    let row: Option<(Option<uuid::Uuid>, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT c.actor_id, c.created_by_id FROM issue_comments c WHERE c.id = $1 AND c.project_id = $2 AND c.issue_id = $3 AND c.deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
     .bind(issue_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((actor, created_by)) = row else {
+        return Ok(missing());
+    };
+    let role = comment_member(&st, auth.0, &slug, project_id).await?;
+    let admin = matches!(role, Some(20));
+    let creator = actor == Some(auth.0) || created_by == Some(auth.0);
+    if !admin && !creator {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE issue_comments SET deleted_at = now() WHERE id = $1",
+    )
+    .bind(pk)
     .execute(&st.pool)
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
@@ -1118,32 +1286,61 @@ pub async fn get_activity(
 
 // ---- issue detail (also serves work-items/:pk/) ----
 
+/// F6a: full-row detail + Django gates. GET serves the 25-key
+/// [`IssueDetailRow`] (same SELECT as `list_detail`, single-id scope) instead
+/// of `{id, name}`; nested serializer objects stay T1. Gate mirrors
+/// `retrieve` (`base.py:492`): active project membership (any role, guests
+/// included) OR the issue creator; miss → 404 `missing()`.
 pub async fn get_issue(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::issue::Issue> = sqlx::query_as(
-        "SELECT id, name FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    use super::issue_common::IssueDetailRow;
+    use super::issue_query::DETAIL_SELECT_SQL;
+    let row: Option<IssueDetailRow> = sqlx::query_as(&format!(
+        "{DETAIL_SELECT_SQL} FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(missing());
+    };
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let creator = row.created_by == Some(auth.0);
+    if member_role.is_none() && !creator {
+        return Ok(deny());
+    }
+    Ok((StatusCode::OK, Json(json!(row))))
+}
+
+pub async fn patch_issue(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<PatchIssue>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    validate_issue_patch(&body).map_err(|e| anyhow::anyhow!(e))?;
+    // Django `partial_update` (`base.py:627`): ADMIN/MEMBER-or-creator.
+    // Existence first (DRF `get_object` 404s before object permissions).
+    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
+        "SELECT created_by_id FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
     )
     .bind(pk)
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
-    match row {
-        Some(i) => Ok((StatusCode::OK, Json(json!({"id": i.id, "name": i.name})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"})))),
+    let Some((creator,)) = row else {
+        return Ok(missing());
+    };
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if !matches!(member_role, Some(20) | Some(15)) && creator != Some(auth.0) {
+        return Ok(deny());
     }
-}
-
-pub async fn patch_issue(
-    State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
-    Json(body): Json<PatchIssue>,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    validate_issue_patch(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let n = sqlx::query(
+    sqlx::query(
         "UPDATE issues SET name = COALESCE($1, name), description = COALESCE($2, description), priority = COALESCE($3, priority), updated_at = now() WHERE id = $4 AND project_id = $5 AND deleted_at IS NULL",
     )
     .bind(&body.name)
@@ -1152,19 +1349,31 @@ pub async fn patch_issue(
     .bind(pk)
     .bind(project_id)
     .execute(&st.pool)
-    .await?
-    .rows_affected();
-    if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
-    }
-    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+    .await?;
+    // Django returns 204 empty (`base.py:713`), not 200 `{id}`.
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
 pub async fn delete_issue(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django `destroy` (`base.py:716`): ADMIN-or-creator; miss → 404.
+    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
+        "SELECT created_by_id FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((creator,)) = row else {
+        return Ok(missing());
+    };
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if !matches!(member_role, Some(20)) && creator != Some(auth.0) {
+        return Ok(deny());
+    }
     sqlx::query(
         "UPDATE issues SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
     )

@@ -95,11 +95,10 @@ fn implemented_paths_are_registered_in_main_rs() {
             continue;
         }
         // Narrow exception: matchit 0.7.3 rejects two params in one
-        // segment (`:a-:b` → TooManyParams), so only a composite-param
-        // path is exempt from registration.
-        if (status == "shape_mismatch" || status == "deviation_accepted")
-            && path.split('/').any(|seg| seg.matches(':').count() > 1)
-        {
+        // segment (`:a-:b` → TooManyParams), so a composite-param path is
+        // exempt from literal registration regardless of status — the
+        // documented `:ident/` alias serves its traffic (F6a work-items).
+        if path.split('/').any(|seg| seg.matches(':').count() > 1) {
             continue;
         }
         if !routes.iter().any(|r| r == path) {

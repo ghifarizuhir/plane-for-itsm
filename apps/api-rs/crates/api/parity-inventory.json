@@ -95,7 +95,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/work-items/:project_identifier-:issue_identifier/",
           "django_source": "app/urls/issue.py:281",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::work_item::get_by_identifier",
           "fe_evidence": [
             {
@@ -104,9 +104,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T4",
+          "batch_task": "Batch F6a",
           "out_scope": false,
-          "notes": "canonical Django path work-items/<project_identifier>-<issue_identifier>/ (issue.py:281) served by get_by_identifier via the :ident/ alias (main.rs:1249) - axum 0.7/matchit 0.7.3 cannot register :a-:b in one segment (TooManyParams, tree.rs:661; documented work_item.rs:1210); GET 200 detail; 400 'Invalid issue identifier' strict-int (base.py:1202-1215); project .get() identifier__iexact miss Django 500 -> rust missing() 404 sane mapping (base.py:1218); 403 'You are not allowed to view this issue' project-member gate (base.py:1220-1230); FE retrieveWithIdentifier (issue.service.ts:439)"
+          "notes": "canonical Django path work-items/<project_identifier>-<issue_identifier>/ (issue.py:281) served by get_by_identifier via the :ident/ alias (main.rs:1249) - axum 0.7/matchit 0.7.3 cannot register :a-:b in one segment (TooManyParams, tree.rs:661; documented work_item.rs:1210); GET 200 detail; 400 'Invalid issue identifier' strict-int (base.py:1202-1215); project .get() identifier__iexact miss Django 500 -> rust missing() 404 sane mapping (base.py:1218); 403 'You are not allowed to view this issue' project-member gate (base.py:1220-1230); FE retrieveWithIdentifier (issue.service.ts:439) | F6a: inherits get_issue full-row upgrade via delegation; alias-served traffic verified."
         },
         {
           "methods": ["GET"],
@@ -207,7 +207,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T1",
           "out_scope": false,
-          "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716)"
+          "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716) | F6a: GET full 25-key IssueDetailRow (nested objects stay T1); PATCH 200->204 + AM/creator gates; DELETE ADMIN/creator gate + miss 404; miss bodies unified to missing()."
         },
         {
           "methods": ["GET", "POST"],
@@ -249,7 +249,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T2",
           "out_scope": false,
-          "notes": "GET returns {id,name} only (label.rs:166) vs LabelSerializer 7 keys (serializers/issue.py:365-371); PATCH 200 {id} (label.rs:207) vs 200 serializer.data (label.py:81); no permission gates (label.rs:153,171,210) vs ProjectBasePermission + ADMIN (label.py:26,58,85)"
+          "notes": "GET returns {id,name} only (label.rs:166) vs LabelSerializer 7 keys (serializers/issue.py:365-371); PATCH 200 {id} (label.rs:207) vs 200 serializer.data (label.py:81); no permission gates (label.rs:153,171,210) vs ProjectBasePermission + ADMIN (label.py:26,58,85) | F6a: GET 7-key LabelSerializer shape + member gate + slug scope; PATCH ADMIN gate + 200 full row; DELETE ADMIN gate + miss 404; miss unified to missing()."
         },
         {
           "methods": ["DELETE"],
@@ -321,7 +321,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T4",
           "out_scope": false,
-          "notes": "GET returns 2-key {id,comment_html} rows (work_item.rs:178) vs IssueCommentSerializer full-detail fields=__all__ + actor/issue/project/workspace details (serializers/issue.py:697-716); POST 201 {id,comment_html} (work_item.rs:199) vs 201 serializer.data (comment.py:106); _auth-only no gates (work_item.rs:167,183) vs member queryset gate (comment.py:35-61) + ADMIN/MEMBER/GUEST create gate with guest-view 400 'You are not allowed to comment on the issue' (comment.py:63-81)"
+          "notes": "GET returns 2-key {id,comment_html} rows (work_item.rs:178) vs IssueCommentSerializer full-detail fields=__all__ + actor/issue/project/workspace details (serializers/issue.py:697-716); POST 201 {id,comment_html} (work_item.rs:199) vs 201 serializer.data (comment.py:106); _auth-only no gates (work_item.rs:167,183) vs member queryset gate (comment.py:35-61) + ADMIN/MEMBER/GUEST create gate with guest-view 400 'You are not allowed to comment on the issue' (comment.py:63-81) | F6a: full scalar rows + actor_detail + is_member; AMG + guest-400 rule on create; member gate on list; miss unified."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
@@ -342,7 +342,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T4",
           "out_scope": false,
-          "notes": "GET 200 {id,comment_html} (work_item.rs:216) vs full IssueCommentSerializer.data; PATCH 200 {id} (work_item.rs:241) vs 200 serializer.data (comment.py:141), no edited_at bump (comment.py:116-117); _auth-only no gates (work_item.rs:203,222,245) vs ADMIN+creator allow_permission (comment.py:109,144); DELETE 204 match on status (comment.py:160 vs work_item.rs:257)"
+          "notes": "GET 200 {id,comment_html} (work_item.rs:216) vs full IssueCommentSerializer.data; PATCH 200 {id} (work_item.rs:241) vs 200 serializer.data (comment.py:141), no edited_at bump (comment.py:116-117); _auth-only no gates (work_item.rs:203,222,245) vs ADMIN+creator allow_permission (comment.py:109,144); DELETE 204 match on status (comment.py:160 vs work_item.rs:257) | F6a: full row + ADMIN/creator gates; edited_at bump on html change; DELETE miss 404."
         },
         {
           "methods": ["GET", "POST"],
@@ -354,7 +354,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T5",
           "out_scope": false,
-          "notes": "verified IssueSubscriberViewSet.list (subscriber.py:52-57) vs subscribers_list (subscribe.rs:292-329): 200 list of ProjectMemberLiteSerializer rows (project.py:237-244 keys member/id/is_subscribed) matches subscriber_member_json (subscribe.rs:68-90, UserLite user.py:141-153); safe-method ProjectEntityPermission gate (subscriber.py:20) matches role.is_none deny incl. GUEST reads (subscribe.rs:301-304); is_subscribed computed as EXISTS per member (subscribe.rs:311-313) while Django passes no annotation (subscriber.py:52-57); Django also maps POST create (DRF ModelViewSet default + perform_create subscriber.py:37-41, issue.py:177); no Rust handler → POST 405 | T4-remainder: POST create wired (subscriber_create: AM gate, 201 minimal row; dup/FK maps to Django 400s)."
+          "notes": "verified IssueSubscriberViewSet.list (subscriber.py:52-57) vs subscribers_list (subscribe.rs:292-329): 200 list of ProjectMemberLiteSerializer rows (project.py:237-244 keys member/id/is_subscribed) matches subscriber_member_json (subscribe.rs:68-90, UserLite user.py:141-153); safe-method ProjectEntityPermission gate (subscriber.py:20) matches role.is_none deny incl. GUEST reads (subscribe.rs:301-304); is_subscribed computed as EXISTS per member (subscribe.rs:311-313) while Django passes no annotation (subscriber.py:52-57); Django also maps POST create (DRF ModelViewSet default + perform_create subscriber.py:37-41, issue.py:177); no Rust handler → POST 405 | T4-remainder: POST create wired (subscriber_create: AM gate, 201 minimal row; dup/FK maps to Django 400s). | F6a: verified POST create + list; row minimal vs __all__ stays T1."
         },
         {
           "methods": ["DELETE"],
@@ -553,7 +553,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/projects/:project_id/archived-issues/",
           "django_source": "app/urls/issue.py:223",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::issue_query::archived_list",
           "fe_evidence": [
             {
@@ -562,7 +562,7 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch G T8",
+          "batch_task": "Batch F6a",
           "out_scope": false,
           "notes": "flat path verified IssueArchiveViewSet.list (archive.py:97-138,210-218) vs archived_list (issue_query.rs:2684-2799): ADMIN/MEMBER gate (archive.py:106 vs issue_query.rs:2696-2700); group_by==sub_group_by 400 byte-exact (archive.py:143-147 vs issue_query.rs:2472-2488,2701-2703); invalid group_by 400 {detail} (paginator.py:690-699 vs issue_query.rs:2516-2533,2717-2719); MISMATCH: truthy group_by Django 200 grouped-dict via GroupedOffsetPaginator/SubGroupedOffsetPaginator (archive.py:148-209) vs Rust 400 {error: Grouped pagination is not supported} (issue_query.rs:2545,2720-2727); FE getArchivedIssues (issue_archive.service.ts:22-24) called only from archived/issue.store.ts:111,152 (store, not a page) | F5: grouped/sub-grouped dict 200 via shared grouped core (two-phase scan+page, Django envelope keys)."
         },
