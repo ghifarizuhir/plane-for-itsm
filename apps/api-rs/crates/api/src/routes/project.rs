@@ -1029,6 +1029,30 @@ pub(crate) fn map_fav_error(rows_deleted: u64) -> StatusCode {
 /// two agree whenever slug matches the project's workspace. Integrity-class
 /// DB errors (`23505` unique, `23503` FK on unknown project id) → 400 like
 /// Django's blanket `IntegrityError` mapping; other DB errors → 500 via `?`.
+/// GET `/api/workspaces/:slug/user-favorite-projects/` — the DRF-default
+/// `list` (`urls/project.py:102-105`) over `ProjectFavoritesViewSet.get_queryset`
+/// (user+slug-scoped rows). Same 500-quirk + 200-superset rationale as
+/// `cycle::fav_list`; shape `[{id, project}]`, scoped by workspace slug
+/// (this collection has no project_id). Serves the FE `getUserProjectFavorites`
+/// caller (`project.service.ts:163-164`), which currently gets 405.
+pub async fn fav_list(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Result<Json<Value>, common::errors::AppError> {
+    let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT f.id, f.entity_identifier FROM user_favorites f JOIN workspaces w ON w.id = f.workspace_id WHERE w.slug = $1 AND f.entity_type = 'project' AND f.deleted_at IS NULL ORDER BY f.created_at DESC",
+    )
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok(Json(json!(
+        rows.into_iter()
+            .map(|(id, project)| json!({"id": id, "project": project}))
+            .collect::<Vec<_>>()
+    )))
+}
+
 pub async fn fav_add(
     State(st): State<AppState>,
     auth: AuthUser,

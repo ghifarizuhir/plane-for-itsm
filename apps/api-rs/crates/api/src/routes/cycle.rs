@@ -1584,6 +1584,30 @@ pub async fn date_check(
 // E2e — favorite cycles.
 // ============================================================================
 
+/// GET `.../user-favorite-cycles/` — the DRF-default `list` (`urls/cycle.py:62-65`)
+/// over `CycleFavoriteViewSet.get_queryset` (user+slug-scoped `UserFavorite`
+/// rows). Django has no `serializer_class` for this viewset, so the real
+/// Django GET 500s on `get_serializer` (same quirk as fav-views, Batch N);
+/// Rust returns 200 `[{id, cycle}]` like `view::list_favorites` — a sane
+/// superset. User/slug scoping gap documented with the views twin.
+pub async fn fav_list(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    Path((_slug, pid)): Path<(String, uuid::Uuid)>,
+) -> Result<Json<Value>, common::errors::AppError> {
+    let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND entity_type = 'cycle' AND deleted_at IS NULL ORDER BY created_at DESC",
+    )
+    .bind(pid)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok(Json(json!(
+        rows.into_iter()
+            .map(|(id, cycle)| json!({"id": id, "cycle": cycle}))
+            .collect::<Vec<_>>()
+    )))
+}
+
 pub async fn fav_create(
     State(st): State<AppState>,
     auth: AuthUser,

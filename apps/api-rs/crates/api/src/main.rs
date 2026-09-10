@@ -98,11 +98,12 @@ async fn main() {
             get(routes::project::check_identifier).delete(routes::project::delete_identifier),
         )
         // Parity with `ProjectFavoritesViewSet` (`views/project/base.py:498-532`,
-        // `urls/project.py:102-111`): POST-only collection + DELETE-only detail.
-        // NO GET — Django defines no `serializer_class` for this viewset.
+        // `urls/project.py:102-111`). GET is the DRF-default list (200
+        // superset `[{id, project}]`, Django 500s for want of a
+        // `serializer_class`); serves FE `getUserProjectFavorites`.
         .route(
             "/api/workspaces/:slug/user-favorite-projects/",
-            post(routes::project::fav_add),
+            get(routes::project::fav_list).post(routes::project::fav_add),
         )
         .route(
             "/api/workspaces/:slug/user-favorite-projects/:project_id/",
@@ -468,11 +469,12 @@ async fn main() {
         // Parity with `CycleFavoriteViewSet.create/destroy`
         // (`views/cycle/base.py:559-591`, `urls/cycle.py:61-70`): POST 204
         // (dup → 400 `{"error":"The payload is not valid"}`, no existence
-        // check) + DELETE 204 (miss → 404). Gate ADMIN/MEMBER. NO GET —
-        // the E2 contract wires POST+DELETE only.
+        // check) + DELETE 204 (miss → 404). Gate ADMIN/MEMBER. GET is the
+        // DRF-default list (200 superset `[{id, cycle}]`, Django 500s —
+        // see `cycle::fav_list`).
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/",
-            post(routes::cycle::fav_create),
+            get(routes::cycle::fav_list).post(routes::cycle::fav_create),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/:cycle_id/",
@@ -599,11 +601,11 @@ async fn main() {
         // (`views/module/base.py:791-822`, `urls/module.py:75-84`): POST 204
         // (dup → 400 `{"error":"The payload is not valid"}`, NO
         // module-existence check) + DELETE 204 (miss → 404). Gate Lite (any
-        // active member; DRF `{"detail": ...}` deny). NO GET — the E3
-        // contract wires POST+DELETE only.
+        // active member; DRF `{"detail": ...}` deny). GET is the DRF-default
+        // list (200 superset `[{id, module}]`, Django 500s).
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/",
-            post(routes::module::fav_create),
+            get(routes::module::fav_list).post(routes::module::fav_create),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/:module_id/",

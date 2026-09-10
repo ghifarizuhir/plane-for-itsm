@@ -2346,6 +2346,28 @@ pub async fn link_destroy(
 // E3d — favorite modules.
 // ============================================================================
 
+/// GET `.../user-favorite-modules/` — the DRF-default `list`
+/// (`urls/module.py:76-79`) over `ModuleFavoriteViewSet.get_queryset`.
+/// Same 500-quirk + 200-superset rationale as `cycle::fav_list`
+/// (no `serializer_class` on the viewset); shape `[{id, module}]`.
+pub async fn fav_list(
+    State(st): State<AppState>,
+    _auth: AuthUser,
+    Path((_slug, pid)): Path<(String, uuid::Uuid)>,
+) -> Result<Json<Value>, common::errors::AppError> {
+    let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND entity_type = 'module' AND deleted_at IS NULL ORDER BY created_at DESC",
+    )
+    .bind(pid)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok(Json(json!(
+        rows.into_iter()
+            .map(|(id, module)| json!({"id": id, "module": module}))
+            .collect::<Vec<_>>()
+    )))
+}
+
 pub async fn fav_create(
     State(st): State<AppState>,
     auth: AuthUser,
