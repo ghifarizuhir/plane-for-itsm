@@ -779,7 +779,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
-          "notes": "list 200 EstimateReadSerializer (Estimate __all__ + points[], serializers/estimate.py:35-41) vs Rust [{id,name}] (estimate.rs:87-97); create 200 (base.py:101) vs Rust 201 (estimate.rs:133); Django nested body {estimate,estimate_points} (base.py:65-76) vs Rust flat {name,description,type} (estimate.rs:17-23); dup name Django 500 via estimate_unique_name_project_when_deleted_at_null (models/estimate.py:30-36) vs Rust 409 (estimate.rs:115-120); ProjectEntityPermission GET any-member/write ADMIN+MEMBER (permissions/project.py:88-116) vs Rust auth-only (estimate.rs:82-105)"
+          "notes": "list 200 EstimateReadSerializer (Estimate __all__ + points[], serializers/estimate.py:35-41) vs Rust [{id,name}] (estimate.rs:87-97); create 200 (base.py:101) vs Rust 201 (estimate.rs:133); Django nested body {estimate,estimate_points} (base.py:65-76) vs Rust flat {name,description,type} (estimate.rs:17-23); dup name Django 500 via estimate_unique_name_project_when_deleted_at_null (models/estimate.py:30-36) vs Rust 409 (estimate.rs:115-120); ProjectEntityPermission GET any-member/write ADMIN+MEMBER (permissions/project.py:88-116) vs Rust auth-only (estimate.rs:82-105) | F2: create 201->200 (base.py:101)."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
@@ -817,7 +817,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
-          "notes": "create 200 EstimatePointSerializer __all__ (base.py:178-179, serializers/estimate.py:20-32) vs Rust 201 {id,key,value} (estimate.rs:163-166); 400 'Key and value are required' (base.py:157-161) + 404 'Estimate not found' (base.py:168-172) mirrored (estimate.rs:69-80,144-152); @allow_permission ADMIN/MEMBER (base.py:154) vs Rust auth-only (estimate.rs:136-141)"
+          "notes": "create 200 EstimatePointSerializer __all__ (base.py:178-179, serializers/estimate.py:20-32) vs Rust 201 {id,key,value} (estimate.rs:163-166); 400 'Key and value are required' (base.py:157-161) + 404 'Estimate not found' (base.py:168-172) mirrored (estimate.rs:69-80,144-152); @allow_permission ADMIN/MEMBER (base.py:154) vs Rust auth-only (estimate.rs:136-141) | F2: create 201->200 (base.py:178-179)."
         },
         {
           "methods": ["PATCH", "DELETE"],
@@ -834,7 +834,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T1",
           "out_scope": false,
-          "notes": "partial_update 200 serializer.data (base.py:190-194) vs Rust 200 {id} (estimate.rs:320); destroy 200 updated-points array + key rearrange + issue_activity (base.py:241-268) vs Rust 204 + new_estimate_id re-point only (estimate.rs:334-351); Rust destroy never 404s vs Django 404 'Estimate point not found' (base.py:248-252); Rust also serves GET (main.rs:710) where Django 405 (superset); ADMIN/MEMBER gate (base.py:181,196) vs Rust auth-only | F1-grup3: destroy miss check added (404 Estimate point not found verbatim, checked before remap); 200-array + key rearrange deferred to F2/F6."
+          "notes": "partial_update 200 serializer.data (base.py:190-194) vs Rust 200 {id} (estimate.rs:320); destroy 200 updated-points array + key rearrange + issue_activity (base.py:241-268) vs Rust 204 + new_estimate_id re-point only (estimate.rs:334-351); Rust destroy never 404s vs Django 404 'Estimate point not found' (base.py:248-252); Rust also serves GET (main.rs:710) where Django 405 (superset); ADMIN/MEMBER gate (base.py:181,196) vs Rust auth-only | F1-grup3: destroy miss check added (404 Estimate point not found verbatim, checked before remap); 200-array + key rearrange deferred to F2/F6. | F2: destroy 204->200 updated-points array + key rearrange (base.py:254-268); rows minimal-shape, full serializer still T1."
         }
       ]
     },
@@ -1258,7 +1258,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T2",
           "out_scope": false,
-          "notes": "verified mark_read POST sets read_at=now (base.py:168-174) / mark_unread DELETE clears read_at (base.py:176-182), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle read_at (notification.rs:122-142) via mark_read/mark_unread (notification.rs:144-166, main.rs:1100-1101) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:168,176) vs rust query-scoped; static route registered before :pk/ (main.rs:1100-1101 vs 1118) so no :pk shadowing (members/leave/ precedent)"
+          "notes": "verified mark_read POST sets read_at=now (base.py:168-174) / mark_unread DELETE clears read_at (base.py:176-182), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle read_at (notification.rs:122-142) via mark_read/mark_unread (notification.rs:144-166, main.rs:1100-1101) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:168,176) vs rust query-scoped; static route registered before :pk/ (main.rs:1100-1101 vs 1118) so no :pk shadowing (members/leave/ precedent) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1."
         },
         {
           "methods": ["POST", "DELETE"],
@@ -1279,7 +1279,7 @@
           "fe_pages": [],
           "batch_task": "Batch J T2",
           "out_scope": false,
-          "notes": "verified archive POST sets archived_at=now (base.py:184-190) / unarchive DELETE clears (base.py:192-198), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle archived_at via archive/unarchive (notification.rs:168-190, main.rs:1104-1105) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:184,192) vs rust query-scoped; static route before :pk/ (main.rs:1104-1105 vs 1118)"
+          "notes": "verified archive POST sets archived_at=now (base.py:184-190) / unarchive DELETE clears (base.py:192-198), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle archived_at via archive/unarchive (notification.rs:168-190, main.rs:1104-1105) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:184,192) vs rust query-scoped; static route before :pk/ (main.rs:1104-1105 vs 1118) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1."
         },
         {
           "methods": ["GET"],
@@ -3650,7 +3650,7 @@
           "fe_pages": [],
           "batch_task": "Batch L T1",
           "out_scope": false,
-          "notes": "GET Django paginated IntakeIssueSerializer list (app/views/intake/base.py:222-226) + 404 {'error': 'Intake not found'} with no intake (app/views/intake/base.py:179-181) + status filter/order_by/guest scoping (app/views/intake/base.py:199-221) vs Rust 200 plain array [{id,status}] (routes/intake.rs:120-136); POST Django 200 full IntakeIssueDetailSerializer (app/views/intake/base.py:329-330) vs Rust 201 {id,status,issue_id} (routes/intake.rs:215-218); 'Name is required'/'Invalid priority' 400s match both (app/views/intake/base.py:230-241 vs validate_issue_create routes/intake.rs:56-66); triage-state lookup-or-create both (app/views/intake/base.py:246-256 vs routes/intake.rs:165-182); Django ADMIN/MEMBER/GUEST gate (app/views/intake/base.py:177,228) vs Rust auth-only; wired main.rs:745-746; FE grep 'intake-issues/' -> 0 hits (FE uses inbox-issues alias)"
+          "notes": "GET Django paginated IntakeIssueSerializer list (app/views/intake/base.py:222-226) + 404 {'error': 'Intake not found'} with no intake (app/views/intake/base.py:179-181) + status filter/order_by/guest scoping (app/views/intake/base.py:199-221) vs Rust 200 plain array [{id,status}] (routes/intake.rs:120-136); POST Django 200 full IntakeIssueDetailSerializer (app/views/intake/base.py:329-330) vs Rust 201 {id,status,issue_id} (routes/intake.rs:215-218); 'Name is required'/'Invalid priority' 400s match both (app/views/intake/base.py:230-241 vs validate_issue_create routes/intake.rs:56-66); triage-state lookup-or-create both (app/views/intake/base.py:246-256 vs routes/intake.rs:165-182); Django ADMIN/MEMBER/GUEST gate (app/views/intake/base.py:177,228) vs Rust auth-only; wired main.rs:745-746; FE grep 'intake-issues/' -> 0 hits (FE uses inbox-issues alias) | F2: POST create 201->200 (intake/base.py:330)."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
@@ -3800,7 +3800,7 @@
           "fe_pages": [],
           "batch_task": "Batch L T3",
           "out_scope": false,
-          "notes": "GET Django 200 full StateSerializer list (9 keys + per-group computed 'order', app/views/state/base.py:77-102, serializer app/serializers/state.py:12-30) + 'grouped=true' dict mode (base.py:91-100), triage excluded via get_queryset is_triage=False (base.py:39) vs Rust 200 [{id,name,group}] ordered by sequence, no grouped/order keys, no triage filter (routes/state.rs:56-76); POST Django 200 full shape (base.py:47-52) + dup-name 400 {'name': 'The state name is already taken'} (base.py:54-59) vs Rust 201 StateOut{id,name,group} (routes/state.rs:78-102) with no dup-name guard (validate_create covers name/group/color only, state.rs:37-54; failures -> 500 via anyhow AppError, common errors.rs:19); gates Django list ADMIN/MEMBER/GUEST (base.py:77) + create ADMIN (base.py:46) vs Rust auth-only (_auth unused, state.rs:56-83); wired main.rs:625-627; FE getStates/createState (project-state.service.ts:19-25,35-41)"
+          "notes": "GET Django 200 full StateSerializer list (9 keys + per-group computed 'order', app/views/state/base.py:77-102, serializer app/serializers/state.py:12-30) + 'grouped=true' dict mode (base.py:91-100), triage excluded via get_queryset is_triage=False (base.py:39) vs Rust 200 [{id,name,group}] ordered by sequence, no grouped/order keys, no triage filter (routes/state.rs:56-76); POST Django 200 full shape (base.py:47-52) + dup-name 400 {'name': 'The state name is already taken'} (base.py:54-59) vs Rust 201 StateOut{id,name,group} (routes/state.rs:78-102) with no dup-name guard (validate_create covers name/group/color only, state.rs:37-54; failures -> 500 via anyhow AppError, common errors.rs:19); gates Django list ADMIN/MEMBER/GUEST (base.py:77) + create ADMIN (base.py:46) vs Rust auth-only (_auth unused, state.rs:56-83); wired main.rs:625-627; FE getStates/createState (project-state.service.ts:19-25,35-41) | F2: POST create 201->200 (state/base.py:146)."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],

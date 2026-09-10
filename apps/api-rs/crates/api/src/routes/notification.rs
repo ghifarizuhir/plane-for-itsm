@@ -144,49 +144,66 @@ async fn toggle(
 pub async fn mark_read(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
-    if !toggle(&st, &_slug, receiver, pk, "read_at", true).await? {
+    if !toggle(&st, &slug, receiver, pk, "read_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+    // Django `mark_read` (`base.py:168-174`) returns the 200 serializer row
+    // (subset shape per file precedent); re-read through the GET twin's scope.
+    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
 }
 
 pub async fn mark_unread(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
-    if !toggle(&st, &_slug, receiver, pk, "read_at", false).await? {
+    if !toggle(&st, &slug, receiver, pk, "read_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+    // Django `mark_unread` (`base.py:176-182`) returns the 200 serializer row.
+    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
 }
 
 pub async fn archive(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
-    if !toggle(&st, &_slug, receiver, pk, "archived_at", true).await? {
+    if !toggle(&st, &slug, receiver, pk, "archived_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+    // Django `archive` (`base.py:184-190`) returns the 200 serializer row.
+    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
 }
 
 pub async fn unarchive(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
-    if !toggle(&st, &_slug, receiver, pk, "archived_at", false).await? {
+    if !toggle(&st, &slug, receiver, pk, "archived_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+    // Django `unarchive` (`base.py:192-198`) returns the 200 serializer row.
+    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+    }
 }
 
 /// Extracts ONLY `snoozed_till` as a string from a PATCH body, mirroring

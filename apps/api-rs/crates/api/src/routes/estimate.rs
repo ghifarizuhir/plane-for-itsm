@@ -130,7 +130,8 @@ pub async fn create(
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "name": row.name}))))
+    // Django `create` (`base.py:101`) returns 200 (not 201).
+    Ok((StatusCode::OK, Json(json!({"id": row.id, "name": row.name}))))
 }
 
 pub async fn create_point(
@@ -160,8 +161,9 @@ pub async fn create_point(
     .bind(body.description.clone().unwrap_or_default())
     .fetch_one(&st.pool)
     .await?;
+    // Django `create` (`base.py:178-179`) returns 200 (not 201).
     Ok((
-        StatusCode::CREATED,
+        StatusCode::OK,
         Json(json!({"id": row.id, "key": row.key, "value": row.value})),
     ))
 }
@@ -346,14 +348,14 @@ pub async fn destroy_point(
     // and misses with 404 `{"error": "Estimate point not found"}`. Rust checks
     // FIRST so a miss has no destructive side effects (sane-mapping precedent);
     // the miss string itself is Django-verbatim.
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimate_points WHERE id = $1 AND estimate_id = $2)")
+    let old_key: Option<i32> = sqlx::query_scalar("SELECT key FROM estimate_points WHERE id = $1 AND estimate_id = $2")
         .bind(point_id)
         .bind(estimate_id)
-        .fetch_one(&st.pool)
+        .fetch_optional(&st.pool)
         .await?;
-    if !exists {
+    let Some(old_key) = old_key else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate point not found"}))));
-    }
+    };
     let new_point = body.get("new_estimate_id").and_then(|v| v.as_str()).and_then(
         |s| uuid::Uuid::parse_str(s).ok(),
     );
@@ -362,12 +364,31 @@ pub async fn destroy_point(
         .bind(point_id)
         .execute(&st.pool)
         .await?;
+    // Key rearrange (`base.py:254-261`): every sibling above the deleted key
+    // shifts down one. Django `bulk_update`s then returns the updated set.
+    sqlx::query("UPDATE estimate_points SET key = key - 1, updated_at = now() WHERE estimate_id = $1 AND key > $2")
+        .bind(estimate_id)
+        .bind(old_key)
+        .execute(&st.pool)
+        .await?;
     sqlx::query("DELETE FROM estimate_points WHERE id = $1 AND estimate_id = $2")
         .bind(point_id)
         .bind(estimate_id)
         .execute(&st.pool)
         .await?;
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+    // Django `destroy` (`base.py:265-268`) returns 200 with the updated-points
+    // array (minimal {id,key,value} rows; full serializer remains T1).
+    let rows: Vec<common::models::estimate::EstimatePoint> = sqlx::query_as(
+        "SELECT id, key, value FROM estimate_points WHERE estimate_id = $1 AND key >= $2 ORDER BY key ASC",
+    )
+    .bind(estimate_id)
+    .bind(old_key)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(|r| json!({"id": r.id, "key": r.key, "value": r.value})).collect::<Vec<_>>())),
+    ))
 }
 
 /// Empty-body helper for `project_estimates` below, mirroring

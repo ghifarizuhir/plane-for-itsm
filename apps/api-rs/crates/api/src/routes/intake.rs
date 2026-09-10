@@ -212,8 +212,9 @@ pub async fn create_issue(
     .bind(workspace_id)
     .fetch_one(&st.pool)
     .await?;
+    // Django `create` (`intake/base.py:330`) returns 200 (not 201).
     Ok((
-        StatusCode::CREATED,
+        StatusCode::OK,
         Json(json!({"id": row.id, "status": row.status, "issue_id": issue_id})),
     ))
 }

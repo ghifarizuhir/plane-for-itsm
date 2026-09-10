@@ -91,8 +91,9 @@ pub async fn create(
     .bind(project_id)
     .fetch_one(&st.pool)
     .await?;
+    // Django `create` (`state/base.py:146`) returns 200 (not 201).
     Ok((
-        StatusCode::CREATED,
+        StatusCode::OK,
         Json(StateOut {
             id: row.id,
             name: row.name,
