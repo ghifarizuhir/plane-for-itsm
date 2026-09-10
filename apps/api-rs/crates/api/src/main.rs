@@ -56,6 +56,7 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/",
             get(routes::workspace::detail)
+                .put(routes::workspace::put_workspace)
                 .patch(routes::workspace::patch)
                 .delete(routes::workspace::destroy),
         )

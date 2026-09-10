@@ -457,7 +457,7 @@ fn opt_uuid(u: &Option<uuid::Uuid>) -> Value {
 // ============================================================================
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct WsMemberRow {
+pub(crate) struct WsMemberRow {
     id: uuid::Uuid,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -484,7 +484,7 @@ struct WsMemberRow {
     u_last_login_medium: String,
 }
 
-const WS_MEMBER_COLS: &str = "wm.id, wm.created_at, wm.updated_at, wm.workspace_id, wm.member_id, \
+pub(crate) const WS_MEMBER_COLS: &str = "wm.id, wm.created_at, wm.updated_at, wm.workspace_id, wm.member_id, \
     wm.role, wm.company_role, wm.view_props, wm.default_props, wm.issue_props, wm.is_active, \
     wm.getting_started_checklist, wm.tips, wm.explored_features, \
     wm.created_by_id, wm.updated_by_id, \
@@ -533,7 +533,7 @@ fn ws_member_short_json(r: &WsMemberRow, admin: bool) -> Value {
 /// Full `WorkSpaceMemberSerializer` shape (`fields="__all__"`,
 /// `serializers/workspace.py:93-99`, member nested lite) — the PATCH
 /// response (`workspace/member.py:91-95`).
-fn ws_member_full_json(r: &WsMemberRow) -> Value {
+pub(crate) fn ws_member_full_json(r: &WsMemberRow) -> Value {
     json!({
         "id": r.id,
         "created_at": r.created_at,

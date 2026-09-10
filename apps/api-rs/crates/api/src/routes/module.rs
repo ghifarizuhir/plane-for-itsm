@@ -2703,6 +2703,9 @@ struct WsModuleRow {
     started_issues: i64,
     unstarted_issues: i64,
     backlog_issues: i64,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub async fn workspace_modules(
@@ -2761,7 +2764,8 @@ pub async fn workspace_modules(
          (SELECT COUNT(DISTINCT mi.issue_id) FROM module_issues mi JOIN issues i ON i.id = mi.issue_id \
           JOIN states s ON s.id = i.state_id \
           WHERE mi.module_id = m.id AND mi.deleted_at IS NULL AND s.\"group\" = 'backlog' \
-          AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS backlog_issues \
+          AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS backlog_issues, \
+         m.created_at, m.updated_at, m.archived_at \
          FROM modules m JOIN workspaces w ON w.id = m.workspace_id \
          JOIN projects p ON p.id = m.project_id \
          WHERE w.slug = $1 AND m.deleted_at IS NULL AND m.archived_at IS NULL \
@@ -2804,6 +2808,9 @@ pub async fn workspace_modules(
                 "started_issues": r.started_issues,
                 "unstarted_issues": r.unstarted_issues,
                 "backlog_issues": r.backlog_issues,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "archived_at": r.archived_at,
             }))
             .collect::<Vec<_>>())),
     ))

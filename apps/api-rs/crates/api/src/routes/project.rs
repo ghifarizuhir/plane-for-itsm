@@ -145,24 +145,295 @@ pub fn validate_create(body: &CreateProject) -> Result<(), String> {
 
 pub async fn list(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-) -> Result<Json<Vec<ProjectOut>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::project::Project>(
-        "SELECT p.id, p.name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE w.slug = $1 AND p.deleted_at IS NULL ORDER BY p.name ASC",
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::member::deny_detail;
+    // AMG at WORKSPACE level (`base.py:145`).
+    let ws_role_val = ws_role(&st.pool, auth.0, &slug).await?;
+    let Some(role) = ws_role_val else {
+        return Ok(deny_detail());
+    };
+    // GUEST/MEMBER scoping (`base.py:199-222`): guests see member-projects
+    // only; members see member-projects + public (network=2); admins all.
+    let scope = if role <= 5 {
+        "AND EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+         AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL)"
+    } else if role <= 15 {
+        "AND (p.network = 2 OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+         AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL))"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "SELECT p.id, p.name, p.identifier, \
+         (SELECT pup.sort_order FROM project_user_properties pup WHERE pup.project_id = p.id \
+          AND pup.user_id = $2 AND pup.workspace_id = p.workspace_id AND pup.deleted_at IS NULL) AS sort_order, \
+         p.logo_props, \
+         (SELECT pm.role FROM project_members pm WHERE pm.project_id = p.id \
+          AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) AS member_role, \
+         (SELECT COUNT(*) FROM intake_issues ii WHERE ii.project_id = p.id \
+          AND ii.status = 'pending' AND ii.deleted_at IS NULL) AS intake_count, \
+         p.archived_at, p.workspace_id AS workspace, p.cycle_view, p.issue_views_view, \
+         p.module_view, p.page_view, p.intake_view AS inbox_view, p.guest_view_all_features, \
+         p.project_lead_id AS project_lead, p.network, p.created_at, p.updated_at, \
+         p.created_by_id AS created_by, p.updated_by_id AS updated_by \
+         FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE w.slug = $1 AND p.deleted_at IS NULL {scope}",
+    );
+    let rows: Vec<ProjectValuesRow> = sqlx::query_as(&sql)
+        .bind(&slug)
+        .bind(auth.0)
+        .fetch_all(&st.pool)
+        .await?;
+    Ok((StatusCode::OK, Json(json!(rows.iter().map(project_values_json).collect::<Vec<_>>()))))
+}
+
+/// The 21-key `.values()` row for the project list (`base.py:175-197`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ProjectValuesRow {
+    id: uuid::Uuid,
+    name: String,
+    identifier: String,
+    sort_order: Option<f64>,
+    logo_props: Value,
+    member_role: Option<i16>,
+    intake_count: i64,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    workspace: uuid::Uuid,
+    cycle_view: bool,
+    issue_views_view: bool,
+    module_view: bool,
+    page_view: bool,
+    inbox_view: bool,
+    guest_view_all_features: bool,
+    project_lead: Option<uuid::Uuid>,
+    network: i16,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by: Option<uuid::Uuid>,
+    updated_by: Option<uuid::Uuid>,
+}
+
+fn project_values_json(r: &ProjectValuesRow) -> Value {
+    json!({
+        "id": r.id,
+        "name": r.name,
+        "identifier": r.identifier,
+        "sort_order": r.sort_order,
+        "logo_props": r.logo_props,
+        "member_role": r.member_role,
+        "intake_count": r.intake_count,
+        "archived_at": r.archived_at,
+        "workspace": r.workspace,
+        "cycle_view": r.cycle_view,
+        "issue_views_view": r.issue_views_view,
+        "module_view": r.module_view,
+        "page_view": r.page_view,
+        "inbox_view": r.inbox_view,
+        "guest_view_all_features": r.guest_view_all_features,
+        "project_lead": r.project_lead,
+        "network": r.network,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by": r.created_by,
+        "updated_by": r.updated_by,
+    })
+}
+
+/// Nested user-lite for `default_assignee` / `project_lead`
+/// (`UserLiteSerializer`, `serializers/user.py:141-153`), mirroring the
+/// avatar-url pattern in `member.rs:WS_MEMBER_COLS`.
+fn proj_user_lite(prefix: &str, id_col: &str) -> String {
+    format!(
+        "{id_col} AS {p}_id, {p}_u.first_name AS {p}_first_name, \
+         {p}_u.last_name AS {p}_last_name, {p}_u.avatar AS {p}_avatar, \
+         CASE WHEN {p}_u.avatar_asset_id IS NOT NULL \
+          THEN '/api/assets/v2/static/' || {p}_u.avatar_asset_id::text || '/' \
+          ELSE {p}_u.avatar END AS {p}_avatar_url, \
+         {p}_u.is_bot AS {p}_is_bot, {p}_u.display_name AS {p}_display_name",
+        p = prefix,
+        id_col = id_col,
     )
-    .bind(&slug)
-    .fetch_all(&st.pool)
-    .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|p| ProjectOut {
-                id: p.id,
-                name: p.name,
-                identifier: String::new(),
-            })
-            .collect(),
-    ))
+}
+
+/// Full `ProjectListSerializer` row (`serializers/project.py:113-143`:
+/// `__all__` with `default_assignee`/`project_lead` nested lite, +
+/// `is_favorite`/`sort_order`/`member_role`/`anchor`/`members`/
+/// `cover_image_url`/`inbox_view`/`next_work_item_sequence`), backing
+/// retrieve/create/partial_update (`base.py:254,310-311,378-379`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ProjectFullRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    name: String,
+    description: String,
+    description_text: Option<Value>,
+    description_html: Option<Value>,
+    network: i16,
+    workspace_id: uuid::Uuid,
+    identifier: String,
+    emoji: Option<String>,
+    icon_prop: Option<Value>,
+    module_view: bool,
+    cycle_view: bool,
+    issue_views_view: bool,
+    page_view: bool,
+    intake_view: bool,
+    is_time_tracking_enabled: bool,
+    is_issue_type_enabled: bool,
+    guest_view_all_features: bool,
+    cover_image: Option<String>,
+    cover_image_asset_id: Option<uuid::Uuid>,
+    cover_asset: Option<String>,
+    estimate_id: Option<uuid::Uuid>,
+    archive_in: i32,
+    close_in: i32,
+    logo_props: Value,
+    default_state_id: Option<uuid::Uuid>,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    timezone: String,
+    external_source: Option<String>,
+    external_id: Option<String>,
+    is_favorite: bool,
+    sort_order: Option<f64>,
+    member_role: Option<i16>,
+    anchor: Option<String>,
+    member_ids: Vec<uuid::Uuid>,
+    next_work_item_sequence: i64,
+    da_id: Option<uuid::Uuid>,
+    da_first_name: Option<String>,
+    da_last_name: Option<String>,
+    da_avatar: Option<String>,
+    da_avatar_url: Option<String>,
+    da_is_bot: Option<bool>,
+    da_display_name: Option<String>,
+    pl_id: Option<uuid::Uuid>,
+    pl_first_name: Option<String>,
+    pl_last_name: Option<String>,
+    pl_avatar: Option<String>,
+    pl_avatar_url: Option<String>,
+    pl_is_bot: Option<bool>,
+    pl_display_name: Option<String>,
+}
+
+fn proj_lite_json(
+    id: Option<uuid::Uuid>,
+    first: &Option<String>,
+    last: &Option<String>,
+    avatar: &Option<String>,
+    avatar_url: &Option<String>,
+    is_bot: &Option<bool>,
+    display: &Option<String>,
+) -> Value {
+    match id {
+        None => Value::Null,
+        Some(i) => json!({
+            "id": i,
+            "first_name": first,
+            "last_name": last,
+            "avatar": avatar,
+            "avatar_url": avatar_url,
+            "is_bot": is_bot,
+            "display_name": display,
+        }),
+    }
+}
+
+fn project_full_json(r: &ProjectFullRow) -> Value {
+    let cover_image_url = r.cover_asset.clone().or(r.cover_image.clone());
+    let default_assignee = proj_lite_json(r.da_id, &r.da_first_name, &r.da_last_name, &r.da_avatar, &r.da_avatar_url, &r.da_is_bot, &r.da_display_name);
+    let project_lead = proj_lite_json(r.pl_id, &r.pl_first_name, &r.pl_last_name, &r.pl_avatar, &r.pl_avatar_url, &r.pl_is_bot, &r.pl_display_name);
+    let mut o = serde_json::Map::with_capacity(41);
+    o.insert("id".to_string(), json!(r.id));
+    o.insert("created_at".to_string(), json!(r.created_at));
+    o.insert("updated_at".to_string(), json!(r.updated_at));
+    o.insert("created_by".to_string(), json!(r.created_by_id));
+    o.insert("updated_by".to_string(), json!(r.updated_by_id));
+    o.insert("name".to_string(), json!(r.name));
+    o.insert("description".to_string(), json!(r.description));
+    o.insert("description_text".to_string(), json!(r.description_text));
+    o.insert("description_html".to_string(), json!(r.description_html));
+    o.insert("network".to_string(), json!(r.network));
+    o.insert("workspace".to_string(), json!(r.workspace_id));
+    o.insert("identifier".to_string(), json!(r.identifier));
+    o.insert("default_assignee".to_string(), default_assignee);
+    o.insert("project_lead".to_string(), project_lead);
+    o.insert("emoji".to_string(), json!(r.emoji));
+    o.insert("icon_prop".to_string(), json!(r.icon_prop));
+    o.insert("module_view".to_string(), json!(r.module_view));
+    o.insert("cycle_view".to_string(), json!(r.cycle_view));
+    o.insert("issue_views_view".to_string(), json!(r.issue_views_view));
+    o.insert("page_view".to_string(), json!(r.page_view));
+    o.insert("intake_view".to_string(), json!(r.intake_view));
+    o.insert("is_time_tracking_enabled".to_string(), json!(r.is_time_tracking_enabled));
+    o.insert("is_issue_type_enabled".to_string(), json!(r.is_issue_type_enabled));
+    o.insert("guest_view_all_features".to_string(), json!(r.guest_view_all_features));
+    o.insert("cover_image".to_string(), json!(r.cover_image));
+    o.insert("cover_image_asset".to_string(), json!(r.cover_image_asset_id));
+    o.insert("estimate".to_string(), json!(r.estimate_id));
+    o.insert("archive_in".to_string(), json!(r.archive_in));
+    o.insert("close_in".to_string(), json!(r.close_in));
+    o.insert("logo_props".to_string(), r.logo_props.clone());
+    o.insert("default_state".to_string(), json!(r.default_state_id));
+    o.insert("archived_at".to_string(), json!(r.archived_at));
+    o.insert("timezone".to_string(), json!(r.timezone));
+    o.insert("external_source".to_string(), json!(r.external_source));
+    o.insert("external_id".to_string(), json!(r.external_id));
+    o.insert("is_favorite".to_string(), json!(r.is_favorite));
+    o.insert("sort_order".to_string(), json!(r.sort_order));
+    o.insert("member_role".to_string(), json!(r.member_role));
+    o.insert("anchor".to_string(), json!(r.anchor));
+    o.insert("members".to_string(), json!(r.member_ids));
+    o.insert("cover_image_url".to_string(), json!(cover_image_url));
+    o.insert("inbox_view".to_string(), json!(r.intake_view));
+    o.insert("next_work_item_sequence".to_string(), json!(r.next_work_item_sequence));
+    Value::Object(o)
+}
+
+async fn fetch_project_full(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pk: uuid::Uuid,
+    user: uuid::Uuid,
+) -> Result<Option<ProjectFullRow>, sqlx::Error> {
+    let da = proj_user_lite("da", "p.default_assignee_id");
+    let pl = proj_user_lite("pl", "p.project_lead_id");
+    let sql = format!(
+        "SELECT p.id, p.created_at, p.updated_at, p.created_by_id, p.updated_by_id, \
+         p.name, p.description, p.description_text, p.description_html, p.network, \
+         p.workspace_id, p.identifier, p.emoji, p.icon_prop, p.module_view, p.cycle_view, \
+         p.issue_views_view, p.page_view, p.intake_view, p.is_time_tracking_enabled, \
+         p.is_issue_type_enabled, p.guest_view_all_features, p.cover_image, \
+         p.cover_image_asset_id, fa.asset AS cover_asset, p.estimate_id, p.archive_in, \
+         p.close_in, p.logo_props, p.default_state_id, p.archived_at, p.timezone, \
+         p.external_source, p.external_id, \
+         EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'project' \
+           AND uf.entity_identifier = p.id AND uf.user_id = $3 AND uf.project_id = p.id \
+           AND uf.deleted_at IS NULL) AS is_favorite, \
+         (SELECT pup.sort_order FROM project_user_properties pup WHERE pup.project_id = p.id \
+          AND pup.user_id = $3 AND pup.workspace_id = p.workspace_id AND pup.deleted_at IS NULL) AS sort_order, \
+         (SELECT pm.role FROM project_members pm WHERE pm.project_id = p.id \
+          AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL) AS member_role, \
+         (SELECT db.anchor FROM deploy_boards db WHERE db.entity_name = 'project' \
+          AND db.entity_identifier = p.id AND db.workspace_id = p.workspace_id \
+          AND db.deleted_at IS NULL LIMIT 1) AS anchor, \
+         COALESCE((SELECT ARRAY(SELECT pm2.member_id FROM project_members pm2 \
+           JOIN users u2 ON u2.id = pm2.member_id WHERE pm2.project_id = p.id \
+           AND pm2.is_active = true AND pm2.deleted_at IS NULL AND u2.is_bot = false)), '{{}}') AS member_ids, \
+         (SELECT COALESCE(MAX(sq.sequence), 0) + 1 FROM issue_sequences sq \
+          WHERE sq.project_id = p.id) AS next_work_item_sequence, \
+         {da}, {pl} \
+         FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         LEFT JOIN users da_u ON da_u.id = p.default_assignee_id \
+         LEFT JOIN users pl_u ON pl_u.id = p.project_lead_id \
+         LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
+    );
+    sqlx::query_as(&sql).bind(pk).bind(&slug).bind(user).fetch_optional(pool).await
 }
 
 /// 400 body for an unknown `project_lead`, mirroring implicit DRF FK
@@ -178,11 +449,27 @@ pub async fn create(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-    Json(body): Json<CreateProject>,
+    Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    // ADMIN/MEMBER at WORKSPACE level (`base.py:257`).
+    match ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(deny()),
+    }
+    let name = body.get("name").and_then(Value::as_str).unwrap_or("");
+    let identifier = body.get("identifier").and_then(Value::as_str).unwrap_or("");
+    validate_create(&CreateProject {
+        name: name.to_string(),
+        identifier: identifier.to_string(),
+        project_lead: None,
+    })
+    .map_err(|e| anyhow::anyhow!(e))?;
     let creator = auth.0;
-    if let Some(lead) = body.project_lead {
+    let project_lead: Option<uuid::Uuid> = body
+        .get("project_lead")
+        .and_then(Value::as_str)
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+    if let Some(lead) = project_lead {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
             .bind(lead)
             .fetch_one(&st.pool)
@@ -198,7 +485,42 @@ pub async fn create(
             ));
         }
     }
-    let ident = body.identifier.trim().to_uppercase();
+    let ws_id: Option<(uuid::Uuid,)> =
+        sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
+    let Some((workspace_id,)) = ws_id else {
+        return Ok(missing());
+    };
+    // `serializers/project.py:39-75` dup checks (DRF field-shape 400s).
+    let ident = identifier.trim().to_uppercase();
+    let dup_name: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_id = $1 AND name = $2 AND deleted_at IS NULL)",
+    )
+    .bind(workspace_id)
+    .bind(name)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup_name {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"name": ["PROJECT_NAME_ALREADY_EXIST"]})),
+        ));
+    }
+    let dup_ident: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_id = $1 AND identifier = $2 AND deleted_at IS NULL)",
+    )
+    .bind(workspace_id)
+    .bind(&ident)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup_ident {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"identifier": ["PROJECT_IDENTIFIER_ALREADY_EXIST"]})),
+        ));
+    }
     // Single transaction like `3df4f504b` (ws-create): project INSERT +
     // creator/lead ADMIN memberships + DEFAULT_STATES seed all commit or all
     // roll back. Mirrors `plane/app/views/project/base.py:258-313`.
@@ -207,12 +529,13 @@ pub async fn create(
         common::errors::AppError(anyhow::anyhow!("internal error"))
     })?;
     let row: (uuid::Uuid, String, uuid::Uuid) = sqlx::query_as(
-        "INSERT INTO projects (id, name, description, identifier, workspace_id, project_lead_id, network, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features, archive_in, close_in, logo_props, timezone, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, $3, 2, false, false, false, true, false, false, false, false, 0, 0, '{}', w.timezone, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name, workspace_id",
+        "INSERT INTO projects (id, name, description, identifier, workspace_id, project_lead_id, network, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features, archive_in, close_in, logo_props, timezone, created_by_id, updated_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '', $2, w.id, $3, 2, false, false, false, true, false, false, false, false, 0, 0, '{}', w.timezone, $5, $5, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name, workspace_id",
     )
-    .bind(&body.name)
+    .bind(name)
     .bind(&ident)
-    .bind(body.project_lead)
+    .bind(project_lead)
     .bind(&slug)
+    .bind(creator)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -237,7 +560,7 @@ pub async fn create(
     }
     // `base.py:272-279`: project_lead (when set and not the creator) is added
     // as a second ADMIN.
-    if let Some(lead) = body.project_lead {
+    if let Some(lead) = project_lead {
         if lead != creator {
             let lead_res = sqlx::query(
                 "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, is_active, view_props, default_props, sort_order, preferences, created_at, updated_at) VALUES (gen_random_uuid(), $1, 20, $2, $3, true, '{}', '{}', 65535, '{}', now(), now())",
@@ -277,14 +600,33 @@ pub async fn create(
             return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
         }
     }
+    // `serializers/project.py:95`: the identifier registry row.
+    let ident_res = sqlx::query(
+        "INSERT INTO project_identifiers (id, name, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now())",
+    )
+    .bind(&ident)
+    .bind(project_id)
+    .bind(workspace_id)
+    .bind(creator)
+    .execute(&mut *tx)
+    .await;
+    if ident_res.is_err() {
+        tracing::warn!("project-create: identifier insert failed");
+        return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
+    }
     if tx.commit().await.is_err() {
         tracing::warn!("project-create: commit failed");
         return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
     }
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({"id": project_id, "name": project_name, "identifier": ident})),
-    ))
+    // 201 full `ProjectListSerializer` row (`base.py:310-311`).
+    match fetch_project_full(&st.pool, &slug, project_id, creator).await? {
+        Some(row) => Ok((StatusCode::CREATED, Json(project_full_json(&row)))),
+        None => Ok((
+            StatusCode::CREATED,
+            Json(json!({"id": project_id, "name": project_name, "identifier": ident})),
+        )),
+    }
 }
 
 /// Mirrors `plane/app/views/project/base.py:partial_update`: archived
@@ -337,69 +679,98 @@ pub struct PatchProject {
     pub description: Option<String>,
 }
 
+/// Mirrors `ProjectViewSet.retrieve` (`base.py:227-254`): AMG ws gate
+/// (decorator); archived projects 404 `{"error": "Project does not
+/// exist"}`; non-member on SECRET → 403 `{"error": "You do not have
+/// permission"}`; non-member otherwise → 409 `{"error": "You are not a
+/// member of this project"}`; else 200 full `ProjectListSerializer` row.
+/// (`recent_visited_task` celery skipped.)
 pub async fn detail(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
-    let row: Option<common::models::project::Project> = sqlx::query_as(
-        "SELECT p.id, p.name FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(&_slug)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some(p) => Ok((
-            StatusCode::OK,
-            Json(serde_json::json!({"id": p.id, "name": p.name})),
-        )),
-        None => Ok((
+    use crate::routes::member::deny_detail;
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let Some(row) = fetch_project_full(&st.pool, &slug, pk, auth.0).await? else {
+        return Ok((
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Project does not exist"})),
-        )),
+        ));
+    };
+    if row.archived_at.is_some() {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Project does not exist"})),
+        ));
     }
+    if !row.member_ids.contains(&auth.0) {
+        if row.network == 0 {
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "You do not have permission"})),
+            ));
+        }
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "You are not a member of this project"})),
+        ));
+    }
+    Ok((StatusCode::OK, Json(project_full_json(&row))))
 }
 
+/// Mirrors `ProjectViewSet.partial_update` (`base.py:316-379`, PUT shares
+/// this core per `urls/project.py:40`, partial-tolerant F3 precedent):
+/// ws-ADMIN **or** project-ADMIN (`deny()` 403 otherwise); miss → 404
+/// `missing()` (DRF `get_object`); archived → 400; `ProjectSerializer`
+/// name/identifier forbidden+dup validation (DRF field-shape 400s) +
+/// `project_lead`/`default_assignee` FK validation; `description_html`
+/// sanitized (`{"error": "html content is not valid"}` on oversize);
+/// truthy `intake_view` auto-creates the default Intake; 200 full
+/// `ProjectListSerializer` row. (`model_activity` celery skipped.)
 pub async fn patch(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
-    Json(body): Json<PatchProject>,
+    Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
-    let row: Option<(Option<chrono::DateTime<chrono::Utc>>, uuid::Uuid)> = sqlx::query_as(
+    let ws_admin = matches!(ws_role(&st.pool, auth.0, &slug).await?, Some(r) if r >= 20);
+    let proj_admin = matches!(project_role(&st.pool, auth.0, pk).await?, Some(20));
+    if !ws_admin && !proj_admin {
+        return Ok(deny());
+    }
+    let meta: Option<(Option<chrono::DateTime<chrono::Utc>>, uuid::Uuid)> = sqlx::query_as(
         "SELECT p.archived_at, p.workspace_id FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
     )
     .bind(pk)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
-    let Some((archived_at, workspace_id)) = row else {
-        return Ok((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Project does not exist"})),
-        ));
+    let Some((archived_at, workspace_id)) = meta else {
+        return Ok(missing());
     };
     if let Err(e) = guard_patch(archived_at.is_some()) {
         return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
     }
-    if let Some(name) = &body.name {
+    if let Some(name) = body.get("name").and_then(Value::as_str) {
         if name.trim().is_empty() || name.chars().count() > 255 || has_forbidden(name) {
             return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
         }
-        let dup: Option<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT id FROM projects WHERE workspace_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL",
+        let dup: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL)",
         )
         .bind(workspace_id)
         .bind(name)
         .bind(pk)
-        .fetch_optional(&st.pool)
+        .fetch_one(&st.pool)
         .await?;
-        if let Err(e) = guard_name_unique(dup.is_some()) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+        if let Err(e) = guard_name_unique(dup) {
+            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"name": [e]}))));
         }
     }
-    if let Some(identifier) = &body.identifier {
+    if let Some(identifier) = body.get("identifier").and_then(Value::as_str) {
         let ident = identifier.trim().to_uppercase();
         if ident.is_empty() || ident.chars().count() > 12 || has_forbidden(&ident) {
             return Ok((
@@ -407,44 +778,182 @@ pub async fn patch(
                 Json(serde_json::json!({"error": "Invalid identifier"})),
             ));
         }
-        let dup: Option<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT id FROM projects WHERE workspace_id = $1 AND identifier = $2 AND id != $3 AND deleted_at IS NULL",
+        let dup: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_id = $1 AND identifier = $2 AND id != $3 AND deleted_at IS NULL)",
         )
         .bind(workspace_id)
         .bind(&ident)
         .bind(pk)
-        .fetch_optional(&st.pool)
+        .fetch_one(&st.pool)
         .await?;
-        if let Err(e) = guard_identifier_unique(dup.is_some()) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+        if let Err(e) = guard_identifier_unique(dup) {
+            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"identifier": [e]}))));
         }
+    }
+    for key in ["project_lead", "default_assignee"] {
+        if let Some(id_str) = body.get(key).and_then(Value::as_str) {
+            let id = uuid::Uuid::parse_str(id_str).ok();
+            let exists = match id {
+                Some(id) => {
+                    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+                        .bind(id)
+                        .fetch_one(&st.pool)
+                        .await?
+                }
+                None => false,
+            };
+            if !exists {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({key: [format!("Invalid pk \"{id_str}\" - object does not exist.")]})),
+                ));
+            }
+        }
+    }
+    let html: Option<String> = match body.get("description_html") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            use crate::routes::page::clean_description_html;
+            match clean_description_html(s) {
+                Ok(h) => Some(h),
+                Err(_) => {
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({"error": "html content is not valid"})),
+                    ));
+                }
+            }
+        }
+        Some(v) => Some(v.to_string()),
+    };
+    // Apply the serializer-writable allowlist (read-only: workspace,
+    // deleted_at, audit ids) as one tx of small static UPDATEs.
+    let mut tx = st.pool.begin().await?;
+    if let Some(name) = body.get("name").and_then(Value::as_str) {
+        sqlx::query("UPDATE projects SET name = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(name).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    }
+    if let Some(identifier) = body.get("identifier").and_then(Value::as_str) {
+        let ident = identifier.trim().to_uppercase();
+        sqlx::query("UPDATE projects SET identifier = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(ident).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    }
+    if let Some(v) = body.get("description").and_then(Value::as_str) {
+        sqlx::query("UPDATE projects SET description = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(v).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    }
+    if body.get("description_text").is_some() {
+        sqlx::query("UPDATE projects SET description_text = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(body.get("description_text").cloned()).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    }
+    if let Some(h) = html {
+        sqlx::query("UPDATE projects SET description_html = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(json!(h)).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    } else if body.get("description_html").is_some() {
+        sqlx::query("UPDATE projects SET description_html = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+            .bind(body.get("description_html").cloned()).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+    }
+    for (key, col) in [
+        ("emoji", "emoji"), ("cover_image", "cover_image"), ("timezone", "timezone"),
+        ("external_source", "external_source"), ("external_id", "external_id"),
+    ] {
+        if let Some(v) = body.get(key).and_then(Value::as_str) {
+            sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
+                .bind(v).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        }
+    }
+    for (key, col) in [("icon_prop", "icon_prop"), ("logo_props", "logo_props")] {
+        if body.get(key).is_some() {
+            sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
+                .bind(body.get(key).cloned()).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        }
+    }
+    for (_key, col) in [
+        ("module_view", "module_view"), ("cycle_view", "cycle_view"),
+        ("issue_views_view", "issue_views_view"), ("page_view", "page_view"),
+        ("intake_view", "intake_view"), ("is_time_tracking_enabled", "is_time_tracking_enabled"),
+        ("is_issue_type_enabled", "is_issue_type_enabled"),
+        ("guest_view_all_features", "guest_view_all_features"),
+    ] {
+        if let Some(b) = body.get(_key).and_then(Value::as_bool) {
+            sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
+                .bind(b).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        }
+    }
+    if let Some(n) = body.get("network").and_then(Value::as_i64) {
+        if n == 0 || n == 2 {
+            sqlx::query("UPDATE projects SET network = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
+                .bind(n as i16).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        }
+    }
+    for (key, col) in [("archive_in", "archive_in"), ("close_in", "close_in")] {
+        if let Some(n) = body.get(key).and_then(Value::as_i64) {
+            if (0..=12).contains(&n) {
+                sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
+                    .bind(n as i32).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+            }
+        }
+    }
+    for (key, col) in [
+        ("project_lead", "project_lead_id"), ("default_assignee", "default_assignee_id"),
+        ("estimate", "estimate_id"), ("default_state", "default_state_id"),
+        ("cover_image_asset", "cover_image_asset_id"),
+    ] {
+        match body.get(key) {
+            None | Some(Value::Null) => {
+                if body.get(key).is_some() {
+                    sqlx::query(&format!("UPDATE projects SET {col} = NULL, updated_at = now(), updated_by_id = $1 WHERE id = $2"))
+                        .bind(auth.0).bind(pk).execute(&mut *tx).await?;
+                }
+            }
+            Some(Value::String(s)) => {
+                if let Ok(id) = uuid::Uuid::parse_str(s) {
+                    sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
+                        .bind(id).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+                }
+            }
+            Some(_) => {}
+        }
+    }
+    // `base.py:358-365`: truthy intake_view auto-creates the default Intake.
+    let intake_on = body.get("intake_view").and_then(Value::as_bool).unwrap_or(false)
+        || body.get("inbox_view").and_then(Value::as_bool).unwrap_or(false);
+    if intake_on {
+        let pname: (String,) = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
+            .bind(pk).fetch_one(&mut *tx).await?;
         sqlx::query(
-            "UPDATE projects SET name = COALESCE($1, name), identifier = $2, description = COALESCE($3, description), updated_at = now() WHERE id = $4",
+            "INSERT INTO intakes (id, name, project_id, workspace_id, is_default, created_by_id, updated_by_id, created_at, updated_at) \
+             SELECT gen_random_uuid(), $1, $2, $3, true, $4, $4, now(), now() \
+             WHERE NOT EXISTS(SELECT 1 FROM intakes WHERE project_id = $2 AND is_default = true AND deleted_at IS NULL)",
         )
-        .bind(&body.name)
-        .bind(&ident)
-        .bind(&body.description)
+        .bind(format!("{} Intake", pname.0))
         .bind(pk)
-        .execute(&st.pool)
-        .await?;
-    } else {
-        sqlx::query(
-            "UPDATE projects SET name = COALESCE($1, name), description = COALESCE($2, description), updated_at = now() WHERE id = $3",
-        )
-        .bind(&body.name)
-        .bind(&body.description)
-        .bind(pk)
-        .execute(&st.pool)
+        .bind(workspace_id)
+        .bind(auth.0)
+        .execute(&mut *tx)
         .await?;
     }
-    Ok((StatusCode::OK, Json(serde_json::json!({"id": pk}))))
+    tx.commit().await?;
+    match fetch_project_full(&st.pool, &slug, pk, auth.0).await? {
+        Some(row) => Ok((StatusCode::OK, Json(project_full_json(&row)))),
+        None => Ok(missing()),
+    }
 }
 
+/// Mirrors `ProjectViewSet.destroy` (`base.py:383-417`): ws-ADMIN **or**
+/// project-ADMIN (`deny()` 403 otherwise); miss → 404 `missing()` (DRF
+/// `get_object`); 204 + `DeployBoard` + `UserFavorite` cleanup
+/// (`webhook_activity` celery skipped).
 pub async fn destroy(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
+    let ws_admin = matches!(ws_role(&st.pool, auth.0, &slug).await?, Some(r) if r >= 20);
+    let proj_admin = matches!(project_role(&st.pool, auth.0, pk).await?, Some(20));
+    if !ws_admin && !proj_admin {
+        return Ok(deny());
+    }
     let n = sqlx::query(
         "UPDATE projects SET deleted_at = now() WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
     )
@@ -454,11 +963,16 @@ pub async fn destroy(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Project does not exist"})),
-        ));
+        return Ok(missing());
     }
+    sqlx::query("UPDATE deploy_boards SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    sqlx::query("UPDATE user_favorites SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
 }
 

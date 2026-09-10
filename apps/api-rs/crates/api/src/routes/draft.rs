@@ -1181,7 +1181,10 @@ pub async fn destroy(
 ///   `completed_at` mirror `Issue.save` (`db/models/issue.py:180-229`);
 ///   `issue_sequences` row created; default-assignee applied when the
 ///   caller sends no assignees (`serializers/issue.py:232-253`).
-/// - 201 with the minimal issue subset (see module docs).
+/// - 201 with the FULL created-issue row (`IssueCreateSerializer.__all__`,
+///   `draft.py:309 serializer.data`): fetched via the shared
+///   [`IssueDetailRow`] SELECT, same as the issue-detail GET. FE `moveIssue`
+///   consumes the response as `TIssue`.
 pub async fn create_draft_to_issue(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1382,23 +1385,36 @@ pub async fn create_draft_to_issue(
     // `draft_issue.delete()` (`draft.py:307`) — soft.
     sqlx::query("UPDATE draft_issues SET deleted_at = now() WHERE id = $1")
         .bind(draft_id)
-        .execute(&mut *tx)
+        .execute(&st.pool)
         .await?;
     tx.commit().await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({
-            "id": issue_id,
-            "name": name,
-            "project_id": project_id,
-            "workspace_id": workspace_id,
-            "sequence_id": sequence as i32,
-            "state_id": opt_id(&state_id),
-            "priority": b.priority.unwrap_or_else(|| "none".to_string()),
-            "assignee_ids": assignees,
-            "label_ids": labels,
-        })),
+    // Full created-issue row for the 201 (`draft.py:309 serializer.data`).
+    use super::issue_common::IssueDetailRow;
+    use super::issue_query::DETAIL_SELECT_SQL;
+    let full: Option<IssueDetailRow> = sqlx::query_as(&format!(
+        "{DETAIL_SELECT_SQL} FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.deleted_at IS NULL"
     ))
+    .bind(issue_id)
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match full {
+        Some(row) => Ok((StatusCode::CREATED, Json(json!(row)))),
+        None => Ok((
+            StatusCode::CREATED,
+            Json(json!({
+                "id": issue_id,
+                "name": name,
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "sequence_id": sequence as i32,
+                "state_id": opt_id(&state_id),
+                "priority": b.priority.unwrap_or_else(|| "none".to_string()),
+                "assignee_ids": assignees,
+                "label_ids": labels,
+            })),
+        )),
+    }
 }
 
 #[cfg(test)]

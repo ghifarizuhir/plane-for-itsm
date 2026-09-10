@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::middleware::auth::AuthUser;
+use crate::routes::invite::{proj_invite_json, ws_invite_json, ProjInviteRow, WsInviteRow, PROJ_INVITE_COLS, WS_INVITE_COLS};
 use crate::routes::member::deny_detail;
 use crate::routes::user::{cleared_cookie_headers, fetch_me, me_json};
 use crate::state::AppState;
@@ -332,21 +333,6 @@ pub fn workspace_invite_link(id: &str, slug: &str, token: &str) -> String {
     format!("/workspace-invitations/?invitation_id={id}&slug={slug}&token={token}")
 }
 
-#[derive(sqlx::FromRow)]
-struct MyWorkspaceInviteRow {
-    id: uuid::Uuid,
-    email: String,
-    accepted: bool,
-    token: String,
-    message: Option<String>,
-    responded_at: Option<chrono::DateTime<chrono::Utc>>,
-    role: i16,
-    workspace_id: uuid::Uuid,
-    workspace_name: String,
-    workspace_slug: String,
-    workspace_logo: Option<String>,
-}
-
 /// GET /api/users/me/workspaces/invitations/ — paritas
 /// `UserWorkspaceInvitationsViewSet.list` (filter email user saat ini).
 pub async fn my_workspace_invitations(
@@ -368,15 +354,16 @@ pub async fn my_workspace_invitations(
     let Some((email,)) = email_row else {
         return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
     };
-    let rows: Vec<MyWorkspaceInviteRow> = match sqlx::query_as(
-        "SELECT i.id, i.email, i.accepted, i.token, i.message, i.responded_at, i.role, \
-                w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug, \
-                w.logo AS workspace_logo \
+    // Full `WorkSpaceMemberInviteSerializer` rows (`__all__` + workspace
+    // lite + invite_link) via the shared invite-row SELECT + builder
+    // (`invite.py:236-243`, ordered `-created_at` per `models/workspace.py:255`).
+    let rows: Vec<WsInviteRow> = match sqlx::query_as(&format!(
+        "SELECT {WS_INVITE_COLS} \
          FROM workspace_member_invites i \
          JOIN workspaces w ON w.id = i.workspace_id AND w.deleted_at IS NULL \
          WHERE i.email = $1 AND i.deleted_at IS NULL \
          ORDER BY i.created_at DESC",
-    )
+    ))
     .bind(&email)
     .fetch_all(&st.pool)
     .await
@@ -387,28 +374,7 @@ pub async fn my_workspace_invitations(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
         }
     };
-    let out: Vec<Value> = rows
-        .into_iter()
-        .map(|r| {
-            let id = r.id.to_string();
-            json!({
-                "id": id,
-                "email": r.email,
-                "accepted": r.accepted,
-                "token": r.token,
-                "message": r.message,
-                "responded_at": r.responded_at,
-                "role": r.role,
-                "workspace": {
-                    "id": r.workspace_id,
-                    "name": r.workspace_name,
-                    "slug": r.workspace_slug,
-                    "logo_url": pick_logo_url(None, r.workspace_logo.as_deref()),
-                },
-                "invite_link": workspace_invite_link(&id, &r.workspace_slug, &r.token),
-            })
-        })
-        .collect();
+    let out: Vec<Value> = rows.iter().map(ws_invite_json).collect();
     (StatusCode::OK, Json(Value::Array(out)))
 }
 
@@ -562,23 +528,6 @@ pub fn may_join_project(network: i32, requester_role: i32) -> bool {
     network != 0 || requester_role == 20
 }
 
-#[derive(sqlx::FromRow)]
-struct MyProjectInviteRow {
-    id: uuid::Uuid,
-    email: String,
-    accepted: bool,
-    token: String,
-    message: Option<String>,
-    responded_at: Option<chrono::DateTime<chrono::Utc>>,
-    role: i16,
-    project_id: uuid::Uuid,
-    project_name: String,
-    workspace_id: uuid::Uuid,
-    workspace_name: String,
-    workspace_slug: String,
-    workspace_logo: Option<String>,
-}
-
 /// GET /api/users/me/workspaces/:slug/projects/invitations/ — paritas
 /// `UserProjectInvitationsViewset.list` (filter email user saat ini).
 /// Django tidak memfilter slug di queryset, tapi path ini slug-scoped dan FE
@@ -642,17 +591,16 @@ pub async fn my_project_invitations(
         }
         return (StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})));
     };
-    let rows: Vec<MyProjectInviteRow> = match sqlx::query_as(
-        "SELECT i.id, i.email, i.accepted, i.token, i.message, i.responded_at, i.role, \
-                p.id AS project_id, p.name AS project_name, \
-                w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug, \
-                w.logo AS workspace_logo \
+    // Full `ProjectMemberInviteSerializer` rows (`__all__` + project/
+    // workspace lite); the path-workspace scoping stays (documented).
+    let rows: Vec<ProjInviteRow> = match sqlx::query_as(&format!(
+        "SELECT {PROJ_INVITE_COLS} \
          FROM project_member_invites i \
          JOIN projects p ON p.id = i.project_id \
          JOIN workspaces w ON w.id = i.workspace_id AND w.deleted_at IS NULL \
          WHERE i.email = $1 AND i.workspace_id = $2 AND i.deleted_at IS NULL \
          ORDER BY i.created_at DESC",
-    )
+    ))
     .bind(&email)
     .bind(workspace_id)
     .fetch_all(&st.pool)
@@ -664,27 +612,7 @@ pub async fn my_project_invitations(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
         }
     };
-    let out: Vec<Value> = rows
-        .into_iter()
-        .map(|r| {
-            json!({
-                "id": r.id,
-                "email": r.email,
-                "accepted": r.accepted,
-                "token": r.token,
-                "message": r.message,
-                "responded_at": r.responded_at,
-                "role": r.role,
-                "project": {"id": r.project_id, "name": r.project_name},
-                "workspace": {
-                    "id": r.workspace_id,
-                    "name": r.workspace_name,
-                    "slug": r.workspace_slug,
-                    "logo_url": pick_logo_url(None, r.workspace_logo.as_deref()),
-                },
-            })
-        })
-        .collect();
+    let out: Vec<Value> = rows.iter().map(proj_invite_json).collect();
     (StatusCode::OK, Json(Value::Array(out)))
 }
 

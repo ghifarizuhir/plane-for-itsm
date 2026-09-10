@@ -27,7 +27,8 @@ use serde_json::{json, Value};
 
 use crate::routes::member::{
     coerce_role_value, deny_detail, gate_project, is_valid_email, parse_drf_bool,
-    project_in_workspace, ROLES, VALID_DETAIL_MSG,
+    project_in_workspace, ws_member_full_json, WsMemberRow, WS_MEMBER_COLS, ROLES,
+    VALID_DETAIL_MSG,
 };
 use crate::routes::project::{deny, missing, ws_role};
 use crate::routes::users_me::workspace_invite_link;
@@ -235,7 +236,7 @@ async fn ws_id_by_slug(
 // ============================================================================
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct WsInviteRow {
+pub(crate) struct WsInviteRow {
     id: uuid::Uuid,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -253,7 +254,7 @@ struct WsInviteRow {
     updated_by_id: Option<uuid::Uuid>,
 }
 
-const WS_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
+pub(crate) const WS_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
     i.message, i.responded_at, i.role, i.workspace_id, \
     w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
     i.created_by_id, i.updated_by_id";
@@ -268,7 +269,7 @@ fn ws_lite(id: uuid::Uuid, name: &str, slug: &str, logo: &Option<String>) -> Val
 
 /// Full `WorkSpaceMemberInviteSerializer` (`serializers/workspace.py:117-133`:
 /// `__all__` + workspace lite + `invite_link`).
-fn ws_invite_json(r: &WsInviteRow) -> Value {
+pub(crate) fn ws_invite_json(r: &WsInviteRow) -> Value {
     json!({
         "id": r.id,
         "created_at": r.created_at,
@@ -306,7 +307,7 @@ fn ws_invite_public_json(r: &WsInviteRow) -> Value {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct ProjInviteRow {
+pub(crate) struct ProjInviteRow {
     id: uuid::Uuid,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -330,7 +331,7 @@ struct ProjInviteRow {
     updated_by_id: Option<uuid::Uuid>,
 }
 
-const PROJ_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
+pub(crate) const PROJ_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
     i.message, i.responded_at, i.role, i.workspace_id, \
     w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
     p.id AS project_id, p.identifier AS proj_identifier, p.name AS proj_name, \
@@ -345,7 +346,7 @@ fn proj_lite(r: &ProjInviteRow) -> Value {
 
 /// Full `ProjectMemberInviteSerializer` (`serializers/project.py`: `__all__`
 /// + project/workspace lite).
-fn proj_invite_json(r: &ProjInviteRow) -> Value {
+pub(crate) fn proj_invite_json(r: &ProjInviteRow) -> Value {
     json!({
         "id": r.id,
         "created_at": r.created_at,
@@ -467,17 +468,19 @@ pub async fn ws_create(
     let Some(workspace_id) = ws_id_by_slug(&st.pool, &slug).await? else {
         return Ok(missing());
     };
-    // `invite.py:72-85` — already-member check over the RAW emails.
+    // `invite.py:72-85` — already-member check over the RAW emails. The 400
+    // payload rows are FULL `WorkSpaceMemberSerializer` rows (nested member
+    // lite), built via the shared member-row SELECT + builder.
     let raw_emails: Vec<&str> = entries
         .iter()
         .map(|(raw, _)| raw.get("email").and_then(Value::as_str).unwrap_or(""))
         .collect();
-    let existing: Vec<WsMemberLiteRow> = sqlx::query_as(
-        "SELECT wm.id, wm.member_id, wm.role, u.email AS u_email FROM workspace_members wm \
+    let existing: Vec<WsMemberRow> = sqlx::query_as(&format!(
+        "SELECT {WS_MEMBER_COLS} FROM workspace_members wm \
          JOIN users u ON u.id = wm.member_id \
          WHERE wm.workspace_id = $1 AND u.email = ANY($2) \
          AND wm.is_active = true AND wm.deleted_at IS NULL",
-    )
+    ))
     .bind(workspace_id)
     .bind(&raw_emails)
     .fetch_all(&st.pool)
@@ -487,7 +490,7 @@ pub async fn ws_create(
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "error": ALREADY_MEMBER_MSG,
-                "workspace_users": existing.iter().map(ws_member_lite_json).collect::<Vec<_>>(),
+                "workspace_users": existing.iter().map(ws_member_full_json).collect::<Vec<_>>(),
             })),
         ));
     }
@@ -520,20 +523,6 @@ pub async fn ws_create(
     }
     tx.commit().await?;
     Ok((StatusCode::OK, Json(json!({"message": WS_SENT_MSG}))))
-}
-
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct WsMemberLiteRow {
-    id: uuid::Uuid,
-    member_id: uuid::Uuid,
-    role: i16,
-    u_email: Option<String>,
-}
-
-/// Minimal `WorkSpaceMemberSerializer` row for the `workspace_users` error
-/// payload (`invite.py:82`).
-fn ws_member_lite_json(r: &WsMemberLiteRow) -> Value {
-    json!({"id": r.id, "member": r.member_id, "role": r.role, "email": r.u_email})
 }
 
 async fn fetch_ws_invite(

@@ -857,7 +857,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/projects/",
           "django_source": "app/urls/project.py:25",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::project::list",
           "fe_evidence": [
             {
@@ -870,9 +870,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch I T1",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "GET returns {id,name,identifier:''} (project.rs:151-166) vs 21-key .values() incl member_role/intake_count/sort_order (base.py:175-197); no ws gate, _auth unused (project.rs:148) vs ADMIN/MEMBER/GUEST allow_permission (base.py:145) + GUEST/MEMBER scope (base.py:199-222); POST 201 {id,name,identifier} (project.rs:284-287) vs ProjectListSerializer detail (base.py:310-311); no ADMIN/MEMBER create gate (project.rs:179) vs allow_permission (base.py:257); no ProjectIdentifier row (serializers/project.py:95) or dup-name/identifier 400s (serializers/project.py:39-75)"
+          "notes": "GET returns {id,name,identifier:''} (project.rs:151-166) vs 21-key .values() incl member_role/intake_count/sort_order (base.py:175-197); no ws gate, _auth unused (project.rs:148) vs ADMIN/MEMBER/GUEST allow_permission (base.py:145) + GUEST/MEMBER scope (base.py:199-222); POST 201 {id,name,identifier} (project.rs:284-287) vs ProjectListSerializer detail (base.py:310-311); no ADMIN/MEMBER create gate (project.rs:179) vs allow_permission (base.py:257); no ProjectIdentifier row (serializers/project.py:95) or dup-name/identifier 400s (serializers/project.py:39-75) | F6c: 21-key .values() list + GUEST/MEMBER scoping + AMG gate; POST AM gate + dup field-400s + ProjectIdentifier row + full 201."
         },
         {
           "methods": ["GET"],
@@ -895,7 +895,7 @@
           "methods": ["GET", "PUT", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/projects/:pk/",
           "django_source": "app/urls/project.py:35",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::project::detail",
           "fe_evidence": [
             {
@@ -912,15 +912,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch I T1",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "PUT update served (urls/project.py:40) with no Rust route/handler (main.rs:139-142 get/patch/delete only); GET {id,name} (project.rs:340-362) vs ProjectListSerializer detail (base.py:254), missing archived filter (base.py:227), SECRET 403 (base.py:236-239) + non-member 409 (base.py:241-244); PATCH 200 {id} (project.rs:440) vs serializer.data (base.py:378-379), no ws/project-ADMIN gate (project.rs:366) vs 403 (base.py:323-336), no intake auto-create (base.py:358-365); DELETE no gate (project.rs:443) vs ADMIN gate 403 (base.py:383-397), no favorites/deploy-board cleanup (base.py:414-417) | F3: PUT wired (shares PATCH core, partial-tolerant superset of DRF full-update; no FE PUT caller)."
+          "notes": "PUT update served (urls/project.py:40) with no Rust route/handler (main.rs:139-142 get/patch/delete only); GET {id,name} (project.rs:340-362) vs ProjectListSerializer detail (base.py:254), missing archived filter (base.py:227), SECRET 403 (base.py:236-239) + non-member 409 (base.py:241-244); PATCH 200 {id} (project.rs:440) vs serializer.data (base.py:378-379), no ws/project-ADMIN gate (project.rs:366) vs 403 (base.py:323-336), no intake auto-create (base.py:358-365); DELETE no gate (project.rs:443) vs ADMIN gate 403 (base.py:383-397), no favorites/deploy-board cleanup (base.py:414-417) | F3: PUT wired (shares PATCH core, partial-tolerant superset of DRF full-update; no FE PUT caller). | F6c: full ProjectListSerializer detail + SECRET 403/non-member 409 + archived filter; PATCH ws/project-ADMIN + full allowlist + intake auto-create + full 200 + field-400s; DELETE ADMIN + DeployBoard/Favorite cleanup + miss unified; PUT shares core."
         },
         {
           "methods": ["GET", "DELETE"],
           "path": "/api/workspaces/:slug/project-identifiers/",
           "django_source": "app/urls/project.py:47",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::project::check_identifier",
           "fe_evidence": [
             {
@@ -929,21 +929,21 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch I T1",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only) | T4-remainder: DELETE wired (delete_identifier: AM-ws gate, 400s verbatim, 204)."
+          "notes": "GET verified ProjectIdentifierEndpoint.get (base.py:446-454) vs check_identifier (project.rs:878-911, main.rs:96-99): ADMIN/MEMBER gate (base.py:445 vs project.rs:884-888), 400 'Name is required' (base.py:450 vs project.rs:920-927), 200 {exists,identifiers[{id,name,project}]} (base.py:452 vs project.rs:903-910) ordered -created_at (models/project.py:281 vs project.rs:897); DELETE served (base.py:457-471: 400s + 204) with no Rust route/handler (main.rs:96-99 get-only) | T4-remainder: DELETE wired (delete_identifier: AM-ws gate, 400s verbatim, 204). | F6c: GET+DELETE both verified verbatim (gate/400s/204/ordering)."
         },
         {
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/projects/:project_id/invitations/",
           "django_source": "app/urls/project.py:52",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::invite::proj_list",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch I T2",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH POST create: Django 500s on any non-empty body via `.filter(...).role` AttributeError (invite.py:65-67) vs Rust intended-validate path (invite.rs:871-898); role-mismatch returns 200 (missing status=, invite.py:69-70) vs Rust intended 400 DIFF_ROLE_MSG (invite.rs:885-890); `project_invitations.delay` on the bulk_create list crashes post-build (invite.py:107-114) vs Rust celery-skipped (invite.rs:917-918); match parts: ADMIN gate (invite.py:56 vs gate_project invite.rs:862-864), empty 400 'Emails are required' (invite.py:61-62 vs invite.rs:865-870), per-email validate + invalid-email 400 (invite.py:76-98 vs invite.rs:892-898), bulk ignore_conflicts (invite.py:101-103 vs invite.rs:899-916), 200 'Email sent successfully' (invite.py:116 vs invite.rs:51,918); GET list matches: IsAuthenticated-only (base.py:51 vs invite.rs:823), 200 full-serializer array ordered -created_at (models/project.py:204 vs invite.rs:829-843, proj_invite_json invite.rs:348-364 vs serializers/project.py:197-203); wired get(proj_list).post(proj_create) (main.rs:887-890); FE repo-wide grep projects/.*/invitations/ over apps/web + packages/services shows no workspace-scoped project-invitation caller (only workspace-invitation + users/me hits) so fe_evidence []"
+          "notes": "MISMATCH POST create: Django 500s on any non-empty body via `.filter(...).role` AttributeError (invite.py:65-67) vs Rust intended-validate path (invite.rs:871-898); role-mismatch returns 200 (missing status=, invite.py:69-70) vs Rust intended 400 DIFF_ROLE_MSG (invite.rs:885-890); `project_invitations.delay` on the bulk_create list crashes post-build (invite.py:107-114) vs Rust celery-skipped (invite.rs:917-918); match parts: ADMIN gate (invite.py:56 vs gate_project invite.rs:862-864), empty 400 'Emails are required' (invite.py:61-62 vs invite.rs:865-870), per-email validate + invalid-email 400 (invite.py:76-98 vs invite.rs:892-898), bulk ignore_conflicts (invite.py:101-103 vs invite.rs:899-916), 200 'Email sent successfully' (invite.py:116 vs invite.rs:51,918); GET list matches: IsAuthenticated-only (base.py:51 vs invite.rs:823), 200 full-serializer array ordered -created_at (models/project.py:204 vs invite.rs:829-843, proj_invite_json invite.rs:348-364 vs serializers/project.py:197-203); wired get(proj_list).post(proj_create) (main.rs:887-890); FE repo-wide grep projects/.*/invitations/ over apps/web + packages/services shows no workspace-scoped project-invitation caller (only workspace-invitation + users/me hits) so fe_evidence [] | F6c: Django POST is dead code (500 on any body + post-build celery crash); Rust implements the intended contract (validate+bulk+200). GET list matches verbatim."
         },
         {
           "methods": ["GET", "DELETE"],
@@ -961,7 +961,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/users/me/workspaces/:slug/projects/invitations/",
           "django_source": "app/urls/project.py:62",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::users_me::my_project_invitations",
           "fe_evidence": [
             {
@@ -970,9 +970,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch I T2",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH GET list: Django email-scoped only, no slug filter (invite.py:123-129), IsAuthenticated-only (base.py:51) vs Rust requires active ws membership (unknown slug 404 / non-member 403, users_me.rs:607-644) + scopes rows to path workspace (users_me.rs:645-658, documented users_me.rs:582-586); rows: full ProjectMemberInviteSerializer (serializers/project.py:197-203) vs custom 9-key rows with project{id,name}/workspace{id,name,slug,logo_url} (users_me.rs:667-689); match parts POST create: ADMIN/MEMBER WORKSPACE gate (invite.py:131-132 vs users_me.rs:769-791 403), SECRET-network 403 byte-exact (invite.py:141-146 vs users_me.rs:809-816), reactivate + bulk member/props ignore_conflicts in one tx (invite.py:157-187 vs users_me.rs:826-898), 201 'Projects joined successfully' (invite.py:189 vs users_me.rs:900); wired get(my_project_invitations).post(join_projects) (main.rs:1354-1357); FE joinProject POST (user.service.ts:245-246), no GET caller, callers span store+components so fe_pages []"
+          "notes": "MISMATCH GET list: Django email-scoped only, no slug filter (invite.py:123-129), IsAuthenticated-only (base.py:51) vs Rust requires active ws membership (unknown slug 404 / non-member 403, users_me.rs:607-644) + scopes rows to path workspace (users_me.rs:645-658, documented users_me.rs:582-586); rows: full ProjectMemberInviteSerializer (serializers/project.py:197-203) vs custom 9-key rows with project{id,name}/workspace{id,name,slug,logo_url} (users_me.rs:667-689); match parts POST create: ADMIN/MEMBER WORKSPACE gate (invite.py:131-132 vs users_me.rs:769-791 403), SECRET-network 403 byte-exact (invite.py:141-146 vs users_me.rs:809-816), reactivate + bulk member/props ignore_conflicts in one tx (invite.py:157-187 vs users_me.rs:826-898), 201 'Projects joined successfully' (invite.py:189 vs users_me.rs:900); wired get(my_project_invitations).post(join_projects) (main.rs:1354-1357); FE joinProject POST (user.service.ts:245-246), no GET caller, callers span store+components so fe_pages [] | F6c: GET rows upgraded to full ProjectMemberInviteSerializer (project/workspace lite); POST verified."
         },
         {
           "methods": ["GET"],
@@ -1104,9 +1104,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch I T4",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH GET list unhandled: Django routes GET->list (app/urls/project.py:102-105) with user+slug-scoped get_queryset (project/base.py:501-509, no serializer_class project/base.py:498-499) vs Rust post-only route (main.rs:103-105) so GET has no handler; POST verified create 204 (project/base.py:514-521) vs fav_add (project.rs:990-1017): AuthUser-only gate both (views/base.py:51 vs project.rs:974), 204 empty, integrity-class 400 {error: The payload is not valid} (views/base.py:80-84 vs project.rs:1011-1014), workspace slug-vs-project derivation deviation (project.rs:984-989); FE getUserProjectFavorites GET (project.service.ts:163-169, zero callers) + addProjectToFavorites POST (project.service.ts:171-177) via project.store.ts:457 from card.tsx:89,create/root.tsx:54 so fe_pages [] | F4: GET list wired (fav_list 200 [{id,project}] ws-scoped superset; serves FE getUserProjectFavorites, ex-405)."
+          "notes": "MISMATCH GET list unhandled: Django routes GET->list (app/urls/project.py:102-105) with user+slug-scoped get_queryset (project/base.py:501-509, no serializer_class project/base.py:498-499) vs Rust post-only route (main.rs:103-105) so GET has no handler; POST verified create 204 (project/base.py:514-521) vs fav_add (project.rs:990-1017): AuthUser-only gate both (views/base.py:51 vs project.rs:974), 204 empty, integrity-class 400 {error: The payload is not valid} (views/base.py:80-84 vs project.rs:1011-1014), workspace slug-vs-project derivation deviation (project.rs:984-989); FE getUserProjectFavorites GET (project.service.ts:163-169, zero callers) + addProjectToFavorites POST (project.service.ts:171-177) via project.store.ts:457 from card.tsx:89,create/root.tsx:54 so fe_pages [] | F4: GET list wired (fav_list 200 [{id,project}] ws-scoped superset; serves FE getUserProjectFavorites, ex-405). | F6c: verified F4 GET + POST; user-scope gap stays open."
         },
         {
           "methods": ["DELETE"],
@@ -1390,7 +1390,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/",
           "django_source": "app/urls/workspace.py:48",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::workspace::list",
           "fe_evidence": [
             {
@@ -1403,15 +1403,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T1",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "GET list returns full WorkSpaceSerializer __all__+total_members/role (serializers/workspace.py:43) member-scoped ordered by name (base.py:63-79, AMG gate base.py:152-154) vs Rust {id,name,slug} unscoped all-workspaces (workspace.rs:124-142); POST Django 400 name/slug/length/URL checks (base.py:103-119) + 403 DISABLE_WORKSPACE_CREATION (base.py:92-96) + 409 slug conflict (base.py:145-150) + 201 serializer.data+total_members+role (base.py:131-139) vs Rust validate_create errors map to 500 AppError (common/src/errors.rs:17-19), no DISABLE check, unique-violation 500 internal error (workspace.rs:172-175), 201 {id,name,slug} (workspace.rs:219-226); FE repo-wide grep bare api/workspaces/ hits only POST create callers, no GET list caller"
+          "notes": "GET list returns full WorkSpaceSerializer __all__+total_members/role (serializers/workspace.py:43) member-scoped ordered by name (base.py:63-79, AMG gate base.py:152-154) vs Rust {id,name,slug} unscoped all-workspaces (workspace.rs:124-142); POST Django 400 name/slug/length/URL checks (base.py:103-119) + 403 DISABLE_WORKSPACE_CREATION (base.py:92-96) + 409 slug conflict (base.py:145-150) + 201 serializer.data+total_members+role (base.py:131-139) vs Rust validate_create errors map to 500 AppError (common/src/errors.rs:17-19), no DISABLE check, unique-violation 500 internal error (workspace.rs:172-175), 201 {id,name,slug} (workspace.rs:219-226); FE repo-wide grep bare api/workspaces/ hits only POST create callers, no GET list caller | F6c: member-scoped list + search/owner filters + full rows + AMG gate; POST DISABLE-403 + verbatim 400s + 409 slug + full 201 + company_role. Destroy slug-rename mirrored."
         },
         {
           "methods": ["GET", "PUT", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/",
           "django_source": "app/urls/workspace.py:53",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::workspace::detail",
           "fe_evidence": [
             {
@@ -1440,15 +1440,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T1",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "PUT-only-in-Django: as_view maps put->update (workspace.py:58) but Rust registers get/patch/delete only (main.rs:57-62) so PUT 405; GET full serializer member-scoped (base.py:63-79) vs {id,name,slug} auth-only (workspace.rs:237-258); PATCH ADMIN-only partial_update (base.py:156-158) vs auth-only name-only returning {slug} (workspace.rs:260-286); DELETE 204 both sides with profile-cleanup parity (Django remove_last_workspace_ids_from_user_settings base.py:160-172 vs Rust UPDATE profiles SET last_workspace_id=NULL workspace.rs:306-309 + soft-delete workspace.rs:310-313); recorded delta is ADMIN gate only (base.py:167 vs auth-only workspace.rs:288-291); FE getWorkspace in 2 page.tsx files so fe_pages []"
+          "notes": "PUT-only-in-Django: as_view maps put->update (workspace.py:58) but Rust registers get/patch/delete only (main.rs:57-62) so PUT 405; GET full serializer member-scoped (base.py:63-79) vs {id,name,slug} auth-only (workspace.rs:237-258); PATCH ADMIN-only partial_update (base.py:156-158) vs auth-only name-only returning {slug} (workspace.rs:260-286); DELETE 204 both sides with profile-cleanup parity (Django remove_last_workspace_ids_from_user_settings base.py:160-172 vs Rust UPDATE profiles SET last_workspace_id=NULL workspace.rs:306-309 + soft-delete workspace.rs:310-313); recorded delta is ADMIN gate only (base.py:167 vs auth-only workspace.rs:288-291); FE getWorkspace in 2 page.tsx files so fe_pages [] | F6c: member-scoped full GET (non-member 404); ADMIN PATCH/PUT (full allowlist, full-row 200, slug-conflict 409) + PUT wired; ADMIN DELETE + profile cleanup + slug-rename."
         },
         {
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/invitations/",
           "django_source": "app/urls/workspace.py:65",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::invite::ws_list",
           "fe_evidence": [
             {
@@ -1465,9 +1465,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T2",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "GET list 200 full-serializer array ordered -created_at (invite.py:44-50, Meta ordering models/workspace.py:255) vs ws_list ORDER BY created_at DESC + ws_invite_json (invite.rs:395-406,271-287); POST 200 {message} (invite.py:128 vs invite.rs:49,522); error literals byte-exact 'Emails are required' (invite.py:56), higher-role (invite.py:64), already-member (invite.py:81) vs invite.rs:42,44,46; gate ADMIN+MEMBER 20/15 (permissions/workspace.py:58-67 vs gate_ws_invite invite.rs:211-221); MISMATCH: 400 already-member workspace_users rows are full WorkSpaceMemberSerializer rows w/ nested member object (serializers/workspace.py:93-98, invite.py:82) vs Rust minimal {id,member,role,email} (invite.rs:535-537); sane-mapping: garbage role Django int() 500 vs Rust 400 (invite.rs:412-433), token payload opaque equality-only (invite.py:95-99,155), celery skipped; FE workspaceInvitations GET (workspace.service.ts:164-165) + inviteWorkspace POST (workspace.service.ts:78-79) + invite POST (invitation.service.ts:55-56), called from multiple components/stores so fe_pages []"
+          "notes": "GET list 200 full-serializer array ordered -created_at (invite.py:44-50, Meta ordering models/workspace.py:255) vs ws_list ORDER BY created_at DESC + ws_invite_json (invite.rs:395-406,271-287); POST 200 {message} (invite.py:128 vs invite.rs:49,522); error literals byte-exact 'Emails are required' (invite.py:56), higher-role (invite.py:64), already-member (invite.py:81) vs invite.rs:42,44,46; gate ADMIN+MEMBER 20/15 (permissions/workspace.py:58-67 vs gate_ws_invite invite.rs:211-221); MISMATCH: 400 already-member workspace_users rows are full WorkSpaceMemberSerializer rows w/ nested member object (serializers/workspace.py:93-98, invite.py:82) vs Rust minimal {id,member,role,email} (invite.rs:535-537); sane-mapping: garbage role Django int() 500 vs Rust 400 (invite.rs:412-433), token payload opaque equality-only (invite.py:95-99,155), celery skipped; FE workspaceInvitations GET (workspace.service.ts:164-165) + inviteWorkspace POST (workspace.service.ts:78-79) + invite POST (invitation.service.ts:55-56), called from multiple components/stores so fe_pages [] | F6c: already-member 400 rows upgraded to full WorkSpaceMemberSerializer; garbage-role 500->400 sane-mapping kept."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
@@ -1498,7 +1498,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/users/me/workspaces/invitations/",
           "django_source": "app/urls/workspace.py:76",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::users_me::my_workspace_invitations",
           "fe_evidence": [
             {
@@ -1519,9 +1519,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T2",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH GET 200 rows: Django full WorkSpaceMemberInviteSerializer rows incl created_at/updated_at/created_by/updated_by + workspace lite + invite_link (invite.py:236-243, serializers/workspace.py, ordered -created_at models/workspace.py:255) vs Rust 9-key rows {id,email,accepted,token,message,responded_at,role,workspace,invite_link} (users_me.rs:390-411); match parts: bare array no pagination, email scope + ORDER BY created_at DESC (users_me.rs:371-379), POST 204 activate + bulk_create(ignore_conflicts) + delete-invites in single tx (invite.py:247-283 vs users_me.rs:451-557), empty-list 204 both (invite.py:248 vs users_me.rs:471-473); sane-mapping: non-UUID invitations Django filter 500 vs Rust extractor 4xx; repo-wide grep users/me/workspaces/invitations hits workspace.service.ts:97,113 + invitation.service.ts:27,117 (callers present, not absent); multiple page callers so fe_pages []"
+          "notes": "MISMATCH GET 200 rows: Django full WorkSpaceMemberInviteSerializer rows incl created_at/updated_at/created_by/updated_by + workspace lite + invite_link (invite.py:236-243, serializers/workspace.py, ordered -created_at models/workspace.py:255) vs Rust 9-key rows {id,email,accepted,token,message,responded_at,role,workspace,invite_link} (users_me.rs:390-411); match parts: bare array no pagination, email scope + ORDER BY created_at DESC (users_me.rs:371-379), POST 204 activate + bulk_create(ignore_conflicts) + delete-invites in single tx (invite.py:247-283 vs users_me.rs:451-557), empty-list 204 both (invite.py:248 vs users_me.rs:471-473); sane-mapping: non-UUID invitations Django filter 500 vs Rust extractor 4xx; repo-wide grep users/me/workspaces/invitations hits workspace.service.ts:97,113 + invitation.service.ts:27,117 (callers present, not absent); multiple page callers so fe_pages [] | F6c: GET rows upgraded to full WorkSpaceMemberInviteSerializer; POST verified."
         },
         {
           "methods": ["GET", "POST"],
@@ -1742,7 +1742,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/user-issues/:user_id/",
           "django_source": "app/urls/workspace.py:152",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::issue_lists::user_issues",
           "fe_evidence": [
             {
@@ -1751,9 +1751,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T4",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "flat path verified WorkspaceUserProfileIssuesEndpoint.get (user.py:98-249, WorkspaceViewerPermission :99) vs user_issues (issue_lists.rs:721-822, main.rs:85-88): viewer gate any-active-member both (permissions/workspace.py:93-100 vs ws_role+guard_user_issues issue_lists.rs:215-220,727-730); assignee-or-creator-or-subscriber scope + requester active-project-member (user.py:139-147); group_by==sub_group_by 400 byte-exact (user.py:176-181 vs issue_lists.rs:732-734, GROUPBY_SAME_MSG :107); allowlist 400 {detail} (paginator.py:690-699 vs issue_lists.rs:746-748); MISMATCH: truthy group_by Django 200 grouped-dict via GroupedOffsetPaginator/SubGroupedOffsetPaginator (user.py:173-241) vs Rust 400 {error:Grouped pagination is not supported} (issue_query.rs:2545, issue_lists.rs:749-754) per archived-issues precedent; FE getUserProfileIssues GET user-issues/ (user.service.ts:210-227) called only from profile/issue.store.ts:154,205 (store, not a page) so fe_pages [] | F5: grouped/sub-grouped dict 200 via shared grouped core."
+          "notes": "flat path verified WorkspaceUserProfileIssuesEndpoint.get (user.py:98-249, WorkspaceViewerPermission :99) vs user_issues (issue_lists.rs:721-822, main.rs:85-88): viewer gate any-active-member both (permissions/workspace.py:93-100 vs ws_role+guard_user_issues issue_lists.rs:215-220,727-730); assignee-or-creator-or-subscriber scope + requester active-project-member (user.py:139-147); group_by==sub_group_by 400 byte-exact (user.py:176-181 vs issue_lists.rs:732-734, GROUPBY_SAME_MSG :107); allowlist 400 {detail} (paginator.py:690-699 vs issue_lists.rs:746-748); MISMATCH: truthy group_by Django 200 grouped-dict via GroupedOffsetPaginator/SubGroupedOffsetPaginator (user.py:173-241) vs Rust 400 {error:Grouped pagination is not supported} (issue_query.rs:2545, issue_lists.rs:749-754) per archived-issues precedent; FE getUserProfileIssues GET user-issues/ (user.service.ts:210-227) called only from profile/issue.store.ts:154,205 (store, not a page) so fe_pages [] | F5: grouped/sub-grouped dict 200 via shared grouped core. | F6c: flat 26-col rows verified + F5 grouped/sub-grouped wired; gate/scope/400s match."
         },
         {
           "methods": ["GET"],
@@ -1831,7 +1831,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/modules/",
           "django_source": "app/urls/workspace.py:177",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::module::workspace_modules",
           "fe_evidence": [
             {
@@ -1844,9 +1844,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T5",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH response keys: Django full ModuleSerializer 27 keys incl created_at/updated_at/archived_at (serializers/module.py:220-253) vs Rust 24-key rows without timestamps (module.rs:2591-2621); second delta: total/completed_estimate_points unannotated in this view (module.py:25-129; project-level annotates them module/base.py:245-277) so Django degrades while Rust computes real sums (module.rs:2542-2553); match parts: GET 200 both, viewer any-active gate (module.py:23, permissions/workspace.py:93-100 vs ws_role + deny_detail module.rs:2529-2531), member-projects + archived exclusions + 6 issue-count/member_ids annotations (module.py:25-129 vs module.rs:2535-2583), default -created_at order (module.py:128 vs module.rs:2583); FE getWorkspaceModules (module.service.ts:18-19) + workspaceModulesList (packages module.service.ts:13-14) both hit workspace-level modules/, store-only/zero callers so fe_pages []"
+          "notes": "MISMATCH response keys: Django full ModuleSerializer 27 keys incl created_at/updated_at/archived_at (serializers/module.py:220-253) vs Rust 24-key rows without timestamps (module.rs:2591-2621); second delta: total/completed_estimate_points unannotated in this view (module.py:25-129; project-level annotates them module/base.py:245-277) so Django degrades while Rust computes real sums (module.rs:2542-2553); match parts: GET 200 both, viewer any-active gate (module.py:23, permissions/workspace.py:93-100 vs ws_role + deny_detail module.rs:2529-2531), member-projects + archived exclusions + 6 issue-count/member_ids annotations (module.py:25-129 vs module.rs:2535-2583), default -created_at order (module.py:128 vs module.rs:2583); FE getWorkspaceModules (module.service.ts:18-19) + workspaceModulesList (packages module.service.ts:13-14) both hit workspace-level modules/, store-only/zero callers so fe_pages [] | F6c: +created_at/updated_at/archived_at (27-key superset of ModuleSerializer); computed estimate-points kept (Django degrades unannotated)."
         },
         {
           "methods": ["GET"],
@@ -1998,7 +1998,7 @@
           "methods": ["POST"],
           "path": "/api/workspaces/:slug/draft-to-issue/:draft_id/",
           "django_source": "app/urls/workspace.py:212",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::draft::create_draft_to_issue",
           "fe_evidence": [
             {
@@ -2007,9 +2007,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T7",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH response keys: Django returns full IssueCreateSerializer __all__ (serializers/issue.py:105, draft.py:309 serializer.data) vs Rust minimal 9-key 201 subset id/name/project_id/workspace_id/sequence_id/state_id/priority/assignee_ids/label_ids (draft.rs:1388-1401); match parts: POST 201 both (draft.py:309 vs draft.rs:1388); no-project 400 {error:Project is required to create an issue.} verbatim (draft.py:209-212 vs NO_PROJECT_MSG draft.rs:104,1199-1202); name required/blank + start>target + state/parent/estimate verbatims (serializers/issue.py:124-197, db/models/issue.py:136 vs validate_convert_name draft.rs:206-212, check_state/check_parent/check_estimate draft.rs:584-643); gate WORKSPACE ADMIN/MEMBER no creator (draft.py:205 vs guard_convert draft.rs:160-165); miss unknown :draft_id Django .first()->None.project_id 500 (draft.py:207-209 no None branch) normalized to 404 missing() (draft.rs:1196-1198) per sane-4xx rule (H6 favorite_id precedent); cycle/module side-writes + FileAsset re-point + draft soft-delete mirrored, Celery issue_activity skipped per Batch C (draft.py:227-307 vs draft.rs:1342-1386); FE moveIssue POST draft-to-issue/ (workspace_draft.service.ts:68-74) via store moveIssue (issue.store.ts:63,339-343) + issue-modal/form.tsx:126,282; multi-caller so fe_pages []"
+          "notes": "MISMATCH response keys: Django returns full IssueCreateSerializer __all__ (serializers/issue.py:105, draft.py:309 serializer.data) vs Rust minimal 9-key 201 subset id/name/project_id/workspace_id/sequence_id/state_id/priority/assignee_ids/label_ids (draft.rs:1388-1401); match parts: POST 201 both (draft.py:309 vs draft.rs:1388); no-project 400 {error:Project is required to create an issue.} verbatim (draft.py:209-212 vs NO_PROJECT_MSG draft.rs:104,1199-1202); name required/blank + start>target + state/parent/estimate verbatims (serializers/issue.py:124-197, db/models/issue.py:136 vs validate_convert_name draft.rs:206-212, check_state/check_parent/check_estimate draft.rs:584-643); gate WORKSPACE ADMIN/MEMBER no creator (draft.py:205 vs guard_convert draft.rs:160-165); miss unknown :draft_id Django .first()->None.project_id 500 (draft.py:207-209 no None branch) normalized to 404 missing() (draft.rs:1196-1198) per sane-4xx rule (H6 favorite_id precedent); cycle/module side-writes + FileAsset re-point + draft soft-delete mirrored, Celery issue_activity skipped per Batch C (draft.py:227-307 vs draft.rs:1342-1386); FE moveIssue POST draft-to-issue/ (workspace_draft.service.ts:68-74) via store moveIssue (issue.store.ts:63,339-343) + issue-modal/form.tsx:126,282; multi-caller so fe_pages [] | F6c: 201 upgraded to full created-issue row (shared IssueDetailRow SELECT); FE moveIssue consumes TIssue."
         },
         {
           "methods": ["POST"],
@@ -2125,7 +2125,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/stickies/",
           "django_source": "app/urls/workspace.py:244",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::misc::list_stickies",
           "fe_evidence": [
             {
@@ -2138,15 +2138,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T8",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH vs WorkspaceStickyViewSet.list/create (sticky.py:31-52, main.rs:1414-1417): (b) Rust bare [{id,name}] array (misc.rs:207-238) vs Django StickySerializer __all__ (serializers/workspace.py:339-344) inside paginated envelope (sticky.py:47-52 paginate default_per_page 20); Rust drops query/cursor/per_page params (sticky.py:42-45 vs misc.rs:207-219 no params) and orders -created_at (misc.rs:213) vs -sort_order (sticky.py:43); (d) no gate, _auth unused (misc.rs:209,223) vs AMG (sticky.py:31,40), no owner scoping on list; (c) create skips description_html/binary 400s (serializers/workspace.py:346-361 vs misc.rs:221-238); match: POST 201 both (sticky.py:37 vs misc.rs:237); FE getStickies/createSticky (sticky.service.ts:18-43) via sticky.store.ts:105,183 so fe_pages []"
+          "notes": "MISMATCH vs WorkspaceStickyViewSet.list/create (sticky.py:31-52, main.rs:1414-1417): (b) Rust bare [{id,name}] array (misc.rs:207-238) vs Django StickySerializer __all__ (serializers/workspace.py:339-344) inside paginated envelope (sticky.py:47-52 paginate default_per_page 20); Rust drops query/cursor/per_page params (sticky.py:42-45 vs misc.rs:207-219 no params) and orders -created_at (misc.rs:213) vs -sort_order (sticky.py:43); (d) no gate, _auth unused (misc.rs:209,223) vs AMG (sticky.py:31,40), no owner scoping on list; (c) create skips description_html/binary 400s (serializers/workspace.py:346-361 vs misc.rs:221-238); match: POST 201 both (sticky.py:37 vs misc.rs:237); FE getStickies/createSticky (sticky.service.ts:18-43) via sticky.store.ts:105,183 so fe_pages [] | F6c: AMG gate + owner scope + -sort_order + query filter + OffsetPaginator envelope (FE reads results/total_pages) + full rows + sort max+10000 + html/binary validation."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/stickies/:pk/",
           "django_source": "app/urls/workspace.py:249",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::misc::get_sticky",
           "fe_evidence": [
             {
@@ -2163,9 +2163,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch H T8",
+          "batch_task": "Batch F6c",
           "out_scope": false,
-          "notes": "MISMATCH vs WorkspaceStickyViewSet retrieve/partial_update/destroy (sticky.py:54-60 + BaseViewSet defaults, urls mapping workspace.py:249-253, main.rs:1418-1423): (b) Rust 200 {id,name} (misc.rs:240-256) / 200 {id} (misc.rs:258-278) vs Django StickySerializer __all__ data (serializers/workspace.py:339-344); (d) no gate, _auth unused (misc.rs:242,260,282) vs creator-only allow_permission creator model Sticky (sticky.py:54,58); (c) miss 404 {error:Sticky not found} (misc.rs:254,275) vs Django generic {error:The required object does not exist.} (base.py:92-96); match: DELETE 204 both (sticky.py:58-60 vs misc.rs:280-293); FE getSticky/updateSticky/deleteSticky (sticky.service.ts:45-67) via sticky.store.ts + use-operations.tsx, no single page so fe_pages []"
+          "notes": "MISMATCH vs WorkspaceStickyViewSet retrieve/partial_update/destroy (sticky.py:54-60 + BaseViewSet defaults, urls mapping workspace.py:249-253, main.rs:1418-1423): (b) Rust 200 {id,name} (misc.rs:240-256) / 200 {id} (misc.rs:258-278) vs Django StickySerializer __all__ data (serializers/workspace.py:339-344); (d) no gate, _auth unused (misc.rs:242,260,282) vs creator-only allow_permission creator model Sticky (sticky.py:54,58); (c) miss 404 {error:Sticky not found} (misc.rs:254,275) vs Django generic {error:The required object does not exist.} (base.py:92-96); match: DELETE 204 both (sticky.py:58-60 vs misc.rs:280-293); FE getSticky/updateSticky/deleteSticky (sticky.service.ts:45-67) via sticky.store.ts + use-operations.tsx, no single page so fe_pages [] | F6c: full rows + creator-only gate (member 403 vs miss 404 distinguished) + miss unified + full PATCH body."
         },
         {
           "methods": ["GET", "PATCH"],
