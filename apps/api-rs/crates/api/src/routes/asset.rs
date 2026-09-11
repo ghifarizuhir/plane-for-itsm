@@ -797,12 +797,11 @@ async fn check_project_access(
 /// `get_entity_id_field` (`v2.py:206-236,551-578,782-813`): map
 /// `(entity_type, entity_identifier)` to the FK column. Identifiers that are
 /// not UUIDs are skipped (Django would crash with a 500 here — sane +
-/// documented). `DRAFT_*` selects NO column: Django's workspace-presign
+/// documented). `DRAFT_*` selects NO column in the workspace-presign
 /// (`v2.py:206-236`) and duplicate (`v2.py:782-813`) `get_entity_id_field`
-/// have no DRAFT branch → `{}` → FK stays NULL (only the project-presign
-/// `v2.py:576-577` `DRAFT_ISSUE_DESCRIPTION` branch binds `draft_issue_id`,
-/// and the shared presign/duplicate inserts below intentionally leave it
-/// NULL for uniform DRAFT handling).
+/// (no DRAFT branch → `{}` → FK stays NULL); only the project-presign
+/// mapping (`v2.py:551-577`) has the `DRAFT_ISSUE_DESCRIPTION` →
+/// `draft_issue_id` branch (`v2.py:576-577`).
 fn entity_fk_fragment(entity_type: &str, entity_id: Option<&str>) -> (&'static str, Option<uuid::Uuid>) {
     let id = entity_id.and_then(|s| s.parse::<uuid::Uuid>().ok());
     let col = match entity_type {
@@ -812,6 +811,8 @@ fn entity_fk_fragment(entity_type: &str, entity_id: Option<&str>) -> (&'static s
         "ISSUE_ATTACHMENT" | "ISSUE_DESCRIPTION" => "issue_id",
         "PAGE_DESCRIPTION" => "page_id",
         "COMMENT_DESCRIPTION" => "comment_id",
+        // `v2.py:576-577`: `DRAFT_ISSUE_DESCRIPTION` binds `draft_issue_id`.
+        "DRAFT_ISSUE_DESCRIPTION" => "draft_issue_id",
         _ => "",
     };
     (col, id)
@@ -1075,7 +1076,15 @@ pub async fn project_presign(
         .bind(json!({"name": name, "type": mime, "size": size_limit})).bind(&key).bind(size_limit as f64)
         .bind(ws.id).bind(project_id).bind(fk_id).bind(auth.0).bind(entity_type).bind(entity_id)
         .fetch_one(&st.pool).await?,
-        // No FK column (covers `DRAFT_*` → FK stays NULL, matching the
+        // `v2.py:576-577`: `DRAFT_ISSUE_DESCRIPTION` binds `draft_issue_id`.
+        "draft_issue_id" => sqlx::query_as(
+            "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, project_id, draft_issue_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, false, false, false, '{}', now(), now()) RETURNING id",
+        )
+        .bind(json!({"name": name, "type": mime, "size": size_limit})).bind(&key).bind(size_limit as f64)
+        .bind(ws.id).bind(project_id).bind(fk_id).bind(auth.0).bind(entity_type).bind(entity_id)
+        .fetch_one(&st.pool).await?,
+        // No FK column (covers remaining `DRAFT_*` → FK stays NULL, matching the
         // workspace-presign / duplicate Django behavior).
         _ => sqlx::query_as(
             "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, project_id, created_by_id, entity_type, entity_identifier, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
@@ -2397,14 +2406,18 @@ mod e9_tests {
 
     #[test]
     fn draft_entity_binds_no_fk() {
-        // Django `get_entity_id_field` (`v2.py:206-236` workspace presign,
-        // `v2.py:782-813` duplicate) has NO DRAFT branch → `{}` → FK stays
-        // NULL. `DRAFT_*` must therefore select no FK column.
+        // `entity_fk_fragment` follows the PROJECT-presign mapping
+        // (`v2.py:551-577`), whose `DRAFT_ISSUE_DESCRIPTION` branch binds
+        // `draft_issue_id` (`v2.py:576-577`). The workspace-presign
+        // (`v2.py:206-236`) and duplicate (`v2.py:782-813`) mappings have
+        // NO DRAFT branch — their `_` catch-all arms keep the FK NULL, so
+        // their behavior is unchanged by the shared helper.
         let eid = "44444444-4444-4444-4444-444444444444";
         let (col_a, _) = entity_fk_fragment("DRAFT_ISSUE_ATTACHMENT", Some(eid));
-        let (col_d, _) = entity_fk_fragment("DRAFT_ISSUE_DESCRIPTION", Some(eid));
+        let (col_d, id_d) = entity_fk_fragment("DRAFT_ISSUE_DESCRIPTION", Some(eid));
         assert_eq!(col_a, "", "DRAFT_ISSUE_ATTACHMENT binds no FK");
-        assert_eq!(col_d, "", "DRAFT_ISSUE_DESCRIPTION binds no FK");
+        assert_eq!(col_d, "draft_issue_id", "DRAFT_ISSUE_DESCRIPTION binds draft_issue_id");
+        assert_eq!(id_d.unwrap().to_string(), eid);
         // Regression pin: the non-DRAFT mapping is unchanged.
         let (col_i, id_i) = entity_fk_fragment("ISSUE_ATTACHMENT", Some(eid));
         assert_eq!(col_i, "issue_id");

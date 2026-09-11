@@ -4039,7 +4039,7 @@
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/assets/v2/workspaces/:slug/:asset_id/",
           "django_source": "app/urls/asset.py:54-58",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::ws_get",
           "fe_evidence": [
             {
@@ -4056,9 +4056,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH DELETE-miss + miss-strings: verified WorkspaceFileAssetEndpoint.get/patch/delete (v2.py:417-488) vs ws_get/mark_uploaded/soft_delete (asset.rs:1533-1561/1194-1258/1383-1424, main.rs:987-992): GET 302 attachment both (v2.py:482-488 vs asset.rs:1560); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:473-477 vs asset.rs:1553-1555); project-bound 403 You do not have access verbatim both (v2.py:422-426,449-453,466-470 vs asset.rs:1206-1208,1393-1395,1545-1547); PATCH/DELETE 204 both (v2.py:443,459 vs asset.rs:1257,1423) incl LOGO/COVER bind+unlink both (v2.py:249-314 vs asset.rs:1216-1248,1402-1417); AMG workspace gate both (v2.py:417,445,461 vs asset.rs:1200,1388,1539); deviations: PATCH Celery get_asset_object_metadata (v2.py:430-431) skipped in Rust (unobservable, 204 both); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Asset not found (asset.rs:1203-1205,1542-1544); DELETE-miss Rust silent 204 no-op (asset.rs:1391-1423) vs Django 404; FE updateWorkspaceAssetUploadStatus PATCH + deleteWorkspaceAsset DELETE (file.service.ts:64-70,99-105) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29) | F1: ws miss (mark_uploaded/ws_get) + DELETE-miss (soft_delete silent-204→404) unified to missing() generic-404 (views/base.py:92-96); not-uploaded branch keeps ASSET_MISSING_MSG."
+          "notes": "MISMATCH DELETE-miss + miss-strings: verified WorkspaceFileAssetEndpoint.get/patch/delete (v2.py:417-488) vs ws_get/mark_uploaded/soft_delete (asset.rs:1533-1561/1194-1258/1383-1424, main.rs:987-992): GET 302 attachment both (v2.py:482-488 vs asset.rs:1560); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:473-477 vs asset.rs:1553-1555); project-bound 403 You do not have access verbatim both (v2.py:422-426,449-453,466-470 vs asset.rs:1206-1208,1393-1395,1545-1547); PATCH/DELETE 204 both (v2.py:443,459 vs asset.rs:1257,1423) incl LOGO/COVER bind+unlink both (v2.py:249-314 vs asset.rs:1216-1248,1402-1417); AMG workspace gate both (v2.py:417,445,461 vs asset.rs:1200,1388,1539); deviations: PATCH Celery get_asset_object_metadata (v2.py:430-431) skipped in Rust (unobservable, 204 both); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Asset not found (asset.rs:1203-1205,1542-1544); DELETE-miss Rust silent 204 no-op (asset.rs:1391-1423) vs Django 404; FE updateWorkspaceAssetUploadStatus PATCH + deleteWorkspaceAsset DELETE (file.service.ts:64-70,99-105) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29) | F1: ws miss (mark_uploaded/ws_get) + DELETE-miss (soft_delete silent-204→404) unified to missing() generic-404 (views/base.py:92-96); not-uploaded branch keeps ASSET_MISSING_MSG. | F6f: verified F1 miss unification (PATCH/DELETE/GET all missing()); 204/302/verbatim branches stand."
         },
         {
           "methods": ["POST"],
@@ -4081,7 +4081,7 @@
           "methods": ["PATCH", "DELETE"],
           "path": "/api/assets/v2/user-assets/:asset_id/",
           "django_source": "app/urls/asset.py:64-68",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::user_complete",
           "fe_evidence": [
             {
@@ -4094,15 +4094,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "verified UserAssetsV2Endpoint.patch/delete (v2.py:172-200) vs user_complete/user_delete (asset.rs:1263-1316/1428-1457, main.rs:994-997): PATCH/DELETE 204 both (v2.py:191,200 vs asset.rs:1315,1456); user-scoped user_id=request.user both (v2.py:174,194 vs asset.rs:1269-1275,1434-1439); avatar/cover bind+unlink incl prev-asset soft-delete both (v2.py:43-109 vs asset.rs:1279-1309,1443-1453); miss Django 404 The required object does not exist (base.py:188-192; plan-note 500 not observed) vs Rust sane 404 Asset not found (asset.rs:1276-1278,1440-1442); IsAuthenticated only either side; FE updateUserAssetUploadStatus PATCH + deleteUserAsset DELETE (file.service.ts:176-182,202-208) | F1: user miss (user_complete/user_delete) unified to missing() generic-404 (views/base.py:92-96)."
+          "notes": "verified UserAssetsV2Endpoint.patch/delete (v2.py:172-200) vs user_complete/user_delete (asset.rs:1263-1316/1428-1457, main.rs:994-997): PATCH/DELETE 204 both (v2.py:191,200 vs asset.rs:1315,1456); user-scoped user_id=request.user both (v2.py:174,194 vs asset.rs:1269-1275,1434-1439); avatar/cover bind+unlink incl prev-asset soft-delete both (v2.py:43-109 vs asset.rs:1279-1309,1443-1453); miss Django 404 The required object does not exist (base.py:188-192; plan-note 500 not observed) vs Rust sane 404 Asset not found (asset.rs:1276-1278,1440-1442); IsAuthenticated only either side; FE updateUserAssetUploadStatus PATCH + deleteUserAsset DELETE (file.service.ts:176-182,202-208) | F1: user miss (user_complete/user_delete) unified to missing() generic-404 (views/base.py:92-96). | F6f: verified F1 miss unification; bind/unlink parity stands."
         },
         {
           "methods": ["POST"],
           "path": "/api/assets/v2/workspaces/:slug/restore/:asset_id/",
           "django_source": "app/urls/asset.py:69-73",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::restore",
           "fe_evidence": [
             {
@@ -4111,27 +4111,27 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "verified AssetRestoreEndpoint.post (v2.py:536-545) vs restore (asset.rs:1853-1873, main.rs:1074-1077): POST 204 clears is_deleted/deleted_at both (v2.py:541-545 vs asset.rs:1861-1872); all_objects + workspace-slug scope both (v2.py:541 vs asset.rs:1862); miss Django 404 (views/base.py:188-192) vs Rust sane 404 Asset not found (asset.rs:1869-1871); AMG workspace gate both (v2.py:539 vs asset.rs:1858); FE restoreNewAsset (file.service.ts:236-244) | F1: restore miss unified to missing() generic-404 (views/base.py:92-96)."
+          "notes": "verified AssetRestoreEndpoint.post (v2.py:536-545) vs restore (asset.rs:1853-1873, main.rs:1074-1077): POST 204 clears is_deleted/deleted_at both (v2.py:541-545 vs asset.rs:1861-1872); all_objects + workspace-slug scope both (v2.py:541 vs asset.rs:1862); miss Django 404 (views/base.py:188-192) vs Rust sane 404 Asset not found (asset.rs:1869-1871); AMG workspace gate both (v2.py:539 vs asset.rs:1858); FE restoreNewAsset (file.service.ts:236-244) | F1: restore miss unified to missing() generic-404 (views/base.py:92-96). | F6f: verified F1 restore-miss 404; 204 + scope + gate stand."
         },
         {
           "methods": ["GET"],
           "path": "/api/assets/v2/static/:asset_id/",
           "django_source": "app/urls/asset.py:74-78",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::static_get",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "verified StaticFileAssetEndpoint.get (v2.py:491-533) vs static_get (asset.rs:1790-1822, main.rs:998): AllowAny public, no auth either side (v2.py:494 vs asset.rs:1790-1794 no AuthUser); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:501-505 vs asset.rs:1804-1806); entity allowlist avatar/cover/logo/project-cover else 400 Invalid entity type both (v2.py:508-517 vs asset.rs:1807-1815); 302 both (v2.py:533 vs asset.rs:1821) with attachment disposition for script-capable MIME both (v2.py:523-526 vs asset.rs:1816-1817 disposition_for asset.rs:242); miss Django 404 (views/base.py:188-192) vs Rust sane 404 (asset.rs:1800-1803); no FE caller (URLs server-generated in avatar payloads) | F1: static miss unified to missing() generic-404 (views/base.py:92-96); not-uploaded keeps ASSET_MISSING_MSG (v2.py:501-505)."
+          "notes": "verified StaticFileAssetEndpoint.get (v2.py:491-533) vs static_get (asset.rs:1790-1822, main.rs:998): AllowAny public, no auth either side (v2.py:494 vs asset.rs:1790-1794 no AuthUser); not-uploaded 404 The requested asset could not be found verbatim both (v2.py:501-505 vs asset.rs:1804-1806); entity allowlist avatar/cover/logo/project-cover else 400 Invalid entity type both (v2.py:508-517 vs asset.rs:1807-1815); 302 both (v2.py:533 vs asset.rs:1821) with attachment disposition for script-capable MIME both (v2.py:523-526 vs asset.rs:1816-1817 disposition_for asset.rs:242); miss Django 404 (views/base.py:188-192) vs Rust sane 404 (asset.rs:1800-1803); no FE caller (URLs server-generated in avatar payloads) | F1: static miss unified to missing() generic-404 (views/base.py:92-96); not-uploaded keeps ASSET_MISSING_MSG (v2.py:501-505). | F6f: verified F1 static-miss 404; allowlist/302/disposition stand."
         },
         {
           "methods": ["POST"],
           "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/",
           "django_source": "app/urls/asset.py:79-83",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::project_presign",
           "fe_evidence": [
             {
@@ -4140,15 +4140,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH draft-branch: verified ProjectAssetEndpoint.post (v2.py:580-645) vs project_presign (asset.rs:1011-1099, main.rs:999-1002): entity_identifier FK: Django HAS DRAFT_ISSUE_DESCRIPTION → draft_issue_id branch (v2.py:576-577) ABSENT in Rust (entity_fk_fragment/asset.rs:1052-1086 `_` arm inserts draft_issue_id=NULL); POST 200 {upload_data,asset_id,asset_url} both (v2.py:638-645 vs asset.rs:1091-1098); project-level AMG gate both (v2.py:580 allow_permission default level PROJECT permissions/base.py:19 vs asset.rs:1024 gate_project_roles + project_in_workspace asset.rs:1018-1023); entity allowlist 400 both (v2.py:589-593 vs asset.rs:1027-1033); image-mime 400 both (v2.py:596-610 vs asset.rs:1034-1040); size clamp both (v2.py:613 vs asset.rs:1048); key {wsid}/{hex}-{name} both (v2.py:619 vs asset.rs:1051); entity FK otherwise matching (v2.py:551-575 vs asset.rs:1052-1086); garbage-size normalize deviation as ws_presign (v2.py:584 vs asset.rs:1041-1047); FE uploadProjectAsset (file.service.ts:148-174)"
+          "notes": "MISMATCH draft-branch: verified ProjectAssetEndpoint.post (v2.py:580-645) vs project_presign (asset.rs:1011-1099, main.rs:999-1002): entity_identifier FK: Django HAS DRAFT_ISSUE_DESCRIPTION → draft_issue_id branch (v2.py:576-577) ABSENT in Rust (entity_fk_fragment/asset.rs:1052-1086 `_` arm inserts draft_issue_id=NULL); POST 200 {upload_data,asset_id,asset_url} both (v2.py:638-645 vs asset.rs:1091-1098); project-level AMG gate both (v2.py:580 allow_permission default level PROJECT permissions/base.py:19 vs asset.rs:1024 gate_project_roles + project_in_workspace asset.rs:1018-1023); entity allowlist 400 both (v2.py:589-593 vs asset.rs:1027-1033); image-mime 400 both (v2.py:596-610 vs asset.rs:1034-1040); size clamp both (v2.py:613 vs asset.rs:1048); key {wsid}/{hex}-{name} both (v2.py:619 vs asset.rs:1051); entity FK otherwise matching (v2.py:551-575 vs asset.rs:1052-1086); garbage-size normalize deviation as ws_presign (v2.py:584 vs asset.rs:1041-1047); FE uploadProjectAsset (file.service.ts:148-174) | F6f: DRAFT_ISSUE_DESCRIPTION now binds draft_issue_id (was NULL); ws/duplicate catch-alls keep NULL per their own Django mapping."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/assets/v2/workspaces/:slug/projects/:project_id/:pk/",
           "django_source": "app/urls/asset.py:84-88",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::asset::project_get",
           "fe_evidence": [
             {
@@ -4161,9 +4161,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T1",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "verified ProjectAssetEndpoint.get/patch/delete (v2.py:647-695) vs project_get/project_complete/project_delete (asset.rs:1565-1593/1320-1346/1460-1484, main.rs:1003-1008): GET 302 attachment both (v2.py:689-695 vs asset.rs:1592); not-uploaded 404 verbatim both (v2.py:680-684 vs asset.rs:1585-1587); PATCH/DELETE 204 both (v2.py:661,672 vs asset.rs:1345,1483); scoped workspace__slug+project_id both (v2.py:650,666,677 vs asset.rs:1335-1339,1474-1479,1580-1584); Django pk == main.rs :pk (asset.py:85 vs main.rs:1004); PATCH no entity binding either side (v2.py:647-661 vs asset.rs:1318-1319); project AMG gate both (v2.py:647,663,674 vs asset.rs:1332,1471,1577); miss Django 404 (views/base.py:188-192) vs Rust 404 (asset.rs:1340-1342,1480-1482,1585-1587); FE updateProjectAssetUploadStatus PATCH (file.service.ts:107-117) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29); DELETE no FE caller | F1: project miss (project_complete/project_delete) unified to missing() generic-404 (views/base.py:92-96)."
+          "notes": "verified ProjectAssetEndpoint.get/patch/delete (v2.py:647-695) vs project_get/project_complete/project_delete (asset.rs:1565-1593/1320-1346/1460-1484, main.rs:1003-1008): GET 302 attachment both (v2.py:689-695 vs asset.rs:1592); not-uploaded 404 verbatim both (v2.py:680-684 vs asset.rs:1585-1587); PATCH/DELETE 204 both (v2.py:661,672 vs asset.rs:1345,1483); scoped workspace__slug+project_id both (v2.py:650,666,677 vs asset.rs:1335-1339,1474-1479,1580-1584); Django pk == main.rs :pk (asset.py:85 vs main.rs:1004); PATCH no entity binding either side (v2.py:647-661 vs asset.rs:1318-1319); project AMG gate both (v2.py:647,663,674 vs asset.rs:1332,1471,1577); miss Django 404 (views/base.py:188-192) vs Rust 404 (asset.rs:1340-1342,1480-1482,1585-1587); FE updateProjectAssetUploadStatus PATCH (file.service.ts:107-117) + GET via getEditorAssetSrc (packages/utils/src/editor/common.ts:20-29); DELETE no FE caller | F1: project miss (project_complete/project_delete) unified to missing() generic-404 (views/base.py:92-96). | F6f: verified F1 miss unification; 204/302/verbatim + scoping stand."
         },
         {
           "methods": ["POST"],
@@ -4337,7 +4337,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/webhooks/",
           "django_source": "app/urls/webhook.py:15-20",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::webhook::list",
           "fe_evidence": [
             {
@@ -4350,15 +4350,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T3",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH keys + invalid-URL status + gate: verified WebhookEndpoint.get/post (base.py:22-79) vs list/create (webhook.rs:60-110, main.rs:1079-1081): GET 200 array full WebhookSerializer rows minus secret_key (fields= allowlist dead per serializers/webhook.py:57-79, no show_secret_key base.py:45-60) vs Rust 3-key {id,url,is_active} rows (webhook.rs:71-75); POST 201 full row WITH secret_key (show_secret_key base.py:27, popped only when flag unset serializers/webhook.py:77-79) vs Rust 201 {id,url,is_active} no secret (webhook.rs:110); dup (workspace,url) 409 URL already exists for the workspace verbatim both (base.py:33-38, partial-unique models/webhook.py:57-60 vs webhook.rs:93-95); schema/domain messages verbatim both (models/webhook.py:21-31 vs webhook.rs:46-56) BUT invalid URL Django 400 serializer.errors vs Rust 500 {error} via anyhow->AppError (errors.rs:19), over-1024 Django 400 max_length (models/webhook.py:36) vs Rust 500 url max length 1024 (webhook.rs:43-45); ADMIN-only gate (base.py:21,41) vs _auth-only unused (webhook.rs:62,80); FE fetchWebhooksList GET + createWebhook POST (webhook.service.ts:19-41)"
+          "notes": "MISMATCH keys + invalid-URL status + gate: verified WebhookEndpoint.get/post (base.py:22-79) vs list/create (webhook.rs:60-110, main.rs:1079-1081): GET 200 array full WebhookSerializer rows minus secret_key (fields= allowlist dead per serializers/webhook.py:57-79, no show_secret_key base.py:45-60) vs Rust 3-key {id,url,is_active} rows (webhook.rs:71-75); POST 201 full row WITH secret_key (show_secret_key base.py:27, popped only when flag unset serializers/webhook.py:77-79) vs Rust 201 {id,url,is_active} no secret (webhook.rs:110); dup (workspace,url) 409 URL already exists for the workspace verbatim both (base.py:33-38, partial-unique models/webhook.py:57-60 vs webhook.rs:93-95); schema/domain messages verbatim both (models/webhook.py:21-31 vs webhook.rs:46-56) BUT invalid URL Django 400 serializer.errors vs Rust 500 {error} via anyhow->AppError (errors.rs:19), over-1024 Django 400 max_length (models/webhook.py:36) vs Rust 500 url max length 1024 (webhook.rs:43-45); ADMIN-only gate (base.py:21,41) vs _auth-only unused (webhook.rs:62,80); FE fetchWebhooksList GET + createWebhook POST (webhook.service.ts:19-41) | F6f: full __all__ rows (secret on create only — fields= allowlists are dead in Django); invalid/over-long URL 500->400 field-shape; ADMIN gate; SSRF/DNS checks documented-out."
         },
         {
           "methods": ["GET", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/webhooks/:pk/",
           "django_source": "app/urls/webhook.py:16-20",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::webhook::detail",
           "fe_evidence": [
             {
@@ -4375,15 +4375,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T3",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH DELETE-miss + miss-strings: verified WebhookEndpoint.get/patch/delete (base.py:42-111) vs detail/patch/destroy (webhook.rs:160-219, main.rs:1083-1086): GET 200 full row minus secret (base.py:63-79) vs Rust 3-key {id,url,is_active} (webhook.rs:173-176); PATCH 200 full row minus secret (base.py:102-105) vs Rust 200 {id} only (webhook.rs:204); DELETE 204 both when row exists (base.py:108-111 vs webhook.rs:219); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:177,202); DELETE-miss Rust silent 204 no-op no rows_affected check (webhook.rs:207-219) vs Django 404; ADMIN-only gate (base.py:41,81,107) vs _auth-only unused (webhook.rs:162,183,209); FE fetchWebhookDetails GET + updateWebhook PATCH + deleteWebhook DELETE (webhook.service.ts:27-57) | F1: detail/patch miss unified to missing() generic-404 (views/base.py:92-96); destroy silent-204→404 via rows_affected."
+          "notes": "MISMATCH DELETE-miss + miss-strings: verified WebhookEndpoint.get/patch/delete (base.py:42-111) vs detail/patch/destroy (webhook.rs:160-219, main.rs:1083-1086): GET 200 full row minus secret (base.py:63-79) vs Rust 3-key {id,url,is_active} (webhook.rs:173-176); PATCH 200 full row minus secret (base.py:102-105) vs Rust 200 {id} only (webhook.rs:204); DELETE 204 both when row exists (base.py:108-111 vs webhook.rs:219); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:177,202); DELETE-miss Rust silent 204 no-op no rows_affected check (webhook.rs:207-219) vs Django 404; ADMIN-only gate (base.py:41,81,107) vs _auth-only unused (webhook.rs:162,183,209); FE fetchWebhookDetails GET + updateWebhook PATCH + deleteWebhook DELETE (webhook.service.ts:27-57) | F1: detail/patch miss unified to missing() generic-404 (views/base.py:92-96); destroy silent-204→404 via rows_affected. | F6f: full rows minus secret on GET+PATCH; PATCH full allowlist + full 200 + ADMIN gate; DELETE ADMIN gate (miss already 404)."
         },
         {
           "methods": ["POST"],
           "path": "/api/workspaces/:slug/webhooks/:pk/regenerate/",
           "django_source": "app/urls/webhook.py:21-25",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::webhook::regenerate",
           "fe_evidence": [
             {
@@ -4392,21 +4392,21 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T3",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH miss-string + keys: verified WebhookSecretRegenerateEndpoint.post (base.py:116-121) vs regenerate (webhook.rs:113-129, main.rs:1089-1090): Django 200 full serializer WITH secret_key (show_secret_key base.py:120) vs Rust 200 {id,secret_key} 2-key only (webhook.rs:126); secret format plane_wh_<32hex> both (generate_token models/webhook.py:17-18 vs SQL plane_wh_||gen_random_uuid webhook.rs:119); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:127); ADMIN-only gate (base.py:115) vs _auth-only unused (webhook.rs:115); FE regenerateSecretKey (webhook.service.ts:59-65) | F1: regenerate miss unified to missing() generic-404 (views/base.py:92-96)."
+          "notes": "MISMATCH miss-string + keys: verified WebhookSecretRegenerateEndpoint.post (base.py:116-121) vs regenerate (webhook.rs:113-129, main.rs:1089-1090): Django 200 full serializer WITH secret_key (show_secret_key base.py:120) vs Rust 200 {id,secret_key} 2-key only (webhook.rs:126); secret format plane_wh_<32hex> both (generate_token models/webhook.py:17-18 vs SQL plane_wh_||gen_random_uuid webhook.rs:119); miss Django 404 The required object does not exist (views/base.py:188-192) vs Rust 404 Webhook not found (webhook.rs:127); ADMIN-only gate (base.py:115) vs _auth-only unused (webhook.rs:115); FE regenerateSecretKey (webhook.service.ts:59-65) | F1: regenerate miss unified to missing() generic-404 (views/base.py:92-96). | F6f: full row WITH new secret + ADMIN gate (miss already 404)."
         },
         {
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/webhook-logs/:webhook_id/",
           "django_source": "app/urls/webhook.py:26-30",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::webhook::list_logs",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T3",
+          "batch_task": "Batch F6f",
           "out_scope": false,
-          "notes": "MISMATCH keys + gate: verified WebhookLogsEndpoint.get (base.py:126-129) vs list_logs (webhook.rs:131-148, main.rs:1092): Django 200 array WebhookLogSerializer fields=__all__ (serializers/webhook.py:98-102; workspace,webhook,event_type,request_method,request_headers,request_body,response_status,response_headers,response_body) vs Rust 200 array 2-key {id,event_type} (webhook.rs:143-147); Django webhook_id == main.rs :webhook_id verbatim; empty filter -> [] both, no miss path; ADMIN-only gate (base.py:125) vs _auth-only unused (webhook.rs:133); no FE caller found -> fe_evidence []"
+          "notes": "MISMATCH keys + gate: verified WebhookLogsEndpoint.get (base.py:126-129) vs list_logs (webhook.rs:131-148, main.rs:1092): Django 200 array WebhookLogSerializer fields=__all__ (serializers/webhook.py:98-102; workspace,webhook,event_type,request_method,request_headers,request_body,response_status,response_headers,response_body) vs Rust 200 array 2-key {id,event_type} (webhook.rs:143-147); Django webhook_id == main.rs :webhook_id verbatim; empty filter -> [] both, no miss path; ADMIN-only gate (base.py:125) vs _auth-only unused (webhook.rs:133); no FE caller found -> fe_evidence [] | F6f: full __all__ log rows + ADMIN gate."
         }
       ]
     }
