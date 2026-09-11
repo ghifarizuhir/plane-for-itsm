@@ -103,7 +103,8 @@ pub async fn generate_email_code(
     };
     let mut conn = match st.redis_client().await {
         Ok(c) => c,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))),
+        // `base.py:169-174`: cache/celery failure → 400 verbatim (not 500).
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to generate verification code. Please try again."}))),
     };
     // INCR gagal = fail-closed (anggap budget habis) agar throttle tak bisa
     // dilewati saat Redis bermasalah.
@@ -130,7 +131,18 @@ pub async fn generate_email_code(
         }
     }
     if count > 3 {
-        return (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error_code": 5900, "error_message": "RATE_LIMIT_EXCEEDED"})));
+        // DRF default throttle body (`rest_framework.throttling`:
+        // `{"detail": "Request was throttled. Expected available in N seconds."}`).
+        let ttl: i64 = redis::cmd("PTTL")
+            .arg(email_code_throttle_key(&auth.0))
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(3_600_000);
+        let secs = (ttl / 1000).max(1);
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"detail": format!("Request was throttled. Expected available in {secs} seconds.")})),
+        );
     }
     let code = new_email_code();
     let stored: redis::RedisResult<()> = redis::cmd("SET")
@@ -141,7 +153,8 @@ pub async fn generate_email_code(
         .query_async(&mut conn)
         .await;
     if stored.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        // `base.py:169-174`: cache write failure → 400 verbatim (not 500).
+        return (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to generate verification code. Please try again."})));
     }
     // SMTP belum ada: kode tersimpan di Redis 10 mnt; pengiriman email = follow-up.
     tracing::info!(user_id = %auth.0, "email verification code stored (delivery pending SMTP)");
@@ -190,11 +203,33 @@ pub async fn update_email(
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"}))),
     };
     let key = email_code_key(&auth.0, &email);
-    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut conn).await.unwrap_or(None);
+    // `base.py:200-222`: the try wraps cache.get + json.loads + compare —
+    // a Redis read error OR corrupt JSON lands in the except branch
+    // (`'Failed to verify code. Please try again.'`), while a clean miss
+    // is `'...expired or is invalid'` and a token mismatch is `'Invalid
+    // verification code'`.
+    let cached: redis::RedisResult<Option<String>> =
+        redis::cmd("GET").arg(&key).query_async(&mut conn).await;
+    let cached = match cached {
+        Ok(v) => v,
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Failed to verify code. Please try again."));
+        }
+    };
     let Some(raw) = cached else {
         return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Verification code has expired or is invalid"));
     };
-    let stored: String = serde_json::from_str::<Value>(&raw).ok().and_then(|v| v.get("token").and_then(|t| t.as_str()).map(str::to_string)).unwrap_or_default();
+    let stored: Option<String> = serde_json::from_str::<Value>(&raw).ok().and_then(|v| {
+        let t = v.get("token")?;
+        // `str(stored_token)` (`base.py:212`): numeric tokens stringify.
+        t.as_str()
+            .map(str::to_string)
+            .or_else(|| t.as_i64().map(|n| n.to_string()))
+            .or_else(|| t.as_u64().map(|n| n.to_string()))
+    });
+    let Some(stored) = stored else {
+        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Failed to verify code. Please try again."));
+    };
     if stored != code {
         return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Invalid verification code"));
     }
@@ -263,14 +298,24 @@ struct MyWorkspaceRow {
 
 /// GET /api/users/me/workspaces/ — paritas `UserWorkSpacesEndpoint.get`
 /// (workspace ber-membership aktif + anotasi role & total_members).
+///
+/// Django-verbatim notes (`views/workspace/base.py:175-211`,
+/// `serializers/workspace.py:43-83`): `owner` renders as PK (the
+/// serializer declares NO nesting); `organization_size` renders null
+/// (no `or ""` coercion); `?fields=` projects the row keys
+/// (`DynamicBaseSerializer`); `?search=` matches name (icontains) and
+/// `?owner=` filters owner id (`search_fields`/`filterset_fields`).
 pub async fn my_workspaces(
     State(st): State<AppState>,
     auth: AuthUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> (StatusCode, Json<Value>) {
     // `file_assets` tidak punya kolom `asset_url` (skema aktual: `asset`,
     // varchar 800) — logo diambil dari `fa.asset`, fallback ke `w.logo`.
     // Field `url` DIHILANGKAN: tidak ada kolomnya di `workspaces` dan tidak
     // ada kode FE yang membaca properti `workspace.url`.
+    let search = params.get("search").cloned().unwrap_or_default();
+    let owner: Option<uuid::Uuid> = params.get("owner").and_then(|s| uuid::Uuid::parse_str(s).ok());
     let rows: Vec<MyWorkspaceRow> = match sqlx::query_as(
         "SELECT w.id, w.name, w.slug, w.timezone, w.organization_size, w.logo, \
                 fa.asset AS logo_asset_url, \
@@ -287,9 +332,13 @@ pub async fn my_workspaces(
          JOIN users o ON o.id = w.owner_id \
          LEFT JOIN file_assets fa ON fa.id = w.logo_asset_id \
          WHERE w.deleted_at IS NULL \
+         AND ($2 = '' OR w.name ILIKE '%' || $2 || '%') \
+         AND ($3::uuid IS NULL OR w.owner_id = $3) \
          ORDER BY w.created_at DESC",
     )
     .bind(auth.0)
+    .bind(&search)
+    .bind(owner)
     .fetch_all(&st.pool)
     .await
     {
@@ -299,29 +348,35 @@ pub async fn my_workspaces(
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
         }
     };
+    // `?fields=a,b,c` (`base.py:181`): subset projection, unknown keys ignored.
+    let fields: Vec<String> = params
+        .get("fields")
+        .map(|s| s.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect())
+        .unwrap_or_default();
     let out: Vec<Value> = rows
         .into_iter()
         .map(|r| {
-            json!({
+            let mut v = json!({
                 "id": r.id,
                 "name": r.name,
                 "slug": r.slug,
                 "timezone": r.timezone,
-                "organization_size": r.organization_size.unwrap_or_default(),
+                "organization_size": r.organization_size,
                 "logo_url": pick_logo_url(r.logo_asset_url.as_deref(), r.logo.as_deref()),
                 "created_at": r.created_at,
                 "updated_at": r.updated_at,
                 "created_by": r.created_by_id,
                 "updated_by": r.updated_by_id,
-                "owner": {
-                    "id": r.owner_id,
-                    "email": r.owner_email,
-                    "first_name": r.owner_first,
-                    "last_name": r.owner_last,
-                },
+                "owner": r.owner_id,
                 "role": r.role,
                 "total_members": r.total_members,
-            })
+            });
+            if !fields.is_empty() {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.retain(|k, _| fields.iter().any(|f| f == k));
+                }
+            }
+            v
         })
         .collect();
     (StatusCode::OK, Json(Value::Array(out)))

@@ -4,6 +4,12 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::{middleware::auth::AuthUser, state::AppState};
+use crate::routes::issue_common::{
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+    total_pages, DetailEnvelope, PageWindow,
+};
+use crate::routes::member::deny_detail;
+use crate::routes::project::ws_role;
 
 /// Mirrors `plane/app/views/notification/base.py` for
 /// `plane/app/urls/notification.py`: list (receiver-scoped), unread counts,
@@ -42,24 +48,290 @@ pub struct MarkAllRead {
     pub r#type: Option<String>,
 }
 
+/// Full `NotificationSerializer` row (`serializers/notification.py:14-22`:
+/// `__all__` + nested `triggered_by_details` lite + the three annotated
+/// bools). `is_inbox_issue`/`is_intake_issue` share one `Exists` subquery
+/// (`base.py:59-65` — the duplication is Django-verbatim); the intake
+/// statuses are `Issue.issue_intake__status__in=[0, 2, -2]`
+/// (Snoozed/Accepted?/Duplicate… `models/intake.py:42-61`: 0 Snoozed,
+/// 2 Duplicate, -2 Pending).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct NotifFullRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    workspace_id: uuid::Uuid,
+    project_id: Option<uuid::Uuid>,
+    data: Option<Value>,
+    entity_identifier: Option<uuid::Uuid>,
+    entity_name: String,
+    title: String,
+    message: Option<Value>,
+    message_html: String,
+    message_stripped: Option<String>,
+    sender: String,
+    triggered_by_id: Option<uuid::Uuid>,
+    tb_first_name: Option<String>,
+    tb_last_name: Option<String>,
+    tb_avatar: Option<String>,
+    tb_avatar_url: Option<String>,
+    tb_is_bot: Option<bool>,
+    tb_display_name: Option<String>,
+    receiver_id: uuid::Uuid,
+    read_at: Option<chrono::DateTime<chrono::Utc>>,
+    snoozed_till: Option<chrono::DateTime<chrono::Utc>>,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    is_inbox_issue: bool,
+    is_intake_issue: bool,
+    is_mentioned_notification: bool,
+}
+
+const NOTIF_FULL_COLS: &str = "n.id, n.created_at, n.updated_at, n.created_by_id, n.updated_by_id, \
+    n.workspace_id, n.project_id, n.data, n.entity_identifier, n.entity_name, n.title, \
+    n.message, n.message_html, n.message_stripped, n.sender, n.triggered_by_id, \
+    tu.first_name AS tb_first_name, tu.last_name AS tb_last_name, tu.avatar AS tb_avatar, \
+    CASE WHEN tu.avatar_asset_id IS NOT NULL \
+      THEN '/api/assets/v2/static/' || tu.avatar_asset_id::text || '/' ELSE tu.avatar END AS tb_avatar_url, \
+    tu.is_bot AS tb_is_bot, tu.display_name AS tb_display_name, \
+    n.receiver_id, n.read_at, n.snoozed_till, n.archived_at, \
+    EXISTS(SELECT 1 FROM issues ii JOIN intake_issues iti ON iti.issue_id = ii.id \
+      WHERE ii.id = n.entity_identifier AND iti.status IN (0, 2, -2) \
+      AND ii.workspace_id = n.workspace_id AND ii.deleted_at IS NULL \
+      AND iti.deleted_at IS NULL) AS is_inbox_issue, \
+    EXISTS(SELECT 1 FROM issues ii JOIN intake_issues iti ON iti.issue_id = ii.id \
+      WHERE ii.id = n.entity_identifier AND iti.status IN (0, 2, -2) \
+      AND ii.workspace_id = n.workspace_id AND ii.deleted_at IS NULL \
+      AND iti.deleted_at IS NULL) AS is_intake_issue, \
+    (n.sender ILIKE '%mentioned%') AS is_mentioned_notification";
+
+fn notif_full_json(r: &NotifFullRow) -> Value {
+    let triggered_by_details = match r.triggered_by_id {
+        None => Value::Null,
+        Some(id) => json!({
+            "id": id,
+            "first_name": r.tb_first_name,
+            "last_name": r.tb_last_name,
+            "avatar": r.tb_avatar,
+            "avatar_url": r.tb_avatar_url,
+            "is_bot": r.tb_is_bot,
+            "display_name": r.tb_display_name,
+        }),
+    };
+    let mut o = serde_json::Map::with_capacity(24);
+    o.insert("id".to_string(), json!(r.id));
+    o.insert("created_at".to_string(), json!(r.created_at));
+    o.insert("updated_at".to_string(), json!(r.updated_at));
+    o.insert("created_by".to_string(), json!(r.created_by_id));
+    o.insert("updated_by".to_string(), json!(r.updated_by_id));
+    o.insert("workspace".to_string(), json!(r.workspace_id));
+    o.insert("project".to_string(), json!(r.project_id));
+    o.insert("data".to_string(), json!(r.data));
+    o.insert("entity_identifier".to_string(), json!(r.entity_identifier));
+    o.insert("entity_name".to_string(), json!(r.entity_name));
+    o.insert("title".to_string(), json!(r.title));
+    o.insert("message".to_string(), json!(r.message));
+    o.insert("message_html".to_string(), json!(r.message_html));
+    o.insert("message_stripped".to_string(), json!(r.message_stripped));
+    o.insert("sender".to_string(), json!(r.sender));
+    o.insert("triggered_by".to_string(), json!(r.triggered_by_id));
+    o.insert("triggered_by_details".to_string(), triggered_by_details);
+    o.insert("receiver".to_string(), json!(r.receiver_id));
+    o.insert("read_at".to_string(), json!(r.read_at));
+    o.insert("snoozed_till".to_string(), json!(r.snoozed_till));
+    o.insert("archived_at".to_string(), json!(r.archived_at));
+    o.insert("is_inbox_issue".to_string(), json!(r.is_inbox_issue));
+    o.insert("is_intake_issue".to_string(), json!(r.is_intake_issue));
+    o.insert("is_mentioned_notification".to_string(), json!(r.is_mentioned_notification));
+    Value::Object(o)
+}
+
+async fn fetch_notif_full(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pk: uuid::Uuid,
+    receiver: uuid::Uuid,
+) -> Result<Option<NotifFullRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {NOTIF_FULL_COLS} FROM notifications n \
+         JOIN workspaces w ON w.id = n.workspace_id \
+         LEFT JOIN users tu ON tu.id = n.triggered_by_id \
+         WHERE w.slug = $1 AND n.id = $2 AND n.receiver_id = $3 AND n.deleted_at IS NULL",
+    ))
+    .bind(slug)
+    .bind(pk)
+    .bind(receiver)
+    .fetch_optional(pool)
+    .await
+}
+
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-) -> Result<Json<Vec<Value>>, common::errors::AppError> {
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // AMG at WORKSPACE level (`base.py:48`).
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
     let receiver = auth.0;
-    let rows = sqlx::query_as::<_, common::models::notification::Notification>(
-        "SELECT n.id, n.title, n.read_at, n.archived_at FROM notifications n JOIN workspaces w ON w.id = n.workspace_id WHERE w.slug = $1 AND n.receiver_id = $2 AND n.deleted_at IS NULL ORDER BY n.created_at DESC",
-    )
+    // `base.py:86-96` — exact-"true" match picks the true-branch.
+    let snoozed = params.get("snoozed").map(|s| s.as_str()) == Some("true");
+    let archived = params.get("archived").map(|s| s.as_str()) == Some("true");
+    let read = params.get("read").map(|s| s.as_str());
+    // `base.py:56` — `request.GET.get("mentioned", False)`: ANY present
+    // non-empty value (even "false") is truthy → mentioned-only.
+    let mentioned = params.get("mentioned").map(|s| !s.is_empty()).unwrap_or(false);
+    let types: Vec<&str> = params
+        .get("type")
+        .map(|s| s.split(',').collect())
+        .unwrap_or_else(|| vec!["all"]);
+    // `base.py:113-135` type subqueries (OR-combined; empty Q = no-op).
+    let mut type_clauses: Vec<String> = Vec::new();
+    if types.contains(&"subscribed") {
+        type_clauses.push(
+            "n.entity_identifier IN (SELECT s.issue_id FROM issue_subscribers s \
+             JOIN workspaces w2 ON w2.id = s.workspace_id WHERE w2.slug = $1 \
+             AND s.subscriber_id = $2 \
+             AND NOT EXISTS(SELECT 1 FROM issues ci WHERE ci.id = s.issue_id AND ci.created_by_id = $2) \
+             AND NOT EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = s.issue_id AND ia.assignee_id = $2))".to_string(),
+        );
+    }
+    if types.contains(&"assigned") {
+        type_clauses.push(
+            "n.entity_identifier IN (SELECT a.issue_id FROM issue_assignees a \
+             JOIN workspaces w2 ON w2.id = a.workspace_id WHERE w2.slug = $1 \
+             AND a.assignee_id = $2)".to_string(),
+        );
+    }
+    if types.contains(&"created") {
+        // Guests see NOTHING for created (`base.py:124-128` → `.none()`).
+        let role = ws_role(&st.pool, receiver, &slug).await?.unwrap_or(0);
+        if role < 15 {
+            let empty: Vec<Value> = Vec::new();
+            return Ok((StatusCode::OK, Json(json!(empty))));
+        }
+        type_clauses.push(
+            "n.entity_identifier IN (SELECT i.id FROM issues i \
+             JOIN workspaces w2 ON w2.id = i.workspace_id WHERE w2.slug = $1 \
+             AND i.created_by_id = $2)".to_string(),
+        );
+    }
+    let type_filter = if type_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("AND ({})", type_clauses.join(" OR "))
+    };
+    let snoozed_filter = if snoozed {
+        "AND (n.snoozed_till < now() OR n.snoozed_till IS NOT NULL)"
+    } else {
+        "AND (n.snoozed_till >= now() OR n.snoozed_till IS NULL)"
+    };
+    let archived_filter = if archived {
+        "AND n.archived_at IS NOT NULL"
+    } else {
+        "AND n.archived_at IS NULL"
+    };
+    let read_filter = match read {
+        Some("true") => "AND n.read_at IS NOT NULL",
+        Some("false") => "AND n.read_at IS NULL",
+        _ => "",
+    };
+    let mentioned_filter = if mentioned {
+        "AND n.sender ILIKE '%mentioned%'"
+    } else {
+        "AND n.sender NOT ILIKE '%mentioned%'"
+    };
+    let base_where = format!(
+        "FROM notifications n JOIN workspaces w ON w.id = n.workspace_id \
+         LEFT JOIN users tu ON tu.id = n.triggered_by_id \
+         WHERE w.slug = $1 AND n.receiver_id = $2 AND n.entity_name = 'issue' \
+         AND n.deleted_at IS NULL {snoozed_filter} {archived_filter} \
+         {read_filter} {mentioned_filter} {type_filter}"
+    );
+    // `base.py:141-154` — paginate ONLY when per_page+cursor both present.
+    let paginate = params.contains_key("per_page") && params.contains_key("cursor");
+    if paginate {
+        let per_page_raw = params.get("per_page").map(|s| s.as_str());
+        let limit = match parse_per_page(per_page_raw) {
+            Ok(v) => v,
+            Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+        };
+        let cursor = match parse_cursor(params.get("cursor").map(|s| s.as_str()).unwrap_or("1000:0:0")) {
+            Ok(c) => c,
+            Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+        };
+        let window = match page_window(cursor.page, limit) {
+            Ok(w) => w,
+            Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        };
+        // `sanitize_order_by(..., NOTIFICATION_ORDER_BY_ALLOWLIST={created_at,updated_at})`.
+        let order_raw = params.get("order_by").map(|s| s.as_str()).unwrap_or("-created_at");
+        let (bare, desc) = match order_raw.strip_prefix('-') {
+            Some(b) => (b, true),
+            None => (order_raw, false),
+        };
+        let key_col = match bare {
+            "created_at" | "updated_at" if !bare.starts_with("--") => bare,
+            _ => "created_at",
+        };
+        let desc = if bare == "created_at" || bare == "updated_at" {
+            desc
+        } else {
+            true
+        };
+        let order_expr = format!(
+            "n.{key_col} {} NULLS LAST, n.created_at DESC",
+            if desc { "DESC" } else { "ASC" }
+        );
+        let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {base_where}"))
+            .bind(&slug)
+            .bind(receiver)
+            .fetch_one(&st.pool)
+            .await?;
+        let mut rows: Vec<NotifFullRow> = match window {
+            PageWindow::Rows(offset) => {
+                let sql = format!(
+                    "SELECT {NOTIF_FULL_COLS} {base_where} ORDER BY {order_expr} LIMIT $3 OFFSET $4"
+                );
+                sqlx::query_as(&sql)
+                    .bind(&slug)
+                    .bind(receiver)
+                    .bind(limit + 1)
+                    .bind(offset)
+                    .fetch_all(&st.pool)
+                    .await?
+            }
+            PageWindow::BeyondEnd => Vec::new(),
+        };
+        let next_page_results = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        let envelope = DetailEnvelope {
+            grouped_by: None,
+            sub_grouped_by: None,
+            total_count: total,
+            next_cursor: next_cursor_str(limit, cursor.page),
+            prev_cursor: prev_cursor_str(limit, cursor.page),
+            next_page_results,
+            prev_page_results: cursor.page > 0,
+            count: rows.len() as i64,
+            total_pages: total_pages(total, limit),
+            total_results: total,
+            extra_stats: None,
+            results: rows.iter().map(notif_full_json).collect(),
+        };
+        return Ok((StatusCode::OK, Json(json!(envelope))));
+    }
+    let rows: Vec<NotifFullRow> = sqlx::query_as(&format!(
+        "SELECT {NOTIF_FULL_COLS} {base_where} ORDER BY n.snoozed_till ASC NULLS LAST, n.created_at DESC"
+    ))
     .bind(&slug)
     .bind(receiver)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|n| json!({"id": n.id, "title": n.title, "read_at": n.read_at, "archived_at": n.archived_at}))
-            .collect(),
-    ))
+    Ok((StatusCode::OK, Json(json!(rows.iter().map(notif_full_json).collect::<Vec<_>>()))))
 }
 
 pub async fn unread(
@@ -150,10 +422,9 @@ pub async fn mark_read(
     if !toggle(&st, &slug, receiver, pk, "read_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    // Django `mark_read` (`base.py:168-174`) returns the 200 serializer row
-    // (subset shape per file precedent); re-read through the GET twin's scope.
-    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
-        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+    // Django `mark_read` (`base.py:168-174`) returns the 200 full serializer row.
+    match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }
@@ -167,9 +438,9 @@ pub async fn mark_unread(
     if !toggle(&st, &slug, receiver, pk, "read_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    // Django `mark_unread` (`base.py:176-182`) returns the 200 serializer row.
-    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
-        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+    // Django `mark_unread` (`base.py:176-182`) returns the 200 full serializer row.
+    match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }
@@ -183,9 +454,9 @@ pub async fn archive(
     if !toggle(&st, &slug, receiver, pk, "archived_at", true).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    // Django `archive` (`base.py:184-190`) returns the 200 serializer row.
-    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
-        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+    // Django `archive` (`base.py:184-190`) returns the 200 full serializer row.
+    match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }
@@ -199,9 +470,9 @@ pub async fn unarchive(
     if !toggle(&st, &slug, receiver, pk, "archived_at", false).await? {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
     }
-    // Django `unarchive` (`base.py:192-198`) returns the 200 serializer row.
-    match fetch_notification_detail(&st.pool, &slug, pk, receiver).await? {
-        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+    // Django `unarchive` (`base.py:192-198`) returns the 200 full serializer row.
+    match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }
@@ -216,57 +487,14 @@ pub fn snoozed_till_from_body(body: &Value) -> Option<String> {
     body.get("snoozed_till")?.as_str().map(|s| s.to_string())
 }
 
-/// Detail row: the `list` shape (`id, title, read_at, archived_at`) extended
-/// with the live `snoozed_till` column (verified in
-/// `migrations/0001_initial.sql`, `notifications.snoozed_till timestamptz` —
-/// the shared `common::models::notification::Notification` struct omits it,
-/// so the detail handlers use this local struct; `list` is untouched).
-/// Subset of Django's `NotificationSerializer(fields="__all__")`
-/// (`serializers/notification.py:14-22`) per file precedent — the FE
-/// `updateNotificationById` caller
-/// (`workspace-notification.service.ts:48-62`) only needs the row back.
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct NotificationDetail {
-    id: uuid::Uuid,
-    title: String,
-    read_at: Option<chrono::DateTime<chrono::Utc>>,
-    archived_at: Option<chrono::DateTime<chrono::Utc>>,
-    snoozed_till: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-fn notification_detail_json(n: &NotificationDetail) -> Value {
-    json!({
-        "id": n.id,
-        "title": n.title,
-        "read_at": n.read_at,
-        "archived_at": n.archived_at,
-        "snoozed_till": n.snoozed_till,
-    })
-}
-
-/// Gate (all three detail handlers): mirrors the neighboring notification
-/// handlers — receiver-scoped `(workspace__slug, pk, receiver=user)` queries
+/// Gate (detail handlers): mirrors the neighboring notification handlers —
+/// receiver-scoped `(workspace__slug, pk, receiver=user)` queries
 /// (`base.py:37-46` `get_queryset`), no explicit `ws_role` lookup. This
 /// carries Django's `@allow_permission([ADMIN, MEMBER, GUEST],
 /// level="WORKSPACE")`: a caller outside the workspace has no receiver rows
 /// under that slug, so every path misses → 404 (Django would 403 the
-/// non-member instead — normalized to the file's 404 precedent).
-async fn fetch_notification_detail(
-    pool: &sqlx::PgPool,
-    slug: &str,
-    pk: uuid::Uuid,
-    receiver: uuid::Uuid,
-) -> Result<Option<NotificationDetail>, common::errors::AppError> {
-    sqlx::query_as::<_, NotificationDetail>(
-        "SELECT n.id, n.title, n.read_at, n.archived_at, n.snoozed_till FROM notifications n JOIN workspaces w ON w.id = n.workspace_id WHERE w.slug = $1 AND n.id = $2 AND n.receiver_id = $3 AND n.deleted_at IS NULL",
-    )
-    .bind(slug)
-    .bind(pk)
-    .bind(receiver)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.into())
-}
+/// non-member instead — normalized to the file's 404 precedent). Rows are
+/// fetched via [`fetch_notif_full`] (full serializer shape).
 
 /// Parity with `NotificationViewSet.retrieve` (default DRF retrieve over the
 /// receiver-scoped queryset, `urls/notification.py:24`). Miss: Django's
@@ -277,8 +505,8 @@ pub async fn get_notification(
     auth: AuthUser,
     axum::extract::Path((slug, pk)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    match fetch_notification_detail(&st.pool, &slug, pk, auth.0).await? {
-        Some(n) => Ok((StatusCode::OK, Json(notification_detail_json(&n)))),
+    match fetch_notif_full(&st.pool, &slug, pk, auth.0).await? {
+        Some(n) => Ok((StatusCode::OK, Json(notif_full_json(&n)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }
@@ -312,8 +540,8 @@ pub async fn patch_notification(
     // 200 serializer row (`base.py:165`); the row exists (we just updated
     // it), re-read through the GET twin's scope (a concurrent delete
     // racing us here misses → 404, never a panic).
-    match fetch_notification_detail(&st.pool, &slug, pk, auth.0).await? {
-        Some(row) => Ok((StatusCode::OK, Json(notification_detail_json(&row)))),
+    match fetch_notif_full(&st.pool, &slug, pk, auth.0).await? {
+        Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
     }
 }

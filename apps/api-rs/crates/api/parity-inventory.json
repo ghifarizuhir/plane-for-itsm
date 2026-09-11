@@ -1226,7 +1226,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/users/notifications/",
           "django_source": "app/urls/notification.py:17",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::notification::list",
           "fe_evidence": [
             {
@@ -1235,15 +1235,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T2",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified NotificationViewSet.list (base.py:48-154) vs list (notification.rs:45-63, main.rs:1093): Django 200 NotificationSerializer __all__ (serializers/notification.py:14-22) over receiver-scoped qs (base.py:37-46) with snoozed/archived/read/type/mentioned filters (base.py:50-138), paginates only when per_page+cursor both present (base.py:141-154) else plain list; rust 200 bare [{id,title,read_at,archived_at}] with no filters/pagination; AMG WORKSPACE gate (base.py:48) vs rust receiver-scoped query with no ws_role lookup (non-member misses to empty, Django 403s)"
+          "notes": "verified NotificationViewSet.list (base.py:48-154) vs list (notification.rs:45-63, main.rs:1093): Django 200 NotificationSerializer __all__ (serializers/notification.py:14-22) over receiver-scoped qs (base.py:37-46) with snoozed/archived/read/type/mentioned filters (base.py:50-138), paginates only when per_page+cursor both present (base.py:141-154) else plain list; rust 200 bare [{id,title,read_at,archived_at}] with no filters/pagination; AMG WORKSPACE gate (base.py:48) vs rust receiver-scoped query with no ws_role lookup (non-member misses to empty, Django 403s) | F6d: full NotificationSerializer rows + entity=issue + snoozed/archived/read/mentioned/type filters + AMG gate + conditional OffsetPaginator envelope."
         },
         {
           "methods": ["POST", "DELETE"],
           "path": "/api/workspaces/:slug/users/notifications/:pk/read/",
           "django_source": "app/urls/notification.py:27",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::notification::mark_read",
           "fe_evidence": [
             {
@@ -1256,15 +1256,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T2",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified mark_read POST sets read_at=now (base.py:168-174) / mark_unread DELETE clears read_at (base.py:176-182), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle read_at (notification.rs:122-142) via mark_read/mark_unread (notification.rs:144-166, main.rs:1100-1101) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:168,176) vs rust query-scoped; static route registered before :pk/ (main.rs:1100-1101 vs 1118) so no :pk shadowing (members/leave/ precedent) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1."
+          "notes": "verified mark_read POST sets read_at=now (base.py:168-174) / mark_unread DELETE clears read_at (base.py:176-182), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle read_at (notification.rs:122-142) via mark_read/mark_unread (notification.rs:144-166, main.rs:1100-1101) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:168,176) vs rust query-scoped; static route registered before :pk/ (main.rs:1100-1101 vs 1118) so no :pk shadowing (members/leave/ precedent) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1. | F6d: full serializer rows on all four toggles (shared NotifFullRow fetch)."
         },
         {
           "methods": ["POST", "DELETE"],
           "path": "/api/workspaces/:slug/users/notifications/:pk/archive/",
           "django_source": "app/urls/notification.py:32",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::notification::archive",
           "fe_evidence": [
             {
@@ -1277,9 +1277,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T2",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified archive POST sets archived_at=now (base.py:184-190) / unarchive DELETE clears (base.py:192-198), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle archived_at via archive/unarchive (notification.rs:168-190, main.rs:1104-1105) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:184,192) vs rust query-scoped; static route before :pk/ (main.rs:1104-1105 vs 1118) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1."
+          "notes": "verified archive POST sets archived_at=now (base.py:184-190) / unarchive DELETE clears (base.py:192-198), both 200 serializer row, receiver-scoped .get() (miss raises 500); rust toggle archived_at via archive/unarchive (notification.rs:168-190, main.rs:1104-1105) returns 204 null + 404 miss (sane mapping); AMG gate Django (base.py:184,192) vs rust query-scoped; static route before :pk/ (main.rs:1104-1105 vs 1118) | F2: 204->200 serializer row (base.py:168-198); row subset-shape, full serializer still T1. | F6d: full serializer rows on all four toggles (shared NotifFullRow fetch)."
         },
         {
           "methods": ["GET"],
@@ -2716,7 +2716,7 @@
           "methods": ["POST"],
           "path": "/api/users/me/email/generate-code/",
           "django_source": "app/urls/user.py:38",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::users_me::generate_email_code",
           "fe_evidence": [
             {
@@ -2725,15 +2725,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch M T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "MISMATCH vs UserEndpoint.generate_email_verification_code (views/user/base.py:137-174, urls/user.py:38, main.rs:1339-1342 post(generate_email_code) routes/users_me.rs:79-148): (c) 5th error 'Failed to generate verification code. Please try again.' (400 on cache/celery exception, base.py:169-174) absent in Rust — Redis/DB failure maps to 500 {'error':'internal error'} (users_me.rs:103-106,142-144); throttle 429 body differs — DRF default throttled detail vs 429 {'error_code':5900,'error_message':'RATE_LIMIT_EXCEEDED'} (users_me.rs:131-133), same 3/hour budget (EmailVerificationThrottle rate_limit.py:93-100 via get_throttles base.py:67-73 vs INCR emailcode:throttle:{uid} + EXPIRE 3600 users_me.rs:109-130); match: 4 _validate_new_email errors byte-exact (base.py:106-133 vs validate_new_email users_me.rs:41-75), 200 {'message':'Verification code sent to email'} (base.py:165-168 vs users_me.rs:147), 10-min TTL (timeout=600 base.py:160 vs EX 600 users_me.rs:135-141), 6-digit code (randbelow base.py:157 vs new_email_code users_me.rs:26-29); cache-key format internal-only (magic_email_update_{uid}_{email} vs emailcode:{uid}:{email}); celery delivery (base.py:163) vs pending-SMTP log (users_me.rs:146) side-effect only; FE generateEmailCode POSTs exact URL (user.service.ts:277-283); fe_pages []"
+          "notes": "MISMATCH vs UserEndpoint.generate_email_verification_code (views/user/base.py:137-174, urls/user.py:38, main.rs:1339-1342 post(generate_email_code) routes/users_me.rs:79-148): (c) 5th error 'Failed to generate verification code. Please try again.' (400 on cache/celery exception, base.py:169-174) absent in Rust — Redis/DB failure maps to 500 {'error':'internal error'} (users_me.rs:103-106,142-144); throttle 429 body differs — DRF default throttled detail vs 429 {'error_code':5900,'error_message':'RATE_LIMIT_EXCEEDED'} (users_me.rs:131-133), same 3/hour budget (EmailVerificationThrottle rate_limit.py:93-100 via get_throttles base.py:67-73 vs INCR emailcode:throttle:{uid} + EXPIRE 3600 users_me.rs:109-130); match: 4 _validate_new_email errors byte-exact (base.py:106-133 vs validate_new_email users_me.rs:41-75), 200 {'message':'Verification code sent to email'} (base.py:165-168 vs users_me.rs:147), 10-min TTL (timeout=600 base.py:160 vs EX 600 users_me.rs:135-141), 6-digit code (randbelow base.py:157 vs new_email_code users_me.rs:26-29); cache-key format internal-only (magic_email_update_{uid}_{email} vs emailcode:{uid}:{email}); celery delivery (base.py:163) vs pending-SMTP log (users_me.rs:146) side-effect only; FE generateEmailCode POSTs exact URL (user.service.ts:277-283); fe_pages [] | F6d: cache/celery failure -> 400 verbatim; throttle 429 -> DRF default detail body with live TTL."
         },
         {
           "methods": ["PATCH"],
           "path": "/api/users/me/email/",
           "django_source": "app/urls/user.py:43",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::users_me::update_email",
           "fe_evidence": [
             {
@@ -2742,15 +2742,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch M T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "MISMATCH vs UserEndpoint.update_email (views/user/base.py:176-250, urls/user.py:43, main.rs:1343-1346 patch(update_email) routes/users_me.rs:159-235): (c) 'Failed to verify code. Please try again.' (corrupt-cache branch, base.py:218-222) absent in Rust — parse failure falls through to 'Invalid verification code' (users_me.rs:196-199); match: shared _validate_new_email 4 errors (base.py:187-189 vs users_me.rs:179-182), 'Verification code is required' (base.py:191-195 vs users_me.rs:183-186), 'Verification code has expired or is invalid' (base.py:202-207 vs users_me.rs:192-195), 'Invalid verification code' (base.py:212-216 vs users_me.rs:197-199), duplicate recheck 'An account with this email already exists' (base.py:224-229 vs users_me.rs:211-213), success sets email + is_email_verified=False (base.py:230-235 vs users_me.rs:214-218), cache delete (base.py:238 vs users_me.rs:219), logout(request) (base.py:241) vs cleared-cookie headers plane_at/plane_rt (users_me.rs:220-223), 200 full UserMeSerializer via shared fetch_me/me_json builder (base.py:249-250 vs users_me.rs:227-228, locked by tests users_me.rs:1040-1091); confirmation emails celery (base.py:243-246) vs no-SMTP side-effect only; FE verifyEmailCode PATCHes exact URL body {email,code} (user.service.ts:285-291); fe_pages []"
+          "notes": "MISMATCH vs UserEndpoint.update_email (views/user/base.py:176-250, urls/user.py:43, main.rs:1343-1346 patch(update_email) routes/users_me.rs:159-235): (c) 'Failed to verify code. Please try again.' (corrupt-cache branch, base.py:218-222) absent in Rust — parse failure falls through to 'Invalid verification code' (users_me.rs:196-199); match: shared _validate_new_email 4 errors (base.py:187-189 vs users_me.rs:179-182), 'Verification code is required' (base.py:191-195 vs users_me.rs:183-186), 'Verification code has expired or is invalid' (base.py:202-207 vs users_me.rs:192-195), 'Invalid verification code' (base.py:212-216 vs users_me.rs:197-199), duplicate recheck 'An account with this email already exists' (base.py:224-229 vs users_me.rs:211-213), success sets email + is_email_verified=False (base.py:230-235 vs users_me.rs:214-218), cache delete (base.py:238 vs users_me.rs:219), logout(request) (base.py:241) vs cleared-cookie headers plane_at/plane_rt (users_me.rs:220-223), 200 full UserMeSerializer via shared fetch_me/me_json builder (base.py:249-250 vs users_me.rs:227-228, locked by tests users_me.rs:1040-1091); confirmation emails celery (base.py:243-246) vs no-SMTP side-effect only; FE verifyEmailCode PATCHes exact URL body {email,code} (user.service.ts:285-291); fe_pages [] | F6d: corrupt-cache/redis-error branch -> Failed-to-verify verbatim; numeric tokens stringified (str() parity)."
         },
         {
           "methods": ["GET"],
           "path": "/api/users/me/accounts/",
           "django_source": "app/urls/user.py:51",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::user::list_accounts",
           "fe_evidence": [
             {
@@ -2759,27 +2759,27 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch M T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "MISMATCH vs AccountEndpoint.get list branch (views/user/base.py:399-408, urls/user.py:51, main.rs:1367-1369 get(list_accounts) routes/user.rs:1049-1063): (b) item FK key 'user' (pk, AccountSerializer __all__ serializers/user.py:208-212 over Account db/models/user.py:271-295) vs 'user_id' (to_jsonb raw column user.rs:1053-1056); match: GET-only both (AccountEndpoint has get+delete only, NO POST in Django — methods stay GET), 200 array both, user-scoped both (base.py:406 vs WHERE user_id user.rs:1054); FE getCurrentUserAccounts GETs exact URL (user.service.ts:79-80); fe_pages []"
+          "notes": "MISMATCH vs AccountEndpoint.get list branch (views/user/base.py:399-408, urls/user.py:51, main.rs:1367-1369 get(list_accounts) routes/user.rs:1049-1063): (b) item FK key 'user' (pk, AccountSerializer __all__ serializers/user.py:208-212 over Account db/models/user.py:271-295) vs 'user_id' (to_jsonb raw column user.rs:1053-1056); match: GET-only both (AccountEndpoint has get+delete only, NO POST in Django — methods stay GET), 200 array both, user-scoped both (base.py:406 vs WHERE user_id user.rs:1054); FE getCurrentUserAccounts GETs exact URL (user.service.ts:79-80); fe_pages [] | F6d: FK renders as user (pk) in __all__ order via explicit jsonb_build_object."
         },
         {
           "methods": ["GET", "DELETE"],
           "path": "/api/users/me/accounts/:pk/",
           "django_source": "app/urls/user.py:52",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::user::get_account",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch M T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "MISMATCH vs AccountEndpoint.get(pk)/delete (views/user/base.py:400-404,410-413, urls/user.py:52, main.rs:1371-1374 get(get_account).delete(delete_account) routes/user.rs:1065-1112): (c) miss 404 {'error':'The required object does not exist.'} (BaseAPIView.handle_exception ObjectDoesNotExist views/base.py:189-193) vs 404 {'error':'Account not found'} (user.rs:1082-1085,1106-1109), sticky-precedent string delta; match: scoped Account.objects.get(pk,user) (base.py:402,411) vs WHERE id+user_id (user.rs:1071,1095), DELETE 204 both (base.py:413 vs user.rs:1111), same 'user' vs 'user_id' item-key delta as collection entry; delete handler routes::user::delete_account; repo-wide grep accounts/${ shows no detail caller so fe_evidence []; fe_pages [] | F1: get/delete miss unified to missing() generic-404 (views/base.py:92-96; user/base.py:402,411)."
+          "notes": "MISMATCH vs AccountEndpoint.get(pk)/delete (views/user/base.py:400-404,410-413, urls/user.py:52, main.rs:1371-1374 get(get_account).delete(delete_account) routes/user.rs:1065-1112): (c) miss 404 {'error':'The required object does not exist.'} (BaseAPIView.handle_exception ObjectDoesNotExist views/base.py:189-193) vs 404 {'error':'Account not found'} (user.rs:1082-1085,1106-1109), sticky-precedent string delta; match: scoped Account.objects.get(pk,user) (base.py:402,411) vs WHERE id+user_id (user.rs:1071,1095), DELETE 204 both (base.py:413 vs user.rs:1111), same 'user' vs 'user_id' item-key delta as collection entry; delete handler routes::user::delete_account; repo-wide grep accounts/${ shows no detail caller so fe_evidence []; fe_pages [] | F1: get/delete miss unified to missing() generic-404 (views/base.py:92-96; user/base.py:402,411). | F6d: same user-key fix; miss already unified (F1)."
         },
         {
           "methods": ["GET"],
           "path": "/api/users/me/workspaces/",
           "django_source": "app/urls/user.py:67",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::users_me::my_workspaces",
           "fe_evidence": [
             {
@@ -2792,9 +2792,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch M T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "MISMATCH vs UserWorkSpacesEndpoint.get (views/workspace/base.py:175-211, urls/user.py:67, main.rs:1347-1350 get(my_workspaces) routes/users_me.rs:263-327): (b) owner pk (FK default, WorkSpaceSerializer serializers/workspace.py:43-83 declares no nesting) vs nested {id,email,first_name,last_name} (users_me.rs:315-320); organization_size null (models/workspace.py:137 null=True) vs '' (unwrap_or_default users_me.rs:309); ?fields= subset + name-search/owner filters (base.py:181,205-209) ignored — my_workspaces takes no Query extractor (users_me.rs:265-268); match: active-membership scoping (base.py:193-203 vs JOIN workspace_members is_active users_me.rs:284-289), annotated role + total_members (base.py:182-191,200 vs users_me.rs:259-260,321-322), GET 200 array; logo_url equivalent via actual column (fa.asset fallback w.logo users_me.rs:238-240,274-287 vs logo_asset.asset_url property models/workspace.py:146-154); FE userWorkspaces (workspace.service.ts:38-44) + packages WorkspaceService.list (packages/services/src/workspace/workspace.service.ts:30-36, method is 'list' not 'userWorkspaces' — plan-hint variance recorded) both GET exact URL; fe_pages []"
+          "notes": "MISMATCH vs UserWorkSpacesEndpoint.get (views/workspace/base.py:175-211, urls/user.py:67, main.rs:1347-1350 get(my_workspaces) routes/users_me.rs:263-327): (b) owner pk (FK default, WorkSpaceSerializer serializers/workspace.py:43-83 declares no nesting) vs nested {id,email,first_name,last_name} (users_me.rs:315-320); organization_size null (models/workspace.py:137 null=True) vs '' (unwrap_or_default users_me.rs:309); ?fields= subset + name-search/owner filters (base.py:181,205-209) ignored — my_workspaces takes no Query extractor (users_me.rs:265-268); match: active-membership scoping (base.py:193-203 vs JOIN workspace_members is_active users_me.rs:284-289), annotated role + total_members (base.py:182-191,200 vs users_me.rs:259-260,321-322), GET 200 array; logo_url equivalent via actual column (fa.asset fallback w.logo users_me.rs:238-240,274-287 vs logo_asset.asset_url property models/workspace.py:146-154); FE userWorkspaces (workspace.service.ts:38-44) + packages WorkspaceService.list (packages/services/src/workspace/workspace.service.ts:30-36, method is 'list' not 'userWorkspaces' — plan-hint variance recorded) both GET exact URL; fe_pages [] | F6d: owner renders as PK (no FE reader); organization_size null-verbatim; ?fields=/search=/owner= wired."
         },
         {
           "methods": ["GET"],
@@ -2841,7 +2841,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/search/",
           "django_source": "app/urls/search.py:12",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::search::global_search",
           "fe_evidence": [
             {
@@ -2850,9 +2850,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T3",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified GlobalSearchEndpoint.get (views/search/base.py:271-302) vs global_search (search.rs:94-156, main.rs:1127): 200 {results:{workspace,project,issue,cycle,module,issue_view,page,intake}} both; Django per-entity .values() keys e.g. projects name/id/identifier/workspace__slug (base.py:80), issues name/id/sequence_id/project__identifier/project_id/workspace__slug [:100] (base.py:107-114) vs rust {id,name} per bucket (workspace adds slug) LIMIT 10 (search.rs:107-150); params search/entities/workspace_search/project_id both, unknown entities ignored both (base.py:289-293, search.rs:35-52); IsAuthenticated-only both (views/base.py:150)"
+          "notes": "verified GlobalSearchEndpoint.get (views/search/base.py:271-302) vs global_search (search.rs:94-156, main.rs:1127): 200 {results:{workspace,project,issue,cycle,module,issue_view,page,intake}} both; Django per-entity .values() keys e.g. projects name/id/identifier/workspace__slug (base.py:80), issues name/id/sequence_id/project__identifier/project_id/workspace__slug [:100] (base.py:107-114) vs rust {id,name} per bucket (workspace adds slug) LIMIT 10 (search.rs:107-150); params search/entities/workspace_search/project_id both, unknown entities ignored both (base.py:289-293, search.rs:35-52); IsAuthenticated-only both (views/base.py:150) | F6d: Django .values() bucket keys + archived/member scoping + workspace_search project-filter semantics + pages arrays + intake-issue bucket."
         },
         {
           "methods": ["GET"],
@@ -2875,7 +2875,7 @@
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/entity-search/",
           "django_source": "app/urls/search.py:22",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::search::entity_search",
           "fe_evidence": [
             {
@@ -2884,9 +2884,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T3",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified SearchEndpoint.get (views/search/base.py:308-730) vs entity_search (search.rs:218-233, main.rs:1132): Django query_type in {user_mention,project,issue,cycle,module,page} default user_mention, count default 5, optional project_id scoping (base.py:309-313) vs rust user_mention-only {user_mention:[{id,display_name}]} count clamp 1-50 (search.rs:224-232); Django user_mention keys member__avatar_url/member__display_name/member__id (base.py:360-364) vs rust id/display_name; WorkspaceUserPermission gate Django (base.py:306) vs auth-only rust"
+          "notes": "verified SearchEndpoint.get (views/search/base.py:308-730) vs entity_search (search.rs:218-233, main.rs:1132): Django query_type in {user_mention,project,issue,cycle,module,page} default user_mention, count default 5, optional project_id scoping (base.py:309-313) vs rust user_mention-only {user_mention:[{id,display_name}]} count clamp 1-50 (search.rs:224-232); Django user_mention keys member__avatar_url/member__display_name/member__id (base.py:360-364) vs rust id/display_name; WorkspaceUserPermission gate Django (base.py:306) vs auth-only rust | F6d: all 6 query_types + member__ key names + avatar annotation + project/public scope + cycle status + page variants + ws-member gate."
         }
       ]
     },
@@ -2951,7 +2951,7 @@
           "methods": ["GET"],
           "path": "/api/timezones/",
           "django_source": "app/urls/timezone.py:11",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::misc::timezones",
           "fe_evidence": [
             {
@@ -2960,9 +2960,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T4",
+          "batch_task": "Batch F6d",
           "out_scope": false,
-          "notes": "verified TimezoneEndpoint.get (views/timezone/base.py:23-215) vs timezones (misc.rs:40-44, main.rs:1250): GET 200; Django 200 {timezones:[{label,value,utc_offset,gmt_offset}]} envelope sorted by offset+label (base.py:184-215) vs rust bare [{label,value}] array from codegen'd timezones.json; AllowAny both (base.py:24, no auth extractor in rust); Django AuthenticationThrottle (base.py:26) + cache_page(2h) (base.py:28) have no rust equivalent; FE timezone.service.ts fetch"
+          "notes": "verified TimezoneEndpoint.get (views/timezone/base.py:23-215) vs timezones (misc.rs:40-44, main.rs:1250): GET 200; Django 200 {timezones:[{label,value,utc_offset,gmt_offset}]} envelope sorted by offset+label (base.py:184-215) vs rust bare [{label,value}] array from codegen'd timezones.json; AllowAny both (base.py:24, no auth extractor in rust); Django AuthenticationThrottle (base.py:26) + cache_page(2h) (base.py:28) have no rust equivalent; FE timezone.service.ts fetch | F6d: {timezones:[...]} envelope + live DST-aware utc/gmt offsets (chrono-tz) + (offset,label) sort; locked by misc_test."
         }
       ]
     },

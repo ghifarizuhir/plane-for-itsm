@@ -46,8 +46,40 @@ pub fn default_token_label(label: Option<String>) -> String {
 
 pub async fn timezones() -> Json<Value> {
     // Generated from apps/api/plane/app/views/timezone/base.py.
+    // Django `TimezoneEndpoint.get` (`base.py:184-215`) returns
+    // `{"timezones": [...]}` sorted by CURRENT utc offset then label, each
+    // `{utc_offset: "UTC±HH:MM", gmt_offset: "GMT±HH:MM", value, label}`.
+    // Offsets are DST-aware (`now.astimezone(tz)`), so they are computed
+    // live here with chrono-tz rather than baked into the JSON.
     const DATA: &str = include_str!("../timezones.json");
-    Json(serde_json::from_str(DATA).unwrap_or(Value::Array(vec![])))
+    let base: Vec<Value> = serde_json::from_str(DATA).unwrap_or_default();
+    let now = chrono::Utc::now();
+    let mut rows: Vec<(i32, String, Value)> = base
+        .into_iter()
+        .filter_map(|v| {
+            let value = v.get("value")?.as_str()?.to_string();
+            let label = v.get("label").and_then(Value::as_str).unwrap_or("").to_string();
+            let tz: chrono_tz::Tz = value.parse().ok()?;
+            let off = {
+                use chrono::Offset as _;
+                now.with_timezone(&tz).offset().fix().local_minus_utc()
+            };
+            let sign = if off >= 0 { '+' } else { '-' };
+            let a = off.abs();
+            let stamp = format!("{sign}{:02}:{:02}", a / 3600, (a % 3600) / 60);
+            let row = json!({
+                "utc_offset": format!("UTC{stamp}"),
+                "gmt_offset": format!("GMT{stamp}"),
+                "value": value,
+                "label": label,
+            });
+            Some((off, label, row))
+        })
+        .collect();
+    // Unknown identifiers (Django skips via UnknownTimeZoneError) are
+    // already filtered; sort by (offset, label), mirroring `base.py:208`.
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    Json(json!({"timezones": rows.into_iter().map(|(_, _, r)| r).collect::<Vec<_>>()}))
 }
 
 // ---- exporter ----

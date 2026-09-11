@@ -33,6 +33,7 @@ aes = { workspace = true }
 regex = { workspace = true }
 zxcvbn = "3"
 rand = "0.9"
+chrono-tz = "0.10.4"
 
 [dev-dependencies]
 chrono = { workspace = true }

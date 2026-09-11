@@ -1046,12 +1046,24 @@ pub async fn tour_completed(
 
 /// GET /api/users/me/accounts/ (+`/<pk>/`) — miss → 404 (Django `.get()`
 /// crash dinormalisasi).
+///
+/// The FK renders as `user` (pk), NOT the raw `user_id` column
+/// (`AccountSerializer`, `serializers/user.py:208-212`, `__all__` order —
+/// built explicitly so the renamed key keeps its model-order position).
+const ACCOUNT_JSON: &str = "jsonb_build_object('id', a.id, 'created_at', a.created_at, \
+    'updated_at', a.updated_at, 'user', a.user_id, \
+    'provider_account_id', a.provider_account_id, 'provider', a.provider, \
+    'access_token', a.access_token, 'access_token_expired_at', a.access_token_expired_at, \
+    'refresh_token', a.refresh_token, \
+    'refresh_token_expired_at', a.refresh_token_expired_at, \
+    'last_connected_at', a.last_connected_at, 'id_token', a.id_token, 'metadata', a.metadata)";
+
 pub async fn list_accounts(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let rows: Vec<Value> =
-        sqlx::query_scalar("SELECT to_jsonb(a) FROM accounts a WHERE a.user_id = $1")
+        sqlx::query_scalar(&format!("SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.user_id = $1"))
             .bind(auth.0)
             .fetch_all(&st.pool)
             .await
@@ -1068,7 +1080,7 @@ pub async fn get_account(
     Path(pk): Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let row: Option<Value> =
-        sqlx::query_scalar("SELECT to_jsonb(a) FROM accounts a WHERE a.id = $1 AND a.user_id = $2")
+        sqlx::query_scalar(&format!("SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.id = $1 AND a.user_id = $2"))
             .bind(pk)
             .bind(auth.0)
             .fetch_optional(&st.pool)
