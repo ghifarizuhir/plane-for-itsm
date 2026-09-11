@@ -65,82 +65,453 @@ pub fn validate_issue_create(body: &CreateIntakeIssue) -> Result<(), String> {
     Ok(())
 }
 
+/// Full `IntakeSerializer` row (`serializers/intake.py:17-24`: `__all__`
+/// + nested `project_detail` lite + annotated `pending_issue_count`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct IntakeFullRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    workspace_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    name: String,
+    description: String,
+    is_default: bool,
+    view_props: Value,
+    logo_props: Value,
+    proj_identifier: String,
+    proj_name: String,
+    proj_cover_image: Option<String>,
+    proj_cover_asset: Option<String>,
+    proj_logo_props: Value,
+    proj_description: String,
+    pending_issue_count: i64,
+}
+
+const INTAKE_FULL_COLS: &str = "i.id, i.created_at, i.updated_at, i.created_by_id, i.updated_by_id, \
+    i.workspace_id, i.project_id, i.name, i.description, i.is_default, i.view_props, i.logo_props, \
+    p.identifier AS proj_identifier, p.name AS proj_name, p.cover_image AS proj_cover_image, \
+    fa.asset AS proj_cover_asset, p.logo_props AS proj_logo_props, p.description AS proj_description, \
+    (SELECT COUNT(*) FROM intake_issues ii WHERE ii.intake_id = i.id \
+     AND ii.status = -2 AND ii.deleted_at IS NULL) AS pending_issue_count";
+
+fn intake_full_json(r: &IntakeFullRow) -> Value {
+    json!({
+        "id": r.id,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by": r.created_by_id,
+        "updated_by": r.updated_by_id,
+        "workspace": r.workspace_id,
+        "project": r.project_id,
+        "name": r.name,
+        "description": r.description,
+        "is_default": r.is_default,
+        "view_props": r.view_props,
+        "logo_props": r.logo_props,
+        "project_detail": {
+            "id": r.project_id,
+            "identifier": r.proj_identifier,
+            "name": r.proj_name,
+            "cover_image": r.proj_cover_image,
+            "cover_image_url": r.proj_cover_asset.clone().or_else(|| r.proj_cover_image.clone()),
+            "logo_props": r.proj_logo_props,
+            "description": r.proj_description,
+        },
+        "pending_issue_count": r.pending_issue_count,
+    })
+}
+
+async fn fetch_intake_full(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    pk: uuid::Uuid,
+) -> Result<Option<IntakeFullRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {INTAKE_FULL_COLS} FROM intakes i \
+         JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN projects p ON p.id = i.project_id \
+         LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
+         WHERE i.id = $1 AND i.project_id = $2 AND w.slug = $3 AND i.deleted_at IS NULL",
+    ))
+    .bind(pk)
+    .bind(project_id)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+}
+
+/// GET `.../intakes/` — Django returns the SINGLE first intake object
+/// (`get_queryset().first()`, `base.py:74-76`), not an array (absent →
+/// 200 null). Gate ADMIN/MEMBER (`base.py:73`).
 pub async fn list(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-) -> Result<Json<Vec<IntakeOut>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::intake::Intake>(
-        "SELECT id, name FROM intakes WHERE project_id = $1 AND deleted_at IS NULL ORDER BY name",
-    )
-    .bind(_project_id)
-    .fetch_all(&st.pool)
-    .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|i| IntakeOut { id: i.id, name: i.name })
-            .collect(),
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
+    let row: Option<IntakeFullRow> = sqlx::query_as(&format!(
+        "SELECT {INTAKE_FULL_COLS} FROM intakes i \
+         JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN projects p ON p.id = i.project_id \
+         LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
+         WHERE i.project_id = $1 AND w.slug = $2 AND i.deleted_at IS NULL \
+         ORDER BY i.name ASC LIMIT 1",
     ))
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(r) => Ok((StatusCode::OK, Json(intake_full_json(&r)))),
+        None => Ok((StatusCode::OK, Json(Value::Null))),
+    }
 }
 
 pub async fn create(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateIntake>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // ADMIN/MEMBER (`base.py:78`).
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
 
-    let existing = sqlx::query_as::<_, common::models::intake::Intake>(
-        "SELECT id, name FROM intakes WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(&body.name)
-    .fetch_optional(&st.pool)
-    .await?;
-    if let Some(intake) = existing {
-        return Ok((
-            StatusCode::CONFLICT,
-            Json(json!({"error": "Intake with the same name already exists in the project", "id": intake.id})),
-        ));
-    }
-
-    let row = sqlx::query_as::<_, common::models::intake::Intake>(
-        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, false, '{}', '{}', $3, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
+    let res = sqlx::query_scalar::<_, uuid::Uuid>(
+        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, false, '{}', '{}', $3, w.id, $5, $5, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id",
     )
     .bind(&body.name)
     .bind(body.description.clone().unwrap_or_default())
     .bind(project_id)
     .bind(&slug)
-    .fetch_one(&st.pool)
-    .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "name": row.name}))))
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await;
+    let new_id = match res {
+        Ok(v) => v,
+        // Unique (name, project) violation → DRF `IntegrityError` handler:
+        // 400 `{"error": "The payload is not valid"}` (`views/base.py:80-84`).
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate key") {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "The payload is not valid"})),
+                ));
+            }
+            return Err(common::errors::AppError(anyhow::anyhow!(e)));
+        }
+    };
+    match new_id {
+        // 201 full shape (`base.py:78-80`, DRF default create).
+        Some(id) => match fetch_intake_full(&st.pool, &slug, project_id, id).await? {
+            Some(r) => Ok((StatusCode::CREATED, Json(intake_full_json(&r)))),
+            None => Ok((StatusCode::CREATED, Json(json!({"id": id, "name": body.name})))),
+        },
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})))),
+    }
 }
 
+/// One row of the intake-issue list: `IntakeIssueSerializer`
+/// (`serializers/intake.py:27-50`) with nested `IssueIntakeSerializer`
+/// (`serializers/issue.py:752-767`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct InboxListRow {
+    id: uuid::Uuid,
+    status: i32,
+    duplicate_to_id: Option<uuid::Uuid>,
+    snoozed_till: Option<chrono::DateTime<chrono::Utc>>,
+    source: Option<String>,
+    created_by_id: Option<uuid::Uuid>,
+    issue_id: uuid::Uuid,
+    issue_name: String,
+    issue_priority: String,
+    issue_sequence_id: i32,
+    issue_project_id: uuid::Uuid,
+    issue_created_at: chrono::DateTime<chrono::Utc>,
+    issue_label_ids: Vec<uuid::Uuid>,
+    issue_created_by_id: Option<uuid::Uuid>,
+}
+
+fn inbox_list_json(r: &InboxListRow) -> Value {
+    json!({
+        "id": r.id,
+        "status": r.status,
+        "duplicate_to": r.duplicate_to_id,
+        "snoozed_till": r.snoozed_till,
+        "source": r.source,
+        "issue": {
+            "id": r.issue_id,
+            "name": r.issue_name,
+            "priority": r.issue_priority,
+            "sequence_id": r.issue_sequence_id,
+            "project_id": r.issue_project_id,
+            "created_at": r.issue_created_at,
+            "label_ids": r.issue_label_ids,
+            "created_by": r.issue_created_by_id,
+        },
+        "created_by": r.created_by_id,
+    })
+}
+
+/// CSV-list parsing for the legacy `issue_filters` GET semantics
+/// (`utils/issue_filters.py`): drop `"null"` tokens; an empty remainder
+/// OR any `""` token drops the whole filter.
+fn csv_filter(raw: Option<&str>) -> Vec<String> {
+    match raw {
+        Some(s) => {
+            let parts: Vec<String> = s.split(',').map(str::to_string).collect();
+            if parts.iter().any(|p| p.is_empty()) {
+                return Vec::new();
+            }
+            let kept: Vec<String> = parts.into_iter().filter(|p| p != "null").collect();
+            if kept.is_empty() {
+                Vec::new()
+            } else {
+                kept
+            }
+        }
+        None => Vec::new(),
+    }
+}
+
+fn uuid_list(vals: &[String]) -> Vec<uuid::Uuid> {
+    vals.iter().filter_map(|v| uuid::Uuid::parse_str(v).ok()).collect()
+}
+
+/// Date-range parsing for `filter_created_at/updated_at` GET
+/// (`issue_filters.py:209-245` + `date_filter:55-81`): each comma item is
+/// `date` (equality), `date;after` (>=), `date;before` (<=), or a
+/// `N_unit;after|before;offset` duration (FE `getCustomDates` never emits
+/// the duration form for inbox — treated as unbounded here); last item
+/// wins per column, mirroring the dict overwrite.
+fn date_bounds(raw: Option<&str>) -> (Option<String>, Option<String>) {
+    let mut gte: Option<String> = None;
+    let mut lte: Option<String> = None;
+    for item in raw.unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        let bits: Vec<&str> = item.split(';').collect();
+        if bits.len() >= 2 {
+            if bits[1] == "after" {
+                gte = Some(bits[0].to_string());
+            } else {
+                lte = Some(bits[0].to_string());
+            }
+        } else {
+            gte = Some(bits[0].to_string());
+            lte = Some(bits[0].to_string());
+        }
+    }
+    (gte, lte)
+}
+
+/// GET `.../intake-issues/` (and the FE-facing `inbox-issues/` twin) —
+/// parity with `IntakeIssueViewSet.list` (`base.py:177-226`): AMG gate;
+/// no intake → 404 `{"error": "Intake not found"}`; status CSV (default
+/// `"-2"`, `"null"` tokens dropped); legacy `issue_filters` GET subset
+/// (priority/labels/state/assignees/created_by/created_at/updated_at, all
+/// `issue__`-prefixed); `order_by` allowlist
+/// (`INTAKE_ISSUE_ORDER_BY_ALLOWLIST`, default `-issue__created_at`);
+/// guest (+ !guest_view_all_features) sees own rows only; OffsetPaginator
+/// envelope of `IntakeIssueSerializer` rows.
 pub async fn list_issues(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
-) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let rows = sqlx::query_as::<_, common::models::intake::IntakeIssue>(
-        "SELECT id, status FROM intake_issues WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::issue_common::{
+        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+        total_pages, DetailEnvelope, PageWindow,
+    };
+    // AMG (`base.py:177`); DRF permission-class deny shape.
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    // First intake by name order (`Intake.Meta.ordering`); absent → 404
+    // (`base.py:179-181`).
+    let intake: Option<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT i.id FROM intakes i JOIN workspaces w ON w.id = i.workspace_id \
+         WHERE i.project_id = $1 AND w.slug = $2 AND i.deleted_at IS NULL \
+         ORDER BY i.name ASC LIMIT 1",
     )
-    .bind(_project_id)
-    .fetch_all(&st.pool)
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
     .await?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|ii| json!({"id": ii.id, "status": ii.status}))
-            .collect(),
-    ))
+    let Some((intake_id,)) = intake else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+    };
+    let status_raw = params.get("status").map(|s| s.as_str()).unwrap_or("-2");
+    let statuses: Vec<i32> = csv_filter(Some(status_raw))
+        .into_iter()
+        .filter_map(|s| s.parse::<i32>().ok())
+        .collect();
+    let prios = csv_filter(params.get("priority").map(|s| s.as_str()));
+    let label_ids = uuid_list(&csv_filter(params.get("labels").map(|s| s.as_str())));
+    let labels_none = params.get("labels").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false);
+    let state_ids = uuid_list(&csv_filter(params.get("state").map(|s| s.as_str())));
+    let assignee_ids = uuid_list(&csv_filter(params.get("assignees").map(|s| s.as_str())));
+    let assignees_none = params.get("assignees").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false);
+    let creator_ids = uuid_list(&csv_filter(params.get("created_by").map(|s| s.as_str())));
+    let (created_gte, created_lte) = date_bounds(params.get("created_at").map(|s| s.as_str()));
+    let (updated_gte, updated_lte) = date_bounds(params.get("updated_at").map(|s| s.as_str()));
+    // Guest scope (`base.py:211-221`).
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let guest_only = if matches!(role, Some(r) if r <= 5) {
+        let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&st.pool)
+            .await?
+            .unwrap_or(false);
+        !gva
+    } else {
+        false
+    };
+    // `order_by` allowlist (`order_queryset.py:36-48`, default `-issue__created_at`).
+    let order_raw = params.get("order_by").map(|s| s.as_str()).unwrap_or("-issue__created_at");
+    let (bare, desc) = match order_raw.strip_prefix('-') {
+        Some(b) => (b, true),
+        None => (order_raw, false),
+    };
+    let order_expr = match (bare, desc) {
+        ("issue__created_at", false) => "i.created_at ASC",
+        ("issue__created_at", true) => "i.created_at DESC",
+        ("issue__updated_at", false) => "i.updated_at ASC",
+        ("issue__updated_at", true) => "i.updated_at DESC",
+        ("issue__sequence_id", false) => "i.sequence_id ASC",
+        ("issue__sequence_id", true) => "i.sequence_id DESC",
+        ("issue__sort_order", false) => "i.sort_order ASC",
+        ("issue__sort_order", true) => "i.sort_order DESC",
+        ("issue__target_date", false) => "i.target_date ASC NULLS LAST",
+        ("issue__target_date", true) => "i.target_date DESC NULLS LAST",
+        ("issue__start_date", false) => "i.start_date ASC NULLS LAST",
+        ("issue__start_date", true) => "i.start_date DESC NULLS LAST",
+        ("issue__priority", false) => "i.priority ASC",
+        ("issue__priority", true) => "i.priority DESC",
+        ("issue__state__name", _) => "s.name ASC NULLS LAST",
+        ("created_at", false) => "ii.created_at ASC",
+        ("created_at", true) => "ii.created_at DESC",
+        ("updated_at", false) => "ii.updated_at ASC",
+        ("updated_at", true) => "ii.updated_at DESC",
+        ("status", false) => "ii.status ASC",
+        ("status", true) => "ii.status DESC",
+        _ => "i.created_at DESC",
+    };
+    let where_extra = format!(
+        "AND ($3::int[] IS NULL OR ii.status = ANY($3)) \
+         AND ($4::text[] IS NULL OR i.priority = ANY($4)) \
+         AND ($5::uuid[] IS NULL OR EXISTS(SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL AND il.label_id = ANY($5))) \
+         AND (NOT $6::boolean OR NOT EXISTS(SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL)) \
+         AND ($7::uuid[] IS NULL OR i.state_id = ANY($7)) \
+         AND ($8::uuid[] IS NULL OR EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL AND ia.assignee_id = ANY($8))) \
+         AND (NOT $9::boolean OR NOT EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL)) \
+         AND ($10::uuid[] IS NULL OR i.created_by_id = ANY($10)) \
+         AND ($11::date IS NULL OR i.created_at::date >= $11) \
+         AND ($12::date IS NULL OR i.created_at::date <= $12) \
+         AND ($13::date IS NULL OR i.updated_at::date >= $13) \
+         AND ($14::date IS NULL OR i.updated_at::date <= $14) \
+         AND (NOT $15::boolean OR ii.created_by_id = $16)"
+    );
+    let status_arr: Option<Vec<i32>> = if statuses.is_empty() { None } else { Some(statuses) };
+    let prio_arr: Option<Vec<String>> = if prios.is_empty() { None } else { Some(prios) };
+    let label_arr: Option<Vec<uuid::Uuid>> = if label_ids.is_empty() { None } else { Some(label_ids) };
+    let state_arr: Option<Vec<uuid::Uuid>> = if state_ids.is_empty() { None } else { Some(state_ids) };
+    let assignee_arr: Option<Vec<uuid::Uuid>> = if assignee_ids.is_empty() { None } else { Some(assignee_ids) };
+    let creator_arr: Option<Vec<uuid::Uuid>> = if creator_ids.is_empty() { None } else { Some(creator_ids) };
+    let parse_date = |s: Option<String>| -> Option<chrono::NaiveDate> {
+        s.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok())
+    };
+    let cg = parse_date(created_gte);
+    let cl = parse_date(created_lte);
+    let ug = parse_date(updated_gte);
+    let ul = parse_date(updated_lte);
+    let base_from = format!(
+        "FROM intake_issues ii JOIN issues i ON i.id = ii.issue_id AND i.deleted_at IS NULL \
+         LEFT JOIN states s ON s.id = i.state_id \
+         WHERE ii.intake_id = $1 AND ii.project_id = $2 AND ii.deleted_at IS NULL {where_extra}"
+    );
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {base_from}"))
+        .bind(intake_id).bind(project_id)
+        .bind(&status_arr).bind(&prio_arr).bind(&label_arr).bind(labels_none)
+        .bind(&state_arr).bind(&assignee_arr).bind(assignees_none)
+        .bind(&creator_arr).bind(cg).bind(cl).bind(ug).bind(ul)
+        .bind(guest_only).bind(auth.0)
+        .fetch_one(&st.pool)
+        .await?;
+    // OffsetPaginator envelope (`self.paginate`, `base.py:222-226`).
+    let limit = match parse_per_page(params.get("per_page").map(|s| s.as_str())) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let cursor_raw = params.get("cursor").cloned().unwrap_or_else(|| format!("{limit}:0:0"));
+    let cursor = match parse_cursor(&cursor_raw) {
+        Ok(c) => c,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let window = match page_window(cursor.page, limit) {
+        Ok(w) => w,
+        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+    };
+    let mut rows: Vec<InboxListRow> = match window {
+        PageWindow::Rows(offset) => sqlx::query_as(&format!(
+            "SELECT ii.id, ii.status, ii.duplicate_to_id, ii.snoozed_till, ii.source, \
+             ii.created_by_id, i.id AS issue_id, i.name AS issue_name, i.priority AS issue_priority, \
+             i.sequence_id AS issue_sequence_id, i.project_id AS issue_project_id, \
+             i.created_at AS issue_created_at, \
+             COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+               WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{{}}'::uuid[]) AS issue_label_ids, \
+             i.created_by_id AS issue_created_by_id \
+             {base_from} ORDER BY {order_expr} LIMIT $17 OFFSET $18"
+        ))
+        .bind(intake_id).bind(project_id)
+        .bind(&status_arr).bind(&prio_arr).bind(&label_arr).bind(labels_none)
+        .bind(&state_arr).bind(&assignee_arr).bind(assignees_none)
+        .bind(&creator_arr).bind(cg).bind(cl).bind(ug).bind(ul)
+        .bind(guest_only).bind(auth.0)
+        .bind(limit + 1).bind(offset)
+        .fetch_all(&st.pool)
+        .await?,
+        PageWindow::BeyondEnd => Vec::new(),
+    };
+    let next_page_results = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let envelope = DetailEnvelope {
+        grouped_by: None,
+        sub_grouped_by: None,
+        total_count: total,
+        next_cursor: next_cursor_str(limit, cursor.page),
+        prev_cursor: prev_cursor_str(limit, cursor.page),
+        next_page_results,
+        prev_page_results: cursor.page > 0,
+        count: rows.len() as i64,
+        total_pages: total_pages(total, limit),
+        total_results: total,
+        extra_stats: None,
+        results: rows.iter().map(inbox_list_json).collect(),
+    };
+    Ok((StatusCode::OK, Json(json!(envelope))))
 }
 
 pub async fn create_issue(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateIntakeIssue>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // AMG (`base.py:228`).
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(crate::routes::member::deny_detail());
+    }
     validate_issue_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let name = body.issue.name.clone().unwrap_or_default();
     let priority = body.issue.priority.clone().unwrap_or_else(|| "none".to_string());
@@ -212,11 +583,15 @@ pub async fn create_issue(
     .bind(workspace_id)
     .fetch_one(&st.pool)
     .await?;
-    // Django `create` (`intake/base.py:330`) returns 200 (not 201).
-    Ok((
-        StatusCode::OK,
-        Json(json!({"id": row.id, "status": row.status, "issue_id": issue_id})),
-    ))
+    // Django `create` (`intake/base.py:330`) returns 200 (not 201) with the
+    // full `IntakeIssueDetailSerializer`.
+    match fetch_inbox_detail(&st.pool, &slug, project_id, row.id, issue_id, auth.0).await? {
+        Some(d) => Ok((StatusCode::OK, Json(serde_json::to_value(&d).unwrap()))),
+        None => Ok((
+            StatusCode::OK,
+            Json(json!({"id": row.id, "status": row.status, "issue_id": issue_id})),
+        )),
+    }
 }
 
 /// Mirrors `plane/app/views/intake/base.py:destroy`: the default intake
@@ -236,56 +611,80 @@ pub struct PatchIntake {
     pub description: Option<String>,
 }
 
+/// Detail/patch/destroy share the ADMIN/MEMBER gate (`base.py:82`,
+/// `allow_permission` on the viewset) + full-shape bodies.
 pub async fn detail(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::intake::Intake> = sqlx::query_as(
-        "SELECT id, name FROM intakes WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some(i) => Ok((StatusCode::OK, Json(json!({"id": i.id, "name": i.name})))),
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
+    match fetch_intake_full(&st.pool, &slug, project_id, pk).await? {
+        Some(r) => Ok((StatusCode::OK, Json(intake_full_json(&r)))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"})))),
     }
 }
 
 pub async fn patch(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchIntake>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
         }
     }
     let n = sqlx::query(
-        "UPDATE intakes SET name = COALESCE($1, name), description = COALESCE($2, description), updated_at = now() WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
+        "UPDATE intakes SET name = COALESCE($1, name), description = COALESCE($2, description), updated_at = now(), updated_by_id = $5 WHERE id = $3 AND project_id = $4 AND deleted_at IS NULL",
     )
     .bind(&body.name)
     .bind(&body.description)
     .bind(pk)
     .bind(project_id)
+    .bind(auth.0)
     .execute(&st.pool)
-    .await?
-    .rows_affected();
-    if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+    .await;
+    match n {
+        // Dup-name unique violation → the same DRF IntegrityError body as create.
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("already exists") || msg.contains("duplicate key") {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "The payload is not valid"})),
+                ));
+            }
+            return Err(common::errors::AppError(anyhow::anyhow!(e)));
+        }
+        Ok(r) if r.rows_affected() == 0 => {
+            return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+        }
+        Ok(_) => {}
     }
-    Ok((StatusCode::OK, Json(json!({"id": pk}))))
+    match fetch_intake_full(&st.pool, &slug, project_id, pk).await? {
+        Some(r) => Ok((StatusCode::OK, Json(intake_full_json(&r)))),
+        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"})))),
+    }
 }
 
 pub async fn destroy(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
     let row: Option<(bool,)> = sqlx::query_as(
         "SELECT is_default FROM intakes WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
     )
@@ -299,58 +698,180 @@ pub async fn destroy(
     if let Err(e) = guard_delete(is_default) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
-    sqlx::query("DELETE FROM intakes WHERE id = $1")
+    sqlx::query("UPDATE intakes SET deleted_at = now() WHERE id = $1")
         .bind(pk)
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
+/// Scope resolver for the `:pk/` handlers: Django's pk is the ISSUE id,
+/// scoped by the project's first intake (`Meta.ordering = ("name",)` →
+/// `ORDER BY name ASC LIMIT 1`) + workspace + project
+/// (`base.py:339-346,505-506,553-558`). FE passes `issue.id` in every
+/// detail/update/delete URL (store keys `inboxIssues[issue.id]`), so the
+/// old row-id scope 404d all live FE traffic. No intake (Django
+/// AttributeError-500) or no row → `None` → 404 (sane-mapping).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct InboxScope {
+    row_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+    created_by_id: Option<uuid::Uuid>,
+    status: i32,
+}
+
+async fn resolve_inbox_row(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    issue_pk: uuid::Uuid,
+) -> Result<Option<InboxScope>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT ii.id AS row_id, ii.issue_id, ii.created_by_id, ii.status \
+         FROM intake_issues ii JOIN workspaces w ON w.id = ii.workspace_id \
+         WHERE ii.issue_id = $1 AND ii.project_id = $2 AND w.slug = $3 \
+         AND ii.deleted_at IS NULL \
+         AND ii.intake_id = (SELECT i.id FROM intakes i JOIN workspaces w2 ON w2.id = i.workspace_id \
+           WHERE i.project_id = $2 AND w2.slug = $3 AND i.deleted_at IS NULL \
+           ORDER BY i.name ASC LIMIT 1)",
+    )
+    .bind(issue_pk)
+    .bind(project_id)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+}
+
+/// Shared full-detail fetch (`IntakeIssueDetailSerializer`, field order
+/// `INBOX_DETAIL_KEYS`): the PATCH tail + GET detail + POST create all
+/// return this shape. `row_id` = intake-issue row, `issue_id` = issue.
+async fn fetch_inbox_detail(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    row_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+    user: uuid::Uuid,
+) -> Result<Option<InboxIssueDetail>, sqlx::Error> {
+    let fresh: Option<(i32, Option<uuid::Uuid>, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT status, duplicate_to_id, snoozed_till, source FROM intake_issues \
+              WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(row_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some((status, duplicate_to, snoozed_till, source)) = fresh else {
+        return Ok(None);
+    };
+    let issue_row: Option<InboxIssueDetailIssue> = sqlx::query_as(INBOX_ISSUE_SELECT_SQL)
+        .bind(issue_id)
+        .bind(project_id)
+        .bind(slug)
+        .bind(user)
+        .fetch_optional(pool)
+        .await?;
+    let Some(issue_row) = issue_row else {
+        return Ok(None);
+    };
+    let duplicate_issue_detail: Option<InboxDuplicateDetail> = match duplicate_to {
+        None => None,
+        Some(dup) => {
+            sqlx::query_as(
+                "SELECT i.id, i.name, i.priority, i.sequence_id, i.project_id, i.created_at, \
+                  COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+                    WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
+                  i.created_by_id AS created_by \
+                  FROM issues i WHERE i.id = $1 AND i.deleted_at IS NULL",
+            )
+            .bind(dup)
+            .fetch_optional(pool)
+            .await?
+        }
+    };
+    Ok(Some(InboxIssueDetail {
+        id: row_id,
+        status,
+        duplicate_to,
+        snoozed_till,
+        duplicate_issue_detail,
+        source,
+        issue: issue_row,
+    }))
+}
+
 pub async fn detail_issue(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<common::models::intake::IntakeIssue> = sqlx::query_as(
-        "SELECT id, status FROM intake_issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some(ii) => Ok((StatusCode::OK, Json(json!({"id": ii.id, "status": ii.status})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake issue not found"})))),
+    // AMG ws gate (decorator, `base.py:503`).
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
+        return Ok(missing());
+    };
+    // Guest gate (`base.py:534-548`): guest + !guest_view_all_features +
+    // not creator → 403 verbatim.
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if matches!(role, Some(r) if r <= 5) {
+        let gva: bool = sqlx::query_scalar(
+            "SELECT guest_view_all_features FROM projects WHERE id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(&st.pool)
+        .await?
+        .unwrap_or(false);
+        if !gva && scope.created_by_id != Some(auth.0) {
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "You are not allowed to view this issue"})),
+            ));
+        }
+    }
+    match fetch_inbox_detail(&st.pool, &slug, project_id, scope.row_id, scope.issue_id, auth.0).await? {
+        Some(d) => Ok((StatusCode::OK, Json(serde_json::to_value(&d).unwrap()))),
+        None => Ok(missing()),
     }
 }
 
+/// DELETE `.../inbox-issues/:pk/` — parity with Django
+/// `IntakeIssueViewSet.destroy` (`base.py:552-569`): pk = issue id scoped
+/// by intake (`resolve_inbox_row`); gate `@allow_permission([ADMIN],
+/// creator=True, model=Issue)` — project-ADMIN or the ISSUE creator,
+/// else the decorator 403; cascade-deletes the issue when status in
+/// [-2,-1,0,2]; soft-deletes the intake row; 204.
 pub async fn destroy_issue(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
+        return Ok(missing());
+    };
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let issue_creator: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT created_by_id FROM issues WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(scope.issue_id)
+    .fetch_optional(&st.pool)
+    .await?
+    .flatten();
+    let is_creator = issue_creator == Some(auth.0);
+    if !matches!(role, Some(20)) && !is_creator {
+        return Ok(crate::routes::project::deny());
+    }
     // Mirrors `plane/app/views/intake/base.py:destroy`: pending/rejected
     // intake rows (status in [-2,-1,0,2]) take the underlying issue with them.
-    let row: Option<(i32, Option<uuid::Uuid>)> = sqlx::query_as(
-        "SELECT status, issue_id FROM intake_issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    let Some((status, issue_id)) = row else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake issue not found"}))));
-    };
-    if matches!(status, -2 | -1 | 0 | 2) {
-        if let Some(issue_id) = issue_id {
-            sqlx::query("UPDATE issues SET deleted_at = now() WHERE id = $1")
-                .bind(issue_id)
-                .execute(&st.pool)
-                .await?;
-        }
+    if matches!(scope.status, -2 | -1 | 0 | 2) {
+        sqlx::query("UPDATE issues SET deleted_at = now() WHERE id = $1")
+            .bind(scope.issue_id)
+            .execute(&st.pool)
+            .await?;
     }
-    sqlx::query("DELETE FROM intake_issues WHERE id = $1")
-        .bind(pk)
+    sqlx::query("UPDATE intake_issues SET deleted_at = now() WHERE id = $1")
+        .bind(scope.row_id)
         .execute(&st.pool)
         .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
@@ -558,14 +1079,6 @@ pub struct InboxIssuePatch {
     pub source: Option<Option<String>>,
 }
 
-/// Gate lookup row: the reused GET/DELETE scope (`id` + `project_id` +
-/// live) plus the creator + link columns the PATCH needs.
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct InboxLookup {
-    issue_id: Option<uuid::Uuid>,
-    created_by_id: Option<uuid::Uuid>,
-}
-
 /// Nested `issue`: the 28-key `IssueDetailSerializer` shape in Django
 /// field order (see `INBOX_ISSUE_KEYS`). Column mapping follows D7
 /// `ArchivedIssueDetailRow` (`estimate_point` reads
@@ -697,25 +1210,18 @@ pub async fn patch_issue(
     axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<InboxIssuePatch>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<InboxLookup> = sqlx::query_as(
-        "SELECT issue_id, created_by_id FROM intake_issues \
-          WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    let Some(row) = row else {
+    // Scope: pk = ISSUE id under the project's first intake
+    // (`resolve_inbox_row`); the D13 locked gate matrix is unchanged.
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
         return Ok(missing());
     };
-    let Some(issue_id) = row.issue_id else {
-        return Ok(missing());
-    };
+    let row_id = scope.row_id;
+    let issue_id = scope.issue_id;
 
     let user_id = auth.0;
     let role = fetch_project_member_role(&st.pool, user_id, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, user_id, &slug).await?;
-    let is_creator = row.created_by_id == Some(user_id);
+    let is_creator = scope.created_by_id == Some(user_id);
     if let Err((code, msg)) = guard_inbox_patch(role.is_some(), role, is_creator, ws_admin) {
         return Ok((code, Json(json!({"error": msg}))));
     }
@@ -837,7 +1343,7 @@ pub async fn patch_issue(
             .bind(snooze_val)
             .bind(source_set)
             .bind(source_val)
-            .bind(pk)
+            .bind(row_id)
             .bind(user_id)
             .execute(&st.pool)
             .await?;
@@ -845,56 +1351,15 @@ pub async fn patch_issue(
     }
 
     // Re-fetch + return the updated intake issue (`base.py:480-505` tail:
-    // `IntakeIssueDetailSerializer(intake_issue)`, 200).
-    let fresh: Option<(i32, Option<uuid::Uuid>, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> =
-        sqlx::query_as(
-            "SELECT status, duplicate_to_id, snoozed_till, source FROM intake_issues \
-              WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(pk)
-        .fetch_optional(&st.pool)
-        .await?;
-    let Some((status, duplicate_to, snoozed_till, source)) = fresh else {
-        return Ok(missing());
-    };
-    let issue_row: Option<InboxIssueDetailIssue> = sqlx::query_as(INBOX_ISSUE_SELECT_SQL)
-        .bind(issue_id)
-        .bind(project_id)
-        .bind(&slug)
-        .bind(user_id)
-        .fetch_optional(&st.pool)
-        .await?;
-    let Some(issue_row) = issue_row else {
-        return Ok(missing());
-    };
-    let duplicate_issue_detail: Option<InboxDuplicateDetail> = match duplicate_to {
-        None => None,
-        Some(dup) => {
-            sqlx::query_as(
-                "SELECT i.id, i.name, i.priority, i.sequence_id, i.project_id, i.created_at, \
-                  COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
-                    WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, \
-                  i.created_by_id AS created_by \
-                  FROM issues i WHERE i.id = $1 AND i.deleted_at IS NULL",
-            )
-            .bind(dup)
-            .fetch_optional(&st.pool)
-            .await?
-        }
-    };
-    let detail = InboxIssueDetail {
-        id: pk,
-        status,
-        duplicate_to,
-        snoozed_till,
-        duplicate_issue_detail,
-        source,
-        issue: issue_row,
-    };
-    Ok((
-        StatusCode::OK,
-        Json(serde_json::to_value(&detail).unwrap()),
-    ))
+    // `IntakeIssueDetailSerializer(intake_issue)`, 200 — `id` is the
+    // intake-issue ROW id).
+    match fetch_inbox_detail(&st.pool, &slug, project_id, row_id, issue_id, user_id).await? {
+        Some(detail) => Ok((
+            StatusCode::OK,
+            Json(serde_json::to_value(&detail).unwrap()),
+        )),
+        None => Ok(missing()),
+    }
 }
 
 #[cfg(test)]
