@@ -177,17 +177,6 @@ type LabelRow = (uuid::Uuid, Option<uuid::Uuid>, String, String, Option<uuid::Uu
 /// Workspace+project member gate for safe label reads: any active project
 /// membership passes (Django `get_queryset` member filter +
 /// `ProjectBasePermission`), with the shared ws-admin fallback.
-async fn gate_label_read(
-    pool: &sqlx::PgPool,
-    user: uuid::Uuid,
-    slug: &str,
-    project_id: uuid::Uuid,
-) -> Result<bool, sqlx::Error> {
-    let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
-    let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(member_role.is_some(), member_role.is_some(), ws_admin))
-}
-
 /// ADMIN-only gate for unsafe label writes (Django `@allow_permission([ROLE.ADMIN])`
 /// on create/partial_update/destroy).
 async fn gate_label_admin(
@@ -206,7 +195,19 @@ pub async fn detail(
     auth: AuthUser,
     axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if !gate_label_read(&st.pool, auth.0, &slug, project_id).await? {
+    // Django `retrieve` (DRF-default + `ProjectBasePermission`, SAFE branch
+    // `permissions/project.py:18-22`): any ACTIVE WORKSPACE member passes
+    // the permission — the per-project scoping lives in the queryset
+    // (`label.py:28-40`, project membership), so a ws-member who is NOT a
+    // project member 404s (not 403). Non-ws-member → 403 `deny()`.
+    let ws_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_members wm JOIN workspaces w ON w.id = wm.workspace_id WHERE w.slug = $1 AND wm.member_id = $2 AND wm.is_active = true AND wm.deleted_at IS NULL)",
+    )
+    .bind(&slug)
+    .bind(auth.0)
+    .fetch_one(&st.pool)
+    .await?;
+    if !ws_member {
         return Ok(deny());
     }
     let row: Option<LabelRow> = sqlx::query_as(

@@ -334,8 +334,8 @@ pub async fn subscribers_list(
 /// body `subscriber` (user id) is saved with project/issue from the URL →
 /// **201** serializer row (`__all__`, `serializers/issue.py:974-978`).
 /// Gate mirrors the unsafe `ProjectEntityPermission` branch (ADMIN/MEMBER),
-/// same as `subscriber_remove`. Row shape is the minimal subset (full
-/// serializer stays T1); dup → 400 `INVALID_PAYLOAD_MSG`
+/// same as `subscriber_remove`. Row shape is the full `__all__` serializer
+/// row (minus `deleted_at` per H2 precedent); dup → 400 `INVALID_PAYLOAD_MSG`
 /// (`views/base.py:80-84` IntegrityError mapping).
 pub async fn subscriber_create(
     State(st): State<AppState>,
@@ -413,10 +413,33 @@ pub async fn subscriber_create(
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({"id": id, "subscriber": subscriber, "issue": issue_id, "project": project_id})),
-    ))
+    // Django `create` (DRF `ModelViewSet` default) returns 201 with the
+    // full `IssueSubscriberSerializer` row (`__all__`,
+    // `serializers/issue.py:974-978`); `deleted_at` omitted for live rows
+    // (H2 precedent).
+    let row: Option<(uuid::Uuid, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<uuid::Uuid>, Option<uuid::Uuid>, uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
+        "SELECT id, created_at, updated_at, created_by_id, updated_by_id, workspace_id, project_id, issue_id, subscriber_id FROM issue_subscribers WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some((id, created_at, updated_at, created_by, updated_by, workspace_id, project_id, issue_id, subscriber_id)) => Ok((
+            StatusCode::CREATED,
+            Json(json!({
+                "id": id,
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "created_by": created_by,
+                "updated_by": updated_by,
+                "workspace": workspace_id,
+                "project": project_id,
+                "issue": issue_id,
+                "subscriber": subscriber_id,
+            })),
+        )),
+        None => Ok(missing()),
+    }
 }
 
 /// DELETE `/api/workspaces/:slug/projects/:project_id/issues/:issue_id/issue-subscribers/:subscriber_id/`

@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
-use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
+use crate::routes::project::{deny, missing, FORBIDDEN_MSG, INVALID_PAYLOAD_MSG};
 
 /// Mirrors `plane/app/serializers/estimate.py:EstimateSerializer` /
 /// `plane/api/serializers/estimate.py` served by both
@@ -175,8 +175,11 @@ pub fn guard_patch(points_empty: bool) -> Result<(), String> {
 }
 
 pub fn validate_point_create(body: &CreateEstimatePoint) -> Result<(), String> {
+    // Django `create` (`base.py:157-161`): `not request.data.get("key")` —
+    // a missing key AND a falsy `0` both 400 (single-create only; PATCH
+    // goes through the serializer, which accepts 0).
     match (&body.key, &body.value) {
-        (Some(_), Some(v)) if !v.trim().is_empty() => {}
+        (Some(k), Some(v)) if *k != 0 && !v.trim().is_empty() => {}
         _ => return Err("Key and value are required".to_string()),
     }
     if let Some(v) = &body.value {
@@ -272,8 +275,10 @@ pub async fn create(
         }
     }
     // Serializer-first validation runs before the dup check in Django
-    // (`base.py:78-82` then the DB constraint); dup → 409 here (sane
-    // mapping for Django's 500, locked precedent).
+    // (`base.py:78-82` then the DB constraint); a dup name hits the
+    // partial unique constraint → `IntegrityError` → 400
+    // `{"error": "The payload is not valid"}` via `views/base.py:80-84`
+    // (NOT 500 — the handler maps it).
     let dup: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL)",
     )
@@ -283,8 +288,8 @@ pub async fn create(
     .await?;
     if dup {
         return Ok((
-            StatusCode::CONFLICT,
-            Json(json!({"error": "Estimate with the same name already exists in the project"})),
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": INVALID_PAYLOAD_MSG})),
         ));
     }
     let workspace_id: Option<uuid::Uuid> =
@@ -329,16 +334,25 @@ pub async fn create_point(
     axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<CreateEstimatePoint>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `create` (`base.py:154`): ADMIN/MEMBER.
+    // Django `create` (`base.py:154`): ADMIN/MEMBER (permission classes
+    // first → miss+non-member is 403, not 404).
     if !gate_estimate_write(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    validate_point_create(&body).map_err(|e| anyhow::anyhow!(e))?;
+    // Django serializer 400s (never 500s) on invalid bodies.
+    if let Err(e) = validate_point_create(&body) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
+    }
 
+    // Django scopes the estimate to this workspace+project
+    // (`base.py:163-172` `.filter(...).first()` → 404 "Estimate not found");
+    // an estimate from another project must NOT accept points here.
     let estimate = sqlx::query_as::<_, common::models::estimate::Estimate>(
-        "SELECT id, name FROM estimates WHERE id = $1 AND deleted_at IS NULL",
+        "SELECT id, name FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL",
     )
     .bind(estimate_id)
+    .bind(project_id)
+    .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
     if estimate.is_none() {
@@ -383,7 +397,9 @@ pub async fn detail(
     auth: AuthUser,
     axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `retrieve` (`base.py:103-106`): any project member reads.
+    // Django `retrieve` (`base.py:103-106`): `ProjectEntityPermission`
+    // (permission classes run BEFORE the body, so a non-member 403s even
+    // on a miss) — gate first, then the `.get()` miss → 404.
     if !gate_estimate_read(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
@@ -409,7 +425,8 @@ pub async fn patch(
     axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchEstimate>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `partial_update` (`base.py:109`): ADMIN/MEMBER writes.
+    // Django `partial_update` (`base.py:109`): ADMIN/MEMBER writes
+    // (permission classes first → miss+non-member is 403, not 404).
     if !gate_estimate_write(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
@@ -417,10 +434,11 @@ pub async fn patch(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let exists: Option<(uuid::Uuid,)> = sqlx::query_as(
-        "SELECT id FROM estimates WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+        "SELECT id FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL",
     )
     .bind(estimate_id)
     .bind(project_id)
+    .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
     if exists.is_none() {
@@ -436,38 +454,57 @@ pub async fn patch(
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid estimate type"}))));
         }
     }
+    // A rename that collides hits the partial unique constraint →
+    // `IntegrityError` → 400 payload (`views/base.py:80-84`), same as
+    // create. Checked up front (no partial writes on dup).
+    if let Some(name) = &body.name {
+        let dup: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL)",
+        )
+        .bind(project_id)
+        .bind(name)
+        .bind(estimate_id)
+        .fetch_one(&st.pool)
+        .await?;
+        if dup {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": INVALID_PAYLOAD_MSG})),
+            ));
+        }
+    }
     sqlx::query(
-        "UPDATE estimates SET name = COALESCE($1, name), type = COALESCE($2, type), updated_at = now() WHERE id = $3",
+        "UPDATE estimates SET name = COALESCE($1, name), type = COALESCE($2, type), updated_at = now() WHERE id = $3 AND project_id = $4 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $5)",
     )
     .bind(&body.name)
     .bind(&body.estimate_type)
     .bind(estimate_id)
+    .bind(project_id)
+    .bind(&slug)
     .execute(&st.pool)
     .await?;
+    // Django sets point attributes directly + `bulk_update` with NO
+    // per-point validation (`base.py:122-141`) — over-long values are
+    // saved as-is (unlike single-create). No length check here.
     for point in &body.estimate_points {
-        if let Some(v) = &point.value {
-            if v.chars().count() > 20 {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": "Value can't be more than 20 characters"})),
-                ));
-            }
-        }
         sqlx::query(
-            "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), updated_at = now() WHERE id = $3 AND estimate_id = $4",
+            "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), updated_at = now() WHERE id = $3 AND estimate_id = $4 AND project_id = $5 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $6)",
         )
         .bind(point.key)
         .bind(&point.value)
         .bind(point.id)
         .bind(estimate_id)
+        .bind(project_id)
+        .bind(&slug)
         .execute(&st.pool)
         .await?;
     }
     // Django `partial_update` (`base.py:143-144`) returns 200 full row.
     let row: Option<EstimateFull> = sqlx::query_as(&format!(
-        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND deleted_at IS NULL"
+        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL"
     ))
     .bind(estimate_id)
+    .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
     match row {
@@ -484,16 +521,18 @@ pub async fn destroy(
     auth: AuthUser,
     axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `destroy` (`base.py:146-150`): ADMIN/MEMBER writes.
+    // Django `destroy` (`base.py:146-150`): ADMIN/MEMBER writes
+    // (permission classes first → miss+non-member is 403, not 404).
     if !gate_estimate_write(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
     // Django `.get` (`base.py:148`) miss → 404 (generic via `views/base.py:92-96`
     // or sane-mapped) with NO side effects. Check existence FIRST: the old order
     // deleted points before the estimate check, so a miss still wiped points.
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimates WHERE id = $1 AND project_id = $2)")
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL)")
         .bind(estimate_id)
         .bind(project_id)
+        .bind(&slug)
         .fetch_one(&st.pool)
         .await?;
     if !exists {
@@ -504,6 +543,14 @@ pub async fn destroy(
         .execute(&st.pool)
         .await?;
     sqlx::query("DELETE FROM estimates WHERE id = $1 AND project_id = $2")
+        .bind(estimate_id)
+        .bind(project_id)
+        .execute(&st.pool)
+        .await?;
+    // `Project.estimate` FK is `on_delete=SET_NULL`
+    // (`models/project.py:109`): deleting the active estimate clears the
+    // project pointer (Django does this via the collector, not code).
+    sqlx::query("UPDATE projects SET estimate_id = NULL WHERE estimate_id = $1 AND id = $2")
         .bind(estimate_id)
         .bind(project_id)
         .execute(&st.pool)
@@ -573,7 +620,8 @@ pub async fn destroy_point(
     )>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `destroy` (`base.py:196`): ADMIN/MEMBER.
+    // Django `destroy` (`base.py:196`): ADMIN/MEMBER (permission classes
+    // first → miss+non-member is 403, not 404).
     if !gate_estimate_write(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
@@ -583,11 +631,14 @@ pub async fn destroy_point(
     //
     // Django checks point existence AFTER the issue remap (`base.py:242-252`)
     // and misses with 404 `{"error": "Estimate point not found"}`. Rust checks
-    // FIRST so a miss has no destructive side effects (sane-mapping precedent);
-    // the miss string itself is Django-verbatim.
-    let old_key: Option<i32> = sqlx::query_scalar("SELECT key FROM estimate_points WHERE id = $1 AND estimate_id = $2")
+    // FIRST so a miss has no destructive side effects (sane-mapping precedent,
+    // ADR `2026-09-10-f1-group3-delete-semantics.md`); the miss string itself
+    // is Django-verbatim.
+    let old_key: Option<i32> = sqlx::query_scalar("SELECT key FROM estimate_points WHERE id = $1 AND estimate_id = $2 AND project_id = $3 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $4)")
         .bind(point_id)
         .bind(estimate_id)
+        .bind(project_id)
+        .bind(&slug)
         .fetch_optional(&st.pool)
         .await?;
     let Some(old_key) = old_key else {
@@ -614,9 +665,10 @@ pub async fn destroy_point(
         .execute(&st.pool)
         .await?;
     // Django `destroy` (`base.py:265-268`) returns 200 with the updated-points
-    // array, full `EstimatePointSerializer` rows.
+    // array (the REARRANGED rows only, in `Meta.ordering` = `value` ASC),
+    // full `EstimatePointSerializer` rows.
     let rows: Vec<EstimatePointFull> = sqlx::query_as(&format!(
-        "SELECT {POINT_COLS} FROM estimate_points WHERE estimate_id = $1 AND key >= $2 ORDER BY key ASC"
+        "SELECT {POINT_COLS} FROM estimate_points WHERE estimate_id = $1 AND key >= $2 AND deleted_at IS NULL ORDER BY value ASC"
     ))
     .bind(estimate_id)
     .bind(old_key)
@@ -742,5 +794,43 @@ mod tests {
     fn project_estimates_no_estimate_returns_empty_list() {
         // Django returns `[]` when project.estimate_id is null (estimate/base.py:38-45).
         assert_eq!(project_estimates_shape(None).as_str(), "[]");
+    }
+
+    #[test]
+    fn point_create_rejects_falsy_key_like_django() {
+        // Django `create` (`base.py:157-161`): `not request.data.get("key")`
+        // — missing AND `0` both 400 (single-create only).
+        assert!(
+            validate_point_create(&CreateEstimatePoint {
+                key: Some(0),
+                value: Some("x".to_string()),
+                description: None,
+            })
+            .is_err()
+        );
+        assert!(
+            validate_point_create(&CreateEstimatePoint {
+                key: None,
+                value: Some("x".to_string()),
+                description: None,
+            })
+            .is_err()
+        );
+        assert!(
+            validate_point_create(&CreateEstimatePoint {
+                key: Some(1),
+                value: Some("x".to_string()),
+                description: None,
+            })
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn dup_name_maps_to_integrity_payload_like_django() {
+        // Dup (name, project) hits the partial unique constraint →
+        // `IntegrityError` → 400 "The payload is not valid" via
+        // `views/base.py:80-84` (NOT 500, NOT 409).
+        assert_eq!(INVALID_PAYLOAD_MSG, "The payload is not valid");
     }
 }

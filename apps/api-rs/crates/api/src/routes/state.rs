@@ -106,8 +106,10 @@ pub async fn list(
         return Ok(deny());
     }
     // Triage excluded (`get_queryset` `is_triage=False`, `base.py:39`).
+    // Archived projects contribute no states (`base.py:37`
+    // `project__archived_at__isnull=True` → 200 `[]`, not 404).
     let rows: Vec<StateFullRow> = sqlx::query_as(&format!(
-        "{STATE_FULL_SELECT_SQL} WHERE s.project_id = $1 AND s.deleted_at IS NULL AND s.is_triage = false ORDER BY s.sequence ASC"
+        "{STATE_FULL_SELECT_SQL} WHERE s.project_id = $1 AND s.deleted_at IS NULL AND s.is_triage = false AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $1 AND p.archived_at IS NULL) ORDER BY s.sequence ASC"
     ))
     .bind(_project_id)
     .fetch_all(&st.pool)
@@ -127,10 +129,14 @@ pub async fn list(
         let count = counts.get(&r.group).copied().unwrap_or(1).max(1) as f64;
         ordered.push((r.group.clone(), state_serializer_json(r, Some(*n as f64 / count))));
     }
-    // `?grouped=true` dict mode (`base.py:91-100`).
+    // `?grouped=true` dict mode (`base.py:91-100`): states are sorted by
+    // group first (`sorted(states, key=group)`), so dict insertion order
+    // follows group name — the flat order is NOT reused here.
     if q.grouped.as_deref() == Some("true") {
+        let mut sorted = ordered;
+        sorted.sort_by(|a, b| a.0.cmp(&b.0));
         let mut dict = serde_json::Map::new();
-        for (group, val) in ordered {
+        for (group, val) in sorted {
             let slot = dict.entry(group).or_insert_with(|| Value::Array(Vec::new()));
             if let Value::Array(items) = slot {
                 items.push(val);
@@ -207,14 +213,21 @@ pub struct PatchState {
 
 pub async fn detail(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     // Django `retrieve` is DRF-default with auth-only permission
-    // (`views/base.py:50`): no gate. Miss → 404 `missing()` (DRF
-    // `{"detail"}` normalized per repo rule; unifies "State not found").
+    // (`views/base.py:51`): no 403 — but the queryset is member-scoped
+    // (`base.py:28-42`: active project membership, non-archived project,
+    // `is_triage=False`), so non-members / archived / triage all 404
+    // (DRF `{"detail"}` normalized to `missing()` per repo rule; unifies
+    // the old "State not found").
+    let member = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if member.is_none() {
+        return Ok(missing());
+    }
     let row: Option<StateFullRow> = sqlx::query_as(&format!(
-        "{STATE_FULL_SELECT_SQL} WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL"
+        "{STATE_FULL_SELECT_SQL} WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL AND s.is_triage = false AND s.\"group\" != 'triage' AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)"
     ))
     .bind(pk)
     .bind(project_id)
@@ -262,7 +275,7 @@ pub async fn patch(
         }
     }
     let n = sqlx::query(
-        "UPDATE states SET name = COALESCE($1, name), \"group\" = COALESCE($2, \"group\"), color = COALESCE($3, color), updated_at = now() WHERE id = $4 AND project_id = $5 AND deleted_at IS NULL",
+        "UPDATE states SET name = COALESCE($1, name), \"group\" = COALESCE($2, \"group\"), color = COALESCE($3, color), updated_at = now() WHERE id = $4 AND project_id = $5 AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage'",
     )
     .bind(&body.name)
     .bind(&body.group)
@@ -298,9 +311,10 @@ pub async fn destroy(
         return Ok(deny());
     }
     // Triage states are outside the lookup scope (`base.py:115`
-    // `is_triage=False`): a triage pk 404s.
+    // `is_triage=False`, plus the default `StateManager` excluding
+    // `group='triage'`, `models/state.py:62-67`): a triage pk 404s.
     let row: Option<(bool,)> = sqlx::query_as(
-        "SELECT \"default\" FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND is_triage = false",
+        "SELECT \"default\" FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage'",
     )
     .bind(pk)
     .bind(project_id)
@@ -309,7 +323,10 @@ pub async fn destroy(
     let Some((is_default,)) = row else {
         return Ok(missing());
     };
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM issues WHERE state_id = $1 AND deleted_at IS NULL")
+    // Django checks `Issue.objects.filter(state=pk).exists()` with NO
+    // deleted_at filter (`base.py:123-124`, plain `objects` manager): even
+    // a soft-deleted issue in the state blocks deletion.
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM issues WHERE state_id = $1")
         .bind(pk)
         .fetch_one(&st.pool)
         .await?;

@@ -17,6 +17,7 @@ use super::issue_common::{
     prev_cursor_str, project_gate_allows, sanitize_order_by, total_pages, DetailEnvelope,
     PageWindow,
 };
+use super::issue_lists::USER_SELECT_SQL;
 
 // ============================================================================
 // Error strings — every literal quoted from Django with file:line.
@@ -1139,47 +1140,6 @@ pub struct CycleIssuesQuery {
     pub sub_group_by: Option<String>,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct CycleIssueRow {
-    id: uuid::Uuid,
-    name: String,
-    state_id: Option<uuid::Uuid>,
-    sort_order: f64,
-    completed_at: Option<DateTime<Utc>>,
-    estimate_point: Option<uuid::Uuid>,
-    priority: String,
-    sequence_id: i32,
-    project_id: uuid::Uuid,
-    parent_id: Option<uuid::Uuid>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    cycle_id: Option<uuid::Uuid>,
-    link_count: i64,
-    attachment_count: i64,
-    sub_issues_count: i64,
-}
-
-fn cycle_issue_json(r: &CycleIssueRow) -> Value {
-    json!({
-        "id": r.id,
-        "name": r.name,
-        "state_id": opt_uuid(&r.state_id),
-        "sort_order": r.sort_order,
-        "completed_at": r.completed_at,
-        "estimate_point": opt_uuid(&r.estimate_point),
-        "priority": r.priority,
-        "sequence_id": r.sequence_id,
-        "project_id": r.project_id,
-        "parent_id": opt_uuid(&r.parent_id),
-        "cycle_id": opt_uuid(&r.cycle_id),
-        "link_count": r.link_count,
-        "attachment_count": r.attachment_count,
-        "sub_issues_count": r.sub_issues_count,
-        "created_at": r.created_at,
-        "updated_at": r.updated_at,
-    })
-}
-
 fn order_sql(sanitized: &str) -> String {
     // Reuses the shared allowlist mapping (`issue_common.rs:
     // sanitize_order_by`) over the `i`/`s` aliases — same shape as the
@@ -1256,7 +1216,7 @@ pub async fn cycle_issues_list(
         .await;
     }
     let (rows, next, prev, next_has, prev_has, count, pages): (
-        Vec<CycleIssueRow>,
+        Vec<super::issue_common::ArchiveRow>,
         String,
         String,
         bool,
@@ -1291,21 +1251,18 @@ pub async fn cycle_issues_list(
                 total_pages(total, limit),
             ),
             Ok(PageWindow::Rows(offset)) => {
+                // Flat rows are the shared 26-col `issue_on_results` shape
+                // (`cycle/issue.py:110-222` via `issue_on_results`, same as
+                // the module twin): reuse the user-scope SELECT with the
+                // cycle scope appended.
                 let sql = format!(
-                    "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
-                     i.estimate_point_id AS estimate_point, i.priority, i.sequence_id, \
-                     i.project_id, i.parent_id, i.created_at, i.updated_at, \
-                     (SELECT ci2.cycle_id FROM cycle_issues ci2 WHERE ci2.issue_id = i.id \
-                      AND ci2.deleted_at IS NULL LIMIT 1) AS cycle_id, \
-                     (SELECT COUNT(*) FROM issue_links il WHERE il.issue_id = i.id \
-                      AND il.deleted_at IS NULL) AS link_count, \
-                     (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id \
-                      AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, \
-                     (SELECT COUNT(*) FROM issues ch WHERE ch.parent_id = i.id \
-                      AND ch.deleted_at IS NULL) AS sub_issues_count \
-                     {base} ORDER BY {order} LIMIT $3 OFFSET $4"
+                    "{} JOIN cycle_issues ci ON ci.issue_id = i.id \
+                     AND ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+                     WHERE i.project_id = $2 AND i.deleted_at IS NULL \
+                     ORDER BY {order} LIMIT $3 OFFSET $4",
+                    USER_SELECT_SQL,
                 );
-                let rows: Vec<CycleIssueRow> = sqlx::query_as(&sql)
+                let rows: Vec<super::issue_common::ArchiveRow> = sqlx::query_as(&sql)
                     .bind(cid)
                     .bind(pid)
                     .bind(limit)
@@ -1338,7 +1295,7 @@ pub async fn cycle_issues_list(
         total_pages: pages,
         total_results: total,
         extra_stats: None,
-        results: rows.iter().map(cycle_issue_json).collect(),
+        results: rows.iter().map(|r| serde_json::to_value(r).unwrap_or(Value::Null)).collect(),
     };
     Ok((StatusCode::OK, Json(json!(env))))
 }
@@ -1450,25 +1407,250 @@ pub async fn cycle_issue_detail(
     if !project_in_workspace(&st.pool, pid, &slug).await? {
         return Ok(missing());
     }
-    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
-        return Ok(deny());
+    // DRF-default retrieve on the member-filtered queryset
+    // (`cycle/issue.py:53-72`): ANY project member reads (guests included —
+    // no role filter, unlike the AM-decorated list/create); non-members and
+    // archived projects 404 (not 403).
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, pid).await?;
+    if role.is_none() {
+        return Ok(missing());
     }
-    let row: Option<(uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
-        "SELECT ci.id, ci.cycle_id, ci.issue_id, ci.project_id FROM cycle_issues ci JOIN workspaces w ON w.id = ci.workspace_id WHERE w.slug = $1 AND ci.project_id = $2 AND ci.cycle_id = $3 AND ci.issue_id = $4 AND ci.deleted_at IS NULL",
+    let archived: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND archived_at IS NOT NULL)")
+        .bind(pid)
+        .fetch_one(&st.pool)
+        .await?;
+    if archived {
+        return Ok(missing());
+    }
+    match cycle_issue_full_json(&st.pool, &slug, pid, cid, iid).await? {
+        Some(v) => Ok((StatusCode::OK, Json(v))),
+        None => Ok(missing()),
+    }
+}
+
+/// Full `CycleIssueSerializer` row (`serializers/cycle.py:92-99`:
+/// `__all__` + `issue_detail` (`IssueStateSerializer`,
+/// `serializers/issue.py:738-749`) + `sub_issues_count`).
+/// NOTE Django quirk (ADR): the viewset queryset annotates
+/// `sub_issues_count` on the CYCLE row but nothing on the nested issue, so
+/// stock Django 500s serializing `issue_detail`'s counts; Rust computes all
+/// three counts and returns the intended shape sanely.
+async fn cycle_issue_full_json(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pid: uuid::Uuid,
+    cid: uuid::Uuid,
+    iid: uuid::Uuid,
+) -> Result<Option<Value>, sqlx::Error> {
+    let ci: Option<(
+        uuid::Uuid,
+        chrono::DateTime<chrono::Utc>,
+        chrono::DateTime<chrono::Utc>,
+        Option<uuid::Uuid>,
+        Option<uuid::Uuid>,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )> = sqlx::query_as(
+        "SELECT ci.id, ci.created_at, ci.updated_at, ci.created_by_id, ci.updated_by_id, ci.workspace_id, ci.project_id, ci.cycle_id, ci.issue_id FROM cycle_issues ci JOIN workspaces w ON w.id = ci.workspace_id WHERE w.slug = $1 AND ci.project_id = $2 AND ci.cycle_id = $3 AND ci.issue_id = $4 AND ci.deleted_at IS NULL",
     )
-    .bind(&slug)
+    .bind(slug)
     .bind(pid)
     .bind(cid)
     .bind(iid)
-    .fetch_optional(&st.pool)
+    .fetch_optional(pool)
     .await?;
-    match row {
-        Some((id, cycle_id, issue_id, project_id)) => Ok((
-            StatusCode::OK,
-            Json(json!({"id": id, "cycle": cycle_id, "issue": issue_id, "project": project_id})),
-        )),
-        None => Ok(missing()),
-    }
+    let Some((id, created_at, updated_at, created_by, updated_by, workspace_id, project_id, cycle_id, issue_id)) = ci
+    else {
+        return Ok(None);
+    };
+    let sub_issues_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issues si LEFT JOIN states ss ON ss.id = si.state_id WHERE si.parent_id = $1 AND si.deleted_at IS NULL AND si.archived_at IS NULL AND si.is_draft = false AND (ss.id IS NULL OR ss.\"group\" != 'triage') AND EXISTS(SELECT 1 FROM projects sp WHERE sp.id = si.project_id AND sp.archived_at IS NULL)",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await?;
+    let issue_detail = issue_state_json(pool, issue_id).await?;
+    Ok(Some(json!({
+        "id": id,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "created_by": created_by,
+        "updated_by": updated_by,
+        "workspace": workspace_id,
+        "project": project_id,
+        "cycle": cycle_id,
+        "issue": issue_id,
+        "issue_detail": issue_detail,
+        "sub_issues_count": sub_issues_count,
+    })))
+}
+
+/// One nested `IssueStateSerializer` (`serializers/issue.py:738-749`):
+/// full Issue `__all__` (FKs as ids, `description_binary` base64 per
+/// versions.rs precedent) + `label_details` / `state_detail` /
+/// `project_detail` / `assignee_details` + the three counts.
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct IssueStateFullRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    project_id: uuid::Uuid,
+    workspace_id: uuid::Uuid,
+    name: String,
+    description_json: Value,
+    priority: String,
+    start_date: Option<chrono::NaiveDate>,
+    target_date: Option<chrono::NaiveDate>,
+    sequence_id: i32,
+    parent_id: Option<uuid::Uuid>,
+    state_id: Option<uuid::Uuid>,
+    description_html: Option<String>,
+    description_stripped: Option<String>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    sort_order: f64,
+    point: Option<i32>,
+    archived_at: Option<chrono::NaiveDate>,
+    is_draft: bool,
+    external_id: Option<String>,
+    external_source: Option<String>,
+    description_binary: Option<Vec<u8>>,
+    estimate_point_id: Option<uuid::Uuid>,
+    type_id: Option<uuid::Uuid>,
+}
+
+async fn issue_state_json(pool: &sqlx::PgPool, issue_id: uuid::Uuid) -> Result<Value, sqlx::Error> {
+    let issue: Option<IssueStateFullRow> = sqlx::query_as(
+        "SELECT id, created_at, updated_at, created_by_id, updated_by_id, project_id, workspace_id, name, description_json, priority, start_date, target_date, sequence_id, parent_id, state_id, description_html, description_stripped, completed_at, sort_order, point, archived_at, is_draft, external_id, external_source, description_binary, estimate_point_id, type_id FROM issues WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(it) = issue else {
+        return Ok(Value::Null);
+    };
+    let labels: Vec<(uuid::Uuid, String, String)> = sqlx::query_as(
+        "SELECT l.id, l.name, l.color FROM issue_labels il JOIN labels l ON l.id = il.label_id WHERE il.issue_id = $1 AND il.deleted_at IS NULL AND l.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await?;
+    let state: Option<(uuid::Uuid, String, String, String)> =
+        sqlx::query_as("SELECT id, name, color, \"group\" FROM states WHERE id = $1")
+            .bind(it.state_id)
+            .fetch_optional(pool)
+            .await?;
+    let assignees: Vec<(
+        uuid::Uuid,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<uuid::Uuid>,
+        Option<bool>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT u.id, u.first_name, u.last_name, u.avatar, u.avatar_asset_id, u.is_bot, u.display_name FROM issue_assignees ia JOIN users u ON u.id = ia.assignee_id WHERE ia.issue_id = $1 AND ia.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await?;
+    let project: Option<(uuid::Uuid, String, String, Option<String>, Option<uuid::Uuid>, Value, String)> =
+        sqlx::query_as(
+            "SELECT p.id, p.identifier, p.name, p.cover_image, p.cover_image_asset_id, p.logo_props, p.description FROM projects p WHERE p.id = $1",
+        )
+        .bind(it.project_id)
+        .fetch_optional(pool)
+        .await?;
+    let project_detail = match project {
+        Some((pid2, identifier, pname, cover_image, cover_asset_id, logo_props, description)) => {
+            let cover_entity: Option<String> =
+                sqlx::query_scalar("SELECT entity_type FROM file_assets WHERE id = $1")
+                    .bind(cover_asset_id)
+                    .fetch_optional(pool)
+                    .await?
+                    .flatten();
+            super::history::project_lite_json(
+                pid2,
+                &identifier,
+                &pname,
+                &cover_image,
+                cover_asset_id,
+                cover_entity.as_deref(),
+                &logo_props,
+                &description,
+            )
+        }
+        None => Value::Null,
+    };
+    let sub: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issues si LEFT JOIN states ss ON ss.id = si.state_id WHERE si.parent_id = $1 AND si.deleted_at IS NULL AND si.archived_at IS NULL AND si.is_draft = false AND (ss.id IS NULL OR ss.\"group\" != 'triage') AND EXISTS(SELECT 1 FROM projects sp WHERE sp.id = si.project_id AND sp.archived_at IS NULL)",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await?;
+    let attach: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = $1 AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await?;
+    let links: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = $1 AND lin.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await?;
+    use base64::Engine as _;
+    Ok(json!({
+        "label_details": labels.iter().map(|(lid, lname, lcolor)| json!({"id": lid, "name": lname, "color": lcolor})).collect::<Vec<_>>(),
+        "state_detail": state.map(|(sid, sname, scolor, sgroup)| json!({"id": sid, "name": sname, "color": scolor, "group": sgroup})).unwrap_or(Value::Null),
+        "project_detail": project_detail,
+        "assignee_details": assignees.iter().map(|(uid, first, last, avatar, asset_id, is_bot, display)| {
+            let entity: Option<String> = None;
+            json!({
+                "id": uid,
+                "first_name": first,
+                "last_name": last,
+                "avatar": avatar,
+                "avatar_url": crate::routes::project::user_avatar_url(*asset_id, entity.as_deref(), avatar.as_deref()),
+                "is_bot": is_bot,
+                "display_name": display,
+            })
+        }).collect::<Vec<_>>(),
+        "sub_issues_count": sub,
+        "attachment_count": attach,
+        "link_count": links,
+        "id": it.id,
+        "created_at": it.created_at,
+        "updated_at": it.updated_at,
+        "created_by": it.created_by_id,
+        "updated_by": it.updated_by_id,
+        "project": it.project_id,
+        "workspace": it.workspace_id,
+        "name": it.name,
+        "description_json": it.description_json,
+        "priority": it.priority,
+        "start_date": it.start_date,
+        "target_date": it.target_date,
+        "sequence_id": it.sequence_id,
+        "parent": it.parent_id,
+        "state": it.state_id,
+        "description_html": it.description_html,
+        "description_stripped": it.description_stripped,
+        "completed_at": it.completed_at,
+        "sort_order": it.sort_order,
+        "point": it.point,
+        "archived_at": it.archived_at,
+        "is_draft": it.is_draft,
+        "external_id": it.external_id,
+        "external_source": it.external_source,
+        "description_binary": it.description_binary.as_ref().map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
+        "estimate_point": it.estimate_point_id,
+        "type": it.type_id,
+    }))
 }
 
 pub async fn cycle_issue_update(
@@ -1480,8 +1662,12 @@ pub async fn cycle_issue_update(
     if !project_in_workspace(&st.pool, pid, &slug).await? {
         return Ok(missing());
     }
-    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
-        return Ok(deny());
+    // DRF-default update/partial_update on the member-filtered queryset
+    // (same gate as retrieve above): any project member writes (guests
+    // included); non-members 404.
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, pid).await?;
+    if role.is_none() {
+        return Ok(missing());
     }
     if let Some(new_issue) = body
         .get("issue")
@@ -1518,8 +1704,9 @@ pub async fn cycle_issue_update(
 }
 
 /// F5 grouped branch of [`cycle_issues_list`]: two-phase grouped 200
-/// (`views/cycle/issue.py:143-220` via the shared [`grouped`] core). Row
-/// shape stays the flat [`CycleIssueRow`] (full serializer remains T1).
+/// (`views/cycle/issue.py:143-220` via the shared [`grouped`] core). Page
+/// rows are the shared 26-col `issue_on_results` shape (same as the flat
+/// list above).
 #[allow(clippy::too_many_arguments)]
 async fn grouped_cycle_response(
     pool: &sqlx::PgPool,
@@ -1535,8 +1722,8 @@ async fn grouped_cycle_response(
     use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
     const BASE: &str = "FROM issues i JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci2.cycle_id::text FROM cycle_issues ci2 WHERE ci2.issue_id = i.id AND ci2.deleted_at IS NULL ORDER BY ci2.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
-    // Twin of the flat row SELECT below (same columns, plus id filter).
-    const ROWS: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.sequence_id, i.project_id, i.parent_id, i.created_at, i.updated_at, (SELECT ci2.cycle_id FROM cycle_issues ci2 WHERE ci2.issue_id = i.id AND ci2.deleted_at IS NULL LIMIT 1) AS cycle_id, (SELECT COUNT(*) FROM issue_links il WHERE il.issue_id = i.id AND il.deleted_at IS NULL) AS link_count, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issues ch WHERE ch.parent_id = i.id AND ch.deleted_at IS NULL) AS sub_issues_count ";
+    // Twin of the flat row SELECT above (shared 26-col shape + id filter).
+    let rows_select = format!("{USER_SELECT_SQL} {BASE} AND i.id = ANY($3)");
     let scan: Vec<ScanRow> = sqlx::query_as(&format!("{KEYS} {BASE} ORDER BY {order}, i.id ASC"))
         .bind(cid)
         .bind(pid)
@@ -1563,15 +1750,15 @@ async fn grouped_cycle_response(
         .collect();
     let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
     if !page_ids.is_empty() {
-        let rows: Vec<CycleIssueRow> =
-            sqlx::query_as(&format!("{ROWS} {BASE} AND i.id = ANY($3)"))
+        let rows: Vec<super::issue_common::ArchiveRow> =
+            sqlx::query_as(&format!("{rows_select}"))
                 .bind(cid)
                 .bind(pid)
                 .bind(&page_ids)
                 .fetch_all(pool)
                 .await?;
         for r in &rows {
-            rows_by_id.insert(r.id, cycle_issue_json(r));
+            rows_by_id.insert(r.id, serde_json::to_value(r).unwrap_or(Value::Null));
         }
     }
     let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
@@ -1586,10 +1773,13 @@ pub async fn cycle_issue_destroy(
     if !project_in_workspace(&st.pool, pid, &slug).await? {
         return Ok(missing());
     }
-    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
-        return Ok(deny());
+    // DRF-default destroy on the member-filtered queryset (same gate as
+    // retrieve): any project member deletes (guests included); non-members
+    // 404. `issue.py:320-343`: soft-delete; **204** always, even with 0 rows.
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, pid).await?;
+    if role.is_none() {
+        return Ok(missing());
     }
-    // `issue.py:320-343`: soft-delete; **204** always, even with 0 rows.
     sqlx::query(
         "UPDATE cycle_issues SET deleted_at = now() WHERE issue_id = $1 \
          AND project_id = $2 AND cycle_id = $3 AND workspace_id IN \
