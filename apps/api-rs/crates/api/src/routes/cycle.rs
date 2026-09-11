@@ -1858,18 +1858,22 @@ pub async fn date_check(
 /// GET `.../user-favorite-cycles/` — the DRF-default `list` (`urls/cycle.py:62-65`)
 /// over `CycleFavoriteViewSet.get_queryset` (user+slug-scoped `UserFavorite`
 /// rows). Django has no `serializer_class` for this viewset, so the real
-/// Django GET 500s on `get_serializer` (same quirk as fav-views, Batch N);
-/// Rust returns 200 `[{id, cycle}]` like `view::list_favorites` — a sane
-/// superset. User/slug scoping gap documented with the views twin.
+/// Django GET 500s on `get_serializer` for every authed caller (ADR
+/// Verify-A.4, same quirk as fav-views Batch N); Rust returns 200
+/// `[{id, cycle}]` scoped to the CALLER (`user_id = auth`, matching the
+/// queryset intent — the old project-wide superset leaked other users'
+/// favorites). GET carries no AM decorator in Django (only create/destroy
+/// do), so auth-only here is exact.
 pub async fn fav_list(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     Path((_slug, pid)): Path<(String, uuid::Uuid)>,
 ) -> Result<Json<Value>, common::errors::AppError> {
     let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
-        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND entity_type = 'cycle' AND deleted_at IS NULL ORDER BY created_at DESC",
+        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND user_id = $2 AND entity_type = 'cycle' AND deleted_at IS NULL ORDER BY created_at DESC",
     )
     .bind(pid)
+    .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
     Ok(Json(json!(

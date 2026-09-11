@@ -1091,7 +1091,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/user-favorite-projects/",
           "django_source": "app/urls/project.py:102",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::project::fav_add",
           "fe_evidence": [
             {
@@ -1104,9 +1104,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch F6c",
+          "batch_task": "Batch Verify-A",
           "out_scope": false,
-          "notes": "MISMATCH GET list unhandled: Django routes GET->list (app/urls/project.py:102-105) with user+slug-scoped get_queryset (project/base.py:501-509, no serializer_class project/base.py:498-499) vs Rust post-only route (main.rs:103-105) so GET has no handler; POST verified create 204 (project/base.py:514-521) vs fav_add (project.rs:990-1017): AuthUser-only gate both (views/base.py:51 vs project.rs:974), 204 empty, integrity-class 400 {error: The payload is not valid} (views/base.py:80-84 vs project.rs:1011-1014), workspace slug-vs-project derivation deviation (project.rs:984-989); FE getUserProjectFavorites GET (project.service.ts:163-169, zero callers) + addProjectToFavorites POST (project.service.ts:171-177) via project.store.ts:457 from card.tsx:89,create/root.tsx:54 so fe_pages [] | F4: GET list wired (fav_list 200 [{id,project}] ws-scoped superset; serves FE getUserProjectFavorites, ex-405). | F6c: verified F4 GET + POST; user-scope gap stays open."
+          "notes": "MISMATCH GET list unhandled: Django routes GET->list (app/urls/project.py:102-105) with user+slug-scoped get_queryset (project/base.py:501-509, no serializer_class project/base.py:498-499) vs Rust post-only route (main.rs:103-105) so GET has no handler; POST verified create 204 (project/base.py:514-521) vs fav_add (project.rs:990-1017): AuthUser-only gate both (views/base.py:51 vs project.rs:974), 204 empty, integrity-class 400 {error: The payload is not valid} (views/base.py:80-84 vs project.rs:1011-1014), workspace slug-vs-project derivation deviation (project.rs:984-989); FE getUserProjectFavorites GET (project.service.ts:163-169, zero callers) + addProjectToFavorites POST (project.service.ts:171-177) via project.store.ts:457 from card.tsx:89,create/root.tsx:54 so fe_pages [] | F4: GET list wired (fav_list 200 [{id,project}] ws-scoped superset; serves FE getUserProjectFavorites, ex-405). | F6c: verified F4 GET + POST; user-scope gap stays open. | Verify-A.4: caller-scoped [{id,project}] (was all-users leak) + Django-500-quirk sane-200; auth-only exact (no member check on Django GET)."
         },
         {
           "methods": ["DELETE"],
@@ -3125,7 +3125,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-cycles/",
           "django_source": "app/urls/cycle.py:62",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::cycle::fav_create",
           "fe_evidence": [
             {
@@ -3138,9 +3138,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch K T2",
+          "batch_task": "Batch Verify-A",
           "out_scope": false,
-          "notes": "MISMATCH GET list unhandled: Django routes get->list (cycle.py:62-65) served by DRF default with user+slug-scoped get_queryset (base.py:562-569) vs Rust post-only route (main.rs:463-464) so GET has no handler; POST verified create 204 (base.py:572-579 vs fav_create cycle.rs:1500, main.rs:463-464): AM gate both (base.py:571 vs gate_am), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (views/base.py:80-84 vs PAYLOAD_INVALID_MSG cycle.rs:55), NO cycle-existence check either side (base.py:573-577 vs cycle.rs cid parse-or-400) | F4: GET list wired (fav_list 200 [{id,cycle}] superset; Django 500s sans serializer_class). | F6b: verified F4 GET; user-scope gap stays open."
+          "notes": "MISMATCH GET list unhandled: Django routes get->list (cycle.py:62-65) served by DRF default with user+slug-scoped get_queryset (base.py:562-569) vs Rust post-only route (main.rs:463-464) so GET has no handler; POST verified create 204 (base.py:572-579 vs fav_create cycle.rs:1500, main.rs:463-464): AM gate both (base.py:571 vs gate_am), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (views/base.py:80-84 vs PAYLOAD_INVALID_MSG cycle.rs:55), NO cycle-existence check either side (base.py:573-577 vs cycle.rs cid parse-or-400) | F4: GET list wired (fav_list 200 [{id,cycle}] superset; Django 500s sans serializer_class). | F6b: verified F4 GET; user-scope gap stays open. | Verify-A.4: caller-scoped [{id,cycle}] (was project-wide leak) + Django-500-quirk sane-200; auth-only exact (AM decorators cover create/destroy only)."
         },
         {
           "methods": ["DELETE"],
@@ -3497,7 +3497,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/projects/:project_id/user-favorite-modules/",
           "django_source": "app/urls/module.py:76",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::module::fav_create",
           "fe_evidence": [
             {
@@ -3510,9 +3510,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch F6g",
+          "batch_task": "Batch Verify-A",
           "out_scope": false,
-          "notes": "MISMATCH GET list unhandled: Django routes get->list (urls/module.py:76-79) served by DRF default with user+slug-scoped get_queryset (app/views/module/base.py:795-802) vs Rust post-only route (main.rs:588-591) so GET has no handler; POST verified create 204 (app/views/module/base.py:804-811 vs fav_create module.rs:2265, main.rs:588-591): Lite gate both (app/views/module/base.py:793 vs gate_lite), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (app/views/base.py:80-84 vs PAYLOAD_INVALID_MSG module.rs:48), NO module-existence check either side (app/views/module/base.py:805-810 vs mid parse-or-400) | F4: GET list wired (fav_list 200 [{id,module}] superset; Django 500s sans serializer_class). | F6g: verified F4 GET + POST; user-scope gap stays open (same class as fav-cycles)."
+          "notes": "MISMATCH GET list unhandled: Django routes get->list (urls/module.py:76-79) served by DRF default with user+slug-scoped get_queryset (app/views/module/base.py:795-802) vs Rust post-only route (main.rs:588-591) so GET has no handler; POST verified create 204 (app/views/module/base.py:804-811 vs fav_create module.rs:2265, main.rs:588-591): Lite gate both (app/views/module/base.py:793 vs gate_lite), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (app/views/base.py:80-84 vs PAYLOAD_INVALID_MSG module.rs:48), NO module-existence check either side (app/views/module/base.py:805-810 vs mid parse-or-400) | F4: GET list wired (fav_list 200 [{id,module}] superset; Django 500s sans serializer_class). | F6g: verified F4 GET + POST; user-scope gap stays open (same class as fav-cycles). | Verify-A.4: caller-scoped [{id,module}] (was project-wide leak) + Django-500-quirk sane-200; ProjectLitePermission gate (non-member 403 observable)."
         },
         {
           "methods": ["DELETE"],

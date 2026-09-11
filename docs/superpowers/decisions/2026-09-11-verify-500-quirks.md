@@ -53,3 +53,24 @@ is_intake` (`serializers/issue.py:934-945`).
   the full intended shape (`__all__` + `issue_detail` + `sub_issues_count`)
   with 200. Gates mirror the DRF-default member-filtered queryset (any
   project member incl. guests; non-members/archived 404, not 403).
+
+## 4. Fav-list GETs — 500-quirk + caller scope (no working Django list)
+
+- `ProjectFavoritesViewSet` (`views/project/base.py:497-521`),
+  `CycleFavoriteViewSet` (`views/cycle/base.py:557-579`) and
+  `ModuleFavoriteViewSet` (`views/module/base.py:790-811`) define NO
+  `serializer_class` and NO `list` method, so the DRF-default `list` raises
+  `AssertionError` in `get_serializer` → 500 for EVERY authed caller that
+  reaches the body — even with zero favorites. There is no observable
+  user-scoped list in stock Django; the `user=request.user` queryset filter
+  is intent, not behavior.
+- Rust returns the intended shape sanely with 200 (`[{id, project}]`,
+  `[{id, cycle}]`, `[{id, module}]`), scoped to the CALLER (`user_id =
+auth`, matching the queryset intent). The pre-scope workspace/project-wide
+  superset leaked other users' favorites, so caller scope is required — not
+  optional — for the flip.
+- Gates mirror what observably runs in Django: project/cycle GETs carry no
+  member check (`IsAuthenticated` only — create/destroy decorators don't
+  apply to list), so auth-only; module GET carries `ProjectLitePermission`
+  (any active project member; non-members observably 403 before the 500),
+  so `gate_lite` + `deny_detail()`.

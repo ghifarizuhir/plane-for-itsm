@@ -1545,19 +1545,22 @@ pub(crate) fn map_fav_error(rows_deleted: u64) -> StatusCode {
 /// Django's blanket `IntegrityError` mapping; other DB errors → 500 via `?`.
 /// GET `/api/workspaces/:slug/user-favorite-projects/` — the DRF-default
 /// `list` (`urls/project.py:102-105`) over `ProjectFavoritesViewSet.get_queryset`
-/// (user+slug-scoped rows). Same 500-quirk + 200-superset rationale as
-/// `cycle::fav_list`; shape `[{id, project}]`, scoped by workspace slug
-/// (this collection has no project_id). Serves the FE `getUserProjectFavorites`
-/// caller (`project.service.ts:163-164`), which currently gets 405.
+/// (user+slug-scoped rows). The viewset defines no `serializer_class`, so
+/// stock Django 500s on `get_serializer` for every authed caller (ADR
+/// Verify-A.4); Rust returns 200 `[{id, project}]` scoped to the CALLER
+/// (`user_id = auth`, matching the queryset intent — the old workspace-wide
+/// superset leaked other users' favorites). Serves the FE
+/// `getUserProjectFavorites` caller (`project.service.ts:163-164`).
 pub async fn fav_list(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
 ) -> Result<Json<Value>, common::errors::AppError> {
     let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
-        "SELECT f.id, f.entity_identifier FROM user_favorites f JOIN workspaces w ON w.id = f.workspace_id WHERE w.slug = $1 AND f.entity_type = 'project' AND f.deleted_at IS NULL ORDER BY f.created_at DESC",
+        "SELECT f.id, f.entity_identifier FROM user_favorites f JOIN workspaces w ON w.id = f.workspace_id WHERE w.slug = $1 AND f.user_id = $2 AND f.entity_type = 'project' AND f.deleted_at IS NULL ORDER BY f.created_at DESC",
     )
     .bind(&slug)
+    .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
     Ok(Json(json!(

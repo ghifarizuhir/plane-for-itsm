@@ -2542,24 +2542,34 @@ pub async fn link_destroy(
 
 /// GET `.../user-favorite-modules/` — the DRF-default `list`
 /// (`urls/module.py:76-79`) over `ModuleFavoriteViewSet.get_queryset`.
-/// Same 500-quirk + 200-superset rationale as `cycle::fav_list`
-/// (no `serializer_class` on the viewset); shape `[{id, module}]`.
+/// Same 500-quirk + caller-scope rationale as `cycle::fav_list`
+/// (no `serializer_class` on the viewset → stock Django GET 500s, ADR
+/// Verify-A.4); shape `[{id, module}]`. Gate mirrors
+/// `ProjectLitePermission` (any active project member; non-members 403 —
+/// observable in Django since the permission runs before the 500).
 pub async fn fav_list(
     State(st): State<AppState>,
-    _auth: AuthUser,
-    Path((_slug, pid)): Path<(String, uuid::Uuid)>,
-) -> Result<Json<Value>, common::errors::AppError> {
+    auth: AuthUser,
+    Path((slug, pid)): Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_lite(&st.pool, auth.0, &slug, pid).await? {
+        return Ok(deny_detail());
+    }
     let rows: Vec<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
-        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND entity_type = 'module' AND deleted_at IS NULL ORDER BY created_at DESC",
+        "SELECT id, entity_identifier FROM user_favorites WHERE project_id = $1 AND user_id = $2 AND entity_type = 'module' AND deleted_at IS NULL ORDER BY created_at DESC",
     )
     .bind(pid)
+    .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(json!(
-        rows.into_iter()
-            .map(|(id, module)| json!({"id": id, "module": module}))
-            .collect::<Vec<_>>()
-    )))
+    Ok((
+        StatusCode::OK,
+        Json(json!(
+            rows.into_iter()
+                .map(|(id, module)| json!({"id": id, "module": module}))
+                .collect::<Vec<_>>()
+        )),
+    ))
 }
 
 pub async fn fav_create(
