@@ -1526,8 +1526,11 @@ pub async fn patch(
 /// PUT (`urls/module.py:24-35` maps `put → update`; Django defines no
 /// `update` on `ModuleViewSet`, so DRF falls back to the stock
 /// `ModelViewSet.update` with NO `@allow_permission` decorator —
-/// locked hardening deviation §12 implements it WITH `[ADMIN,MEMBER]`
-/// enforcement, sharing the PATCH body logic).
+/// IsAuthenticated-only, GUEST included — and FULL-update semantics:
+/// `name` is required (`{"name": ["This field is required."]}` when
+/// absent). Validated-then-shared core: DRF full update only differs
+/// from partial in required-field enforcement (omitted optional fields
+/// are not reset), so a present name delegates to `apply_update`.
 pub async fn update(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1537,8 +1540,14 @@ pub async fn update(
     if !project_in_workspace(&st.pool, pid, &slug).await? {
         return Ok(missing());
     }
-    if !gate_am(&st.pool, auth.0, &slug, pid).await? {
-        return Ok(deny());
+    match body.get("name").and_then(Value::as_str) {
+        Some(n) if !n.trim().is_empty() => {}
+        _ => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"name": ["This field is required."]})),
+            ));
+        }
     }
     apply_update(&st.pool, auth.0, &slug, pid, mid, &body).await
 }
@@ -1624,47 +1633,6 @@ pub struct ModuleIssuesQuery {
     pub sub_group_by: Option<String>,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
-struct ModuleIssueRow {
-    id: uuid::Uuid,
-    name: String,
-    state_id: Option<uuid::Uuid>,
-    sort_order: f64,
-    completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    estimate_point: Option<uuid::Uuid>,
-    priority: String,
-    sequence_id: i32,
-    project_id: uuid::Uuid,
-    parent_id: Option<uuid::Uuid>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-    module_id: Option<uuid::Uuid>,
-    link_count: i64,
-    attachment_count: i64,
-    sub_issues_count: i64,
-}
-
-fn module_issue_json(r: &ModuleIssueRow) -> Value {
-    json!({
-        "id": r.id,
-        "name": r.name,
-        "state_id": opt_uuid(&r.state_id),
-        "sort_order": r.sort_order,
-        "completed_at": r.completed_at,
-        "estimate_point": opt_uuid(&r.estimate_point),
-        "priority": r.priority,
-        "sequence_id": r.sequence_id,
-        "project_id": r.project_id,
-        "parent_id": opt_uuid(&r.parent_id),
-        "module_id": opt_uuid(&r.module_id),
-        "link_count": r.link_count,
-        "attachment_count": r.attachment_count,
-        "sub_issues_count": r.sub_issues_count,
-        "created_at": r.created_at,
-        "updated_at": r.updated_at,
-    })
-}
-
 pub async fn issues_list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1734,7 +1702,7 @@ pub async fn issues_list(
         .await;
     }
     let (rows, next, prev, next_has, prev_has, count, pages): (
-        Vec<ModuleIssueRow>,
+        Vec<super::issue_common::ArchiveRow>,
         String,
         String,
         bool,
@@ -1769,21 +1737,19 @@ pub async fn issues_list(
                 total_pages(total, limit),
             ),
             Ok(PageWindow::Rows(offset)) => {
+                // Flat rows are the shared 26-col `issue_on_results` shape
+                // (`issue.py:126-141` via `issue_queryset_grouper` with no
+                // grouping): reuse the user-scope SELECT (identical
+                // annotations; archived modules excluded from `module_ids`
+                // per `grouper.py:59-68`) with the module scope appended.
                 let sql = format!(
-                    "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, \
-                     i.estimate_point_id AS estimate_point, i.priority, i.sequence_id, \
-                     i.project_id, i.parent_id, i.created_at, i.updated_at, \
-                     (SELECT mi2.module_id FROM module_issues mi2 WHERE mi2.issue_id = i.id \
-                      AND mi2.deleted_at IS NULL LIMIT 1) AS module_id, \
-                     (SELECT COUNT(*) FROM issue_links il WHERE il.issue_id = i.id \
-                      AND il.deleted_at IS NULL) AS link_count, \
-                     (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id \
-                      AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, \
-                     (SELECT COUNT(*) FROM issues ch WHERE ch.parent_id = i.id \
-                      AND ch.deleted_at IS NULL) AS sub_issues_count \
-                     {base} ORDER BY {order} LIMIT $3 OFFSET $4"
+                    "{} JOIN module_issues mi ON mi.issue_id = i.id \
+                     AND mi.module_id = $1 AND mi.deleted_at IS NULL \
+                     WHERE i.project_id = $2 AND i.deleted_at IS NULL \
+                     ORDER BY {order} LIMIT $3 OFFSET $4",
+                    super::issue_lists::USER_SELECT_SQL,
                 );
-                let rows: Vec<ModuleIssueRow> = sqlx::query_as(&sql)
+                let rows: Vec<super::issue_common::ArchiveRow> = sqlx::query_as(&sql)
                     .bind(mid)
                     .bind(pid)
                     .bind(limit)
@@ -1816,7 +1782,7 @@ pub async fn issues_list(
         total_pages: pages,
         total_results: total,
         extra_stats: None,
-        results: rows.iter().map(module_issue_json).collect(),
+        results: rows.iter().map(|r| serde_json::to_value(r).unwrap_or(Value::Null)).collect(),
     };
     Ok((StatusCode::OK, Json(json!(env))))
 }
@@ -1980,16 +1946,18 @@ pub async fn issue_modules_create(
 /// GET/PUT/PATCH `/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/`
 /// — parity with the DRF `ModelViewSet` defaults behind
 /// `get→retrieve put→update patch→partial_update` (`urls/module.py:47-57`; no
-/// retrieve/update overrides in `views/module/issue.py`). The join row's only
-/// writable field is the `issue` link (`ModuleIssueSerializer` read-only:
+/// retrieve/update overrides in `views/module/issue.py`). Writable links are
+/// `module` + `issue` (`ModuleIssueSerializer` read-only:
 /// workspace/project/created_by/updated_by, `serializers/module.py:137-149`);
-/// PUT/PATCH re-point it when `body.issue`/`body.issue_id` parses as UUID,
-/// else return the row unchanged. 200 join-row subset (full serializer +
-/// details stays T1); miss → 404 `missing()`. Gate AM mirrors the file's
-/// destroy twin. No FE GET/PUT/PATCH caller (DELETE only).
+/// PUT/PATCH re-point either when it parses as UUID, else return the row
+/// unchanged. 200 full `ModuleIssueSerializer` row (nested `module_detail`
+/// flat + quirky project-lite `issue_detail` + `sub_issues_count`); miss →
+/// 404 `missing()`. Gate AM mirrors the file's destroy twin. No FE
+/// GET/PUT/PATCH caller (DELETE only).
 /// F5 grouped branch of [`issues_list`]: two-phase grouped 200
 /// (`views/module/issue.py:126-198` via the shared [`grouped`] core). Row
-/// shape stays the flat [`ModuleIssueRow`] (full serializer remains T1).
+/// shape is the shared 26-col `issue_on_results` shape (same as the flat
+/// list).
 #[allow(clippy::too_many_arguments)]
 async fn grouped_module_response(
     pool: &sqlx::PgPool,
@@ -2005,8 +1973,10 @@ async fn grouped_module_response(
     use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
     const BASE: &str = "FROM issues i JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi2.module_id::text) FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
-    // Twin of the flat row SELECT above (same columns, plus id filter).
-    const ROWS: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.sequence_id, i.project_id, i.parent_id, i.created_at, i.updated_at, (SELECT mi2.module_id FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL LIMIT 1) AS module_id, (SELECT COUNT(*) FROM issue_links il WHERE il.issue_id = i.id AND il.deleted_at IS NULL) AS link_count, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issues ch WHERE ch.parent_id = i.id AND ch.deleted_at IS NULL) AS sub_issues_count ";
+    // Page-id fetch in the shared 26-col shape (same as the flat list).
+    const ROWS_BASE: &str = "FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+        JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL \
+        WHERE i.project_id = $2 AND i.deleted_at IS NULL AND i.id = ANY($3)";
     let scan: Vec<ScanRow> = sqlx::query_as(&format!("{KEYS} {BASE} ORDER BY {order}, i.id ASC"))
         .bind(mid)
         .bind(pid)
@@ -2033,19 +2003,134 @@ async fn grouped_module_response(
         .collect();
     let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
     if !page_ids.is_empty() {
-        let rows: Vec<ModuleIssueRow> =
-            sqlx::query_as(&format!("{ROWS} {BASE} AND i.id = ANY($3)"))
+        let rows: Vec<super::issue_common::ArchiveRow> =
+            sqlx::query_as(&format!("{} {ROWS_BASE}", super::issue_lists::USER_SELECT_SQL))
                 .bind(mid)
                 .bind(pid)
                 .bind(&page_ids)
                 .fetch_all(pool)
                 .await?;
         for r in &rows {
-            rows_by_id.insert(r.id, module_issue_json(r));
+            rows_by_id.insert(r.id, serde_json::to_value(r).unwrap_or(Value::Null));
         }
     }
     let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
     Ok((StatusCode::OK, Json(env)))
+}
+
+/// Full `ModuleIssueSerializer` row (`serializers/module.py:137-149`:
+/// `__all__` + nested `module_detail` (flat module `__all__`) +
+/// `issue_detail` (quirk: `ProjectLiteSerializer` over the issue — only
+/// id/name/description exist on issues, the project-only keys render
+/// null) + `sub_issues_count`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ModuleLinkFullRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+    workspace_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    module_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+    m_name: String,
+    m_description: String,
+    m_description_text: Option<Value>,
+    m_description_html: Option<Value>,
+    m_start_date: Option<chrono::NaiveDate>,
+    m_target_date: Option<chrono::NaiveDate>,
+    m_status: String,
+    m_lead_id: Option<uuid::Uuid>,
+    m_view_props: Value,
+    m_sort_order: f64,
+    m_external_source: Option<String>,
+    m_external_id: Option<String>,
+    m_logo_props: Value,
+    m_archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    m_created_at: chrono::DateTime<chrono::Utc>,
+    m_updated_at: chrono::DateTime<chrono::Utc>,
+    i_name: String,
+    i_description: String,
+    sub_issues_count: i64,
+}
+
+fn module_link_full_json(r: &ModuleLinkFullRow) -> Value {
+    json!({
+        "id": r.id,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by": r.created_by_id,
+        "updated_by": r.updated_by_id,
+        "workspace": r.workspace_id,
+        "project": r.project_id,
+        "module": r.module_id,
+        "issue": r.issue_id,
+        "module_detail": {
+            "id": r.module_id,
+            "created_at": r.m_created_at,
+            "updated_at": r.m_updated_at,
+            "workspace": r.workspace_id,
+            "project": r.project_id,
+            "name": r.m_name,
+            "description": r.m_description,
+            "description_text": r.m_description_text,
+            "description_html": r.m_description_html,
+            "start_date": r.m_start_date,
+            "target_date": r.m_target_date,
+            "status": r.m_status,
+            "lead_id": r.m_lead_id,
+            "view_props": r.m_view_props,
+            "sort_order": r.m_sort_order,
+            "external_source": r.m_external_source,
+            "external_id": r.m_external_id,
+            "logo_props": r.m_logo_props,
+            "archived_at": r.m_archived_at,
+        },
+        "issue_detail": {
+            "id": r.issue_id,
+            "identifier": Value::Null,
+            "name": r.i_name,
+            "cover_image": Value::Null,
+            "cover_image_url": Value::Null,
+            "logo_props": Value::Null,
+            "description": r.i_description,
+        },
+        "sub_issues_count": r.sub_issues_count,
+    })
+}
+
+async fn fetch_module_link_full(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pid: uuid::Uuid,
+    mid: uuid::Uuid,
+    iid: uuid::Uuid,
+) -> Result<Option<ModuleLinkFullRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT mi.id, mi.created_at, mi.updated_at, mi.created_by_id, mi.updated_by_id, \
+         mi.workspace_id, mi.project_id, mi.module_id, mi.issue_id, \
+         m.name AS m_name, m.description AS m_description, \
+         m.description_text AS m_description_text, m.description_html AS m_description_html, \
+         m.start_date AS m_start_date, m.target_date AS m_target_date, m.status AS m_status, \
+         m.lead_id AS m_lead_id, m.view_props AS m_view_props, m.sort_order AS m_sort_order, \
+         m.external_source AS m_external_source, m.external_id AS m_external_id, \
+         m.logo_props AS m_logo_props, m.archived_at AS m_archived_at, \
+         m.created_at AS m_created_at, m.updated_at AS m_updated_at, \
+         i.name AS i_name, i.description AS i_description, \
+         (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count \
+         FROM module_issues mi JOIN workspaces w ON w.id = mi.workspace_id \
+         JOIN modules m ON m.id = mi.module_id \
+         JOIN issues i ON i.id = mi.issue_id \
+         WHERE w.slug = $1 AND mi.project_id = $2 AND mi.module_id = $3 AND mi.issue_id = $4 \
+         AND mi.deleted_at IS NULL",
+    )
+    .bind(slug)
+    .bind(pid)
+    .bind(mid)
+    .bind(iid)
+    .fetch_optional(pool)
+    .await
 }
 
 pub async fn module_issue_detail(
@@ -2059,20 +2144,8 @@ pub async fn module_issue_detail(
     if !gate_am(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
-    let row: Option<(uuid::Uuid, uuid::Uuid, uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
-        "SELECT mi.id, mi.module_id, mi.issue_id, mi.project_id FROM module_issues mi JOIN workspaces w ON w.id = mi.workspace_id WHERE w.slug = $1 AND mi.project_id = $2 AND mi.module_id = $3 AND mi.issue_id = $4 AND mi.deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .bind(pid)
-    .bind(mid)
-    .bind(iid)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some((id, module_id, issue_id, project_id)) => Ok((
-            StatusCode::OK,
-            Json(json!({"id": id, "module": module_id, "issue": issue_id, "project": project_id})),
-        )),
+    match fetch_module_link_full(&st.pool, &slug, pid, mid, iid).await? {
+        Some(r) => Ok((StatusCode::OK, Json(module_link_full_json(&r)))),
         None => Ok(missing()),
     }
 }
@@ -2089,6 +2162,41 @@ pub async fn module_issue_update(
     if !gate_am(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
+    // DRF-default update/partial_update over `ModuleIssueSerializer`:
+    // writable links are `module` + `issue` (workspace/project/audit are
+    // read-only). Re-point either when it parses as UUID; dup → the
+    // IntegrityError 400.
+    let mut cur_mid = mid;
+    let mut cur_iid = iid;
+    if let Some(new_module) = body
+        .get("module")
+        .or_else(|| body.get("module_id"))
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<uuid::Uuid>().ok())
+    {
+        match sqlx::query(
+            "UPDATE module_issues mi SET module_id = $1, updated_at = now() FROM workspaces w WHERE w.id = mi.workspace_id AND w.slug = $2 AND mi.project_id = $3 AND mi.module_id = $4 AND mi.issue_id = $5 AND mi.deleted_at IS NULL",
+        )
+        .bind(new_module)
+        .bind(&slug)
+        .bind(pid)
+        .bind(cur_mid)
+        .bind(cur_iid)
+        .execute(&st.pool)
+        .await
+        {
+            Ok(_) => {
+                cur_mid = new_module;
+            }
+            Err(e) if is_constraint_violation(&e) => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "The payload is not valid"})),
+                ));
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
     if let Some(new_issue) = body
         .get("issue")
         .or_else(|| body.get("issue_id"))
@@ -2103,12 +2211,14 @@ pub async fn module_issue_update(
         .bind(new_issue)
         .bind(&slug)
         .bind(pid)
-        .bind(mid)
-        .bind(iid)
+        .bind(cur_mid)
+        .bind(cur_iid)
         .execute(&st.pool)
         .await
         {
-            Ok(_) => {}
+            Ok(_) => {
+                cur_iid = new_issue;
+            }
             Err(e) if is_constraint_violation(&e) => {
                 return Ok((
                     StatusCode::BAD_REQUEST,
@@ -2117,9 +2227,11 @@ pub async fn module_issue_update(
             }
             Err(e) => return Err(e.into()),
         }
-        return module_issue_detail(State(st), auth, Path((slug, pid, mid, new_issue))).await;
     }
-    module_issue_detail(State(st), auth, Path((slug, pid, mid, iid))).await
+    match fetch_module_link_full(&st.pool, &slug, pid, cur_mid, cur_iid).await? {
+        Some(r) => Ok((StatusCode::OK, Json(module_link_full_json(&r)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn issue_destroy(

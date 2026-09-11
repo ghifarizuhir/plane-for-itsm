@@ -34,8 +34,10 @@ pub const EXPORT_PROVIDERS: [&str; 3] = ["csv", "xlsx", "json"];
 pub fn validate_export_provider(provider: Option<&str>) -> Result<(), String> {
     match provider {
         Some(p) if EXPORT_PROVIDERS.contains(&p) => Ok(()),
+        // Django reads `request.data.get("provider", False)` → a missing
+        // provider formats as `False`: `"Provider 'False' not found."`.
         Some(p) => Err(format!("Provider '{p}' not found.")),
-        None => Err("Provider 'unknown' not found.".to_string()),
+        None => Err("Provider 'False' not found.".to_string()),
     }
 }
 
@@ -100,9 +102,28 @@ pub async fn create_export(
     axum::extract::Path(slug): axum::extract::Path<String>,
     Json(body): Json<CreateExport>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // ADMIN/MEMBER at WORKSPACE level (`exporter/base.py:22`).
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
     validate_export_provider(body.provider.as_deref()).map_err(|e| anyhow::anyhow!(e))?;
     let user = auth.0;
-    let projects = body.project.unwrap_or_default();
+    // Empty project list defaults to the caller's live member projects
+    // (`exporter/base.py:33-39`).
+    let mut projects = body.project.unwrap_or_default();
+    if projects.is_empty() {
+        projects = sqlx::query_scalar(
+            "SELECT pm.project_id FROM project_members pm JOIN projects p ON p.id = pm.project_id \
+             JOIN workspaces w ON w.id = p.workspace_id \
+             WHERE w.slug = $1 AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL \
+             AND p.archived_at IS NULL AND p.deleted_at IS NULL",
+        )
+        .bind(&slug)
+        .bind(user)
+        .fetch_all(&st.pool)
+        .await?;
+    }
     sqlx::query(
         "INSERT INTO exporters (id, workspace_id, project, provider, \"type\", initiated_by_id, status, reason, key, token, created_at, updated_at) SELECT gen_random_uuid(), w.id, $1, $2, 'issue_exports', $3, 'queued', '', '', 'exp_' || replace(gen_random_uuid()::text, '-', ''), now(), now() FROM workspaces w WHERE w.slug = $4",
     )
@@ -121,25 +142,147 @@ pub struct ExportHistoryQuery {
     pub per_page: Option<i64>,
     #[serde(default)]
     pub cursor: Option<String>,
+    #[serde(default)]
+    pub order_by: Option<String>,
+}
+
+/// Full `ExporterHistorySerializer` row (`serializers/exporter.py:11-33`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ExporterHistoryRow {
+    id: uuid::Uuid,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    project: Vec<uuid::Uuid>,
+    provider: String,
+    status: String,
+    url: Option<String>,
+    initiated_by_id: Option<uuid::Uuid>,
+    ib_first_name: Option<String>,
+    ib_last_name: Option<String>,
+    ib_avatar: Option<String>,
+    ib_avatar_url: Option<String>,
+    ib_is_bot: Option<bool>,
+    ib_display_name: Option<String>,
+    token: Option<String>,
+    created_by_id: Option<uuid::Uuid>,
+    updated_by_id: Option<uuid::Uuid>,
+}
+
+fn exporter_history_json(r: &ExporterHistoryRow) -> Value {
+    json!({
+        "id": r.id,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "project": r.project,
+        "provider": r.provider,
+        "status": r.status,
+        "url": r.url,
+        "initiated_by": r.initiated_by_id,
+        "initiated_by_detail": match r.initiated_by_id {
+            None => Value::Null,
+            Some(id) => json!({
+                "id": id,
+                "first_name": r.ib_first_name,
+                "last_name": r.ib_last_name,
+                "avatar": r.ib_avatar,
+                "avatar_url": r.ib_avatar_url,
+                "is_bot": r.ib_is_bot,
+                "display_name": r.ib_display_name,
+            }),
+        },
+        "token": r.token,
+        "created_by": r.created_by_id,
+        "updated_by": r.updated_by_id,
+    })
 }
 
 pub async fn export_history(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
     axum::extract::Query(q): axum::extract::Query<ExportHistoryQuery>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::issue_common::{
+        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+        total_pages, DetailEnvelope, PageWindow,
+    };
+    // ADMIN/MEMBER at WORKSPACE level (`exporter/base.py:67`).
+    match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(crate::routes::project::deny()),
+    }
     if q.per_page.is_none() || q.cursor.is_none() {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "per_page and cursor are required"}))));
     }
-    let rows = sqlx::query_as::<_, common::models::misc::ExporterHistory>(
-        "SELECT e.id, e.provider FROM exporters e JOIN workspaces w ON w.id = e.workspace_id WHERE w.slug = $1 AND e.\"type\" = 'issue_exports' AND e.deleted_at IS NULL ORDER BY e.created_at DESC LIMIT $2",
+    let limit = match parse_per_page(q.per_page.map(|v| v.to_string()).as_deref()) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let cursor = match parse_cursor(q.cursor.as_deref().unwrap_or("10:0:0")) {
+        Ok(c) => c,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let window = match page_window(cursor.page, limit) {
+        Ok(w) => w,
+        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+    };
+    // `order_by` passthrough, default `-created_at` (`base.py:73-80`).
+    let order_raw = q.order_by.as_deref().unwrap_or("-created_at");
+    let (bare, desc) = match order_raw.strip_prefix('-') {
+        Some(b) => (b, true),
+        None => (order_raw, false),
+    };
+    let order_expr = match (bare, desc) {
+        ("created_at", false) => "e.created_at ASC",
+        ("updated_at", false) => "e.updated_at ASC",
+        ("updated_at", true) => "e.updated_at DESC",
+        _ => "e.created_at DESC",
+    };
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM exporters e JOIN workspaces w ON w.id = e.workspace_id \
+         WHERE w.slug = $1 AND e.\"type\" = 'issue_exports' AND e.deleted_at IS NULL",
     )
     .bind(&slug)
-    .bind(q.per_page.unwrap_or(10))
-    .fetch_all(&st.pool)
+    .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!(rows.into_iter().map(|e| json!({"id": e.id, "provider": e.provider})).collect::<Vec<_>>()))))
+    let mut rows: Vec<ExporterHistoryRow> = match window {
+        PageWindow::Rows(offset) => sqlx::query_as(&format!(
+            "SELECT e.id, e.created_at, e.updated_at, e.project, e.provider, e.status, e.url, \
+             e.initiated_by_id, u.first_name AS ib_first_name, u.last_name AS ib_last_name, \
+             u.avatar AS ib_avatar, \
+             CASE WHEN u.avatar_asset_id IS NOT NULL \
+              THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS ib_avatar_url, \
+             u.is_bot AS ib_is_bot, u.display_name AS ib_display_name, \
+             e.token, e.created_by_id, e.updated_by_id \
+             FROM exporters e JOIN workspaces w ON w.id = e.workspace_id \
+             LEFT JOIN users u ON u.id = e.initiated_by_id \
+             WHERE w.slug = $1 AND e.\"type\" = 'issue_exports' AND e.deleted_at IS NULL \
+             ORDER BY {order_expr} LIMIT $2 OFFSET $3",
+        ))
+        .bind(&slug)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&st.pool)
+        .await?,
+        PageWindow::BeyondEnd => Vec::new(),
+    };
+    let next_page_results = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let envelope = DetailEnvelope {
+        grouped_by: None,
+        sub_grouped_by: None,
+        total_count: total,
+        next_cursor: next_cursor_str(limit, cursor.page),
+        prev_cursor: prev_cursor_str(limit, cursor.page),
+        next_page_results,
+        prev_page_results: cursor.page > 0,
+        count: rows.len() as i64,
+        total_pages: total_pages(total, limit),
+        total_results: total,
+        extra_stats: None,
+        results: rows.iter().map(exporter_history_json).collect(),
+    };
+    Ok((StatusCode::OK, Json(json!(envelope))))
 }
 
 // ---- api tokens ----

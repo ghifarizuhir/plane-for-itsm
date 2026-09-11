@@ -129,73 +129,227 @@ pub fn validate_view_create(body: &CreateAnalyticView) -> Result<(), String> {
     Ok(())
 }
 
+/// Legacy `issue_filters(request.GET)` subset for the analytics base
+/// (`base.py:254`) — same CSV/date semantics as the intake list. Binds are
+/// positional ($2..$12 after the $1 slug); `None` disables a clause.
+struct AnalyticsFilters {
+    prios: Option<Vec<String>>,
+    label_ids: Option<Vec<uuid::Uuid>>,
+    labels_none: bool,
+    state_ids: Option<Vec<uuid::Uuid>>,
+    assignee_ids: Option<Vec<uuid::Uuid>>,
+    assignees_none: bool,
+    creator_ids: Option<Vec<uuid::Uuid>>,
+    cg: Option<chrono::NaiveDate>,
+    cl: Option<chrono::NaiveDate>,
+    ug: Option<chrono::NaiveDate>,
+    ul: Option<chrono::NaiveDate>,
+}
+
+fn analytics_filters(params: &std::collections::HashMap<String, String>) -> AnalyticsFilters {
+    fn csv(raw: Option<&str>) -> Vec<String> {
+        match raw {
+            Some(s) => {
+                let parts: Vec<String> = s.split(',').map(str::to_string).collect();
+                if parts.iter().any(|p| p.is_empty()) {
+                    return Vec::new();
+                }
+                let kept: Vec<String> = parts.into_iter().filter(|p| p != "null").collect();
+                if kept.is_empty() { Vec::new() } else { kept }
+            }
+            None => Vec::new(),
+        }
+    }
+    fn uuids(v: &[String]) -> Vec<uuid::Uuid> {
+        v.iter().filter_map(|s| uuid::Uuid::parse_str(s).ok()).collect()
+    }
+    fn bounds(raw: Option<&str>) -> (Option<String>, Option<String>) {
+        let mut gte = None;
+        let mut lte = None;
+        for item in raw.unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            let bits: Vec<&str> = item.split(';').collect();
+            if bits.len() >= 2 {
+                if bits[1] == "after" {
+                    gte = Some(bits[0].to_string());
+                } else {
+                    lte = Some(bits[0].to_string());
+                }
+            } else {
+                gte = Some(bits[0].to_string());
+                lte = Some(bits[0].to_string());
+            }
+        }
+        (gte, lte)
+    }
+    let parse = |s: Option<String>| s.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok());
+    let (cg, cl) = bounds(params.get("created_at").map(|s| s.as_str()));
+    let (ug, ul) = bounds(params.get("updated_at").map(|s| s.as_str()));
+    let opt_vec = |v: Vec<uuid::Uuid>| if v.is_empty() { None } else { Some(v) };
+    let prio = csv(params.get("priority").map(|s| s.as_str()));
+    AnalyticsFilters {
+        prios: if prio.is_empty() { None } else { Some(prio) },
+        label_ids: opt_vec(uuids(&csv(params.get("labels").map(|s| s.as_str())))),
+        labels_none: params.get("labels").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false),
+        state_ids: opt_vec(uuids(&csv(params.get("state").map(|s| s.as_str())))),
+        assignee_ids: opt_vec(uuids(&csv(params.get("assignees").map(|s| s.as_str())))),
+        assignees_none: params.get("assignees").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false),
+        creator_ids: opt_vec(uuids(&csv(params.get("created_by").map(|s| s.as_str())))),
+        cg: parse(cg),
+        cl: parse(cl),
+        ug: parse(ug),
+        ul: parse(ul),
+    }
+}
+
+/// Static filter fragment ($2..$12) shared by every analytics subquery.
+const ANALYTICS_FILTER_SQL: &str = "AND ($2::text[] IS NULL OR i.priority = ANY($2)) \
+     AND ($3::uuid[] IS NULL OR EXISTS(SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL AND il.label_id = ANY($3))) \
+     AND (NOT $4::boolean OR NOT EXISTS(SELECT 1 FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL)) \
+     AND ($5::uuid[] IS NULL OR i.state_id = ANY($5)) \
+     AND ($6::uuid[] IS NULL OR EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL AND ia.assignee_id = ANY($6))) \
+     AND (NOT $7::boolean OR NOT EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL)) \
+     AND ($8::uuid[] IS NULL OR i.created_by_id = ANY($8)) \
+     AND ($9::date IS NULL OR i.created_at::date >= $9) \
+     AND ($10::date IS NULL OR i.created_at::date <= $10) \
+     AND ($11::date IS NULL OR i.updated_at::date >= $11) \
+     AND ($12::date IS NULL OR i.updated_at::date <= $12)";
+
+macro_rules! bind_af {
+    ($q:expr, $slug:expr, $f:expr) => {
+        $q.bind($slug)
+            .bind(&$f.prios)
+            .bind(&$f.label_ids)
+            .bind($f.labels_none)
+            .bind(&$f.state_ids)
+            .bind(&$f.assignee_ids)
+            .bind($f.assignees_none)
+            .bind(&$f.creator_ids)
+            .bind($f.cg)
+            .bind($f.cl)
+            .bind($f.ug)
+            .bind($f.ul)
+    };
+}
+
+/// Avatar-URL CASE shared by the three user lists (`base.py:292-369`).
+const AVATAR_URL_SQL: &str = "CASE WHEN u.avatar_asset_id IS NOT NULL \
+     THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END";
+
+fn analytics_user_json(
+    id: &uuid::Uuid,
+    first: &Option<String>,
+    last: &Option<String>,
+    display: &Option<String>,
+    avatar_url: &Option<String>,
+    count: &i64,
+) -> Value {
+    json!({
+        "first_name": first,
+        "last_name": last,
+        "display_name": display,
+        "id": id,
+        "avatar_url": avatar_url,
+        "count": count,
+    })
+}
+
 pub async fn default_analytics(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-) -> Result<Json<Value>, common::errors::AppError> {
-    let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issues i JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.deleted_at IS NULL",
-    )
-    .bind(&slug).fetch_one(&st.pool).await?;
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::member::deny_detail;
+    use crate::routes::project::ws_role;
+    // AMG (`base.py:252`).
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let f = analytics_filters(&params);
+    // `Issue.issue_objects` scope (`models/issue.py:92-100`): live rows
+    // outside triage, not archived/draft, project not archived.
+    let scope = format!(
+        "FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id \
+         WHERE w.slug = $1 AND i.deleted_at IS NULL AND s.\"group\" != 'triage' \
+         AND i.archived_at IS NULL AND i.is_draft = false AND p.archived_at IS NULL \
+         {ANALYTICS_FILTER_SQL}"
+    );
+    let total: (i64,) = bind_af!(sqlx::query_as(&format!("SELECT COUNT(*) {scope}")), &slug, f).fetch_one(&st.pool).await?;
 
-    let classified: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT s.\"group\", COUNT(*) FROM issues i JOIN states s ON s.id = i.state_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.deleted_at IS NULL GROUP BY s.\"group\" ORDER BY s.\"group\"",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    let classified: Vec<(Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
+        "SELECT s.\"group\", COUNT(*) {scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
+    )), &slug, f).fetch_all(&st.pool).await?;
 
-    let open: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issues i JOIN states s ON s.id = i.state_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND s.\"group\" IN ('backlog','unstarted','started') AND i.deleted_at IS NULL",
-    )
-    .bind(&slug).fetch_one(&st.pool).await?;
+    let open_scope = format!("{scope} AND s.\"group\" IN ('backlog','unstarted','started')");
+    let open: (i64,) = bind_af!(sqlx::query_as(&format!("SELECT COUNT(*) {open_scope}")), &slug, f).fetch_one(&st.pool).await?;
 
-    let open_classified: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT s.\"group\", COUNT(*) FROM issues i JOIN states s ON s.id = i.state_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND s.\"group\" IN ('backlog','unstarted','started') AND i.deleted_at IS NULL GROUP BY s.\"group\" ORDER BY s.\"group\"",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    let open_classified: Vec<(Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
+        "SELECT s.\"group\", COUNT(*) {open_scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
+    )), &slug, f).fetch_all(&st.pool).await?;
 
-    let month_wise: Vec<(i32, i64)> = sqlx::query_as(
-        "SELECT EXTRACT(MONTH FROM i.completed_at)::int, COUNT(*) FROM issues i JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND EXTRACT(YEAR FROM i.completed_at) = EXTRACT(YEAR FROM now()) AND i.deleted_at IS NULL GROUP BY 1 ORDER BY 1",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    // Django-tz year (`base.py:275`); UTC equivalent kept per file precedent.
+    let month_wise: Vec<(Option<i32>, i64)> = bind_af!(sqlx::query_as(&format!(
+        "SELECT EXTRACT(MONTH FROM i.completed_at)::int, COUNT(*) {scope} \
+         AND EXTRACT(YEAR FROM i.completed_at) = EXTRACT(YEAR FROM now()) \
+         GROUP BY 1 ORDER BY 1"
+    )), &slug, f).fetch_all(&st.pool).await?;
 
-    let top_creators: Vec<(uuid::Uuid, String, i64)> = sqlx::query_as(
-        "SELECT u.id, u.display_name, COUNT(*) FROM issues i JOIN users u ON u.id = i.created_by_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.created_by_id IS NOT NULL AND i.deleted_at IS NULL GROUP BY u.id, u.display_name ORDER BY COUNT(*) DESC LIMIT 5",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    // NOTE: creator join appended after the scope (u bound here).
+    let top_creators: Vec<(uuid::Uuid, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
+            "SELECT u.id, u.first_name, u.last_name, u.display_name, ({AVATAR_URL_SQL}) AS avatar_url, COUNT(*) \
+             FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+             JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id \
+             JOIN users u ON u.id = i.created_by_id \
+             WHERE w.slug = $1 AND i.deleted_at IS NULL AND s.\"group\" != 'triage' \
+             AND i.archived_at IS NULL AND i.is_draft = false AND p.archived_at IS NULL \
+             {ANALYTICS_FILTER_SQL} \
+             GROUP BY u.id, u.first_name, u.last_name, u.display_name, u.avatar, u.avatar_asset_id \
+             ORDER BY COUNT(*) DESC LIMIT 5"
+        )), &slug, f).fetch_all(&st.pool).await?;
 
-    let top_closers: Vec<(uuid::Uuid, String, i64)> = sqlx::query_as(
-        "SELECT u.id, u.display_name, COUNT(*) FROM issues i JOIN issue_assignees a ON a.issue_id = i.id JOIN users u ON u.id = a.assignee_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.completed_at IS NOT NULL AND i.deleted_at IS NULL GROUP BY u.id, u.display_name ORDER BY COUNT(*) DESC LIMIT 5",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    let top_closers: Vec<(uuid::Uuid, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
+            "SELECT u.id, u.first_name, u.last_name, u.display_name, ({AVATAR_URL_SQL}) AS avatar_url, COUNT(*) \
+             FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+             JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id \
+             JOIN issue_assignees a ON a.issue_id = i.id AND a.deleted_at IS NULL \
+             JOIN users u ON u.id = a.assignee_id \
+             WHERE w.slug = $1 AND i.deleted_at IS NULL AND s.\"group\" != 'triage' \
+             AND i.archived_at IS NULL AND i.is_draft = false AND p.archived_at IS NULL \
+             AND i.completed_at IS NOT NULL {ANALYTICS_FILTER_SQL} \
+             GROUP BY u.id, u.first_name, u.last_name, u.display_name, u.avatar, u.avatar_asset_id \
+             ORDER BY COUNT(*) DESC LIMIT 5"
+        )), &slug, f).fetch_all(&st.pool).await?;
 
-    let pending: Vec<(uuid::Uuid, String, i64)> = sqlx::query_as(
-        "SELECT u.id, u.display_name, COUNT(*) FROM issues i JOIN issue_assignees a ON a.issue_id = i.id JOIN users u ON u.id = a.assignee_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.completed_at IS NULL AND i.deleted_at IS NULL GROUP BY u.id, u.display_name ORDER BY COUNT(*) DESC LIMIT 5",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
+    // Unbounded (`base.py:347-369` — no `[:5]` slice).
+    let pending: Vec<(uuid::Uuid, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
+            "SELECT u.id, u.first_name, u.last_name, u.display_name, ({AVATAR_URL_SQL}) AS avatar_url, COUNT(*) \
+             FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+             JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id \
+             JOIN issue_assignees a ON a.issue_id = i.id AND a.deleted_at IS NULL \
+             JOIN users u ON u.id = a.assignee_id \
+             WHERE w.slug = $1 AND i.deleted_at IS NULL AND s.\"group\" != 'triage' \
+             AND i.archived_at IS NULL AND i.is_draft = false AND p.archived_at IS NULL \
+             AND i.completed_at IS NULL {ANALYTICS_FILTER_SQL} \
+             GROUP BY u.id, u.first_name, u.last_name, u.display_name, u.avatar, u.avatar_asset_id \
+             ORDER BY COUNT(*) DESC"
+        )), &slug, f).fetch_all(&st.pool).await?;
 
-    let open_estimate: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(i.point) FROM issues i JOIN states s ON s.id = i.state_id JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND s.\"group\" IN ('backlog','unstarted','started') AND i.deleted_at IS NULL",
-    )
-    .bind(&slug).fetch_one(&st.pool).await?;
-    let total_estimate: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(i.point) FROM issues i JOIN workspaces w ON w.id = i.workspace_id WHERE w.slug = $1 AND i.deleted_at IS NULL",
-    )
-    .bind(&slug).fetch_one(&st.pool).await?;
+    let open_estimate: (Option<i64>,) = bind_af!(sqlx::query_as(&format!("SELECT SUM(i.point) {open_scope}")), &slug, f).fetch_one(&st.pool).await?;
+    let total_estimate: (Option<i64>,) = bind_af!(sqlx::query_as(&format!("SELECT SUM(i.point) {scope}")), &slug, f).fetch_one(&st.pool).await?;
 
-    let user_row = |(id, display_name, count): (uuid::Uuid, String, i64)| json!({"id": id, "display_name": display_name, "count": count});
-    Ok(Json(json!({
+    Ok((StatusCode::OK, Json(json!({
         "total_issues": total.0,
         "total_issues_classified": classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
         "open_issues": open.0,
         "open_issues_classified": open_classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
         "issue_completed_month_wise": month_wise.into_iter().map(|(m, c)| json!({"month": m, "count": c})).collect::<Vec<_>>(),
-        "most_issue_created_user": top_creators.into_iter().map(user_row).collect::<Vec<_>>(),
-        "most_issue_closed_user": top_closers.into_iter().map(user_row).collect::<Vec<_>>(),
-        "pending_issue_user": pending.into_iter().map(user_row).collect::<Vec<_>>(),
+        "most_issue_created_user": top_creators.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
+        "most_issue_closed_user": top_closers.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
+        "pending_issue_user": pending.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
         "open_estimate_sum": open_estimate.0,
         "total_estimate_sum": total_estimate.0,
-    })))
+    }))))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -210,10 +364,16 @@ const STAT_FIELDS: [&str; 5] = ["total_issues", "completed_issues", "total_membe
 
 pub async fn project_stats(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
     axum::extract::Query(q): axum::extract::Query<ProjectStatsQuery>,
-) -> Result<Json<Value>, common::errors::AppError> {
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::member::deny_detail;
+    use crate::routes::project::ws_role;
+    // AMG (`base.py:392`); FE-exercised via getProjectAnalyticsCount.
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
     let requested: Vec<&str> = match &q.fields {
         Some(f) => f.split(',').map(str::trim).filter(|f| STAT_FIELDS.contains(f)).collect(),
         None => vec![],
@@ -261,39 +421,75 @@ pub async fn project_stats(
         }
         out.push(Value::Object(row));
     }
-    Ok(Json(Value::Array(out)))
+    Ok((StatusCode::OK, Json(Value::Array(out))))
 }
 
 pub async fn list_views(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-) -> Result<Json<Vec<Value>>, common::errors::AppError> {
-    let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
-        "SELECT a.id, a.name FROM analytic_views a JOIN workspaces w ON w.id = a.workspace_id WHERE w.slug = $1 AND a.deleted_at IS NULL ORDER BY a.created_at DESC",
-    )
-    .bind(&slug).fetch_all(&st.pool).await?;
-    Ok(Json(rows.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect()))
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use crate::routes::member::deny_detail;
+    use crate::routes::project::ws_role;
+    // `WorkSpaceAdminPermission`: ADMIN + MEMBER (`permissions/workspace.py:61-71`).
+    match ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(deny_detail()),
+    }
+    let rows: Vec<AnalyticViewRow> = sqlx::query_as(&format!(
+        "SELECT {ANALYTIC_VIEW_COLS} \
+         FROM analytic_views a JOIN workspaces w ON w.id = a.workspace_id \
+         WHERE w.slug = $1 AND a.deleted_at IS NULL ORDER BY a.created_at DESC",
+    ))
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((StatusCode::OK, Json(json!(rows.iter().map(analytic_view_json).collect::<Vec<_>>()))))
 }
 
 pub async fn create_view(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-    Json(body): Json<CreateAnalyticView>,
+    Json(body): Json<Value>,
 ) -> Result<(axum::http::StatusCode, Json<Value>), common::errors::AppError> {
-    validate_view_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-    let row: (uuid::Uuid, String) = sqlx::query_as(
-        "INSERT INTO analytic_views (id, name, description, query, query_dict, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, w.id, now(), now() FROM workspaces w WHERE w.slug = $5 RETURNING id, name",
-    )
-    .bind(&body.name)
-    .bind(body.description.clone().unwrap_or_default())
-    .bind(&body.query)
-    .bind(body.query_dict.clone().unwrap_or(json!({})))
+    use crate::routes::member::deny_detail;
+    use crate::routes::project::ws_role;
+    // `WorkSpaceAdminPermission`: ADMIN + MEMBER (`base.py:176-183`).
+    match ws_role(&st.pool, auth.0, &slug).await? {
+        Some(r) if r >= 15 => {}
+        _ => return Ok(deny_detail()),
+    }
+    let name = body.get("name").and_then(Value::as_str).unwrap_or("");
+    if name.trim().is_empty() {
+        return Ok((axum::http::StatusCode::BAD_REQUEST, Json(json!({"name": ["This field may not be blank."]}))));
+    }
+    if name.chars().count() > 255 {
+        return Ok((axum::http::StatusCode::BAD_REQUEST, Json(json!({"name": ["Ensure this field has no more than 255 characters."]}))));
+    }
+    // `query` is read-only, built from `query_dict` (`serializers/analytic.py:16-22`).
+    let query_dict = body.get("query_dict").cloned().unwrap_or(json!({}));
+    let query = if query_dict.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+        crate::routes::view::build_view_query(&query_dict)
+    } else {
+        json!({})
+    };
+    let row: Option<AnalyticViewRow> = sqlx::query_as(&format!(
+        "INSERT INTO analytic_views (id, name, description, query, query_dict, workspace_id, created_by_id, updated_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, w.id, $5, $5, now(), now() FROM workspaces w WHERE w.slug = $6 RETURNING {ANALYTIC_VIEW_COLS}",
+    ))
+    .bind(name)
+    .bind(body.get("description").and_then(Value::as_str).unwrap_or(""))
+    .bind(&query)
+    .bind(&query_dict)
+    .bind(auth.0)
     .bind(&slug)
-    .fetch_one(&st.pool)
+    .fetch_optional(&st.pool)
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(json!({"id": row.0, "name": row.1}))))
+    match row {
+        // 201 full row (`base.py:176-186`, DRF default create).
+        Some(r) => Ok((axum::http::StatusCode::CREATED, Json(analytic_view_json(&r)))),
+        None => Ok((axum::http::StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})))),
+    }
 }
 
 // ============================================================================

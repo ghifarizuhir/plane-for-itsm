@@ -2245,31 +2245,31 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/analytic-view/",
           "django_source": "app/urls/analytic.py:30-34",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::analytic::list_views",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH keys + POST semantics + gate: verified AnalyticViewViewset.list/create (app/views/analytic/base.py:176-186, app/urls/analytic.py:30-34) vs list_views/create_view (routes/analytic.rs:267-306, main.rs:1426-1429): GET 200 array of full AnalyticViewSerializer rows (fields=__all__, app/serializers/analytic.py:10-14) vs [{id,name}] only; POST query is read-only, built from query_dict via issue_filters (app/serializers/analytic.py:16-22; workspace bound in perform_create base.py:181-183) vs Rust requires+stores body.query (validate_view_create analytic.rs:119-130); POST 201 both (Django full row vs Rust {id,name}); WorkSpaceAdminPermission ADMIN+MEMBER (app/permissions/workspace.py:61-71) vs no Rust gate. No FE caller."
+          "notes": "MISMATCH keys + POST semantics + gate: verified AnalyticViewViewset.list/create (app/views/analytic/base.py:176-186, app/urls/analytic.py:30-34) vs list_views/create_view (routes/analytic.rs:267-306, main.rs:1426-1429): GET 200 array of full AnalyticViewSerializer rows (fields=__all__, app/serializers/analytic.py:10-14) vs [{id,name}] only; POST query is read-only, built from query_dict via issue_filters (app/serializers/analytic.py:16-22; workspace bound in perform_create base.py:181-183) vs Rust requires+stores body.query (validate_view_create analytic.rs:119-130); POST 201 both (Django full row vs Rust {id,name}); WorkSpaceAdminPermission ADMIN+MEMBER (app/permissions/workspace.py:61-71) vs no Rust gate. No FE caller. | F6g: full __all__ rows + query built from query_dict via shared POST-branch port (view::build_view_query) + ADMIN/MEMBER gate."
         },
         {
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/default-analytics/",
           "django_source": "app/urls/analytic.py:50-54",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::analytic::default_analytics",
           "fe_evidence": [],
           "fe_pages": [],
-          "batch_task": "Batch N T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH gate + filters + user keys: verified DefaultAnalyticsEndpoint.get (app/views/analytic/base.py:251-388, app/urls/analytic.py:50-54) vs default_analytics (routes/analytic.rs:132-200, main.rs:1424): 10-key payload both; workspace AMG gate (base.py:252) vs no Rust gate; Django applies issue_filters(request.GET) (base.py:254) vs Rust takes no query params; user lists Django {first/last/display/id + avatar_url CASE + count} (base.py:284-369) vs Rust {id,display_name,count}; pending_issue_user unbounded (base.py:347-369, no [:5] slice) vs Rust LIMIT 5 (analytic.rs:173); Django-tz year (base.py:275) vs EXTRACT(YEAR FROM now()) both. No FE caller."
+          "notes": "MISMATCH gate + filters + user keys: verified DefaultAnalyticsEndpoint.get (app/views/analytic/base.py:251-388, app/urls/analytic.py:50-54) vs default_analytics (routes/analytic.rs:132-200, main.rs:1424): 10-key payload both; workspace AMG gate (base.py:252) vs no Rust gate; Django applies issue_filters(request.GET) (base.py:254) vs Rust takes no query params; user lists Django {first/last/display/id + avatar_url CASE + count} (base.py:284-369) vs Rust {id,display_name,count}; pending_issue_user unbounded (base.py:347-369, no [:5] slice) vs Rust LIMIT 5 (analytic.rs:173); Django-tz year (base.py:275) vs EXTRACT(YEAR FROM now()) both. No FE caller. | F6g: AMG gate + issue_objects scope (triage/archived/draft excluded) + legacy issue_filters GET subset + 6-key user rows + pending unbounded."
         },
         {
           "methods": ["GET"],
           "path": "/api/workspaces/:slug/project-stats/",
           "django_source": "app/urls/analytic.py:55-59",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::analytic::project_stats",
           "fe_evidence": [
             {
@@ -2278,9 +2278,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch N T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH gate (FE-exercised per K4): verified ProjectStatsEndpoint.get (app/views/analytic/base.py:391-455, app/urls/analytic.py:55-59) vs project_stats (routes/analytic.rs:211-265, main.rs:1425): workspace AMG gate (base.py:392) vs no Rust gate; fields + project_ids params, no-valid-field -> all 5 defaults, 200 array of {id,...} both; completed incl cancelled both (base.py:422-428); FE-live via getProjectAnalyticsCount (project.service.ts:71-82, literal /project-stats/ URL)."
+          "notes": "MISMATCH gate (FE-exercised per K4): verified ProjectStatsEndpoint.get (app/views/analytic/base.py:391-455, app/urls/analytic.py:55-59) vs project_stats (routes/analytic.rs:211-265, main.rs:1425): workspace AMG gate (base.py:392) vs no Rust gate; fields + project_ids params, no-valid-field -> all 5 defaults, 200 array of {id,...} both; completed incl cancelled both (base.py:422-428); FE-live via getProjectAnalyticsCount (project.service.ts:71-82, literal /project-stats/ URL). | F6g: AMG gate added (FE-exercised); fields/counts already verbatim."
         },
         {
           "methods": ["GET"],
@@ -2973,7 +2973,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/export-issues/",
           "django_source": "app/urls/exporter.py:11",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::misc::export_history",
           "fe_evidence": [
             {
@@ -2982,9 +2982,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch J T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "verified ExportIssuesEndpoint.post/get (views/exporter/base.py:18-84) vs create_export/export_history (misc.rs:58-104, main.rs:1321): POST 200 {message:'Once the export is ready you will be able to download it'} both (base.py:57-60); POST 400 {error:Provider 'x' not found.} csv/xlsx/json-only (base.py:31,61-65) vs rust validate_export_provider (misc.rs:24-30, None-case message differs); GET 200 only when BOTH per_page+cursor present else 400 {error:'per_page and cursor are required'} both (base.py:73-84 vs misc.rs:97-99); rust GET is LIMIT list without cursor pagination; ADMIN/MEMBER WORKSPACE gate Django (base.py:22,67) vs auth-only rust (history _auth unused); file generation stays on Django celery issue_export_task (base.py:49-56); FE project-export.service.ts csvExport POST-only (GET history has no FE caller)"
+          "notes": "verified ExportIssuesEndpoint.post/get (views/exporter/base.py:18-84) vs create_export/export_history (misc.rs:58-104, main.rs:1321): POST 200 {message:'Once the export is ready you will be able to download it'} both (base.py:57-60); POST 400 {error:Provider 'x' not found.} csv/xlsx/json-only (base.py:31,61-65) vs rust validate_export_provider (misc.rs:24-30, None-case message differs); GET 200 only when BOTH per_page+cursor present else 400 {error:'per_page and cursor are required'} both (base.py:73-84 vs misc.rs:97-99); rust GET is LIMIT list without cursor pagination; ADMIN/MEMBER WORKSPACE gate Django (base.py:22,67) vs auth-only rust (history _auth unused); file generation stays on Django celery issue_export_task (base.py:49-56); FE project-export.service.ts csvExport POST-only (GET history has no FE caller) | F6g: missing-provider message False-verbatim; empty project list defaults to member projects; ADMIN/MEMBER gates; GET paginated envelope + full 12-key serializer rows."
         }
       ]
     },
@@ -3335,7 +3335,7 @@
           "methods": ["GET", "PUT", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/projects/:project_id/modules/:pk/",
           "django_source": "app/urls/module.py:25",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::module::detail",
           "fe_evidence": [
             {
@@ -3368,9 +3368,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch K T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH PUT gate+semantics: Django defines no update override (base.py:295,354,396,652,724), so PUT falls back to DRF ModelViewSet.update with IsAuthenticated-only gate (app/views/base.py:48-51; urls/module.py:24-35) — GUEST allowed, full-update semantics (name required, PUT-without-name → 400); Rust PUT shares PATCH partial-style logic (apply_update validates name only-if-present → 200) under AM gate (module.rs:1524-1542, main.rs:530) — GUEST 403; FE-live via updateModule PUT (module.service.ts:42). Verified ModuleViewSet.retrieve/partial_update/destroy (base.py:395-759, urls module.py:24-35) vs detail/patch/destroy (module.rs:1263-1605, main.rs:528-532); retrieve 200 + distribution/estimate_distribution/completion_chart both (base.py:396-649 vs detail_body module.rs:1202-1283), miss 404 Module not found both (base.py:414-415 vs MODULE_NOT_FOUND_MSG module.rs:29,1276-1281); PUT/PATCH 200 both (base.py:720 vs apply_update module.rs:1285), archived 400 verbatim both (base.py:663-667 vs guard_patch module.rs:109,1312-1317), dup-name-excl-self 400 both (serializers/module.py:94-100 vs module.rs:1331-1344); AM retrieve/patch (base.py:395,651 vs gate_am), destroy 204 ADMIN-or-creator both (base.py:723 vs module.rs:1552-1572); FE updateModule PUT (module.service.ts:42)"
+          "notes": "MISMATCH PUT gate+semantics: Django defines no update override (base.py:295,354,396,652,724), so PUT falls back to DRF ModelViewSet.update with IsAuthenticated-only gate (app/views/base.py:48-51; urls/module.py:24-35) — GUEST allowed, full-update semantics (name required, PUT-without-name → 400); Rust PUT shares PATCH partial-style logic (apply_update validates name only-if-present → 200) under AM gate (module.rs:1524-1542, main.rs:530) — GUEST 403; FE-live via updateModule PUT (module.service.ts:42). Verified ModuleViewSet.retrieve/partial_update/destroy (base.py:395-759, urls module.py:24-35) vs detail/patch/destroy (module.rs:1263-1605, main.rs:528-532); retrieve 200 + distribution/estimate_distribution/completion_chart both (base.py:396-649 vs detail_body module.rs:1202-1283), miss 404 Module not found both (base.py:414-415 vs MODULE_NOT_FOUND_MSG module.rs:29,1276-1281); PUT/PATCH 200 both (base.py:720 vs apply_update module.rs:1285), archived 400 verbatim both (base.py:663-667 vs guard_patch module.rs:109,1312-1317), dup-name-excl-self 400 both (serializers/module.py:94-100 vs module.rs:1331-1344); AM retrieve/patch (base.py:395,651 vs gate_am), destroy 204 ADMIN-or-creator both (base.py:723 vs module.rs:1552-1572); FE updateModule PUT (module.service.ts:42) | F6g: PUT split to full-update semantics (IsAuthenticated-only, name required) — was AM-gated partial-tolerant; FE updateModule sends full body."
         },
         {
           "methods": ["POST"],
@@ -3397,7 +3397,7 @@
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/",
           "django_source": "app/urls/module.py:42",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::module::issues_list",
           "fe_evidence": [
             {
@@ -3418,15 +3418,15 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch K T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH grouped 200 dict shapes unhandled: Django list (issue.py:94-207) serves flat paginated 200 plus grouped/sub-grouped dict 200s (issue.py:126-198 via issue_queryset_grouper issue.py:124) vs Rust flat envelope only (issues_list module.rs:1666-1801, main.rs:542-543); group_by==sub_group_by 400 verbatim both (issue.py:129-133 vs GROUP_DUP_MSG module.rs:37,1680-1684); POST verified create_module_issues 201 {message:success} both (issue.py:211-254 vs issues_create module.rs:1803-1866, main.rs:542-543: empty-issues 400 both issue.py:213-214 vs guard_issues_present module.rs:127,1826-1831, issues re-scoped ws+project unknown-dropped both issue.py:217-223 vs module.rs:1846-1863); AM gate both (issue.py:95,209 vs gate_am) | F5: grouped/sub-grouped dict 200 via shared grouped core (+ group_by allowlist 400); rows stay minimal-shape."
+          "notes": "MISMATCH grouped 200 dict shapes unhandled: Django list (issue.py:94-207) serves flat paginated 200 plus grouped/sub-grouped dict 200s (issue.py:126-198 via issue_queryset_grouper issue.py:124) vs Rust flat envelope only (issues_list module.rs:1666-1801, main.rs:542-543); group_by==sub_group_by 400 verbatim both (issue.py:129-133 vs GROUP_DUP_MSG module.rs:37,1680-1684); POST verified create_module_issues 201 {message:success} both (issue.py:211-254 vs issues_create module.rs:1803-1866, main.rs:542-543: empty-issues 400 both issue.py:213-214 vs guard_issues_present module.rs:127,1826-1831, issues re-scoped ws+project unknown-dropped both issue.py:217-223 vs module.rs:1846-1863); AM gate both (issue.py:95,209 vs gate_am) | F5: grouped/sub-grouped dict 200 via shared grouped core (+ group_by allowlist 400); rows stay minimal-shape. | F6g: flat + grouped rows upgraded to shared 26-col issue_on_results shape (USER_SELECT_SQL reuse)."
         },
         {
           "methods": ["GET", "PUT", "PATCH", "DELETE"],
           "path": "/api/workspaces/:slug/projects/:project_id/modules/:module_id/issues/:issue_id/",
           "django_source": "app/urls/module.py:47",
-          "rust_status": "shape_mismatch",
+          "rust_status": "implemented",
           "rust_handler": "routes::module::issue_destroy",
           "fe_evidence": [
             {
@@ -3439,9 +3439,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch K T4",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages [] | T4-remainder: GET/PUT/PATCH wired (join-row retrieve + issue re-point; DRF-default miss normalized to missing())."
+          "notes": "MISMATCH GET/PUT/PATCH unhandled: Django maps get→retrieve put→update patch→partial_update (urls/module.py:47-57) served by DRF ModelViewSet defaults (no retrieve/update overrides in issue.py — only list/create_module_issues/create_issue_modules/destroy at issue.py:96,211,258,326; BaseViewSet app/views/base.py:48) vs Rust delete-only route (main.rs:559-560); DELETE verified 204 always even 0 rows both (issue.py:326-345 soft-delete vs issue_destroy module.rs:1959-1987 UPDATE deleted_at); Django .first().module crash on missing link (issue.py:339) normalized to idempotent 204 (documented deviation, main.rs:553-557); AM gate both (issue.py:325 vs gate_am); FE removeIssuesFromModuleBulk DELETE only (module.service.ts:125-142 + packages twin), no FE GET/PUT/PATCH caller so fe_pages [] | T4-remainder: GET/PUT/PATCH wired (join-row retrieve + issue re-point; DRF-default miss normalized to missing()). | F6g: full ModuleIssueSerializer row (flat module_detail + quirky project-lite issue_detail + sub_issues_count); module re-point added."
         },
         {
           "methods": ["GET", "POST"],
@@ -3510,9 +3510,9 @@
             }
           ],
           "fe_pages": [],
-          "batch_task": "Batch K T5",
+          "batch_task": "Batch F6g",
           "out_scope": false,
-          "notes": "MISMATCH GET list unhandled: Django routes get->list (urls/module.py:76-79) served by DRF default with user+slug-scoped get_queryset (app/views/module/base.py:795-802) vs Rust post-only route (main.rs:588-591) so GET has no handler; POST verified create 204 (app/views/module/base.py:804-811 vs fav_create module.rs:2265, main.rs:588-591): Lite gate both (app/views/module/base.py:793 vs gate_lite), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (app/views/base.py:80-84 vs PAYLOAD_INVALID_MSG module.rs:48), NO module-existence check either side (app/views/module/base.py:805-810 vs mid parse-or-400) | F4: GET list wired (fav_list 200 [{id,module}] superset; Django 500s sans serializer_class)."
+          "notes": "MISMATCH GET list unhandled: Django routes get->list (urls/module.py:76-79) served by DRF default with user+slug-scoped get_queryset (app/views/module/base.py:795-802) vs Rust post-only route (main.rs:588-591) so GET has no handler; POST verified create 204 (app/views/module/base.py:804-811 vs fav_create module.rs:2265, main.rs:588-591): Lite gate both (app/views/module/base.py:793 vs gate_lite), 204 empty, dup/invalid IntegrityError-class 400 {error:The payload is not valid} (app/views/base.py:80-84 vs PAYLOAD_INVALID_MSG module.rs:48), NO module-existence check either side (app/views/module/base.py:805-810 vs mid parse-or-400) | F4: GET list wired (fav_list 200 [{id,module}] superset; Django 500s sans serializer_class). | F6g: verified F4 GET + POST; user-scope gap stays open (same class as fav-cycles)."
         },
         {
           "methods": ["DELETE"],
