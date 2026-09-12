@@ -88,7 +88,8 @@ name = os.environ["RES_NAME"]
 data = json.load(sys.stdin)
 # list endpoints return the paginated envelope {"results": [...], ...};
 # accept a bare array too (structure unchanged, shape-tolerant lookup)
-items = data.get("results", data) if isinstance(data, dict) else data
+items = data.get("results", []) if isinstance(data, dict) else data
+items = [o for o in items if isinstance(o, dict)] if isinstance(items, list) else []
 for o in items:
     if o.get("name") == name:
         print(o.get("id", ""))
@@ -170,14 +171,49 @@ flow_work_item() {
     fi
   else
     detail="UI create failed"
-    ab screenshot "$SNAP_DIR/e2e-work-item-fail.png"
+    ab screenshot "$SNAP_DIR/e2e-work-item-fail.png" || true
     ab snapshot -i > "$SNAP_DIR/e2e-work-item-fail.txt" 2>/dev/null || true
     # still try API cleanup if it somehow got created
     api_login && verify_api wi "$name" && cleanup wi "$RES_ID" >/dev/null && detail="$detail, cleaned-by-relookup"
   fi
   record "$flow" "$rc" "$detail"
 }
-flow_module()    { record "module"    "PASS" "stub"; }
+# Discovered live (2026-09-12, session e2e-discover-mod) for modules:
+# - list route is .../modules (NO /list suffix: ".../modules/list" is treated
+#   as a module id and renders "Module does not exist" + "View other modules").
+# - create button text "Add Module"; modal heading "Create module"; name input
+#   has NO placeholder — stable locator is role textbox "Title"; submit button
+#   text "Create Module". No extra required fields (Backlog default is fine).
+flow_module() {
+  local flow="module" name="e2e-mod-$(date +%s)" rc="FAIL" detail=""
+  echo "== flow module: $name"
+  if ab open "$WEB/$WS/projects/$PROJECT_ID/modules" \
+     && ab wait --load networkidle 2>/dev/null \
+     && ab wait --text "Add Module" 2>/dev/null \
+     && ab find text "Add Module" click \
+     && sleep 2 \
+     && ab find role textbox fill "$name" --name Title \
+     && ab find text "Create Module" click \
+     && sleep 2 \
+     && ab wait --text "$name" 2>/dev/null; then
+    detail="UI ok"
+    if api_login && verify_api mod "$name"; then
+      local code; code="$(cleanup mod "$RES_ID")"
+      if [[ "$code" =~ ^2 ]]; then detail="UI+API ok, cleaned ($code)"; rc="PASS"; else detail="cleaned failed $code"; fi
+    else
+      detail="UI ok, API verify failed"
+      # best-effort cleanup by re-lookup
+      verify_api mod "$name" && cleanup mod "$RES_ID" >/dev/null
+    fi
+  else
+    detail="UI create failed"
+    ab screenshot "$SNAP_DIR/e2e-module-fail.png" || true
+    ab snapshot -i > "$SNAP_DIR/e2e-module-fail.txt" 2>/dev/null || true
+    # still try API cleanup if it somehow got created
+    api_login && verify_api mod "$name" && cleanup mod "$RES_ID" >/dev/null && detail="$detail, cleaned-by-relookup"
+  fi
+  record "$flow" "$rc" "$detail"
+}
 flow_page()      { record "page"      "PASS" "stub"; }
 
 # ---- main ----
