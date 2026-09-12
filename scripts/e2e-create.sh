@@ -106,7 +106,12 @@ cleanup() { # cleanup <wi|mod|pg> <id> -> echo HTTP code
   case "$kind" in
     wi)  ep="/api/workspaces/$WS/projects/$PROJECT_ID/issues/$id/" ;;
     mod) ep="/api/workspaces/$WS/projects/$PROJECT_ID/modules/$id/" ;;
-    pg)  ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/" ;;
+    pg)
+      # pages must be archived before delete (mirrors Django PageViewSet:
+      # destroy returns 400 "should be archived before deleting" otherwise)
+      curl -s -o /dev/null -b "$JAR" -X POST --max-time 15 \
+        -H "Origin: $WEB" "$API/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/archive/" >/dev/null
+      ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/" ;;
     *)   return 1 ;;
   esac
   curl -s -o /dev/null -w "%{http_code}" -b "$JAR" -X DELETE --max-time 15 \
@@ -214,7 +219,99 @@ flow_module() {
   fi
   record "$flow" "$rc" "$detail"
 }
-flow_page()      { record "page"      "PASS" "stub"; }
+# Discovered live (2026-09-12, session e2e-discover-pg) for pages:
+# - list route is .../pages (NO /list suffix: ".../pages/list" renders an
+#   empty view with zero interactive elements — same trap as modules).
+# - create button text "Add page"; clicking it instantly creates a blank page
+#   (API name "") shown as "Untitled" — NO modal, NO navigation, stays on list.
+# - editor route is .../pages/<page-id>/; the title is an h1 inside a textbox
+#   (accessible name "Untitled" while blank). Stable rename interaction:
+#   `find role heading click --name Untitled`, `press Control+a`,
+#   `keyboard type "<name>"` (autosaves; persists despite the editor's
+#   "Connection lost" websocket banner — verified via API GET).
+# - the editor route needs a beat after networkidle: it first renders
+#   "Loading version details", then the title textbox (h1 "Untitled ").
+#   A `sleep 2` + `wait --text Untitled` before the heading click is required.
+# - the new page id is identified by diffing the API list before/after the
+#   "Add page" click, so we never guess which "Untitled" row is ours.
+flow_page() {
+  local flow="page" name="e2e-pg-$(date +%s)" rc="FAIL" detail=""
+  echo "== flow page: $name"
+  local ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/"
+  local ids_before="" after="" NEW_ID=""
+  api_login || { record "$flow" "$rc" "api login failed"; return; }
+  ids_before="$(curl -s -b "$JAR" --max-time 15 "$API$ep" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+items = data.get("results", data) if isinstance(data, dict) else data
+for o in items if isinstance(items, list) else []:
+    if isinstance(o, dict) and o.get("id"):
+        print(o["id"])
+')" || { record "$flow" "$rc" "list pages (before) failed"; return; }
+  if ab open "$WEB/$WS/projects/$PROJECT_ID/pages" \
+     && ab wait --load networkidle 2>/dev/null \
+     && ab wait --text "Add page" 2>/dev/null \
+     && ab find text "Add page" click \
+     && sleep 2; then
+    after="$(curl -s -b "$JAR" --max-time 15 "$API$ep")" || after=""
+    NEW_ID="$(IDS_BEFORE="$ids_before" python3 -c '
+import json, os, sys
+before = set((os.environ.get("IDS_BEFORE") or "").split())
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+items = data.get("results", data) if isinstance(data, dict) else data
+for o in items if isinstance(items, list) else []:
+    if isinstance(o, dict) and o.get("id") and o["id"] not in before:
+        print(o["id"])
+        break
+' <<<"$after")" || NEW_ID=""
+    if [[ -n "$NEW_ID" ]] \
+       && ab open "$WEB/$WS/projects/$PROJECT_ID/pages/$NEW_ID/" \
+       && ab wait --load networkidle 2>/dev/null \
+       && sleep 2 \
+       && ab wait --text "Untitled" 2>/dev/null \
+       && ab find role heading click --name Untitled \
+       && ab press Control+a \
+       && ab keyboard type "$name" \
+       && sleep 3 \
+       && ab wait --text "$name" 2>/dev/null \
+       && ab open "$WEB/$WS/projects/$PROJECT_ID/pages" \
+       && ab wait --load networkidle 2>/dev/null \
+       && ab wait --text "$name" 2>/dev/null; then
+      detail="UI ok"
+      if verify_api pg "$name"; then
+        local code; code="$(cleanup pg "$RES_ID")"
+        if [[ "$code" =~ ^2 ]]; then detail="UI+API ok, cleaned ($code)"; rc="PASS"; else detail="cleaned failed $code"; fi
+      else
+        detail="UI ok, API verify failed"
+        # best-effort cleanup by re-lookup
+        verify_api pg "$name" && cleanup pg "$RES_ID" >/dev/null
+      fi
+    else
+      detail="UI create/rename failed"
+      ab screenshot "$SNAP_DIR/e2e-page-fail.png" || true
+      ab snapshot -i > "$SNAP_DIR/e2e-page-fail.txt" 2>/dev/null || true
+      # still try cleanup: prefer the diffed id, fall back to name re-lookup
+      if [[ -n "$NEW_ID" ]]; then
+        cleanup pg "$NEW_ID" >/dev/null && detail="$detail, cleaned-by-id"
+      else
+        api_login && verify_api pg "$name" && cleanup pg "$RES_ID" >/dev/null && detail="$detail, cleaned-by-relookup"
+      fi
+    fi
+  else
+    detail="UI create failed"
+    ab screenshot "$SNAP_DIR/e2e-page-fail.png" || true
+    ab snapshot -i > "$SNAP_DIR/e2e-page-fail.txt" 2>/dev/null || true
+    # still try API cleanup if it somehow got created
+    api_login && verify_api pg "$name" && cleanup pg "$RES_ID" >/dev/null && detail="$detail, cleaned-by-relookup"
+  fi
+  record "$flow" "$rc" "$detail"
+}
 
 # ---- main ----
 login
