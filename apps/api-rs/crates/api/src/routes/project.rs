@@ -173,7 +173,7 @@ pub async fn list(
          (SELECT pm.role FROM project_members pm WHERE pm.project_id = p.id \
           AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) AS member_role, \
          (SELECT COUNT(*) FROM intake_issues ii WHERE ii.project_id = p.id \
-          AND ii.status = 'pending' AND ii.deleted_at IS NULL) AS intake_count, \
+          AND ii.status = -2 AND ii.deleted_at IS NULL) AS intake_count, \
          p.archived_at, p.workspace_id AS workspace, p.cycle_view, p.issue_views_view, \
          p.module_view, p.page_view, p.intake_view AS inbox_view, p.guest_view_all_features, \
          p.project_lead_id AS project_lead, p.network, p.created_at, p.updated_at, \
