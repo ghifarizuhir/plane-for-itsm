@@ -8,6 +8,7 @@
 #   PLANE_WS    workspace slug  (default itsm)
 #   PLANE_PROJECT_ID  (default a6152f0b-e445-4e70-b007-dbf267ab9b66)
 #   PLANE_FLOW  wi|mod|pg|none  run a single flow only (default: all)
+#             (none = login only, no flows run)
 #   PLANE_DEBUG=1  print bodies on failure
 set -u
 AB_BIN="${AGENT_BROWSER_BIN:-/home/ghifari/.nvm/versions/node/v24.16.0/bin/agent-browser}"
@@ -28,12 +29,17 @@ trap 'rm -f "$JAR"; "$AB_BIN" close 2>/dev/null' EXIT
 PASS=0; FAIL=0
 declare -a RESULTS=()
 
-ab() { "$AB_BIN" "$@" || { echo "  [ab] command failed: agent-browser $*" >&2; return 1; }; }
+ab() { "$AB_BIN" "$@" || { echo "  [ab] command failed: agent-browser" "$@" >&2; return 1; }; }
 
 api_login() {
+  local payload
+  payload="$(PLANE_EMAIL="$PLANE_EMAIL" PLANE_PASSWORD="$PLANE_PASSWORD" python3 -c '
+import json, os
+print(json.dumps({"email": os.environ["PLANE_EMAIL"], "password": os.environ["PLANE_PASSWORD"]}))
+')" || return 1
   curl -s -c "$JAR" -X POST "$API/api/auth/login/" \
     -H "Content-Type: application/json" -H "Origin: $WEB" \
-    -d "{\"email\":\"$PLANE_EMAIL\",\"password\":\"$PLANE_PASSWORD\"}" >/dev/null || return 1
+    -d "$payload" >/dev/null || return 1
 }
 
 login() {
@@ -51,8 +57,10 @@ login() {
   ab press Enter
   # wait until we leave the login page: after success Plane redirects to
   # a workspace URL that contains the workspace slug (e.g. /itsm/...)
+  # NOTE: `wait --url` takes no --timeout flag (default timeout applies);
+  # errors are intentionally visible here so a login failure is diagnosable.
   for _ in 1 2 3 4 5; do
-    if ab wait --url "$WS" --timeout 3000 2>/dev/null; then
+    if ab wait --url "$WS"; then
       echo "  login OK"
       return 0
     fi
@@ -63,6 +71,8 @@ login() {
 }
 
 verify_api() { # verify_api <wi|mod|pg> <name> -> sets RES_ID, returns 0 if found
+  # callers: use "${RES_ID:-}" — empty when not found
+  # assumes list response; adjust if API paginates
   local kind="$1" name="$2" ep
   case "$kind" in
     wi)  ep="/api/workspaces/$WS/projects/$PROJECT_ID/issues/" ;;
@@ -80,8 +90,11 @@ for o in data:
     if o.get("name") == name:
         print(o.get("id", ""))
         break
-')" <<<"$body"
-  [[ -n "${RES_ID:-}" ]]
+' <<<"$body")"
+  if [[ -z "${RES_ID:-}" ]]; then
+    [[ "${PLANE_DEBUG:-0}" == "1" ]] && printf '%s\n' "$body" >&2
+    return 1
+  fi
 }
 
 cleanup() { # cleanup <wi|mod|pg> <id> -> echo HTTP code
@@ -121,6 +134,8 @@ flow_page()      { record "page"      "PASS" "stub"; }
 login
 LOGIN_RC=$?
 [[ "$LOGIN_RC" -eq 0 ]] || record "login" "FAIL" "UI login failed"
+# no point running flows without a logged-in browser session
+[[ "$LOGIN_RC" -eq 0 ]] || { report; exit 1; }
 api_login || record "api-login" "FAIL" "curl login failed"
 
 FLOW="${PLANE_FLOW:-all}"
