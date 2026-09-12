@@ -86,7 +86,10 @@ verify_api() { # verify_api <wi|mod|pg> <name> -> sets RES_ID, returns 0 if foun
 import json, os, sys
 name = os.environ["RES_NAME"]
 data = json.load(sys.stdin)
-for o in data:
+# list endpoints return the paginated envelope {"results": [...], ...};
+# accept a bare array too (structure unchanged, shape-tolerant lookup)
+items = data.get("results", data) if isinstance(data, dict) else data
+for o in items:
     if o.get("name") == name:
         print(o.get("id", ""))
         break
@@ -105,7 +108,8 @@ cleanup() { # cleanup <wi|mod|pg> <id> -> echo HTTP code
     pg)  ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/" ;;
     *)   return 1 ;;
   esac
-  curl -s -o /dev/null -w "%{http_code}" -b "$JAR" -X DELETE --max-time 15 "$API$ep"
+  curl -s -o /dev/null -w "%{http_code}" -b "$JAR" -X DELETE --max-time 15 \
+    -H "Origin: $WEB" "$API$ep"
 }
 
 record() { # record <flow> <PASS|FAIL> <detail>
@@ -125,8 +129,54 @@ report() {
   [[ "$FAIL" -eq 0 ]]
 }
 
-# flow stubs (implemented in later tasks)
-flow_work_item() { record "work-item" "PASS" "stub"; }
+# flow stubs (module/page implemented in later tasks)
+# Discovered live (2026-09-12, session e2e-discover-wi) for work items:
+# - create button text "New work item"; modal heading "Create new work item";
+#   title input has NO placeholder — stable locator is role textbox "Title";
+#   submit button text "Save".
+# - State MUST be picked explicitly (Backlog via state dropdown + Search
+#   combobox): the form default state_id is "" and a stateless issue is
+#   excluded from the issues list API, so API verify would never find it.
+# - Project list view fetches .../issues/?group_by=state_id which the Rust
+#   API 400s ("group_by not supported"), so the UI-list assert runs on the
+#   workspace all-issues spreadsheet view (ungrouped fetch, renders the row).
+flow_work_item() {
+  local flow="work-item" name="e2e-wi-$(date +%s)" rc="FAIL" detail=""
+  echo "== flow work-item: $name"
+  if ab open "$WEB/$WS/projects/$PROJECT_ID/issues/list" \
+     && ab wait --load networkidle 2>/dev/null \
+     && ab wait --text "New work item" 2>/dev/null \
+     && ab find text "New work item" click \
+     && sleep 2 \
+     && ab find text "Backlog" click \
+     && sleep 2 \
+     && ab find role combobox fill "Backlog" --name Search \
+     && ab press Enter \
+     && sleep 1 \
+     && ab find role textbox fill "$name" --name Title \
+     && ab find text "Save" click \
+     && sleep 2 \
+     && ab open "$WEB/$WS/workspace-views/all-issues/" \
+     && ab wait --load networkidle 2>/dev/null \
+     && ab wait --text "$name" 2>/dev/null; then
+    detail="UI ok"
+    if api_login && verify_api wi "$name"; then
+      local code; code="$(cleanup wi "$RES_ID")"
+      if [[ "$code" =~ ^2 ]]; then detail="UI+API ok, cleaned ($code)"; rc="PASS"; else detail="cleaned failed $code"; fi
+    else
+      detail="UI ok, API verify failed"
+      # best-effort cleanup by re-lookup
+      verify_api wi "$name" && cleanup wi "$RES_ID" >/dev/null
+    fi
+  else
+    detail="UI create failed"
+    ab screenshot "$SNAP_DIR/e2e-work-item-fail.png"
+    ab snapshot -i > "$SNAP_DIR/e2e-work-item-fail.txt" 2>/dev/null || true
+    # still try API cleanup if it somehow got created
+    api_login && verify_api wi "$name" && cleanup wi "$RES_ID" >/dev/null && detail="$detail, cleaned-by-relookup"
+  fi
+  record "$flow" "$rc" "$detail"
+}
 flow_module()    { record "module"    "PASS" "stub"; }
 flow_page()      { record "page"      "PASS" "stub"; }
 
