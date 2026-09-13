@@ -12,6 +12,7 @@ pub mod misc;
 pub mod notification;
 pub mod page;
 pub mod search;
+pub mod service;
 pub mod view;
 pub mod webhook;
 pub mod work_item;
