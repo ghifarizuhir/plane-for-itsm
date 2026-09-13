@@ -17,6 +17,7 @@ import {
   ModuleOutline,
   ParentOutline,
   PriorityOutline,
+  ServerOutline,
   StartDateOutline,
   StateOutline,
   UserOutline,
@@ -41,6 +42,7 @@ import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/prop
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
+import { ServiceSelect } from "@/components/services/select/service-select";
 import type { TIssueOperations } from "./root";
 
 type Props = {
@@ -211,6 +213,18 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   projectId={projectId}
                   issueId={issueId}
                   issueOperations={issueOperations}
+                  disabled={!isEditable}
+                />
+              </SidebarPropertyListItem>
+            )}
+
+            {(projectDetails?.service_view ?? true) && (
+              <SidebarPropertyListItem icon={ServerOutline} label={t("service.title")}>
+                <ServiceSelect
+                  className="w-full grow"
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issueId={issueId}
                   disabled={!isEditable}
                 />
               </SidebarPropertyListItem>

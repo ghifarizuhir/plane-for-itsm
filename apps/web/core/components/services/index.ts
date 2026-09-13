@@ -21,3 +21,4 @@ export * from "./graph/service-graph";
 export * from "./graph/service-node";
 export * from "./graph/use-graph-layout";
 export * from "./detail";
+export * from "./select";
