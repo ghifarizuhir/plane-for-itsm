@@ -62,6 +62,10 @@ services:
   # (like `worker`/`beat` below) consumes that SAME file via `env_file`,
   # so Rust Fernet (`instance_admin.rs:fernet_secret`) decrypts with the
   # exact value Django used to encrypt.
+  # Networking: infra (minio/mq/redis) runs from `docker-compose-local.yml`
+  # on the `dev_env` network, while this file's default network is separate.
+  # `api` joins both so s3proxy can reach `plane-minio:9000` AND the
+  # `proxy` service (dev_env-only) can resolve the `api` hostname.
   api:
     container_name: api-rs
     image: plane-api-rs:local
@@ -85,6 +89,9 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    networks:
+      - default
+      - dev_env
 
   # Django celery worker/beat removed (superseded by Rust worker on the
   # plane:jobs Redis Stream; plane-mq removed below).
@@ -226,3 +233,13 @@ volumes:
   pgdata:
   redisdata:
   uploads:
+
+# Shared infra network created by `docker-compose-local.yml` (project
+# `plane-for-itsm` => `plane-for-itsm_dev_env`). Referenced by name because
+# compose cannot share an implicitly-created network across files.
+# If the local stack runs under a different project name (`-p`), update
+# `name` below to `<project>_dev_env`.
+networks:
+  dev_env:
+    external: true
+    name: plane-for-itsm_dev_env
