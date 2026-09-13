@@ -145,10 +145,12 @@ Graph is a view mode of the list page (not a separate route) and renders the who
 
 ### Navigation registration (4 places)
 
-1. `core/components/workspace/sidebar/project-navigation.tsx` — entry `key: "services"`, `sortOrder: 4` (module=3, pages=5), icon from `@makeplane/propel/icons`, `shouldRender: project?.service_view ?? true`.
+1. `core/components/workspace/sidebar/project-navigation.tsx` — entry `key: "services"`, `sortOrder: 4`, icon from `@makeplane/propel/icons`, `shouldRender: project?.service_view ?? true`.
 2. `core/components/navigation/use-navigation-items.ts` — same entry.
 3. `core/components/navigation/tab-navigation-utils.ts` — `tabUrlMap.services`.
 4. i18n keys (`sidebar.services`, headers/labels) under `packages/i18n/src/locales` — performed with the `translate` skill.
+
+Note: since `views` currently uses `sortOrder: 4`, in both navigation files shift `views` → 5, `pages` → 6, `intake` → 7 so Services sits directly after Modules.
 
 ## Components & graph
 
