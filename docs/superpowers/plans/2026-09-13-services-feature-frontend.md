@@ -1917,6 +1917,8 @@ git commit -m "feat(services): add service graph node"
 - Create: `apps/web/core/components/services/graph/service-graph.tsx`
 - Modify: `apps/web/core/components/services/services-list-view.tsx` (render graph)
 
+> Post-review fixes (required, landed in `021e49954` follow-up): (1) remove the manual `setEdges(addEdge(...))` after `await addDependency` — the store sync effect is the single source of truth; (2) guard the nodes/edges sync effect against no-op structural updates and preserve `selected` flags; (3) fit the viewport only once on mount (`onInit` + ref), not via bare `fitView`; (4) wrap `onNodeDragStop` in try/catch with an error toast.
+
 - [ ] **Step 1: Create the canvas**
 
 ```tsx
