@@ -31,15 +31,13 @@ const toServiceError = (error: unknown): Error => {
   return normalized;
 };
 
-const base = (workspaceSlug: string, projectId: string) => `/api/workspaces/${workspaceSlug}/projects/${projectId}`;
-
 export class ServiceService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
   async getServices(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<IService[]> {
-    return this.get(`${base(workspaceSlug, projectId)}/services/`)
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
@@ -47,73 +45,47 @@ export class ServiceService extends APIService {
   }
 
   async getDependencies(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<IServiceDependency[]> {
-    return this.get(`${base(workspaceSlug, projectId)}/service-dependencies/`)
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async getWorkItemLinks(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string
-  ): Promise<TServiceWorkItemLink[]> {
-    return this.get(`${base(workspaceSlug, projectId)}/service-issues/`)
+  async getWorkItemLinks(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<TServiceWorkItemLink[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async createService(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    data: Partial<IService>
-  ): Promise<IService> {
-    return this.post(`${base(workspaceSlug, projectId)}/services/`, data)
+  async createService(workspaceSlug: string, _workspaceId: string, projectId: string, data: Partial<IService>): Promise<IService> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async updateService(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    serviceId: string,
-    data: Partial<IService>
-  ): Promise<IService> {
-    return this.patch(`${base(workspaceSlug, projectId)}/services/${serviceId}/`, data)
+  async updateService(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string, data: Partial<IService>): Promise<IService> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/${serviceId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async deleteService(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    serviceId: string
-  ): Promise<void> {
-    return this.delete(`${base(workspaceSlug, projectId)}/services/${serviceId}/`)
+  async deleteService(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/${serviceId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async createDependency(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    fromServiceId: string,
-    toServiceId: string
-  ): Promise<IServiceDependency> {
-    return this.post(`${base(workspaceSlug, projectId)}/service-dependencies/`, {
+  async createDependency(workspaceSlug: string, _workspaceId: string, projectId: string, fromServiceId: string, toServiceId: string): Promise<IServiceDependency> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/`, {
       from_service_id: fromServiceId,
       to_service_id: toServiceId,
     })
@@ -123,37 +95,20 @@ export class ServiceService extends APIService {
       });
   }
 
-  async deleteDependency(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    dependencyId: string
-  ): Promise<void> {
-    return this.delete(`${base(workspaceSlug, projectId)}/service-dependencies/${dependencyId}/`)
+  async deleteDependency(workspaceSlug: string, _workspaceId: string, projectId: string, dependencyId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/${dependencyId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
   }
 
-  async updateNodePosition(
-    workspaceSlug: string,
-    workspaceId: string,
-    projectId: string,
-    serviceId: string,
-    position: { x: number; y: number }
-  ): Promise<IService> {
+  async updateNodePosition(workspaceSlug: string, workspaceId: string, projectId: string, serviceId: string, position: { x: number; y: number }): Promise<IService> {
     return this.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position });
   }
 
-  async linkWorkItem(
-    workspaceSlug: string,
-    _workspaceId: string,
-    projectId: string,
-    serviceId: string,
-    issue: { id: string; identifier?: string; name?: string }
-  ): Promise<TServiceWorkItemLink> {
-    return this.post(`${base(workspaceSlug, projectId)}/service-issues/`, {
+  async linkWorkItem(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string, issue: { id: string; identifier?: string; name?: string }): Promise<TServiceWorkItemLink> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/`, {
       service_id: serviceId,
       issue_id: issue.id,
     })
@@ -164,7 +119,7 @@ export class ServiceService extends APIService {
   }
 
   async unlinkWorkItem(workspaceSlug: string, _workspaceId: string, projectId: string, linkId: string): Promise<void> {
-    return this.delete(`${base(workspaceSlug, projectId)}/service-issues/${linkId}/`)
+    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/${linkId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
