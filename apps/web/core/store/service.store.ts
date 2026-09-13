@@ -184,6 +184,7 @@ export class ServicesStore implements IServiceStore {
     data: Partial<IService>
   ) => {
     const original = this.getServiceById(serviceId);
+    if (!original) throw new Error("Service not found");
     try {
       runInAction(() => {
         set(this.serviceMap, [serviceId], { ...original, ...data });
@@ -194,6 +195,7 @@ export class ServicesStore implements IServiceStore {
       });
       return response;
     } catch (error) {
+      console.error("Failed to update service in service store", error);
       runInAction(() => {
         set(this.serviceMap, [serviceId], original);
       });
