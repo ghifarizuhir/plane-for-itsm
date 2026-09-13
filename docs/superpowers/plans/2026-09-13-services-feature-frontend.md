@@ -1543,6 +1543,7 @@ git commit -m "feat(services): add service i18n strings"
 - Create: `apps/web/core/components/services/index.ts`
 - Create: `apps/web/core/components/services/service-list-item.tsx`
 - Create: `apps/web/core/components/services/services-list-view.tsx`
+- Modify: `apps/web/core/routes/core.ts` (register the `services` list route — without it the route 404s and typegen emits no `+types/page`; landed in Task 12 commit `8738c0b68`)
 
 - [ ] **Step 1: Route layout**
 
@@ -1692,6 +1693,8 @@ git commit -m "feat(services): add create/edit/delete flows"
 - Create: `apps/web/core/components/services/service-layout-icon.tsx`
 - Create: `apps/web/core/components/services/dropdowns/order-by.tsx`
 
+> Carry-overs from Task 12 review (do in this task): mount an `AppHeader` in `(list)/layout.tsx`; in the list page use `fetchedMap[projectId]` (not the whole object) as the fetch-effect dep; add `aria-hidden="true"` to the status dot; use `rel="noopener noreferrer"`; drop the redundant `?.` after the null guard in the list item; move the hardcoded loading string to i18n.
+
 - [ ] **Step 1: Header**
 
 Mirror `apps/web/core/components/modules/module-view-header.tsx` + `modules-list-header`. Include:
@@ -1732,6 +1735,8 @@ git commit -m "feat(services): add header, view toggle, grid, order-by"
 - Create: `apps/web/core/components/services/filters/{root,status,criticality,type}.tsx`
 - Create: `apps/web/core/components/services/applied-filters/root.tsx`
 - Create: `apps/web/core/components/services/search-input.tsx`
+
+> Carry-overs from Task 12 review (do in this task): branch the list view on unfiltered vs filtered ids — use `getProjectServiceIds` for the true empty state and `getFilteredServiceIds` for a distinct "no matches" state (mirror `modules-list-view.tsx`); move status/criticality/type badge labels to i18n (no raw enum strings).
 
 - [ ] **Step 1: Filter dropdowns**
 
