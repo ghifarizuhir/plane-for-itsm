@@ -627,6 +627,138 @@ pub async fn dependency_destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+// ---------------------------------------------------------------------------
+// Work-item links
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ServiceIssueRow {
+    pub id: Uuid,
+    pub service_id: Uuid,
+    pub issue_id: Uuid,
+    pub project_id: Uuid,
+    pub workspace_id: Uuid,
+    pub issue_identifier: String,
+    pub issue_name: String,
+}
+
+fn service_issue_json(row: &ServiceIssueRow) -> Value {
+    json!({
+        "id": row.id,
+        "service_id": row.service_id,
+        "issue_id": row.issue_id,
+        "project_id": row.project_id,
+        "workspace_id": row.workspace_id,
+        "issue_identifier": row.issue_identifier,
+        "issue_name": row.issue_name,
+    })
+}
+
+const SERVICE_ISSUE_SELECT: &str = "SELECT si.id, si.service_id, si.issue_id, si.project_id, \
+    si.workspace_id, (p.identifier || '-' || i.sequence_id::text) AS issue_identifier, \
+    i.name AS issue_name FROM service_issues si \
+    JOIN issues i ON i.id = si.issue_id JOIN projects p ON p.id = si.project_id";
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateServiceIssue {
+    pub service_id: Uuid,
+    pub issue_id: Uuid,
+}
+
+pub async fn issues_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<ServiceIssueRow> = sqlx::query_as(&format!(
+        "{SERVICE_ISSUE_SELECT} WHERE si.project_id = $1 AND si.deleted_at IS NULL \
+         ORDER BY si.created_at ASC"
+    ))
+    .bind(project_id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(service_issue_json).collect())),
+    ))
+}
+
+pub async fn issues_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Json(body): Json<CreateServiceIssue>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    if !service_exists(&st.pool, project_id, body.service_id).await? {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Service not found."}))));
+    }
+    let issue_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(body.issue_id)
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if !issue_exists {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+    }
+    let existing: Option<ServiceIssueRow> = sqlx::query_as(&format!(
+        "{SERVICE_ISSUE_SELECT} WHERE si.project_id = $1 AND si.service_id = $2 \
+         AND si.issue_id = $3 AND si.deleted_at IS NULL"
+    ))
+    .bind(project_id)
+    .bind(body.service_id)
+    .bind(body.issue_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    if let Some(row) = existing {
+        return Ok((StatusCode::CREATED, Json(service_issue_json(&row))));
+    }
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+         created_at, updated_at, created_by_id, updated_by_id) \
+         SELECT $1, p.workspace_id, p.id, $2, $3, now(), now(), $4, $4 FROM projects p WHERE p.id = $5",
+    )
+    .bind(id)
+    .bind(body.service_id)
+    .bind(body.issue_id)
+    .bind(auth.0)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    let row: ServiceIssueRow = sqlx::query_as(&format!("{SERVICE_ISSUE_SELECT} WHERE si.id = $1"))
+        .bind(id)
+        .fetch_one(&st.pool)
+        .await?;
+    Ok((StatusCode::CREATED, Json(service_issue_json(&row))))
+}
+
+pub async fn issue_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE service_issues SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
