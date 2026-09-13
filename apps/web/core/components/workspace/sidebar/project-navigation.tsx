@@ -15,6 +15,7 @@ import {
   IntakeOutline,
   ModuleOutline,
   PagesOutline,
+  ServerOutline,
   ViewsOutline,
   WorkItemsOutline,
 } from "@makeplane/propel/icons";
@@ -76,6 +77,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   };
 
   const baseNavigation = useCallback(
+    // oxlint-disable-next-line no-shadow
     (workspaceSlug: string, projectId: string): TNavigationItem[] => [
       {
         i18n_key: "sidebar.work_items",
@@ -108,6 +110,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 3,
       },
       {
+        i18n_key: "sidebar.services",
+        key: "services",
+        name: "Services",
+        href: `/${workspaceSlug}/projects/${projectId}/services`,
+        icon: ServerOutline,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        shouldRender: project?.service_view ?? true,
+        sortOrder: 4,
+      },
+      {
         i18n_key: "sidebar.views",
         key: "views",
         name: "Views",
@@ -115,7 +127,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: ViewsOutline,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: project?.issue_views_view ?? false,
-        sortOrder: 4,
+        sortOrder: 5,
       },
       {
         i18n_key: "sidebar.pages",
@@ -125,7 +137,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: PagesOutline,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: project?.page_view ?? false,
-        sortOrder: 5,
+        sortOrder: 6,
       },
       {
         i18n_key: "sidebar.intake",
@@ -135,7 +147,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         icon: IntakeOutline,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
         shouldRender: project?.inbox_view ?? false,
-        sortOrder: 6,
+        sortOrder: 7,
       },
     ],
     [project]
@@ -143,6 +155,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
 
   // memoized navigation items and adding additional navigation items
   const navigationItemsMemo = useMemo(() => {
+    // oxlint-disable-next-line no-shadow
     const navigationItems = (workspaceSlug: string, projectId: string): TNavigationItem[] => {
       const navItems = baseNavigation(workspaceSlug, projectId);
 
@@ -154,6 +167,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     };
 
     // sort navigation items by sortOrder
+    // oxlint-disable-next-line unicorn/no-array-sort
     const sortedNavigationItems = navigationItems(workspaceSlug, projectId).sort(
       (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)
     );
