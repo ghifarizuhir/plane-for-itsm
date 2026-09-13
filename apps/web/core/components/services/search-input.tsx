@@ -50,7 +50,7 @@ export const ServiceSearchInput = observer(function ServiceSearchInput() {
         <IconButton
           variant="ghost"
           size="lg"
-          className="p- -mr-1"
+          className="-mr-1"
           onClick={() => {
             setIsSearchOpen(true);
             inputRef.current?.focus();
@@ -80,6 +80,7 @@ export const ServiceSearchInput = observer(function ServiceSearchInput() {
             type="button"
             className="grid place-items-center"
             onClick={() => {
+              updateSearchQuery("");
               setIsSearchOpen(false);
             }}
           >
