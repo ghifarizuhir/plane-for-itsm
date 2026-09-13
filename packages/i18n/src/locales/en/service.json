@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Services",
+    "add": "Add service",
+    "create": "Create service",
+    "empty_state": {
+      "title": "No services yet",
+      "description": "Add a service to start mapping dependencies."
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "status": "Status",
+      "criticality": "Criticality",
+      "type": "Type",
+      "owner": "Owner",
+      "repository": "Repository",
+      "documentation": "Documentation"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "work_items": "Work items",
+      "dependencies": "Dependencies"
+    },
+    "graph": {
+      "re_layout": "Re-layout",
+      "connect_hint": "Drag from a node handle to create a dependency",
+      "empty": "No services to show"
+    }
+  }
+}
