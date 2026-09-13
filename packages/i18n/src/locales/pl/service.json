@@ -63,6 +63,23 @@
       "connect_hint": "Przeciągnij z uchwytu węzła, aby utworzyć zależność",
       "empty": "Brak usług do wyświetlenia",
       "coming_soon": "Graf wkrótce"
+    },
+    "detail": {
+      "depends_on": "Zależy od",
+      "depended_on_by": "Używane przez",
+      "select_service": "Wybierz usługę",
+      "no_dependencies": "Brak zależności",
+      "no_dependents": "Brak zależnych usług",
+      "issue_id_placeholder": "ID elementu pracy",
+      "no_work_items": "Brak powiązanych elementów pracy",
+      "untitled": "Bez tytułu",
+      "not_found_title": "Usługa nie istnieje",
+      "not_found_description": "Usługa, której szukasz, nie istnieje lub została usunięta.",
+      "view_other_services": "Zobacz inne usługi",
+      "create_dependency_error": "Nie można utworzyć zależności. Spróbuj ponownie.",
+      "delete_dependency_error": "Nie można usunąć zależności. Spróbuj ponownie.",
+      "link_work_item_error": "Nie można powiązać elementu pracy. Spróbuj ponownie.",
+      "unlink_work_item_error": "Nie można usunąć powiązania elementu pracy. Spróbuj ponownie."
     }
   }
 }

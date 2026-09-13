@@ -63,6 +63,23 @@
       "connect_hint": "Seret dari handel node untuk membuat dependensi",
       "empty": "Tidak ada layanan untuk ditampilkan",
       "coming_soon": "Graf segera hadir"
+    },
+    "detail": {
+      "depends_on": "Bergantung pada",
+      "depended_on_by": "Digunakan oleh",
+      "select_service": "Pilih layanan",
+      "no_dependencies": "Belum ada dependensi",
+      "no_dependents": "Belum ada layanan dependen",
+      "issue_id_placeholder": "ID item kerja",
+      "no_work_items": "Belum ada item kerja yang ditautkan",
+      "untitled": "Tanpa judul",
+      "not_found_title": "Layanan tidak ada",
+      "not_found_description": "Layanan yang Anda cari tidak ada atau telah dihapus.",
+      "view_other_services": "Lihat layanan lain",
+      "create_dependency_error": "Dependensi tidak dapat dibuat. Silakan coba lagi.",
+      "delete_dependency_error": "Dependensi tidak dapat dihapus. Silakan coba lagi.",
+      "link_work_item_error": "Item kerja tidak dapat ditautkan. Silakan coba lagi.",
+      "unlink_work_item_error": "Tautan item kerja tidak dapat dihapus. Silakan coba lagi."
     }
   }
 }

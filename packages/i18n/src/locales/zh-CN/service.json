@@ -63,6 +63,23 @@
       "connect_hint": "从节点句柄拖动以创建依赖关系",
       "empty": "暂无可显示的服务",
       "coming_soon": "图谱即将推出"
+    },
+    "detail": {
+      "depends_on": "依赖的服务",
+      "depended_on_by": "被依赖的服务",
+      "select_service": "选择服务",
+      "no_dependencies": "暂无依赖",
+      "no_dependents": "暂无被依赖",
+      "issue_id_placeholder": "工作项 ID",
+      "no_work_items": "暂无关联的工作项",
+      "untitled": "未命名",
+      "not_found_title": "服务不存在",
+      "not_found_description": "您要查找的服务不存在或已被删除。",
+      "view_other_services": "查看其他服务",
+      "create_dependency_error": "无法创建依赖关系，请重试。",
+      "delete_dependency_error": "无法删除依赖关系，请重试。",
+      "link_work_item_error": "无法关联工作项，请重试。",
+      "unlink_work_item_error": "无法取消关联工作项，请重试。"
     }
   }
 }

@@ -63,6 +63,23 @@
       "connect_hint": "Bağımlılık oluşturmak için bir düğüm tutamacından sürükleyin",
       "empty": "Gösterilecek hizmet yok",
       "coming_soon": "Graf çok yakında"
+    },
+    "detail": {
+      "depends_on": "Bağımlı Olduğu",
+      "depended_on_by": "Bağımlı Olanlar",
+      "select_service": "Hizmet seçin",
+      "no_dependencies": "Henüz bağımlılık yok",
+      "no_dependents": "Henüz bağımlı hizmet yok",
+      "issue_id_placeholder": "İş öğesi ID",
+      "no_work_items": "Henüz bağlı iş öğesi yok",
+      "untitled": "Başlıksız",
+      "not_found_title": "Hizmet mevcut değil",
+      "not_found_description": "Aradığınız hizmet mevcut değil veya silinmiş.",
+      "view_other_services": "Diğer hizmetleri görüntüleyin",
+      "create_dependency_error": "Bağımlılık oluşturulamadı. Lütfen tekrar deneyin.",
+      "delete_dependency_error": "Bağımlılık silinemedi. Lütfen tekrar deneyin.",
+      "link_work_item_error": "İş öğesi bağlanamadı. Lütfen tekrar deneyin.",
+      "unlink_work_item_error": "İş öğesi bağlantısı kaldırılamadı. Lütfen tekrar deneyin."
     }
   }
 }

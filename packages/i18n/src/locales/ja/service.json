@@ -63,6 +63,23 @@
       "connect_hint": "ノードのハンドルからドラッグして依存関係を作成します",
       "empty": "表示するサービスがありません",
       "coming_soon": "グラフ近日公開"
+    },
+    "detail": {
+      "depends_on": "依存先",
+      "depended_on_by": "依存元",
+      "select_service": "サービスを選択",
+      "no_dependencies": "まだ依存関係がありません",
+      "no_dependents": "まだ依存元がありません",
+      "issue_id_placeholder": "作業項目 ID",
+      "no_work_items": "まだリンクされた作業項目がありません",
+      "untitled": "無題",
+      "not_found_title": "サービスが存在しません",
+      "not_found_description": "お探しのサービスは存在しないか、削除されました。",
+      "view_other_services": "他のサービスを表示",
+      "create_dependency_error": "依存関係を作成できませんでした。もう一度お試しください。",
+      "delete_dependency_error": "依存関係を削除できませんでした。もう一度お試しください。",
+      "link_work_item_error": "作業項目をリンクできませんでした。もう一度お試しください。",
+      "unlink_work_item_error": "作業項目のリンクを解除できませんでした。もう一度お試しください。"
     }
   }
 }

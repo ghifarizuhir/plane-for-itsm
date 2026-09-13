@@ -63,6 +63,23 @@
       "connect_hint": "Arraste a partir da alça de um nó para criar uma dependência",
       "empty": "Nenhum serviço para exibir",
       "coming_soon": "Grafo em breve"
+    },
+    "detail": {
+      "depends_on": "Depende de",
+      "depended_on_by": "Utilizado por",
+      "select_service": "Selecione um serviço",
+      "no_dependencies": "Nenhuma dependência ainda",
+      "no_dependents": "Nenhum serviço dependente ainda",
+      "issue_id_placeholder": "ID do item",
+      "no_work_items": "Nenhum item vinculado ainda",
+      "untitled": "Sem título",
+      "not_found_title": "O serviço não existe",
+      "not_found_description": "O serviço que você procura não existe ou foi excluído.",
+      "view_other_services": "Ver outros serviços",
+      "create_dependency_error": "Não foi possível criar a dependência. Tente novamente.",
+      "delete_dependency_error": "Não foi possível excluir a dependência. Tente novamente.",
+      "link_work_item_error": "Não foi possível vincular o item. Tente novamente.",
+      "unlink_work_item_error": "Não foi possível desvincular o item. Tente novamente."
     }
   }
 }

@@ -63,6 +63,23 @@
       "connect_hint": "Trage din mânerul unui nod pentru a crea o dependență",
       "empty": "Niciun serviciu de afișat",
       "coming_soon": "Graf în curând"
+    },
+    "detail": {
+      "depends_on": "Depinde de",
+      "depended_on_by": "Utilizat de",
+      "select_service": "Selectați un serviciu",
+      "no_dependencies": "Nicio dependență încă",
+      "no_dependents": "Niciun serviciu dependent încă",
+      "issue_id_placeholder": "ID activitate",
+      "no_work_items": "Nicio activitate asociată încă",
+      "untitled": "Fără titlu",
+      "not_found_title": "Serviciul nu există",
+      "not_found_description": "Serviciul căutat nu există sau a fost șters.",
+      "view_other_services": "Vizualizați alte servicii",
+      "create_dependency_error": "Dependența nu a putut fi creată. Încercați din nou.",
+      "delete_dependency_error": "Dependența nu a putut fi ștearsă. Încercați din nou.",
+      "link_work_item_error": "Activitatea nu a putut fi asociată. Încercați din nou.",
+      "unlink_work_item_error": "Asocierea activității nu a putut fi eliminată. Încercați din nou."
     }
   }
 }

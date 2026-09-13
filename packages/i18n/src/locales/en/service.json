@@ -63,6 +63,23 @@
       "connect_hint": "Drag from a node handle to create a dependency",
       "empty": "No services to show",
       "coming_soon": "Graph coming soon"
+    },
+    "detail": {
+      "depends_on": "Depends on",
+      "depended_on_by": "Depended on by",
+      "select_service": "Select service",
+      "no_dependencies": "No dependencies yet",
+      "no_dependents": "No dependents yet",
+      "issue_id_placeholder": "Issue ID",
+      "no_work_items": "No work items linked yet",
+      "untitled": "Untitled",
+      "not_found_title": "Service does not exist",
+      "not_found_description": "The service you are looking for does not exist or has been deleted.",
+      "view_other_services": "View other services",
+      "create_dependency_error": "Could not create dependency. Please try again.",
+      "delete_dependency_error": "Could not delete dependency. Please try again.",
+      "link_work_item_error": "Could not link work item. Please try again.",
+      "unlink_work_item_error": "Could not unlink work item. Please try again."
     }
   }
 }

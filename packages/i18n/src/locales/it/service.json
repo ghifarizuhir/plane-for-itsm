@@ -63,6 +63,23 @@
       "connect_hint": "Trascina dalla maniglia di un nodo per creare una dipendenza",
       "empty": "Nessun servizio da mostrare",
       "coming_soon": "Grafo prossimamente"
+    },
+    "detail": {
+      "depends_on": "Dipende da",
+      "depended_on_by": "Utilizzato da",
+      "select_service": "Seleziona un servizio",
+      "no_dependencies": "Ancora nessuna dipendenza",
+      "no_dependents": "Ancora nessun servizio dipendente",
+      "issue_id_placeholder": "ID elemento di lavoro",
+      "no_work_items": "Nessun elemento di lavoro collegato",
+      "untitled": "Senza titolo",
+      "not_found_title": "Il servizio non esiste",
+      "not_found_description": "Il servizio cercato non esiste o è stato eliminato.",
+      "view_other_services": "Visualizza altri servizi",
+      "create_dependency_error": "Impossibile creare la dipendenza. Riprova.",
+      "delete_dependency_error": "Impossibile eliminare la dipendenza. Riprova.",
+      "link_work_item_error": "Impossibile collegare l'elemento di lavoro. Riprova.",
+      "unlink_work_item_error": "Impossibile scollegare l'elemento di lavoro. Riprova."
     }
   }
 }

@@ -56,7 +56,7 @@ export const ServiceOverview = observer(function ServiceOverview(props: Props) {
         <h4 className="text-13 font-medium text-secondary">{t("common.dependencies")}</h4>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex flex-col gap-1.5 rounded-md border border-subtle p-3">
-            <p className="text-12 font-medium text-tertiary">Depends on</p>
+            <p className="text-12 font-medium text-tertiary">{t("service.detail.depends_on")}</p>
             {dependsOn.length === 0 ? (
               <p className="text-12 text-tertiary">—</p>
             ) : (
@@ -68,7 +68,7 @@ export const ServiceOverview = observer(function ServiceOverview(props: Props) {
             )}
           </div>
           <div className="flex flex-col gap-1.5 rounded-md border border-subtle p-3">
-            <p className="text-12 font-medium text-tertiary">Depended on by</p>
+            <p className="text-12 font-medium text-tertiary">{t("service.detail.depended_on_by")}</p>
             {dependedOnBy.length === 0 ? (
               <p className="text-12 text-tertiary">—</p>
             ) : (

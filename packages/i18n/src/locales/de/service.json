@@ -63,6 +63,23 @@
       "connect_hint": "Ziehen Sie von einem Knoten-Handle, um eine Abhängigkeit zu erstellen",
       "empty": "Keine Services zum Anzeigen",
       "coming_soon": "Graph demnächst verfügbar"
+    },
+    "detail": {
+      "depends_on": "Abhängig von",
+      "depended_on_by": "Verwendet von",
+      "select_service": "Service auswählen",
+      "no_dependencies": "Noch keine Abhängigkeiten",
+      "no_dependents": "Noch keine abhängigen Services",
+      "issue_id_placeholder": "Issue-ID",
+      "no_work_items": "Noch keine Arbeitselemente verknüpft",
+      "untitled": "Ohne Titel",
+      "not_found_title": "Service existiert nicht",
+      "not_found_description": "Der gesuchte Service existiert nicht oder wurde gelöscht.",
+      "view_other_services": "Andere Services ansehen",
+      "create_dependency_error": "Abhängigkeit konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
+      "delete_dependency_error": "Abhängigkeit konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",
+      "link_work_item_error": "Arbeitselement konnte nicht verknüpft werden. Bitte versuchen Sie es erneut.",
+      "unlink_work_item_error": "Verknüpfung des Arbeitselements konnte nicht aufgehoben werden. Bitte versuchen Sie es erneut."
     }
   }
 }

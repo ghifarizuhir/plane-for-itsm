@@ -51,8 +51,8 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Could not link work item. Please try again.",
+        title: t("error"),
+        message: t("service.detail.link_work_item_error"),
       });
     } finally {
       setIsLinking(false);
@@ -66,8 +66,8 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Could not unlink work item. Please try again.",
+        title: t("error"),
+        message: t("service.detail.unlink_work_item_error"),
       });
     }
   };
@@ -83,7 +83,7 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
             type="text"
             value={issueId}
             onChange={(e) => setIssueId(e.target.value)}
-            placeholder="Issue ID"
+            placeholder={t("service.detail.issue_id_placeholder")}
           />
         </div>
         <Button variant="primary" size="sm" onClick={handleLink} disabled={!issueId.trim()} loading={isLinking}>
@@ -91,7 +91,7 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
         </Button>
       </div>
       {links.length === 0 ? (
-        <p className="text-13 text-tertiary">No work items linked yet</p>
+        <p className="text-13 text-tertiary">{t("service.detail.no_work_items")}</p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {links.map((link) => (
@@ -101,8 +101,11 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
             >
               <div className="flex min-w-0 flex-col">
                 <span className="text-13 font-medium text-primary">{link.issue_identifier ?? link.issue_id}</span>
-                <span className="truncate text-12 text-secondary" title={link.issue_name ?? "Untitled"}>
-                  {link.issue_name ?? "Untitled"}
+                <span
+                  className="truncate text-12 text-secondary"
+                  title={link.issue_name ?? t("service.detail.untitled")}
+                >
+                  {link.issue_name ?? t("service.detail.untitled")}
                 </span>
               </div>
               <button

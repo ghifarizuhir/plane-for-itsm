@@ -63,6 +63,23 @@
       "connect_hint": "Arrastre desde el controlador de un nodo para crear una dependencia",
       "empty": "No hay servicios para mostrar",
       "coming_soon": "Grafo próximamente"
+    },
+    "detail": {
+      "depends_on": "Depende de",
+      "depended_on_by": "Utilizado por",
+      "select_service": "Seleccione un servicio",
+      "no_dependencies": "Sin dependencias aún",
+      "no_dependents": "Sin servicios dependientes aún",
+      "issue_id_placeholder": "ID del elemento de trabajo",
+      "no_work_items": "Ningún elemento de trabajo vinculado aún",
+      "untitled": "Sin título",
+      "not_found_title": "El servicio no existe",
+      "not_found_description": "El servicio que busca no existe o ha sido eliminado.",
+      "view_other_services": "Ver otros servicios",
+      "create_dependency_error": "No se pudo crear la dependencia. Inténtelo de nuevo.",
+      "delete_dependency_error": "No se pudo eliminar la dependencia. Inténtelo de nuevo.",
+      "link_work_item_error": "No se pudo vincular el elemento de trabajo. Inténtelo de nuevo.",
+      "unlink_work_item_error": "No se pudo desvincular el elemento de trabajo. Inténtelo de nuevo."
     }
   }
 }

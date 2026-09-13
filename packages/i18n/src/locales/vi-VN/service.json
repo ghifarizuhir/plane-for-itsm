@@ -63,6 +63,23 @@
       "connect_hint": "Kéo từ tay nắm trên nút để tạo một phụ thuộc",
       "empty": "Không có dịch vụ để hiển thị",
       "coming_soon": "Đồ thị sắp ra mắt"
+    },
+    "detail": {
+      "depends_on": "Phụ thuộc vào",
+      "depended_on_by": "Được phụ thuộc",
+      "select_service": "Chọn dịch vụ",
+      "no_dependencies": "Chưa có phụ thuộc nào",
+      "no_dependents": "Chưa có dịch vụ phụ thuộc nào",
+      "issue_id_placeholder": "ID mục công việc",
+      "no_work_items": "Chưa có mục công việc nào được liên kết",
+      "untitled": "Không tiêu đề",
+      "not_found_title": "Dịch vụ không tồn tại",
+      "not_found_description": "Dịch vụ bạn đang tìm không tồn tại hoặc đã bị xóa.",
+      "view_other_services": "Xem các dịch vụ khác",
+      "create_dependency_error": "Không thể tạo phụ thuộc. Vui lòng thử lại.",
+      "delete_dependency_error": "Không thể xóa phụ thuộc. Vui lòng thử lại.",
+      "link_work_item_error": "Không thể liên kết mục công việc. Vui lòng thử lại.",
+      "unlink_work_item_error": "Không thể gỡ liên kết mục công việc. Vui lòng thử lại."
     }
   }
 }

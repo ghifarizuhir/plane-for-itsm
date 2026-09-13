@@ -63,6 +63,23 @@
       "connect_hint": "從節點控點拖曳以建立相依性",
       "empty": "尚無可顯示的服務",
       "coming_soon": "圖譜即將推出"
+    },
+    "detail": {
+      "depends_on": "相依的服務",
+      "depended_on_by": "被相依的服務",
+      "select_service": "選取服務",
+      "no_dependencies": "暫無相依性",
+      "no_dependents": "暫無被相依",
+      "issue_id_placeholder": "工作項目 ID",
+      "no_work_items": "暫無關聯的工作項目",
+      "untitled": "未命名",
+      "not_found_title": "服務不存在",
+      "not_found_description": "您要尋找的服務不存在或已被刪除。",
+      "view_other_services": "檢視其他服務",
+      "create_dependency_error": "無法建立相依性，請重試。",
+      "delete_dependency_error": "無法刪除相依性，請重試。",
+      "link_work_item_error": "無法關聯工作項目，請重試。",
+      "unlink_work_item_error": "無法取消關聯工作項目，請重試。"
     }
   }
 }

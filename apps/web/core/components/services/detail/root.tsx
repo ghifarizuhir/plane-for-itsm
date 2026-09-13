@@ -48,10 +48,10 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
     return (
       <EmptyState
         image={emptyModule}
-        title="Service does not exist"
-        description="The service you are looking for does not exist or has been deleted."
+        title={t("service.detail.not_found_title")}
+        description={t("service.detail.not_found_description")}
         primaryButton={{
-          text: "View other services",
+          text: t("service.detail.view_other_services"),
           onClick: () => router.push(`/${workspaceSlug}/projects/${projectId}/services`),
         }}
       />

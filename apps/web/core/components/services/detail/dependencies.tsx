@@ -62,8 +62,8 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
     } catch (error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error instanceof Error ? error.message : "Could not create dependency. Please try again.",
+        title: t("error"),
+        message: error instanceof Error ? error.message : t("service.detail.create_dependency_error"),
       });
     } finally {
       setIsAdding(false);
@@ -77,8 +77,8 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Could not delete dependency. Please try again.",
+        title: t("error"),
+        message: t("service.detail.delete_dependency_error"),
       });
     }
   };
@@ -112,7 +112,11 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
           onChange={(val: string) => setSelectedId(val)}
           label={
             <span className="flex items-center gap-2 py-0.5 text-12">
-              {selectedService ? selectedService.name : <span className="text-secondary">Select service</span>}
+              {selectedService ? (
+                selectedService.name
+              ) : (
+                <span className="text-secondary">{t("service.detail.select_service")}</span>
+              )}
             </span>
           }
         >
@@ -128,17 +132,17 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <p className="text-12 font-medium text-tertiary">Depends on</p>
+          <p className="text-12 font-medium text-tertiary">{t("service.detail.depends_on")}</p>
           {outgoing.length === 0 ? (
-            <p className="text-12 text-tertiary">No dependencies yet</p>
+            <p className="text-12 text-tertiary">{t("service.detail.no_dependencies")}</p>
           ) : (
             outgoing.map((d) => renderEdgeRow(d.id, d.to_service_id))
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <p className="text-12 font-medium text-tertiary">Depended on by</p>
+          <p className="text-12 font-medium text-tertiary">{t("service.detail.depended_on_by")}</p>
           {incoming.length === 0 ? (
-            <p className="text-12 text-tertiary">No dependents yet</p>
+            <p className="text-12 text-tertiary">{t("service.detail.no_dependents")}</p>
           ) : (
             incoming.map((d) => renderEdgeRow(d.id, d.from_service_id))
           )}

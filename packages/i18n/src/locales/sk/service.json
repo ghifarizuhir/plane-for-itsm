@@ -63,6 +63,23 @@
       "connect_hint": "Potiahnutím z úchytu uzla vytvoríte závislosť",
       "empty": "Žiadne služby na zobrazenie",
       "coming_soon": "Graf už čoskoro"
+    },
+    "detail": {
+      "depends_on": "Závisí od",
+      "depended_on_by": "Závislé služby",
+      "select_service": "Vybrať službu",
+      "no_dependencies": "Zatiaľ žiadne závislosti",
+      "no_dependents": "Zatiaľ žiadne závislé služby",
+      "issue_id_placeholder": "ID pracovnej položky",
+      "no_work_items": "Zatiaľ žiadne prepojené pracovné položky",
+      "untitled": "Bez názvu",
+      "not_found_title": "Služba neexistuje",
+      "not_found_description": "Služba, ktorú hľadáte, neexistuje alebo bola odstránená.",
+      "view_other_services": "Zobraziť ďalšie služby",
+      "create_dependency_error": "Závislosť sa nepodarilo vytvoriť. Skúste to prosím znova.",
+      "delete_dependency_error": "Závislosť sa nepodarilo odstrániť. Skúste to prosím znova.",
+      "link_work_item_error": "Pracovnú položku sa nepodarilo prepojiť. Skúste to prosím znova.",
+      "unlink_work_item_error": "Prepojenie pracovnej položky sa nepodarilo zrušiť. Skúste to prosím znova."
     }
   }
 }
