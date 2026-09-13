@@ -1785,6 +1785,7 @@ git commit -m "feat(services): add filters and applied filters"
  */
 
 import type { Edge, Node } from "@xyflow/react";
+import { Position } from "@xyflow/react";
 import dagre from "dagre";
 import type { IService, IServiceDependency } from "@plane/types";
 
@@ -1817,8 +1818,8 @@ export const getLayoutedElements = (
         x: (pos?.x ?? 0) - SERVICE_NODE_WIDTH / 2,
         y: (pos?.y ?? 0) - SERVICE_NODE_HEIGHT / 2,
       },
-      sourcePosition: "right",
-      targetPosition: "left",
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
     } as Node;
   });
 
