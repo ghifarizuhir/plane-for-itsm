@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "서비스",
+    "add": "서비스 추가",
+    "create": "서비스 생성",
+    "empty_state": {
+      "title": "아직 서비스가 없습니다",
+      "description": "종속성 매핑을 시작하려면 서비스를 추가하세요."
+    },
+    "fields": {
+      "name": "이름",
+      "description": "설명",
+      "status": "상태",
+      "criticality": "중요도",
+      "type": "유형",
+      "owner": "소유자",
+      "repository": "레포지토리",
+      "documentation": "문서"
+    },
+    "tabs": {
+      "overview": "오버뷰",
+      "work_items": "작업 항목",
+      "dependencies": "종속성"
+    },
+    "graph": {
+      "re_layout": "다시 배치",
+      "connect_hint": "노드 핸들에서 드래그하여 종속성을 생성하세요",
+      "empty": "표시할 서비스가 없습니다"
+    }
+  }
+}

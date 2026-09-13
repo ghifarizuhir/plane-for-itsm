@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Dịch vụ",
+    "add": "Thêm dịch vụ",
+    "create": "Tạo dịch vụ",
+    "empty_state": {
+      "title": "Chưa có dịch vụ",
+      "description": "Thêm dịch vụ để bắt đầu lập sơ đồ các phụ thuộc."
+    },
+    "fields": {
+      "name": "Tên",
+      "description": "Mô tả",
+      "status": "Trạng thái",
+      "criticality": "Mức độ quan trọng",
+      "type": "Loại",
+      "owner": "Chủ sở hữu",
+      "repository": "Kho lưu trữ",
+      "documentation": "Tài liệu"
+    },
+    "tabs": {
+      "overview": "Tổng quan",
+      "work_items": "Mục công việc",
+      "dependencies": "Phụ thuộc"
+    },
+    "graph": {
+      "re_layout": "Bố trí lại",
+      "connect_hint": "Kéo từ tay nắm trên nút để tạo một phụ thuộc",
+      "empty": "Không có dịch vụ để hiển thị"
+    }
+  }
+}

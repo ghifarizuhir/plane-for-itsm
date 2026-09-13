@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "服務",
+    "add": "新增服務",
+    "create": "建立服務",
+    "empty_state": {
+      "title": "尚無服務",
+      "description": "新增服務以開始梳理相依性。"
+    },
+    "fields": {
+      "name": "名稱",
+      "description": "描述",
+      "status": "狀態",
+      "criticality": "關鍵性",
+      "type": "類型",
+      "owner": "擁有者",
+      "repository": "倉庫",
+      "documentation": "文件"
+    },
+    "tabs": {
+      "overview": "概覽",
+      "work_items": "工作項目",
+      "dependencies": "相依性"
+    },
+    "graph": {
+      "re_layout": "重新排列",
+      "connect_hint": "從節點控點拖曳以建立相依性",
+      "empty": "尚無可顯示的服務"
+    }
+  }
+}

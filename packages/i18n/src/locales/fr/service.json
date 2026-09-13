@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Services",
+    "add": "Ajouter un service",
+    "create": "Créer un service",
+    "empty_state": {
+      "title": "Aucun service pour le moment",
+      "description": "Ajoutez un service pour commencer à cartographier les dépendances."
+    },
+    "fields": {
+      "name": "Nom",
+      "description": "Description",
+      "status": "Statut",
+      "criticality": "Criticité",
+      "type": "Type",
+      "owner": "Propriétaire",
+      "repository": "Dépôt",
+      "documentation": "Documentation"
+    },
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "work_items": "Éléments de travail",
+      "dependencies": "Dépendances"
+    },
+    "graph": {
+      "re_layout": "Réorganiser",
+      "connect_hint": "Faites glisser depuis la poignée d'un nœud pour créer une dépendance",
+      "empty": "Aucun service à afficher"
+    }
+  }
+}

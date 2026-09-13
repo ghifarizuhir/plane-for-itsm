@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Servicii",
+    "add": "Adaugă serviciu",
+    "create": "Creează serviciu",
+    "empty_state": {
+      "title": "Niciun serviciu încă",
+      "description": "Adaugă un serviciu pentru a începe maparea dependențelor."
+    },
+    "fields": {
+      "name": "Nume",
+      "description": "Descriere",
+      "status": "Status",
+      "criticality": "Criticitate",
+      "type": "Tip",
+      "owner": "Proprietar",
+      "repository": "Repozitoriu",
+      "documentation": "Documentație"
+    },
+    "tabs": {
+      "overview": "Prezentare generală",
+      "work_items": "Activități",
+      "dependencies": "Dependențe"
+    },
+    "graph": {
+      "re_layout": "Rearanjează",
+      "connect_hint": "Trage din mânerul unui nod pentru a crea o dependență",
+      "empty": "Niciun serviciu de afișat"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Servicios",
+    "add": "Agregar servicio",
+    "create": "Crear servicio",
+    "empty_state": {
+      "title": "Sin servicios aún",
+      "description": "Agregue un servicio para empezar a mapear las dependencias."
+    },
+    "fields": {
+      "name": "Nombre",
+      "description": "Descripción",
+      "status": "Estado",
+      "criticality": "Criticidad",
+      "type": "Tipo",
+      "owner": "Propietario",
+      "repository": "Repositorio",
+      "documentation": "Documentación"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "work_items": "Elementos de trabajo",
+      "dependencies": "Dependencias"
+    },
+    "graph": {
+      "re_layout": "Reorganizar",
+      "connect_hint": "Arrastre desde el controlador de un nodo para crear una dependencia",
+      "empty": "No hay servicios para mostrar"
+    }
+  }
+}

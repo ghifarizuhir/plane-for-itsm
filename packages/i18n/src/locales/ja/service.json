@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "サービス",
+    "add": "サービスを追加",
+    "create": "サービスを作成",
+    "empty_state": {
+      "title": "まだサービスがありません",
+      "description": "サービスを追加して依存関係のマッピングを開始しましょう。"
+    },
+    "fields": {
+      "name": "名前",
+      "description": "説明",
+      "status": "ステータス",
+      "criticality": "重要度",
+      "type": "タイプ",
+      "owner": "所有者",
+      "repository": "リポジトリ",
+      "documentation": "ドキュメント"
+    },
+    "tabs": {
+      "overview": "概要",
+      "work_items": "作業項目",
+      "dependencies": "依存関係"
+    },
+    "graph": {
+      "re_layout": "再レイアウト",
+      "connect_hint": "ノードのハンドルからドラッグして依存関係を作成します",
+      "empty": "表示するサービスがありません"
+    }
+  }
+}

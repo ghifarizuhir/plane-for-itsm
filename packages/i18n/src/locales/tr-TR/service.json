@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Hizmetler",
+    "add": "Hizmet ekle",
+    "create": "Hizmet oluştur",
+    "empty_state": {
+      "title": "Henüz hizmet yok",
+      "description": "Bağımlılıkları eşlemeye başlamak için bir hizmet ekleyin."
+    },
+    "fields": {
+      "name": "Ad",
+      "description": "Açıklama",
+      "status": "Durum",
+      "criticality": "Kritiklik",
+      "type": "Tür",
+      "owner": "Sahip",
+      "repository": "Repository",
+      "documentation": "Dokümantasyon"
+    },
+    "tabs": {
+      "overview": "Genel Bakış",
+      "work_items": "İş öğeleri",
+      "dependencies": "Bağımlılıklar"
+    },
+    "graph": {
+      "re_layout": "Yeniden düzenle",
+      "connect_hint": "Bağımlılık oluşturmak için bir düğüm tutamacından sürükleyin",
+      "empty": "Gösterilecek hizmet yok"
+    }
+  }
+}

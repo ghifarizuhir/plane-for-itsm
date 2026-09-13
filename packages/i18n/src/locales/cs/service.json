@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Služby",
+    "add": "Přidat službu",
+    "create": "Vytvořit službu",
+    "empty_state": {
+      "title": "Zatím žádné služby",
+      "description": "Přidejte službu a začněte mapovat závislosti."
+    },
+    "fields": {
+      "name": "Název",
+      "description": "Popis",
+      "status": "Stav",
+      "criticality": "Kritičnost",
+      "type": "Typ",
+      "owner": "Vlastník",
+      "repository": "Repozitář",
+      "documentation": "Dokumentace"
+    },
+    "tabs": {
+      "overview": "Přehled",
+      "work_items": "Pracovní položky",
+      "dependencies": "Závislosti"
+    },
+    "graph": {
+      "re_layout": "Přeuspořádat",
+      "connect_hint": "Tažením z úchytu uzlu vytvoříte závislost",
+      "empty": "Žádné služby k zobrazení"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Layanan",
+    "add": "Tambah layanan",
+    "create": "Buat layanan",
+    "empty_state": {
+      "title": "Belum ada layanan",
+      "description": "Tambahkan layanan untuk mulai memetakan dependensi."
+    },
+    "fields": {
+      "name": "Nama",
+      "description": "Deskripsi",
+      "status": "Status",
+      "criticality": "Kritikalitas",
+      "type": "Tipe",
+      "owner": "Pemilik",
+      "repository": "Repositori",
+      "documentation": "Dokumentasi"
+    },
+    "tabs": {
+      "overview": "Ikhtisar",
+      "work_items": "Item kerja",
+      "dependencies": "Ketergantungan"
+    },
+    "graph": {
+      "re_layout": "Tata ulang",
+      "connect_hint": "Seret dari handel node untuk membuat dependensi",
+      "empty": "Tidak ada layanan untuk ditampilkan"
+    }
+  }
+}

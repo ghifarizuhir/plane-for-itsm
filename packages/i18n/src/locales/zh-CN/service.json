@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "服务",
+    "add": "添加服务",
+    "create": "创建服务",
+    "empty_state": {
+      "title": "暂无服务",
+      "description": "添加服务以开始梳理依赖关系。"
+    },
+    "fields": {
+      "name": "名称",
+      "description": "描述",
+      "status": "状态",
+      "criticality": "关键性",
+      "type": "类型",
+      "owner": "所有者",
+      "repository": "仓库",
+      "documentation": "文档"
+    },
+    "tabs": {
+      "overview": "概览",
+      "work_items": "工作项",
+      "dependencies": "依赖关系"
+    },
+    "graph": {
+      "re_layout": "重新排布",
+      "connect_hint": "从节点句柄拖动以创建依赖关系",
+      "empty": "暂无可显示的服务"
+    }
+  }
+}

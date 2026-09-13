@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Usługi",
+    "add": "Dodaj usługę",
+    "create": "Utwórz usługę",
+    "empty_state": {
+      "title": "Brak usług",
+      "description": "Dodaj usługę, aby rozpocząć mapowanie zależności."
+    },
+    "fields": {
+      "name": "Nazwa",
+      "description": "Opis",
+      "status": "Status",
+      "criticality": "Krytyczność",
+      "type": "Typ",
+      "owner": "Właściciel",
+      "repository": "Repozytorium",
+      "documentation": "Dokumentacja"
+    },
+    "tabs": {
+      "overview": "Przegląd",
+      "work_items": "Elementy pracy",
+      "dependencies": "Zależności"
+    },
+    "graph": {
+      "re_layout": "Rozmieść ponownie",
+      "connect_hint": "Przeciągnij z uchwytu węzła, aby utworzyć zależność",
+      "empty": "Brak usług do wyświetlenia"
+    }
+  }
+}

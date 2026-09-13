@@ -1,0 +1,31 @@
+{
+  "service": {
+    "title": "Services",
+    "add": "Service hinzufügen",
+    "create": "Service erstellen",
+    "empty_state": {
+      "title": "Noch keine Services",
+      "description": "Fügen Sie einen Service hinzu, um mit der Zuordnung von Abhängigkeiten zu beginnen."
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Beschreibung",
+      "status": "Status",
+      "criticality": "Kritikalität",
+      "type": "Typ",
+      "owner": "Besitzer",
+      "repository": "Repository",
+      "documentation": "Dokumentation"
+    },
+    "tabs": {
+      "overview": "Übersicht",
+      "work_items": "Arbeitselemente",
+      "dependencies": "Abhängigkeiten"
+    },
+    "graph": {
+      "re_layout": "Neu anordnen",
+      "connect_hint": "Ziehen Sie von einem Knoten-Handle, um eine Abhängigkeit zu erstellen",
+      "empty": "Keine Services zum Anzeigen"
+    }
+  }
+}
