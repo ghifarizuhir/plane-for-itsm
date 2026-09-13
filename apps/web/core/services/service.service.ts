@@ -4,84 +4,136 @@
  * See the LICENSE file for details.
  */
 
+import { API_BASE_URL } from "@plane/constants";
 import type { IService, IServiceDependency, TServiceWorkItemLink } from "@plane/types";
 // services
-import { ServiceMockRepository } from "@/services/service-mock.repository";
+import { APIService } from "@/services/api.service";
+
+type TServiceErrorBody = { detail?: string; error?: string; [key: string]: unknown };
 
 /**
- * Async facade over the localStorage mock.
- * Swap the method bodies for APIService HTTP calls when the backend lands;
- * signatures and return shapes stay identical.
+ * Normalizes an axios error into a real Error whose `.message` carries the
+ * backend message, while also exposing `.detail`/`.error`. Components use
+ * both styles: the modal reads `err.detail/err.error`, the graph and
+ * dependency views branch on `error instanceof Error`.
  */
-export class ServiceService {
-  repository: ServiceMockRepository;
+const toServiceError = (error: unknown): Error => {
+  const body = (error as { response?: { data?: TServiceErrorBody } })?.response?.data;
+  let fieldMessage: string | undefined;
+  if (body && typeof body === "object") {
+    const first = Object.values(body).find((value) => typeof value === "string");
+    fieldMessage = typeof first === "string" ? first : undefined;
+  }
+  const message = body?.detail ?? body?.error ?? fieldMessage ?? "Something went wrong. Please try again.";
+  const normalized = new Error(message) as Error & { detail?: string; error?: string };
+  normalized.detail = body?.detail;
+  normalized.error = body?.error;
+  return normalized;
+};
 
-  constructor(repository: ServiceMockRepository = new ServiceMockRepository()) {
-    this.repository = repository;
+const base = (workspaceSlug: string, projectId: string) => `/api/workspaces/${workspaceSlug}/projects/${projectId}`;
+
+export class ServiceService extends APIService {
+  constructor() {
+    super(API_BASE_URL);
   }
 
-  async getServices(workspaceSlug: string, workspaceId: string, projectId: string): Promise<IService[]> {
-    return Promise.resolve(this.repository.getServices(workspaceSlug, workspaceId, projectId));
+  async getServices(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<IService[]> {
+    return this.get(`${base(workspaceSlug, projectId)}/services/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
-  async getDependencies(workspaceSlug: string, workspaceId: string, projectId: string): Promise<IServiceDependency[]> {
-    return Promise.resolve(this.repository.getDependencies(workspaceSlug, workspaceId, projectId));
+  async getDependencies(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<IServiceDependency[]> {
+    return this.get(`${base(workspaceSlug, projectId)}/service-dependencies/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async getWorkItemLinks(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string
   ): Promise<TServiceWorkItemLink[]> {
-    return Promise.resolve(this.repository.getLinks(workspaceSlug, workspaceId, projectId));
+    return this.get(`${base(workspaceSlug, projectId)}/service-issues/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async createService(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string,
     data: Partial<IService>
   ): Promise<IService> {
-    return Promise.resolve(this.repository.createService(workspaceSlug, workspaceId, projectId, data));
+    return this.post(`${base(workspaceSlug, projectId)}/services/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async updateService(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string,
     serviceId: string,
     data: Partial<IService>
   ): Promise<IService> {
-    const updated = this.repository.updateService(workspaceSlug, workspaceId, projectId, serviceId, data);
-    if (!updated) throw new Error("Service not found");
-    return Promise.resolve(updated);
+    return this.patch(`${base(workspaceSlug, projectId)}/services/${serviceId}/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
-  async deleteService(workspaceSlug: string, workspaceId: string, projectId: string, serviceId: string): Promise<void> {
-    this.repository.deleteService(workspaceSlug, workspaceId, projectId, serviceId);
-    return Promise.resolve();
+  async deleteService(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    serviceId: string
+  ): Promise<void> {
+    return this.delete(`${base(workspaceSlug, projectId)}/services/${serviceId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async createDependency(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string,
     fromServiceId: string,
     toServiceId: string
   ): Promise<IServiceDependency> {
-    return Promise.resolve(
-      this.repository.createDependency(workspaceSlug, workspaceId, projectId, fromServiceId, toServiceId)
-    );
+    return this.post(`${base(workspaceSlug, projectId)}/service-dependencies/`, {
+      from_service_id: fromServiceId,
+      to_service_id: toServiceId,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async deleteDependency(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string,
     dependencyId: string
   ): Promise<void> {
-    this.repository.deleteDependency(workspaceSlug, workspaceId, projectId, dependencyId);
-    return Promise.resolve();
+    return this.delete(`${base(workspaceSlug, projectId)}/service-dependencies/${dependencyId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
   async updateNodePosition(
@@ -91,23 +143,31 @@ export class ServiceService {
     serviceId: string,
     position: { x: number; y: number }
   ): Promise<IService> {
-    const updated = this.repository.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position });
-    if (!updated) throw new Error("Service not found");
-    return Promise.resolve(updated);
+    return this.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position });
   }
 
   async linkWorkItem(
     workspaceSlug: string,
-    workspaceId: string,
+    _workspaceId: string,
     projectId: string,
     serviceId: string,
     issue: { id: string; identifier?: string; name?: string }
   ): Promise<TServiceWorkItemLink> {
-    return Promise.resolve(this.repository.linkWorkItem(workspaceSlug, workspaceId, projectId, serviceId, issue));
+    return this.post(`${base(workspaceSlug, projectId)}/service-issues/`, {
+      service_id: serviceId,
+      issue_id: issue.id,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 
-  async unlinkWorkItem(workspaceSlug: string, workspaceId: string, projectId: string, linkId: string): Promise<void> {
-    this.repository.unlinkWorkItem(workspaceSlug, workspaceId, projectId, linkId);
-    return Promise.resolve();
+  async unlinkWorkItem(workspaceSlug: string, _workspaceId: string, projectId: string, linkId: string): Promise<void> {
+    return this.delete(`${base(workspaceSlug, projectId)}/service-issues/${linkId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
   }
 }
