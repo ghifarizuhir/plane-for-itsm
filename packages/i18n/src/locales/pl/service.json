@@ -22,10 +22,24 @@
       "work_items": "Elementy pracy",
       "dependencies": "Zależności"
     },
+    "layout": {
+      "list": "Lista",
+      "grid": "Siatka",
+      "graph": "Graf"
+    },
+    "layout_label": "Układ",
+    "order_by": {
+      "name": "Nazwa",
+      "created": "Data utworzenia",
+      "updated": "Data aktualizacji",
+      "criticality": "Krytyczność",
+      "status": "Status"
+    },
     "graph": {
       "re_layout": "Rozmieść ponownie",
       "connect_hint": "Przeciągnij z uchwytu węzła, aby utworzyć zależność",
-      "empty": "Brak usług do wyświetlenia"
+      "empty": "Brak usług do wyświetlenia",
+      "coming_soon": "Graf wkrótce"
     }
   }
 }

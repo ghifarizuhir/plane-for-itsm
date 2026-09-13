@@ -22,10 +22,24 @@
       "work_items": "Activități",
       "dependencies": "Dependențe"
     },
+    "layout": {
+      "list": "Listă",
+      "grid": "Grilă",
+      "graph": "Graf"
+    },
+    "layout_label": "Aspect",
+    "order_by": {
+      "name": "Nume",
+      "created": "Dată creare",
+      "updated": "Dată actualizare",
+      "criticality": "Criticitate",
+      "status": "Status"
+    },
     "graph": {
       "re_layout": "Rearanjează",
       "connect_hint": "Trage din mânerul unui nod pentru a crea o dependență",
-      "empty": "Niciun serviciu de afișat"
+      "empty": "Niciun serviciu de afișat",
+      "coming_soon": "Graf în curând"
     }
   }
 }

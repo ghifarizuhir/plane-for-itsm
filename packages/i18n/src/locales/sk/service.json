@@ -22,10 +22,24 @@
       "work_items": "Pracovné položky",
       "dependencies": "Závislosti"
     },
+    "layout": {
+      "list": "Zoznam",
+      "grid": "Mriežka",
+      "graph": "Graf"
+    },
+    "layout_label": "Rozloženie",
+    "order_by": {
+      "name": "Názov",
+      "created": "Dátum vytvorenia",
+      "updated": "Dátum aktualizácie",
+      "criticality": "Kritickosť",
+      "status": "Stav"
+    },
     "graph": {
       "re_layout": "Preusporiadať",
       "connect_hint": "Potiahnutím z úchytu uzla vytvoríte závislosť",
-      "empty": "Žiadne služby na zobrazenie"
+      "empty": "Žiadne služby na zobrazenie",
+      "coming_soon": "Graf už čoskoro"
     }
   }
 }

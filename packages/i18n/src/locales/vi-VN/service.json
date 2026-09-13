@@ -22,10 +22,24 @@
       "work_items": "Mục công việc",
       "dependencies": "Phụ thuộc"
     },
+    "layout": {
+      "list": "Danh sách",
+      "grid": "Lưới",
+      "graph": "Đồ thị"
+    },
+    "layout_label": "Bố cục",
+    "order_by": {
+      "name": "Tên",
+      "created": "Ngày tạo",
+      "updated": "Ngày cập nhật",
+      "criticality": "Mức độ quan trọng",
+      "status": "Trạng thái"
+    },
     "graph": {
       "re_layout": "Bố trí lại",
       "connect_hint": "Kéo từ tay nắm trên nút để tạo một phụ thuộc",
-      "empty": "Không có dịch vụ để hiển thị"
+      "empty": "Không có dịch vụ để hiển thị",
+      "coming_soon": "Đồ thị sắp ra mắt"
     }
   }
 }

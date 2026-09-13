@@ -22,10 +22,24 @@
       "work_items": "작업 항목",
       "dependencies": "종속성"
     },
+    "layout": {
+      "list": "목록",
+      "grid": "그리드",
+      "graph": "그래프"
+    },
+    "layout_label": "레이아웃",
+    "order_by": {
+      "name": "이름",
+      "created": "생성일",
+      "updated": "업데이트일",
+      "criticality": "중요도",
+      "status": "상태"
+    },
     "graph": {
       "re_layout": "다시 배치",
       "connect_hint": "노드 핸들에서 드래그하여 종속성을 생성하세요",
-      "empty": "표시할 서비스가 없습니다"
+      "empty": "표시할 서비스가 없습니다",
+      "coming_soon": "그래프 곧 출시"
     }
   }
 }

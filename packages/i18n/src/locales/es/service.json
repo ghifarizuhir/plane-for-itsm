@@ -22,10 +22,24 @@
       "work_items": "Elementos de trabajo",
       "dependencies": "Dependencias"
     },
+    "layout": {
+      "list": "Lista",
+      "grid": "Cuadrícula",
+      "graph": "Grafo"
+    },
+    "layout_label": "Diseño",
+    "order_by": {
+      "name": "Nombre",
+      "created": "Fecha de creación",
+      "updated": "Fecha de actualización",
+      "criticality": "Criticidad",
+      "status": "Estado"
+    },
     "graph": {
       "re_layout": "Reorganizar",
       "connect_hint": "Arrastre desde el controlador de un nodo para crear una dependencia",
-      "empty": "No hay servicios para mostrar"
+      "empty": "No hay servicios para mostrar",
+      "coming_soon": "Grafo próximamente"
     }
   }
 }

@@ -22,10 +22,24 @@
       "work_items": "工作项",
       "dependencies": "依赖关系"
     },
+    "layout": {
+      "list": "列表",
+      "grid": "网格",
+      "graph": "图谱"
+    },
+    "layout_label": "布局",
+    "order_by": {
+      "name": "名称",
+      "created": "创建日期",
+      "updated": "更新日期",
+      "criticality": "关键性",
+      "status": "状态"
+    },
     "graph": {
       "re_layout": "重新排布",
       "connect_hint": "从节点句柄拖动以创建依赖关系",
-      "empty": "暂无可显示的服务"
+      "empty": "暂无可显示的服务",
+      "coming_soon": "图谱即将推出"
     }
   }
 }

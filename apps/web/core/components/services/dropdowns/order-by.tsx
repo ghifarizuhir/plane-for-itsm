@@ -5,6 +5,7 @@
  */
 
 import { ChevronDownOutline, SortAscendingOutline, SortDescendingOutline, TickOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 import { getButtonStyling } from "@plane/propel/button";
 import type { TServiceOrderByOptions } from "@plane/types";
 // ui
@@ -12,12 +13,12 @@ import { CustomMenu } from "@plane/ui";
 // helpers
 import { cn } from "@plane/utils";
 
-export const SERVICE_ORDER_BY_OPTIONS: { key: TServiceOrderByOptions; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "-created_at", label: "Created date" },
-  { key: "-updated_at", label: "Updated date" },
-  { key: "criticality", label: "Criticality" },
-  { key: "status", label: "Status" },
+export const SERVICE_ORDER_BY_OPTIONS: { key: TServiceOrderByOptions; i18n_label: string }[] = [
+  { key: "name", i18n_label: "service.order_by.name" },
+  { key: "-created_at", i18n_label: "service.order_by.created" },
+  { key: "-updated_at", i18n_label: "service.order_by.updated" },
+  { key: "criticality", i18n_label: "service.order_by.criticality" },
+  { key: "status", i18n_label: "service.order_by.status" },
 ];
 
 type Props = {
@@ -27,6 +28,8 @@ type Props = {
 
 export function ServiceOrderByDropdown(props: Props) {
   const { onChange, value } = props;
+  // hooks
+  const { t } = useTranslation();
 
   const orderByDetails = SERVICE_ORDER_BY_OPTIONS.find((option) => option.key === value);
 
@@ -37,7 +40,7 @@ export function ServiceOrderByDropdown(props: Props) {
       customButton={
         <div className={cn(getButtonStyling("secondary", "lg"), "px-2 text-tertiary")}>
           {!isDescending ? <SortAscendingOutline className="size-3" /> : <SortDescendingOutline className="size-3" />}
-          {orderByDetails?.label}
+          {orderByDetails && t(orderByDetails.i18n_label)}
           <ChevronDownOutline className="size-3" />
         </div>
       }
@@ -51,7 +54,7 @@ export function ServiceOrderByDropdown(props: Props) {
           className="flex items-center justify-between gap-2"
           onClick={() => onChange(option.key)}
         >
-          {option.label}
+          {t(option.i18n_label)}
           {value === option.key && <TickOutline className="h-3 w-3" />}
         </CustomMenu.MenuItem>
       ))}

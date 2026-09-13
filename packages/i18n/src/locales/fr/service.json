@@ -22,10 +22,24 @@
       "work_items": "Éléments de travail",
       "dependencies": "Dépendances"
     },
+    "layout": {
+      "list": "Liste",
+      "grid": "Grille",
+      "graph": "Graphe"
+    },
+    "layout_label": "Disposition",
+    "order_by": {
+      "name": "Nom",
+      "created": "Date de création",
+      "updated": "Date de mise à jour",
+      "criticality": "Criticité",
+      "status": "Statut"
+    },
     "graph": {
       "re_layout": "Réorganiser",
       "connect_hint": "Faites glisser depuis la poignée d'un nœud pour créer une dépendance",
-      "empty": "Aucun service à afficher"
+      "empty": "Aucun service à afficher",
+      "coming_soon": "Graphe à venir"
     }
   }
 }

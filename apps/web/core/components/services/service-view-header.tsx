@@ -84,7 +84,7 @@ export const ServiceViewHeader = observer(function ServiceViewHeader() {
           />
           <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">
             {SERVICE_VIEW_LAYOUTS.map((layout) => (
-              <Tooltip key={layout.key} label={layout.label} disabled={isMobile}>
+              <Tooltip key={layout.key} label={t(layout.i18n_label)} disabled={isMobile}>
                 <button
                   type="button"
                   className={cn(

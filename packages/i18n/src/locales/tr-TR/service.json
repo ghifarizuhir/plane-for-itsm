@@ -22,10 +22,24 @@
       "work_items": "İş öğeleri",
       "dependencies": "Bağımlılıklar"
     },
+    "layout": {
+      "list": "Liste",
+      "grid": "Izgara",
+      "graph": "Graf"
+    },
+    "layout_label": "Düzen",
+    "order_by": {
+      "name": "Ad",
+      "created": "Oluşturulma tarihi",
+      "updated": "Güncelleme tarihi",
+      "criticality": "Kritiklik",
+      "status": "Durum"
+    },
     "graph": {
       "re_layout": "Yeniden düzenle",
       "connect_hint": "Bağımlılık oluşturmak için bir düğüm tutamacından sürükleyin",
-      "empty": "Gösterilecek hizmet yok"
+      "empty": "Gösterilecek hizmet yok",
+      "coming_soon": "Graf çok yakında"
     }
   }
 }

@@ -8,10 +8,10 @@ import { GridOutline, ListOutline, WorkgraphOutline } from "@makeplane/propel/ic
 import type { TServiceLayoutOptions } from "@plane/types";
 import { cn } from "@plane/utils";
 
-export const SERVICE_VIEW_LAYOUTS: { key: TServiceLayoutOptions; label: string }[] = [
-  { key: "list", label: "List" },
-  { key: "grid", label: "Grid" },
-  { key: "graph", label: "Graph" },
+export const SERVICE_VIEW_LAYOUTS: { key: TServiceLayoutOptions; i18n_label: string }[] = [
+  { key: "list", i18n_label: "service.layout.list" },
+  { key: "grid", i18n_label: "service.layout.grid" },
+  { key: "graph", i18n_label: "service.layout.graph" },
 ];
 
 interface IServiceLayoutIcon {

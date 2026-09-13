@@ -22,10 +22,24 @@
       "work_items": "作業項目",
       "dependencies": "依存関係"
     },
+    "layout": {
+      "list": "リスト",
+      "grid": "グリッド",
+      "graph": "グラフ"
+    },
+    "layout_label": "レイアウト",
+    "order_by": {
+      "name": "名前",
+      "created": "作成日",
+      "updated": "更新日",
+      "criticality": "重要度",
+      "status": "ステータス"
+    },
     "graph": {
       "re_layout": "再レイアウト",
       "connect_hint": "ノードのハンドルからドラッグして依存関係を作成します",
-      "empty": "表示するサービスがありません"
+      "empty": "表示するサービスがありません",
+      "coming_soon": "グラフ近日公開"
     }
   }
 }

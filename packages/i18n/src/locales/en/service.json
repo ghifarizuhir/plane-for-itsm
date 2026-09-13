@@ -22,10 +22,24 @@
       "work_items": "Work items",
       "dependencies": "Dependencies"
     },
+    "layout": {
+      "list": "List",
+      "grid": "Grid",
+      "graph": "Graph"
+    },
+    "layout_label": "Layout",
+    "order_by": {
+      "name": "Name",
+      "created": "Created date",
+      "updated": "Updated date",
+      "criticality": "Criticality",
+      "status": "Status"
+    },
     "graph": {
       "re_layout": "Re-layout",
       "connect_hint": "Drag from a node handle to create a dependency",
-      "empty": "No services to show"
+      "empty": "No services to show",
+      "coming_soon": "Graph coming soon"
     }
   }
 }

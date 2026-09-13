@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { ChevronDownOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 import { CustomMenu, Row } from "@plane/ui";
 // components
 import { SERVICE_VIEW_LAYOUTS, ServiceLayoutIcon } from "./service-layout-icon";
@@ -16,6 +17,8 @@ import { useServiceFilter } from "@/hooks/store/use-service-filter";
 export const ServiceMobileHeader = observer(function ServiceMobileHeader() {
   // router
   const { projectId } = useParams();
+  // hooks
+  const { t } = useTranslation();
   // store hooks
   const { updateDisplayFilters } = useServiceFilter();
 
@@ -26,7 +29,7 @@ export const ServiceMobileHeader = observer(function ServiceMobileHeader() {
         className="flex flex-grow justify-start border-b border-subtle bg-surface-1 py-2 text-13 text-secondary"
         customButton={
           <Row className="flex flex-grow justify-center gap-2 text-13 text-secondary">
-            <span>Layout</span> <ChevronDownOutline className="my-auto h-4 w-4 text-secondary" />
+            <span>{t("service.layout_label")}</span> <ChevronDownOutline className="my-auto h-4 w-4 text-secondary" />
           </Row>
         }
         customButtonClassName="flex flex-grow justify-center items-center text-secondary text-13"
@@ -42,7 +45,7 @@ export const ServiceMobileHeader = observer(function ServiceMobileHeader() {
             className="flex items-center gap-2"
           >
             <ServiceLayoutIcon layoutType={layout.key} />
-            <div className="text-tertiary">{layout.label}</div>
+            <div className="text-tertiary">{t(layout.i18n_label)}</div>
           </CustomMenu.MenuItem>
         ))}
       </CustomMenu>

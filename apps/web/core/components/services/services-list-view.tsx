@@ -48,7 +48,9 @@ export const ServicesListView = observer(function ServicesListView() {
           </Button>
         </div>
       ) : layout === "graph" ? (
-        <div className="text-sm flex h-full items-center justify-center p-6 text-secondary">Graph coming soon</div>
+        <div className="text-sm flex h-full items-center justify-center p-6 text-secondary">
+          {t("service.graph.coming_soon")}
+        </div>
       ) : layout === "grid" ? (
         <div className="grid size-full auto-rows-max grid-cols-1 gap-4 overflow-y-auto p-2 sm:grid-cols-2 xl:grid-cols-3">
           {serviceIds.map((id) => (

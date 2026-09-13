@@ -22,10 +22,24 @@
       "work_items": "Arbeitselemente",
       "dependencies": "Abhängigkeiten"
     },
+    "layout": {
+      "list": "Liste",
+      "grid": "Raster",
+      "graph": "Graph"
+    },
+    "layout_label": "Layout",
+    "order_by": {
+      "name": "Name",
+      "created": "Erstellungsdatum",
+      "updated": "Aktualisierungsdatum",
+      "criticality": "Kritikalität",
+      "status": "Status"
+    },
     "graph": {
       "re_layout": "Neu anordnen",
       "connect_hint": "Ziehen Sie von einem Knoten-Handle, um eine Abhängigkeit zu erstellen",
-      "empty": "Keine Services zum Anzeigen"
+      "empty": "Keine Services zum Anzeigen",
+      "coming_soon": "Graph demnächst verfügbar"
     }
   }
 }

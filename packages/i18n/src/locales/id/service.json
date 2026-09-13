@@ -22,10 +22,24 @@
       "work_items": "Item kerja",
       "dependencies": "Ketergantungan"
     },
+    "layout": {
+      "list": "Daftar",
+      "grid": "Kisi",
+      "graph": "Graf"
+    },
+    "layout_label": "Tata letak",
+    "order_by": {
+      "name": "Nama",
+      "created": "Tanggal dibuat",
+      "updated": "Tanggal diperbarui",
+      "criticality": "Kritikalitas",
+      "status": "Status"
+    },
     "graph": {
       "re_layout": "Tata ulang",
       "connect_hint": "Seret dari handel node untuk membuat dependensi",
-      "empty": "Tidak ada layanan untuk ditampilkan"
+      "empty": "Tidak ada layanan untuk ditampilkan",
+      "coming_soon": "Graf segera hadir"
     }
   }
 }
