@@ -213,6 +213,9 @@ export class ServiceMockRepository {
   createService(workspaceSlug: string, workspaceId: string, projectId: string, data: Partial<IService>): IService {
     const key = serviceStorageKey(workspaceSlug, projectId);
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
+    const candidateName = (data.name ?? "Untitled service").trim().toLowerCase();
+    if (stored.services.some((s) => s.name.trim().toLowerCase() === candidateName))
+      throw new Error("A service with this name already exists.");
     const service: IService = {
       id: uid(),
       workspace_id: workspaceId,
@@ -247,6 +250,9 @@ export class ServiceMockRepository {
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
     const current = stored.services.find((s) => s.id === serviceId);
     if (!current) return null;
+    const candidateName = (typeof data.name === "string" ? data.name : current.name).trim().toLowerCase();
+    if (stored.services.some((s) => s.id !== serviceId && s.name.trim().toLowerCase() === candidateName))
+      throw new Error("A service with this name already exists.");
     // Never allow identity/timestamp fields to be overwritten.
     const safe: Partial<IService> = { ...data };
     delete safe.id;

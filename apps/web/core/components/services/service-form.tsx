@@ -31,8 +31,6 @@ const SERVICE_CRITICALITY_OPTIONS: IService["criticality"][] = ["critical", "hig
 
 const SERVICE_TYPE_OPTIONS: IService["type"][] = ["internal", "external", "infrastructure", "third_party"];
 
-const formatOptionLabel = (value: string) => value.replace(/_/g, " ");
-
 type TServiceOptionSelectProps = {
   control: Control<IService, any>;
   name: "status" | "criticality" | "type";
@@ -41,12 +39,19 @@ type TServiceOptionSelectProps = {
 
 function ServiceOptionSelect(props: TServiceOptionSelectProps) {
   const { control, name, label } = props;
+  const { t } = useTranslation();
   const options =
     name === "status"
       ? SERVICE_STATUS_OPTIONS
       : name === "criticality"
         ? SERVICE_CRITICALITY_OPTIONS
         : SERVICE_TYPE_OPTIONS;
+  const prefix =
+    name === "status"
+      ? "service.status_values"
+      : name === "criticality"
+        ? "service.criticality_values"
+        : "service.type_values";
   return (
     <Controller
       control={control}
@@ -57,7 +62,7 @@ function ServiceOptionSelect(props: TServiceOptionSelectProps) {
           value={value}
           label={
             <span className="flex items-center gap-2 py-0.5 text-11 capitalize">
-              {value ? formatOptionLabel(value) : <span className="text-secondary normal-case">{label}</span>}
+              {value ? t(`${prefix}.${value}`) : <span className="text-secondary normal-case">{label}</span>}
             </span>
           }
           onChange={onChange}
@@ -65,7 +70,7 @@ function ServiceOptionSelect(props: TServiceOptionSelectProps) {
         >
           {options.map((option) => (
             <CustomSelect.Option key={option} value={option}>
-              <span className="capitalize">{formatOptionLabel(option)}</span>
+              <span className="capitalize">{t(`${prefix}.${option}`)}</span>
             </CustomSelect.Option>
           ))}
         </CustomSelect>

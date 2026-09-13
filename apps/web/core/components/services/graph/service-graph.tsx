@@ -25,6 +25,7 @@ import "@xyflow/react/dist/style.css";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { IService } from "@plane/types";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -40,7 +41,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   // store hooks
   const { getGraphData, addDependency, removeDependency, updateNodePosition, updateService } = useService();
   const { currentWorkspace } = useWorkspace();
@@ -59,14 +60,45 @@ export const ServiceGraph = observer(function ServiceGraph() {
     [graphData.dependencies, graphData.services]
   );
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(layoutNodes);
+  const translatedNodes = useMemo(
+    () =>
+      layoutNodes.map((node) => {
+        const service = (node.data as { service?: IService } | undefined)?.service;
+        if (!service) return node;
+        return {
+          ...node,
+          data: {
+            ...(node.data as Record<string, unknown>),
+            service,
+            statusLabel: t(`service.status_values.${service.status}`),
+            criticalityLabel: t(`service.criticality_values.${service.criticality}`),
+          },
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
+    [layoutNodes, currentLocale]
+  );
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges);
 
   useEffect(() => {
     setNodes((prev) => {
-      if (prev.length === layoutNodes.length && prev.every((node, i) => node.id === layoutNodes[i]?.id)) return prev;
+      if (
+        prev.length === translatedNodes.length &&
+        prev.every((node, i) => {
+          const next = translatedNodes[i];
+          if (node.id !== next?.id) return false;
+          const prevData = node.data as { statusLabel?: string; criticalityLabel?: string } | undefined;
+          const nextData = next?.data as { statusLabel?: string; criticalityLabel?: string } | undefined;
+          return (
+            prevData?.statusLabel === nextData?.statusLabel && prevData?.criticalityLabel === nextData?.criticalityLabel
+          );
+        })
+      )
+        return prev;
       const selectedById = new Map(prev.map((node) => [node.id, node.selected]));
-      return layoutNodes.map((node) =>
+      return translatedNodes.map((node) =>
         selectedById.has(node.id) ? { ...node, selected: selectedById.get(node.id) } : node
       );
     });
@@ -77,7 +109,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
         selectedById.has(edge.id) ? { ...edge, selected: selectedById.get(edge.id) } : edge
       );
     });
-  }, [layoutNodes, layoutEdges, setNodes, setEdges]);
+  }, [translatedNodes, layoutEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(
     async (connection: Connection) => {
