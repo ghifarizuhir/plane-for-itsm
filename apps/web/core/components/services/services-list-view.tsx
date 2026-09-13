@@ -14,6 +14,7 @@ import { Button } from "@plane/propel/button";
 import { useService } from "@/hooks/store/use-service";
 import { useServiceFilter } from "@/hooks/store/use-service-filter";
 // components
+import { ServiceGraph } from "./graph/service-graph";
 import { CreateUpdateServiceModal } from "./modal";
 import { ServiceCardItem } from "./service-card-item";
 import { ServiceListItem } from "./service-list-item";
@@ -54,8 +55,8 @@ export const ServicesListView = observer(function ServicesListView() {
           <p className="text-xs text-secondary">{t("service.empty_state.no_matches.description")}</p>
         </div>
       ) : layout === "graph" ? (
-        <div className="text-sm flex h-full items-center justify-center p-6 text-secondary">
-          {t("service.graph.coming_soon")}
+        <div className="h-[calc(100vh-12rem)] w-full">
+          <ServiceGraph />
         </div>
       ) : layout === "grid" ? (
         <div className="grid size-full auto-rows-max grid-cols-1 gap-4 overflow-y-auto p-2 sm:grid-cols-2 xl:grid-cols-3">
