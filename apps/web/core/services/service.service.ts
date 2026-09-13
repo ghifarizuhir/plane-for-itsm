@@ -52,7 +52,11 @@ export class ServiceService extends APIService {
       });
   }
 
-  async getWorkItemLinks(workspaceSlug: string, _workspaceId: string, projectId: string): Promise<TServiceWorkItemLink[]> {
+  async getWorkItemLinks(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string
+  ): Promise<TServiceWorkItemLink[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -60,7 +64,12 @@ export class ServiceService extends APIService {
       });
   }
 
-  async createService(workspaceSlug: string, _workspaceId: string, projectId: string, data: Partial<IService>): Promise<IService> {
+  async createService(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    data: Partial<IService>
+  ): Promise<IService> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -68,7 +77,13 @@ export class ServiceService extends APIService {
       });
   }
 
-  async updateService(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string, data: Partial<IService>): Promise<IService> {
+  async updateService(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    data: Partial<IService>
+  ): Promise<IService> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/${serviceId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -76,7 +91,12 @@ export class ServiceService extends APIService {
       });
   }
 
-  async deleteService(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string): Promise<void> {
+  async deleteService(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    serviceId: string
+  ): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/services/${serviceId}/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -84,7 +104,13 @@ export class ServiceService extends APIService {
       });
   }
 
-  async createDependency(workspaceSlug: string, _workspaceId: string, projectId: string, fromServiceId: string, toServiceId: string): Promise<IServiceDependency> {
+  async createDependency(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    fromServiceId: string,
+    toServiceId: string
+  ): Promise<IServiceDependency> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/`, {
       from_service_id: fromServiceId,
       to_service_id: toServiceId,
@@ -95,7 +121,12 @@ export class ServiceService extends APIService {
       });
   }
 
-  async deleteDependency(workspaceSlug: string, _workspaceId: string, projectId: string, dependencyId: string): Promise<void> {
+  async deleteDependency(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    dependencyId: string
+  ): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/${dependencyId}/`)
       .then((response) => response?.data)
       .catch((error) => {
@@ -103,11 +134,23 @@ export class ServiceService extends APIService {
       });
   }
 
-  async updateNodePosition(workspaceSlug: string, workspaceId: string, projectId: string, serviceId: string, position: { x: number; y: number }): Promise<IService> {
+  async updateNodePosition(
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    position: { x: number; y: number }
+  ): Promise<IService> {
     return this.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position });
   }
 
-  async linkWorkItem(workspaceSlug: string, _workspaceId: string, projectId: string, serviceId: string, issue: { id: string; identifier?: string; name?: string }): Promise<TServiceWorkItemLink> {
+  async linkWorkItem(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    issue: { id: string; identifier?: string; name?: string }
+  ): Promise<TServiceWorkItemLink> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/`, {
       service_id: serviceId,
       issue_id: issue.id,
