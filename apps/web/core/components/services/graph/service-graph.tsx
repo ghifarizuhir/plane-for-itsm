@@ -4,11 +4,10 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import {
-  addEdge,
   Background,
   Controls,
   MiniMap,
@@ -18,6 +17,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
@@ -50,6 +50,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const workspaceId = currentWorkspace?.id;
   // states
   const [isReLayouting, setIsReLayouting] = useState(false);
+  const fitDone = useRef(false);
 
   const graphData = pid ? getGraphData(pid) : { services: [], dependencies: [] };
 
@@ -62,8 +63,20 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges);
 
   useEffect(() => {
-    setNodes(layoutNodes);
-    setEdges(layoutEdges);
+    setNodes((prev) => {
+      if (prev.length === layoutNodes.length && prev.every((node, i) => node.id === layoutNodes[i]?.id)) return prev;
+      const selectedById = new Map(prev.map((node) => [node.id, node.selected]));
+      return layoutNodes.map((node) =>
+        selectedById.has(node.id) ? { ...node, selected: selectedById.get(node.id) } : node
+      );
+    });
+    setEdges((prev) => {
+      if (prev.length === layoutEdges.length && prev.every((edge, i) => edge.id === layoutEdges[i]?.id)) return prev;
+      const selectedById = new Map(prev.map((edge) => [edge.id, edge.selected]));
+      return layoutEdges.map((edge) =>
+        selectedById.has(edge.id) ? { ...edge, selected: selectedById.get(edge.id) } : edge
+      );
+    });
   }, [layoutNodes, layoutEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(
@@ -86,8 +99,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
         return;
       }
       try {
-        const dependency = await addDependency(slug, workspaceId, pid, source, target);
-        setEdges((prev) => addEdge({ id: dependency.id, source, target, type: "smoothstep" }, prev));
+        await addDependency(slug, workspaceId, pid, source, target);
       } catch (error) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -96,7 +108,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
         });
       }
     },
-    [addDependency, pid, setEdges, slug, workspaceId]
+    [addDependency, pid, slug, workspaceId]
   );
 
   const onEdgesDelete = useCallback(
@@ -118,7 +130,15 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const onNodeDragStop = useCallback(
     async (_event: unknown, node: Node) => {
       if (!slug || !workspaceId || !pid) return;
-      await updateNodePosition(slug, workspaceId, pid, node.id, node.position);
+      try {
+        await updateNodePosition(slug, workspaceId, pid, node.id, node.position);
+      } catch {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: "Error!",
+          message: "Could not save node position. Please try again.",
+        });
+      }
     },
     [pid, slug, updateNodePosition, workspaceId]
   );
@@ -170,7 +190,12 @@ export const ServiceGraph = observer(function ServiceGraph() {
           onEdgesDelete={onEdgesDelete}
           onNodeDragStop={onNodeDragStop}
           onNodeClick={onNodeClick}
-          fitView
+          onInit={(instance: ReactFlowInstance) => {
+            if (!fitDone.current) {
+              fitDone.current = true;
+              instance.fitView();
+            }
+          }}
           deleteKeyCode={["Backspace", "Delete"]}
         >
           <Background />
