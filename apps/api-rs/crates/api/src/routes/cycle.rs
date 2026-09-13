@@ -1723,7 +1723,12 @@ async fn grouped_cycle_response(
     const BASE: &str = "FROM issues i JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci2.cycle_id::text FROM cycle_issues ci2 WHERE ci2.issue_id = i.id AND ci2.deleted_at IS NULL ORDER BY ci2.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
     // Twin of the flat row SELECT above (shared 26-col shape + id filter).
-    let rows_select = format!("{USER_SELECT_SQL} {BASE} AND i.id = ANY($3)");
+    // NOTE: `USER_SELECT_SQL` already ends with
+    // `FROM issues i LEFT JOIN states s ...`, so the row fetch only appends
+    // the cycle bridge JOIN + WHERE — reusing `BASE` here would duplicate
+    // FROM (500 `syntax error at or near "FROM"`) and the `states s` alias.
+    const ROW_BASE: &str = "JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL WHERE i.project_id = $2 AND i.deleted_at IS NULL";
+    let rows_select = format!("{USER_SELECT_SQL} {ROW_BASE} AND i.id = ANY($3)");
     let scan: Vec<ScanRow> = sqlx::query_as(&format!("{KEYS} {BASE} ORDER BY {order}, i.id ASC"))
         .bind(cid)
         .bind(pid)

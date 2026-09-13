@@ -95,8 +95,15 @@ pub struct RemoveRelationBody {
 pub struct PatchIssue {
     #[serde(default)]
     pub name: Option<String>,
+    // Django `IssueCreateSerializer` (`serializers/issue.py:82-105`,
+    // `fields = "__all__"`): the Issue model has NO `description` column —
+    // description lives in `description_html` (text) + `description_json`
+    // (jsonb). `description` here is the tiptap JSON doc → `description_json`
+    // (same mapping as the intake nested-issue write, `intake.rs:1271-1286`).
     #[serde(default)]
-    pub description: Option<String>,
+    pub description_html: Option<String>,
+    #[serde(default)]
+    pub description: Option<Value>,
     #[serde(default)]
     pub priority: Option<String>,
 }
@@ -1585,7 +1592,7 @@ pub async fn get_issue(
         return Ok(deny());
     }
     let row: Option<IssueDetailRow> = sqlx::query_as(&format!(
-        "{DETAIL_SELECT_SQL} FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL"
+        "{DETAIL_SELECT_SQL} WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL"
     ))
     .bind(pk)
     .bind(project_id)
@@ -1704,9 +1711,10 @@ pub async fn patch_issue(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     sqlx::query(
-        "UPDATE issues SET name = COALESCE($1, name), description = COALESCE($2, description), priority = COALESCE($3, priority), updated_at = now() WHERE id = $4 AND project_id = $5 AND deleted_at IS NULL",
+        "UPDATE issues SET name = COALESCE($1, name), description_html = COALESCE($2, description_html), description_json = COALESCE($3::jsonb, description_json), priority = COALESCE($4, priority), updated_at = now() WHERE id = $5 AND project_id = $6 AND deleted_at IS NULL",
     )
     .bind(&body.name)
+    .bind(body.description_html.as_deref())
     .bind(&body.description)
     .bind(&body.priority)
     .bind(pk)

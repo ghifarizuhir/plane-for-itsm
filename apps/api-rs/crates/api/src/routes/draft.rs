@@ -1392,7 +1392,7 @@ pub async fn create_draft_to_issue(
     use super::issue_common::IssueDetailRow;
     use super::issue_query::DETAIL_SELECT_SQL;
     let full: Option<IssueDetailRow> = sqlx::query_as(&format!(
-        "{DETAIL_SELECT_SQL} FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.deleted_at IS NULL"
+        "{DETAIL_SELECT_SQL} WHERE i.id = $1 AND i.project_id = $2 AND i.deleted_at IS NULL"
     ))
     .bind(issue_id)
     .bind(project_id)

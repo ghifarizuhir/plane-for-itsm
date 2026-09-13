@@ -1974,8 +1974,11 @@ async fn grouped_module_response(
     const BASE: &str = "FROM issues i JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi2.module_id::text) FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
     // Page-id fetch in the shared 26-col shape (same as the flat list).
-    const ROWS_BASE: &str = "FROM issues i LEFT JOIN states s ON s.id = i.state_id \
-        JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL \
+    // NOTE: `USER_SELECT_SQL` already ends with
+    // `FROM issues i LEFT JOIN states s ...`, so this only appends the
+    // module bridge JOIN + WHERE (a second FROM here 500s with
+    // `syntax error at or near "FROM"`).
+    const ROWS_BASE: &str = "JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL \
         WHERE i.project_id = $2 AND i.deleted_at IS NULL AND i.id = ANY($3)";
     let scan: Vec<ScanRow> = sqlx::query_as(&format!("{KEYS} {BASE} ORDER BY {order}, i.id ASC"))
         .bind(mid)

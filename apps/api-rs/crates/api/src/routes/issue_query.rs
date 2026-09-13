@@ -65,6 +65,91 @@ pub fn build_ungrouped_envelope(total: i64, limit: i64, page: i128, results: Vec
     })
 }
 
+/// The page-query SELECT prefix for `list`: the 26 `IssueListRow` columns
+/// (same projection as the flat path below, `issue_common.rs:20-47`).
+pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at FROM issues i LEFT JOIN states s ON s.id = i.state_id";
+
+/// Key-scan SELECT for grouped `list` mode: every groupable key as text
+/// over the flat scope (same FROM/WHERE as the flat path). Arrays use the
+/// same bridge subqueries as `issue_queryset_grouper` (`grouper.py:52-90`);
+/// `cycle_id` mirrors the row annotation (latest bridge, `created_at DESC`).
+pub(crate) const LIST_SCAN_SELECT_SQL: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date";
+
+/// Shared WHERE scope for the `list` COUNT + page + scan queries: the flat
+/// visibility (`base.py:266-294`) — project scoping (slug enforced by the
+/// project-exists check above) + not deleted + not archived + not draft +
+/// triage-state exclusion — then the GUEST scoping (`base.py:310-321`).
+fn push_list_where(qb: &mut QueryBuilder<Postgres>, project_id: uuid::Uuid, guest_scoped: bool, user_id: uuid::Uuid) {
+    qb.push(" WHERE i.project_id = ").push_bind(project_id).push(
+        " AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'",
+    );
+    if guest_scoped {
+        qb.push(" AND i.created_by_id = ").push_bind(user_id);
+    }
+}
+
+/// F5-style grouped branch of [`list`]: two-phase grouped 200
+/// (`base.py:323-394` via the shared [`grouped`] core). Phase 1 scans
+/// `(id + group keys)` over the full flat scope (same WHERE/ORDER);
+/// phase 2 fetches full [`IssueListRow`]s for the page ids only.
+#[allow(clippy::too_many_arguments)]
+async fn grouped_list_response(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    project_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    guest_scoped: bool,
+    group: &str,
+    sub: Option<&str>,
+    limit: i64,
+    page: i128,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SCAN_SELECT_SQL);
+    scan_qb.push(" FROM issues i LEFT JOIN states s ON s.id = i.state_id");
+    push_list_where(&mut scan_qb, project_id, guest_scoped, user_id);
+    // Flat-path order is fixed `-created_at` (order_by accepted-and-ignored);
+    // the scan keeps that order (+ id tiebreak per the grouped core docs).
+    scan_qb.push(" ORDER BY i.created_at DESC, i.id ASC");
+    let scan: Vec<ScanRow> = scan_qb.build_query_as().fetch_all(pool).await?;
+    let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
+        scan_universe(&scan, group)
+    } else {
+        group_universe(pool, group, slug, Some(project_id)).await?
+    };
+    let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+    };
+    // Phase 2: full rows for the page ids via the flat row query.
+    let page_ids: Vec<uuid::Uuid> = plan
+        .buckets
+        .iter()
+        .flat_map(|b| {
+            if sub.is_some() {
+                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+            } else {
+                b.page_ids.clone()
+            }
+        })
+        .collect();
+    let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
+    if !page_ids.is_empty() {
+        let mut rows_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
+        push_list_where(&mut rows_qb, project_id, guest_scoped, user_id);
+        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
+        let rows: Vec<IssueListRow> = rows_qb.build_query_as().fetch_all(pool).await?;
+        for row in &rows {
+            if let Ok(v) = serde_json::to_value(row) {
+                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                    rows_by_id.insert(id, v);
+                }
+            }
+        }
+    }
+    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    Ok((StatusCode::OK, Json(env)))
+}
+
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -92,11 +177,12 @@ pub async fn list(
     if exists.is_none() {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
     }
-    // 3. Grouped branches out of scope for this fix: Django uses
-    // GroupedOffsetPaginator/SubGroupedOffsetPaginator. Return explicit 400
-    // so FE never gets a shape it can't parse (YAGNI: ungrouped covers list layout).
-    if q.group_by.as_deref().is_some_and(|s| !s.is_empty() && s != "null" && s != "None") {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "group_by not supported in Rust cutover yet"}))));
+    // 3. Group-by validation mirrors the Django view + paginator
+    // (`base.py:323-331`, `paginator.py:690-699`): equal truthy
+    // group_by/sub_group_by → 400 byte-exact, then the allowlist gate
+    // (DRF `{"detail"}` envelope, same as the per_page/cursor errors).
+    if let Some(msg) = archive_group_by_conflict(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": msg}))));
     }
     // 4. Cursor pagination byte-exact with BasePaginator (paginator.py:643-681).
     let per_page = match parse_per_page(q.per_page.as_deref()) {
@@ -108,6 +194,12 @@ pub async fn list(
         Ok(c) => c,
         Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
     };
+    // Group-by allowlist BEFORE the window check: Django validates the
+    // field names while constructing the paginator, which precedes
+    // `get_result` (the offset/window 400).
+    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
+    }
     let limit = per_page.min(1000);
     let window = match page_window(cursor.page, limit) {
         Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
@@ -118,22 +210,35 @@ pub async fn list(
     }
     // 5. Guest scoping: GUEST role on non-view-all project sees own rows only.
     let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
-    // 6. Order expr: fixed `-created_at` path for this slice (same deviation
-    // as documented for rich `issue_filters()` below); `order_by`/`filters`/
-    // `sub_group_by` accepted-and-ignored here.
-    let _ = (&q.order_by, &q.filters, &q.sub_group_by);
-    // 7. Count + page using IssueListRow 26-key SELECT (issue_common.rs:20-47).
+    // 6. Grouped shapes: truthy `group_by` serves the Django
+    // Grouped/SubGroupedOffsetPaginator dict 200 via the shared core
+    // (`base.py:323-394`); a lone `sub_group_by` is ignored (flat path),
+    // exactly like Django (`if group_by:`).
+    if archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+        return grouped_list_response(
+            &st.pool,
+            &slug,
+            project_id,
+            auth.0,
+            guest_scoped,
+            q.group_by.as_deref().unwrap_or(""),
+            q.sub_group_by.as_deref().filter(|s| !s.is_empty()),
+            limit,
+            cursor.page,
+        )
+        .await;
+    }
+    // 7. Order expr: fixed `-created_at` path for this slice (same deviation
+    // as documented for rich `issue_filters()` below); `order_by`/`filters`
+    // accepted-and-ignored here.
+    let _ = (&q.order_by, &q.filters);
+    // 8. Count + page using IssueListRow 26-key SELECT (issue_common.rs:20-47).
     // NOTE: full legacy `issue_filters()` + rich filters ignored in this
     // slice (same deviation as list_detail docs); base visibility only:
     // not deleted, not archived, not draft.
-    let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
-        "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
-    );
-    count_qb.push_bind(project_id);
-    count_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
-    if guest_scoped {
-        count_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
-    }
+    let mut count_qb: QueryBuilder<Postgres> =
+        QueryBuilder::new("SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id");
+    push_list_where(&mut count_qb, project_id, guest_scoped, auth.0);
     let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
     // `BeyondEnd` (unbounded page) slices to `[]` in Django and returns an
     // empty page with a 200 — no page query needed.
@@ -143,14 +248,8 @@ pub async fn list(
     };
     let rows: Vec<IssueListRow> = match offset_opt {
         Some(offset) => {
-            let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(
-                "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = ",
-            );
-            page_qb.push_bind(project_id);
-            page_qb.push(" AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
-            if guest_scoped {
-                page_qb.push(" AND i.created_by_id = ").push_bind(auth.0);
-            }
+            let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
+            push_list_where(&mut page_qb, project_id, guest_scoped, auth.0);
             page_qb.push(" ORDER BY i.created_at DESC LIMIT ").push_bind(limit);
             page_qb.push(" OFFSET ").push_bind(offset);
             page_qb.build_query_as().fetch_all(&st.pool).await?
@@ -158,7 +257,7 @@ pub async fn list(
         None => Vec::new(),
     };
     let results: Vec<Value> = rows.into_iter().map(|r| json!(r)).collect();
-    // 8. 12-key paginate() envelope (paginator.py:728-743), ungrouped.
+    // 9. 12-key paginate() envelope (paginator.py:728-743), ungrouped.
     let envelope = build_ungrouped_envelope(total, limit, cursor.page, results);
     Ok((StatusCode::OK, Json(envelope)))
 }
