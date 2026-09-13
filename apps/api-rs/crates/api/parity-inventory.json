@@ -3639,6 +3639,7 @@
           "rust_handler": "routes::service::detail/patch/destroy",
           "fe_evidence": [
             { "service": "apps/web/core/services/service.service.ts", "method": "updateService" },
+            { "service": "apps/web/core/services/service.service.ts", "method": "updateNodePosition" },
             { "service": "apps/web/core/services/service.service.ts", "method": "deleteService" }
           ],
           "fe_pages": [],

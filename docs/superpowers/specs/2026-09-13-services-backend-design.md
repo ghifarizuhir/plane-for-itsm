@@ -175,8 +175,11 @@ stored.
 | Cycle-creating dependency | 400 | `{"error": "This dependency would create a cycle."}` |
 | Source service missing | 400 | `{"error": "Source service not found."}` |
 | Target service missing | 400 | `{"error": "Target service not found."}` |
-| Service missing (update/delete) | 404 | `{"error": "Service not found"}` |
+| Service missing (retrieve/update) | 404 | `{"error": "Service not found"}` |
+| Service missing (delete/dependency-delete/link-delete) | 204 | idempotent, no error |
 | Service missing (link create) | 404 | `{"error": "Service not found."}` |
+| Issue missing (link create) | 404 | `{"error": "Issue not found."}` |
+| Unknown owner | 400 | `{"error": "Invalid owner_id \"<uuid>\" - object does not exist."}` (existence check only, not membership) |
 | Unknown enum value | 400 | `{"error": "Invalid status"}` / `"Invalid criticality"` / `"Invalid type"` |
 | Not permitted | 403 | `{"error": "You don't have the required permissions."}` (via `deny()`) |
 

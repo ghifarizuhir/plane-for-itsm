@@ -319,7 +319,10 @@ pub async fn detail(
     .await?;
     match row {
         Some(r) => Ok((StatusCode::OK, Json(service_json(&r)))),
-        None => Ok(missing()),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Service not found"})),
+        )),
     }
 }
 
@@ -340,7 +343,10 @@ pub async fn patch(
     .fetch_optional(&st.pool)
     .await?;
     let Some(current) = current else {
-        return Ok(missing());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Service not found"})),
+        ));
     };
 
     let name = body.name.clone().unwrap_or_else(|| current.name.clone());
@@ -706,7 +712,7 @@ pub async fn issues_create(
     .fetch_one(&st.pool)
     .await?;
     if !issue_exists {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found."}))));
     }
     let existing: Option<ServiceIssueRow> = sqlx::query_as(&format!(
         "{SERVICE_ISSUE_SELECT} WHERE si.project_id = $1 AND si.service_id = $2 \
