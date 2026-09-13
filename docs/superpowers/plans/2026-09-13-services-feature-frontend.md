@@ -1706,6 +1706,7 @@ Mirror `apps/web/core/components/modules/module-view-header.tsx` + `modules-list
 - View toggle buttons: List / Grid / Graph, calling `useServiceFilter().updateDisplayFilters(projectId, { layout })`
 - Layout icon component for each option (mirror `apps/web/core/components/modules/module-layout-icon.tsx`)
 - Order-by dropdown (mirror `modules/dropdowns/order-by.tsx`) with options `name`, `-created_at`, `-updated_at`, `criticality`, `status`
+- All layout/order-by/mobile labels via i18n (mirror the module `i18n_label` pattern): `service.layout.{list,grid,graph}`, `service.order_by.{name,created,updated,criticality,status}`, `service.layout_label`, `service.graph.coming_soon`. Add English source, translate to all locales (translate skill), keep `sync:check` green.
 
 - [ ] **Step 2: Mobile header**
 
@@ -1716,7 +1717,7 @@ Mirror `modules/(list)/mobile-header.tsx` / the module mobile header component; 
 In `services-list-view.tsx`, branch on `currentProjectDisplayFilters?.layout`:
 
 - `"list"` → current `ServiceListItem` rows
-- `"grid"` → create `service-card-item.tsx` (mirror `module-card-item.tsx`), render in a responsive grid
+- `"grid"` → create `service-card-item.tsx` (mirror `module-card-item.tsx`), render in a responsive grid. Do NOT nest `<a>` inside the card's link — render repo/docs actions outside the link element (mirror how `ListItem` keeps `actionableItems` outside `ControlLink`).
 - `"graph"` → render `<ServiceGraph />` (Phase 5); until then a placeholder `div` with "Graph coming soon"
 
 - [ ] **Step 4: Manual verification**
