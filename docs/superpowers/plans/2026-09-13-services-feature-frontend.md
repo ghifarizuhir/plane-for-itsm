@@ -1647,6 +1647,8 @@ git commit -m "feat(services): add route and list view (mock-backed)"
 - Create: `apps/web/core/components/services/modal.tsx`
 - Create: `apps/web/core/components/services/delete-service-modal.tsx`
 
+> Post-review fixes (required, landed in `d21279bc8` follow-up): URL fields must validate (allow empty, else valid URL, error rendered like `errors.name`); submit must set `description_html` (derived from `description`); modal must rethrow on error and the form must reset only on success.
+
 - [ ] **Step 1: Form**
 
 Mirror `apps/web/core/components/modules/form.tsx` for structure and the description input (use the same rich-text/description component the module form uses). Fields:
