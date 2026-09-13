@@ -6,3 +6,6 @@
 
 export * from "./services-list-view";
 export * from "./service-list-item";
+export * from "./service-form";
+export * from "./modal";
+export * from "./delete-service-modal";
