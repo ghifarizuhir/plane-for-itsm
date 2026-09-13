@@ -3613,6 +3613,99 @@
         }
       ]
     },
+    "service": {
+      "rust_module": "routes/service.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/services/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::list/create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "getServices" },
+            { "service": "apps/web/core/services/service.service.ts", "method": "createService" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "New feature. Session-auth project-scoped service catalog; GET list, POST create (201)."
+        },
+        {
+          "methods": ["GET", "PATCH", "PUT", "DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/services/:pk/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::detail/patch/destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "updateService" },
+            { "service": "apps/web/core/services/service.service.ts", "method": "deleteService" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "PUT aliases PATCH. PATCH accepts position:{x,y}|null. DELETE soft-cascades dependencies and links, 204 idempotent."
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/service-dependencies/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::dependencies_list/dependencies_create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "getDependencies" },
+            { "service": "apps/web/core/services/service.service.ts", "method": "createDependency" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "DAG edges (from depends on to); self/duplicate/cycle rejected 400 with mock-verbatim messages."
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/service-dependencies/:pk/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::dependency_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "deleteDependency" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "Soft delete, 204 idempotent."
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/service-issues/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::issues_list/issues_create",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "getWorkItemLinks" },
+            { "service": "apps/web/core/services/service.service.ts", "method": "linkWorkItem" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "Bridge to work items; list computes issue_identifier (project.identifier-sequence_id) and issue_name via join."
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/service-issues/:pk/",
+          "django_source": "N/A (new ITSM feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::service::issue_destroy",
+          "fe_evidence": [
+            { "service": "apps/web/core/services/service.service.ts", "method": "unlinkWorkItem" }
+          ],
+          "fe_pages": [],
+          "batch_task": "Services backend",
+          "out_scope": false,
+          "notes": "Soft delete, 204 idempotent."
+        }
+      ]
+    },
     "intake": {
       "rust_module": "routes/intake.rs",
       "endpoints": [

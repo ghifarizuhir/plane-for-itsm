@@ -653,6 +653,37 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
+        // Services (ITSM catalog + dependency DAG + work-item links).
+        // Session auth; project-scoped. GET = any active member (incl.
+        // guest), writes = project ADMIN/MEMBER. Bodies/error strings follow
+        // the frontend mock contract (see services backend design spec).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/services/",
+            get(routes::service::list).post(routes::service::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/services/:pk/",
+            get(routes::service::detail)
+                .put(routes::service::patch)
+                .patch(routes::service::patch)
+                .delete(routes::service::destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/service-dependencies/",
+            get(routes::service::dependencies_list).post(routes::service::dependencies_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/service-dependencies/:pk/",
+            delete(routes::service::dependency_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/service-issues/",
+            get(routes::service::issues_list).post(routes::service::issues_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/service-issues/:pk/",
+            delete(routes::service::issue_destroy),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 unconditional.
