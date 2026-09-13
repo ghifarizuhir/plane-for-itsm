@@ -108,16 +108,35 @@ export function ServiceForm(props: Props) {
 
   const { t } = useTranslation();
 
-  const handleCreateUpdateService = async (formData: Partial<IService>) => {
-    await handleFormSubmit({
-      ...formData,
-      repository_url: formData.repository_url || null,
-      documentation_url: formData.documentation_url || null,
-    });
+  const validateUrl = (value: string | null | undefined) => {
+    if (!value) return true;
+    const canParse = (URL as unknown as { canParse?: (url: string) => boolean }).canParse;
+    if (typeof canParse === "function") {
+      return canParse(value) ? true : t("common.url_is_invalid");
+    }
+    try {
+      void new URL(value);
+      return true;
+    } catch {
+      return t("common.url_is_invalid");
+    }
+  };
 
-    reset({
-      ...defaultValues,
-    });
+  const handleCreateUpdateService = async (formData: Partial<IService>) => {
+    const description = formData.description ?? "";
+    try {
+      await handleFormSubmit({
+        ...formData,
+        description_html: description ? `<p>${description}</p>` : "",
+        repository_url: formData.repository_url || null,
+        documentation_url: formData.documentation_url || null,
+      });
+      reset({
+        ...defaultValues,
+      });
+    } catch {
+      // The modal already toasted the error; keep user input so they can retry.
+    }
   };
 
   useEffect(() => {
@@ -215,6 +234,7 @@ export function ServiceForm(props: Props) {
               <Controller
                 name="repository_url"
                 control={control}
+                rules={{ validate: validateUrl }}
                 render={({ field: { value, onChange } }) => (
                   <UIKitInput
                     id="repository_url"
@@ -227,6 +247,7 @@ export function ServiceForm(props: Props) {
                   />
                 )}
               />
+              <span className="text-11 text-danger-primary">{errors?.repository_url?.message}</span>
             </div>
             <div className="space-y-1">
               <label htmlFor="documentation_url" className="text-11 font-medium text-secondary">
@@ -235,6 +256,7 @@ export function ServiceForm(props: Props) {
               <Controller
                 name="documentation_url"
                 control={control}
+                rules={{ validate: validateUrl }}
                 render={({ field: { value, onChange } }) => (
                   <UIKitInput
                     id="documentation_url"
@@ -247,6 +269,7 @@ export function ServiceForm(props: Props) {
                   />
                 )}
               />
+              <span className="text-11 text-danger-primary">{errors?.documentation_url?.message}</span>
             </div>
           </div>
         </div>

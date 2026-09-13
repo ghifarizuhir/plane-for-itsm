@@ -54,6 +54,7 @@ export const CreateUpdateServiceModal = observer(function CreateUpdateServiceMod
         title: "Error!",
         message: apiError?.detail ?? apiError?.error ?? "Service could not be created. Please try again.",
       });
+      throw err;
     }
   };
 
@@ -75,6 +76,7 @@ export const CreateUpdateServiceModal = observer(function CreateUpdateServiceMod
         title: "Error!",
         message: apiError?.detail ?? apiError?.error ?? "Service could not be updated. Please try again.",
       });
+      throw err;
     }
   };
 
