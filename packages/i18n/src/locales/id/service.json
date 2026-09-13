@@ -5,7 +5,11 @@
     "create": "Buat layanan",
     "empty_state": {
       "title": "Belum ada layanan",
-      "description": "Tambahkan layanan untuk mulai memetakan dependensi."
+      "description": "Tambahkan layanan untuk mulai memetakan dependensi.",
+      "no_matches": {
+        "title": "Tidak ada layanan yang cocok",
+        "description": "Tidak ada layanan yang sesuai dengan filter saat ini. Sesuaikan atau hapus filter."
+      }
     },
     "fields": {
       "name": "Nama",
@@ -34,6 +38,25 @@
       "updated": "Tanggal diperbarui",
       "criticality": "Kritikalitas",
       "status": "Status"
+    },
+    "status_values": {
+      "active": "Aktif",
+      "planned": "Terencana",
+      "maintenance": "Dalam pemeliharaan",
+      "deprecated": "Tidak digunakan lagi",
+      "retired": "Dihentikan"
+    },
+    "criticality_values": {
+      "critical": "Kritis",
+      "high": "Tinggi",
+      "medium": "Sedang",
+      "low": "Rendah"
+    },
+    "type_values": {
+      "internal": "Internal",
+      "external": "Eksternal",
+      "infrastructure": "Infrastruktur",
+      "third_party": "Pihak ketiga"
     },
     "graph": {
       "re_layout": "Tata ulang",

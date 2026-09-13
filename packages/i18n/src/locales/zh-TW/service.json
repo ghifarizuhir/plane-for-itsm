@@ -5,7 +5,11 @@
     "create": "建立服務",
     "empty_state": {
       "title": "尚無服務",
-      "description": "新增服務以開始梳理相依性。"
+      "description": "新增服務以開始梳理相依性。",
+      "no_matches": {
+        "title": "沒有相符的服務",
+        "description": "沒有服務符合目前的篩選條件。請調整或清除篩選條件。"
+      }
     },
     "fields": {
       "name": "名稱",
@@ -34,6 +38,25 @@
       "updated": "更新日期",
       "criticality": "關鍵性",
       "status": "狀態"
+    },
+    "status_values": {
+      "active": "啟用",
+      "planned": "計劃中",
+      "maintenance": "維護中",
+      "deprecated": "已棄用",
+      "retired": "已停用"
+    },
+    "criticality_values": {
+      "critical": "嚴重",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "type_values": {
+      "internal": "內部",
+      "external": "外部",
+      "infrastructure": "基礎設施",
+      "third_party": "第三方"
     },
     "graph": {
       "re_layout": "重新排列",

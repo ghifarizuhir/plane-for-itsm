@@ -24,11 +24,12 @@ export const ServicesListView = observer(function ServicesListView() {
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getFilteredServiceIds, loader } = useService();
+  const { getProjectServiceIds, getFilteredServiceIds, loader } = useService();
   const { currentProjectDisplayFilters } = useServiceFilter();
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  const projectServiceIds = projectId ? getProjectServiceIds(projectId.toString()) : null;
   const serviceIds = projectId ? getFilteredServiceIds(projectId.toString()) : null;
   const layout = currentProjectDisplayFilters?.layout ?? "list";
 
@@ -37,15 +38,20 @@ export const ServicesListView = observer(function ServicesListView() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      {loader || serviceIds === null ? (
+      {loader || projectServiceIds === null || serviceIds === null ? (
         <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>
-      ) : serviceIds.length === 0 ? (
+      ) : projectServiceIds.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.description")}</p>
           <Button variant="primary" size="sm" onClick={openCreateModal}>
             {t("service.add")}
           </Button>
+        </div>
+      ) : serviceIds.length === 0 ? (
+        <div className="flex h-full flex-col items-center justify-center gap-1 p-6">
+          <p className="text-sm font-medium text-primary">{t("service.empty_state.no_matches.title")}</p>
+          <p className="text-xs text-secondary">{t("service.empty_state.no_matches.description")}</p>
         </div>
       ) : layout === "graph" ? (
         <div className="text-sm flex h-full items-center justify-center p-6 text-secondary">

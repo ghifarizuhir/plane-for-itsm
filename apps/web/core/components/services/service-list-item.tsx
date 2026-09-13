@@ -30,8 +30,6 @@ const STATUS_DOT_CLASS: Record<string, string> = {
   retired: "bg-gray-500",
 };
 
-const formatLabel = (value: string) => value.replace(/_/g, " ");
-
 export const ServiceListItem = observer(function ServiceListItem(props: Props) {
   const { serviceId } = props;
   // refs
@@ -62,13 +60,13 @@ export const ServiceListItem = observer(function ServiceListItem(props: Props) {
       appendTitleElement={
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-secondary capitalize">
-            {formatLabel(serviceDetails.status)}
+            {t(`service.status_values.${serviceDetails.status}`)}
           </span>
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-secondary capitalize">
-            {formatLabel(serviceDetails.criticality)}
+            {t(`service.criticality_values.${serviceDetails.criticality}`)}
           </span>
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-tertiary capitalize">
-            {formatLabel(serviceDetails.type)}
+            {t(`service.type_values.${serviceDetails.type}`)}
           </span>
         </div>
       }

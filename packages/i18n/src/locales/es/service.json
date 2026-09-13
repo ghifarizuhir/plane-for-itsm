@@ -5,7 +5,11 @@
     "create": "Crear servicio",
     "empty_state": {
       "title": "Sin servicios aún",
-      "description": "Agregue un servicio para empezar a mapear las dependencias."
+      "description": "Agregue un servicio para empezar a mapear las dependencias.",
+      "no_matches": {
+        "title": "Sin servicios coincidentes",
+        "description": "Ningún servicio coincide con los filtros actuales. Ajuste o borre los filtros."
+      }
     },
     "fields": {
       "name": "Nombre",
@@ -34,6 +38,25 @@
       "updated": "Fecha de actualización",
       "criticality": "Criticidad",
       "status": "Estado"
+    },
+    "status_values": {
+      "active": "Activo",
+      "planned": "Planificado",
+      "maintenance": "En mantenimiento",
+      "deprecated": "Obsoleto",
+      "retired": "Retirado"
+    },
+    "criticality_values": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "type_values": {
+      "internal": "Interno",
+      "external": "Externo",
+      "infrastructure": "Infraestructura",
+      "third_party": "Tercero"
     },
     "graph": {
       "re_layout": "Reorganizar",

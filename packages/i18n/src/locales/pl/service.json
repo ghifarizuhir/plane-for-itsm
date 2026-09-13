@@ -5,7 +5,11 @@
     "create": "Utwórz usługę",
     "empty_state": {
       "title": "Brak usług",
-      "description": "Dodaj usługę, aby rozpocząć mapowanie zależności."
+      "description": "Dodaj usługę, aby rozpocząć mapowanie zależności.",
+      "no_matches": {
+        "title": "Brak pasujących usług",
+        "description": "Żadna usługa nie odpowiada bieżącym filtrom. Dostosuj lub wyczyść filtry."
+      }
     },
     "fields": {
       "name": "Nazwa",
@@ -34,6 +38,25 @@
       "updated": "Data aktualizacji",
       "criticality": "Krytyczność",
       "status": "Status"
+    },
+    "status_values": {
+      "active": "Aktywny",
+      "planned": "Planowany",
+      "maintenance": "W konserwacji",
+      "deprecated": "Przestarzały",
+      "retired": "Wycofany"
+    },
+    "criticality_values": {
+      "critical": "Krytyczny",
+      "high": "Wysoki",
+      "medium": "Średni",
+      "low": "Niski"
+    },
+    "type_values": {
+      "internal": "Wewnętrzny",
+      "external": "Zewnętrzny",
+      "infrastructure": "Infrastruktura",
+      "third_party": "Strona trzecia"
     },
     "graph": {
       "re_layout": "Rozmieść ponownie",

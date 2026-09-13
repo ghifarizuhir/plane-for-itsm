@@ -5,7 +5,11 @@
     "create": "Tạo dịch vụ",
     "empty_state": {
       "title": "Chưa có dịch vụ",
-      "description": "Thêm dịch vụ để bắt đầu lập sơ đồ các phụ thuộc."
+      "description": "Thêm dịch vụ để bắt đầu lập sơ đồ các phụ thuộc.",
+      "no_matches": {
+        "title": "Không có dịch vụ phù hợp",
+        "description": "Không có dịch vụ nào khớp với bộ lọc hiện tại. Hãy điều chỉnh hoặc xóa bộ lọc."
+      }
     },
     "fields": {
       "name": "Tên",
@@ -34,6 +38,25 @@
       "updated": "Ngày cập nhật",
       "criticality": "Mức độ quan trọng",
       "status": "Trạng thái"
+    },
+    "status_values": {
+      "active": "Đang hoạt động",
+      "planned": "Đã lên kế hoạch",
+      "maintenance": "Đang bảo trì",
+      "deprecated": "Không còn dùng",
+      "retired": "Đã ngừng"
+    },
+    "criticality_values": {
+      "critical": "Nghiêm trọng",
+      "high": "Cao",
+      "medium": "Trung bình",
+      "low": "Thấp"
+    },
+    "type_values": {
+      "internal": "Nội bộ",
+      "external": "Bên ngoài",
+      "infrastructure": "Hạ tầng",
+      "third_party": "Bên thứ ba"
     },
     "graph": {
       "re_layout": "Bố trí lại",

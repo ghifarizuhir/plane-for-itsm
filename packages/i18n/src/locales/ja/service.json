@@ -5,7 +5,11 @@
     "create": "サービスを作成",
     "empty_state": {
       "title": "まだサービスがありません",
-      "description": "サービスを追加して依存関係のマッピングを開始しましょう。"
+      "description": "サービスを追加して依存関係のマッピングを開始しましょう。",
+      "no_matches": {
+        "title": "一致するサービスがありません",
+        "description": "現在のフィルターに一致するサービスはありません。フィルターを調整またはクリアしてください。"
+      }
     },
     "fields": {
       "name": "名前",
@@ -34,6 +38,25 @@
       "updated": "更新日",
       "criticality": "重要度",
       "status": "ステータス"
+    },
+    "status_values": {
+      "active": "アクティブ",
+      "planned": "計画中",
+      "maintenance": "メンテナンス中",
+      "deprecated": "非推奨",
+      "retired": "廃止済み"
+    },
+    "criticality_values": {
+      "critical": "重大",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "type_values": {
+      "internal": "内部",
+      "external": "外部",
+      "infrastructure": "インフラストラクチャ",
+      "third_party": "サードパーティ"
     },
     "graph": {
       "re_layout": "再レイアウト",

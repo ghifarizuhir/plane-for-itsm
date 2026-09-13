@@ -5,7 +5,11 @@
     "create": "Create service",
     "empty_state": {
       "title": "No services yet",
-      "description": "Add a service to start mapping dependencies."
+      "description": "Add a service to start mapping dependencies.",
+      "no_matches": {
+        "title": "No matching services",
+        "description": "No services match the current filters. Try adjusting or clearing them."
+      }
     },
     "fields": {
       "name": "Name",
@@ -34,6 +38,25 @@
       "updated": "Updated date",
       "criticality": "Criticality",
       "status": "Status"
+    },
+    "status_values": {
+      "active": "Active",
+      "planned": "Planned",
+      "maintenance": "Maintenance",
+      "deprecated": "Deprecated",
+      "retired": "Retired"
+    },
+    "criticality_values": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "type_values": {
+      "internal": "Internal",
+      "external": "External",
+      "infrastructure": "Infrastructure",
+      "third_party": "Third party"
     },
     "graph": {
       "re_layout": "Re-layout",

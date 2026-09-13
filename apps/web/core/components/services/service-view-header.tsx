@@ -4,22 +4,26 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { ServerOutline } from "@makeplane/propel/icons";
+import { FilterOutline, ServerOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
+import type { TServiceFilters } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 // helpers
-import { cn } from "@plane/utils";
+import { cn, calculateTotalFilters } from "@plane/utils";
 // components
+import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { ServiceOrderByDropdown } from "./dropdowns/order-by";
+import { ServiceFiltersSelection } from "./filters";
+import { ServiceSearchInput } from "./search-input";
 import { CreateUpdateServiceModal } from "./modal";
 import { SERVICE_VIEW_LAYOUTS, ServiceLayoutIcon } from "./service-layout-icon";
 // hooks
@@ -38,12 +42,40 @@ export const ServiceViewHeader = observer(function ServiceViewHeader() {
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { loader } = useProject();
-  const { currentProjectDisplayFilters: displayFilters, updateDisplayFilters } = useServiceFilter();
+  const {
+    currentProjectDisplayFilters: displayFilters,
+    currentProjectFilters: filters,
+    updateDisplayFilters,
+    updateFilters,
+  } = useServiceFilter();
 
   const { t } = useTranslation();
 
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // handlers
+  const handleFilters = useCallback(
+    (key: keyof TServiceFilters, value: string | string[]) => {
+      if (!projectId) return;
+      const newValues = [...(filters?.[key] ?? [])];
+
+      if (Array.isArray(value))
+        value.forEach((val) => {
+          if (!newValues.includes(val as never)) newValues.push(val as never);
+          else newValues.splice(newValues.indexOf(val as never), 1);
+        });
+      else {
+        if (filters?.[key]?.includes(value as never)) newValues.splice(newValues.indexOf(value as never), 1);
+        else newValues.push(value as never);
+      }
+
+      updateFilters(projectId.toString(), { [key]: newValues });
+    },
+    [filters, projectId, updateFilters]
+  );
+
+  const isFiltersApplied = calculateTotalFilters(filters ?? {}) !== 0;
 
   // auth
   const canUserCreateService = allowPermissions(
@@ -73,6 +105,7 @@ export const ServiceViewHeader = observer(function ServiceViewHeader() {
       </Header.LeftItem>
       <Header.RightItem>
         <div className="hidden h-full items-center gap-2 self-end sm:flex">
+          <ServiceSearchInput />
           <ServiceOrderByDropdown
             value={displayFilters?.order_by}
             onChange={(val) => {
@@ -82,6 +115,14 @@ export const ServiceViewHeader = observer(function ServiceViewHeader() {
               });
             }}
           />
+          <FiltersDropdown
+            icon={<FilterOutline className="h-3 w-3" />}
+            title={t("common.filters")}
+            placement="bottom-end"
+            isFiltersApplied={isFiltersApplied}
+          >
+            <ServiceFiltersSelection filters={filters ?? {}} handleFiltersUpdate={handleFilters} />
+          </FiltersDropdown>
           <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">
             {SERVICE_VIEW_LAYOUTS.map((layout) => (
               <Tooltip key={layout.key} label={t(layout.i18n_label)} disabled={isMobile}>

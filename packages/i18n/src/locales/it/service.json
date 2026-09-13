@@ -5,7 +5,11 @@
     "create": "Crea servizio",
     "empty_state": {
       "title": "Ancora nessun servizio",
-      "description": "Aggiungi un servizio per iniziare a mappare le dipendenze."
+      "description": "Aggiungi un servizio per iniziare a mappare le dipendenze.",
+      "no_matches": {
+        "title": "Nessun servizio corrispondente",
+        "description": "Nessun servizio corrisponde ai filtri attuali. Modifica o cancella i filtri."
+      }
     },
     "fields": {
       "name": "Nome",
@@ -34,6 +38,25 @@
       "updated": "Data di aggiornamento",
       "criticality": "Criticità",
       "status": "Stato"
+    },
+    "status_values": {
+      "active": "Attivo",
+      "planned": "Pianificato",
+      "maintenance": "In manutenzione",
+      "deprecated": "Deprecato",
+      "retired": "Ritirato"
+    },
+    "criticality_values": {
+      "critical": "Critica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Bassa"
+    },
+    "type_values": {
+      "internal": "Interno",
+      "external": "Esterno",
+      "infrastructure": "Infrastruttura",
+      "third_party": "Terze parti"
     },
     "graph": {
       "re_layout": "Riorganizza",

@@ -29,8 +29,6 @@ const STATUS_DOT_CLASS: Record<string, string> = {
   retired: "bg-gray-500",
 };
 
-const formatLabel = (value: string) => value.replace(/_/g, " ");
-
 export const ServiceCardItem = observer(function ServiceCardItem(props: Props) {
   const { serviceId } = props;
   // router
@@ -69,13 +67,13 @@ export const ServiceCardItem = observer(function ServiceCardItem(props: Props) {
         )}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-secondary capitalize">
-            {formatLabel(serviceDetails.status)}
+            {t(`service.status_values.${serviceDetails.status}`)}
           </span>
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-secondary capitalize">
-            {formatLabel(serviceDetails.criticality)}
+            {t(`service.criticality_values.${serviceDetails.criticality}`)}
           </span>
           <span className="rounded-sm border border-subtle px-1.5 py-0.5 text-11 text-tertiary capitalize">
-            {formatLabel(serviceDetails.type)}
+            {t(`service.type_values.${serviceDetails.type}`)}
           </span>
         </div>
       </Link>

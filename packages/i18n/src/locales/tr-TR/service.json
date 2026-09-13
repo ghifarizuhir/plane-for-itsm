@@ -5,7 +5,11 @@
     "create": "Hizmet oluştur",
     "empty_state": {
       "title": "Henüz hizmet yok",
-      "description": "Bağımlılıkları eşlemeye başlamak için bir hizmet ekleyin."
+      "description": "Bağımlılıkları eşlemeye başlamak için bir hizmet ekleyin.",
+      "no_matches": {
+        "title": "Eşleşen hizmet bulunamadı",
+        "description": "Geçerli filtrelerle eşleşen hizmet yok. Filtreleri değiştirin veya temizleyin."
+      }
     },
     "fields": {
       "name": "Ad",
@@ -34,6 +38,25 @@
       "updated": "Güncelleme tarihi",
       "criticality": "Kritiklik",
       "status": "Durum"
+    },
+    "status_values": {
+      "active": "Aktif",
+      "planned": "Planlanan",
+      "maintenance": "Bakımda",
+      "deprecated": "Kullanımdan kaldırılan",
+      "retired": "Kaldırılan"
+    },
+    "criticality_values": {
+      "critical": "Kritik",
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük"
+    },
+    "type_values": {
+      "internal": "Dahili",
+      "external": "Harici",
+      "infrastructure": "Altyapı",
+      "third_party": "Üçüncü taraf"
     },
     "graph": {
       "re_layout": "Yeniden düzenle",

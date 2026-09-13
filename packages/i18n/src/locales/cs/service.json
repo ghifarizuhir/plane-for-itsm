@@ -5,7 +5,11 @@
     "create": "Vytvořit službu",
     "empty_state": {
       "title": "Zatím žádné služby",
-      "description": "Přidejte službu a začněte mapovat závislosti."
+      "description": "Přidejte službu a začněte mapovat závislosti.",
+      "no_matches": {
+        "title": "Žádné odpovídající služby",
+        "description": "Žádná služba neodpovídá aktuálním filtrům. Upravte nebo vymažte filtry."
+      }
     },
     "fields": {
       "name": "Název",
@@ -34,6 +38,25 @@
       "updated": "Datum aktualizace",
       "criticality": "Kritičnost",
       "status": "Stav"
+    },
+    "status_values": {
+      "active": "Aktivní",
+      "planned": "Plánovaný",
+      "maintenance": "V údržbě",
+      "deprecated": "Zastaralý",
+      "retired": "Vyřazený"
+    },
+    "criticality_values": {
+      "critical": "Kritická",
+      "high": "Vysoká",
+      "medium": "Střední",
+      "low": "Nízká"
+    },
+    "type_values": {
+      "internal": "Interní",
+      "external": "Externí",
+      "infrastructure": "Infrastruktura",
+      "third_party": "Třetí strana"
     },
     "graph": {
       "re_layout": "Přeuspořádat",

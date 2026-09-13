@@ -5,7 +5,11 @@
     "create": "Service erstellen",
     "empty_state": {
       "title": "Noch keine Services",
-      "description": "Fügen Sie einen Service hinzu, um mit der Zuordnung von Abhängigkeiten zu beginnen."
+      "description": "Fügen Sie einen Service hinzu, um mit der Zuordnung von Abhängigkeiten zu beginnen.",
+      "no_matches": {
+        "title": "Keine passenden Services",
+        "description": "Keine Services entsprechen den aktuellen Filtern. Passen Sie die Filter an oder entfernen Sie sie."
+      }
     },
     "fields": {
       "name": "Name",
@@ -34,6 +38,25 @@
       "updated": "Aktualisierungsdatum",
       "criticality": "Kritikalität",
       "status": "Status"
+    },
+    "status_values": {
+      "active": "Aktiv",
+      "planned": "Geplant",
+      "maintenance": "Wartung",
+      "deprecated": "Veraltet",
+      "retired": "Stillgelegt"
+    },
+    "criticality_values": {
+      "critical": "Kritisch",
+      "high": "Hoch",
+      "medium": "Mittel",
+      "low": "Niedrig"
+    },
+    "type_values": {
+      "internal": "Intern",
+      "external": "Extern",
+      "infrastructure": "Infrastruktur",
+      "third_party": "Drittanbieter"
     },
     "graph": {
       "re_layout": "Neu anordnen",

@@ -5,7 +5,11 @@
     "create": "Creează serviciu",
     "empty_state": {
       "title": "Niciun serviciu încă",
-      "description": "Adaugă un serviciu pentru a începe maparea dependențelor."
+      "description": "Adaugă un serviciu pentru a începe maparea dependențelor.",
+      "no_matches": {
+        "title": "Niciun serviciu potrivit",
+        "description": "Niciun serviciu nu corespunde filtrelor actuale. Ajustați sau ștergeți filtrele."
+      }
     },
     "fields": {
       "name": "Nume",
@@ -34,6 +38,25 @@
       "updated": "Dată actualizare",
       "criticality": "Criticitate",
       "status": "Status"
+    },
+    "status_values": {
+      "active": "Activ",
+      "planned": "Planificat",
+      "maintenance": "În mentenanță",
+      "deprecated": "Deprecat",
+      "retired": "Retras"
+    },
+    "criticality_values": {
+      "critical": "Critică",
+      "high": "Ridicată",
+      "medium": "Medie",
+      "low": "Scăzută"
+    },
+    "type_values": {
+      "internal": "Intern",
+      "external": "Extern",
+      "infrastructure": "Infrastructură",
+      "third_party": "Terță parte"
     },
     "graph": {
       "re_layout": "Rearanjează",

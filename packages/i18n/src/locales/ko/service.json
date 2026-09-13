@@ -5,7 +5,11 @@
     "create": "서비스 생성",
     "empty_state": {
       "title": "아직 서비스가 없습니다",
-      "description": "종속성 매핑을 시작하려면 서비스를 추가하세요."
+      "description": "종속성 매핑을 시작하려면 서비스를 추가하세요.",
+      "no_matches": {
+        "title": "일치하는 서비스가 없습니다",
+        "description": "현재 필터와 일치하는 서비스가 없습니다. 필터를 조정하거나 지우세요."
+      }
     },
     "fields": {
       "name": "이름",
@@ -34,6 +38,25 @@
       "updated": "업데이트일",
       "criticality": "중요도",
       "status": "상태"
+    },
+    "status_values": {
+      "active": "활성",
+      "planned": "계획됨",
+      "maintenance": "유지 관리 중",
+      "deprecated": "지원 중단",
+      "retired": "폐기됨"
+    },
+    "criticality_values": {
+      "critical": "심각",
+      "high": "높음",
+      "medium": "보통",
+      "low": "낮음"
+    },
+    "type_values": {
+      "internal": "내부",
+      "external": "외부",
+      "infrastructure": "인프라스트럭처",
+      "third_party": "서드파티"
     },
     "graph": {
       "re_layout": "다시 배치",

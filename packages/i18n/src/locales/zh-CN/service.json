@@ -5,7 +5,11 @@
     "create": "创建服务",
     "empty_state": {
       "title": "暂无服务",
-      "description": "添加服务以开始梳理依赖关系。"
+      "description": "添加服务以开始梳理依赖关系。",
+      "no_matches": {
+        "title": "没有匹配的服务",
+        "description": "没有服务符合当前筛选条件。请调整或清除筛选条件。"
+      }
     },
     "fields": {
       "name": "名称",
@@ -34,6 +38,25 @@
       "updated": "更新日期",
       "criticality": "关键性",
       "status": "状态"
+    },
+    "status_values": {
+      "active": "启用",
+      "planned": "计划中",
+      "maintenance": "维护中",
+      "deprecated": "已弃用",
+      "retired": "已停用"
+    },
+    "criticality_values": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "type_values": {
+      "internal": "内部",
+      "external": "外部",
+      "infrastructure": "基础设施",
+      "third_party": "第三方"
     },
     "graph": {
       "re_layout": "重新排布",
