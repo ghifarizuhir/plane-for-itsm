@@ -178,7 +178,7 @@ stored.
 | Service missing (update/delete) | 404 | `{"error": "Service not found"}` |
 | Service missing (link create) | 404 | `{"error": "Service not found."}` |
 | Unknown enum value | 400 | `{"error": "Invalid status"}` / `"Invalid criticality"` / `"Invalid type"` |
-| Not permitted | 403 | `{"detail": "You do not have permission to perform this action."}` |
+| Not permitted | 403 | `{"error": "You don't have the required permissions."}` (via `deny()`) |
 
 Cycle detection runs server-side with a recursive CTE: adding `from → to` is rejected when
 `to` can already reach `from` (including `from == to`).
