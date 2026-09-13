@@ -256,6 +256,16 @@ pub async fn create(
     if dup {
         return Ok(bad_request("A service with this name already exists."));
     }
+    let owner_id = body.owner_id;
+    if let Some(owner) = owner_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(owner)
+            .fetch_one(&st.pool)
+            .await?;
+        if !exists {
+            return Ok(bad_request(format!("Invalid owner_id \"{owner}\" - object does not exist.")));
+        }
+    }
     let max_order: f64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(sort_order), 0) FROM services WHERE project_id = $1 AND deleted_at IS NULL",
     )
@@ -277,7 +287,7 @@ pub async fn create(
     .bind(&status)
     .bind(&criticality)
     .bind(&service_type)
-    .bind(body.owner_id)
+    .bind(owner_id)
     .bind(body.repository_url.clone())
     .bind(body.documentation_url.clone())
     .bind(next_sort_order(max_order))
@@ -377,6 +387,15 @@ pub async fn patch(
         Some(v) => v,
         None => current.owner_id,
     };
+    if let Some(owner) = owner_id {
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(owner)
+            .fetch_one(&st.pool)
+            .await?;
+        if !exists {
+            return Ok(bad_request(format!("Invalid owner_id \"{owner}\" - object does not exist.")));
+        }
+    }
     let repository_url = match body.repository_url {
         Some(v) => v,
         None => current.repository_url.clone(),
@@ -412,11 +431,14 @@ pub async fn patch(
     .execute(&st.pool)
     .await?;
 
-    let row: ServiceRow = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
+    let row: Option<ServiceRow> = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
         .bind(pk)
-        .fetch_one(&st.pool)
+        .fetch_optional(&st.pool)
         .await?;
-    Ok((StatusCode::OK, Json(service_json(&row))))
+    match row {
+        Some(r) => Ok((StatusCode::OK, Json(service_json(&r)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn destroy(
