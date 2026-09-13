@@ -1042,7 +1042,7 @@ git commit -m "feat(services): add service filter store"
  */
 
 import { set, sortBy } from "lodash-es";
-import { action, computed, observable, makeObservable, runInAction } from "mobx";
+import { action, observable, makeObservable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
 import type { IService, IServiceDependency, TServiceGraphData, TServiceWorkItemLink } from "@plane/types";
@@ -1332,17 +1332,18 @@ git add apps/web/core/store/service.store.ts
 git commit -m "feat(services): add services store over mock service"
 ```
 
-### Task 8: Register stores + hooks
+### Task 8: Service hooks (root registration already landed in Task 7)
 
 **Files:**
 
-- Modify: `apps/web/core/store/root.store.ts`
 - Create: `apps/web/core/hooks/store/use-service.ts`
 - Create: `apps/web/core/hooks/store/use-service-filter.ts`
 
-- [ ] **Step 1: Register in `root.store.ts`**
+> Note: the `root.store.ts` registration (imports, fields, constructor + `resetOnSignOut` instantiations) was applied in Task 7 (commit `baccda63d`) to keep the store typecheck self-contained.
 
-Add imports next to the module store imports:
+- [ ] **Step 1: Verify root registration is present**
+
+Confirm `apps/web/core/store/root.store.ts` contains the `service`/`serviceFilter` imports, fields, and instantiations. If any piece is missing, add it per the original snippet below before proceeding.
 
 ```ts
 import type { IServiceStore } from "./service.store";
@@ -1417,8 +1418,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/web/core/store/root.store.ts apps/web/core/hooks/store/use-service.ts apps/web/core/hooks/store/use-service-filter.ts
-git commit -m "feat(services): register stores and hooks"
+git add apps/web/core/hooks/store/use-service.ts apps/web/core/hooks/store/use-service-filter.ts
+git commit -m "feat(services): add service store hooks"
 ```
 
 ### Task 9: Add `service_view` to project types
