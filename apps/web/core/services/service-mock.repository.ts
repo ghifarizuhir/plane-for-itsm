@@ -35,8 +35,14 @@ export const createMemoryStorage = (): TStorageLike => {
   };
 };
 
-export const createDefaultStorage = (): TStorageLike =>
-  typeof window !== "undefined" && window.localStorage ? window.localStorage : createMemoryStorage();
+export const createDefaultStorage = (): TStorageLike => {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  } catch {
+    // blocked storage (private mode) falls through to memory
+  }
+  return createMemoryStorage();
+};
 
 const nowIso = () => new Date().toISOString();
 
@@ -133,9 +139,9 @@ export class ServiceMockRepository {
       if (!parsed || parsed.version !== 1) return EMPTY_DATA();
       return {
         version: 1,
-        services: parsed.services ?? [],
-        dependencies: parsed.dependencies ?? [],
-        links: parsed.links ?? [],
+        services: Array.isArray(parsed.services) ? parsed.services : [],
+        dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : [],
+        links: Array.isArray(parsed.links) ? parsed.links : [],
       };
     } catch {
       return EMPTY_DATA();
@@ -149,8 +155,8 @@ export class ServiceMockRepository {
 
   seedIfEmpty(workspaceSlug: string, workspaceId: string, projectId: string): TServiceStoreData {
     const key = serviceStorageKey(workspaceSlug, projectId);
-    const existing = this.read(key);
-    if (existing.services.length > 0) return existing;
+    // Key presence (not array length) decides seeding, so an emptied store stays empty.
+    if (this.storage.getItem(key) !== null) return this.read(key);
 
     const services = seedServices(workspaceId, projectId);
     const byName = (name: string) => services.find((s) => s.name === name)?.id as string;
@@ -221,7 +227,7 @@ export class ServiceMockRepository {
       repository_url: data.repository_url ?? null,
       documentation_url: data.documentation_url ?? null,
       position: null,
-      sort_order: stored.services.length * 65535,
+      sort_order: Math.max(0, ...stored.services.map((s) => s.sort_order)) + 65535,
       created_at: nowIso(),
       updated_at: nowIso(),
       created_by: data.created_by ?? null,
@@ -241,7 +247,13 @@ export class ServiceMockRepository {
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
     const current = stored.services.find((s) => s.id === serviceId);
     if (!current) return null;
-    const updated: IService = { ...current, ...data, updated_at: nowIso() };
+    // Never allow identity/timestamp fields to be overwritten.
+    const safe: Partial<IService> = { ...data };
+    delete safe.id;
+    delete safe.workspace_id;
+    delete safe.project_id;
+    delete safe.created_at;
+    const updated: IService = { ...current, ...safe, updated_at: nowIso() };
     this.write(serviceStorageKey(workspaceSlug, projectId), {
       ...stored,
       services: stored.services.map((s) => (s.id === serviceId ? updated : s)),
@@ -267,6 +279,8 @@ export class ServiceMockRepository {
     toServiceId: string
   ): IServiceDependency {
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
+    if (!stored.services.some((s) => s.id === fromServiceId)) throw new Error("Source service not found.");
+    if (!stored.services.some((s) => s.id === toServiceId)) throw new Error("Target service not found.");
     const error = validateDependency(stored.dependencies, fromServiceId, toServiceId);
     if (error) throw new Error(error);
     const dependency: IServiceDependency = {
@@ -300,6 +314,7 @@ export class ServiceMockRepository {
     issue: { id: string; identifier?: string; name?: string }
   ): TServiceWorkItemLink {
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
+    if (!stored.services.some((s) => s.id === serviceId)) throw new Error("Service not found.");
     const existing = stored.links.find((l) => l.service_id === serviceId && l.issue_id === issue.id);
     if (existing) return existing;
     const link: TServiceWorkItemLink = {
