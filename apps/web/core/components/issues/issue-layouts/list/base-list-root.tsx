@@ -5,7 +5,7 @@
  */
 
 import type { FC } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
@@ -88,13 +88,32 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
 
+  const isAnyInitLoading = issues?.loader ? Object.values(issues.loader).some((l) => l === "init-loader") : false;
+
   const hasHydratedIssues =
-    !!groupedIssueIds && Object.keys(groupedIssueIds).length > 0 && issues?.getIssueLoader() !== "init-loader";
+    !!groupedIssueIds &&
+    Object.keys(groupedIssueIds).length > 0 &&
+    issues?.getIssueLoader() !== "init-loader" &&
+    !isAnyInitLoading;
+
+  // Track last fetch params: filter.store only refetches for order_by/sub_issue/type and clears on
+  // layout change, so group_by/viewId/storeType changes rely on this effect to refetch.
+  const lastFetchedRef = useRef<{ viewId?: string; groupBy?: GroupByColumnTypes | null; storeType?: string } | null>(
+    null
+  );
 
   // EXPECTED: back-navigation dengan groupedIssueIds terisi tidak memicu fetchIssues init-loader lagi
   useEffect(() => {
-    if (hasHydratedIssues) return;
+    const last = lastFetchedRef.current;
+    if (
+      hasHydratedIssues &&
+      (last === null || (last.viewId === viewId && last.groupBy === group_by && last.storeType === storeType))
+    ) {
+      lastFetchedRef.current = { viewId, groupBy: group_by, storeType };
+      return;
+    }
     fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
+    lastFetchedRef.current = { viewId, groupBy: group_by, storeType };
   }, [fetchIssues, storeType, group_by, viewId, hasHydratedIssues]);
   // auth
   const isEditingAllowed = allowPermissions(
