@@ -31,6 +31,31 @@ declare -a RESULTS=()
 
 ab() { "$AB_BIN" "$@" || { echo "  [ab] command failed: agent-browser" "$@" >&2; return 1; }; }
 
+# wait_text <text> [tries] — re-poll `wait --text` (single poll can miss on a
+# slow dev FE under load); returns 0 on first match, 1 after all tries.
+wait_text() {
+  local text="$1" tries="${2:-3}" i
+  for ((i=1; i<=tries; i++)); do
+    if ab wait --text "$text" 2>/dev/null; then return 0; fi
+    echo "  [wait] retry $i/$tries for text: $text" >&2
+    sleep 3
+  done
+  return 1
+}
+
+# click_untitled — retry the editor-title heading click itself. A bare
+# `wait --text Untitled` can match the sidebar row before the editor title
+# (h1) has loaded past "Loading version details", so gate on the click.
+click_untitled() {
+  local i
+  for ((i=1; i<=4; i++)); do
+    if ab find role heading click --name Untitled 2>/dev/null; then return 0; fi
+    echo "  [wait] retry $i/4 for Untitled heading click" >&2
+    sleep 3
+  done
+  return 1
+}
+
 api_login() {
   local payload
   payload="$(PLANE_EMAIL="$PLANE_EMAIL" PLANE_PASSWORD="$PLANE_PASSWORD" python3 -c '
@@ -73,6 +98,7 @@ login() {
 verify_api() { # verify_api <wi|mod|pg> <name> -> sets RES_ID, returns 0 if found
   # callers: use "${RES_ID:-}" — empty when not found
   # assumes list response; adjust if API paginates
+  RES_ID=""
   local kind="$1" name="$2" ep
   case "$kind" in
     wi)  ep="/api/workspaces/$WS/projects/$PROJECT_ID/issues/" ;;
@@ -110,7 +136,7 @@ cleanup() { # cleanup <wi|mod|pg> <id> -> echo HTTP code
       # pages must be archived before delete (mirrors Django PageViewSet:
       # destroy returns 400 "should be archived before deleting" otherwise)
       curl -s -o /dev/null -b "$JAR" -X POST --max-time 15 \
-        -H "Origin: $WEB" "$API/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/archive/" >/dev/null
+        -H "Origin: $WEB" "$API/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/archive/"
       ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/$id/" ;;
     *)   return 1 ;;
   esac
@@ -151,7 +177,7 @@ flow_work_item() {
   echo "== flow work-item: $name"
   if ab open "$WEB/$WS/projects/$PROJECT_ID/issues/list" \
      && ab wait --load networkidle 2>/dev/null \
-     && ab wait --text "New work item" 2>/dev/null \
+     && wait_text "New work item" \
      && ab find text "New work item" click \
      && sleep 2 \
      && ab find text "Backlog" click \
@@ -162,9 +188,9 @@ flow_work_item() {
      && ab find role textbox fill "$name" --name Title \
      && ab find text "Save" click \
      && sleep 2 \
-     && ab open "$WEB/$WS/workspace-views/all-issues/" \
-     && ab wait --load networkidle 2>/dev/null \
-     && ab wait --text "$name" 2>/dev/null; then
+      && ab open "$WEB/$WS/workspace-views/all-issues/" \
+      && ab wait --load networkidle 2>/dev/null \
+      && wait_text "$name"; then
     detail="UI ok"
     if api_login && verify_api wi "$name"; then
       local code; code="$(cleanup wi "$RES_ID")"
@@ -194,13 +220,13 @@ flow_module() {
   echo "== flow module: $name"
   if ab open "$WEB/$WS/projects/$PROJECT_ID/modules" \
      && ab wait --load networkidle 2>/dev/null \
-     && ab wait --text "Add Module" 2>/dev/null \
+     && wait_text "Add Module" \
      && ab find text "Add Module" click \
      && sleep 2 \
      && ab find role textbox fill "$name" --name Title \
      && ab find text "Create Module" click \
      && sleep 2 \
-     && ab wait --text "$name" 2>/dev/null; then
+     && wait_text "$name"; then
     detail="UI ok"
     if api_login && verify_api mod "$name"; then
       local code; code="$(cleanup mod "$RES_ID")"
@@ -231,7 +257,10 @@ flow_module() {
 #   "Connection lost" websocket banner — verified via API GET).
 # - the editor route needs a beat after networkidle: it first renders
 #   "Loading version details", then the title textbox (h1 "Untitled ").
-#   A `sleep 2` + `wait --text Untitled` before the heading click is required.
+#   A bare `wait --text Untitled` is not enough to gate the title click:
+#   the sidebar list already contains an "Untitled" row and matches early,
+#   while the editor h1 is still "Loading version details" (seen live
+#   2026-09-12) — so click_untitled() retries the heading click itself.
 # - the new page id is identified by diffing the API list before/after the
 #   "Add page" click, so we never guess which "Untitled" row is ours.
 flow_page() {
@@ -240,7 +269,9 @@ flow_page() {
   local ep="/api/workspaces/$WS/projects/$PROJECT_ID/pages/"
   local ids_before="" after="" NEW_ID=""
   api_login || { record "$flow" "$rc" "api login failed"; return; }
-  ids_before="$(curl -s -b "$JAR" --max-time 15 "$API$ep" | python3 -c '
+  local before_body=""
+  before_body="$(curl -s -b "$JAR" --max-time 15 "$API$ep")" || { record "$flow" "$rc" "list pages (before) failed"; return; }
+  ids_before="$(python3 -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -250,10 +281,10 @@ items = data.get("results", data) if isinstance(data, dict) else data
 for o in items if isinstance(items, list) else []:
     if isinstance(o, dict) and o.get("id"):
         print(o["id"])
-')" || { record "$flow" "$rc" "list pages (before) failed"; return; }
+' <<<"$before_body")" || { record "$flow" "$rc" "list pages (before) failed"; return; }
   if ab open "$WEB/$WS/projects/$PROJECT_ID/pages" \
      && ab wait --load networkidle 2>/dev/null \
-     && ab wait --text "Add page" 2>/dev/null \
+     && wait_text "Add page" \
      && ab find text "Add page" click \
      && sleep 2; then
     after="$(curl -s -b "$JAR" --max-time 15 "$API$ep")" || after=""
@@ -274,17 +305,16 @@ for o in items if isinstance(items, list) else []:
        && ab open "$WEB/$WS/projects/$PROJECT_ID/pages/$NEW_ID/" \
        && ab wait --load networkidle 2>/dev/null \
        && sleep 2 \
-       && ab wait --text "Untitled" 2>/dev/null \
-       && ab find role heading click --name Untitled \
+       && click_untitled \
        && ab press Control+a \
        && ab keyboard type "$name" \
        && sleep 3 \
-       && ab wait --text "$name" 2>/dev/null \
+       && wait_text "$name" \
        && ab open "$WEB/$WS/projects/$PROJECT_ID/pages" \
        && ab wait --load networkidle 2>/dev/null \
-       && ab wait --text "$name" 2>/dev/null; then
+       && wait_text "$name"; then
       detail="UI ok"
-      if verify_api pg "$name"; then
+      if api_login && verify_api pg "$name"; then
         local code; code="$(cleanup pg "$RES_ID")"
         if [[ "$code" =~ ^2 ]]; then detail="UI+API ok, cleaned ($code)"; rc="PASS"; else detail="cleaned failed $code"; fi
       else
