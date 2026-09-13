@@ -122,3 +122,6 @@ packages/i18n/src/types/keys.generated.ts
 # Rust
 /apps/api-rs/target
 /apps/api-rs/target/
+
+# Local brainstorming visual companion artifacts
+.superpowers/
