@@ -78,6 +78,7 @@ export const useNavigationItems = ({
         href: `/${workspaceSlug}/projects/${projectId}/services`,
         icon: ServerOutline,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        // temporary: always visible until the backend ships service_view
         shouldRender: project?.service_view ?? true,
         sortOrder: 4,
       },
