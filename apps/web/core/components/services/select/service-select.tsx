@@ -45,8 +45,16 @@ export const ServiceSelect = observer(function ServiceSelect(props: TServiceSele
     issue: { getIssueById },
   } = useIssueDetail();
   const { getProjectById } = useProject();
-  const { getServiceById, getProjectServiceIds, workItemLinkMap, fetchServices, linkWorkItem, unlinkWorkItem } =
-    useService();
+  const {
+    getServiceById,
+    getProjectServiceIds,
+    workItemLinkMap,
+    fetchServices,
+    linkWorkItem,
+    unlinkWorkItem,
+    fetchedMap,
+    loader,
+  } = useService();
   const { currentWorkspace, getWorkspaceBySlug } = useWorkspace();
   // derived values
   const issue = getIssueById(issueId);
@@ -75,7 +83,8 @@ export const ServiceSelect = observer(function ServiceSelect(props: TServiceSele
   });
 
   const ensureServices = () => {
-    if (serviceIds === null && workspaceId) fetchServices(workspaceSlug, workspaceId, projectId);
+    if (serviceIds === null && !fetchedMap[projectId] && !loader && workspaceId)
+      fetchServices(workspaceSlug, workspaceId, projectId);
   };
 
   const { handleKeyDown, handleOnClick } = useDropdown({
@@ -90,14 +99,16 @@ export const ServiceSelect = observer(function ServiceSelect(props: TServiceSele
 
   // The issue detail never hydrates the service store, so fetch on mount for the chips.
   useEffect(() => {
-    if (serviceIds !== null || !workspaceId) return;
+    if (serviceIds !== null || fetchedMap[projectId] || loader || !workspaceId) return;
     fetchServices(workspaceSlug, workspaceId, projectId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, projectId]);
 
   const handleToggle = async (serviceId: string) => {
     if (disabled || !issue || !workspaceId) return;
-    const existing = Object.values(workItemLinkMap).find((l) => l.service_id === serviceId && l.issue_id === issueId);
+    const existing = Object.values(workItemLinkMap).find(
+      (l) => l.service_id === serviceId && l.issue_id === issueId && l.project_id === projectId
+    );
     try {
       if (existing) {
         await unlinkWorkItem(workspaceSlug, workspaceId, projectId, existing.id);
