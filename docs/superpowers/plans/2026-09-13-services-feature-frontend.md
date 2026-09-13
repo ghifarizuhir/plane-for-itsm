@@ -350,6 +350,8 @@ git commit -m "feat(services): add dependency DAG and filter helpers"
 
 - Create: `apps/web/core/services/service-mock.repository.ts`
 
+> Final-review requirement: enforce case-insensitive `name` uniqueness per project in `createService` and `updateService` (throw `Error("A service with this name already exists.")` on duplicate, excluding self on update). Surfaces via the existing modal error toast.
+
 - [ ] **Step 1: Create the repository**
 
 ```ts
@@ -1655,9 +1657,9 @@ Mirror `apps/web/core/components/modules/form.tsx` for structure and the descrip
 
 - `name` (required, controlled)
 - `description` (same input component as module form)
-- `status` select — options `active | planned | maintenance | deprecated | retired`
-- `criticality` select — options `critical | high | medium | low`
-- `type` select — options `internal | external | infrastructure | third_party`
+- `status` select — options `active | planned | maintenance | deprecated | retired`, labels via `t("service.status_values.*")`
+- `criticality` select — options `critical | high | medium | low`, labels via `t("service.criticality_values.*")`
+- `type` select — options `internal | external | infrastructure | third_party`, labels via `t("service.type_values.*")`
 - `owner_id` — use the same member dropdown the module form uses for `lead_id`
 - `repository_url`, `documentation_url` — plain `Input` (`@plane/ui`)
 
@@ -1868,6 +1870,8 @@ import type { IService, TServiceCriticality } from "@plane/types";
 
 export type TServiceNodeData = {
   service: IService;
+  statusLabel: string;
+  criticalityLabel: string;
 };
 
 const CRITICALITY_CLASS: Record<TServiceCriticality, string> = {
@@ -1880,6 +1884,7 @@ const CRITICALITY_CLASS: Record<TServiceCriticality, string> = {
 export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
   const service = (data as TServiceNodeData | undefined)?.service;
   if (!service) return null;
+  const { statusLabel, criticalityLabel } = data as TServiceNodeData;
   return (
     <div className="w-[220px] rounded-md border border-subtle bg-surface-1 px-3 py-2 shadow-sm">
       <Handle type="target" position={Position.Left} className="!bg-surface-2" />
@@ -1893,7 +1898,7 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
         </span>
       </div>
       <div className="mt-1 text-xs capitalize text-secondary">
-        {service.status} · {service.criticality}
+        {statusLabel} · {criticalityLabel}
       </div>
       <Handle type="source" position={Position.Right} className="!bg-surface-2" />
     </div>
@@ -1917,7 +1922,7 @@ git commit -m "feat(services): add service graph node"
 - Create: `apps/web/core/components/services/graph/service-graph.tsx`
 - Modify: `apps/web/core/components/services/services-list-view.tsx` (render graph)
 
-> Post-review fixes (required, landed in `021e49954` follow-up): (1) remove the manual `setEdges(addEdge(...))` after `await addDependency` — the store sync effect is the single source of truth; (2) guard the nodes/edges sync effect against no-op structural updates and preserve `selected` flags; (3) fit the viewport only once on mount (`onInit` + ref), not via bare `fitView`; (4) wrap `onNodeDragStop` in try/catch with an error toast.
+> Post-review fixes (required, landed in `021e49954` follow-up): (1) remove the manual `setEdges(addEdge(...))` after `await addDependency` — the store sync effect is the single source of truth; (2) guard the nodes/edges sync effect against no-op structural updates and preserve `selected` flags; (3) fit the viewport only once on mount (`onInit` + ref), not via bare `fitView`; (4) wrap `onNodeDragStop` in try/catch with an error toast; (5) pre-translate node labels in `service-graph.tsx` (via `t("service.status_values.*")` / `t("service.criticality_values.*")`) into `data.statusLabel` / `data.criticalityLabel` for `ServiceNode` (no raw enums on canvas).
 
 - [ ] **Step 1: Create the canvas**
 
@@ -2078,6 +2083,8 @@ git commit -m "feat(services): add React Flow dependency graph"
 - Create: `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(detail)/layout.tsx`
 - Create: `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(detail)/[serviceId]/page.tsx`
 - Create: `apps/web/core/components/services/detail/{root,header,tabs,overview,work-items,dependencies}.tsx`
+
+> All user-facing detail strings must use i18n (no hardcoded English): add `service.detail.*` keys for section titles ("Depends on", "Depended on by"), the dependency select placeholder, work-items empty state + Issue-ID input, and the not-found copy. Add English source + translate to all locales (translate skill), keep `sync:check` green. Landed in `3380fde59` follow-up.
 
 - [ ] **Step 1: Route files**
 
