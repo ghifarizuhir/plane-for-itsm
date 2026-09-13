@@ -105,10 +105,10 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   // EXPECTED: back-navigation dengan groupedIssueIds terisi tidak memicu fetchIssues init-loader lagi
   useEffect(() => {
     const last = lastFetchedRef.current;
-    if (
-      hasHydratedIssues &&
-      (last === null || (last.viewId === viewId && last.groupBy === group_by && last.storeType === storeType))
-    ) {
+    const paramsMatch =
+      last !== null && last.viewId === viewId && last.groupBy === group_by && last.storeType === storeType;
+    if (paramsMatch && (hasHydratedIssues || isAnyInitLoading)) return;
+    if (last === null && hasHydratedIssues) {
       lastFetchedRef.current = { viewId, groupBy: group_by, storeType };
       return;
     }
