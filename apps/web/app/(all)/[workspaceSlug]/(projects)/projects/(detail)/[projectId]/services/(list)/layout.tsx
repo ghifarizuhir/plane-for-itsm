@@ -6,12 +6,17 @@
 
 import { Outlet } from "react-router";
 // components
+import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import { ServiceMobileHeader, ServiceViewHeader } from "@/components/services";
 
 export default function ProjectServicesListLayout() {
   return (
-    <ContentWrapper>
-      <Outlet />
-    </ContentWrapper>
+    <>
+      <AppHeader header={<ServiceViewHeader />} mobileHeader={<ServiceMobileHeader />} />
+      <ContentWrapper>
+        <Outlet />
+      </ContentWrapper>
+    </>
   );
 }

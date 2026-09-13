@@ -51,10 +51,11 @@ export const ServiceListItem = observer(function ServiceListItem(props: Props) {
 
   return (
     <ListItem
-      title={serviceDetails?.name ?? ""}
+      title={serviceDetails.name ?? ""}
       itemLink={`/${workspaceSlug?.toString()}/projects/${serviceDetails.project_id}/services/${serviceDetails.id}`}
       prependTitleElement={
         <span
+          aria-hidden="true"
           className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${STATUS_DOT_CLASS[serviceDetails.status] ?? "bg-gray-400"}`}
         />
       }
@@ -78,7 +79,7 @@ export const ServiceListItem = observer(function ServiceListItem(props: Props) {
             <a
               href={serviceDetails.repository_url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 text-11 text-tertiary hover:text-primary"
             >
@@ -90,7 +91,7 @@ export const ServiceListItem = observer(function ServiceListItem(props: Props) {
             <a
               href={serviceDetails.documentation_url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 text-11 text-tertiary hover:text-primary"
             >

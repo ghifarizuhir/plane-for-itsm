@@ -12,8 +12,10 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 // hooks
 import { useService } from "@/hooks/store/use-service";
+import { useServiceFilter } from "@/hooks/store/use-service-filter";
 // components
 import { CreateUpdateServiceModal } from "./modal";
+import { ServiceCardItem } from "./service-card-item";
 import { ServiceListItem } from "./service-list-item";
 
 export const ServicesListView = observer(function ServicesListView() {
@@ -23,24 +25,20 @@ export const ServicesListView = observer(function ServicesListView() {
   const { t } = useTranslation();
   // store hooks
   const { getFilteredServiceIds, loader } = useService();
+  const { currentProjectDisplayFilters } = useServiceFilter();
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const serviceIds = projectId ? getFilteredServiceIds(projectId.toString()) : null;
+  const layout = currentProjectDisplayFilters?.layout ?? "list";
 
   const openCreateModal = () => setIsCreateModalOpen(true);
   const closeCreateModal = () => setIsCreateModalOpen(false);
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <h2 className="text-16 font-medium text-primary">{t("service.title")}</h2>
-        <Button variant="primary" size="sm" onClick={openCreateModal}>
-          {t("service.add")}
-        </Button>
-      </div>
       {loader || serviceIds === null ? (
-        <div className="text-sm p-6 text-secondary">Loading services…</div>
+        <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>
       ) : serviceIds.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
@@ -48,6 +46,14 @@ export const ServicesListView = observer(function ServicesListView() {
           <Button variant="primary" size="sm" onClick={openCreateModal}>
             {t("service.add")}
           </Button>
+        </div>
+      ) : layout === "graph" ? (
+        <div className="text-sm flex h-full items-center justify-center p-6 text-secondary">Graph coming soon</div>
+      ) : layout === "grid" ? (
+        <div className="grid size-full auto-rows-max grid-cols-1 gap-4 overflow-y-auto p-2 sm:grid-cols-2 xl:grid-cols-3">
+          {serviceIds.map((id) => (
+            <ServiceCardItem key={id} serviceId={id} />
+          ))}
         </div>
       ) : (
         <div className="flex flex-col gap-1 p-2">

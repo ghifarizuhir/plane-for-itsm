@@ -29,11 +29,12 @@ function ProjectServicesPage({ params }: Route.ComponentProps) {
   const project = getProjectById(projectId);
   const pageTitle = project?.name ? `${project?.name} - ${t("service.title")}` : undefined;
   const workspaceId = currentWorkspace?.id;
+  const hasFetched = projectId ? fetchedMap[projectId] : undefined;
 
   useEffect(() => {
-    if (!workspaceSlug || !workspaceId || !projectId || fetchedMap[projectId]) return;
+    if (!workspaceSlug || !workspaceId || !projectId || hasFetched) return;
     fetchServices(workspaceSlug, workspaceId, projectId);
-  }, [workspaceSlug, workspaceId, projectId, fetchedMap, fetchServices]);
+  }, [workspaceSlug, workspaceId, projectId, hasFetched, fetchServices]);
 
   return (
     <>
