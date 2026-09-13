@@ -86,11 +86,16 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const collapsedGroups =
     issuesFilter?.issueFilters?.kanbanFilters || ({ group_by: [], sub_group_by: [] } as TIssueKanbanFilters);
 
-  useEffect(() => {
-    fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
-  }, [fetchIssues, storeType, group_by, viewId]);
-
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
+
+  const hasHydratedIssues =
+    !!groupedIssueIds && Object.keys(groupedIssueIds).length > 0 && issues?.getIssueLoader() !== "init-loader";
+
+  // EXPECTED: back-navigation dengan groupedIssueIds terisi tidak memicu fetchIssues init-loader lagi
+  useEffect(() => {
+    if (hasHydratedIssues) return;
+    fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
+  }, [fetchIssues, storeType, group_by, viewId, hasHydratedIssues]);
   // auth
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
