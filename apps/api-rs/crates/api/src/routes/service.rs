@@ -479,6 +479,154 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DependencyRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub project_id: Uuid,
+    pub from_service_id: Uuid,
+    pub to_service_id: Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn dependency_json(row: &DependencyRow) -> Value {
+    json!({
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "project_id": row.project_id,
+        "from_service_id": row.from_service_id,
+        "to_service_id": row.to_service_id,
+        "created_at": row.created_at,
+    })
+}
+
+const DEPENDENCY_SELECT: &str = "SELECT id, workspace_id, project_id, from_service_id, \
+    to_service_id, created_at FROM service_dependencies";
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateDependency {
+    pub from_service_id: Uuid,
+    pub to_service_id: Uuid,
+}
+
+async fn service_exists(pool: &sqlx::PgPool, project_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn dependencies_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<DependencyRow> = sqlx::query_as(&format!(
+        "{DEPENDENCY_SELECT} WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC"
+    ))
+    .bind(project_id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(dependency_json).collect())),
+    ))
+}
+
+pub async fn dependencies_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Json(body): Json<CreateDependency>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    if !service_exists(&st.pool, project_id, body.from_service_id).await? {
+        return Ok(bad_request("Source service not found."));
+    }
+    if !service_exists(&st.pool, project_id, body.to_service_id).await? {
+        return Ok(bad_request("Target service not found."));
+    }
+    if body.from_service_id == body.to_service_id {
+        return Ok(bad_request("A service cannot depend on itself."));
+    }
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM service_dependencies WHERE project_id = $1 \
+         AND from_service_id = $2 AND to_service_id = $3 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(body.from_service_id)
+    .bind(body.to_service_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup {
+        return Ok(bad_request("This dependency already exists."));
+    }
+    // Adding from -> to creates a cycle when `from` is reachable from `to`.
+    let creates_cycle: bool = sqlx::query_scalar(
+        "WITH RECURSIVE reach(node) AS ( \
+           SELECT to_service_id FROM service_dependencies \
+             WHERE project_id = $1 AND from_service_id = $2 AND deleted_at IS NULL \
+           UNION \
+           SELECT d.to_service_id FROM service_dependencies d \
+             JOIN reach r ON d.from_service_id = r.node \
+             WHERE d.project_id = $1 AND d.deleted_at IS NULL \
+         ) SELECT EXISTS(SELECT 1 FROM reach WHERE node = $3)",
+    )
+    .bind(project_id)
+    .bind(body.to_service_id)
+    .bind(body.from_service_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if creates_cycle {
+        return Ok(bad_request("This dependency would create a cycle."));
+    }
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO service_dependencies (id, workspace_id, project_id, from_service_id, \
+         to_service_id, created_at, updated_at, created_by_id, updated_by_id) \
+         SELECT $1, p.workspace_id, p.id, $2, $3, now(), now(), $4, $4 FROM projects p WHERE p.id = $5",
+    )
+    .bind(id)
+    .bind(body.from_service_id)
+    .bind(body.to_service_id)
+    .bind(auth.0)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    let row: DependencyRow = sqlx::query_as(&format!("{DEPENDENCY_SELECT} WHERE id = $1"))
+        .bind(id)
+        .fetch_one(&st.pool)
+        .await?;
+    Ok((StatusCode::CREATED, Json(dependency_json(&row))))
+}
+
+pub async fn dependency_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
