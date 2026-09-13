@@ -50,6 +50,10 @@ import type { IModuleStore } from "./module.store";
 import { ModulesStore } from "./module.store";
 import type { IModuleFilterStore } from "./module_filter.store";
 import { ModuleFilterStore } from "./module_filter.store";
+import type { IServiceStore } from "./service.store";
+import { ServicesStore } from "./service.store";
+import type { IServiceFilterStore } from "./service_filter.store";
+import { ServiceFilterStore } from "./service_filter.store";
 import type { IMultipleSelectStore } from "./multiple_select.store";
 import { MultipleSelectStore } from "./multiple_select.store";
 import type { IWorkspaceNotificationStore } from "./notifications/workspace-notifications.store";
@@ -80,6 +84,8 @@ export class CoreRootStore {
   cycleFilter: ICycleFilterStore;
   module: IModuleStore;
   moduleFilter: IModuleFilterStore;
+  service: IServiceStore;
+  serviceFilter: IServiceFilterStore;
   projectView: IProjectViewStore;
   globalView: IGlobalViewStore;
   issue: IIssueRootStore;
@@ -117,6 +123,8 @@ export class CoreRootStore {
     this.cycleFilter = new CycleFilterStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
+    this.service = new ServicesStore(this);
+    this.serviceFilter = new ServiceFilterStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);
@@ -152,6 +160,8 @@ export class CoreRootStore {
     this.cycleFilter = new CycleFilterStore(this);
     this.module = new ModulesStore(this);
     this.moduleFilter = new ModuleFilterStore(this);
+    this.service = new ServicesStore(this);
+    this.serviceFilter = new ServiceFilterStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);
