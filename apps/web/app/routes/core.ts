@@ -178,6 +178,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
+          // Services List
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/services",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(list)/page.tsx"
+            ),
+          ]),
+
           // View Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/views/(detail)/layout.tsx", [
             route(
