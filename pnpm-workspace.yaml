@@ -156,7 +156,6 @@ catalog:
   "react-markdown": "^10.1.0"
   "react-masonry-component": "^6.3.0"
   "react-pdf-html": "^2.1.2"
-  "react-popper": "^2.3.0"
   "react-router": "8.3.0"
   "recharts": "^2.15.4"
   "reflect-metadata": "^0.2.2"
@@ -289,11 +288,6 @@ patchedDependencies:
 
 peerDependencyRules:
   allowedVersions:
-    # react-popper 2.3.0 is unmaintained and broken on React 19 (positioning
-    # stays at top:0 left:0, dropdowns render at viewport origin). All call
-    # sites now use `usePopper` from `@plane/hooks` (floating-ui based).
-    # The override is kept only until the dependency is fully removed.
-    "react-popper>react": "19"
     # Same situation: peer range predates React 19, uses nothing React 19 removed.
     "react-masonry-component>react": "19"
     "use-font-face-observer>react": "19"

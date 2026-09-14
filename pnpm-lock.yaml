@@ -420,9 +420,6 @@ catalogs:
     react-pdf-html:
       specifier: ^2.1.2
       version: 2.1.3
-    react-popper:
-      specifier: ^2.3.0
-      version: 2.3.0
     react-router:
       specifier: 8.3.0
       version: 8.3.0
@@ -961,9 +958,6 @@ importers:
       react-hook-form:
         specifier: 'catalog:'
         version: 7.84.0(react@19.2.8)
-      react-popper:
-        specifier: 'catalog:'
-        version: 2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-router:
         specifier: 'catalog:'
         version: 8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1163,9 +1157,6 @@ importers:
       react-pdf-html:
         specifier: 'catalog:'
         version: 2.1.3(@react-pdf/renderer@4.8.1(react@19.2.8))(react@19.2.8)
-      react-popper:
-        specifier: 'catalog:'
-        version: 2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-router:
         specifier: 'catalog:'
         version: 8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1830,9 +1821,6 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
-      react-popper:
-        specifier: 'catalog:'
-        version: 2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.4.0
@@ -8566,13 +8554,6 @@ packages:
       '@react-pdf/renderer': '>=3.4.4'
       react: 19.2.8
 
-  react-popper@2.3.0:
-    resolution: {integrity: sha512-e1hj8lL3uM+sgSR4Lxzn5h1GxBlpa4CQz0XLF8kx4MDrDRWY0Ena4c97PUeSX9i5W3UAfDP0z0FXCTQkoXUl3Q==}
-    peerDependencies:
-      '@popperjs/core': ^2.0.0
-      react: 19.2.8
-      react-dom: 19.2.8
-
   react-refresh@0.18.0:
     resolution: {integrity: sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw==}
     engines: {node: '>=0.10.0'}
@@ -9598,9 +9579,6 @@ packages:
 
   w3c-keyname@2.2.8:
     resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
-
-  warning@4.0.3:
-    resolution: {integrity: sha512-rpJyN222KWIvHJ/F53XSZv0Zl/accqHR8et1kpaMTD/fLCRxtV8iX8czMzY7sVZupTI3zcUTg8eycS2kNF9l6w==}
 
   watchpack@2.4.4:
     resolution: {integrity: sha512-c5EGNOiyxxV5qmTtAB7rbiXxi1ooX1pQKMLX/MIabJjRA0SJBQOjKF+KSVfHkr9U1cADPon0mRiVe/riyaiDUA==}
@@ -16542,14 +16520,6 @@ snapshots:
       node-html-parser: 6.1.13
       react: 19.2.8
 
-  react-popper@2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
-    dependencies:
-      '@popperjs/core': 2.11.8
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-      react-fast-compare: 3.2.2
-      warning: 4.0.3
-
   react-refresh@0.18.0: {}
 
   react-remove-scroll-bar@2.3.8(@types/react@19.2.17)(react@19.2.8):
@@ -17664,10 +17634,6 @@ snapshots:
   vscode-uri@3.1.0: {}
 
   w3c-keyname@2.2.8: {}
-
-  warning@4.0.3:
-    dependencies:
-      loose-envify: 1.4.0
 
   watchpack@2.4.4:
     dependencies:

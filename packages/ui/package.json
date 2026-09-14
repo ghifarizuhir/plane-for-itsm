@@ -42,7 +42,6 @@
     "lucide-react": "catalog:",
     "react-color": "catalog:",
     "react-day-picker": "catalog:",
-    "react-popper": "catalog:",
     "tailwind-merge": "catalog:",
     "use-font-face-observer": "catalog:"
   },
