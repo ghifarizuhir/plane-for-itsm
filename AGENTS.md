@@ -11,6 +11,17 @@
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
 
+## Web Prod vs Dev (port 3000)
+
+Only ONE server may occupy port 3000. Default is **prod** (`plane-web-prod.service`); dev (`plane-web.service`) is stopped + disabled.
+
+- Prod serves static `apps/web/build/client` (built with `VITE_API_BASE_URL=https://api.terraline.space` for the tunnel demo). It never picks up code changes.
+- After ANY web code change that must appear on the tunnel, rebuild + restart:
+  1. `pnpm --filter=web build`
+  2. `systemctl --user restart plane-web-prod.service`
+- To code locally instead: `systemctl --user stop plane-web-prod.service && systemctl --user start plane-web.service` (dev needs `VITE_API_BASE_URL=http://192.168.1.11:8000` in `apps/web/.env`, otherwise login loops on SameSite=Lax cross-site cookies). Never enable both services at once.
+- Do NOT expose Vite dev via Cloudflare Tunnel without a cache-bypass rule: edge-cached `node_modules/.vite/deps/*` mixes optimizer generations (`?v=` mismatch) and crashes React (`resolveDispatcher() is null`). Do NOT delete `apps/web/node_modules/.vite` to "fix" it — that resets the optimizer and makes it worse.
+
 ## Code Style
 
 - **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
