@@ -9,7 +9,7 @@ import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
@@ -78,9 +78,11 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
     if (isOpen) {
       onDropdownOpen?.();
       if (!isMobile) {
-        inputRef.current && inputRef.current.focus();
+        if (inputRef.current) inputRef.current.focus();
       }
     }
+    // Intentionally runs only when open-state changes; onDropdownOpen is a notify callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isMobile]);
 
   const searchInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 // components
 import { Combobox } from "@headlessui/react";
 // i18n
@@ -57,9 +57,12 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
     if (isOpen) {
       onOpen();
       if (!isMobile) {
-        inputRef.current && inputRef.current.focus();
+        if (inputRef.current) inputRef.current.focus();
       }
     }
+    // Intentionally runs only when open-state changes; onOpen is defined below and adding
+    // it would refetch on every parent render while open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isMobile]);
 
   // popper-js init
@@ -78,7 +81,7 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
   const cycleIds = (getProjectCycleIds(projectId) ?? [])?.filter((cycleId) => {
     const cycleDetails = getCycleById(cycleId);
     if (currentCycleId && currentCycleId === cycleId) return false;
-    return cycleDetails?.status ? (cycleDetails?.status.toLowerCase() != "completed" ? true : false) : true;
+    return cycleDetails?.status ? cycleDetails.status.toLowerCase() !== "completed" : true;
   });
 
   const onOpen = () => {

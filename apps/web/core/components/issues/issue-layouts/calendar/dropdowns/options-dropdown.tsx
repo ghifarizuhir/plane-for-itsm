@@ -7,7 +7,7 @@
 import React, { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { ChevronUpOutline, MoreVerticalOutline, TickOutline } from "@makeplane/propel/icons";
 import { Popover, Transition } from "@headlessui/react";
 // hooks
@@ -84,14 +84,14 @@ export const CalendarOptionsDropdown = observer(function CalendarOptionsDropdown
   };
 
   const handleToggleWeekends = () => {
-    const showWeekends = issuesFilterStore.issueFilters?.displayFilters?.calendar?.show_weekends ?? false;
+    const currentShowWeekends = issuesFilterStore.issueFilters?.displayFilters?.calendar?.show_weekends ?? false;
 
     if (!updateFilters) return;
 
     updateFilters(projectId?.toString(), EIssueFilterType.DISPLAY_FILTERS, {
       calendar: {
         ...issuesFilterStore.issueFilters?.displayFilters?.calendar,
-        show_weekends: !showWeekends,
+        show_weekends: !currentShowWeekends,
       },
     });
   };

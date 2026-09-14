@@ -6,7 +6,7 @@
 
 import React, { Fragment, useState } from "react";
 import type { Placement } from "@popperjs/core";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Popover, Transition } from "@headlessui/react";
 // ui
 import { Button } from "@plane/propel/button";

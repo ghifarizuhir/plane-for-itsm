@@ -6,7 +6,7 @@
 
 import React, { useState } from "react";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Popover, Transition } from "@headlessui/react";
 import { ChevronLeftOutline, ChevronRightOutline } from "@makeplane/propel/icons";
 //hooks

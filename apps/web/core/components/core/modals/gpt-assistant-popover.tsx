@@ -8,7 +8,7 @@ import type { Ref } from "react";
 import React, { useEffect, useState, useRef, Fragment } from "react";
 import type { Placement } from "@popperjs/core";
 import { Controller, useForm } from "react-hook-form"; // services
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { WarningCircleOutline } from "@makeplane/propel/icons";
 import { Popover, Transition } from "@headlessui/react";
 // plane imports
@@ -273,6 +273,8 @@ export function GptAssistantPopover(props: Props) {
                   placeholder={`${
                     prompt && prompt !== "" ? "Tell AI what action to perform on this content..." : "Ask AI anything..."
                   }`}
+                  // Autofocus is intentional here: the popover is a single-purpose prompt input.
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
                 />
               </InputGroup>

@@ -7,7 +7,7 @@
 import React, { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { CalendarOutline, CloseOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // ui
@@ -164,6 +164,8 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
   );
 
   return (
+    // HeadlessUI-based dropdown handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <ComboDropDown
       as="div"
       ref={dropdownRef}

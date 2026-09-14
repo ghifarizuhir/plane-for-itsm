@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";

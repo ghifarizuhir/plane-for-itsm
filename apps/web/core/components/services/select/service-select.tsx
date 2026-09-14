@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { ChevronDownOutline, CloseOutline, SearchOutline } from "@makeplane/propel/icons";

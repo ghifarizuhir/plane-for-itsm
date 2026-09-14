@@ -8,7 +8,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { ArrowNarrowRightOutline, CalendarOutline, CloseOutline, DueDateOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // plane imports
@@ -283,6 +283,8 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
   const Options = renderInPortal ? createPortal(comboOptions, document.body) : comboOptions;
 
   return (
+    // HeadlessUI-based dropdown handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <ComboDropDown
       as="div"
       ref={dropdownRef}

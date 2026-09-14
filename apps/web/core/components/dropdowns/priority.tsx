@@ -6,7 +6,7 @@
 
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { SignalHigh } from "lucide-react";
 import { Combobox } from "@headlessui/react";
 import { ISSUE_PRIORITIES } from "@plane/constants";
@@ -427,6 +427,8 @@ export function PriorityDropdown(props: Props) {
   );
 
   return (
+    // HeadlessUI-based dropdown handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <ComboDropDown
       as="div"
       ref={dropdownRef}

@@ -5,7 +5,7 @@
  */
 
 import { Fragment, useState } from "react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Popover } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";

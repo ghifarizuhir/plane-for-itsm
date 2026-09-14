@@ -7,12 +7,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 import { GroupOutline, LabelsOutline, LoadingOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 import { getRandomLabelColor } from "@plane/constants";
 // plane imports
-import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import type { IIssueLabel } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -72,7 +71,7 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
     placement: placement ?? "bottom-start",
   });
   // derived values
-  const labelsList = labelIds.map((labelId) => getLabelById(labelId)).filter((label) => !!label);
+  const labelsList = labelIds.map((labelId) => getLabelById(labelId)).filter((lbl) => !!lbl);
   const filteredOptions =
     query === "" ? labelsList : labelsList?.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()));
 
@@ -150,6 +149,8 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
   };
 
   return (
+    // HeadlessUI Combobox handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <Combobox
       as="div"
       ref={dropdownRef}
@@ -213,21 +214,21 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
               {labelsList && filteredOptions ? (
                 filteredOptions.length > 0 ? (
                   <ul className="space-y-1">
-                    {filteredOptions.map((label) => {
-                      const children = labelsList?.filter((l) => l.parent === label.id);
+                    {filteredOptions.map((lbl) => {
+                      const children = labelsList?.filter((l) => l.parent === lbl.id);
 
                       if (children.length === 0) {
-                        if (!label.parent)
+                        if (!lbl.parent)
                           return (
                             <Combobox.Option
                               as="li"
-                              key={label.id}
+                              key={lbl.id}
                               className={({ active }) =>
                                 `${
                                   active ? "bg-layer-1" : ""
                                 } group flex w-full cursor-pointer items-center gap-2 truncate rounded-sm px-1 py-1.5 text-secondary select-none`
                               }
-                              value={label.id}
+                              value={lbl.id}
                             >
                               {({ selected }) => (
                                 <div className="flex w-full justify-between gap-2 rounded-sm">
@@ -235,10 +236,10 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
                                     <span
                                       className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
                                       style={{
-                                        backgroundColor: label.color,
+                                        backgroundColor: lbl.color,
                                       }}
                                     />
-                                    <span className="truncate">{label.name}</span>
+                                    <span className="truncate">{lbl.name}</span>
                                   </div>
                                   <div className="flex shrink-0 items-center justify-center rounded-sm p-1">
                                     <TickOutline className={`h-3 w-3 ${selected ? "opacity-100" : "opacity-0"}`} />
@@ -249,9 +250,9 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
                           );
                       } else
                         return (
-                          <li key={label.id} className="border-y border-subtle">
+                          <li key={lbl.id} className="border-y border-subtle">
                             <div className="flex items-center gap-2 truncate p-2 text-primary select-none">
-                              <GroupOutline className="h-3 w-3" /> {label.name}
+                              <GroupOutline className="h-3 w-3" /> {lbl.name}
                             </div>
                             <ul>
                               {children.map((child) => (
@@ -291,6 +292,8 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
                 ) : submitting ? (
                   <LoadingOutline className="h-3.5 w-3.5 animate-spin" />
                 ) : createLabelEnabled ? (
+                  // Pre-existing create-action; keep element to avoid visual regression.
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                   <p
                     onClick={() => {
                       if (!query.length) return;

@@ -6,7 +6,7 @@
 
 import { Fragment, useState } from "react";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { AddOutline, LoadingOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // plane imports
@@ -91,7 +91,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
 
   const issueLabels = values ?? [];
 
-  const label = <span className="text-body-xs-medium text-placeholder">{t("label.select")}</span>;
+  const selectPlaceholder = <span className="text-body-xs-medium text-placeholder">{t("label.select")}</span>;
 
   const searchInputKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (query !== "" && e.key === "Escape") {
@@ -108,8 +108,8 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
 
   const handleAddLabel = async (labelName: string) => {
     setSubmitting(true);
-    const label = await onAddLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
-    onSelect([...values, label.id]);
+    const newLabel = await onAddLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
+    onSelect([...values, newLabel.id]);
     setQuery("");
     setSubmitting(false);
   };
@@ -134,7 +134,7 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
             prependIcon={<AddOutline />}
             onClick={() => !projectLabels && fetchLabels()}
           >
-            {label}
+            {selectPlaceholder}
           </Button>
         </Combobox.Button>
 
@@ -192,6 +192,8 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
                 <LoadingOutline className="spin h-3.5 w-3.5" />
               ) : canCreateLabel ? (
                 <ul className="space-y-1">
+                  {/* HeadlessUI Combobox.Option handles keyboard selection internally. */}
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}
                   <Combobox.Option
                     as="li"
                     value={query}

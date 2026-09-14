@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -52,7 +52,7 @@ export const ModuleOptions = observer(function ModuleOptions(props: Props) {
     if (isOpen) {
       onOpen();
       if (!isMobile) {
-        inputRef.current && inputRef.current.focus();
+        if (inputRef.current) inputRef.current.focus();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

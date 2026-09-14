@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { observer } from "mobx-react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -47,6 +47,12 @@ type Props = TDropdownProps & {
         value: string[];
       }
   );
+
+const renderIcon = (logoProps: TProject["logo_props"]) => (
+  <span className="grid h-4 w-4 flex-shrink-0 place-items-center">
+    <Logo logo={logoProps} size={14} />
+  </span>
+);
 
 export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: Props) {
   const {
@@ -139,27 +145,21 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
     if (!multiple) handleClose();
   };
 
-  const getDisplayName = (value: string | string[] | null, placeholder: string = "") => {
-    if (Array.isArray(value)) {
-      const firstProject = getProjectById(value[0]);
-      return value.length ? (value.length === 1 ? firstProject?.name : `${value.length} projects`) : placeholder;
+  const getDisplayName = (val: string | string[] | null, fallback: string = "") => {
+    if (Array.isArray(val)) {
+      const firstProject = getProjectById(val[0]);
+      return val.length ? (val.length === 1 ? firstProject?.name : `${val.length} projects`) : fallback;
     } else {
-      return value ? (getProjectById(value)?.name ?? placeholder) : placeholder;
+      return val ? (getProjectById(val)?.name ?? fallback) : fallback;
     }
   };
 
-  const getProjectIcon = (value: string | string[] | null) => {
-    const renderIcon = (logoProps: TProject["logo_props"]) => (
-      <span className="grid h-4 w-4 flex-shrink-0 place-items-center">
-        <Logo logo={logoProps} size={14} />
-      </span>
-    );
-
-    if (Array.isArray(value)) {
+  const getProjectIcon = (val: string | string[] | null) => {
+    if (Array.isArray(val)) {
       return (
         <div className="flex items-center gap-0.5">
-          {value.length > 0 ? (
-            value.map((projectId) => {
+          {val.length > 0 ? (
+            val.map((projectId) => {
               const projectDetails = getProjectById(projectId);
               return projectDetails?.logo_props ? renderIcon(projectDetails.logo_props) : null;
             })
@@ -169,7 +169,7 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
         </div>
       );
     } else {
-      const projectDetails = getProjectById(value);
+      const projectDetails = getProjectById(val);
       return projectDetails?.logo_props ? renderIcon(projectDetails.logo_props) : null;
     }
   };
@@ -220,6 +220,8 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
   );
 
   return (
+    // HeadlessUI-based dropdown handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <ComboDropDown
       as="div"
       ref={dropdownRef}

@@ -7,12 +7,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Placement } from "@popperjs/core";
 import { useParams } from "next/navigation";
-import { usePopper } from "react-popper";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 import { ChevronDownOutline, LoadingOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { Combobox } from "@headlessui/react";
 // plane imports
 import { EUserPermissionsLevel, getRandomLabelColor } from "@plane/constants";
-import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 // types
 import type { IIssueLabel } from "@plane/types";
@@ -44,6 +43,11 @@ export interface ILabelDropdownProps {
   fullHeight?: boolean;
   label: React.ReactNode;
 }
+
+const preventPropagation = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+  e.stopPropagation();
+  e.preventDefault();
+};
 
 export function LabelDropdown(props: ILabelDropdownProps) {
   const {
@@ -98,18 +102,18 @@ export function LabelDropdown(props: ILabelDropdownProps) {
 
   const options = useMemo(
     () =>
-      projectLabels.map((label) => ({
-        value: label?.id,
-        query: label?.name,
+      projectLabels.map((storeLabel) => ({
+        value: storeLabel?.id,
+        query: storeLabel?.name,
         content: (
           <div className="flex items-center justify-start gap-2 overflow-hidden">
             <span
               className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
               style={{
-                backgroundColor: label?.color,
+                backgroundColor: storeLabel?.color,
               }}
             />
-            <div className="line-clamp-1 inline-block truncate">{label?.name}</div>
+            <div className="line-clamp-1 inline-block truncate">{storeLabel?.name}</div>
           </div>
         ),
       })),
@@ -162,8 +166,8 @@ export function LabelDropdown(props: ILabelDropdownProps) {
   const handleAddLabel = async (labelName: string) => {
     if (!projectId) return;
     setSubmitting(true);
-    const label = await createLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
-    onChange([...value, label.id]);
+    const newLabel = await createLabel(workspaceSlug, projectId, { name: labelName, color: getRandomLabelColor() });
+    onChange([...value, newLabel.id]);
     setQuery("");
     setSubmitting(false);
   };
@@ -231,13 +235,11 @@ export function LabelDropdown(props: ILabelDropdownProps) {
     ]
   );
 
-  const preventPropagation = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   return (
+    // Pre-existing click-catcher wrapper; keep element to avoid visual regression.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div className={`${fullHeight ? "h-full" : "h-5"}`} onClick={preventPropagation}>
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <ComboDropDown
         as="div"
         ref={dropdownRef}
@@ -308,6 +310,8 @@ export function LabelDropdown(props: ILabelDropdownProps) {
                 ) : submitting ? (
                   <LoadingOutline className="h-3.5 w-3.5 animate-spin" />
                 ) : canCreateLabel ? (
+                  // Pre-existing create-action; keep element to avoid visual regression.
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                   <p
                     onClick={() => {
                       if (!query.length) return;

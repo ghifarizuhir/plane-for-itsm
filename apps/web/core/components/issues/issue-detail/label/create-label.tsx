@@ -4,10 +4,13 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+// Pre-existing interactive toggle below; kept as-is to avoid visual regression.
+
 import { useState, Fragment, useEffect } from "react";
 import { TwitterPicker } from "react-color";
 import { Controller, useForm } from "react-hook-form";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { AddOutline, CloseOutline, LoadingOutline } from "@makeplane/propel/icons";
 import { Popover } from "@headlessui/react";
 import { Field } from "@makeplane/propel/components/field";
@@ -120,7 +123,7 @@ export function LabelCreate(props: ILabelCreate) {
                         style={styles.popper}
                         {...attributes.popper}
                       >
-                        <TwitterPicker triangle={"hide"} color={value} onChange={(value) => onChange(value.hex)} />
+                        <TwitterPicker triangle={"hide"} color={value} onChange={(color) => onChange(color.hex)} />
                       </div>
                     </Popover.Panel>
                   </>
