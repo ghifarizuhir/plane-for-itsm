@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useRef, useContext } from "react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 import { ChevronRightOutline } from "@makeplane/propel/icons";
 // helpers
 import { cn } from "../../utils";
@@ -32,7 +32,10 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
 
   const contextMenuContext = useContext(ContextMenuContext);
   const hasNestedItems = item.nestedMenuItems && item.nestedMenuItems.length > 0;
-  const renderedNestedItems = item.nestedMenuItems?.filter((nestedItem) => nestedItem.shouldRender !== false) || [];
+  const renderedNestedItems = React.useMemo(
+    () => item.nestedMenuItems?.filter((nestedItem) => nestedItem.shouldRender !== false) || [],
+    [item.nestedMenuItems]
+  );
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: "right-start",
@@ -100,17 +103,20 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
     }
   };
 
-  const handleNestedItemClick = (nestedItem: TContextMenuItem, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+  const handleNestedItemClick = React.useCallback(
+    (nestedItem: TContextMenuItem, e?: React.MouseEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
 
-    nestedItem.action();
-    if (nestedItem.closeOnClick !== false) {
-      handleClose(); // Close the entire context menu
-    }
-  };
+      nestedItem.action();
+      if (nestedItem.closeOnClick !== false) {
+        handleClose(); // Close the entire context menu
+      }
+    },
+    [handleClose]
+  );
 
   // Handle keyboard navigation for nested items
   React.useEffect(() => {
@@ -148,7 +154,7 @@ export function ContextMenuItem(props: ContextMenuItemProps) {
         menuElement.removeEventListener("keydown", handleKeyDown);
       };
     }
-  }, [isNestedOpen, activeNestedIndex, renderedNestedItems, hasNestedItems, closeNestedMenu]);
+  }, [isNestedOpen, activeNestedIndex, renderedNestedItems, hasNestedItems, closeNestedMenu, handleNestedItemClick]);
 
   if (item.shouldRender === false) return null;
 

@@ -8,7 +8,7 @@ import { Popover as HeadlessReactPopover, Transition } from "@headlessui/react";
 import { MoreVerticalOutline } from "@makeplane/propel/icons";
 import type { Ref } from "react";
 import React, { Fragment, useState } from "react";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 // helpers
 import { cn } from "../utils";
 // types

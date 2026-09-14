@@ -7,9 +7,8 @@
 import { Combobox } from "@headlessui/react";
 import { sortBy } from "lodash-es";
 import React, { useMemo, useRef, useState } from "react";
-import { usePopper } from "react-popper";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 // plane imports
-import { useOutsideClickDetector } from "@plane/hooks";
 // local imports
 import { useDropdownKeyPressed } from "../hooks/use-dropdown-key-pressed";
 import { cn } from "../utils";
@@ -93,8 +92,8 @@ export function Dropdown(props: ISingleSelectDropdown) {
     if (!options) return undefined;
 
     const filteredOptions = queryArray
-      ? (options || []).filter((options) => {
-          const queryString = queryArray.map((query) => options.data[query]).join(" ");
+      ? (options || []).filter((opt) => {
+          const queryString = queryArray.map((key) => opt.data[key]).join(" ");
           return queryString.toLowerCase().includes(query.toLowerCase());
         })
       : options;
@@ -106,7 +105,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
       (option) => !(value ?? []).includes(option.data[option.value]),
       () => sortByKey && sortByKey.toLowerCase(),
     ]);
-  }, [query, options]);
+  }, [query, options, queryArray, value, sortByKey, firstItem, disableSorting]);
 
   // hooks
   const handleKeyDown = useDropdownKeyPressed(toggleDropdown, handleClose);
@@ -114,6 +113,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
   useOutsideClickDetector(dropdownRef, handleClose, true);
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <Combobox
       as="div"
       ref={dropdownRef}

@@ -8,7 +8,7 @@ import { Popover, Transition } from "@headlessui/react";
 import * as React from "react";
 import * as ColorPicker from "react-color";
 import type { ColorResult } from "react-color";
-import { usePopper } from "react-popper";
+import { usePopper } from "@plane/hooks";
 // helpers
 import { Button } from "../button/button";
 import { cn } from "../utils";

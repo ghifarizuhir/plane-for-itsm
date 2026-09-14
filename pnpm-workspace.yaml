@@ -289,11 +289,10 @@ patchedDependencies:
 
 peerDependencyRules:
   allowedVersions:
-    # react-popper 2.3.0 is unmaintained and its peer range stops at React 18, but it
-    # only uses hooks — no findDOMNode, no string refs, no element.ref reads and no
-    # defaultProps on function components — so it runs unchanged on React 19. All 32
-    # call sites import usePopper only. Recorded here so the acceptance is explicit
-    # rather than hidden behind the global strict-peer-dependencies=false.
+    # react-popper 2.3.0 is unmaintained and broken on React 19 (positioning
+    # stays at top:0 left:0, dropdowns render at viewport origin). All call
+    # sites now use `usePopper` from `@plane/hooks` (floating-ui based).
+    # The override is kept only until the dependency is fully removed.
     "react-popper>react": "19"
     # Same situation: peer range predates React 19, uses nothing React 19 removed.
     "react-masonry-component>react": "19"

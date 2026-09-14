@@ -8,8 +8,7 @@ import { Menu } from "@headlessui/react";
 import { ChevronDownOutline, ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import * as React from "react";
 import ReactDOM from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 // plane helpers
 // helpers
 import { useDropdownKeyDown } from "../hooks/use-dropdown-key-down";

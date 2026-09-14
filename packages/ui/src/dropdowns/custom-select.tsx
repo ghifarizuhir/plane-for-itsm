@@ -8,8 +8,7 @@ import { Combobox } from "@headlessui/react";
 
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 import { ChevronDownOutline, TickOutline } from "@makeplane/propel/icons";
 // plane helpers
 // hooks
@@ -67,6 +66,8 @@ function CustomSelect(props: ICustomSelectProps) {
 
   return (
     <DropdownContext.Provider value={closeDropdown}>
+      {/* HeadlessUI Combobox handles keyboard interaction internally. */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <Combobox
         as="div"
         ref={dropdownRef}
@@ -162,6 +163,8 @@ function Option(props: ICustomSelectItemProps) {
   }, [closeDropdown]);
 
   return (
+    // HeadlessUI Combobox.Option handles keyboard selection internally.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events
     <Combobox.Option
       as="li"
       value={value}

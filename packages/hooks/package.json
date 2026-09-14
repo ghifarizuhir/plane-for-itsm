@@ -23,6 +23,7 @@
     "clean": "rm -rf .turbo && rm -rf .next && rm -rf node_modules && rm -rf dist"
   },
   "dependencies": {
+    "@floating-ui/dom": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {

@@ -8,8 +8,7 @@ import { Combobox } from "@headlessui/react";
 import { ChevronDownOutline, InfoOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import React, { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { usePopper } from "react-popper";
-import { useOutsideClickDetector } from "@plane/hooks";
+import { useOutsideClickDetector, usePopper } from "@plane/hooks";
 // plane imports
 // local imports
 import { Tooltip } from "@plane/propel/tooltip";
@@ -73,7 +72,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
 
   const closeDropdown = () => {
     setIsOpen(false);
-    onClose && onClose();
+    if (onClose) onClose();
   };
 
   const handleKeyDown = useDropdownKeyDown(openDropdown, closeDropdown, isOpen);
@@ -85,6 +84,8 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
   };
 
   return (
+    // HeadlessUI Combobox handles keyboard interaction internally.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <Combobox
       as="div"
       ref={dropdownRef}
@@ -175,6 +176,8 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                       {filteredOptions ? (
                         filteredOptions.length > 0 ? (
                           filteredOptions.map((option) => (
+                            // HeadlessUI Combobox.Option handles keyboard selection internally.
+                            // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                             <Combobox.Option
                               as="li"
                               key={option.value}
