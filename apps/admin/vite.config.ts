@@ -17,6 +17,15 @@ const viteEnv = Object.keys(process.env)
 
 const basePath = joinUrlPath(process.env.VITE_ADMIN_BASE_PATH ?? "", "/") ?? "/";
 
+const allowedHosts = [
+  "app.terraline.space",
+  ".terraline.space",
+  ".trycloudflare.com",
+  ...(process.env.VITE_ALLOWED_HOSTS?.split(",")
+    .map((h) => h.trim())
+    .filter(Boolean) ?? []),
+];
+
 export default defineConfig(() => ({
   base: basePath,
   define: {
@@ -36,6 +45,7 @@ export default defineConfig(() => ({
   },
   server: {
     host: "0.0.0.0",
+    allowedHosts,
   },
   // No SSR-specific overrides needed; alias resolves to ESM build
 }));
