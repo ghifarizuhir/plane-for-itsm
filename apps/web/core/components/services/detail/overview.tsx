@@ -4,15 +4,21 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { IService } from "@plane/types";
-// ui
-import { TextArea } from "@plane/ui";
+import type { IService, TNameDescriptionLoader } from "@plane/types";
+import { EFileAssetType } from "@plane/types";
+// components
+import { DescriptionInput } from "@/components/editor/rich-text/description-input";
+import { NameDescriptionUpdateStatus } from "@/components/issues/issue-update-status";
 // hooks
 import { useService } from "@/hooks/store/use-service";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+// helpers
+import { SERVICE_DESCRIPTION_DISABLED_EXTENSIONS, stripHtmlToText } from "@/services/service.helpers";
 
 type Props = {
   serviceId: string;
@@ -20,13 +26,18 @@ type Props = {
 
 export const ServiceOverview = observer(function ServiceOverview(props: Props) {
   const { serviceId } = props;
+  // states
+  const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
   // router
-  const { projectId } = useParams();
+  const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getServiceById, getDependenciesByProject } = useService();
+  const { getServiceById, getDependenciesByProject, updateService } = useService();
+  const { getWorkspaceBySlug } = useWorkspace();
   // derived values
+  const slug = workspaceSlug?.toString() ?? "";
+  const workspaceId = getWorkspaceBySlug(slug)?.id;
   const service = getServiceById(serviceId);
   if (!service) return null;
   const pid = projectId?.toString() ?? service.project_id;
@@ -42,13 +53,31 @@ export const ServiceOverview = observer(function ServiceOverview(props: Props) {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      {service.description && (
+      {slug && workspaceId && (
         <div className="flex flex-col gap-1.5">
-          <h4 className="text-13 font-medium text-secondary">{t("service.fields.description")}</h4>
-          <TextArea
-            className="ring-none !m-0 max-h-max w-full resize-none !border-0 bg-transparent !p-0 text-13 leading-5 text-secondary outline-none"
-            value={service.description}
-            disabled
+          <div className="flex items-center justify-between gap-4">
+            <h4 className="text-13 font-medium text-secondary">{t("service.fields.description")}</h4>
+            <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
+          </div>
+          <DescriptionInput
+            containerClassName="-ml-6 border-none p-0! pl-6!"
+            entityId={service.id}
+            fileAssetType={EFileAssetType.PROJECT_DESCRIPTION}
+            initialValue={service.description_html || "<p></p>"}
+            key={service.id}
+            disabledExtensions={SERVICE_DESCRIPTION_DISABLED_EXTENSIONS}
+            onSubmit={async (value) => {
+              const descriptionHtml =
+                value.description_html && value.description_html.trim() !== "" ? value.description_html : "<p></p>";
+              await updateService(slug, workspaceId, pid, service.id, {
+                description: stripHtmlToText(descriptionHtml),
+                description_html: descriptionHtml,
+              });
+            }}
+            projectId={pid}
+            setIsSubmitting={(value) => setIsSubmitting(value)}
+            workspaceSlug={slug}
+            placeholder={t("service.fields.description")}
           />
         </div>
       )}

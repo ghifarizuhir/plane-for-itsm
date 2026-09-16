@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import type { TExtensions } from "@plane/editor";
 import type { IService, IServiceDependency, TServiceFilters, TServiceOrderByOptions } from "@plane/types";
 
 /**
@@ -85,4 +86,41 @@ export const orderServices = (services: IService[], orderBy: TServiceOrderByOpti
     }
   });
   return ordered;
+};
+
+/**
+ * Extensions disabled for the service description editor: image upload (no
+ * `SERVICE_*` file-asset type exists yet) and AI. `TExtensions`
+ * (`packages/editor/src/types/extensions.ts`) only supports
+ * `"ai" | "collaboration-cursor" | "issue-embed" | "slash-commands" |
+ * "enter-key" | "image"`, and only `"image"` is actually gated in
+ * `CoreEditorExtensions` — table/mention stay enabled for full work-item
+ * parity. `collaboration-cursor` is additionally disabled by default in
+ * `useEditorFlagging` for all richText editors. `"ai"` duplicates the
+ * richText default-disable in `useEditorFlagging` and is kept explicitly as defense-in-depth.
+ */
+export const SERVICE_DESCRIPTION_DISABLED_EXTENSIONS: TExtensions[] = ["image", "ai"];
+
+/**
+ * Derives the plain-text `description` column from editor HTML for the
+ * existing Rust `services` table. Block closings become newlines, all other
+ * tags are stripped, common entities decoded, blank lines dropped.
+ */
+export const stripHtmlToText = (html: string): string => {
+  if (!html || html.trim() === "") return "";
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|ul|ol|tr|td|th|table|thead|tbody|tfoot|blockquote|pre)>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n")
+    .trim();
 };

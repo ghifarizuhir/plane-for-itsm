@@ -98,6 +98,7 @@ export const CreateUpdateServiceModal = observer(function CreateUpdateServiceMod
         handleClose={handleClose}
         status={!!data}
         projectId={projectId}
+        workspaceSlug={workspaceSlug}
         data={data}
       />
     </ModalCore>
