@@ -13,15 +13,26 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IService } from "@plane/types";
 // ui
-import { CustomSelect, Input as UIKitInput, TextArea } from "@plane/ui";
+import { CustomSelect, Input as UIKitInput } from "@plane/ui";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { RichTextEditor } from "@/components/editor/rich-text";
+// hooks
+import { useWorkspace } from "@/hooks/store/use-workspace";
+// plane web services
+import { WorkspaceService } from "@/services/workspace.service";
+// helpers
+import { SERVICE_DESCRIPTION_DISABLED_EXTENSIONS, stripHtmlToText } from "@/services/service.helpers";
+
+// services init
+const workspaceService = new WorkspaceService();
 
 type Props = {
   handleFormSubmit: (values: Partial<IService>) => Promise<void>;
   handleClose: () => void;
   status: boolean;
   projectId: string;
+  workspaceSlug: string;
   data?: IService;
 };
 
@@ -82,6 +93,7 @@ function ServiceOptionSelect(props: TServiceOptionSelectProps) {
 const defaultValues: Partial<IService> = {
   name: "",
   description: "",
+  description_html: "",
   status: "planned",
   criticality: "medium",
   type: "internal",
@@ -91,7 +103,7 @@ const defaultValues: Partial<IService> = {
 };
 
 export function ServiceForm(props: Props) {
-  const { handleFormSubmit, handleClose, status, projectId, data } = props;
+  const { handleFormSubmit, handleClose, status, projectId, workspaceSlug, data } = props;
   // form info
   const {
     formState: { errors, isSubmitting },
@@ -102,6 +114,7 @@ export function ServiceForm(props: Props) {
     defaultValues: {
       name: data?.name || "",
       description: data?.description || "",
+      description_html: data?.description_html || "",
       status: data?.status || "planned",
       criticality: data?.criticality || "medium",
       type: data?.type || "internal",
@@ -112,6 +125,7 @@ export function ServiceForm(props: Props) {
   });
 
   const { t } = useTranslation();
+  const { getWorkspaceBySlug } = useWorkspace();
 
   const validateUrl = (value: string | null | undefined) => {
     if (!value) return true;
@@ -128,11 +142,13 @@ export function ServiceForm(props: Props) {
   };
 
   const handleCreateUpdateService = async (formData: Partial<IService>) => {
-    const description = formData.description ?? "";
+    const descriptionHtml =
+      formData.description_html && formData.description_html.trim() !== "" ? formData.description_html : "<p></p>";
     try {
       await handleFormSubmit({
         ...formData,
-        description_html: description ? `<p>${description}</p>` : "",
+        description: stripHtmlToText(descriptionHtml),
+        description_html: descriptionHtml,
         repository_url: formData.repository_url || null,
         documentation_url: formData.documentation_url || null,
       });
@@ -189,17 +205,35 @@ export function ServiceForm(props: Props) {
           </div>
           <div>
             <Controller
-              name="description"
+              name="description_html"
               control={control}
               render={({ field: { value, onChange } }) => (
-                <TextArea
-                  id="description"
-                  name="description"
-                  value={value}
-                  onChange={onChange}
+                <RichTextEditor
+                  editable
+                  id="service-description-editor"
+                  initialValue={value ?? ""}
+                  value={value ?? ""}
+                  workspaceSlug={workspaceSlug}
+                  workspaceId={getWorkspaceBySlug(workspaceSlug)?.id ?? ""}
+                  projectId={projectId}
+                  disabledExtensions={SERVICE_DESCRIPTION_DISABLED_EXTENSIONS}
+                  onChange={(_descriptionJson: object, descriptionHtml: string) => {
+                    onChange(descriptionHtml);
+                  }}
                   placeholder={t("service.fields.description")}
-                  className="min-h-24 w-full resize-none text-14"
-                  hasError={Boolean(errors?.description)}
+                  searchMentionCallback={async (payload) =>
+                    await workspaceService.searchEntity(workspaceSlug, {
+                      ...payload,
+                      project_id: projectId,
+                    })
+                  }
+                  containerClassName="min-h-24 rounded-md border border-subtle"
+                  uploadFile={async () => {
+                    throw new Error("File upload is disabled for service descriptions.");
+                  }}
+                  duplicateFile={async () => {
+                    throw new Error("File upload is disabled for service descriptions.");
+                  }}
                 />
               )}
             />
