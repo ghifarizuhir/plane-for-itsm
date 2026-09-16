@@ -92,7 +92,6 @@ function ServiceOptionSelect(props: TServiceOptionSelectProps) {
 
 const defaultValues: Partial<IService> = {
   name: "",
-  description: "",
   description_html: "",
   status: "planned",
   criticality: "medium",
@@ -113,7 +112,6 @@ export function ServiceForm(props: Props) {
   } = useForm<IService>({
     defaultValues: {
       name: data?.name || "",
-      description: data?.description || "",
       description_html: data?.description_html || "",
       status: data?.status || "planned",
       criticality: data?.criticality || "medium",
@@ -126,6 +124,12 @@ export function ServiceForm(props: Props) {
 
   const { t } = useTranslation();
   const { getWorkspaceBySlug } = useWorkspace();
+  // Stable server snapshot for the editor: typing updates RHF via onChange
+  // but must NOT feed back into `value` (would force setContent+selection
+  // move on every keystroke — see use-editor.ts). Entity switches remount
+  // via key below, mirroring DescriptionInput's key={entityId}.
+  const stableDescriptionHtml =
+    data?.description_html && data.description_html.trim() !== "" ? data.description_html : "<p></p>";
 
   const validateUrl = (value: string | null | undefined) => {
     if (!value) return true;
@@ -207,12 +211,13 @@ export function ServiceForm(props: Props) {
             <Controller
               name="description_html"
               control={control}
-              render={({ field: { value, onChange } }) => (
+              render={({ field: { onChange } }) => (
                 <RichTextEditor
                   editable
+                  key={data?.id ?? "service-create"}
                   id="service-description-editor"
-                  initialValue={value ?? ""}
-                  value={value ?? ""}
+                  initialValue={stableDescriptionHtml}
+                  value={stableDescriptionHtml}
                   workspaceSlug={workspaceSlug}
                   workspaceId={getWorkspaceBySlug(workspaceSlug)?.id ?? ""}
                   projectId={projectId}
