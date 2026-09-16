@@ -38,7 +38,6 @@ export const ServiceOverview = observer(function ServiceOverview(props: Props) {
   // derived values
   const slug = workspaceSlug?.toString() ?? "";
   const workspaceId = getWorkspaceBySlug(slug)?.id;
-  // derived values
   const service = getServiceById(serviceId);
   if (!service) return null;
   const pid = projectId?.toString() ?? service.project_id;
