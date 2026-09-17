@@ -8,10 +8,18 @@ import { set, sortBy } from "lodash-es";
 import { action, observable, makeObservable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { IService, IServiceDependency, TServiceGraphData, TServiceWorkItemLink } from "@plane/types";
+import type {
+  IService,
+  IServiceDependency,
+  IServiceHealthSnapshot,
+  TServiceGraphData,
+  TServiceHealthSummary,
+  TServiceWorkItemLink,
+} from "@plane/types";
 // helpers
 import { filterServices, orderServices } from "@/services/service.helpers";
 // services
+import { ServiceHealthService } from "@/services/service-health.service";
 import { ServiceService } from "@/services/service.service";
 // store
 import type { CoreRootStore } from "./root.store";
@@ -22,7 +30,10 @@ export interface IServiceStore {
   serviceMap: Record<string, IService>;
   dependencyMap: Record<string, IServiceDependency>;
   workItemLinkMap: Record<string, TServiceWorkItemLink>;
+  healthMap: Record<string, IServiceHealthSnapshot>;
   getServiceById: (serviceId: string) => IService | null;
+  getServiceHealth: (serviceId: string) => IServiceHealthSnapshot | null;
+  getProjectHealthSummary: (projectId: string) => TServiceHealthSummary;
   getProjectServiceIds: (projectId: string) => string[] | null;
   getFilteredServiceIds: (projectId: string) => string[] | null;
   getDependenciesByProject: (projectId: string) => IServiceDependency[];
@@ -79,8 +90,10 @@ export class ServicesStore implements IServiceStore {
   serviceMap: Record<string, IService> = {};
   dependencyMap: Record<string, IServiceDependency> = {};
   workItemLinkMap: Record<string, TServiceWorkItemLink> = {};
+  healthMap: Record<string, IServiceHealthSnapshot> = {};
   rootStore;
   serviceService;
+  serviceHealthService;
 
   constructor(_rootStore: CoreRootStore) {
     makeObservable(this, {
@@ -89,6 +102,7 @@ export class ServicesStore implements IServiceStore {
       serviceMap: observable,
       dependencyMap: observable,
       workItemLinkMap: observable,
+      healthMap: observable,
       fetchServices: action,
       createService: action,
       updateService: action,
@@ -101,9 +115,26 @@ export class ServicesStore implements IServiceStore {
     });
     this.rootStore = _rootStore;
     this.serviceService = new ServiceService();
+    this.serviceHealthService = new ServiceHealthService();
   }
 
   getServiceById = computedFn((serviceId: string) => this.serviceMap[serviceId] || null);
+
+  getServiceHealth = computedFn((serviceId: string) => this.healthMap[serviceId] || null);
+
+  getProjectHealthSummary = computedFn((projectId: string): TServiceHealthSummary => {
+    const summary: TServiceHealthSummary = { down: 0, degraded: 0, healthy: 0, unknown: 0, criticalImpacted: 0 };
+    Object.values(this.serviceMap)
+      .filter((service) => service.project_id === projectId)
+      .forEach((service) => {
+        const state = this.healthMap[service.id]?.health ?? "unknown";
+        summary[state] += 1;
+        if (state !== "healthy" && state !== "unknown" && service.criticality === "critical") {
+          summary.criticalImpacted += 1;
+        }
+      });
+    return summary;
+  });
 
   getProjectServiceIds = computedFn((projectId: string) => {
     if (!this.fetchedMap[projectId]) return null;
@@ -120,8 +151,8 @@ export class ServicesStore implements IServiceStore {
     const filters = this.rootStore.serviceFilter.getFiltersByProjectId(projectId);
     const searchQuery = this.rootStore.serviceFilter.searchQuery;
     const services = Object.values(this.serviceMap).filter((s) => s.project_id === projectId);
-    const filtered = filterServices(services, filters, searchQuery);
-    return orderServices(filtered, displayFilters?.order_by).map((s) => s.id);
+    const filtered = filterServices(services, filters, searchQuery, this.healthMap);
+    return orderServices(filtered, displayFilters?.order_by, this.healthMap).map((s) => s.id);
   });
 
   getDependenciesByProject = computedFn((projectId: string) =>
@@ -141,7 +172,12 @@ export class ServicesStore implements IServiceStore {
     const dependencies = this.getDependenciesByProject(projectId).filter(
       (d) => visible.has(d.from_service_id) && visible.has(d.to_service_id)
     );
-    return { services, dependencies };
+    const health: Record<string, IServiceHealthSnapshot> = {};
+    services.forEach((service) => {
+      const snapshot = this.healthMap[service.id];
+      if (snapshot) health[service.id] = snapshot;
+    });
+    return { services, dependencies, health };
   });
 
   fetchServices = async (workspaceSlug: string, workspaceId: string, projectId: string) => {
@@ -159,6 +195,15 @@ export class ServicesStore implements IServiceStore {
         set(this.fetchedMap, projectId, true);
         this.loader = false;
       });
+      try {
+        const health = await this.serviceHealthService.getHealth(workspaceSlug, workspaceId, projectId, services);
+        runInAction(() => {
+          health.forEach((snapshot) => set(this.healthMap, [snapshot.service_id], snapshot));
+        });
+      } catch (error) {
+        // Health is supplementary; the board falls back to "unknown" without it.
+        console.error("Failed to derive service health", error);
+      }
       return services;
     } catch {
       runInAction(() => {
