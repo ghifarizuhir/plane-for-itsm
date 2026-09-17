@@ -5,8 +5,13 @@
  */
 
 export * from "./services-list-view";
-export * from "./service-list-item";
-export * from "./service-card-item";
+export * from "./board/services-board";
+export * from "./board/services-board-row";
+export * from "./health/service-health-dot";
+export * from "./health/service-health-pill";
+export * from "./health/service-health-summary";
+export * from "./health/service-incident-cell";
+export * from "./health/service-deploy-cell";
 export * from "./service-view-header";
 export * from "./service-mobile-header";
 export * from "./service-layout-icon";

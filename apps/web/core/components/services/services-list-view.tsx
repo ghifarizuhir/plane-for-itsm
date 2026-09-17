@@ -14,10 +14,10 @@ import { Button } from "@plane/propel/button";
 import { useService } from "@/hooks/store/use-service";
 import { useServiceFilter } from "@/hooks/store/use-service-filter";
 // components
+import { ServicesBoard } from "./board/services-board";
 import { ServiceGraph } from "./graph/service-graph";
+import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
-import { ServiceCardItem } from "./service-card-item";
-import { ServiceListItem } from "./service-list-item";
 
 export const ServicesListView = observer(function ServicesListView() {
   // router
@@ -25,23 +25,26 @@ export const ServicesListView = observer(function ServicesListView() {
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getProjectServiceIds, getFilteredServiceIds, loader } = useService();
-  const { currentProjectDisplayFilters } = useServiceFilter();
+  const { getProjectServiceIds, getFilteredServiceIds, getProjectHealthSummary, loader } = useService();
+  const { currentProjectDisplayFilters, clearAllFilters } = useServiceFilter();
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // derived values
+  const layout = currentProjectDisplayFilters?.layout ?? "board";
   const projectServiceIds = projectId ? getProjectServiceIds(projectId.toString()) : null;
   const serviceIds = projectId ? getFilteredServiceIds(projectId.toString()) : null;
-  const layout = currentProjectDisplayFilters?.layout ?? "list";
+  const summary = projectId ? getProjectHealthSummary(projectId.toString()) : null;
 
   const openCreateModal = () => setIsCreateModalOpen(true);
   const closeCreateModal = () => setIsCreateModalOpen(false);
 
-  return (
-    <div className="flex h-full w-full flex-col">
-      {loader || projectServiceIds === null || serviceIds === null ? (
-        <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>
-      ) : projectServiceIds.length === 0 ? (
+  const renderContent = () => {
+    if (loader || projectServiceIds === null || serviceIds === null) {
+      return <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>;
+    }
+    if (projectServiceIds.length === 0) {
+      return (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.description")}</p>
@@ -49,28 +52,39 @@ export const ServicesListView = observer(function ServicesListView() {
             {t("service.add")}
           </Button>
         </div>
-      ) : serviceIds.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center gap-1 p-6">
+      );
+    }
+    if (serviceIds.length === 0) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.no_matches.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.no_matches.description")}</p>
+          {projectId && (
+            <Button variant="secondary" size="sm" onClick={() => clearAllFilters(projectId.toString())}>
+              {t("common.clear_all")}
+            </Button>
+          )}
         </div>
-      ) : layout === "graph" ? (
+      );
+    }
+    if (layout === "graph") {
+      return (
         <div className="h-[calc(100vh-12rem)] w-full">
           <ServiceGraph />
         </div>
-      ) : layout === "grid" ? (
-        <div className="grid size-full auto-rows-max grid-cols-1 gap-4 overflow-y-auto p-2 sm:grid-cols-2 xl:grid-cols-3">
-          {serviceIds.map((id) => (
-            <ServiceCardItem key={id} serviceId={id} />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1 p-2">
-          {serviceIds.map((id) => (
-            <ServiceListItem key={id} serviceId={id} />
-          ))}
-        </div>
-      )}
+      );
+    }
+    return (
+      <>
+        {summary && <ServiceHealthSummary summary={summary} />}
+        <ServicesBoard />
+      </>
+    );
+  };
+
+  return (
+    <div className="flex h-full w-full flex-col">
+      {renderContent()}
       {workspaceSlug && projectId && (
         <CreateUpdateServiceModal
           isOpen={isCreateModalOpen}
