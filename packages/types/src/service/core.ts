@@ -10,6 +10,32 @@ export type TServiceCriticality = "critical" | "high" | "medium" | "low";
 
 export type TServiceType = "internal" | "external" | "infrastructure" | "third_party";
 
+export type TServiceHealth = "healthy" | "degraded" | "down" | "unknown";
+
+export type TServiceIncidentSeverity = "sev1" | "sev2" | "sev3" | "sev4";
+
+export interface IServiceIncident {
+  id: string;
+  service_id: string;
+  severity: TServiceIncidentSeverity;
+  opened_at: string;
+}
+
+export interface IServiceHealthSnapshot {
+  service_id: string;
+  health: TServiceHealth;
+  incidents: IServiceIncident[];
+  last_deployed_at: string | null;
+}
+
+export type TServiceHealthSummary = {
+  down: number;
+  degraded: number;
+  healthy: number;
+  unknown: number;
+  criticalImpacted: number;
+};
+
 export type TServicePosition = {
   x: number;
   y: number;
@@ -58,4 +84,5 @@ export interface TServiceWorkItemLink {
 export type TServiceGraphData = {
   services: IService[];
   dependencies: IServiceDependency[];
+  health: Record<string, IServiceHealthSnapshot>;
 };
