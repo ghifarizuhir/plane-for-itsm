@@ -25,7 +25,7 @@ import "@xyflow/react/dist/style.css";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IService } from "@plane/types";
+import type { IService, TServiceGraphData } from "@plane/types";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -53,7 +53,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const [isReLayouting, setIsReLayouting] = useState(false);
   const fitDone = useRef(false);
 
-  const graphData = pid ? getGraphData(pid) : { services: [], dependencies: [] };
+  const graphData: TServiceGraphData = pid ? getGraphData(pid) : { services: [], dependencies: [], health: {} };
 
   const { nodes: layoutNodes, edges: layoutEdges } = useMemo(
     () => getLayoutedElements(graphData.services, graphData.dependencies),
@@ -65,6 +65,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
       layoutNodes.map((node) => {
         const service = (node.data as { service?: IService } | undefined)?.service;
         if (!service) return node;
+        const health = graphData.health[service.id];
         return {
           ...node,
           data: {
@@ -72,11 +73,13 @@ export const ServiceGraph = observer(function ServiceGraph() {
             service,
             statusLabel: t(`service.status_values.${service.status}`),
             criticalityLabel: t(`service.criticality_values.${service.criticality}`),
+            health: health?.health ?? "unknown",
+            incidents: health?.incidents ?? [],
           },
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
-    [layoutNodes, currentLocale]
+    [layoutNodes, currentLocale, graphData.health]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
@@ -89,10 +92,17 @@ export const ServiceGraph = observer(function ServiceGraph() {
         prev.every((node, i) => {
           const next = translatedNodes[i];
           if (node.id !== next?.id) return false;
-          const prevData = node.data as { statusLabel?: string; criticalityLabel?: string } | undefined;
-          const nextData = next?.data as { statusLabel?: string; criticalityLabel?: string } | undefined;
+          const prevData = node.data as
+            | { statusLabel?: string; criticalityLabel?: string; health?: string; incidents?: unknown[] }
+            | undefined;
+          const nextData = next?.data as
+            | { statusLabel?: string; criticalityLabel?: string; health?: string; incidents?: unknown[] }
+            | undefined;
           return (
-            prevData?.statusLabel === nextData?.statusLabel && prevData?.criticalityLabel === nextData?.criticalityLabel
+            prevData?.statusLabel === nextData?.statusLabel &&
+            prevData?.criticalityLabel === nextData?.criticalityLabel &&
+            prevData?.health === nextData?.health &&
+            (prevData?.incidents?.length ?? 0) === (nextData?.incidents?.length ?? 0)
           );
         })
       )
