@@ -8,7 +8,7 @@ import { set } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction, reaction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { TServiceDisplayFilters, TServiceFilters } from "@plane/types";
+import type { TServiceDisplayFilters, TServiceFilters, TServiceLayoutOptions } from "@plane/types";
 // helpers
 import { storage } from "@/lib/local-storage";
 // store
@@ -112,10 +112,13 @@ export class ServiceFilterStore implements IServiceFilterStore {
 
   initProjectServiceFilters = (projectId: string) => {
     const displayFilters = this.getDisplayFiltersByProjectId(projectId);
+    // Legacy persisted layouts ("list" | "grid") collapse into the board.
+    const persistedLayout = displayFilters?.layout as string | undefined;
+    const layout: TServiceLayoutOptions = persistedLayout === "graph" ? "graph" : "board";
     runInAction(() => {
       this.displayFilters[projectId] = {
-        layout: displayFilters?.layout || "list",
-        order_by: displayFilters?.order_by || "name",
+        layout,
+        order_by: displayFilters?.order_by || "health",
       };
       this.filters[projectId] = this.filters[projectId] ?? {};
     });
