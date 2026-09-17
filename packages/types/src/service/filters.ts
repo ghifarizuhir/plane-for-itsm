@@ -4,16 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import type { TServiceCriticality, TServiceStatus, TServiceType } from "./core";
+import type { TServiceCriticality, TServiceHealth, TServiceStatus, TServiceType } from "./core";
 
-export type TServiceLayoutOptions = "list" | "grid" | "graph";
+export type TServiceLayoutOptions = "board" | "graph";
 
-export type TServiceOrderByOptions = "name" | "-created_at" | "-updated_at" | "criticality" | "status";
+export type TServiceOrderByOptions = "health" | "name" | "-created_at" | "-updated_at" | "criticality" | "status";
+
+export type TServiceIncidentFilter = "active";
 
 export type TServiceFilters = {
   status?: TServiceStatus[];
   criticality?: TServiceCriticality[];
   type?: TServiceType[];
+  health?: TServiceHealth[];
+  incidents?: TServiceIncidentFilter[];
 };
 
 export type TServiceDisplayFilters = {
