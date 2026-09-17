@@ -14,6 +14,7 @@ import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 
 export const SERVICE_ORDER_BY_OPTIONS: { key: TServiceOrderByOptions; i18n_label: string }[] = [
+  { key: "health", i18n_label: "service.order_by.health" },
   { key: "name", i18n_label: "service.order_by.name" },
   { key: "-created_at", i18n_label: "service.order_by.created" },
   { key: "-updated_at", i18n_label: "service.order_by.updated" },

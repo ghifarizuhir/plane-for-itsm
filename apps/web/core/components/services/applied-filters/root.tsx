@@ -23,6 +23,8 @@ const SERVICE_FILTER_VALUE_I18N: Record<keyof TServiceFilters, (value: string) =
   status: (value) => `service.status_values.${value}`,
   criticality: (value) => `service.criticality_values.${value}`,
   type: (value) => `service.type_values.${value}`,
+  health: (value) => `service.health_values.${value}`,
+  incidents: (value) => `service.incidents.${value}`,
 };
 
 export const ServiceAppliedFiltersList = observer(function ServiceAppliedFiltersList(props: Props) {
