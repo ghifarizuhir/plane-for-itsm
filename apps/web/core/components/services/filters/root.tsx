@@ -11,7 +11,13 @@ import { CloseOutline, SearchOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import type { TServiceFilters } from "@plane/types";
 // components
-import { FilterServiceCriticality, FilterServiceStatus, FilterServiceType } from "@/components/services";
+import {
+  FilterServiceCriticality,
+  FilterServiceHealth,
+  FilterServiceIncidents,
+  FilterServiceStatus,
+  FilterServiceType,
+} from "@/components/services";
 
 type Props = {
   filters: TServiceFilters;
@@ -50,6 +56,24 @@ export const ServiceFiltersSelection = observer(function ServiceFiltersSelection
           <FilterServiceStatus
             appliedFilters={filters.status ?? null}
             handleUpdate={(val) => handleFiltersUpdate("status", val)}
+            searchQuery={filtersSearchQuery}
+          />
+        </div>
+
+        {/* health */}
+        <div className="py-2">
+          <FilterServiceHealth
+            appliedFilters={filters.health ?? null}
+            handleUpdate={(val) => handleFiltersUpdate("health", val)}
+            searchQuery={filtersSearchQuery}
+          />
+        </div>
+
+        {/* incidents */}
+        <div className="py-2">
+          <FilterServiceIncidents
+            appliedFilters={filters.incidents ?? null}
+            handleUpdate={(val) => handleFiltersUpdate("incidents", val)}
             searchQuery={filtersSearchQuery}
           />
         </div>

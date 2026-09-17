@@ -5,6 +5,8 @@
  */
 
 export * from "./criticality";
+export * from "./health";
+export * from "./incidents";
 export * from "./root";
 export * from "./status";
 export * from "./type";
