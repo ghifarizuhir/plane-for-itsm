@@ -5,7 +5,15 @@
  */
 
 import type { TExtensions } from "@plane/editor";
-import type { IService, IServiceDependency, TServiceFilters, TServiceOrderByOptions } from "@plane/types";
+import type {
+  IService,
+  IServiceDependency,
+  IServiceHealthSnapshot,
+  TServiceFilters,
+  TServiceOrderByOptions,
+} from "@plane/types";
+// helpers
+import { HEALTH_WEIGHT } from "@/services/service-health.helpers";
 
 /**
  * Adding `from -> to` is invalid if it is a self-loop.
@@ -56,18 +64,42 @@ export const validateDependency = (dependencies: IServiceDependency[], from: str
 
 const CRITICALITY_WEIGHT: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-const matchesFilters = (service: IService, filters: TServiceFilters): boolean => {
+const matchesFilters = (
+  service: IService,
+  filters: TServiceFilters,
+  health: IServiceHealthSnapshot | undefined
+): boolean => {
   if (filters.status && filters.status.length > 0 && !filters.status.includes(service.status)) return false;
   if (filters.criticality && filters.criticality.length > 0 && !filters.criticality.includes(service.criticality))
     return false;
   if (filters.type && filters.type.length > 0 && !filters.type.includes(service.type)) return false;
+  if (filters.health && filters.health.length > 0) {
+    const state = health?.health ?? "unknown";
+    if (!filters.health.includes(state)) return false;
+  }
+  if (filters.incidents && filters.incidents.length > 0 && filters.incidents.includes("active")) {
+    if ((health?.incidents.length ?? 0) === 0) return false;
+  }
   return true;
 };
 
-export const filterServices = (services: IService[], filters: TServiceFilters, searchQuery: string): IService[] =>
-  services.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) && matchesFilters(s, filters));
+export const filterServices = (
+  services: IService[],
+  filters: TServiceFilters,
+  searchQuery: string,
+  healthMap: Record<string, IServiceHealthSnapshot> = {}
+): IService[] =>
+  services.filter(
+    (service) =>
+      service.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      matchesFilters(service, filters, healthMap[service.id])
+  );
 
-export const orderServices = (services: IService[], orderBy: TServiceOrderByOptions = "name"): IService[] => {
+export const orderServices = (
+  services: IService[],
+  orderBy: TServiceOrderByOptions = "health",
+  healthMap: Record<string, IServiceHealthSnapshot> = {}
+): IService[] => {
   const ordered = [...services];
   // oxlint-disable-next-line unicorn/no-array-sort
   ordered.sort((a, b) => {
@@ -80,6 +112,15 @@ export const orderServices = (services: IService[], orderBy: TServiceOrderByOpti
         return (CRITICALITY_WEIGHT[a.criticality] ?? 9) - (CRITICALITY_WEIGHT[b.criticality] ?? 9);
       case "status":
         return a.status.localeCompare(b.status);
+      case "health": {
+        const healthDiff =
+          (HEALTH_WEIGHT[healthMap[a.id]?.health ?? "unknown"] ?? 2) -
+          (HEALTH_WEIGHT[healthMap[b.id]?.health ?? "unknown"] ?? 2);
+        if (healthDiff !== 0) return healthDiff;
+        const criticalityDiff = (CRITICALITY_WEIGHT[a.criticality] ?? 9) - (CRITICALITY_WEIGHT[b.criticality] ?? 9);
+        if (criticalityDiff !== 0) return criticalityDiff;
+        return a.name.localeCompare(b.name);
+      }
       case "name":
       default:
         return a.name.localeCompare(b.name);
