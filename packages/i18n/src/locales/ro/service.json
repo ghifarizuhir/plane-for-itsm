@@ -19,7 +19,10 @@
       "type": "Tip",
       "owner": "Proprietar",
       "repository": "Repozitoriu",
-      "documentation": "Documentație"
+      "documentation": "Documentație",
+      "health": "Sănătate",
+      "incidents": "Incidente",
+      "deploy": "Ultima implementare"
     },
     "tabs": {
       "overview": "Prezentare generală",
@@ -27,8 +30,7 @@
       "dependencies": "Dependențe"
     },
     "layout": {
-      "list": "Listă",
-      "grid": "Grilă",
+      "board": "Panou",
       "graph": "Graf"
     },
     "layout_label": "Aspect",
@@ -37,7 +39,8 @@
       "created": "Dată creare",
       "updated": "Dată actualizare",
       "criticality": "Criticitate",
-      "status": "Status"
+      "status": "Status",
+      "health": "Sănătate"
     },
     "status_values": {
       "active": "Activ",
@@ -57,6 +60,34 @@
       "external": "Extern",
       "infrastructure": "Infrastructură",
       "third_party": "Terță parte"
+    },
+    "health_values": {
+      "healthy": "Funcțional",
+      "degraded": "Degradat",
+      "down": "Indisponibil",
+      "unknown": "Necunoscut"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Are incidente active"
+    },
+    "summary": {
+      "down": "{count} indisponibile",
+      "degraded": "{count} degradate",
+      "healthy": "{count} funcționale",
+      "critical_impacted": "{count} critice afectate"
+    },
+    "board": {
+      "service": "Serviciu",
+      "health": "Sănătate",
+      "incidents": "Incidente",
+      "deploy": "Ultima implementare",
+      "owner": "Proprietar"
     },
     "graph": {
       "re_layout": "Rearanjează",

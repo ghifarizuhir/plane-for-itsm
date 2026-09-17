@@ -19,7 +19,10 @@
       "type": "タイプ",
       "owner": "所有者",
       "repository": "リポジトリ",
-      "documentation": "ドキュメント"
+      "documentation": "ドキュメント",
+      "health": "ヘルス",
+      "incidents": "インシデント",
+      "deploy": "最終デプロイ"
     },
     "tabs": {
       "overview": "概要",
@@ -27,8 +30,7 @@
       "dependencies": "依存関係"
     },
     "layout": {
-      "list": "リスト",
-      "grid": "グリッド",
+      "board": "ボード",
       "graph": "グラフ"
     },
     "layout_label": "レイアウト",
@@ -37,7 +39,8 @@
       "created": "作成日",
       "updated": "更新日",
       "criticality": "重要度",
-      "status": "ステータス"
+      "status": "ステータス",
+      "health": "ヘルス"
     },
     "status_values": {
       "active": "アクティブ",
@@ -57,6 +60,34 @@
       "external": "外部",
       "infrastructure": "インフラストラクチャ",
       "third_party": "サードパーティ"
+    },
+    "health_values": {
+      "healthy": "正常",
+      "degraded": "低下中",
+      "down": "停止中",
+      "unknown": "不明"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "アクティブなインシデントがあります。"
+    },
+    "summary": {
+      "down": "{count}件が停止中",
+      "degraded": "{count}件が低下中",
+      "healthy": "{count}件が正常",
+      "critical_impacted": "{count}件の重大サービスに影響"
+    },
+    "board": {
+      "service": "サービス",
+      "health": "ヘルス",
+      "incidents": "インシデント",
+      "deploy": "最終デプロイ",
+      "owner": "所有者"
     },
     "graph": {
       "re_layout": "再レイアウト",

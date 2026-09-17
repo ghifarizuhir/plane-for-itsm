@@ -19,7 +19,10 @@
       "type": "유형",
       "owner": "소유자",
       "repository": "레포지토리",
-      "documentation": "문서"
+      "documentation": "문서",
+      "health": "헬스",
+      "incidents": "인시던트",
+      "deploy": "최근 배포"
     },
     "tabs": {
       "overview": "오버뷰",
@@ -27,8 +30,7 @@
       "dependencies": "종속성"
     },
     "layout": {
-      "list": "목록",
-      "grid": "그리드",
+      "board": "보드",
       "graph": "그래프"
     },
     "layout_label": "레이아웃",
@@ -37,7 +39,8 @@
       "created": "생성일",
       "updated": "업데이트일",
       "criticality": "중요도",
-      "status": "상태"
+      "status": "상태",
+      "health": "헬스"
     },
     "status_values": {
       "active": "활성",
@@ -57,6 +60,34 @@
       "external": "외부",
       "infrastructure": "인프라스트럭처",
       "third_party": "서드파티"
+    },
+    "health_values": {
+      "healthy": "정상",
+      "degraded": "성능 저하",
+      "down": "다운",
+      "unknown": "알 수 없음"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "활성 인시던트가 있습니다"
+    },
+    "summary": {
+      "down": "다운 {count}개",
+      "degraded": "성능 저하 {count}개",
+      "healthy": "정상 {count}개",
+      "critical_impacted": "심각 영향 {count}개"
+    },
+    "board": {
+      "service": "서비스",
+      "health": "헬스",
+      "incidents": "인시던트",
+      "deploy": "최근 배포",
+      "owner": "소유자"
     },
     "graph": {
       "re_layout": "다시 배치",

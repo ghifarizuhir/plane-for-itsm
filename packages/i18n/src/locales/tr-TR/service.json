@@ -19,7 +19,10 @@
       "type": "Tür",
       "owner": "Sahip",
       "repository": "Depo",
-      "documentation": "Dokümantasyon"
+      "documentation": "Dokümantasyon",
+      "health": "Sağlık",
+      "incidents": "Olaylar",
+      "deploy": "Son dağıtım"
     },
     "tabs": {
       "overview": "Genel Bakış",
@@ -27,8 +30,7 @@
       "dependencies": "Bağımlılıklar"
     },
     "layout": {
-      "list": "Liste",
-      "grid": "Izgara",
+      "board": "Pano",
       "graph": "Graf"
     },
     "layout_label": "Düzen",
@@ -37,7 +39,8 @@
       "created": "Oluşturulma tarihi",
       "updated": "Güncelleme tarihi",
       "criticality": "Kritiklik",
-      "status": "Durum"
+      "status": "Durum",
+      "health": "Sağlık"
     },
     "status_values": {
       "active": "Aktif",
@@ -57,6 +60,34 @@
       "external": "Harici",
       "infrastructure": "Altyapı",
       "third_party": "Üçüncü taraf"
+    },
+    "health_values": {
+      "healthy": "Sağlıklı",
+      "degraded": "Düşük performans",
+      "down": "Çalışmıyor",
+      "unknown": "Bilinmiyor"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Aktif olaylar var"
+    },
+    "summary": {
+      "down": "{count} çalışmıyor",
+      "degraded": "{count} düşük performans",
+      "healthy": "{count} sağlıklı",
+      "critical_impacted": "{count} kritik etkilendi"
+    },
+    "board": {
+      "service": "Hizmet",
+      "health": "Sağlık",
+      "incidents": "Olaylar",
+      "deploy": "Son dağıtım",
+      "owner": "Sahip"
     },
     "graph": {
       "re_layout": "Yeniden düzenle",

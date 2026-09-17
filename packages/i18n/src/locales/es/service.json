@@ -19,7 +19,10 @@
       "type": "Tipo",
       "owner": "Propietario",
       "repository": "Repositorio",
-      "documentation": "Documentación"
+      "documentation": "Documentación",
+      "health": "Salud",
+      "incidents": "Incidentes",
+      "deploy": "Último despliegue"
     },
     "tabs": {
       "overview": "Resumen",
@@ -27,8 +30,7 @@
       "dependencies": "Dependencias"
     },
     "layout": {
-      "list": "Lista",
-      "grid": "Cuadrícula",
+      "board": "Tablero",
       "graph": "Grafo"
     },
     "layout_label": "Diseño",
@@ -37,7 +39,8 @@
       "created": "Fecha de creación",
       "updated": "Fecha de actualización",
       "criticality": "Criticidad",
-      "status": "Estado"
+      "status": "Estado",
+      "health": "Salud"
     },
     "status_values": {
       "active": "Activo",
@@ -57,6 +60,34 @@
       "external": "Externo",
       "infrastructure": "Infraestructura",
       "third_party": "Tercero"
+    },
+    "health_values": {
+      "healthy": "Saludable",
+      "degraded": "Degradado",
+      "down": "Caído",
+      "unknown": "Desconocido"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Tiene incidentes activos"
+    },
+    "summary": {
+      "down": "{count} caídos",
+      "degraded": "{count} degradados",
+      "healthy": "{count} saludables",
+      "critical_impacted": "{count} críticos afectados"
+    },
+    "board": {
+      "service": "Servicio",
+      "health": "Salud",
+      "incidents": "Incidentes",
+      "deploy": "Último despliegue",
+      "owner": "Propietario"
     },
     "graph": {
       "re_layout": "Reorganizar",

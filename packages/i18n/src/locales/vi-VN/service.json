@@ -19,7 +19,10 @@
       "type": "Loại",
       "owner": "Chủ sở hữu",
       "repository": "Kho lưu trữ",
-      "documentation": "Tài liệu"
+      "documentation": "Tài liệu",
+      "health": "Sức khỏe",
+      "incidents": "Sự cố",
+      "deploy": "Triển khai gần nhất"
     },
     "tabs": {
       "overview": "Tổng quan",
@@ -27,8 +30,7 @@
       "dependencies": "Phụ thuộc"
     },
     "layout": {
-      "list": "Danh sách",
-      "grid": "Lưới",
+      "board": "Bảng",
       "graph": "Đồ thị"
     },
     "layout_label": "Bố cục",
@@ -37,7 +39,8 @@
       "created": "Ngày tạo",
       "updated": "Ngày cập nhật",
       "criticality": "Mức độ quan trọng",
-      "status": "Trạng thái"
+      "status": "Trạng thái",
+      "health": "Sức khỏe"
     },
     "status_values": {
       "active": "Đang hoạt động",
@@ -57,6 +60,34 @@
       "external": "Bên ngoài",
       "infrastructure": "Hạ tầng",
       "third_party": "Bên thứ ba"
+    },
+    "health_values": {
+      "healthy": "Ổn định",
+      "degraded": "Suy giảm",
+      "down": "Ngừng hoạt động",
+      "unknown": "Không xác định"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Có sự cố đang hoạt động"
+    },
+    "summary": {
+      "down": "{count} ngừng hoạt động",
+      "degraded": "{count} suy giảm",
+      "healthy": "{count} ổn định",
+      "critical_impacted": "{count} nghiêm trọng bị ảnh hưởng"
+    },
+    "board": {
+      "service": "Dịch vụ",
+      "health": "Sức khỏe",
+      "incidents": "Sự cố",
+      "deploy": "Triển khai gần nhất",
+      "owner": "Chủ sở hữu"
     },
     "graph": {
       "re_layout": "Bố trí lại",

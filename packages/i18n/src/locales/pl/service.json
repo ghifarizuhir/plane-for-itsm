@@ -19,7 +19,10 @@
       "type": "Typ",
       "owner": "Właściciel",
       "repository": "Repozytorium",
-      "documentation": "Dokumentacja"
+      "documentation": "Dokumentacja",
+      "health": "Kondycja",
+      "incidents": "Incydenty",
+      "deploy": "Ostatnie wdrożenie"
     },
     "tabs": {
       "overview": "Przegląd",
@@ -27,8 +30,7 @@
       "dependencies": "Zależności"
     },
     "layout": {
-      "list": "Lista",
-      "grid": "Siatka",
+      "board": "Tablica",
       "graph": "Graf"
     },
     "layout_label": "Układ",
@@ -37,7 +39,8 @@
       "created": "Data utworzenia",
       "updated": "Data aktualizacji",
       "criticality": "Krytyczność",
-      "status": "Status"
+      "status": "Status",
+      "health": "Kondycja"
     },
     "status_values": {
       "active": "Aktywny",
@@ -57,6 +60,34 @@
       "external": "Zewnętrzny",
       "infrastructure": "Infrastruktura",
       "third_party": "Strona trzecia"
+    },
+    "health_values": {
+      "healthy": "Sprawny",
+      "degraded": "Zdegradowany",
+      "down": "Niedostępny",
+      "unknown": "Nieznany"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Ma aktywne incydenty"
+    },
+    "summary": {
+      "down": "{count} niedostępnych",
+      "degraded": "{count} zdegradowanych",
+      "healthy": "{count} sprawnych",
+      "critical_impacted": "{count} krytycznych dotkniętych"
+    },
+    "board": {
+      "service": "Usługa",
+      "health": "Kondycja",
+      "incidents": "Incydenty",
+      "deploy": "Ostatnie wdrożenie",
+      "owner": "Właściciel"
     },
     "graph": {
       "re_layout": "Rozmieść ponownie",

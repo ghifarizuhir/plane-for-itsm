@@ -19,7 +19,10 @@
       "type": "Tipe",
       "owner": "Pemilik",
       "repository": "Repositori",
-      "documentation": "Dokumentasi"
+      "documentation": "Dokumentasi",
+      "health": "Kesehatan",
+      "incidents": "Insiden",
+      "deploy": "Deploy terakhir"
     },
     "tabs": {
       "overview": "Ikhtisar",
@@ -27,8 +30,7 @@
       "dependencies": "Ketergantungan"
     },
     "layout": {
-      "list": "Daftar",
-      "grid": "Kisi",
+      "board": "Papan",
       "graph": "Graf"
     },
     "layout_label": "Tata letak",
@@ -37,7 +39,8 @@
       "created": "Tanggal dibuat",
       "updated": "Tanggal diperbarui",
       "criticality": "Kritikalitas",
-      "status": "Status"
+      "status": "Status",
+      "health": "Kesehatan"
     },
     "status_values": {
       "active": "Aktif",
@@ -57,6 +60,34 @@
       "external": "Eksternal",
       "infrastructure": "Infrastruktur",
       "third_party": "Pihak ketiga"
+    },
+    "health_values": {
+      "healthy": "Sehat",
+      "degraded": "Terdegradasi",
+      "down": "Mati",
+      "unknown": "Tidak diketahui"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Memiliki insiden aktif"
+    },
+    "summary": {
+      "down": "{count} mati",
+      "degraded": "{count} terdegradasi",
+      "healthy": "{count} sehat",
+      "critical_impacted": "{count} kritis terdampak"
+    },
+    "board": {
+      "service": "Layanan",
+      "health": "Kesehatan",
+      "incidents": "Insiden",
+      "deploy": "Deploy terakhir",
+      "owner": "Pemilik"
     },
     "graph": {
       "re_layout": "Tata ulang",

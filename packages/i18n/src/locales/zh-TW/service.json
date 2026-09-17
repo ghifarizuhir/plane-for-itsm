@@ -19,7 +19,10 @@
       "type": "類型",
       "owner": "擁有者",
       "repository": "倉庫",
-      "documentation": "文件"
+      "documentation": "文件",
+      "health": "健康",
+      "incidents": "事件",
+      "deploy": "上次佈署"
     },
     "tabs": {
       "overview": "概覽",
@@ -27,8 +30,7 @@
       "dependencies": "相依性"
     },
     "layout": {
-      "list": "清單",
-      "grid": "網格",
+      "board": "看板",
       "graph": "圖譜"
     },
     "layout_label": "版面配置",
@@ -37,7 +39,8 @@
       "created": "建立日期",
       "updated": "更新日期",
       "criticality": "關鍵性",
-      "status": "狀態"
+      "status": "狀態",
+      "health": "健康"
     },
     "status_values": {
       "active": "啟用",
@@ -57,6 +60,34 @@
       "external": "外部",
       "infrastructure": "基礎設施",
       "third_party": "第三方"
+    },
+    "health_values": {
+      "healthy": "健康",
+      "degraded": "降級",
+      "down": "宕機",
+      "unknown": "未知"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "有進行中的事件"
+    },
+    "summary": {
+      "down": "{count} 個宕機",
+      "degraded": "{count} 個降級",
+      "healthy": "{count} 個健康",
+      "critical_impacted": "{count} 個嚴重受影響"
+    },
+    "board": {
+      "service": "服務",
+      "health": "健康",
+      "incidents": "事件",
+      "deploy": "上次佈署",
+      "owner": "擁有者"
     },
     "graph": {
       "re_layout": "重新排列",

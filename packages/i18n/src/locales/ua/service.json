@@ -19,7 +19,10 @@
       "type": "Тип",
       "owner": "Власник",
       "repository": "Репозиторій",
-      "documentation": "Документація"
+      "documentation": "Документація",
+      "health": "Стан",
+      "incidents": "Інциденти",
+      "deploy": "Останній деплой"
     },
     "tabs": {
       "overview": "Оверв'ю",
@@ -27,8 +30,7 @@
       "dependencies": "Залежності"
     },
     "layout": {
-      "list": "Список",
-      "grid": "Сітка",
+      "board": "Дошка",
       "graph": "Граф"
     },
     "layout_label": "Розташування",
@@ -37,7 +39,8 @@
       "created": "Дата створення",
       "updated": "Дата оновлення",
       "criticality": "Критичність",
-      "status": "Статус"
+      "status": "Статус",
+      "health": "Стан"
     },
     "status_values": {
       "active": "Активний",
@@ -57,6 +60,34 @@
       "external": "Зовнішній",
       "infrastructure": "Інфраструктура",
       "third_party": "Сторонній"
+    },
+    "health_values": {
+      "healthy": "Працює",
+      "degraded": "Деградує",
+      "down": "Не працює",
+      "unknown": "Невідомо"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Є активні інциденти"
+    },
+    "summary": {
+      "down": "{count} не працює",
+      "degraded": "{count} деградує",
+      "healthy": "{count} працює",
+      "critical_impacted": "{count} критичних постраждало"
+    },
+    "board": {
+      "service": "Сервіс",
+      "health": "Стан",
+      "incidents": "Інциденти",
+      "deploy": "Останній деплой",
+      "owner": "Власник"
     },
     "graph": {
       "re_layout": "Перебудувати",

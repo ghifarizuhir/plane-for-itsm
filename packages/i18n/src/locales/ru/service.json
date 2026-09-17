@@ -19,7 +19,10 @@
       "type": "Тип",
       "owner": "Владелец",
       "repository": "Репозиторий",
-      "documentation": "Документация"
+      "documentation": "Документация",
+      "health": "Состояние",
+      "incidents": "Инциденты",
+      "deploy": "Последний деплой"
     },
     "tabs": {
       "overview": "Обзор",
@@ -27,8 +30,7 @@
       "dependencies": "Зависимости"
     },
     "layout": {
-      "list": "Список",
-      "grid": "Сетка",
+      "board": "Доска",
       "graph": "Граф"
     },
     "layout_label": "Макет",
@@ -37,7 +39,8 @@
       "created": "Дата создания",
       "updated": "Дата обновления",
       "criticality": "Критичность",
-      "status": "Статус"
+      "status": "Статус",
+      "health": "Состояние"
     },
     "status_values": {
       "active": "Активный",
@@ -57,6 +60,34 @@
       "external": "Внешний",
       "infrastructure": "Инфраструктура",
       "third_party": "Сторонний"
+    },
+    "health_values": {
+      "healthy": "Работает",
+      "degraded": "Деградирует",
+      "down": "Не работает",
+      "unknown": "Неизвестно"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Есть активные инциденты"
+    },
+    "summary": {
+      "down": "{count} не работает",
+      "degraded": "{count} деградирует",
+      "healthy": "{count} работает",
+      "critical_impacted": "{count} критических затронуто"
+    },
+    "board": {
+      "service": "Сервис",
+      "health": "Состояние",
+      "incidents": "Инциденты",
+      "deploy": "Последний деплой",
+      "owner": "Владелец"
     },
     "graph": {
       "re_layout": "Перестроить",

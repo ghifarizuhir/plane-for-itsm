@@ -19,7 +19,10 @@
       "type": "Typ",
       "owner": "Vlastník",
       "repository": "Repozitár",
-      "documentation": "Dokumentácia"
+      "documentation": "Dokumentácia",
+      "health": "Zdravie",
+      "incidents": "Incidenty",
+      "deploy": "Posledné nasadenie"
     },
     "tabs": {
       "overview": "Prehľad",
@@ -27,8 +30,7 @@
       "dependencies": "Závislosti"
     },
     "layout": {
-      "list": "Zoznam",
-      "grid": "Mriežka",
+      "board": "Nástenka",
       "graph": "Graf"
     },
     "layout_label": "Rozloženie",
@@ -37,7 +39,8 @@
       "created": "Dátum vytvorenia",
       "updated": "Dátum aktualizácie",
       "criticality": "Kritickosť",
-      "status": "Stav"
+      "status": "Stav",
+      "health": "Zdravie"
     },
     "status_values": {
       "active": "Aktívny",
@@ -57,6 +60,34 @@
       "external": "Externý",
       "infrastructure": "Infraštruktúra",
       "third_party": "Tretia strana"
+    },
+    "health_values": {
+      "healthy": "Zdravá",
+      "degraded": "Obmedzená",
+      "down": "Nedostupná",
+      "unknown": "Neznáma"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Má aktívne incidenty"
+    },
+    "summary": {
+      "down": "{count} nedostupných",
+      "degraded": "{count} obmedzených",
+      "healthy": "{count} zdravých",
+      "critical_impacted": "{count} kritických zasiahnutých"
+    },
+    "board": {
+      "service": "Služba",
+      "health": "Zdravie",
+      "incidents": "Incidenty",
+      "deploy": "Posledné nasadenie",
+      "owner": "Vlastník"
     },
     "graph": {
       "re_layout": "Preusporiadať",

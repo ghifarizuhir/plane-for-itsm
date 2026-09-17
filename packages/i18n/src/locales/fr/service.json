@@ -19,7 +19,10 @@
       "type": "Type",
       "owner": "Propriétaire",
       "repository": "Dépôt",
-      "documentation": "Documentation"
+      "documentation": "Documentation",
+      "health": "Santé",
+      "incidents": "Incidents",
+      "deploy": "Dernier déploiement"
     },
     "tabs": {
       "overview": "Vue d'ensemble",
@@ -27,8 +30,7 @@
       "dependencies": "Dépendances"
     },
     "layout": {
-      "list": "Liste",
-      "grid": "Grille",
+      "board": "Tableau",
       "graph": "Graphe"
     },
     "layout_label": "Disposition",
@@ -37,7 +39,8 @@
       "created": "Date de création",
       "updated": "Date de mise à jour",
       "criticality": "Criticité",
-      "status": "Statut"
+      "status": "Statut",
+      "health": "Santé"
     },
     "status_values": {
       "active": "Actif",
@@ -57,6 +60,34 @@
       "external": "Externe",
       "infrastructure": "Infrastructure",
       "third_party": "Tiers"
+    },
+    "health_values": {
+      "healthy": "Opérationnel",
+      "degraded": "Dégradé",
+      "down": "En panne",
+      "unknown": "Inconnu"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "A des incidents actifs"
+    },
+    "summary": {
+      "down": "{count} en panne",
+      "degraded": "{count} dégradés",
+      "healthy": "{count} opérationnels",
+      "critical_impacted": "{count} critiques impactés"
+    },
+    "board": {
+      "service": "Service",
+      "health": "Santé",
+      "incidents": "Incidents",
+      "deploy": "Dernier déploiement",
+      "owner": "Propriétaire"
     },
     "graph": {
       "re_layout": "Réorganiser",

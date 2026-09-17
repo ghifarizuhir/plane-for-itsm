@@ -19,7 +19,10 @@
       "type": "Typ",
       "owner": "Besitzer",
       "repository": "Repository",
-      "documentation": "Dokumentation"
+      "documentation": "Dokumentation",
+      "health": "Zustand",
+      "incidents": "Störungen",
+      "deploy": "Letzte Bereitstellung"
     },
     "tabs": {
       "overview": "Übersicht",
@@ -27,8 +30,7 @@
       "dependencies": "Abhängigkeiten"
     },
     "layout": {
-      "list": "Liste",
-      "grid": "Raster",
+      "board": "Pinnwand",
       "graph": "Graph"
     },
     "layout_label": "Layout",
@@ -37,7 +39,8 @@
       "created": "Erstellungsdatum",
       "updated": "Aktualisierungsdatum",
       "criticality": "Kritikalität",
-      "status": "Status"
+      "status": "Status",
+      "health": "Zustand"
     },
     "status_values": {
       "active": "Aktiv",
@@ -57,6 +60,34 @@
       "external": "Extern",
       "infrastructure": "Infrastruktur",
       "third_party": "Drittanbieter"
+    },
+    "health_values": {
+      "healthy": "Funktionsfähig",
+      "degraded": "Beeinträchtigt",
+      "down": "Ausgefallen",
+      "unknown": "Unbekannt"
+    },
+    "incident_severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "incidents": {
+      "active": "Hat aktive Störungen"
+    },
+    "summary": {
+      "down": "{count} ausgefallen",
+      "degraded": "{count} beeinträchtigt",
+      "healthy": "{count} funktionsfähig",
+      "critical_impacted": "{count} kritische betroffen"
+    },
+    "board": {
+      "service": "Service",
+      "health": "Zustand",
+      "incidents": "Störungen",
+      "deploy": "Letzte Bereitstellung",
+      "owner": "Besitzer"
     },
     "graph": {
       "re_layout": "Neu anordnen",
