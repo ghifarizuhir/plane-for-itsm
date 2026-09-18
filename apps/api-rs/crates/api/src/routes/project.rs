@@ -263,7 +263,7 @@ fn proj_user_lite(prefix: &str, id_col: &str) -> String {
 /// `cover_image_url`/`inbox_view`/`next_work_item_sequence`), backing
 /// retrieve/create/partial_update (`base.py:254,310-311,378-379`).
 #[derive(Debug, Clone, sqlx::FromRow)]
-struct ProjectFullRow {
+pub(crate) struct ProjectFullRow {
     id: uuid::Uuid,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -273,18 +273,18 @@ struct ProjectFullRow {
     description: String,
     description_text: Option<Value>,
     description_html: Option<Value>,
-    network: i16,
+    pub(crate) network: i16,
     workspace_id: uuid::Uuid,
     identifier: String,
     emoji: Option<String>,
     icon_prop: Option<Value>,
-    module_view: bool,
-    cycle_view: bool,
-    issue_views_view: bool,
-    page_view: bool,
-    intake_view: bool,
+    pub(crate) module_view: bool,
+    pub(crate) cycle_view: bool,
+    pub(crate) issue_views_view: bool,
+    pub(crate) page_view: bool,
+    pub(crate) intake_view: bool,
     is_time_tracking_enabled: bool,
-    is_issue_type_enabled: bool,
+    pub(crate) is_issue_type_enabled: bool,
     guest_view_all_features: bool,
     cover_image: Option<String>,
     cover_image_asset_id: Option<uuid::Uuid>,
@@ -294,7 +294,7 @@ struct ProjectFullRow {
     close_in: i32,
     logo_props: Value,
     default_state_id: Option<uuid::Uuid>,
-    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) archived_at: Option<chrono::DateTime<chrono::Utc>>,
     timezone: String,
     external_source: Option<String>,
     external_id: Option<String>,
@@ -302,7 +302,7 @@ struct ProjectFullRow {
     sort_order: Option<f64>,
     member_role: Option<i16>,
     anchor: Option<String>,
-    member_ids: Vec<uuid::Uuid>,
+    pub(crate) member_ids: Vec<uuid::Uuid>,
     next_work_item_sequence: i64,
     da_id: Option<uuid::Uuid>,
     da_first_name: Option<String>,
@@ -394,7 +394,7 @@ fn project_full_json(r: &ProjectFullRow) -> Value {
     Value::Object(o)
 }
 
-async fn fetch_project_full(
+pub(crate) async fn fetch_project_full(
     pool: &sqlx::PgPool,
     slug: &str,
     pk: uuid::Uuid,

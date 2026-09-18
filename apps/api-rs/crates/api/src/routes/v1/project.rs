@@ -154,23 +154,22 @@ pub async fn get_features(
     if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
         return Ok(deny_detail());
     }
-    let row: Option<(bool, bool, bool, bool, bool, bool)> = sqlx::query_as(
-        "SELECT p.module_view, p.cycle_view, p.issue_views_view, p.page_view, \
-         p.intake_view, p.is_issue_type_enabled \
-         FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
-         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
-    match row {
-        Some((m, c, v, p, i, t)) => Ok((
-            StatusCode::OK,
-            Json(v1_project_features_json(m, c, v, p, i, t)),
-        )),
-        None => Ok(missing()),
+    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+    };
+    if row.archived_at.is_some() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
     }
+    if !row.member_ids.contains(&auth.0) {
+        if row.network == 0 {
+            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": "You do not have permission"}))));
+        }
+        return Ok((StatusCode::CONFLICT, Json(json!({"error": "You are not a member of this project"}))));
+    }
+    Ok((StatusCode::OK, Json(v1_project_features_json(
+        row.module_view, row.cycle_view, row.issue_views_view,
+        row.page_view, row.intake_view, row.is_issue_type_enabled,
+    ))))
 }
 /// Maps an SDK `ProjectFeature` key to the backing column. Unknown keys are
 /// ignored (the SDK sends `extra` keys this fork has no column for).
@@ -192,8 +191,16 @@ pub async fn patch_features(
     Path((slug, project_id)): Path<(String, uuid::Uuid)>,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
-        return Ok(deny_detail());
+    let ws_admin = matches!(ws_role(&st.pool, auth.0, &slug).await?, Some(r) if r >= 20);
+    let proj_admin = matches!(crate::routes::project::project_role(&st.pool, auth.0, project_id).await?, Some(20));
+    if !ws_admin && !proj_admin {
+        return Ok(crate::routes::project::deny());
+    }
+    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
+        return Ok(missing());
+    };
+    if let Err(e) = crate::routes::project::guard_patch(row.archived_at.is_some()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let Some(obj) = body.as_object() else {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Invalid payload"}))));
@@ -230,6 +237,7 @@ pub async fn patch_features(
 /// `GET projects/{id}/total-worklogs/`. This fork has no work-log table, so the
 /// list is always empty; access is still gated on project existence + workspace
 /// membership so the endpoint is not a silent 404.
+/// Project-level visibility now mirrors `detail`.
 pub async fn total_worklogs(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -238,16 +246,17 @@ pub async fn total_worklogs(
     if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
         return Ok(deny_detail());
     }
-    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT p.id FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
-         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
-    if exists.is_none() {
-        return Ok(missing());
+    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+    };
+    if row.archived_at.is_some() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+    }
+    if !row.member_ids.contains(&auth.0) {
+        if row.network == 0 {
+            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": "You do not have permission"}))));
+        }
+        return Ok((StatusCode::CONFLICT, Json(json!({"error": "You are not a member of this project"}))));
     }
     Ok((StatusCode::OK, Json(json!([]))))
 }
