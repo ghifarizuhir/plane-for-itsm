@@ -9,7 +9,7 @@ use sqlx::FromRow;
 use crate::{middleware::auth::AuthUser, state::AppState};
 use crate::routes::issue_query::build_ungrouped_envelope;
 use crate::routes::member::deny_detail;
-use crate::routes::project::ws_role;
+use crate::routes::project::{cover_image_url, ws_role};
 use crate::routes::v1::common::PageParams;
 
 /// Trimmed project row for the `projects-lite` shape (`ProjectLiteSerializer`
@@ -20,11 +20,12 @@ pub struct ProjectLiteRow {
     pub identifier: String,
     pub name: String,
     pub cover_image: Option<String>,
-    pub icon_prop: Value,
+    pub icon_prop: Option<Value>,
     pub emoji: Option<String>,
     pub description: String,
     pub archived_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub cover_asset: Option<String>,
+    pub cover_image_asset_id: Option<uuid::Uuid>,
+    pub cover_image_entity_type: Option<String>,
 }
 
 pub fn v1_project_lite_json(r: &ProjectLiteRow) -> Value {
@@ -33,10 +34,10 @@ pub fn v1_project_lite_json(r: &ProjectLiteRow) -> Value {
         "identifier": r.identifier,
         "name": r.name,
         "cover_image": r.cover_image,
-        "icon_prop": r.icon_prop,
+        "icon_prop": r.icon_prop.clone().unwrap_or(Value::Null),
         "emoji": r.emoji,
         "description": r.description,
-        "cover_image_url": r.cover_asset.clone().or(r.cover_image.clone()),
+        "cover_image_url": cover_image_url(r.cover_image_asset_id, r.cover_image_entity_type.as_deref(), r.cover_image.as_deref()),
         "archived_at": r.archived_at,
     })
 }
@@ -51,7 +52,13 @@ pub struct LiteListQuery {
 
 impl LiteListQuery {
     fn include_archived(&self) -> bool {
-        matches!(self.include_archived.as_deref(), Some("true") | Some("True") | Some("1"))
+        match self.include_archived.as_deref() {
+            Some(s) => {
+                let t = s.trim().to_ascii_lowercase();
+                t == "true" || t == "1"
+            }
+            None => false,
+        }
     }
 }
 
@@ -102,7 +109,7 @@ pub async fn list_lite(
         Some(offset) => {
             let sql = format!(
                 "SELECT p.id, p.identifier, p.name, p.cover_image, p.icon_prop, p.emoji, \
-                 p.description, p.archived_at, fa.asset AS cover_asset {base} \
+                 p.description, p.archived_at, p.cover_image_asset_id, fa.entity_type AS cover_image_entity_type {base} \
                  ORDER BY p.name ASC LIMIT $3 OFFSET $4"
             );
             sqlx::query_as(&sql)
