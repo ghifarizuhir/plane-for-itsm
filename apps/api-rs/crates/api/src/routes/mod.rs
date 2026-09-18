@@ -43,3 +43,4 @@ pub mod grouped;
 pub mod prefs;
 pub mod s3proxy;
 pub mod themes;
+pub mod v1;
