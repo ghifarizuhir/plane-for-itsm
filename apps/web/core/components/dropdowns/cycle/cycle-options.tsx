@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Placement } from "@popperjs/core";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
@@ -68,6 +69,7 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
   // popper-js init
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: placement ?? "bottom-start",
+    strategy: "fixed",
     modifiers: [
       {
         name: "preventOverflow",
@@ -127,8 +129,8 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
   const filteredOptions =
     query === "" ? options : options?.filter((o) => o.query.toLowerCase().includes(query.toLowerCase()));
 
-  return (
-    <Combobox.Options as="ul" className="fixed z-10" static>
+  return createPortal(
+    <Combobox.Options as="ul" className="z-10" static>
       <div
         className="my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none"
         ref={setPopperElement}
@@ -178,6 +180,7 @@ export const CycleOptions = observer(function CycleOptions(props: CycleOptionsPr
           )}
         </div>
       </div>
-    </Combobox.Options>
+    </Combobox.Options>,
+    document.body
   );
 });
