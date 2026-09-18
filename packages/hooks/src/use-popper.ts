@@ -164,8 +164,13 @@ export function usePopper(referenceElement: ReferenceType, popperElement: Popper
             },
           });
         })
-        .catch(() => {
-          // Keep last known position on transient errors.
+        .catch((err) => {
+          console.warn("[usePopper] computePosition failed, revealing popper at last known position", err);
+          setIsPositioned(true);
+          setData((prev) => ({
+            ...prev,
+            styles: { popper: { ...prev.styles.popper, visibility: "visible" } },
+          }));
         });
     };
 
