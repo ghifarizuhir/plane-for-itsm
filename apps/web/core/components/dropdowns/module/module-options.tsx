@@ -43,7 +43,7 @@ export const ModuleOptions = observer(function ModuleOptions(props: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   // states
   const [query, setQuery] = useState("");
-  const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
+  const [popperElement, setPopperElement] = useState<HTMLElement | null>(null);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -115,13 +115,16 @@ export const ModuleOptions = observer(function ModuleOptions(props: Props) {
   );
 
   return createPortal(
-    <Combobox.Options as="ul" data-prevent-outside-click static>
-      <div
-        className="z-30 my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none"
-        ref={setPopperElement}
-        style={styles.popper}
-        {...attributes.popper}
-      >
+    <Combobox.Options
+      as="ul"
+      className="z-30"
+      data-prevent-outside-click
+      static
+      ref={setPopperElement}
+      style={styles.popper}
+      {...attributes.popper}
+    >
+      <div className="my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none">
         <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
           <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
           <Combobox.Input
