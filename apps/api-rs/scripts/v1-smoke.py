@@ -2,8 +2,8 @@
 """Contract smoke: drive plane-sdk against the local Rust /api/v1.
 
 Usage:
-  V1_TOKEN=plane_api_... V1_WS=itsm python3 apps/api-rs/scripts/v1-smoke.py
-Reads the SDK from plane-mcp-server/.venv (PYTHONPATH can override).
+  V1_TOKEN=plane_api_... V1_WS=itsm /home/ghifari/plane-mcp-server/.venv/bin/python apps/api-rs/scripts/v1-smoke.py
+Reads the SDK from plane-mcp-server/.venv (PLANE_SDK_PATH can override).
 """
 import os
 import sys
