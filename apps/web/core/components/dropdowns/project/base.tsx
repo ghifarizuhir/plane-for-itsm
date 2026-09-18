@@ -239,9 +239,9 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
     >
       {isOpen &&
         createPortal(
-          <Combobox.Options as="ul" className="z-10" static>
+          <Combobox.Options as="ul" data-prevent-outside-click static>
             <div
-              className="my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none"
+              className="z-30 my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none"
               ref={setPopperElement}
               style={styles.popper}
               {...attributes.popper}
