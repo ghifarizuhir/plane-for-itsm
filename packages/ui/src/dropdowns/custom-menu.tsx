@@ -195,7 +195,7 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
 
   let menuItems = (
     <Menu.Items
-      data-prevent-outside-click={!!portalElement}
+      data-prevent-outside-click
       className={cn("z-30", menuItemsClassName)} /** stacking context is ensured by the inner fixed z-30 element */
       static
     >
