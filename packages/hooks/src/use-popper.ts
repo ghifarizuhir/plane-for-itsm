@@ -105,6 +105,7 @@ export function usePopper(referenceElement: ReferenceType, popperElement: Popper
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(options.modifiers ?? []), placement, strategy]);
 
+  const [isPositioned, setIsPositioned] = useState(false);
   const [data, setData] = useState<{
     styles: { popper: React.CSSProperties };
     attributes: { popper: Record<string, string> };
@@ -114,6 +115,7 @@ export function usePopper(referenceElement: ReferenceType, popperElement: Popper
         position: strategy,
         top: "0",
         left: "0",
+        visibility: "hidden",
       } as React.CSSProperties,
     },
     attributes: {
@@ -144,6 +146,7 @@ export function usePopper(referenceElement: ReferenceType, popperElement: Popper
         middleware,
       })
         .then(({ x, y, placement: computedPlacement, strategy: computedStrategy }) => {
+          setIsPositioned(true);
           setData({
             styles: {
               popper: {
@@ -173,6 +176,7 @@ export function usePopper(referenceElement: ReferenceType, popperElement: Popper
   return {
     styles: data.styles,
     attributes: data.attributes,
+    isPositioned,
     state: null,
     update: () => Promise.resolve(null),
     forceUpdate: () => null,
