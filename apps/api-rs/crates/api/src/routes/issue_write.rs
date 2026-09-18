@@ -79,6 +79,53 @@ pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
     Ok(())
 }
 
+/// Pure pick for the effective state of a new issue, mirroring
+/// `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`):
+/// explicit id wins; else the project's default non-triage state; else the
+/// first non-triage state; else None. Without this fallback create stores
+/// NULL and the list `WHERE s."group" <> 'triage'`
+/// (`issue_query.rs:push_list_where`) drops the row — 201 but invisible.
+pub fn resolve_effective_state(
+    explicit: Option<uuid::Uuid>,
+    default_id: Option<uuid::Uuid>,
+    first_id: Option<uuid::Uuid>,
+) -> Option<uuid::Uuid> {
+    explicit.or(default_id).or(first_id)
+}
+
+/// DB lookup behind [`resolve_effective_state`]: same two queries as
+/// `draft.rs:resolve_default_state` (default non-triage, then first
+/// non-triage). Explicit id is returned untouched (validated by caller).
+async fn resolve_issue_state(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    explicit: Option<uuid::Uuid>,
+) -> Result<Option<uuid::Uuid>, sqlx::Error> {
+    if explicit.is_some() {
+        return Ok(explicit);
+    }
+    let default_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
+         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
+         ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if default_id.is_some() {
+        return Ok(default_id);
+    }
+    let first_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
+         AND \"group\" != 'triage' AND is_triage = false \
+         ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(resolve_effective_state(explicit, default_id, first_id))
+}
+
 pub async fn create(
     State(st): State<AppState>,
     _auth: AuthUser,
@@ -131,6 +178,11 @@ pub async fn create(
         }
     }
 
+    // Django `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`):
+    // a missing state resolves to the project's default non-triage state so
+    // the row survives the list triage exclusion (NULL rows are dropped).
+    let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
+
     // Django `Issue.save` (`plane/db/models/issue.py:190-216`): sequence_id from
     // IssueSequence max+1 per project; sort_order max+10000 per (project, state).
     let row = sqlx::query_as::<_, common::models::issue::Issue>(
@@ -138,7 +190,7 @@ pub async fn create(
     )
     .bind(&body.name)
     .bind(project_id)
-    .bind(body.state_id)
+    .bind(state_id)
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;

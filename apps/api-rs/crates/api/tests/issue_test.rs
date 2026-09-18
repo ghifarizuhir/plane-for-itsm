@@ -1,5 +1,5 @@
 use api::routes::issue_query::{build_ungrouped_envelope, ProjectIssuesQuery};
-use api::routes::issue_write::{validate_create, CreateIssue};
+use api::routes::issue_write::{resolve_effective_state, validate_create, CreateIssue};
 
 #[test]
 fn rejects_empty_name() {
@@ -171,4 +171,37 @@ fn issues_list_query_deserializes_fe_params() {
         serde_json::from_value(serde_json::json!({})).expect("empty params must deserialize");
     assert!(empty.cursor.is_none());
     assert!(empty.filters.is_none());
+}
+
+#[test]
+fn explicit_state_id_wins_over_defaults() {
+    // Mirrors `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`):
+    // an explicit state is never replaced.
+    let explicit = uuid::Uuid::new_v4();
+    let default = uuid::Uuid::new_v4();
+    let first = uuid::Uuid::new_v4();
+    assert_eq!(resolve_effective_state(Some(explicit), Some(default), Some(first)), Some(explicit));
+}
+
+#[test]
+fn falls_back_to_project_default_state() {
+    // No explicit state -> project's default non-triage state wins.
+    // Without this, create stores NULL and the list `WHERE s."group" <> 'triage'`
+    // (`issue_query.rs:push_list_where`) drops the row: 201 but invisible.
+    let default = uuid::Uuid::new_v4();
+    let first = uuid::Uuid::new_v4();
+    assert_eq!(resolve_effective_state(None, Some(default), Some(first)), Some(default));
+}
+
+#[test]
+fn falls_back_to_first_non_triage_state() {
+    // No explicit and no default -> first non-triage state.
+    let first = uuid::Uuid::new_v4();
+    assert_eq!(resolve_effective_state(None, None, Some(first)), Some(first));
+}
+
+#[test]
+fn returns_none_when_no_state_available() {
+    // Project with zero non-triage states: stay NULL (Django does the same).
+    assert_eq!(resolve_effective_state(None, None, None), None);
 }
