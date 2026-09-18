@@ -8,6 +8,7 @@ fn v1_project_object_routes_registered() {
     .expect("main.rs");
     for path in [
         "/api/v1/workspaces/:slug/projects/",
+        "/api/v1/workspaces/:slug/projects-lite/",
         "/api/v1/workspaces/:slug/projects/:pk/",
         "/api/v1/workspaces/:slug/projects/:project_id/archive/",
     ] {

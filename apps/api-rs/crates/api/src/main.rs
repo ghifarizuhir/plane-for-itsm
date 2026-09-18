@@ -1312,7 +1312,11 @@ async fn main() {
         // response is a superset, and plane-sdk models allow extra keys.
         .route(
             "/api/v1/workspaces/:slug/projects/",
-            get(routes::v1::project::list_lite).post(routes::project::create),
+            post(routes::project::create),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects-lite/",
+            get(routes::v1::project::list_lite),
         )
         .route(
             "/api/v1/workspaces/:slug/projects/:pk/",
