@@ -21,10 +21,11 @@ impl PageParams {
     }
 }
 
-/// Offset window for a parsed cursor (re-exported so handlers don't import
-/// `issue_common` directly). `BeyondEnd` renders an empty page.
-pub(crate) fn window_for(cursor: DetailCursor, limit: i64) -> Result<PageWindow, ()> {
-    page_window(cursor.page, limit)
+/// Offset window for a page (wrapper so handlers don't import `issue_common`
+/// directly). `BeyondEnd` renders an empty page. Takes `page` by value because
+/// `DetailCursor` is not `Clone`/`Copy` and the caller still needs it afterwards.
+pub(crate) fn window_for(page: i128, limit: i64) -> Result<PageWindow, ()> {
+    page_window(page, limit)
 }
 
 #[cfg(test)]
