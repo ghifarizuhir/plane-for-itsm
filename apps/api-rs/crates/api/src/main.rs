@@ -1307,6 +1307,31 @@ async fn main() {
         )
         .route("/api/workspaces/:slug/work-items/search/", get(routes::work_item::workspace_issue_search))
         .route("/api/workspaces/:slug/work-items/:ident/", get(routes::work_item::get_by_identifier))
+        // ---- Public API v1 (plane-sdk / MCP) ----------------------------
+        // Object endpoints delegate to the app-API handlers: same auth,
+        // response is a superset, and plane-sdk models allow extra keys.
+        .route(
+            "/api/v1/workspaces/:slug/projects/",
+            get(routes::v1::project::list_lite).post(routes::project::create),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:pk/",
+            get(routes::project::detail)
+                .patch(routes::project::patch)
+                .delete(routes::project::destroy),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/archive/",
+            post(routes::project::archive).delete(routes::project::unarchive),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/features/",
+            get(routes::v1::project::get_features).patch(routes::v1::project::patch_features),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/total-worklogs/",
+            get(routes::v1::project::total_worklogs),
+        )
         .route("/api/timezones/", get(routes::misc::timezones))
         .route(
             "/api/instances/",
