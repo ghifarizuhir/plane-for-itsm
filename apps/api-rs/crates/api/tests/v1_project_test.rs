@@ -1,4 +1,4 @@
-use api::routes::v1::project::{v1_project_lite_json, ProjectLiteRow};
+use api::routes::v1::project::{v1_project_features_json, v1_project_lite_json, ProjectLiteRow};
 use chrono::Utc;
 use serde_json::Value;
 use uuid::Uuid;
@@ -76,4 +76,15 @@ fn project_lite_json_cover_image_url_matches_helper_semantics() {
     r.cover_image_asset_id = None;
     r.cover_image_entity_type = None;
     assert_eq!(v1_project_lite_json(&r)["cover_image_url"], Value::Null);
+}
+
+#[test]
+fn project_features_json_maps_known_columns() {
+    let v = v1_project_features_json(true, false, true, false, true, true);
+    assert_eq!(v["modules"], Value::Bool(true));
+    assert_eq!(v["cycles"], Value::Bool(false));
+    assert_eq!(v["views"], Value::Bool(true));
+    assert_eq!(v["pages"], Value::Bool(false));
+    assert_eq!(v["intakes"], Value::Bool(true));
+    assert_eq!(v["work_item_types"], Value::Bool(true));
 }

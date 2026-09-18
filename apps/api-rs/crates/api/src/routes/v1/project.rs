@@ -9,7 +9,7 @@ use sqlx::FromRow;
 use crate::{middleware::auth::AuthUser, state::AppState};
 use crate::routes::issue_query::build_ungrouped_envelope;
 use crate::routes::member::deny_detail;
-use crate::routes::project::{cover_image_url, ws_role};
+use crate::routes::project::{cover_image_url, missing, ws_role};
 use crate::routes::v1::common::PageParams;
 
 /// Trimmed project row for the `projects-lite` shape (`ProjectLiteSerializer`
@@ -125,9 +125,52 @@ pub async fn list_lite(
     let results: Vec<Value> = rows.iter().map(v1_project_lite_json).collect();
     Ok((StatusCode::OK, Json(build_ungrouped_envelope(total, limit, cursor.page, results))))
 }
-pub async fn get_features(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>)
-    -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+pub fn v1_project_features_json(
+    modules: bool,
+    cycles: bool,
+    views: bool,
+    pages: bool,
+    intakes: bool,
+    work_item_types: bool,
+) -> Value {
+    // SDK `ProjectFeature` fields are all optional; these are the ones backed
+    // by columns in this fork. `work_item_types` is what `workitem_type
+    // resolve` reads.
+    json!({
+        "modules": modules,
+        "cycles": cycles,
+        "views": views,
+        "pages": pages,
+        "intakes": intakes,
+        "work_item_types": work_item_types,
+    })
+}
+
+pub async fn get_features(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let row: Option<(bool, bool, bool, bool, bool, bool)> = sqlx::query_as(
+        "SELECT p.module_view, p.cycle_view, p.issue_views_view, p.page_view, \
+         p.intake_view, p.is_issue_type_enabled \
+         FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some((m, c, v, p, i, t)) => Ok((
+            StatusCode::OK,
+            Json(v1_project_features_json(m, c, v, p, i, t)),
+        )),
+        None => Ok(missing()),
+    }
 }
 pub async fn patch_features(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Json<Value>)
     -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
