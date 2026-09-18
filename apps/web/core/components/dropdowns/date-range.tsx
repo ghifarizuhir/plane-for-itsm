@@ -263,6 +263,7 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
       ref={setPopperElement}
       style={styles.popper}
       {...attributes.popper}
+      modal={false}
     >
       <div className="my-1 overflow-hidden rounded-md border-[0.5px] border-subtle-1 bg-surface-1">
         <Calendar

@@ -198,6 +198,7 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
       data-prevent-outside-click
       className={cn("z-30", menuItemsClassName)} /** stacking context is ensured by the inner fixed z-30 element */
       static
+      modal={false}
     >
       <div
         className={cn(

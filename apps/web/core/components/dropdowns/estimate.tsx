@@ -241,6 +241,7 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
             ref={setPopperElement}
             style={styles.popper}
             {...attributes.popper}
+            modal={false}
           >
             <div className="my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none">
               <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">

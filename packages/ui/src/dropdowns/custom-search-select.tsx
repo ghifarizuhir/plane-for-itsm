@@ -151,6 +151,7 @@ export function CustomSearchSelect(props: ICustomSearchSelectProps) {
                   ref={setPopperElement}
                   style={styles.popper}
                   {...attributes.popper}
+                  modal={false}
                 >
                   <div
                     className={cn(

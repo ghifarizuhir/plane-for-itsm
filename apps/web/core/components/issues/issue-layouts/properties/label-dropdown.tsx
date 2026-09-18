@@ -264,6 +264,7 @@ export function LabelDropdown(props: ILabelDropdownProps) {
               ref={setPopperElement}
               style={styles.popper}
               {...attributes.popper}
+              modal={false}
             >
               <div
                 className={`my-1 h-auto w-48 rounded-sm border border-strong bg-surface-1 px-2 py-2.5 text-caption-sm-regular whitespace-nowrap shadow-raised-200 focus:outline-none ${optionsClassName}`}

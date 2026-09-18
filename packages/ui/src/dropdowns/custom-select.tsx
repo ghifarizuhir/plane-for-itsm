@@ -127,6 +127,7 @@ function CustomSelect(props: ICustomSelectProps) {
               ref={setPopperElement}
               style={styles.popper}
               {...attributes.popper}
+              modal={false}
             >
               <div
                 className={cn(

@@ -149,6 +149,7 @@ export function Dropdown(props: ISingleSelectDropdown) {
           ref={setPopperElement}
           style={styles.popper}
           {...attributes.popper}
+          modal={false}
         >
           <div
             className={cn(

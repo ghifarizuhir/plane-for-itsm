@@ -141,6 +141,7 @@ export const MemberOptions = observer(function MemberOptions(props: Props) {
       ref={setPopperElement}
       style={styles.popper}
       {...attributes.popper}
+      modal={false}
     >
       <div
         className={cn(
