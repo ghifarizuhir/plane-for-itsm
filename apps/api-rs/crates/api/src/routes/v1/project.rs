@@ -227,9 +227,29 @@ pub async fn patch_features(
         None => Ok(missing()),
     }
 }
-pub async fn total_worklogs(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>)
-    -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+/// `GET projects/{id}/total-worklogs/`. This fork has no work-log table, so the
+/// list is always empty; access is still gated on project existence + workspace
+/// membership so the endpoint is not a silent 404.
+pub async fn total_worklogs(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    if exists.is_none() {
+        return Ok(missing());
+    }
+    Ok((StatusCode::OK, Json(json!([]))))
 }
 
 #[cfg(test)]
