@@ -165,7 +165,7 @@ function CustomMenu(props: ICustomMenuDropdownProps) {
   React.useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      const isSubmenuClick = target.closest('[data-prevent-outside-click="true"]');
+      const isSubmenuClick = target.closest("[data-prevent-outside-click]");
       const isMainMenuClick = dropdownRef.current?.contains(target);
 
       // If it's a submenu click or main menu click, don't close
