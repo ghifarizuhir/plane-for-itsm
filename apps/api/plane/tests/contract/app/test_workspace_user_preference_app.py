@@ -30,7 +30,7 @@ class TestWorkspaceUserPreferencePatch:
         """A member's PATCH must update only their own preference, never another member's."""
         # A second, more-recently-active member of the same workspace.
         other_user = User.objects.create(
-            email="other@plane.so", username="other_user", first_name="Other", last_name="User"
+            email="other@terraline.space", username="other_user", first_name="Other", last_name="User"
         )
         WorkspaceMember.objects.create(workspace=workspace, member=other_user, role=15)
 

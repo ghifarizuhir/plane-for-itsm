@@ -51,7 +51,7 @@ def foreign_project(db, workspace):
     """A project owned by someone else; the token holder is NOT a member."""
     unique_id = uuid4().hex[:8]
     owner = User.objects.create(
-        email=f"owner-{unique_id}@plane.so",
+        email=f"owner-{unique_id}@terraline.space",
         username=f"owner_{unique_id}",
     )
     owner.set_password("test-password")

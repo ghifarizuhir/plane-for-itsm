@@ -8,7 +8,7 @@ import React from "react";
 import { observer } from "mobx-react";
 import { Circle } from "lucide-react";
 import { ChevronDownOutline, ChevronUpOutline } from "@makeplane/propel/icons";
-// Plane
+// Terraline
 import type { TIssueGroupByOptions, TIssueKanbanFilters } from "@plane/types";
 
 interface IHeaderSubGroupByCard {

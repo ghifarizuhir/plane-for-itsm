@@ -4,18 +4,21 @@
  * See the LICENSE file for details.
  */
 
-import { useTheme } from "next-themes";
-import LogoSpinnerDark from "@/app/assets/images/logo-spinner-dark.gif?url";
-import LogoSpinnerLight from "@/app/assets/images/logo-spinner-light.gif?url";
-
 export function LogoSpinner() {
-  const { resolvedTheme } = useTheme();
-
-  const logoSrc = resolvedTheme === "dark" ? LogoSpinnerLight : LogoSpinnerDark;
-
   return (
     <div className="flex items-center justify-center">
-      <img src={logoSrc} alt="logo" className="h-6 w-auto sm:h-11" />
+      <svg
+        role="status"
+        aria-label="Loading"
+        viewBox="0 0 85 52"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="terraline-logo-spinner h-6 w-auto text-primary sm:h-11"
+      >
+        <rect x="0" y="0" width="85" height="14" rx="7" fill="currentColor" />
+        <rect x="10.625" y="19" width="63.75" height="14" rx="7" fill="currentColor" />
+        <rect x="21.25" y="38" width="42.5" height="14" rx="7" fill="currentColor" />
+      </svg>
     </div>
   );
 }

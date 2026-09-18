@@ -3,9 +3,9 @@
 # See the LICENSE file for details.
 
 """
-Core utilities for Plane database routing and request scoping.
+Core utilities for Terraline database routing and request scoping.
 This package contains essential components for managing read replica routing
-and request-scoped context in the Plane application.
+and request-scoped context in the Terraline application.
 """
 
 from .dbrouters import ReadReplicaRouter

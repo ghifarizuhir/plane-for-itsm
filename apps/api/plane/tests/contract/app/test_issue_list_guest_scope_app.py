@@ -52,7 +52,7 @@ def guest(db, workspace, project):
     """An active project GUEST (role=5)."""
     unique_id = uuid4().hex[:8]
     user = User.objects.create(
-        email=f"guest-{unique_id}@plane.so",
+        email=f"guest-{unique_id}@terraline.space",
         username=f"guest_{unique_id}",
         first_name="Guest",
         last_name="User",

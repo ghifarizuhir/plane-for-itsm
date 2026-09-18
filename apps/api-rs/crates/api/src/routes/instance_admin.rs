@@ -1568,7 +1568,7 @@ pub fn email_config_defaults() -> EmailConfig {
         use_tls: std::env::var("EMAIL_USE_TLS").unwrap_or_else(|_| "1".to_string()),
         use_ssl: std::env::var("EMAIL_USE_SSL").unwrap_or_else(|_| "0".to_string()),
         from: std::env::var("EMAIL_FROM")
-            .unwrap_or_else(|_| "Team Plane <team@mailer.plane.so>".to_string()),
+            .unwrap_or_else(|_| "Team Terraline <team@terraline.space>".to_string()),
     }
 }
 
@@ -1820,8 +1820,8 @@ pub async fn email_check(
     let msg = match Message::builder()
         .from(from)
         .to(to_box)
-        .subject("Email Notification from Plane")
-        .body("This is a sample email notification sent from Plane application.".to_string())
+        .subject("Email Notification from Terraline")
+        .body("This is a sample email notification sent from Terraline application.".to_string())
     {
         Ok(m) => m,
         Err(_) => {
@@ -2613,7 +2613,7 @@ mod tests {
             .build();
         transport.shutdown();
         let msg = lettre::Message::builder()
-            .from("Plane <plane@example.com>".parse().unwrap())
+            .from("Terraline <terraline@example.com>".parse().unwrap())
             .to("to@example.com".parse().unwrap())
             .subject("t")
             .body(String::from("b"))

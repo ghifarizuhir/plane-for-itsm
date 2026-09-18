@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-// Plane imports
+// Terraline imports
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IService } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";

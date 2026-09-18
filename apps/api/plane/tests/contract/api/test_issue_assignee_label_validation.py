@@ -50,7 +50,7 @@ def create_issue(db, project, workspace, create_user):
 @pytest.fixture
 def outsider_user(db):
     """A user who exists in the workspace/system but is NOT a member of `project`."""
-    user = User.objects.create(email="outsider@plane.so", username="outsider-user")
+    user = User.objects.create(email="outsider@terraline.space", username="outsider-user")
     user.set_password("outsider-password")
     user.save()
     return user

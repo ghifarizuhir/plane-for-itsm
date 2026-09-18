@@ -72,7 +72,7 @@ def outsider_client(db, workspace):
     """Session client for a workspace member who is NOT in ``project``."""
     unique_id = uuid4().hex[:8]
     outsider = User.objects.create(
-        email=f"outsider-{unique_id}@plane.so",
+        email=f"outsider-{unique_id}@terraline.space",
         username=f"outsider_{unique_id}",
         first_name="Outsider",
         last_name="User",

@@ -54,7 +54,7 @@ def outsider_user(db):
     """A user who is a workspace member but NOT a member of ``project``."""
     unique_id = uuid4().hex[:8]
     user = User.objects.create(
-        email=f"outsider-{unique_id}@plane.so",
+        email=f"outsider-{unique_id}@terraline.space",
         username=f"outsider_{unique_id}",
         first_name="Outsider",
         last_name="User",

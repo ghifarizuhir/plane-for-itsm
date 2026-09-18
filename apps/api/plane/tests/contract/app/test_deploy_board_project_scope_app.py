@@ -53,7 +53,7 @@ def outsider_client(db, workspace, create_user):
     """
     unique_id = uuid4().hex[:8]
     outsider = User.objects.create(
-        email=f"outsider-{unique_id}@plane.so",
+        email=f"outsider-{unique_id}@terraline.space",
         username=f"outsider_{unique_id}",
     )
     outsider.set_password("test-password")

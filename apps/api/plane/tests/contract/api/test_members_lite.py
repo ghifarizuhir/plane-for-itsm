@@ -61,7 +61,7 @@ class TestWorkspaceMembersLite:
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
         emails = {item["email"] for item in response.data["results"]}
-        assert "test@plane.so" in emails
+        assert "test@terraline.space" in emails
 
     @pytest.mark.django_db
     def test_lite_member_shape(self, api_key_client, workspace):
@@ -91,7 +91,7 @@ class TestProjectMembersLite:
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
         emails = {item["email"] for item in response.data["results"]}
-        assert "test@plane.so" in emails
+        assert "test@terraline.space" in emails
 
     @pytest.mark.django_db
     def test_lite_member_shape(self, api_key_client, workspace, project):

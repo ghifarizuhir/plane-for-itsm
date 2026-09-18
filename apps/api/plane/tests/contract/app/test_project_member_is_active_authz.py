@@ -68,7 +68,7 @@ def project(db, workspace, create_user):
 class TestProjectMemberIsActiveAuthz:
     def test_guest_cannot_deactivate_admin(self, workspace, project, create_user):
         """A project GUEST must not deactivate a project ADMIN via is_active."""
-        attacker = _make_user("guest-attacker@plane.so")
+        attacker = _make_user("guest-attacker@terraline.space")
         # non-workspace-admin (role 15) so is_workspace_admin bypass does not apply,
         # project GUEST (role 5)
         _add_member(workspace, project, attacker, ws_role=15, project_role=5)
@@ -88,7 +88,7 @@ class TestProjectMemberIsActiveAuthz:
 
     def test_member_cannot_deactivate_admin(self, workspace, project, create_user):
         """A project MEMBER must not deactivate a project ADMIN via is_active."""
-        attacker = _make_user("member-attacker@plane.so")
+        attacker = _make_user("member-attacker@terraline.space")
         _add_member(workspace, project, attacker, ws_role=15, project_role=15)
         victim = ProjectMember.objects.get(project=project, member=create_user)
 
@@ -106,8 +106,8 @@ class TestProjectMemberIsActiveAuthz:
 
     def test_guest_cannot_deactivate_peer_guest(self, workspace, project):
         """A GUEST cannot deactivate another GUEST either (role check applies to all)."""
-        attacker = _make_user("guest-a@plane.so")
-        peer = _make_user("guest-b@plane.so")
+        attacker = _make_user("guest-a@terraline.space")
+        peer = _make_user("guest-b@terraline.space")
         _add_member(workspace, project, attacker, ws_role=15, project_role=5)
         peer_member = _add_member(workspace, project, peer, ws_role=15, project_role=5)
 
@@ -125,8 +125,8 @@ class TestProjectMemberIsActiveAuthz:
 
     def test_project_admin_can_deactivate_member(self, workspace, project):
         """Positive control: a project ADMIN (non-workspace-admin) may deactivate a MEMBER."""
-        admin = _make_user("project-admin@plane.so")
-        target = _make_user("plain-member@plane.so")
+        admin = _make_user("project-admin@terraline.space")
+        target = _make_user("plain-member@terraline.space")
         # admin is a workspace MEMBER (15) but project ADMIN (20) — exercises the
         # role-comparison guard rather than the workspace-admin bypass.
         _add_member(workspace, project, admin, ws_role=15, project_role=20)
@@ -153,7 +153,7 @@ class TestProjectMemberIsActiveAuthz:
         is_workspace_admin short-circuits the role-comparison guard. Locks in the
         bypass so future changes don't silently remove it.
         """
-        ws_admin = _make_user("ws-admin@plane.so")
+        ws_admin = _make_user("ws-admin@terraline.space")
         # workspace ADMIN (20) but only a project GUEST (5)
         _add_member(workspace, project, ws_admin, ws_role=20, project_role=5)
         # victim is the project ADMIN (create_user) set up by the `project` fixture

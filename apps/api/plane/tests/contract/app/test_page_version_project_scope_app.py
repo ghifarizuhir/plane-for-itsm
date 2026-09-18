@@ -67,7 +67,7 @@ class TestPageVersionProjectScope:
     project_a only. Victim owns a public page in project_b."""
 
     def _setup(self, workspace, attacker):
-        victim = User.objects.create(email="victim@plane.so", username=f"victim_{uuid.uuid4().hex[:8]}")
+        victim = User.objects.create(email="victim@terraline.space", username=f"victim_{uuid.uuid4().hex[:8]}")
 
         project_a = _make_project(workspace, "PRJA")
         project_b = _make_project(workspace, "PRJB")

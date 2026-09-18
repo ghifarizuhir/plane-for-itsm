@@ -58,7 +58,7 @@ def victim_tenant(db):
     already assigned to the victim's own cycle."""
     uid = uuid4().hex[:8]
     victim_user = User.objects.create(
-        email=f"victim-{uid}@plane.so",
+        email=f"victim-{uid}@terraline.space",
         username=f"victim_{uid}",
         first_name="Victim",
         last_name="User",

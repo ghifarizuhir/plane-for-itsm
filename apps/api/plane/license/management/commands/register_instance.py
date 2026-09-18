@@ -40,7 +40,7 @@ class Command(BaseCommand):
     def check_for_latest_version(self, fallback_version):
         try:
             response = requests.get(
-                "https://api.github.com/repos/makeplane/plane/releases/latest",
+                "https://api.github.com/repos/terraline/terraline/releases/latest",
                 timeout=10,
             )
             response.raise_for_status()
@@ -65,7 +65,7 @@ class Command(BaseCommand):
                 raise CommandError("Machine signature is required")
 
             instance = Instance.objects.create(
-                instance_name="Plane Community Edition",
+                instance_name="Terraline Community Edition",
                 instance_id=secrets.token_hex(12),
                 current_version=current_version,
                 latest_version=latest_version,

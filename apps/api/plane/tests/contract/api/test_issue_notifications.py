@@ -53,7 +53,7 @@ def create_issue(db, project, workspace, create_user):
 def assignee_user(db):
     """Create a second user that can be assigned to a work item."""
     user = User.objects.create(
-        email="assignee@plane.so",
+        email="assignee@terraline.space",
         username="assignee-user",
         first_name="Assignee",
         last_name="User",

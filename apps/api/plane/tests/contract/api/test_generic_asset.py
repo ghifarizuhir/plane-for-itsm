@@ -25,7 +25,7 @@ def victim_user(db):
     """A user that owns a separate workspace the attacker is not part of."""
     unique_id = uuid4().hex[:8]
     user = User.objects.create(
-        email=f"victim-{unique_id}@plane.so",
+        email=f"victim-{unique_id}@terraline.space",
         username=f"victim_{unique_id}",
         first_name="Victim",
         last_name="User",

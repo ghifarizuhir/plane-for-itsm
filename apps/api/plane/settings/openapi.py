@@ -12,21 +12,21 @@ SPECTACULAR_SETTINGS = {
     # ========================================================================
     # Basic API Information
     # ========================================================================
-    "TITLE": "The Plane REST API",
+    "TITLE": "The Terraline REST API",
     "DESCRIPTION": (
-        "The Plane REST API\n\n"
+        "The Terraline REST API\n\n"
         "Visit our quick start guide and full API documentation at "
-        "[developers.plane.so](https://developers.plane.so/api-reference/introduction)."
+        "[developers.terraline.space](https://developers.terraline.space/api-reference/introduction)."
     ),
     "CONTACT": {
-        "name": "Plane",
-        "url": "https://plane.so",
-        "email": "support@plane.so",
+        "name": "Terraline",
+        "url": "https://terraline.space",
+        "email": "support@terraline.space",
     },
     "VERSION": "0.0.1",
     "LICENSE": {
         "name": "GNU AGPLv3",
-        "url": "https://github.com/makeplane/plane/blob/preview/LICENSE.txt",
+        "url": "https://github.com/terraline/terraline/blob/preview/LICENSE.txt",
     },
     # ========================================================================
     # Schema Generation Settings
@@ -45,7 +45,7 @@ SPECTACULAR_SETTINGS = {
     # ========================================================================
     "SERVERS": [
         {"url": "http://localhost:8000", "description": "Local"},
-        {"url": "https://api.plane.so", "description": "Production"},
+        {"url": "https://api.terraline.space", "description": "Production"},
     ],
     # ========================================================================
     # API Tag Definitions

@@ -596,6 +596,9 @@ importers:
       react-doctor:
         specifier: ^0.4.2
         version: 0.4.2(eslint@10.4.1(jiti@2.7.0))
+      sharp:
+        specifier: 0.35.3
+        version: 0.35.3(@types/node@22.12.0)
       turbo:
         specifier: 'catalog:'
         version: 2.10.11

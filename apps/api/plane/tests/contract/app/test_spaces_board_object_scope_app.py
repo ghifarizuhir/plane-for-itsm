@@ -166,7 +166,7 @@ def victim_other_ws(db, create_user):
     """A project in a DIFFERENT workspace — exercises the workspace_id binding
     (true cross-tenant, matching the advisory's stated impact)."""
     uid = uuid4().hex[:8]
-    owner = User.objects.create(email=f"victim-owner-{uid}@plane.so", username=f"victim_owner_{uid}")
+    owner = User.objects.create(email=f"victim-owner-{uid}@terraline.space", username=f"victim_owner_{uid}")
     owner.set_password("test-password")
     owner.save()
     other_ws = Workspace.objects.create(name="Other WS", owner=owner, slug=f"other-ws-{uid}")
@@ -215,7 +215,7 @@ def board_votes_disabled(db, workspace, create_user):
 def attacker_client(db, workspace):
     """An authenticated user who is NOT a member of the victim project."""
     uid = uuid4().hex[:8]
-    user = User.objects.create(email=f"attacker-{uid}@plane.so", username=f"attacker_{uid}")
+    user = User.objects.create(email=f"attacker-{uid}@terraline.space", username=f"attacker_{uid}")
     user.set_password("test-password")
     user.save()
     WorkspaceMember.objects.create(workspace=workspace, member=user, role=15)

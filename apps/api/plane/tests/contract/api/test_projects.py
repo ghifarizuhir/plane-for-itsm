@@ -16,7 +16,7 @@ def other_workspace_member(db, workspace):
     """Create another user that is a member of the workspace, distinct from the creator."""
     unique_id = uuid4().hex[:8]
     other = User.objects.create(
-        email=f"other-{unique_id}@plane.so",
+        email=f"other-{unique_id}@terraline.space",
         username=f"other_user_{unique_id}",
         first_name="Other",
         last_name="User",
@@ -32,7 +32,7 @@ def outsider_user(db):
     """Create a user that is NOT a member of any workspace under test."""
     unique_id = uuid4().hex[:8]
     outsider = User.objects.create(
-        email=f"outsider-{unique_id}@plane.so",
+        email=f"outsider-{unique_id}@terraline.space",
         username=f"outsider_{unique_id}",
         first_name="Out",
         last_name="Sider",
