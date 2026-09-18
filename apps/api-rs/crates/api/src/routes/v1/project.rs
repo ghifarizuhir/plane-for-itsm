@@ -172,11 +172,78 @@ pub async fn get_features(
         None => Ok(missing()),
     }
 }
-pub async fn patch_features(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Json<Value>)
-    -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+/// Maps an SDK `ProjectFeature` key to the backing column. Unknown keys are
+/// ignored (the SDK sends `extra` keys this fork has no column for).
+pub fn feature_column(key: &str) -> Option<&'static str> {
+    match key {
+        "modules" => Some("module_view"),
+        "cycles" => Some("cycle_view"),
+        "views" => Some("issue_views_view"),
+        "pages" => Some("page_view"),
+        "intakes" => Some("intake_view"),
+        "work_item_types" => Some("is_issue_type_enabled"),
+        _ => None,
+    }
+}
+
+pub async fn patch_features(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let Some(obj) = body.as_object() else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Invalid payload"}))));
+    };
+    let mut sets: Vec<String> = Vec::new();
+    let mut binds: Vec<bool> = Vec::new();
+    for (k, v) in obj {
+        if let (Some(col), Some(b)) = (feature_column(k), v.as_bool()) {
+            binds.push(b);
+            sets.push(format!("{col} = ${}", binds.len() + 2));
+        }
+    }
+    if sets.is_empty() {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "No supported feature keys"}))));
+    }
+    let sql = format!(
+        "UPDATE projects SET {}, updated_at = now() \
+         WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) \
+         AND deleted_at IS NULL \
+         RETURNING module_view, cycle_view, issue_views_view, page_view, intake_view, is_issue_type_enabled",
+        sets.join(", ")
+    );
+    let mut q = sqlx::query_as::<_, (bool, bool, bool, bool, bool, bool)>(&sql)
+        .bind(project_id)
+        .bind(&slug);
+    for b in binds {
+        q = q.bind(b);
+    }
+    match q.fetch_optional(&st.pool).await? {
+        Some((m, c, v, p, i, t)) => Ok((StatusCode::OK, Json(v1_project_features_json(m, c, v, p, i, t)))),
+        None => Ok(missing()),
+    }
 }
 pub async fn total_worklogs(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>)
     -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn feature_column_allowlist_maps_sdk_names() {
+        assert_eq!(feature_column("modules"), Some("module_view"));
+        assert_eq!(feature_column("cycles"), Some("cycle_view"));
+        assert_eq!(feature_column("views"), Some("issue_views_view"));
+        assert_eq!(feature_column("pages"), Some("page_view"));
+        assert_eq!(feature_column("intakes"), Some("intake_view"));
+        assert_eq!(feature_column("work_item_types"), Some("is_issue_type_enabled"));
+        assert_eq!(feature_column("epics"), None);
+    }
 }
