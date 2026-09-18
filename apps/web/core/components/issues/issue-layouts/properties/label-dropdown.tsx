@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Placement } from "@popperjs/core";
 import { useParams } from "next/navigation";
 import { useOutsideClickDetector, usePopper } from "@plane/hooks";
@@ -131,6 +132,7 @@ export function LabelDropdown(props: ILabelDropdownProps) {
 
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: placement ?? "bottom-start",
+    strategy: "fixed",
     modifiers: [
       {
         name: "preventOverflow",
@@ -252,89 +254,91 @@ export function LabelDropdown(props: ILabelDropdownProps) {
         renderByDefault={renderByDefault}
         multiple
       >
-        {isOpen && (
-          <Combobox.Options as="ul" className="fixed z-10" static>
-            <div
-              className={`z-10 my-1 h-auto w-48 rounded-sm border border-strong bg-surface-1 px-2 py-2.5 text-caption-sm-regular whitespace-nowrap shadow-raised-200 focus:outline-none ${optionsClassName}`}
-              ref={setPopperElement}
-              style={styles.popper}
-              {...attributes.popper}
-            >
-              <div className="flex w-full items-center justify-start rounded-sm border border-subtle bg-surface-2 px-2">
-                <SearchOutline className="h-3.5 w-3.5 text-tertiary" />
-                <Combobox.Input
-                  ref={inputRef}
-                  className="w-full bg-transparent px-2 py-1 text-caption-sm-regular text-secondary placeholder:text-placeholder focus:outline-none"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t("common.search.label")}
-                  displayValue={(assigned: any) => assigned?.name || ""}
-                  onKeyDown={searchInputKeyDown}
-                />
-              </div>
-              <div className={`mt-2 max-h-48 overflow-y-scroll`}>
-                {isLoading ? (
-                  <p className="text-center text-secondary">{t("common.loading")}</p>
-                ) : filteredOptions && filteredOptions.length > 0 ? (
-                  <ul className="space-y-1">
-                    {filteredOptions.map((option) => (
-                      <Combobox.Option
-                        as="li"
-                        key={option.value}
-                        value={option.value}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            e.stopPropagation();
+        {isOpen &&
+          createPortal(
+            <Combobox.Options as="ul" className="z-30" data-prevent-outside-click static>
+              <div
+                className={`z-30 my-1 h-auto w-48 rounded-sm border border-strong bg-surface-1 px-2 py-2.5 text-caption-sm-regular whitespace-nowrap shadow-raised-200 focus:outline-none ${optionsClassName}`}
+                ref={setPopperElement}
+                style={styles.popper}
+                {...attributes.popper}
+              >
+                <div className="flex w-full items-center justify-start rounded-sm border border-subtle bg-surface-2 px-2">
+                  <SearchOutline className="h-3.5 w-3.5 text-tertiary" />
+                  <Combobox.Input
+                    ref={inputRef}
+                    className="w-full bg-transparent px-2 py-1 text-caption-sm-regular text-secondary placeholder:text-placeholder focus:outline-none"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t("common.search.label")}
+                    displayValue={(assigned: any) => assigned?.name || ""}
+                    onKeyDown={searchInputKeyDown}
+                  />
+                </div>
+                <div className={`mt-2 max-h-48 overflow-y-scroll`}>
+                  {isLoading ? (
+                    <p className="text-center text-secondary">{t("common.loading")}</p>
+                  ) : filteredOptions && filteredOptions.length > 0 ? (
+                    <ul className="space-y-1">
+                      {filteredOptions.map((option) => (
+                        <Combobox.Option
+                          as="li"
+                          key={option.value}
+                          value={option.value}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }
+                          }}
+                          className={({ active, selected }) =>
+                            `flex cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none hover:bg-layer-1 ${
+                              active ? "bg-layer-1" : ""
+                            } ${selected ? "text-primary" : "text-secondary"}`
                           }
-                        }}
-                        className={({ active, selected }) =>
-                          `flex cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none hover:bg-layer-1 ${
-                            active ? "bg-layer-1" : ""
-                          } ${selected ? "text-primary" : "text-secondary"}`
-                        }
-                      >
-                        {({ selected }) => (
-                          <>
-                            {option.content}
-                            {selected && (
-                              <div className="flex-shrink-0">
-                                <TickOutline className={`h-3.5 w-3.5`} />
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </Combobox.Option>
-                    ))}
-                  </ul>
-                ) : submitting ? (
-                  <LoadingOutline className="h-3.5 w-3.5 animate-spin" />
-                ) : canCreateLabel ? (
-                  // Pre-existing create-action; keep element to avoid visual regression.
-                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events
-                  <p
-                    onClick={() => {
-                      if (!query.length) return;
-                      handleAddLabel(query);
-                    }}
-                    className={`text-left text-secondary ${query.length ? "cursor-pointer" : "cursor-default"}`}
-                  >
-                    {/* TODO: translate here */}
-                    {query.length ? (
-                      <>
-                        + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
-                      </>
-                    ) : (
-                      t("label.create.type")
-                    )}
-                  </p>
-                ) : (
-                  <p className="text-left text-secondary">{t("common.search.no_matching_results")}</p>
-                )}
+                        >
+                          {({ selected }) => (
+                            <>
+                              {option.content}
+                              {selected && (
+                                <div className="flex-shrink-0">
+                                  <TickOutline className={`h-3.5 w-3.5`} />
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </Combobox.Option>
+                      ))}
+                    </ul>
+                  ) : submitting ? (
+                    <LoadingOutline className="h-3.5 w-3.5 animate-spin" />
+                  ) : canCreateLabel ? (
+                    // Pre-existing create-action; keep element to avoid visual regression.
+                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events
+                    <p
+                      onClick={() => {
+                        if (!query.length) return;
+                        handleAddLabel(query);
+                      }}
+                      className={`text-left text-secondary ${query.length ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      {/* TODO: translate here */}
+                      {query.length ? (
+                        <>
+                          + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
+                        </>
+                      ) : (
+                        t("label.create.type")
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-left text-secondary">{t("common.search.no_matching_results")}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          </Combobox.Options>
-        )}
+            </Combobox.Options>,
+            document.body
+          )}
       </ComboDropDown>
     </div>
   );
