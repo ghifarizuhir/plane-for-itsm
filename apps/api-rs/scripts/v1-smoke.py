@@ -146,4 +146,44 @@ finally:
     client.work_items.delete(WS, pid, created.id)
     print("workitem delete OK")
 
+# ---- Phase-4b: work item types + workspace features --------------------------
+from plane.models.work_item_types import CreateWorkItemType  # noqa: E402
+
+ws_feats = client.workspaces.get_features(WS)
+assert ws_feats.work_item_types is False, (
+    f"workspace features work_item_types expected False, got {ws_feats.work_item_types}"
+)
+print(f"workspace features OK: work_item_types={ws_feats.work_item_types}")
+
+ws_types = client.workspace_work_item_types.list(WS)
+assert isinstance(ws_types, list), "workspace type list must be a list"
+print(f"workspace type list OK: {len(ws_types)} rows")
+
+smoke_type = client.workspace_work_item_types.create(
+    WS, CreateWorkItemType(name="Smoke Type")
+)
+assert smoke_type.id and smoke_type.name == "Smoke Type", "workspace type create mismatch"
+print(f"workspace type create OK: {smoke_type.id}")
+
+try:
+    fetched = client.workspace_work_item_types.retrieve(WS, smoke_type.id)
+    assert fetched.id == smoke_type.id, "workspace type retrieve id mismatch"
+    print("workspace type retrieve OK")
+
+    client.work_item_types.import_to_project(WS, pid, [smoke_type.id])
+    proj_types = client.work_item_types.list(WS, pid)
+    assert any(t.id == smoke_type.id for t in proj_types), (
+        "imported type not in project list"
+    )
+    print(f"project type import OK: {len(proj_types)} rows")
+
+    client.work_item_types.delete(WS, pid, smoke_type.id)
+    print("project type delete (detach) OK")
+finally:
+    try:
+        client.workspace_work_item_types.delete(WS, smoke_type.id)
+        print("workspace type delete OK")
+    except Exception as e:
+        print(f"workspace type delete skipped: {e}")
+
 print("v1 smoke passed")
