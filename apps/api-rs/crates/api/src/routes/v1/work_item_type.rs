@@ -1,6 +1,7 @@
-//! v1 work-item-type data layer (`issue_types` + `project_issue_types`).
-//! Handlers arrive in later tasks; this module holds only the row shape,
-//! JSON shaper, create/update bodies, and auth helpers.
+//! v1 work-item-type handlers (`issue_types` + `project_issue_types`).
+//! Row shape, JSON shaper, create/update bodies, auth helpers, plus
+//! workspace and project CRUD (list/create/retrieve/update/delete) and
+//! project import (link existing types into a project).
 
 use axum::{
     extract::{Path, Query, State},
@@ -291,7 +292,7 @@ async fn create_type(
 
     let row = reload(st, &ws, row.id)
         .await?
-        .ok_or(sqlx::Error::RowNotFound)?;
+        .ok_or_else(|| common::errors::AppError::internal())?;
     Ok((StatusCode::CREATED, Json(v1_work_item_type_json(&row))))
 }
 
@@ -590,6 +591,9 @@ pub async fn import_to_project(
 ) -> R {
     if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
         return Ok(deny());
+    }
+    if let Some(resp) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(resp);
     }
     let Some(ws) = ws_id(&st.pool, &slug).await? else {
         return Ok(missing());
