@@ -233,8 +233,37 @@ async fn list_envelope(
     let results: Vec<Value> = rows.iter().map(v1_work_item_json).collect();
     Ok((StatusCode::OK, Json(build_ungrouped_envelope(total, limit, cursor.page, results))))
 }
-pub async fn list_archived(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Query<serde_json::Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+pub async fn list_archived(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Query(q): Query<V1WorkItemQuery>,
+) -> R {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    let pql = match pql_or_400(q.pql.as_deref()) { Ok(p) => p, Err(e) => return Ok(e) };
+    let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
+    // Archived rows keep completed/cancelled groups; the archived clause is
+    // flipped by `list_envelope(archived=true)`.
+    list_envelope(
+        &st,
+        &slug,
+        auth.0,
+        Some(project_id),
+        true,
+        q.cursor.as_deref(),
+        q.per_page.as_deref(),
+        &pql,
+        guest_scoped,
+    )
+    .await
 }
 pub async fn retrieve(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
