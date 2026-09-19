@@ -60,3 +60,42 @@ pub fn v1_search_issue_json(row: &V1SearchRow) -> Value {
         "workspace__slug": row.workspace_slug,
     })
 }
+
+use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
+use crate::{middleware::auth::AuthUser, state::AppState};
+
+type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
+
+pub async fn list_project(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Query<serde_json::Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn list_workspace(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn list_archived(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Query<serde_json::Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn retrieve(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn retrieve_by_identifier(_: State<AppState>, _: AuthUser, _: Path<(String, String)>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn search(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn count(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn create(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Json<Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn update(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>, _: Json<Value>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn archive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+pub async fn unarchive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}

@@ -1336,6 +1336,44 @@ async fn main() {
             "/api/v1/workspaces/:slug/projects/:project_id/total-worklogs/",
             get(routes::v1::project::total_worklogs),
         )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/work-items/",
+            get(routes::v1::work_item::list_project).post(routes::v1::work_item::create),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/work-items/:pk/",
+            get(routes::v1::work_item::retrieve)
+                .patch(routes::v1::work_item::update)
+                .delete(routes::work_item::delete_issue),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/work-items/:pk/archive/",
+            post(routes::v1::work_item::archive),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/work-items/:pk/unarchive/",
+            delete(routes::v1::work_item::unarchive),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/projects/:project_id/archived-work-items/",
+            get(routes::v1::work_item::list_archived),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/work-items/",
+            get(routes::v1::work_item::list_workspace),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/work-items/count/",
+            get(routes::v1::work_item::count),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/work-items/search/",
+            get(routes::v1::work_item::search),
+        )
+        .route(
+            "/api/v1/workspaces/:slug/work-items/:ident/",
+            get(routes::v1::work_item::retrieve_by_identifier),
+        )
         .route("/api/timezones/", get(routes::misc::timezones))
         .route(
             "/api/instances/",
