@@ -36,6 +36,23 @@ fn v1_work_item_routes_registered() {
 }
 
 #[test]
+fn v1_work_item_type_routes_registered() {
+    let src =
+        std::fs::read_to_string(std::path::Path::new(common::MANIFEST_DIR).join("src/main.rs"))
+            .expect("main.rs");
+    for path in [
+        "/api/v1/workspaces/:slug/work-item-types/",
+        "/api/v1/workspaces/:slug/work-item-types/:pk/",
+        "/api/v1/workspaces/:slug/projects/:project_id/work-item-types/",
+        "/api/v1/workspaces/:slug/projects/:project_id/work-item-types/:pk/",
+        "/api/v1/workspaces/:slug/projects/:project_id/import-work-item-types/",
+        "/api/v1/workspaces/:slug/features/",
+    ] {
+        assert!(src.contains(path), "missing v1 route: {path}");
+    }
+}
+
+#[test]
 fn v1_subresource_routes_registered() {
     let src =
         std::fs::read_to_string(std::path::Path::new(common::MANIFEST_DIR).join("src/main.rs"))

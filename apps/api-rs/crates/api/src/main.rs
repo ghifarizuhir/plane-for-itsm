@@ -1386,6 +1386,12 @@ async fn main() {
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/dependencies/:related_id/", delete(routes::v1::relation::remove_dependency))
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/", get(routes::v1::relation::list_custom).post(routes::v1::relation::custom_create_not_supported))
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/:related_id/", delete(routes::v1::relation::custom_delete_not_supported))
+        .route("/api/v1/workspaces/:slug/features/", get(routes::v1::workspace::get_features).patch(routes::v1::workspace::patch_features))
+        .route("/api/v1/workspaces/:slug/work-item-types/", get(routes::v1::work_item_type::list_workspace).post(routes::v1::work_item_type::create_workspace))
+        .route("/api/v1/workspaces/:slug/work-item-types/:pk/", get(routes::v1::work_item_type::retrieve_workspace).patch(routes::v1::work_item_type::update_workspace).delete(routes::v1::work_item_type::delete_workspace))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-item-types/", get(routes::v1::work_item_type::list_project).post(routes::v1::work_item_type::create_project))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-item-types/:pk/", get(routes::v1::work_item_type::retrieve_project).patch(routes::v1::work_item_type::update_project).delete(routes::v1::work_item_type::delete_project))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/import-work-item-types/", post(routes::v1::work_item_type::import_to_project))
         .route("/api/timezones/", get(routes::misc::timezones))
         .route(
             "/api/instances/",
