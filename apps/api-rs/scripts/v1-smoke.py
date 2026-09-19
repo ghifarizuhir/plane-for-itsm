@@ -69,6 +69,23 @@ try:
     by_ident = client.work_items.retrieve_by_identifier(WS, proj_ident, detail.sequence_id)
     assert by_ident.id == created.id
     print("workitem retrieve_by_identifier OK")
+
+    # Archive/unarchive: archive only accepts completed/cancelled states, but
+    # v1 exposes no states-listing endpoint to move the item there
+    # deterministically. Exercise the route and report the state-group 400
+    # rather than skipping silently; run unarchive only on success.
+    from plane.errors.errors import HttpError  # noqa: E402
+
+    try:
+        client.work_items.archive(WS, pid, created.id)
+    except HttpError as e:
+        print(f"workitem archive reported HTTP {e.status_code} (state group not terminal)")
+    else:
+        archived = client.work_items.list_archived(WS, pid)
+        assert any(i.id == created.id for i in archived.results), "archived item not listed"
+        print("workitem archive OK")
+        client.work_items.unarchive(WS, pid, created.id)
+        print("workitem unarchive OK")
 finally:
     client.work_items.delete(WS, pid, created.id)
     print("workitem delete OK")

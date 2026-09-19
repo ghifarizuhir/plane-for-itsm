@@ -184,12 +184,15 @@ async fn list_envelope(
         Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
     };
     let limit = per_page.min(1000);
+    if limit <= 0 {
+        return Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": crate::routes::issue_query::GENERIC_500_MSG}))));
+    }
     let window = match page_window(cursor.page, limit) {
         Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
         Ok(w) => w,
     };
 
-    let mut where_qb = |qb: &mut QueryBuilder<Postgres>| {
+    let where_qb = |qb: &mut QueryBuilder<Postgres>| {
         qb.push(" WHERE i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
           .push_bind(slug.to_string())
           .push(") AND i.deleted_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
@@ -274,7 +277,6 @@ pub async fn list_archived(
 async fn fetch_detail(
     st: &AppState,
     slug: &str,
-    user_id: uuid::Uuid,
     project_id: uuid::Uuid,
     pk: uuid::Uuid,
 ) -> Result<Option<Value>, common::errors::AppError> {
@@ -297,7 +299,6 @@ async fn fetch_detail(
         o.insert("project".to_string(), json!(project_id));
         o.insert("workspace".to_string(), json!(slug));
     }
-    let _ = user_id;
     Ok(Some(v))
 }
 
@@ -339,7 +340,7 @@ pub async fn retrieve(
             ));
         }
     }
-    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+    match fetch_detail(&st, &slug, project_id, pk).await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok(missing()),
     }
@@ -386,7 +387,7 @@ pub async fn retrieve_by_identifier(
             ));
         }
     }
-    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+    match fetch_detail(&st, &slug, project_id, pk).await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok(missing()),
     }
@@ -406,18 +407,23 @@ pub async fn search(
         return Ok(deny());
     }
     let pattern = match q.search.as_deref() {
-        Some(s) if !s.trim().is_empty() => format!("%{}%", s.replace(['%', '_'], "")),
+        Some(s) if !s.trim().is_empty() => format!("%{}%", s.replace(['%', '_', '\\'], "")),
         _ => "%".to_string(),
     };
     let rows: Vec<V1SearchRow> = sqlx::query_as(
         "SELECT i.id, i.name, i.sequence_id, i.project_id, p.identifier AS project_identifier, \
                 w.slug AS workspace_slug \
          FROM issues i \
+         LEFT JOIN states s ON s.id = i.state_id \
          JOIN projects p ON p.id = i.project_id \
          JOIN workspaces w ON w.id = i.workspace_id \
          JOIN project_members pm ON pm.project_id = i.project_id \
          WHERE w.slug = $1 AND pm.member_id = $2 AND pm.is_active = true \
+           AND pm.deleted_at IS NULL \
            AND i.name ILIKE $3 AND i.deleted_at IS NULL AND i.archived_at IS NULL \
+           AND i.is_draft = false \
+           AND (s.id IS NULL OR s.\"group\" <> 'triage') \
+           AND EXISTS(SELECT 1 FROM projects p WHERE p.id = i.project_id AND p.deleted_at IS NULL AND p.archived_at IS NULL) \
          ORDER BY i.created_at DESC LIMIT 100",
     )
     .bind(&slug).bind(auth.0).bind(&pattern)
@@ -463,7 +469,7 @@ pub async fn count(
     }
     let pql = match pql_or_400(q.pql.as_deref()) { Ok(p) => p, Err(e) => return Ok(e) };
 
-    let mut base_where = |qb: &mut QueryBuilder<Postgres>| {
+    let base_where = |qb: &mut QueryBuilder<Postgres>| {
         qb.push(" WHERE i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
           .push_bind(slug.clone())
           .push(") AND i.deleted_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage' AND i.archived_at IS NULL")
@@ -716,8 +722,17 @@ pub async fn create(
     let html = description_of(&body);
 
     let mut tx = st.pool.begin().await?;
+    // Serialize per-project creates so two concurrent calls cannot pick the
+    // same sequence (no unique index exists on issues.sequence_id).
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM projects WHERE id = $1 FOR UPDATE")
+        .bind(project_id)
+        .fetch_one(&mut *tx)
+        .await?;
     let sequence: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM issue_sequences WHERE project_id = $1",
+        "SELECT COALESCE(GREATEST(\
+            (SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $1), \
+            (SELECT MAX(sequence_id) FROM issues WHERE project_id = $1 AND deleted_at IS NULL)\
+         ), 0) + 1",
     )
     .bind(project_id)
     .fetch_one(&mut *tx)
@@ -750,7 +765,7 @@ pub async fn create(
     replace_bridges(&mut tx, issue_id, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
     tx.commit().await?;
 
-    match fetch_detail(&st, &slug, auth.0, project_id, issue_id).await? {
+    match fetch_detail(&st, &slug, project_id, issue_id).await? {
         Some(v) => Ok((StatusCode::CREATED, Json(v))),
         None => Ok(missing()),
     }
@@ -864,7 +879,7 @@ pub async fn update(
     replace_bridges(&mut tx, pk, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
     tx.commit().await?;
 
-    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+    match fetch_detail(&st, &slug, project_id, pk).await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok(missing()),
     }
@@ -890,7 +905,7 @@ pub async fn archive(
     if let Err(msg) = guard_archive_one_group(group.as_deref().unwrap_or("")) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": msg}))));
     }
-    sqlx::query("UPDATE issues SET archived_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL")
+    sqlx::query("UPDATE issues SET archived_at = now(), updated_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL")
         .bind(pk).bind(project_id).execute(&st.pool).await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
@@ -911,7 +926,7 @@ pub async fn unarchive(
     if exists.is_none() {
         return Ok(missing());
     }
-    sqlx::query("UPDATE issues SET archived_at = NULL WHERE id = $1 AND project_id = $2")
+    sqlx::query("UPDATE issues SET archived_at = NULL, updated_at = now() WHERE id = $1 AND project_id = $2")
         .bind(pk).bind(project_id).execute(&st.pool).await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
