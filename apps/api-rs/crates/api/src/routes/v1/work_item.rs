@@ -389,8 +389,39 @@ pub async fn retrieve_by_identifier(
         None => Ok(missing()),
     }
 }
-pub async fn search(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct V1SearchQuery {
+    #[serde(default)] pub search: Option<String>,
+}
+
+pub async fn search(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<V1SearchQuery>,
+) -> R {
+    if !ws_active_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let pattern = match q.search.as_deref() {
+        Some(s) if !s.trim().is_empty() => format!("%{}%", s.replace(['%', '_'], "")),
+        _ => "%".to_string(),
+    };
+    let rows: Vec<V1SearchRow> = sqlx::query_as(
+        "SELECT i.id, i.name, i.sequence_id, i.project_id, p.identifier AS project_identifier, \
+                w.slug AS workspace_slug \
+         FROM issues i \
+         JOIN projects p ON p.id = i.project_id \
+         JOIN workspaces w ON w.id = i.workspace_id \
+         JOIN project_members pm ON pm.project_id = i.project_id \
+         WHERE w.slug = $1 AND pm.member_id = $2 AND pm.is_active = true \
+           AND i.name ILIKE $3 AND i.deleted_at IS NULL AND i.archived_at IS NULL \
+         ORDER BY i.created_at DESC LIMIT 100",
+    )
+    .bind(&slug).bind(auth.0).bind(&pattern)
+    .fetch_all(&st.pool).await?;
+    let issues: Vec<Value> = rows.iter().map(v1_search_issue_json).collect();
+    Ok((StatusCode::OK, Json(json!({ "issues": issues }))))
 }
 pub async fn count(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
