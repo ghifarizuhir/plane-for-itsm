@@ -557,25 +557,35 @@ async fn require_project_write(
 }
 
 fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {
-    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
+    let _ = e;
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Something went wrong please try again later"})))
 }
 
 async fn validate_write(
     st: &AppState,
     project_id: uuid::Uuid,
     body: &V1WriteWorkItem,
+    require_name: bool,
 ) -> Result<(), (StatusCode, Json<Value>)> {
     let bad = |msg: String| (StatusCode::BAD_REQUEST, Json(json!({"error": msg})));
-    if let Some(name) = &body.name {
-        if name.trim().is_empty() { return Err(bad("name is required".into())); }
-        if name.chars().count() > 255 { return Err(bad("name max length 255".into())); }
+    match body.name.as_deref() {
+        None if require_name => return Err(bad("name is required".into())),
+        Some(n) if n.trim().is_empty() => return Err(bad("name is required".into())),
+        Some(n) if n.chars().count() > 255 => return Err(bad("name max length 255".into())),
+        _ => {}
     }
     if let Some(p) = &body.priority {
         if !V1_PRIORITIES.contains(&p.as_str()) { return Err(bad("Invalid priority".into())); }
     }
+    if let Some(t) = body.type_id {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM issue_types WHERE id = $1 AND deleted_at IS NULL)",
+        ).bind(t).fetch_one(&st.pool).await.map_err(internal)?;
+        if !ok { return Err(bad("type_id is not valid".into())); }
+    }
     if let Some(ids) = body.assignees.as_ref().filter(|v| !v.is_empty()) {
         let (n,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND member_id = ANY($2) AND is_active = true AND role >= 15",
+            "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND member_id = ANY($2) AND is_active = true AND role >= 15 AND deleted_at IS NULL",
         ).bind(project_id).bind(ids).fetch_one(&st.pool).await.map_err(internal)?;
         if n != ids.len() as i64 { return Err(bad("invalid assignee: not a project member".into())); }
     }
@@ -586,7 +596,7 @@ async fn validate_write(
         if n != ids.len() as i64 { return Err(bad("invalid label: not in project".into())); }
     }
     if let Some(state_id) = body.state {
-        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)")
+        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false)")
             .bind(state_id).bind(project_id).fetch_one(&st.pool).await.map_err(internal)?;
         if !ok { return Err(bad("State is not valid please pass a valid state_id".into())); }
     }
@@ -607,7 +617,7 @@ async fn validate_write(
 
 /// Replaces the live assignee/label bridge rows when the SDK sent the key.
 async fn replace_bridges(
-    st: &AppState,
+    tx: &mut sqlx::Transaction<'_, Postgres>,
     issue_id: uuid::Uuid,
     project_id: uuid::Uuid,
     user_id: uuid::Uuid,
@@ -616,24 +626,24 @@ async fn replace_bridges(
 ) -> Result<(), common::errors::AppError> {
     if let Some(ids) = assignees {
         sqlx::query("UPDATE issue_assignees SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
-            .bind(issue_id).execute(&st.pool).await?;
+            .bind(issue_id).execute(&mut **tx).await?;
         for id in ids {
             sqlx::query(
                 "INSERT INTO issue_assignees (id, issue_id, assignee_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
                  SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
                  WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
-            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&st.pool).await?;
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
         }
     }
     if let Some(ids) = labels {
         sqlx::query("UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
-            .bind(issue_id).execute(&st.pool).await?;
+            .bind(issue_id).execute(&mut **tx).await?;
         for id in ids {
             sqlx::query(
                 "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
                  SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
                  WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
-            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&st.pool).await?;
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
         }
     }
     Ok(())
@@ -648,7 +658,7 @@ pub async fn create(
     if !require_project_write(&st, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    if let Err(e) = validate_write(&st, project_id, &body).await {
+    if let Err(e) = validate_write(&st, project_id, &body, true).await {
         return Ok(e);
     }
     let name = body.name.clone().unwrap_or_default();
@@ -671,27 +681,40 @@ pub async fn create(
     let priority = body.priority.clone().unwrap_or_else(|| "none".to_string());
     let html = description_of(&body);
 
+    let mut tx = st.pool.begin().await?;
+    let sequence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM issue_sequences WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *tx)
+    .await?;
     let row: Option<(uuid::Uuid,)> = sqlx::query_as(
         "INSERT INTO issues (id, name, description_html, description_json, description_stripped, priority, start_date, target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, updated_by_id, point, estimate_point_id, type_id, parent_id, external_source, external_id, created_at, updated_at) \
          SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, $5, $6, $7, \
                 COALESCE($8, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $9 AND deleted_at IS NULL), 65535.0) + 10000), \
-                COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $9), 0) + 1, \
-                $10, $9, w.id, $11, $11, $12, $13, $14, $15, $16, $17, now(), now() \
-         FROM workspaces w WHERE w.slug = $18 RETURNING id",
+                $10, \
+                $11, $9, w.id, $12, $12, $13, $14, $15, $16, $17, $18, now(), now() \
+         FROM workspaces w WHERE w.slug = $19 RETURNING id",
     )
     .bind(&name).bind(&html).bind(body.description_stripped.as_deref())
     .bind(&priority).bind(start_date).bind(target_date)
     .bind(body.is_draft.unwrap_or(false)).bind(body.sort_order)
-    .bind(project_id).bind(state_id).bind(auth.0)
+    .bind(project_id).bind(sequence as i32).bind(state_id).bind(auth.0)
     .bind(body.point).bind(body.estimate_point).bind(body.type_id).bind(body.parent)
     .bind(body.external_source.as_deref()).bind(body.external_id.as_deref())
     .bind(&slug)
-    .fetch_optional(&st.pool).await?;
+    .fetch_optional(&mut *tx).await?;
     let Some((issue_id,)) = row else {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
     };
-
-    replace_bridges(&st, issue_id, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
+    sqlx::query(
+        "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, created_by_id, deleted, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, (SELECT workspace_id FROM projects WHERE id = $3), $4, false, now(), now())",
+    )
+    .bind(sequence).bind(issue_id).bind(project_id).bind(auth.0)
+    .execute(&mut *tx).await?;
+    replace_bridges(&mut tx, issue_id, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
+    tx.commit().await?;
 
     match fetch_detail(&st, &slug, auth.0, project_id, issue_id).await? {
         Some(v) => Ok((StatusCode::CREATED, Json(v))),
@@ -706,4 +729,53 @@ pub async fn archive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uui
 }
 pub async fn unarchive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_date_absent_or_empty_is_none() {
+        assert_eq!(parse_date(&None), Ok(None));
+        assert_eq!(parse_date(&Some("".into())), Ok(None));
+    }
+
+    #[test]
+    fn parse_date_parses_iso() {
+        assert_eq!(
+            parse_date(&Some("2026-01-02".into())),
+            Ok(Some(chrono::NaiveDate::from_ymd_opt(2026, 1, 2).unwrap()))
+        );
+    }
+
+    #[test]
+    fn parse_date_rejects_garbage() {
+        assert!(parse_date(&Some("nope".into())).is_err());
+    }
+
+    #[test]
+    fn description_prefers_html() {
+        let body = V1WriteWorkItem {
+            description_html: Some("<p>rich</p>".into()),
+            description_stripped: Some("plain".into()),
+            ..Default::default()
+        };
+        assert_eq!(description_of(&body), "<p>rich</p>");
+    }
+
+    #[test]
+    fn description_wraps_stripped_when_no_html() {
+        let body = V1WriteWorkItem {
+            description_stripped: Some("a <b>\nline".into()),
+            ..Default::default()
+        };
+        assert_eq!(description_of(&body), "<p>a &lt;b&gt;<br/>line</p>");
+    }
+
+    #[test]
+    fn description_defaults_to_empty_paragraph() {
+        let body = V1WriteWorkItem::default();
+        assert_eq!(description_of(&body), "<p></p>");
+    }
 }
