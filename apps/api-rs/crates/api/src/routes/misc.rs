@@ -1,5 +1,6 @@
 use axum::{extract::Query, extract::State, http::StatusCode, Json};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{middleware::auth::AuthUser, state::AppState};
@@ -297,10 +298,63 @@ pub struct CreateApiToken {
     pub expired_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ApiTokenOut {
-    pub id: uuid::Uuid,
-    pub label: String,
+/// Columns for the read shape; kept in sync with Django's
+/// `APITokenReadSerializer` (all model fields except the secret `token`).
+const API_TOKEN_READ_COLUMNS: &str = "id, label, description, last_used, user_type, created_by_id, \
+    updated_by_id, user_id, workspace_id, expired_at, is_service, allowed_rate_limit, \
+    created_at, updated_at, deleted_at";
+
+fn iso(dt: &DateTime<Utc>) -> String {
+    // DRF renders datetimes as ISO-8601 with microseconds and a `Z` suffix.
+    dt.to_rfc3339_opts(SecondsFormat::Micros, true)
+}
+
+/// Django `APITokenReadSerializer.is_active` is a `SerializerMethodField` computed
+/// from `expired_at`, not the stored column.
+pub fn token_is_active(expired_at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+    match expired_at {
+        None => true,
+        Some(expiry) => now < expiry,
+    }
+}
+
+/// Full read shape (never includes `token`).
+pub fn api_token_read_json(token: &common::models::misc::ApiToken, now: DateTime<Utc>) -> Value {
+    json!({
+        "id": token.id,
+        "label": token.label,
+        "description": token.description,
+        "is_active": token_is_active(token.expired_at, now),
+        "last_used": token.last_used.as_ref().map(iso),
+        "user_type": token.user_type,
+        "created_by": token.created_by_id,
+        "updated_by": token.updated_by_id,
+        "user": token.user_id,
+        "workspace": token.workspace_id,
+        "expired_at": token.expired_at.as_ref().map(iso),
+        "is_service": token.is_service,
+        "allowed_rate_limit": token.allowed_rate_limit,
+        "created_at": iso(&token.created_at),
+        "updated_at": iso(&token.updated_at),
+        "deleted_at": token.deleted_at.as_ref().map(iso),
+    })
+}
+
+/// Read shape plus the secret, mirroring `APITokenSerializer` (visible only on create).
+pub fn api_token_created_json(
+    token: &common::models::misc::ApiToken,
+    secret: &str,
+    now: DateTime<Utc>,
+) -> Value {
+    let mut value = api_token_read_json(token, now);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("token".to_string(), Value::String(secret.to_string()));
+    }
+    value
+}
+
+fn read_token_by_id_query() -> String {
+    format!("SELECT {API_TOKEN_READ_COLUMNS} FROM api_tokens WHERE id = $1")
 }
 
 pub async fn list_tokens(
@@ -308,13 +362,17 @@ pub async fn list_tokens(
     auth: AuthUser,
 ) -> Result<Json<Vec<Value>>, common::errors::AppError> {
     let user = auth.0;
-    let rows = sqlx::query_as::<_, common::models::misc::ApiToken>(
-        "SELECT id, label FROM api_tokens WHERE user_id = $1 AND is_service = false AND deleted_at IS NULL ORDER BY created_at DESC",
-    )
-    .bind(user)
-    .fetch_all(&st.pool)
-    .await?;
-    Ok(Json(rows.into_iter().map(|t| json!({"id": t.id, "label": t.label})).collect()))
+    let sql = format!(
+        "SELECT {API_TOKEN_READ_COLUMNS} FROM api_tokens \
+         WHERE user_id = $1 AND is_service = false AND deleted_at IS NULL \
+         ORDER BY created_at DESC"
+    );
+    let rows = sqlx::query_as::<_, common::models::misc::ApiToken>(&sql)
+        .bind(user)
+        .fetch_all(&st.pool)
+        .await?;
+    let now = Utc::now();
+    Ok(Json(rows.iter().map(|t| api_token_read_json(t, now)).collect()))
 }
 
 pub async fn create_token(
@@ -330,8 +388,8 @@ pub async fn create_token(
         .fetch_one(&st.pool)
         .await?;
     // Token visible only on create, like APITokenSerializer.
-    let row: (uuid::Uuid, String, String) = sqlx::query_as(
-        "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'plane_api_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, true, false, '60/min', $5, now(), now()) RETURNING id, label, token",
+    let (id, secret): (uuid::Uuid, String) = sqlx::query_as(
+        "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'plane_api_' || replace(gen_random_uuid()::text, '-', ''), $3, $4, true, false, '60/min', $5, now(), now()) RETURNING id, token",
     )
     .bind(&label)
     .bind(body.description.clone().unwrap_or_default())
@@ -340,7 +398,13 @@ pub async fn create_token(
     .bind(body.expired_at)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.0, "label": row.1, "token": row.2}))))
+    let sql = format!("{} AND user_id = $2", read_token_by_id_query());
+    let row: common::models::misc::ApiToken = sqlx::query_as(&sql)
+        .bind(id)
+        .bind(user)
+        .fetch_one(&st.pool)
+        .await?;
+    Ok((StatusCode::CREATED, Json(api_token_created_json(&row, &secret, Utc::now()))))
 }
 
 pub async fn get_token(
@@ -349,15 +413,14 @@ pub async fn get_token(
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let user = auth.0;
-    let row: Option<common::models::misc::ApiToken> = sqlx::query_as(
-        "SELECT id, label FROM api_tokens WHERE id = $1 AND user_id = $2 AND is_service = false AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(user)
-    .fetch_optional(&st.pool)
-    .await?;
+    let sql = format!("{} AND user_id = $2 AND is_service = false AND deleted_at IS NULL", read_token_by_id_query());
+    let row: Option<common::models::misc::ApiToken> = sqlx::query_as(&sql)
+        .bind(pk)
+        .bind(user)
+        .fetch_optional(&st.pool)
+        .await?;
     match row {
-        Some(t) => Ok((StatusCode::OK, Json(json!({"id": t.id, "label": t.label})))),
+        Some(t) => Ok((StatusCode::OK, Json(api_token_read_json(&t, Utc::now())))),
         None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Token not found"})))),
     }
 }
