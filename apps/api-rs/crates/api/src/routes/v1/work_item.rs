@@ -516,6 +516,16 @@ pub struct V1WriteWorkItem {
     #[serde(default)] pub external_id: Option<String>,
 }
 
+#[derive(Clone)]
+enum BindValue {
+    Text(String),
+    Date(Option<chrono::NaiveDate>),
+    Uuid(Option<uuid::Uuid>),
+    Int(Option<i32>),
+    Float(f64),
+    Bool(bool),
+}
+
 pub const V1_PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
 
 fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDate>, String> {
@@ -731,8 +741,118 @@ pub async fn create(
         None => Ok(missing()),
     }
 }
-pub async fn update(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>, _: Json<Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+pub async fn update(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<V1WriteWorkItem>,
+) -> R {
+    if !ws_active_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let creator: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND created_by_id = $2 AND deleted_at IS NULL)",
+    ).bind(pk).bind(auth.0).fetch_one(&st.pool).await?;
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !creator
+        && !project_gate_allows(
+            matches!(member_role, Some(20) | Some(15)),
+            member_role.is_some(),
+            ws_admin,
+        )
+    {
+        return Ok(deny());
+    }
+    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT i.id FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
+         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
+         AND (s.id IS NULL OR s.\"group\" != 'triage')",
+    ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
+    if exists.is_none() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+    }
+    if let Err(e) = validate_write(&st, project_id, &body, false).await {
+        return Ok(e);
+    }
+
+    let start_date = match parse_date(&body.start_date) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
+    };
+    let target_date = match parse_date(&body.target_date) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
+    };
+    let html = body.description_html.clone().or_else(|| {
+        body.description_stripped.as_deref().filter(|s| !s.is_empty()).map(|p| format!("<p>{}</p>", p))
+    });
+
+    // Only fields present in the JSON body are written (`COALESCE` cannot set
+    // an explicit NULL back), so the SET list and its positional binds are
+    // built together in one pass via `BindValue`.
+    let mut sets: Vec<String> = Vec::new();
+    let mut values: Vec<BindValue> = Vec::new();
+    fn add(sets: &mut Vec<String>, values: &mut Vec<BindValue>, col: &str, v: BindValue) {
+        sets.push(format!("{col} = ${}", values.len() + 1));
+        values.push(v);
+    }
+    if let Some(v) = body.name.clone() { add(&mut sets, &mut values, "name", BindValue::Text(v)); }
+    if let Some(v) = html.clone() { add(&mut sets, &mut values, "description_html", BindValue::Text(v)); }
+    if let Some(v) = body.description_stripped.clone() { add(&mut sets, &mut values, "description_stripped", BindValue::Text(v)); }
+    if let Some(v) = body.priority.clone() { add(&mut sets, &mut values, "priority", BindValue::Text(v)); }
+    if body.start_date.is_some() { add(&mut sets, &mut values, "start_date", BindValue::Date(start_date)); }
+    if body.target_date.is_some() { add(&mut sets, &mut values, "target_date", BindValue::Date(target_date)); }
+    if body.state.is_some() { add(&mut sets, &mut values, "state_id", BindValue::Uuid(body.state)); }
+    if body.type_id.is_some() { add(&mut sets, &mut values, "type_id", BindValue::Uuid(body.type_id)); }
+    if body.parent.is_some() { add(&mut sets, &mut values, "parent_id", BindValue::Uuid(body.parent)); }
+    if body.point.is_some() { add(&mut sets, &mut values, "point", BindValue::Int(body.point)); }
+    if body.estimate_point.is_some() { add(&mut sets, &mut values, "estimate_point_id", BindValue::Uuid(body.estimate_point)); }
+    if let Some(v) = body.sort_order { add(&mut sets, &mut values, "sort_order", BindValue::Float(v)); }
+    if let Some(v) = body.is_draft { add(&mut sets, &mut values, "is_draft", BindValue::Bool(v)); }
+    if let Some(v) = body.external_source.clone() { add(&mut sets, &mut values, "external_source", BindValue::Text(v)); }
+    if let Some(v) = body.external_id.clone() { add(&mut sets, &mut values, "external_id", BindValue::Text(v)); }
+
+    if sets.is_empty() && body.assignees.is_none() && body.labels.is_none() {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "No supported fields"}))));
+    }
+
+    let mut tx = st.pool.begin().await?;
+    if !sets.is_empty() {
+        let user_pos = values.len() + 1;
+        let pk_pos = values.len() + 2;
+        let project_pos = values.len() + 3;
+        let sql = format!(
+            "UPDATE issues SET {}, updated_at = now(), updated_by_id = ${user_pos} \
+             WHERE id = ${pk_pos} AND project_id = ${project_pos} AND deleted_at IS NULL",
+            sets.join(", ")
+        );
+        let mut q = sqlx::query(&sql);
+        for v in &values {
+            q = match v {
+                BindValue::Text(s) => q.bind(s.clone()),
+                BindValue::Date(d) => q.bind(*d),
+                BindValue::Uuid(u) => q.bind(*u),
+                BindValue::Int(n) => q.bind(*n),
+                BindValue::Float(f) => q.bind(*f),
+                BindValue::Bool(b) => q.bind(*b),
+            };
+        }
+        q = q.bind(auth.0).bind(pk).bind(project_id);
+        q.execute(&mut *tx).await?;
+    } else {
+        sqlx::query("UPDATE issues SET updated_at = now(), updated_by_id = $1 WHERE id = $2 AND project_id = $3 AND deleted_at IS NULL")
+            .bind(auth.0).bind(pk).bind(project_id).execute(&mut *tx).await?;
+    }
+
+    replace_bridges(&mut tx, pk, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
+    tx.commit().await?;
+
+    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+        Some(v) => Ok((StatusCode::OK, Json(v))),
+        None => Ok(missing()),
+    }
 }
 pub async fn archive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
