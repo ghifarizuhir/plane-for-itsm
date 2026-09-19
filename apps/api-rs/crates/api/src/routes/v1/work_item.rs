@@ -265,9 +265,10 @@ pub async fn list_archived(
     )
     .await
 }
-/// Fetches the SDK `WorkItemDetail` shape: the full visibility gate of the
-/// app API's `get_issue` (active ws member + project member/creator), then
-/// `DETAIL_SELECT_SQL` plus `description_html`. Adds `assignees`/`labels`.
+/// Fetches the SDK `WorkItemDetail` shape: `DETAIL_SELECT_SQL` plus
+/// `description_html`, and adds `assignees`/`labels` and the `project`/
+/// `workspace` refs. Callers own the visibility gate — active ws member,
+/// project member/creator, and the `get_issue` guest-view rule.
 async fn fetch_detail(
     st: &AppState,
     slug: &str,
@@ -320,6 +321,22 @@ pub async fn retrieve(
     {
         return Ok(deny());
     }
+    // Guest-view rule (`base.py:596-609`): a guest whose project hides member
+    // work and who did not create the issue → 403.
+    if matches!(member_role, Some(5)) && !creator {
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
+        if !gva {
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": crate::routes::versions::DESC_GUEST_MSG})),
+            ));
+        }
+    }
     match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok(missing()),
@@ -348,6 +365,25 @@ pub async fn retrieve_by_identifier(
         "SELECT i.id FROM issues i WHERE i.project_id = $1 AND i.sequence_id = $2 AND i.deleted_at IS NULL",
     ).bind(project_id).bind(seq).fetch_optional(&st.pool).await?;
     let Some(pk) = pk else { return Ok(missing()); };
+    let creator: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND created_by_id = $2 AND deleted_at IS NULL)",
+    ).bind(pk).bind(auth.0).fetch_one(&st.pool).await?;
+    // Guest-view rule (`base.py:596-609`): a guest whose project hides member
+    // work and who did not create the issue → 403.
+    if matches!(role, Some(5)) && !creator {
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
+        if !gva {
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": crate::routes::versions::DESC_GUEST_MSG})),
+            ));
+        }
+    }
     match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok(missing()),
