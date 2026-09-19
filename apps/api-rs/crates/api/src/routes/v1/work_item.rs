@@ -9,6 +9,7 @@ use crate::routes::issue_common::{
     is_workspace_admin, page_window, project_gate_allows,
 };
 use crate::routes::issue_query::{DETAIL_SELECT_SQL, LIST_SELECT_SQL, build_ungrouped_envelope};
+use crate::routes::issue_write::resolve_effective_state;
 use crate::routes::project::{deny, missing};
 use crate::routes::v1::common::PageParams;
 use crate::routes::v1::pql::{V1Pql, parse_v1_pql, push_pql_where};
@@ -494,8 +495,208 @@ pub async fn count(
     let total: i64 = rows.iter().map(|(_, n)| *n).sum();
     Ok((StatusCode::OK, Json(v1_count_json(Some(key), None, total, rows))))
 }
-pub async fn create(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Json<Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct V1WriteWorkItem {
+    #[serde(default)] pub name: Option<String>,
+    #[serde(default)] pub assignees: Option<Vec<uuid::Uuid>>,
+    #[serde(default)] pub labels: Option<Vec<uuid::Uuid>>,
+    #[serde(default)] pub state: Option<uuid::Uuid>,
+    #[serde(default)] pub type_id: Option<uuid::Uuid>,
+    #[serde(default)] pub point: Option<i32>,
+    #[serde(default)] pub estimate_point: Option<uuid::Uuid>,
+    #[serde(default)] pub priority: Option<String>,
+    #[serde(default)] pub start_date: Option<String>,
+    #[serde(default)] pub target_date: Option<String>,
+    #[serde(default)] pub sort_order: Option<f64>,
+    #[serde(default)] pub parent: Option<uuid::Uuid>,
+    #[serde(default)] pub is_draft: Option<bool>,
+    #[serde(default)] pub description_html: Option<String>,
+    #[serde(default)] pub description_stripped: Option<String>,
+    #[serde(default)] pub external_source: Option<String>,
+    #[serde(default)] pub external_id: Option<String>,
+}
+
+pub const V1_PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
+
+fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDate>, String> {
+    match raw.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(s) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .map(Some)
+            .map_err(|_| format!("Invalid date: {s}")),
+    }
+}
+
+fn description_of(body: &V1WriteWorkItem) -> String {
+    if let Some(html) = body.description_html.as_deref().filter(|s| !s.is_empty()) {
+        return html.to_string();
+    }
+    if let Some(plain) = body.description_stripped.as_deref().filter(|s| !s.is_empty()) {
+        return format!("<p>{}</p>", plain.replace('<', "&lt;").replace('>', "&gt;").replace('\n', "<br/>"));
+    }
+    "<p></p>".to_string()
+}
+
+/// 403 unless the caller is a project ADMIN/MEMBER (or ws admin).
+async fn require_project_write(
+    st: &AppState,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, common::errors::AppError> {
+    if !ws_active_member(&st.pool, user_id, slug).await? {
+        return Ok(false);
+    }
+    let member_role = fetch_project_member_role(&st.pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20) | Some(15)),
+        member_role.is_some(),
+        ws_admin,
+    ))
+}
+
+fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
+}
+
+async fn validate_write(
+    st: &AppState,
+    project_id: uuid::Uuid,
+    body: &V1WriteWorkItem,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let bad = |msg: String| (StatusCode::BAD_REQUEST, Json(json!({"error": msg})));
+    if let Some(name) = &body.name {
+        if name.trim().is_empty() { return Err(bad("name is required".into())); }
+        if name.chars().count() > 255 { return Err(bad("name max length 255".into())); }
+    }
+    if let Some(p) = &body.priority {
+        if !V1_PRIORITIES.contains(&p.as_str()) { return Err(bad("Invalid priority".into())); }
+    }
+    if let Some(ids) = body.assignees.as_ref().filter(|v| !v.is_empty()) {
+        let (n,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND member_id = ANY($2) AND is_active = true AND role >= 15",
+        ).bind(project_id).bind(ids).fetch_one(&st.pool).await.map_err(internal)?;
+        if n != ids.len() as i64 { return Err(bad("invalid assignee: not a project member".into())); }
+    }
+    if let Some(ids) = body.labels.as_ref().filter(|v| !v.is_empty()) {
+        let (n,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        ).bind(project_id).bind(ids).fetch_one(&st.pool).await.map_err(internal)?;
+        if n != ids.len() as i64 { return Err(bad("invalid label: not in project".into())); }
+    }
+    if let Some(state_id) = body.state {
+        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)")
+            .bind(state_id).bind(project_id).fetch_one(&st.pool).await.map_err(internal)?;
+        if !ok { return Err(bad("State is not valid please pass a valid state_id".into())); }
+    }
+    if let Some(ep) = body.estimate_point {
+        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM estimate_points WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)")
+            .bind(ep).bind(project_id).fetch_one(&st.pool).await.map_err(internal)?;
+        if !ok { return Err(bad("estimate_point is not valid".into())); }
+    }
+    if let Some(parent) = body.parent {
+        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)")
+            .bind(parent).bind(project_id).fetch_one(&st.pool).await.map_err(internal)?;
+        if !ok { return Err(bad("parent is not valid".into())); }
+    }
+    parse_date(&body.start_date).map_err(bad)?;
+    parse_date(&body.target_date).map_err(bad)?;
+    Ok(())
+}
+
+/// Replaces the live assignee/label bridge rows when the SDK sent the key.
+async fn replace_bridges(
+    st: &AppState,
+    issue_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    assignees: Option<&[uuid::Uuid]>,
+    labels: Option<&[uuid::Uuid]>,
+) -> Result<(), common::errors::AppError> {
+    if let Some(ids) = assignees {
+        sqlx::query("UPDATE issue_assignees SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
+            .bind(issue_id).execute(&st.pool).await?;
+        for id in ids {
+            sqlx::query(
+                "INSERT INTO issue_assignees (id, issue_id, assignee_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
+                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&st.pool).await?;
+        }
+    }
+    if let Some(ids) = labels {
+        sqlx::query("UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
+            .bind(issue_id).execute(&st.pool).await?;
+        for id in ids {
+            sqlx::query(
+                "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
+                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&st.pool).await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<V1WriteWorkItem>,
+) -> R {
+    if !require_project_write(&st, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    if let Err(e) = validate_write(&st, project_id, &body).await {
+        return Ok(e);
+    }
+    let name = body.name.clone().unwrap_or_default();
+
+    let (default_state, first_state): (Option<uuid::Uuid>, Option<uuid::Uuid>) = (
+        sqlx::query_scalar("SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true ORDER BY created_at ASC LIMIT 1")
+            .bind(project_id).fetch_optional(&st.pool).await?,
+        sqlx::query_scalar("SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false ORDER BY created_at ASC LIMIT 1")
+            .bind(project_id).fetch_optional(&st.pool).await?,
+    );
+    let state_id = resolve_effective_state(body.state, default_state, first_state);
+    let start_date = match parse_date(&body.start_date) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
+    };
+    let target_date = match parse_date(&body.target_date) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
+    };
+    let priority = body.priority.clone().unwrap_or_else(|| "none".to_string());
+    let html = description_of(&body);
+
+    let row: Option<(uuid::Uuid,)> = sqlx::query_as(
+        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, priority, start_date, target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, updated_by_id, point, estimate_point_id, type_id, parent_id, external_source, external_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, $5, $6, $7, \
+                COALESCE($8, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $9 AND deleted_at IS NULL), 65535.0) + 10000), \
+                COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $9), 0) + 1, \
+                $10, $9, w.id, $11, $11, $12, $13, $14, $15, $16, $17, now(), now() \
+         FROM workspaces w WHERE w.slug = $18 RETURNING id",
+    )
+    .bind(&name).bind(&html).bind(body.description_stripped.as_deref())
+    .bind(&priority).bind(start_date).bind(target_date)
+    .bind(body.is_draft.unwrap_or(false)).bind(body.sort_order)
+    .bind(project_id).bind(state_id).bind(auth.0)
+    .bind(body.point).bind(body.estimate_point).bind(body.type_id).bind(body.parent)
+    .bind(body.external_source.as_deref()).bind(body.external_id.as_deref())
+    .bind(&slug)
+    .fetch_optional(&st.pool).await?;
+    let Some((issue_id,)) = row else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
+    };
+
+    replace_bridges(&st, issue_id, project_id, auth.0, body.assignees.as_deref(), body.labels.as_deref()).await?;
+
+    match fetch_detail(&st, &slug, auth.0, project_id, issue_id).await? {
+        Some(v) => Ok((StatusCode::CREATED, Json(v))),
+        None => Ok(missing()),
+    }
 }
 pub async fn update(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>, _: Json<Value>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
