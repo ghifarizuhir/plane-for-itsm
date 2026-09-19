@@ -2,7 +2,9 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::routes::issue_common::{parse_cursor, parse_per_page, DetailCursor, PageWindow, page_window};
+use crate::routes::issue_common::{
+    page_window, parse_cursor, parse_per_page, DetailCursor, PageWindow,
+};
 use crate::routes::issue_query::build_ungrouped_envelope;
 
 /// `?cursor=&per_page=` params shared by v1 list endpoints.
@@ -18,7 +20,10 @@ impl PageParams {
     /// Byte-exact DRF parse: per_page default/max 1000, cursor `value:page:is_prev`.
     pub(crate) fn resolve(&self) -> Result<(i64, DetailCursor), String> {
         let per_page = parse_per_page(self.per_page.as_deref())?;
-        let raw = self.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+        let raw = self
+            .cursor
+            .clone()
+            .unwrap_or_else(|| format!("{per_page}:0:0"));
         let cursor = parse_cursor(&raw)?;
         Ok((per_page, cursor))
     }
@@ -31,18 +36,39 @@ pub(crate) fn window_for(page: i128, limit: i64) -> Result<PageWindow, ()> {
     page_window(page, limit)
 }
 
-pub(crate) fn page_rows(rows: Vec<Value>, per_page: Option<&str>, cursor: Option<&str>) -> Result<Value, String> {
-    let params = PageParams { cursor: cursor.map(str::to_string), per_page: per_page.map(str::to_string) };
+/// Slice `rows` into a DRF-style ungrouped envelope.
+///
+/// Callers must treat `limit <= 0` as a client error (this function returns `Err`).
+/// Negative cursor pages clamp to the first page (documented SDK-forward-only deviation).
+pub(crate) fn page_rows(
+    rows: Vec<Value>,
+    per_page: Option<&str>,
+    cursor: Option<&str>,
+) -> Result<Value, String> {
+    let params = PageParams {
+        cursor: cursor.map(str::to_string),
+        per_page: per_page.map(str::to_string),
+    };
     let (limit, cur) = params.resolve()?;
-    if limit <= 0 { return Err("Invalid per_page value. Cannot exceed 1000.".to_string()); }
+    if limit <= 0 {
+        return Err("Invalid per_page parameter.".to_string());
+    }
     let page = cur.page.max(0);
     let total = rows.len() as i64;
     let offset = page.saturating_mul(i128::from(limit));
-    let slice: Vec<Value> = if offset >= i128::from(total) { Vec::new() } else { let start = offset as usize; let end = (start + limit as usize).min(rows.len()); rows[start..end].to_vec() };
+    let slice: Vec<Value> = if offset >= i128::from(total) {
+        Vec::new()
+    } else {
+        let start = offset as usize;
+        let end = (start + limit as usize).min(rows.len());
+        rows[start..end].to_vec()
+    };
     Ok(build_ungrouped_envelope(total, limit, page, slice))
 }
 
-pub(crate) fn bad_request(msg: String) -> (StatusCode, serde_json::Value) { (StatusCode::BAD_REQUEST, json!({"detail": msg})) }
+pub(crate) fn bad_request(msg: String) -> (StatusCode, serde_json::Value) {
+    (StatusCode::BAD_REQUEST, json!({"detail": msg}))
+}
 
 #[cfg(test)]
 mod tests {
