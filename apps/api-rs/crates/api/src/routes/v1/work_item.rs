@@ -658,6 +658,16 @@ pub async fn create(
     if !require_project_write(&st, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
+    let project_ok: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM projects WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    if project_ok.is_none() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
+    }
     if let Err(e) = validate_write(&st, project_id, &body, true).await {
         return Ok(e);
     }
