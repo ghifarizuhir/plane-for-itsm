@@ -19,9 +19,12 @@ pub async fn list_comments(
     Path((slug, project_id, issue_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
     Query(q): Query<PageParams>,
 ) -> R {
-    let Json(rows) =
-        crate::routes::work_item::list_comments(State(st), auth, Path((slug, project_id, issue_id)))
-            .await?;
+    let Json(rows) = crate::routes::work_item::list_comments(
+        State(st),
+        auth,
+        Path((slug, project_id, issue_id)),
+    )
+    .await?;
     match crate::routes::v1::common::page_rows(rows, q.per_page.as_deref(), q.cursor.as_deref()) {
         Ok(v) => Ok((StatusCode::OK, Json(v))),
         Err(msg) => {
