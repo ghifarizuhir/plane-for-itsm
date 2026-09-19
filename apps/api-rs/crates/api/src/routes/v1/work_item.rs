@@ -1,8 +1,18 @@
 //! v1 work-item handlers (`/api/v1/.../work-items/...`).
 
+use serde::Deserialize;
 use serde_json::{json, Value};
+use sqlx::{Postgres, QueryBuilder};
 
-use crate::routes::issue_common::IssueListRow;
+use crate::routes::issue_common::{
+    IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
+    is_workspace_admin, page_window, project_gate_allows,
+};
+use crate::routes::issue_query::{LIST_SELECT_SQL, build_ungrouped_envelope};
+use crate::routes::project::deny;
+use crate::routes::v1::common::PageParams;
+use crate::routes::v1::pql::{V1Pql, parse_v1_pql, push_pql_where};
+use crate::routes::work_item::ws_active_member;
 
 /// Serialize a list row and add the SDK-key aliases `assignees`/`labels`
 /// (the fork's rows carry `assignee_ids`/`label_ids`). `WorkItemDetail`'s
@@ -66,11 +76,162 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 
 type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 
-pub async fn list_project(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Query<serde_json::Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+/// `?pql=&cursor=&per_page=&order_by=&expand=&fields=` (only the first three
+/// have effect; the rest are accepted-and-ignored, matching the app API's
+/// documented deviation).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct V1WorkItemQuery {
+    #[serde(default)] pub cursor: Option<String>,
+    #[serde(default)] pub per_page: Option<String>,
+    #[serde(default)] pub order_by: Option<String>,
+    #[serde(default)] pub pql: Option<String>,
+    #[serde(default)] pub expand: Option<String>,
+    #[serde(default)] pub fields: Option<String>,
+    #[serde(default)] pub external_id: Option<String>,
+    #[serde(default)] pub external_source: Option<String>,
 }
-pub async fn list_workspace(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+
+fn pql_or_400(raw: Option<&str>) -> Result<V1Pql, (StatusCode, Json<Value>)> {
+    parse_v1_pql(raw.unwrap_or("")).map_err(|msg| (StatusCode::BAD_REQUEST, Json(json!({"pql": msg}))))
+}
+
+pub async fn list_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Query(q): Query<V1WorkItemQuery>,
+) -> R {
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15) | Some(5)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
+        return Ok(deny());
+    }
+    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM projects WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
+    )
+    .bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
+    if exists.is_none() {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
+    }
+    let pql = match pql_or_400(q.pql.as_deref()) { Ok(p) => p, Err(e) => return Ok(e) };
+    let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
+    list_envelope(
+        &st,
+        &slug,
+        auth.0,
+        Some(project_id),
+        false,
+        q.cursor.as_deref(),
+        q.per_page.as_deref(),
+        &pql,
+        guest_scoped,
+    )
+    .await
+}
+
+pub async fn list_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<V1WorkItemQuery>,
+) -> R {
+    if !ws_active_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let pql = match pql_or_400(q.pql.as_deref()) { Ok(p) => p, Err(e) => return Ok(e) };
+    list_envelope(
+        &st,
+        &slug,
+        auth.0,
+        None,
+        false,
+        q.cursor.as_deref(),
+        q.per_page.as_deref(),
+        &pql,
+        false,
+    )
+    .await
+}
+
+/// Shared envelope path. `scope_project = Some(pid)` → project list (mirrors
+/// `issue_query::list` visibility); `None` → workspace list (member projects
+/// only). `archived = true` → `archived_at IS NOT NULL`.
+#[allow(clippy::too_many_arguments)]
+async fn list_envelope(
+    st: &AppState,
+    slug: &str,
+    user_id: uuid::Uuid,
+    scope_project: Option<uuid::Uuid>,
+    archived: bool,
+    cursor_raw: Option<&str>,
+    per_page_raw: Option<&str>,
+    pql: &V1Pql,
+    guest_scoped: bool,
+) -> R {
+    let (per_page, cursor) = match (PageParams {
+        cursor: cursor_raw.map(str::to_string),
+        per_page: per_page_raw.map(str::to_string),
+    })
+    .resolve()
+    {
+        Ok(v) => v,
+        Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
+    };
+    let limit = per_page.min(1000);
+    let window = match page_window(cursor.page, limit) {
+        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Ok(w) => w,
+    };
+
+    let mut where_qb = |qb: &mut QueryBuilder<Postgres>| {
+        qb.push(" WHERE i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
+          .push_bind(slug.to_string())
+          .push(") AND i.deleted_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'");
+        if archived {
+            qb.push(" AND i.archived_at IS NOT NULL");
+        } else {
+            qb.push(" AND i.archived_at IS NULL");
+        }
+        if let Some(pid) = scope_project {
+            qb.push(" AND i.project_id = ").push_bind(pid);
+        } else {
+            qb.push(" AND EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = i.project_id \
+                      AND pm.member_id = ").push_bind(user_id)
+              .push(" AND pm.is_active = true AND pm.deleted_at IS NULL)");
+        }
+        if guest_scoped {
+            qb.push(" AND i.created_by_id = ").push_bind(user_id);
+        }
+        qb.push(" AND EXISTS(SELECT 1 FROM projects p WHERE p.id = i.project_id AND p.deleted_at IS NULL AND p.archived_at IS NULL)");
+        push_pql_where(qb, pql, user_id);
+    };
+
+    let mut count_qb = QueryBuilder::new(
+        "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id",
+    );
+    where_qb(&mut count_qb);
+    let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
+
+    let offset_opt: Option<i64> = match window {
+        PageWindow::Rows(o) => Some(o),
+        PageWindow::BeyondEnd => None,
+    };
+    let rows: Vec<IssueListRow> = match offset_opt {
+        Some(offset) => {
+            let mut page_qb = QueryBuilder::new(LIST_SELECT_SQL);
+            where_qb(&mut page_qb);
+            page_qb.push(" ORDER BY i.created_at DESC LIMIT ").push_bind(limit);
+            page_qb.push(" OFFSET ").push_bind(offset);
+            page_qb.build_query_as().fetch_all(&st.pool).await?
+        }
+        None => Vec::new(),
+    };
+    let results: Vec<Value> = rows.iter().map(v1_work_item_json).collect();
+    Ok((StatusCode::OK, Json(build_ungrouped_envelope(total, limit, cursor.page, results))))
 }
 pub async fn list_archived(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Query<serde_json::Value>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))

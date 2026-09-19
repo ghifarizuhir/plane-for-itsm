@@ -413,7 +413,7 @@ async fn comment_member(
 /// and `@allow_permission` first branch, `permissions/project.py:18-22`,
 /// `permissions/base.py:24-33`): the decorator denies non-ws-members BEFORE
 /// the body runs, so a denied miss is 403, not 404.
-async fn ws_active_member(
+pub(crate) async fn ws_active_member(
     pool: &sqlx::PgPool,
     user: uuid::Uuid,
     slug: &str,
