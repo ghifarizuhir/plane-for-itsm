@@ -1374,6 +1374,18 @@ async fn main() {
             "/api/v1/workspaces/:slug/work-items/:ident/",
             get(routes::v1::work_item::retrieve_by_identifier),
         )
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/comments/", get(routes::v1::subresource::list_comments).post(routes::work_item::create_comment))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/comments/:pk/", get(routes::work_item::get_comment).patch(routes::work_item::patch_comment).delete(routes::work_item::delete_comment))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/links/", get(routes::v1::subresource::list_links).post(routes::work_item::create_link))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/links/:pk/", get(routes::work_item::get_link).patch(routes::work_item::patch_link).delete(routes::work_item::delete_link))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/activities/", get(routes::v1::activity::list))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/activities/:pk/", get(routes::v1::activity::retrieve))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/attachments/", get(routes::asset::issue_list).post(routes::asset::issue_presign))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/attachments/:pk/", get(routes::asset::issue_get).patch(routes::asset::issue_complete).delete(routes::asset::issue_delete))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/dependencies/", get(routes::v1::relation::list_dependencies).post(routes::v1::relation::create_dependencies))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/dependencies/:related_id/", delete(routes::v1::relation::remove_dependency))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/", get(routes::v1::relation::list_custom).post(routes::v1::relation::custom_not_supported))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/:related_id/", delete(routes::v1::relation::custom_not_supported))
         .route("/api/timezones/", get(routes::misc::timezones))
         .route(
             "/api/instances/",
