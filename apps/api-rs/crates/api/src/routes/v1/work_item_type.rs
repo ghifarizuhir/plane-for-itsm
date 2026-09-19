@@ -3,16 +3,16 @@
 //! JSON shaper, create/update bodies, and auth helpers.
 
 use axum::{
-    Json,
     extract::{Path, Query, State},
     http::StatusCode,
+    Json,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::FromRow;
 
 use crate::routes::member::deny_detail;
-use crate::routes::project::{deny, missing, project_role, ws_role};
+use crate::routes::project::{deny, fetch_project_full, missing, project_role, ws_role};
 use crate::routes::v1::common::PageParams;
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -418,4 +418,209 @@ async fn update_type(
         Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),
         None => Ok(missing()),
     }
+}
+
+/// Project-scope readability gate, mirroring `v1::project::get_features`:
+/// workspace membership required, then project existence (archived counts as
+/// missing), then member-or-public visibility.
+async fn project_readable(
+    st: &AppState,
+    user: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<Option<(StatusCode, Json<Value>)>, common::errors::AppError> {
+    if ws_role(&st.pool, user, slug).await?.is_none() {
+        return Ok(Some(deny_detail()));
+    }
+    let Some(row) = fetch_project_full(&st.pool, slug, project_id, user).await? else {
+        return Ok(Some((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        )));
+    };
+    if row.archived_at.is_some() {
+        return Ok(Some((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        )));
+    }
+    if !row.member_ids.contains(&user) {
+        if row.network == 0 {
+            return Ok(Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "You do not have permission"})),
+            )));
+        }
+        return Ok(Some((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "You are not a member of this project"})),
+        )));
+    }
+    Ok(None)
+}
+
+pub async fn list_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Query(_q): Query<PageParams>,
+) -> R {
+    if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(gate);
+    }
+    let sql = format!(
+        "SELECT {TYPE_COLS} FROM issue_types t \
+         JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
+         WHERE pit.project_id = $1 AND t.deleted_at IS NULL ORDER BY t.created_at ASC"
+    );
+    let rows: Vec<V1WorkItemTypeRow> = sqlx::query_as(&sql)
+        .bind(project_id)
+        .fetch_all(&st.pool)
+        .await?;
+    let out: Vec<Value> = rows.iter().map(v1_work_item_type_json).collect();
+    // Bare array: the SDK iterates this response.
+    Ok((StatusCode::OK, Json(Value::Array(out))))
+}
+
+pub async fn create_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<V1CreateWorkItemType>,
+) -> R {
+    if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(gate);
+    }
+    create_type(&st, auth.0, &slug, Some(project_id), body).await
+}
+
+/// Project-scope link check: a live `project_issue_types` link to a live type,
+/// both in the workspace behind `slug`.
+async fn project_scope_ok(
+    st: &AppState,
+    slug: &str,
+    project_id: uuid::Uuid,
+    pk: uuid::Uuid,
+) -> Result<bool, common::errors::AppError> {
+    let Some(ws) = ws_id(&st.pool, slug).await? else {
+        return Ok(false);
+    };
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM project_issue_types pit JOIN issue_types t ON t.id = pit.issue_type_id \
+         WHERE pit.issue_type_id = $1 AND pit.project_id = $2 AND pit.deleted_at IS NULL \
+         AND t.workspace_id = $3 AND t.deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .bind(ws)
+    .fetch_one(&st.pool)
+    .await?)
+}
+
+pub async fn retrieve_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(gate);
+    }
+    if !project_scope_ok(&st, &slug, project_id, pk).await? {
+        return Ok(missing());
+    }
+    let Some(ws) = ws_id(&st.pool, &slug).await? else {
+        return Ok(missing());
+    };
+    match reload(&st, &ws, pk).await? {
+        Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn update_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<V1UpdateWorkItemType>,
+) -> R {
+    if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(gate);
+    }
+    update_type(&st, auth.0, &slug, Some(project_id), pk, body).await
+}
+
+pub async fn delete_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
+        return Ok(gate);
+    }
+    // Project scope detaches only: soft-delete the link, never the type.
+    let affected = sqlx::query(
+        "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
+         WHERE issue_type_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Ok(missing());
+    }
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+pub async fn import_to_project(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> R {
+    if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    let Some(ws) = ws_id(&st.pool, &slug).await? else {
+        return Ok(missing());
+    };
+    let ids: Vec<uuid::Uuid> = body
+        .get("work_item_types")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .filter_map(|s| s.parse::<uuid::Uuid>().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    for id in ids {
+        sqlx::query(
+            "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, \
+             level, is_default, created_by_id, updated_by_id, created_at, updated_at) \
+             SELECT gen_random_uuid(), t.id, p.id, $3, 0, false, $4, $4, now(), now() \
+             FROM issue_types t JOIN projects p ON p.id = $2 \
+             WHERE t.id = $1 AND t.workspace_id = $3 AND t.deleted_at IS NULL \
+             AND p.workspace_id = $3 AND p.deleted_at IS NULL \
+             AND NOT EXISTS(SELECT 1 FROM project_issue_types pit \
+               WHERE pit.project_id = p.id AND pit.issue_type_id = t.id AND pit.deleted_at IS NULL)",
+        )
+        .bind(id)
+        .bind(project_id)
+        .bind(ws)
+        .bind(auth.0)
+        .execute(&st.pool)
+        .await?;
+    }
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
