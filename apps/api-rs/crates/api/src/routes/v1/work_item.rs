@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder};
 
+use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     IssueDetailRow, IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
     is_workspace_admin, page_window, project_gate_allows,
@@ -868,11 +869,51 @@ pub async fn update(
         None => Ok(missing()),
     }
 }
-pub async fn archive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+/// `POST .../work-items/{id}/archive/`. Mirrors the app API's single-issue
+/// archive (`issue_archive_one::archive`): ADMIN/MEMBER gate, live+draft=false
+/// scope, state group must be `completed`/`cancelled` else 400, then 204.
+pub async fn archive(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if !require_project_write(&st, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT s.\"group\" FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
+         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
+         AND (s.id IS NULL OR s.\"group\" != 'triage')",
+    ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
+    let Some((group,)) = row else { return Ok(missing()); };
+    if let Err(msg) = guard_archive_one_group(group.as_deref().unwrap_or("")) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": msg}))));
+    }
+    sqlx::query("UPDATE issues SET archived_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL")
+        .bind(pk).bind(project_id).execute(&st.pool).await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
-pub async fn unarchive(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+
+pub async fn unarchive(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if !require_project_write(&st, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT i.id FROM issues i WHERE i.id = $1 AND i.project_id = $2 \
+         AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
+         AND i.deleted_at IS NULL AND i.archived_at IS NOT NULL",
+    ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
+    if exists.is_none() {
+        return Ok(missing());
+    }
+    sqlx::query("UPDATE issues SET archived_at = NULL WHERE id = $1 AND project_id = $2")
+        .bind(pk).bind(project_id).execute(&st.pool).await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
 #[cfg(test)]
