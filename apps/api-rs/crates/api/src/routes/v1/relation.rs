@@ -22,7 +22,9 @@ pub const DEPENDENCY_TYPES: [&str; 6] = [
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct V1CreateDependency {
+    #[serde(default)]
     pub relation_type: String,
+    #[serde(default)]
     pub work_item_ids: Vec<uuid::Uuid>,
 }
 
@@ -97,11 +99,28 @@ pub async fn list_custom(
     Ok((StatusCode::OK, Json(json!({}))))
 }
 
-pub async fn custom_not_supported(
+pub async fn custom_create_not_supported(
     State(_st): State<AppState>,
     _auth: AuthUser,
-    Path((_slug,)): Path<(String,)>,
-    Query(_q): Query<PageParams>,
+    Path((_slug, _project_id, _issue_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    Ok((
+        StatusCode::NOT_FOUND,
+        Json(
+            json!({"error": "Work item relation definitions are not available in this workspace"}),
+        ),
+    ))
+}
+
+pub async fn custom_delete_not_supported(
+    State(_st): State<AppState>,
+    _auth: AuthUser,
+    Path((_slug, _project_id, _issue_id, _related_id)): Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> R {
     Ok((
         StatusCode::NOT_FOUND,

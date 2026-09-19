@@ -1384,8 +1384,8 @@ async fn main() {
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/attachments/:pk/", get(routes::asset::issue_get).patch(routes::asset::issue_complete).delete(routes::asset::issue_delete))
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/dependencies/", get(routes::v1::relation::list_dependencies).post(routes::v1::relation::create_dependencies))
         .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/dependencies/:related_id/", delete(routes::v1::relation::remove_dependency))
-        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/", get(routes::v1::relation::list_custom).post(routes::v1::relation::custom_not_supported))
-        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/:related_id/", delete(routes::v1::relation::custom_not_supported))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/", get(routes::v1::relation::list_custom).post(routes::v1::relation::custom_create_not_supported))
+        .route("/api/v1/workspaces/:slug/projects/:project_id/work-items/:issue_id/work-item-relations/:related_id/", delete(routes::v1::relation::custom_delete_not_supported))
         .route("/api/timezones/", get(routes::misc::timezones))
         .route(
             "/api/instances/",
