@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder};
 
 use crate::routes::issue_common::{
-    IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
+    IssueDetailRow, IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
     is_workspace_admin, page_window, project_gate_allows,
 };
-use crate::routes::issue_query::{LIST_SELECT_SQL, build_ungrouped_envelope};
-use crate::routes::project::deny;
+use crate::routes::issue_query::{DETAIL_SELECT_SQL, LIST_SELECT_SQL, build_ungrouped_envelope};
+use crate::routes::project::{deny, missing};
 use crate::routes::v1::common::PageParams;
 use crate::routes::v1::pql::{V1Pql, parse_v1_pql, push_pql_where};
 use crate::routes::work_item::ws_active_member;
@@ -265,11 +265,93 @@ pub async fn list_archived(
     )
     .await
 }
-pub async fn retrieve(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid, uuid::Uuid)>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+/// Fetches the SDK `WorkItemDetail` shape: the full visibility gate of the
+/// app API's `get_issue` (active ws member + project member/creator), then
+/// `DETAIL_SELECT_SQL` plus `description_html`. Adds `assignees`/`labels`.
+async fn fetch_detail(
+    st: &AppState,
+    slug: &str,
+    user_id: uuid::Uuid,
+    project_id: uuid::Uuid,
+    pk: uuid::Uuid,
+) -> Result<Option<Value>, common::errors::AppError> {
+    let row: Option<IssueDetailRow> = sqlx::query_as(&format!(
+        "{DETAIL_SELECT_SQL} WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL"
+    ))
+    .bind(pk).bind(project_id).bind(slug)
+    .fetch_optional(&st.pool).await?;
+    let Some(row) = row else { return Ok(None); };
+    let description_html: Option<String> =
+        sqlx::query_scalar("SELECT description_html FROM issues WHERE id = $1")
+            .bind(pk).fetch_optional(&st.pool).await?.flatten();
+    let mut v = serde_json::to_value(&row).unwrap_or(Value::Null);
+    if let Some(o) = v.as_object_mut() {
+        let assignees = o.get("assignee_ids").cloned().unwrap_or_else(|| json!([]));
+        let labels = o.get("label_ids").cloned().unwrap_or_else(|| json!([]));
+        o.insert("assignees".to_string(), assignees);
+        o.insert("labels".to_string(), labels);
+        o.insert("description_html".to_string(), json!(description_html.unwrap_or_else(|| "<p></p>".to_string())));
+        o.insert("project".to_string(), json!(project_id));
+        o.insert("workspace".to_string(), json!(slug));
+    }
+    let _ = user_id;
+    Ok(Some(v))
 }
-pub async fn retrieve_by_identifier(_: State<AppState>, _: AuthUser, _: Path<(String, String)>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+
+pub async fn retrieve(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if !ws_active_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let creator: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND created_by_id = $2 AND deleted_at IS NULL)",
+    ).bind(pk).bind(auth.0).fetch_one(&st.pool).await?;
+    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !creator
+        && !project_gate_allows(
+            matches!(member_role, Some(20) | Some(15) | Some(5)),
+            member_role.is_some(),
+            ws_admin,
+        )
+    {
+        return Ok(deny());
+    }
+    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+        Some(v) => Ok((StatusCode::OK, Json(v))),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn retrieve_by_identifier(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, ident)): Path<(String, String)>,
+) -> R {
+    let Ok((proj_ident, seq_raw)) = crate::routes::work_item::resolve_identifier(&ident) else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": crate::routes::work_item::INVALID_IDENTIFIER_MSG}))));
+    };
+    let project_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE w.slug = $1 AND LOWER(p.identifier) = LOWER($2) AND p.deleted_at IS NULL",
+    ).bind(&slug).bind(&proj_ident).fetch_optional(&st.pool).await?;
+    let Some(project_id) = project_id else { return Ok(missing()); };
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    if role.is_none() {
+        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": crate::routes::work_item::IDENTIFIER_FORBIDDEN_MSG}))));
+    }
+    let Ok(seq) = seq_raw.parse::<i32>() else { return Ok(missing()); };
+    let pk: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT i.id FROM issues i WHERE i.project_id = $1 AND i.sequence_id = $2 AND i.deleted_at IS NULL",
+    ).bind(project_id).bind(seq).fetch_optional(&st.pool).await?;
+    let Some(pk) = pk else { return Ok(missing()); };
+    match fetch_detail(&st, &slug, auth.0, project_id, pk).await? {
+        Some(v) => Ok((StatusCode::OK, Json(v))),
+        None => Ok(missing()),
+    }
 }
 pub async fn search(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
