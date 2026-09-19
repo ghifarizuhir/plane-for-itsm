@@ -70,6 +70,62 @@ try:
     assert by_ident.id == created.id
     print("workitem retrieve_by_identifier OK")
 
+    # ---- sub-resources ------------------------------------------------------
+    from plane.models.work_items import CreateWorkItemComment  # noqa: E402
+
+    comment = client.work_items.comments.create(
+        workspace_slug=WS,
+        project_id=pid,
+        work_item_id=created.id,
+        data=CreateWorkItemComment(comment_html="<p>v1-smoke comment</p>"),
+    )
+    assert comment.id, "comment create missing id"
+    print(f"comment create OK: {comment.id}")
+
+    comments = client.work_items.comments.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert comments.total_count >= 1, "comment list missing created comment"
+    print(f"comment list OK: total_count={comments.total_count}")
+
+    client.work_items.comments.delete(
+        workspace_slug=WS,
+        project_id=pid,
+        work_item_id=created.id,
+        comment_id=comment.id,
+    )
+    print("comment delete OK")
+
+    links = client.work_items.links.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert hasattr(links, "total_count") and isinstance(links.results, list)
+    print(f"links list OK: total_count={links.total_count}")
+
+    acts = client.work_items.activities.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert all(a.project and a.workspace for a in acts.results)
+    print(f"activities list OK: {len(acts.results)} rows")
+
+    atts = client.work_items.attachments.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert isinstance(atts, list), "attachments list must be a list"
+    print(f"attachments list OK: {len(atts)} rows")
+
+    deps = client.work_items.dependencies.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert hasattr(deps, "blocking"), "dependencies missing blocking"
+    print("dependencies list OK: has blocking")
+
+    crels = client.work_items.custom_relations.list(
+        workspace_slug=WS, project_id=pid, work_item_id=created.id
+    )
+    assert isinstance(crels, dict), "custom relations must be a dict"
+    print(f"custom relations list OK: {len(crels)} groups")
+
     # Archive/unarchive: archive only accepts completed/cancelled states, but
     # v1 exposes no states-listing endpoint to move the item there
     # deterministically. Exercise the route and report the state-group 400
