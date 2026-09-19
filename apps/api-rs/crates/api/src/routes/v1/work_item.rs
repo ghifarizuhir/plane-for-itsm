@@ -682,7 +682,7 @@ pub async fn create(
         return Ok(deny());
     }
     let project_ok: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM projects WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
+        "SELECT id FROM projects WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL AND archived_at IS NULL",
     )
     .bind(project_id)
     .bind(&slug)
@@ -782,7 +782,7 @@ pub async fn update(
          WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
          AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
          AND (s.id IS NULL OR s.\"group\" != 'triage') \
-         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)",
+         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.deleted_at IS NULL AND p.archived_at IS NULL)",
     ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
     if exists.is_none() {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
