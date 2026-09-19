@@ -19,6 +19,12 @@ pub fn origin_allowed_many(
     if matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) {
         return true;
     }
+    // API-token and Bearer callers are not browser cookie flows, so CSRF
+    // Origin/Referer checks do not apply. This unblocks non-browser clients
+    // like the MCP server and `curl -H "X-Api-Key: ..."` without Origin.
+    if headers.contains_key("x-api-key") || headers.contains_key("authorization") {
+        return true;
+    }
     if let Some(o) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         return frontends.iter().any(|f| o == f);
     }
