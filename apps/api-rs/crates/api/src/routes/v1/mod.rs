@@ -6,3 +6,4 @@ pub mod relation;
 pub mod subresource;
 pub mod work_item;
 pub mod work_item_type;
+pub mod workspace;
