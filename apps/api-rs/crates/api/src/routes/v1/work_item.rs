@@ -537,12 +537,25 @@ fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDate>, String>
     }
 }
 
+/// Wraps plain text into a single paragraph, escaping HTML metacharacters so
+/// the documented plain-text field cannot inject markup.
+fn wrap_stripped(plain: &str) -> String {
+    format!(
+        "<p>{}</p>",
+        plain
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('\n', "<br/>")
+    )
+}
+
 fn description_of(body: &V1WriteWorkItem) -> String {
     if let Some(html) = body.description_html.as_deref().filter(|s| !s.is_empty()) {
         return html.to_string();
     }
     if let Some(plain) = body.description_stripped.as_deref().filter(|s| !s.is_empty()) {
-        return format!("<p>{}</p>", plain.replace('<', "&lt;").replace('>', "&gt;").replace('\n', "<br/>"));
+        return wrap_stripped(plain);
     }
     "<p></p>".to_string()
 }
@@ -768,7 +781,8 @@ pub async fn update(
         "SELECT i.id FROM issues i LEFT JOIN states s ON s.id = i.state_id \
          WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
          AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
-         AND (s.id IS NULL OR s.\"group\" != 'triage')",
+         AND (s.id IS NULL OR s.\"group\" != 'triage') \
+         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)",
     ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
     if exists.is_none() {
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
@@ -785,8 +799,8 @@ pub async fn update(
         Ok(v) => v,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
     };
-    let html = body.description_html.clone().or_else(|| {
-        body.description_stripped.as_deref().filter(|s| !s.is_empty()).map(|p| format!("<p>{}</p>", p))
+    let html = body.description_html.clone().filter(|s| !s.is_empty()).or_else(|| {
+        body.description_stripped.as_deref().filter(|s| !s.is_empty()).map(wrap_stripped)
     });
 
     // Only fields present in the JSON body are written (`COALESCE` cannot set
@@ -885,6 +899,29 @@ mod tests {
     }
 
     #[test]
+    fn wrap_stripped_wraps_plain_text() {
+        assert_eq!(wrap_stripped("text"), "<p>text</p>");
+    }
+
+    #[test]
+    fn wrap_stripped_escapes_script() {
+        assert_eq!(
+            wrap_stripped("<script>x</script>"),
+            "<p>&lt;script&gt;x&lt;/script&gt;</p>"
+        );
+    }
+
+    #[test]
+    fn wrap_stripped_turns_newline_into_break() {
+        assert_eq!(wrap_stripped("a\nb"), "<p>a<br/>b</p>");
+    }
+
+    #[test]
+    fn wrap_stripped_escapes_ampersand_without_double_escaping() {
+        assert_eq!(wrap_stripped("a & b"), "<p>a &amp; b</p>");
+    }
+
+    #[test]
     fn description_prefers_html() {
         let body = V1WriteWorkItem {
             description_html: Some("<p>rich</p>".into()),
@@ -901,6 +938,16 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(description_of(&body), "<p>a &lt;b&gt;<br/>line</p>");
+    }
+
+    #[test]
+    fn description_of_delegates_stripped_to_wrap_stripped() {
+        let body = V1WriteWorkItem {
+            description_html: Some("".into()),
+            description_stripped: Some("a & b".into()),
+            ..Default::default()
+        };
+        assert_eq!(description_of(&body), wrap_stripped("a & b"));
     }
 
     #[test]
