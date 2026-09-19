@@ -423,8 +423,76 @@ pub async fn search(
     let issues: Vec<Value> = rows.iter().map(v1_search_issue_json).collect();
     Ok((StatusCode::OK, Json(json!({ "issues": issues }))))
 }
-pub async fn count(_: State<AppState>, _: AuthUser, _: Path<String>, _: Query<serde_json::Value>) -> R {
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct V1CountQuery {
+    #[serde(default)] pub pql: Option<String>,
+    #[serde(default)] pub group_by: Option<String>,
+    #[serde(default)] pub sub_group_by: Option<String>,
+}
+
+/// Maps an SDK `group_by` value to a SQL expression over the list scope.
+/// Only dimensions backed by columns in this fork are supported; the MCP's
+/// module/cycle/milestone/release keys return `None` → 400.
+pub fn count_group_column(key: &str) -> Option<&'static str> {
+    match key {
+        "state_id" => Some("i.state_id::text"),
+        "state__group" => Some("s.\"group\""),
+        "priority" => Some("i.priority"),
+        "project_id" => Some("i.project_id::text"),
+        "type_id" => Some("i.type_id::text"),
+        "created_by" => Some("i.created_by_id::text"),
+        "target_date" => Some("i.target_date::text"),
+        "start_date" => Some("i.start_date::text"),
+        _ => None,
+    }
+}
+
+pub async fn count(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<V1CountQuery>,
+) -> R {
+    if !ws_active_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if matches!(q.sub_group_by.as_deref(), Some(s) if !s.trim().is_empty()) {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "sub_group_by is not supported"}))));
+    }
+    let pql = match pql_or_400(q.pql.as_deref()) { Ok(p) => p, Err(e) => return Ok(e) };
+
+    let mut base_where = |qb: &mut QueryBuilder<Postgres>| {
+        qb.push(" WHERE i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
+          .push_bind(slug.clone())
+          .push(") AND i.deleted_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage' AND i.archived_at IS NULL")
+          .push(" AND EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = i.project_id \
+                  AND pm.member_id = ").push_bind(auth.0)
+          .push(" AND pm.is_active = true AND pm.deleted_at IS NULL)")
+          .push(" AND EXISTS(SELECT 1 FROM projects p WHERE p.id = i.project_id AND p.deleted_at IS NULL AND p.archived_at IS NULL)");
+        push_pql_where(qb, &pql, auth.0);
+    };
+
+    let group_key = q.group_by.as_deref().filter(|s| !s.trim().is_empty());
+    let Some(key) = group_key else {
+        let mut qb = QueryBuilder::new("SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id");
+        base_where(&mut qb);
+        let total: i64 = qb.build_query_scalar().fetch_one(&st.pool).await?;
+        return Ok((StatusCode::OK, Json(v1_count_json(None, None, total, vec![]))));
+    };
+    let Some(expr) = count_group_column(key) else {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": format!("Unsupported group_by: {key}")}))));
+    };
+
+    let count_sql = format!(
+        "SELECT COALESCE({expr}, 'None') AS k, COUNT(*) AS n \
+         FROM issues i LEFT JOIN states s ON s.id = i.state_id"
+    );
+    let mut qb = QueryBuilder::new(count_sql);
+    base_where(&mut qb);
+    qb.push(format!(" GROUP BY {expr}"));
+    let rows: Vec<(String, i64)> = qb.build_query_as().fetch_all(&st.pool).await?;
+    let total: i64 = rows.iter().map(|(_, n)| *n).sum();
+    Ok((StatusCode::OK, Json(v1_count_json(Some(key), None, total, rows))))
 }
 pub async fn create(_: State<AppState>, _: AuthUser, _: Path<(String, uuid::Uuid)>, _: Json<Value>) -> R {
     Ok((StatusCode::NOT_IMPLEMENTED, Json(json!({"detail": "stub"}))))

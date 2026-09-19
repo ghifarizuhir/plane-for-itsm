@@ -1,5 +1,5 @@
 use api::routes::v1::work_item::{
-    v1_count_json, v1_search_issue_json, v1_work_item_json, V1SearchRow,
+    count_group_column, v1_count_json, v1_search_issue_json, v1_work_item_json, V1SearchRow,
 };
 use api::routes::issue_common::IssueListRow;
 use chrono::Utc;
@@ -62,6 +62,20 @@ fn count_json_flat_grouping() {
     assert_eq!(v["grouped_by"], Value::from("priority"));
     assert_eq!(v["grouped_counts"]["urgent"]["count"], Value::from(2));
     assert_eq!(v["grouped_counts"]["None"]["count"], Value::from(5));
+}
+
+#[test]
+fn count_group_column_allowlist() {
+    assert_eq!(count_group_column("state_id"), Some("i.state_id::text"));
+    assert_eq!(count_group_column("state__group"), Some("s.\"group\""));
+    assert_eq!(count_group_column("priority"), Some("i.priority"));
+    assert_eq!(count_group_column("project_id"), Some("i.project_id::text"));
+    assert_eq!(count_group_column("type_id"), Some("i.type_id::text"));
+    assert_eq!(count_group_column("created_by"), Some("i.created_by_id::text"));
+    assert_eq!(count_group_column("target_date"), Some("i.target_date::text"));
+    assert_eq!(count_group_column("start_date"), Some("i.start_date::text"));
+    assert_eq!(count_group_column("cycle_id"), None);
+    assert_eq!(count_group_column("label_ids"), None);
 }
 
 #[test]
