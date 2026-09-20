@@ -13,11 +13,13 @@ import { Button } from "@plane/propel/button";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useServiceFilter } from "@/hooks/store/use-service-filter";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 // components
 import { ServicesBoard } from "./board/services-board";
 import { ServiceGraph } from "./graph/service-graph";
 import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
+import { ServiceLoadErrorState } from "./service-load-error-state";
 
 export const ServicesListView = observer(function ServicesListView() {
   // router
@@ -25,8 +27,10 @@ export const ServicesListView = observer(function ServicesListView() {
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getProjectServiceIds, getFilteredServiceIds, getProjectHealthSummary, loader } = useService();
+  const { getProjectServiceIds, getFilteredServiceIds, getProjectHealthSummary, loader, errorMap, fetchServices } =
+    useService();
   const { currentProjectDisplayFilters, clearAllFilters } = useServiceFilter();
+  const { currentWorkspace } = useWorkspace();
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -36,10 +40,21 @@ export const ServicesListView = observer(function ServicesListView() {
   const serviceIds = projectId ? getFilteredServiceIds(projectId.toString()) : null;
   const summary = projectId ? getProjectHealthSummary(projectId.toString()) : null;
 
+  const workspaceId = currentWorkspace?.id;
+  const hasError = projectId ? errorMap[projectId.toString()] : false;
+
+  const handleRetry = () => {
+    if (!workspaceSlug || !workspaceId || !projectId) return;
+    fetchServices(workspaceSlug.toString(), workspaceId, projectId.toString());
+  };
+
   const openCreateModal = () => setIsCreateModalOpen(true);
   const closeCreateModal = () => setIsCreateModalOpen(false);
 
   const renderContent = () => {
+    if (hasError) {
+      return <ServiceLoadErrorState onRetry={handleRetry} />;
+    }
     if (loader || projectServiceIds === null || serviceIds === null) {
       return <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>;
     }
