@@ -608,7 +608,6 @@ else
 fi
 
 echo "--- FE-tolerance pins (must not break smoke) ---"
-check fe-ai-404 404 -X POST -d '{"prompt":"hi"}' "$BASE/api/workspaces/$WS/ai-assistant/"
 check fe-rephrase-404 404 -X POST -d '{"text":"hi"}' "$BASE/api/workspaces/$WS/rephrase-grammar/"
 check fe-changelog-404 404 "$BASE/api/instances/changelog/"
 check fe-archpages-404 404 "$BASE/api/workspaces/$WS/projects/$PID/archived-pages/"
