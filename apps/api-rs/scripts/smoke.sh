@@ -25,6 +25,9 @@
 #     false, now(), now());"
 set -u
 BASE="${BASE:-http://127.0.0.1:8000}"
+# Nama container DB dapat dioverride (compose project prefix berbeda-beda,
+# mis. `plane-for-itsm-plane-db-1`).
+DB_CONTAINER="${DB_CONTAINER:-plane-db}"
 TOKEN="${TOKEN:?set TOKEN to a valid api_tokens.token value}"
 # Harus SAMA dengan FRONTEND_URL server: middleware origin menolak semua mutasi
 # (POST/PATCH/PUT/DELETE) tanpa `Origin:` yang cocok → 403 {"error":"bad origin"}.
@@ -154,6 +157,40 @@ else
   check oauth-start-302 302 "$BASE/api/auth/oauth/github/start/"
   rm -f "$JAR"
 fi
+
+echo "== signup (invite-only) =="
+# XFF terpisah agar tidak memakan budget IP 5/mnt auth_router (login dkk).
+SIGNUP_EMAIL="temp-signup-$SFX@example.com"
+SIGNUP_NOINVITE="temp-signup-noinvite-$SFX@example.com"
+SIGNUP_JAR=/tmp/smoke_signup_jar
+SIGNUP_ARGS=(-s -m 10 -H "X-Forwarded-For: 203.0.113.9" -H 'Content-Type: application/json' -H "Origin: $FRONTEND")
+signup_check() { # signup_check <label> <expected_status> <curl_args...>
+  local label="$1" want="$2"; shift 2
+  local code
+  code=$(curl "${SIGNUP_ARGS[@]}" -o /tmp/smoke_body -w '%{http_code}' "$@")
+  if [ "$code" = "$want" ]; then PASS=$((PASS+1)); echo "ok   $label -> $code";
+  else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
+}
+# 1) tanpa invite → 403 {5015}
+signup_check signup-noinvite-403 403 -X POST -d "{\"email\":\"$SIGNUP_NOINVITE\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+grep -q '"error_code":5015' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-noinvite-body -> 5015"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-noinvite-body"; echo "FAIL signup-noinvite-body: $(head -c 200 /tmp/smoke_body)"; }
+# 2) invite lewat API (di luar auth_router → bebas limit IP)
+check signup-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"$SIGNUP_EMAIL\",\"role\":15}]}" "$BASE/api/workspaces/$WS/invitations/"
+# 3) password lemah dengan invite → 400 {5021}
+signup_check signup-weak-400 400 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"password\"}" "$BASE/api/auth/signup/"
+grep -q '"error_code":5021' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-weak-body -> 5021"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-weak-body"; echo "FAIL signup-weak-body: $(head -c 200 /tmp/smoke_body)"; }
+# 4) happy path → 200 + cookie sesi
+rm -f "$SIGNUP_JAR"
+signup_check signup-200 200 -c "$SIGNUP_JAR" -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+grep -q "$SIGNUP_EMAIL" /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-body -> email"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-body"; echo "FAIL signup-body: $(head -c 200 /tmp/smoke_body)"; }
+# 5) cookie hasil signup langsung valid + auto-join workspace
+code=$(curl -s -m 10 -b "$SIGNUP_JAR" -H "Origin: $FRONTEND" -o /tmp/smoke_body -w '%{http_code}' "$BASE/api/users/me/workspaces/")
+if [ "$code" = "200" ] && grep -q "$WS" /tmp/smoke_body; then PASS=$((PASS+1)); echo "ok   signup-autologin-join -> $WS";
+else FAIL=$((FAIL+1)); FAILED="$FAILED signup-autologin-join($code)"; echo "FAIL signup-autologin-join -> $code: $(head -c 200 /tmp/smoke_body)"; fi
+# 6) email yang sama → 409 {5030} (race-safe user insert; bukan 500)
+signup_check signup-duplicate-409 409 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+grep -q '"error_code":5030' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-duplicate-body -> 5030"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-duplicate-body"; echo "FAIL signup-duplicate-body: $(head -c 200 /tmp/smoke_body)"; }
+rm -f "$SIGNUP_JAR"
 
 echo "== batch-D =="
 check sub-status-200 200 "$BASE/api/workspaces/$WS/projects/$PID/issues/$IID/subscribe/"
@@ -330,7 +367,7 @@ check e4-page-del 204 -X DELETE "$PG/$PG1/"
 
 echo "--- E5 members + invites ---"
 check e5-ws-members 200 "$BASE/api/workspaces/$WS/members/"
-MID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT wm.id FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id WHERE w.slug='$WS' AND wm.member_id='$MUID2' AND wm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
+MID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT wm.id FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id WHERE w.slug='$WS' AND wm.member_id='$MUID2' AND wm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 check e5-ws-member-detail 200 "$BASE/api/workspaces/$WS/members/$MID/"
 check e5-ws-member-selfrole 400 -X PATCH -d '{"role":10}' "$BASE/api/workspaces/$WS/members/$MID/"
 check e5-ws-member-badrole 400 -X PATCH -d '{"role":"xx"}' "$BASE/api/workspaces/$WS/members/$MID/"
@@ -338,10 +375,10 @@ check e5-ws-leave-guard 400 -X POST "$BASE/api/workspaces/$WS/members/leave/"
 check e5-proj-members 200 "$BASE/api/workspaces/$WS/projects/$PID/members/"
 check e5-proj-bulk-empty 400 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/members/"
 PROLE=$(curl -s -m 10 -H "X-Api-Key: $TOKEN" -H "Origin: $FRONTEND" "$BASE/api/workspaces/$WS/projects/$PID/project-members/me/" | python3 -c "import json,sys; print(json.load(sys.stdin).get('role',''))" 2>/dev/null)
-TUID=$(docker exec plane-db psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-member-$SFX@example.com', 'tempmem$SFX', '!', '', '', 'tempmem', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
-docker exec plane-db psql -U plane -d plane -q -c "INSERT INTO workspace_members (id, workspace_id, member_id, role, view_props, default_props, issue_props, is_active, explored_features, getting_started_checklist, tips, created_at, updated_at) SELECT gen_random_uuid(), w.id, '$TUID', 15, '{}', '{}', '{}', true, '{}', '{}', '{}', now(), now() FROM workspaces w WHERE w.slug='$WS';" 2>&1 | head -n 1
+TUID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-member-$SFX@example.com', 'tempmem$SFX', '!', '', '', 'tempmem', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "INSERT INTO workspace_members (id, workspace_id, member_id, role, view_props, default_props, issue_props, is_active, explored_features, getting_started_checklist, tips, created_at, updated_at) SELECT gen_random_uuid(), w.id, '$TUID', 15, '{}', '{}', '{}', true, '{}', '{}', '{}', now(), now() FROM workspaces w WHERE w.slug='$WS';" 2>&1 | head -n 1
 check e5-proj-bulk-add 201 -X POST -d "{\"members\":[{\"member_id\":\"$TUID\",\"role\":15}]}" "$BASE/api/workspaces/$WS/projects/$PID/members/"
-PMID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT pm.id FROM project_members pm JOIN projects p ON p.id=pm.project_id JOIN workspaces w ON w.id=p.workspace_id WHERE w.slug='$WS' AND p.id='$PID' AND pm.member_id='$TUID' AND pm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
+PMID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT pm.id FROM project_members pm JOIN projects p ON p.id=pm.project_id JOIN workspaces w ON w.id=p.workspace_id WHERE w.slug='$WS' AND p.id='$PID' AND pm.member_id='$TUID' AND pm.deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 # Ladder adjudication (T12-retry): Django's project PATCH gates
 # (views/project/member.py:219-281) ALL carry `not is_workspace_admin`, and
 # the smoke requester (workspace creator) IS a ws-admin -> bypass -> 200 on
@@ -354,8 +391,8 @@ check e5-proj-member-del 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/m
 check e5-ws-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"temp-join-$SFX@example.com\",\"role\":5}]}" "$BASE/api/workspaces/$WS/invitations/"
 grep -q 'Emails sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-wsinvite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-wsinvite-body"; echo "FAIL e5-wsinvite-body: $(head -c 200 /tmp/smoke_body)"; }
 check e5-ws-invite-list 200 "$BASE/api/workspaces/$WS/invitations/"
-INVID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
-INVTOK=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT token FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
+INVID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT id FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
+INVTOK=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT token FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 check_auth e5-ws-join-get 200 "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
 check e5-ws-join-badtoken 403 -X POST -d '{"token":"deadbeef","accepted":true}' "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
 # Join-accept adjudication (T12-retry): Django (workspace/invite.py:170-174,
@@ -363,17 +400,17 @@ check e5-ws-join-badtoken 403 -X POST -d '{"token":"deadbeef","accepted":true}' 
 # email, so accepting a temp-join-* invite as the TOKEN user is 403 on BOTH
 # backends. The fixture creates the invitee user, mints their own api token,
 # and accepts AS the invitee -> exercises the real 200 + hard-delete path.
-JUID=$(docker exec plane-db psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-join-$SFX@example.com', 'tempjoin$SFX', '!', '', '', 'tempjoin', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
+JUID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -q -t -A -c "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, avatar, date_joined, token, user_timezone, last_location, created_location, last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, is_active, is_staff, is_superuser, is_managed, is_password_expired, is_email_verified, is_password_autoset, is_bot, is_email_valid, is_password_reset_required, created_at, updated_at) VALUES (gen_random_uuid(), 'temp-join-$SFX@example.com', 'tempjoin$SFX', '!', '', '', 'tempjoin', '', now(), '', 'UTC', '', '', '', '', 'password', '', true, false, false, false, false, true, false, false, true, false, now(), now()) RETURNING id;" 2>/dev/null | head -n 1 | tr -d ' \n')
 JTOK="plane_api_$(cat /proc/sys/kernel/random/uuid | tr -d '-')"
-docker exec plane-db psql -U plane -d plane -q -c "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), 'smoke-join-$SFX', '', '$JTOK', '$JUID', 0, true, false, '60/min', NULL, now(), now());" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "INSERT INTO api_tokens (id, label, description, token, user_id, user_type, is_active, is_service, allowed_rate_limit, expired_at, created_at, updated_at) VALUES (gen_random_uuid(), 'smoke-join-$SFX', '', '$JTOK', '$JUID', 0, true, false, '60/min', NULL, now(), now());" 2>&1 | head -n 1
 check_as "$JTOK" e5-ws-join-accept 200 -X POST -d "{\"token\":\"$INVTOK\",\"accepted\":true}" "$BASE/api/workspaces/$WS/invitations/$INVID/join/"
 grep -q 'Workspace Invitation Accepted' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-join-body -> Accepted"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-body"; echo "FAIL e5-join-body: $(head -c 200 /tmp/smoke_body)"; }
-INVLEFT=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT COUNT(*) FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com';" 2>/dev/null | tr -d ' \n')
+INVLEFT=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT COUNT(*) FROM workspace_member_invites WHERE email='temp-join-$SFX@example.com';" 2>/dev/null | tr -d ' \n')
 if [ "$INVLEFT" = "0" ]; then PASS=$((PASS+1)); echo "ok   e5-join-row-deleted -> 0"; else FAIL=$((FAIL+1)); FAILED="$FAILED e5-join-row-deleted($INVLEFT)"; echo "FAIL e5-join-row-deleted -> $INVLEFT"; fi
 check e5-proj-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"temp-proj-$SFX@example.com\",\"role\":10}]}" "$BASE/api/workspaces/$WS/projects/$PID/invitations/"
 grep -q 'Email sent successfully' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e5-projinvite-body -> sent-msg"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e5-projinvite-body"; echo "FAIL e5-projinvite-body: $(head -c 200 /tmp/smoke_body)"; }
 check e5-proj-invite-list 200 "$BASE/api/workspaces/$WS/projects/$PID/invitations/"
-PINVID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM project_member_invites WHERE email='temp-proj-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
+PINVID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT id FROM project_member_invites WHERE email='temp-proj-$SFX@example.com' AND deleted_at IS NULL;" 2>/dev/null | tr -d ' \n')
 check_auth e5-proj-join-get 200 "$BASE/api/workspaces/$WS/projects/$PID/join/$PINVID/"
 check e5-proj-join-badtoken 403 -X POST -d '{"token":"deadbeef","accepted":true}' "$BASE/api/workspaces/$WS/projects/$PID/join/$PINVID/"
 check e5-proj-invite-del 204 -X DELETE "$BASE/api/workspaces/$WS/projects/$PID/invitations/$PINVID/"
@@ -486,7 +523,7 @@ grep -q 'exists' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e9-check-body
 check e9-restore 204 -X POST "$BASE/api/assets/v2/workspaces/$WS/restore/$AIDS/"
 check e9-download-notuploaded 404 "$BASE/api/assets/v2/workspaces/$WS/download/$AIDS/"
 check e9-issue-list 200 "$BASE/api/assets/v2/workspaces/$WS/projects/$PID/issues/$IID/attachments/"
-WSID=$(docker exec plane-db psql -U plane -d plane -t -A -c "SELECT id FROM workspaces WHERE slug='$WS';" 2>/dev/null | tr -d ' \n')
+WSID=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "SELECT id FROM workspaces WHERE slug='$WS';" 2>/dev/null | tr -d ' \n')
 check e9-legacy-quirk 200 "$BASE/api/workspaces/file-assets/$WSID/no-such-key-$SFX/"
 grep -q '"status":false' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   e9-legacy-body -> status:false"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED e9-legacy-body"; echo "FAIL e9-legacy-body: $(head -c 200 /tmp/smoke_body)"; }
 check e9-ws-del 204 -X DELETE "$BASE/api/assets/v2/workspaces/$WS/$AIDS/"
@@ -570,16 +607,17 @@ check fe-archpages-404 404 "$BASE/api/workspaces/$WS/projects/$PID/archived-page
 check fe-bulksub-404 404 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/bulk-subscribe-issues/"
 
 echo "== cleanup =="
-docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label = 'smoke2';" 2>&1 | head -n 1
-docker exec plane-db psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
-docker exec plane-db psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
-docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE 'smoke-%'); DELETE FROM workspaces WHERE slug LIKE 'smoke-%';" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label = 'smoke2';" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE 'smoke-%'); DELETE FROM workspaces WHERE slug LIKE 'smoke-%';" 2>&1 | head -n 1
 echo "== temp-user cleanup (E5 second member + E5 join invitee) =="
-docker exec plane-db psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label LIKE 'smoke-join-%'; DELETE FROM project_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%';" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label LIKE 'smoke-join-%'; DELETE FROM project_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%';" 2>&1 | head -n 1
+docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-signup-%'); DELETE FROM workspace_member_invites WHERE email LIKE 'temp-signup-%'; DELETE FROM profiles WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'temp-signup-%'); DELETE FROM users WHERE email LIKE 'temp-signup-%';" 2>&1 | head -n 1
 echo "== leftover-proof (must all be 0) =="
 proof_zero() { # proof_zero <label> <sql>
   local label="$1" sql="$2" n
-  n=$(docker exec plane-db psql -U plane -d plane -t -A -c "$sql" 2>/dev/null | tr -d ' \n')
+  n=$(docker exec "$DB_CONTAINER" psql -U plane -d plane -t -A -c "$sql" 2>/dev/null | tr -d ' \n')
   if [ "$n" = "0" ]; then PASS=$((PASS+1)); echo "ok   $label -> 0";
   else FAIL=$((FAIL+1)); FAILED="$FAILED $label($n)"; echo "FAIL $label -> $n leftovers"; fi
 }
@@ -594,5 +632,6 @@ proof_zero z-favs "SELECT COUNT(*) FROM user_favorites f JOIN workspaces w ON w.
 proof_zero z-drafts "SELECT COUNT(*) FROM draft_issues d JOIN workspaces w ON w.id=d.workspace_id WHERE w.slug LIKE 'smoke-%' AND d.deleted_at IS NULL"
 proof_zero z-labels "SELECT COUNT(*) FROM labels l JOIN projects p ON p.id=l.project_id JOIN workspaces w ON w.id=p.workspace_id WHERE w.slug LIKE 'smoke-%' AND l.deleted_at IS NULL"
 proof_zero z-tempusers "SELECT COUNT(*) FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'"
+proof_zero z-signupusers "SELECT COUNT(*) FROM users WHERE email LIKE 'temp-signup-%'"
 echo "PASS=$PASS FAIL=$FAIL"; [ -n "$FAILED" ] && echo "failed:$FAILED"
 [ "$FAIL" = 0 ]
