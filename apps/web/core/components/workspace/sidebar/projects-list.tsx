@@ -68,6 +68,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
     projectPreferences.showLimitedProjects && joinedProjects.length > projectPreferences.limitedProjectsCount;
 
   const handleCopyText = (projectId: string) => {
+    // oxlint-disable-next-line eslint-plugin-promise/always-return
     copyUrlToClipboard(`${workspaceSlug}/projects/${projectId}/issues`).then(() => {
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -229,6 +230,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
               {loader === "init-loader" && (
                 <Loader className="w-full space-y-1.5">
                   {Array.from({ length: 4 }).map((_, index) => (
+                    // oxlint-disable-next-line eslint-plugin-react/no-array-index-key
                     <Loader.Item key={index} height="28px" />
                   ))}
                 </Loader>
@@ -262,7 +264,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
                           )}
                         >
                           <MoreHorizontalOutline className="size-4 flex-shrink-0" />
-                          <span>{isExtendedProjectSidebarOpened ? "Hide" : "More"}</span>
+                          <span>{t(isExtendedProjectSidebarOpened ? "sidebar.hide" : "sidebar.more")}</span>
                         </button>
                       </SidebarNavItem>
                     )}
