@@ -101,7 +101,6 @@
       "select_service": "Selectați un serviciu",
       "no_dependencies": "Nicio dependență încă",
       "no_dependents": "Niciun serviciu dependent încă",
-      "issue_id_placeholder": "ID activitate",
       "no_work_items": "Nicio activitate asociată încă",
       "untitled": "Fără titlu",
       "not_found_title": "Serviciul nu există",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Dependența nu a putut fi creată. Încercați din nou.",
       "delete_dependency_error": "Dependența nu a putut fi ștearsă. Încercați din nou.",
       "link_work_item_error": "Activitatea nu a putut fi asociată. Încercați din nou.",
-      "unlink_work_item_error": "Asocierea activității nu a putut fi eliminată. Încercați din nou."
+      "unlink_work_item_error": "Asocierea activității nu a putut fi eliminată. Încercați din nou.",
+      "add_work_items": "Adaugă activități",
+      "load_error_title": "Serviciile nu au putut fi încărcate",
+      "load_error_description": "A apărut o eroare la încărcarea serviciilor. Încercați din nou.",
+      "retry": "Reîncearcă"
     }
   }
 }

@@ -101,7 +101,6 @@
       "select_service": "Pilih layanan",
       "no_dependencies": "Belum ada dependensi",
       "no_dependents": "Belum ada layanan dependen",
-      "issue_id_placeholder": "ID item kerja",
       "no_work_items": "Belum ada item kerja yang ditautkan",
       "untitled": "Tanpa judul",
       "not_found_title": "Layanan tidak ada",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Dependensi tidak dapat dibuat. Silakan coba lagi.",
       "delete_dependency_error": "Dependensi tidak dapat dihapus. Silakan coba lagi.",
       "link_work_item_error": "Item kerja tidak dapat ditautkan. Silakan coba lagi.",
-      "unlink_work_item_error": "Tautan item kerja tidak dapat dihapus. Silakan coba lagi."
+      "unlink_work_item_error": "Tautan item kerja tidak dapat dihapus. Silakan coba lagi.",
+      "add_work_items": "Tambah item kerja",
+      "load_error_title": "Layanan tidak dapat dimuat",
+      "load_error_description": "Terjadi kesalahan saat memuat layanan. Silakan coba lagi.",
+      "retry": "Coba lagi"
     }
   }
 }

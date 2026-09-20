@@ -101,7 +101,6 @@
       "select_service": "サービスを選択",
       "no_dependencies": "まだ依存関係がありません",
       "no_dependents": "まだ依存元がありません",
-      "issue_id_placeholder": "作業項目 ID",
       "no_work_items": "まだリンクされた作業項目がありません",
       "untitled": "無題",
       "not_found_title": "サービスが存在しません",
@@ -110,7 +109,11 @@
       "create_dependency_error": "依存関係を作成できませんでした。もう一度お試しください。",
       "delete_dependency_error": "依存関係を削除できませんでした。もう一度お試しください。",
       "link_work_item_error": "作業項目をリンクできませんでした。もう一度お試しください。",
-      "unlink_work_item_error": "作業項目のリンクを解除できませんでした。もう一度お試しください。"
+      "unlink_work_item_error": "作業項目のリンクを解除できませんでした。もう一度お試しください。",
+      "add_work_items": "作業項目を追加",
+      "load_error_title": "サービスを読み込めませんでした",
+      "load_error_description": "サービスの取得中にエラーが発生しました。もう一度お試しください。",
+      "retry": "再試行"
     }
   }
 }

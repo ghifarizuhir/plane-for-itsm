@@ -101,7 +101,6 @@
       "select_service": "選取服務",
       "no_dependencies": "暫無相依性",
       "no_dependents": "暫無被相依",
-      "issue_id_placeholder": "工作項目 ID",
       "no_work_items": "暫無關聯的工作項目",
       "untitled": "未命名",
       "not_found_title": "服務不存在",
@@ -110,7 +109,11 @@
       "create_dependency_error": "無法建立相依性，請重試。",
       "delete_dependency_error": "無法刪除相依性，請重試。",
       "link_work_item_error": "無法關聯工作項目，請重試。",
-      "unlink_work_item_error": "無法取消關聯工作項目，請重試。"
+      "unlink_work_item_error": "無法取消關聯工作項目，請重試。",
+      "add_work_items": "新增工作項目",
+      "load_error_title": "無法載入服務",
+      "load_error_description": "擷取服務時發生錯誤，請重試。",
+      "retry": "重試"
     }
   }
 }

@@ -101,7 +101,6 @@
       "select_service": "Select service",
       "no_dependencies": "No dependencies yet",
       "no_dependents": "No dependents yet",
-      "issue_id_placeholder": "Issue ID",
       "no_work_items": "No work items linked yet",
       "untitled": "Untitled",
       "not_found_title": "Service does not exist",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Could not create dependency. Please try again.",
       "delete_dependency_error": "Could not delete dependency. Please try again.",
       "link_work_item_error": "Could not link work item. Please try again.",
-      "unlink_work_item_error": "Could not unlink work item. Please try again."
+      "unlink_work_item_error": "Could not unlink work item. Please try again.",
+      "add_work_items": "Add work items",
+      "load_error_title": "Couldn't load services",
+      "load_error_description": "Something went wrong while fetching services. Please try again.",
+      "retry": "Retry"
     }
   }
 }

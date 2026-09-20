@@ -101,7 +101,6 @@
       "select_service": "Chọn dịch vụ",
       "no_dependencies": "Chưa có phụ thuộc nào",
       "no_dependents": "Chưa có dịch vụ phụ thuộc nào",
-      "issue_id_placeholder": "ID mục công việc",
       "no_work_items": "Chưa có mục công việc nào được liên kết",
       "untitled": "Không tiêu đề",
       "not_found_title": "Dịch vụ không tồn tại",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Không thể tạo phụ thuộc. Vui lòng thử lại.",
       "delete_dependency_error": "Không thể xóa phụ thuộc. Vui lòng thử lại.",
       "link_work_item_error": "Không thể liên kết mục công việc. Vui lòng thử lại.",
-      "unlink_work_item_error": "Không thể gỡ liên kết mục công việc. Vui lòng thử lại."
+      "unlink_work_item_error": "Không thể gỡ liên kết mục công việc. Vui lòng thử lại.",
+      "add_work_items": "Thêm mục công việc",
+      "load_error_title": "Không thể tải dịch vụ",
+      "load_error_description": "Đã xảy ra lỗi khi tải dịch vụ. Vui lòng thử lại.",
+      "retry": "Thử lại"
     }
   }
 }

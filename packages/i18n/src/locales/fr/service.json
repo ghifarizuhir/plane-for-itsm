@@ -101,7 +101,6 @@
       "select_service": "Sélectionner un service",
       "no_dependencies": "Aucune dépendance pour le moment",
       "no_dependents": "Aucun service dépendant pour le moment",
-      "issue_id_placeholder": "ID de l'élément de travail",
       "no_work_items": "Aucun élément de travail lié pour le moment",
       "untitled": "Sans titre",
       "not_found_title": "Le service n'existe pas",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Impossible de créer la dépendance. Veuillez réessayer.",
       "delete_dependency_error": "Impossible de supprimer la dépendance. Veuillez réessayer.",
       "link_work_item_error": "Impossible de lier l'élément de travail. Veuillez réessayer.",
-      "unlink_work_item_error": "Impossible de retirer le lien vers l'élément de travail. Veuillez réessayer."
+      "unlink_work_item_error": "Impossible de retirer le lien vers l'élément de travail. Veuillez réessayer.",
+      "add_work_items": "Ajouter des éléments de travail",
+      "load_error_title": "Impossible de charger les services",
+      "load_error_description": "Une erreur s'est produite lors du chargement des services. Veuillez réessayer.",
+      "retry": "Réessayer"
     }
   }
 }

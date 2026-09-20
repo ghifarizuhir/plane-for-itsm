@@ -101,7 +101,6 @@
       "select_service": "Hizmet seçin",
       "no_dependencies": "Henüz bağımlılık yok",
       "no_dependents": "Henüz bağımlı hizmet yok",
-      "issue_id_placeholder": "İş öğesi ID",
       "no_work_items": "Henüz bağlı iş öğesi yok",
       "untitled": "Başlıksız",
       "not_found_title": "Hizmet mevcut değil",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Bağımlılık oluşturulamadı. Lütfen tekrar deneyin.",
       "delete_dependency_error": "Bağımlılık silinemedi. Lütfen tekrar deneyin.",
       "link_work_item_error": "İş öğesi bağlanamadı. Lütfen tekrar deneyin.",
-      "unlink_work_item_error": "İş öğesi bağlantısı kaldırılamadı. Lütfen tekrar deneyin."
+      "unlink_work_item_error": "İş öğesi bağlantısı kaldırılamadı. Lütfen tekrar deneyin.",
+      "add_work_items": "İş öğeleri ekleyin",
+      "load_error_title": "Hizmetler yüklenemedi",
+      "load_error_description": "Hizmetler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.",
+      "retry": "Tekrar dene"
     }
   }
 }

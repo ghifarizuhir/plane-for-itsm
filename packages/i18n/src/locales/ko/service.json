@@ -101,7 +101,6 @@
       "select_service": "서비스를 선택하세요",
       "no_dependencies": "아직 종속성이 없어요",
       "no_dependents": "아직 이 서비스에 의존하는 항목이 없어요",
-      "issue_id_placeholder": "작업 항목 ID",
       "no_work_items": "아직 연결된 작업 항목이 없어요",
       "untitled": "제목 없음",
       "not_found_title": "서비스가 존재하지 않습니다",
@@ -110,7 +109,11 @@
       "create_dependency_error": "종속성을 생성하지 못했습니다. 다시 시도하세요.",
       "delete_dependency_error": "종속성을 삭제하지 못했습니다. 다시 시도하세요.",
       "link_work_item_error": "작업 항목을 연결하지 못했습니다. 다시 시도하세요.",
-      "unlink_work_item_error": "작업 항목 연결을 해제하지 못했습니다. 다시 시도하세요."
+      "unlink_work_item_error": "작업 항목 연결을 해제하지 못했습니다. 다시 시도하세요.",
+      "add_work_items": "작업 항목 추가",
+      "load_error_title": "서비스를 불러오지 못했습니다",
+      "load_error_description": "서비스를 가져오는 중 오류가 발생했습니다. 다시 시도하세요.",
+      "retry": "다시 시도"
     }
   }
 }

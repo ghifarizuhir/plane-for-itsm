@@ -101,7 +101,6 @@
       "select_service": "Wybierz usługę",
       "no_dependencies": "Brak zależności",
       "no_dependents": "Brak zależnych usług",
-      "issue_id_placeholder": "ID elementu pracy",
       "no_work_items": "Brak powiązanych elementów pracy",
       "untitled": "Bez tytułu",
       "not_found_title": "Usługa nie istnieje",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Nie można utworzyć zależności. Spróbuj ponownie.",
       "delete_dependency_error": "Nie można usunąć zależności. Spróbuj ponownie.",
       "link_work_item_error": "Nie można powiązać elementu pracy. Spróbuj ponownie.",
-      "unlink_work_item_error": "Nie można usunąć powiązania elementu pracy. Spróbuj ponownie."
+      "unlink_work_item_error": "Nie można usunąć powiązania elementu pracy. Spróbuj ponownie.",
+      "add_work_items": "Dodaj elementy pracy",
+      "load_error_title": "Nie można wczytać usług",
+      "load_error_description": "Wystąpił błąd podczas wczytywania usług. Spróbuj ponownie.",
+      "retry": "Ponów"
     }
   }
 }

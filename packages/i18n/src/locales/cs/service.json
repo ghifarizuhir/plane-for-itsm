@@ -101,7 +101,6 @@
       "select_service": "Vybrat službu",
       "no_dependencies": "Zatím žádné závislosti",
       "no_dependents": "Zatím žádné závislé služby",
-      "issue_id_placeholder": "ID pracovní položky",
       "no_work_items": "Zatím žádné propojené pracovní položky",
       "untitled": "Bez názvu",
       "not_found_title": "Služba neexistuje",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Závislost se nepodařilo vytvořit. Zkuste to prosím znovu.",
       "delete_dependency_error": "Závislost se nepodařilo odstranit. Zkuste to prosím znovu.",
       "link_work_item_error": "Pracovní položku se nepodařilo propojit. Zkuste to prosím znovu.",
-      "unlink_work_item_error": "Propojení pracovní položky se nepodařilo zrušit. Zkuste to prosím znovu."
+      "unlink_work_item_error": "Propojení pracovní položky se nepodařilo zrušit. Zkuste to prosím znovu.",
+      "add_work_items": "Přidat pracovní položky",
+      "load_error_title": "Služby se nepodařilo načíst",
+      "load_error_description": "Při načítání služeb došlo k chybě. Zkuste to prosím znovu.",
+      "retry": "Zkusit znovu"
     }
   }
 }

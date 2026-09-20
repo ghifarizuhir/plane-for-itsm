@@ -101,7 +101,6 @@
       "select_service": "Selecione um serviço",
       "no_dependencies": "Nenhuma dependência ainda",
       "no_dependents": "Nenhum serviço dependente ainda",
-      "issue_id_placeholder": "ID do item",
       "no_work_items": "Nenhum item vinculado ainda",
       "untitled": "Sem título",
       "not_found_title": "O serviço não existe",
@@ -110,7 +109,11 @@
       "create_dependency_error": "Não foi possível criar a dependência. Tente novamente.",
       "delete_dependency_error": "Não foi possível excluir a dependência. Tente novamente.",
       "link_work_item_error": "Não foi possível vincular o item. Tente novamente.",
-      "unlink_work_item_error": "Não foi possível desvincular o item. Tente novamente."
+      "unlink_work_item_error": "Não foi possível desvincular o item. Tente novamente.",
+      "add_work_items": "Adicionar itens",
+      "load_error_title": "Não foi possível carregar os serviços",
+      "load_error_description": "Ocorreu um erro ao carregar os serviços. Tente novamente.",
+      "retry": "Tentar novamente"
     }
   }
 }
