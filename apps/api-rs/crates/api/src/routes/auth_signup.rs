@@ -65,14 +65,17 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(signup_error_status(INSTANCE_NOT_CONFIGURED), StatusCode::BAD_REQUEST);
+        assert_eq!(signup_error_status(9999), StatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn raw_required_semantics() {
         assert!(signup_fields_missing("", "whatever1!"));
         assert!(signup_fields_missing("a@b.co", ""));
+        assert!(signup_fields_missing("", ""));
         // Spasi dianggap terisi (nilai raw), sama seperti Python truthiness.
         assert!(!signup_fields_missing("   ", "whatever1!"));
+        assert!(!signup_fields_missing("a@b.co", "   "));
     }
 
     #[test]
