@@ -131,6 +131,37 @@
   animation: fadeOut 500ms ease-in 100ms forwards;
 }
 
+/* Auth sign-up editorial entrance */
+@keyframes authRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-rise {
+  opacity: 0;
+  animation: authRise 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.auth-dotgrid {
+  background-image: radial-gradient(circle, rgba(100, 116, 139, 0.22) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise {
+    opacity: 1;
+    animation: none;
+  }
+}
+
 @keyframes highlight {
   0% {
     background-color: var(--background-color-layer-2);
