@@ -30,6 +30,10 @@
     "epics": "Epics",
     "upgrade_plan": "Upgrade plan",
     "plane_pro": "Terraline Pro",
-    "business": "Business"
+    "business": "Business",
+    "hide": "Hide",
+    "more": "More",
+    "pin": "Pin",
+    "unpin": "Unpin"
   }
 }
