@@ -81,6 +81,13 @@ export interface IServiceStore {
     serviceId: string,
     issue: { id: string; identifier?: string; name?: string }
   ) => Promise<TServiceWorkItemLink>;
+  linkWorkItems: (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    issues: { id: string; identifier?: string; name?: string }[]
+  ) => Promise<TServiceWorkItemLink[]>;
   unlinkWorkItem: (workspaceSlug: string, workspaceId: string, projectId: string, linkId: string) => Promise<void>;
 }
 
@@ -111,6 +118,7 @@ export class ServicesStore implements IServiceStore {
       removeDependency: action,
       updateNodePosition: action,
       linkWorkItem: action,
+      linkWorkItems: action,
       unlinkWorkItem: action,
     });
     this.rootStore = _rootStore;
@@ -319,6 +327,20 @@ export class ServicesStore implements IServiceStore {
       set(this.workItemLinkMap, [link.id], link);
     });
     return link;
+  };
+
+  linkWorkItems = async (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    issues: { id: string; identifier?: string; name?: string }[]
+  ) => {
+    const links = await this.serviceService.linkWorkItems(workspaceSlug, workspaceId, projectId, serviceId, issues);
+    runInAction(() => {
+      links.forEach((link) => set(this.workItemLinkMap, [link.id], link));
+    });
+    return links;
   };
 
   unlinkWorkItem = async (workspaceSlug: string, workspaceId: string, projectId: string, linkId: string) => {
