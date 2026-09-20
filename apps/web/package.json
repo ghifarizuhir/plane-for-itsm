@@ -72,7 +72,8 @@
     "smooth-scroll-into-view-if-needed": "catalog:",
     "swr": "catalog:",
     "use-font-face-observer": "catalog:",
-    "uuid": "catalog:"
+    "uuid": "catalog:",
+    "vgpu": "catalog:"
   },
   "devDependencies": {
     "@plane/tailwind-config": "workspace:*",
@@ -86,6 +87,7 @@
     "@types/react": "catalog:",
     "@types/react-color": "catalog:",
     "@types/react-dom": "catalog:",
+    "@webgpu/types": "catalog:",
     "dotenv": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
