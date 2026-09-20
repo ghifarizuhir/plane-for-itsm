@@ -138,7 +138,7 @@ catalog: # 70+ deps pinned (terra: package.json workspaces)
 | Alloc      | jemalloc + LTO + strip (binary api ~6,7 MB)          | —     | RSS api+worker+beat ~9 MiB (<150)                       |
 | Testing    | cargo test workspace + shadow + parity/cutover gates | —     | `crates/*/tests/`, `scripts/shadow.sh`                  |
 
-Django (`apps/api`: Python 3.11, Django 5 + DRF, Celery + RabbitMQ) tinggal sebagai **fallback opt-in** `api-legacy` (`--profile legacy`) untuk boundary belum di-port: asset S3 upload/download, Unsplash/GPT external, analytic export, notification sending, OAuth — lihat `03-api-contract.md`.
+Django (`apps/api`: Python 3.11, Django 5 + DRF, Celery + RabbitMQ) tinggal sebagai **fallback opt-in** `api-legacy` (`--profile legacy`) untuk boundary belum di-port: asset S3 upload/download, Unsplash external, analytic export, notification sending, OAuth — lihat `03-api-contract.md`.
 
 ---
 

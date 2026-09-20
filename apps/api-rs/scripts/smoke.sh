@@ -614,6 +614,16 @@ check fe-changelog-404 404 "$BASE/api/instances/changelog/"
 check fe-archpages-404 404 "$BASE/api/workspaces/$WS/projects/$PID/archived-pages/"
 check fe-bulksub-404 404 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/bulk-subscribe-issues/"
 
+echo "== ai =="
+# Route harus dilayani Rust (bukan 404/405). Status bergantung konfigurasi
+# stack: 400 tanpa key, 200/500/429 bila key ada.
+AICODE=$(curl "${H[@]}" -o /tmp/smoke_body -w '%{http_code}' -X POST -d '{"task":"say hi","prompt":"hi"}' "$BASE/api/workspaces/$WS/ai-assistant/")
+if [ "$AICODE" = "404" ] || [ "$AICODE" = "405" ]; then
+  FAIL=$((FAIL+1)); FAILED="$FAILED ai-assistant($AICODE)"; echo "FAIL ai-assistant route missing -> $AICODE"
+else
+  PASS=$((PASS+1)); echo "ok   ai-assistant served -> $AICODE"
+fi
+
 echo "== cleanup =="
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label = 'smoke2';" 2>&1 | head -n 1
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1

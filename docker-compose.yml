@@ -35,7 +35,7 @@ services:
       - web
 
   # Django fallback for un-ported boundaries (asset S3 upload/download,
-  # Unsplash/GPT external, analytic export, notification sending, OAuth).
+  # Unsplash external, analytic export, notification sending, OAuth).
   # Opt-in only: docker compose --profile legacy up -d api-legacy
   # (internal http://api-legacy:8000; async publish paths need a broker).
   api-legacy:

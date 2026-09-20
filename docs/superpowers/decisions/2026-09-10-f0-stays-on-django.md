@@ -6,6 +6,12 @@ Format: docs/superpowers/decisions/2026-09-10-f0-parity-decision-format.md
 
 ## GPT proxy ×2
 
+> **Superseded (2026-09-21):** endpoint workspace
+> `POST /api/workspaces/:slug/ai-assistant/` kini dibangun di Rust
+> (`routes/ai.rs`, `deviation_accepted`) — lihat
+> `docs/superpowers/decisions/2026-09-21-ai-assistant-rust.md`. Bagian
+> project-level di bawah masih berlaku.
+
 - `POST /api/workspaces/:slug/projects/:project_id/ai-assistant/` (`external.py:14`,
   `views/external/base.py:148-181`) dan `POST /api/workspaces/:slug/ai-assistant/`
   (`external.py:19`, `:184-212`): proxy LLM eksternal. Tidak ada handler/route Rust

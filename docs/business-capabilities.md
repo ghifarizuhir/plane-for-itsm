@@ -6,21 +6,21 @@ Observational snapshot: apa yang **benar-benar ada di kode** saat ini (`apps/api
 
 Monorepo **pnpm + Turbo** (`pnpm-workspace.yaml:1`, `turbo.json:1`) — 6 apps + 15 packages:
 
-| Komponen                | Stack                                                                      | Peran                                                            |
-| ----------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `apps/web`              | React 19 + React Router 8 + Vite + Tailwind 4 + MobX + SWR                 | SPA utama (Work Items, Cycles, dll)                              |
-| `apps/admin`            | React Router 8 + Vite                                                      | God-mode admin (`/god-mode/`)                                    |
-| `apps/space`            | React Router 8                                                             | Space / Pages public                                             |
-| `apps/live`             | Express 4 + express-ws + Hocuspocus + Yjs                                  | Realtime collaboration (Pages)                                   |
-| `apps/api-rs`           | Rust Axum + SQLx + Redis Stream `plane:jobs` (api + worker + beat, ~9 MiB) | API utama sejak `rust-cutover-v1` (kontrak 1:1 Django)           |
-| `apps/api`              | Django 5 + DRF (fallback opt-in `api-legacy`)                              | Boundary belum di-port: asset S3, external, export, notif, OAuth |
-| `apps/proxy`            | —                                                                          | Reverse proxy                                                    |
-| `packages/ui`           | React + Radix + Tailwind                                                   | Design system (Storybook `pnpm --filter=@plane/ui storybook`)    |
-| `packages/editor`       | TipTap 2 + Yjs                                                             | Rich-text + collaboration                                        |
-| `packages/types`        | TypeScript                                                                 | Shared types                                                     |
-| `packages/shared-state` | MobX 6                                                                     | Stores (`apps/web/core/store/*`)                                 |
-| `packages/services`     | —                                                                          | API clients                                                      |
-| `packages/i18n`         | i18next 25                                                                 | Locales (`packages/i18n/src/locales`)                            |
+| Komponen                | Stack                                                                      | Peran                                                                       |
+| ----------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `apps/web`              | React 19 + React Router 8 + Vite + Tailwind 4 + MobX + SWR                 | SPA utama (Work Items, Cycles, dll)                                         |
+| `apps/admin`            | React Router 8 + Vite                                                      | God-mode admin (`/god-mode/`)                                               |
+| `apps/space`            | React Router 8                                                             | Space / Pages public                                                        |
+| `apps/live`             | Express 4 + express-ws + Hocuspocus + Yjs                                  | Realtime collaboration (Pages)                                              |
+| `apps/api-rs`           | Rust Axum + SQLx + Redis Stream `plane:jobs` (api + worker + beat, ~9 MiB) | API utama sejak `rust-cutover-v1` (kontrak 1:1 Django)                      |
+| `apps/api`              | Django 5 + DRF (fallback opt-in `api-legacy`)                              | Boundary belum di-port: asset S3, external (Unsplash), export, notif, OAuth |
+| `apps/proxy`            | —                                                                          | Reverse proxy                                                               |
+| `packages/ui`           | React + Radix + Tailwind                                                   | Design system (Storybook `pnpm --filter=@plane/ui storybook`)               |
+| `packages/editor`       | TipTap 2 + Yjs                                                             | Rich-text + collaboration                                                   |
+| `packages/types`        | TypeScript                                                                 | Shared types                                                                |
+| `packages/shared-state` | MobX 6                                                                     | Stores (`apps/web/core/store/*`)                                            |
+| `packages/services`     | —                                                                          | API clients                                                                 |
+| `packages/i18n`         | i18next 25                                                                 | Locales (`packages/i18n/src/locales`)                                       |
 
 Model data inti Postgres per-table: `plane.db.models` — `WorkItem` (`issue.py`), `Project` (`project.py`), `Workspace` (`workspace.py`), `State` (`state.py`), `Cycle` (`cycle.py`), `Module` (`module.py`), `Page` (`page.py`), `Label` (`label.py`), dll. — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`). Bukan `entities` JSONB tunggal seperti Terra — tiap entity adalah tabel sendiri.
 

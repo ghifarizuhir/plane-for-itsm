@@ -19,8 +19,10 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 /// `sequence_id` match for issues). Results are membership-scoped to the
 /// caller's projects like the viewsets.
 ///
-/// STAYS ON DJANGO (`plane/app/urls/external.py`): Unsplash and GPT
-/// AI-assistant endpoints — third-party API proxies needing external keys.
+/// STAYS ON DJANGO (`plane/app/urls/external.py`): Unsplash and the
+/// project-level GPT AI-assistant — third-party API proxies needing external
+/// keys. The workspace-level `ai-assistant/` moved to `routes/ai.rs`
+/// (ADR 2026-09-21).
 pub const SEARCH_ENTITIES: [&str; 8] = [
     "workspace",
     "project",
