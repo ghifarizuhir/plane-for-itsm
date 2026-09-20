@@ -1756,6 +1756,7 @@ async fn main() {
     // Login + OAuth callback + email-check di-limit per-IP (5/mnt); refresh/logout/start bebas.
     let auth_router = Router::new()
         .route("/api/auth/login/", post(routes::auth::login))
+        .route("/api/auth/signup/", post(routes::auth_signup::signup))
         .route(
             "/api/auth/oauth/:provider/callback/",
             get(routes::auth::oauth_callback),
