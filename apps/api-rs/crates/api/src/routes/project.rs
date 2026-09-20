@@ -121,6 +121,15 @@ fn has_forbidden(s: &str) -> bool {
     s.chars().any(|c| FORBIDDEN.contains(&c))
 }
 
+fn validation_error(msg: &str) -> (StatusCode, Json<Value>) {
+    let field = if msg.starts_with("name") || msg.starts_with("PROJECT_NAME") {
+        "name"
+    } else {
+        "identifier"
+    };
+    (StatusCode::BAD_REQUEST, Json(json!({field: [msg]})))
+}
+
 pub fn validate_create(body: &CreateProject) -> Result<(), String> {
     if body.name.trim().is_empty() {
         return Err("name is required".to_string());
@@ -458,12 +467,13 @@ pub async fn create(
     }
     let name = body.get("name").and_then(Value::as_str).unwrap_or("");
     let identifier = body.get("identifier").and_then(Value::as_str).unwrap_or("");
-    validate_create(&CreateProject {
+    if let Err(e) = validate_create(&CreateProject {
         name: name.to_string(),
         identifier: identifier.to_string(),
         project_lead: None,
-    })
-    .map_err(|e| anyhow::anyhow!(e))?;
+    }) {
+        return Ok(validation_error(&e));
+    }
     let creator = auth.0;
     let project_lead: Option<uuid::Uuid> = body
         .get("project_lead")
