@@ -2,6 +2,7 @@ pub mod analytic;
 pub mod asset;
 pub mod auth;
 pub mod auth_compat;
+pub mod auth_signup;
 pub mod cycle;
 pub mod estimate;
 pub mod favorite;
