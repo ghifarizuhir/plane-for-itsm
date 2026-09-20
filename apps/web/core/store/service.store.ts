@@ -31,6 +31,7 @@ export interface IServiceStore {
   dependencyMap: Record<string, IServiceDependency>;
   workItemLinkMap: Record<string, TServiceWorkItemLink>;
   healthMap: Record<string, IServiceHealthSnapshot>;
+  errorMap: Record<string, boolean>;
   getServiceById: (serviceId: string) => IService | null;
   getServiceHealth: (serviceId: string) => IServiceHealthSnapshot | null;
   getProjectHealthSummary: (projectId: string) => TServiceHealthSummary;
@@ -98,6 +99,7 @@ export class ServicesStore implements IServiceStore {
   dependencyMap: Record<string, IServiceDependency> = {};
   workItemLinkMap: Record<string, TServiceWorkItemLink> = {};
   healthMap: Record<string, IServiceHealthSnapshot> = {};
+  errorMap: Record<string, boolean> = {};
   rootStore;
   serviceService;
   serviceHealthService;
@@ -110,6 +112,7 @@ export class ServicesStore implements IServiceStore {
       dependencyMap: observable,
       workItemLinkMap: observable,
       healthMap: observable,
+      errorMap: observable,
       fetchServices: action,
       createService: action,
       updateService: action,
@@ -190,6 +193,7 @@ export class ServicesStore implements IServiceStore {
 
   fetchServices = async (workspaceSlug: string, workspaceId: string, projectId: string) => {
     try {
+      set(this.errorMap, projectId, false);
       this.loader = true;
       const [services, dependencies, links] = await Promise.all([
         this.serviceService.getServices(workspaceSlug, workspaceId, projectId),
@@ -216,6 +220,7 @@ export class ServicesStore implements IServiceStore {
     } catch {
       runInAction(() => {
         this.loader = false;
+        set(this.errorMap, projectId, true);
       });
       return undefined;
     }
