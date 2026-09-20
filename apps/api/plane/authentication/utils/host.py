@@ -55,12 +55,31 @@ def base_host(
 
     # App Redirection
     if is_app:
-        if settings.APP_BASE_URL:
-            return settings.APP_BASE_URL
-        else:
-            return base_origin
+        return resolve_app_host(request)
 
     return base_origin
+
+
+def resolve_app_host(request: Request | HttpRequest) -> str:
+    """Return the app origin the user should land on.
+
+    Prefers the request's Origin header when it is one of the trusted
+    (CORS/CSRF-allowed) origins, so deployments reachable from multiple
+    hosts (e.g. a tunnel domain and a LAN IP) redirect back to whichever
+    host the user actually came from. Falls back to APP_BASE_URL, then
+    WEB_URL.
+    """
+    origin = request.headers.get("Origin")
+    if origin:
+        origin = origin.rstrip("/")
+        allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", None) or []
+        if origin in allowed_origins:
+            return origin
+
+    if settings.APP_BASE_URL:
+        return settings.APP_BASE_URL
+
+    return settings.WEB_URL or settings.APP_BASE_URL
 
 
 def user_ip(request: Request | HttpRequest) -> str:
