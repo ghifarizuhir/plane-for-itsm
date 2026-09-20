@@ -27,30 +27,30 @@ type TAuthHeader = {
 const Titles = {
   [EAuthModes.SIGN_IN]: {
     [EAuthSteps.EMAIL]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Terraline.",
+      header: "Welcome back to Terraline.",
+      subHeader: "",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Terraline.",
+      header: "Welcome back to Terraline.",
+      subHeader: "",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Work in all dimensions.",
-      subHeader: "Welcome back to Terraline.",
+      header: "Welcome back to Terraline.",
+      subHeader: "",
     },
   },
   [EAuthModes.SIGN_UP]: {
     [EAuthSteps.EMAIL]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Terraline account.",
+      header: "Create your Terraline account.",
+      subHeader: "",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Terraline account.",
+      header: "Create your Terraline account.",
+      subHeader: "",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Work in all dimensions.",
-      subHeader: "Create your Terraline account.",
+      header: "Create your Terraline account.",
+      subHeader: "",
     },
   },
 };
@@ -74,11 +74,11 @@ export const AuthHeader = observer(function AuthHeader(props: TAuthHeader) {
   const getHeaderSubHeader = (
     step: EAuthSteps,
     mode: EAuthModes,
-    invitation: IWorkspaceMemberInvitation | undefined,
+    memberInvitation: IWorkspaceMemberInvitation | undefined,
     email: string | undefined
   ) => {
-    if (invitation && email && invitation.email === email && invitation.workspace) {
-      const workspace = invitation.workspace;
+    if (memberInvitation && email && memberInvitation.email === email && memberInvitation.workspace) {
+      const workspace = memberInvitation.workspace;
       return {
         header: (
           <div className="relative inline-flex items-center gap-2">
@@ -118,7 +118,7 @@ export function AuthHeaderBase(props: TAuthHeaderBase) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-h4-semibold text-primary">{props.header}</span>
-      <span className="text-h4-semibold text-placeholder">{props.subHeader}</span>
+      {props.subHeader ? <span className="text-h4-semibold text-placeholder">{props.subHeader}</span> : null}
     </div>
   );
 }

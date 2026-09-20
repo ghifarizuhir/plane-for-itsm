@@ -20,11 +20,27 @@ export function AuthBase({ authType }: AuthBaseProps) {
     <div className="relative z-10 flex h-screen w-screen overflow-hidden bg-surface-1">
       <div className="flex h-full w-full min-w-0 flex-col overflow-hidden overflow-y-auto px-6 pt-6 pb-10 sm:px-8 lg:w-[46%] lg:min-w-[30rem] xl:min-w-[34rem]">
         <AuthHeader type={authType} />
-        {authType === EAuthModes.SIGN_UP && <AuthSignupCopy />}
+        {authType === EAuthModes.SIGN_UP && (
+          <div className="lg:hidden">
+            <AuthSignupCopy kind="signup" />
+          </div>
+        )}
+        {authType === EAuthModes.SIGN_IN && (
+          <div className="lg:hidden">
+            <AuthSignupCopy kind="signin" />
+          </div>
+        )}
         <AuthRoot authMode={authType} />
-        {authType === EAuthModes.SIGN_UP && <AuthSignupTrust />}
+        {(authType === EAuthModes.SIGN_UP || authType === EAuthModes.SIGN_IN) && (
+          <div className="lg:hidden">
+            <AuthSignupTrust />
+          </div>
+        )}
       </div>
-      <AuthWavesPanel />
+      <AuthWavesPanel
+        showCopy={authType === EAuthModes.SIGN_UP || authType === EAuthModes.SIGN_IN}
+        copyKind={authType === EAuthModes.SIGN_IN ? "signin" : "signup"}
+      />
     </div>
   );
 }

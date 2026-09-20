@@ -5,6 +5,7 @@
  */
 
 import { lazy, Suspense, useEffect, useState } from "react";
+import { AuthSignupCopy, AuthSignupTrust, type SignupCopyKind } from "../signup-copy";
 import type { ShapeWavesProps } from "./shape-waves";
 
 const ShapeWaves = lazy(() => import("./shape-waves").then((module) => ({ default: module.ShapeWaves })));
@@ -87,7 +88,13 @@ function useWavesRenderer(enabled: boolean): WavesRenderer {
   return renderer;
 }
 
-export function AuthWavesPanel() {
+export function AuthWavesPanel({
+  showCopy = false,
+  copyKind = "signup",
+}: {
+  showCopy?: boolean;
+  copyKind?: SignupCopyKind;
+}) {
   const isDesktop = useIsDesktop();
   const renderer = useWavesRenderer(isDesktop);
   const [webgpuFailed, setWebgpuFailed] = useState(false);
@@ -117,9 +124,22 @@ export function AuthWavesPanel() {
           </div>
         </Suspense>
       )}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-8 xl:p-10">
-        <span className="font-code text-11 tracking-[0.28em] text-white/30 uppercase">Work in all dimensions</span>
-      </div>
+      {showCopy && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(10,7,16,0.92)_0%,rgba(10,7,16,0.55)_38%,transparent_68%)]"
+        />
+      )}
+      {showCopy ? (
+        <div className="absolute inset-x-0 bottom-0 max-w-[36rem] p-8 xl:p-10">
+          <AuthSignupCopy variant="dark" kind={copyKind} />
+          <AuthSignupTrust variant="dark" />
+        </div>
+      ) : (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-8 xl:p-10">
+          <span className="font-code text-11 tracking-[0.28em] text-white/30 uppercase">Work in all dimensions</span>
+        </div>
+      )}
     </div>
   );
 }
