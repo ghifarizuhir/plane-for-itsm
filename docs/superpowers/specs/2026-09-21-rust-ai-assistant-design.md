@@ -92,8 +92,8 @@ ada di Rust) tidak pernah menyalakan gate FE
 
 ### Panggilan upstream
 
-- `pub async fn chat_completion(base_url, api_key, model, prompt) -> Result<String, LlmError>`
-  — `base_url` eksplisit sebagai parameter supaya test tidak menyentuh env proses.
+- `pub async fn chat_completion(base_url, api_key, model, task, prompt) -> Result<String, LlmError>`
+  — `base_url` eksplisit sebagai parameter supaya test tidak menyentuh env proses; body mengirim `task + "\n" + prompt`.
 - `reqwest::Client` dibagikan lewat `OnceLock` (pola `s3proxy.rs::http()`),
   timeout total 60 detik.
 - URL: `{base_url tanpa trailing '/'}/chat/completions`.
