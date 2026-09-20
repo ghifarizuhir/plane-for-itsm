@@ -1,6 +1,7 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
 
+use crate::routes::ai::resolve_llm_config;
 use crate::state::AppState;
 
 /// Mirrors `apps/api/plane/license/api/views/instance.py:InstanceEndpoint.get`
@@ -38,7 +39,7 @@ pub fn file_size_limit() -> f64 {
         .unwrap_or(5_242_880.0)
 }
 
-pub fn build_config() -> Value {
+pub fn build_config(has_llm_configured: bool) -> Value {
     json!({
         "enable_signup": env_flag("ENABLE_SIGNUP", "0"),
         "is_workspace_creation_disabled": env_flag("DISABLE_WORKSPACE_CREATION", "0"),
@@ -51,7 +52,7 @@ pub fn build_config() -> Value {
         "github_app_name": env_str_or("GITHUB_APP_NAME", ""),
         "slack_client_id": env_opt("SLACK_CLIENT_ID"),
         "has_unsplash_configured": !env_str_or("UNSPLASH_ACCESS_KEY", "").is_empty(),
-        "has_llm_configured": !env_str_or("LLM_API_KEY", "").is_empty(),
+        "has_llm_configured": has_llm_configured,
         "file_size_limit": file_size_limit(),
         "is_smtp_configured": !env_str_or("EMAIL_HOST", "").is_empty(),
         "app_base_url": env_str_or("APP_BASE_URL", ""),
@@ -143,9 +144,11 @@ pub async fn get(
         "user_count": user_count,
     });
 
+    let llm = resolve_llm_config(&st.pool).await;
+
     Ok((
         StatusCode::OK,
-        Json(json!({"config": build_config(), "instance": instance})),
+        Json(json!({"config": build_config(!llm.api_key.is_empty()), "instance": instance})),
     ))
 }
 
@@ -168,5 +171,11 @@ mod tests {
         let parsed: f64 = "123.5".parse().unwrap();
         assert_eq!(parsed, 123.5);
         assert_eq!(file_size_limit(), 5_242_880.0);
+    }
+
+    #[test]
+    fn build_config_carries_llm_flag() {
+        assert_eq!(build_config(true)["has_llm_configured"], json!(true));
+        assert_eq!(build_config(false)["has_llm_configured"], json!(false));
     }
 }
