@@ -14,11 +14,21 @@ use crate::routes::instance_admin::{decrypt_data, fernet_secret, skip_env_vars};
 pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct LlmConfig {
     pub api_key: String,
     pub model: String,
     pub base_url: String,
+}
+
+impl std::fmt::Debug for LlmConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LlmConfig")
+            .field("api_key", &"<redacted>")
+            .field("model", &self.model)
+            .field("base_url", &self.base_url)
+            .finish()
+    }
 }
 
 /// Pure mapping from raw `(key, value, is_encrypted)` rows + env fallbacks.
@@ -49,6 +59,7 @@ pub fn llm_config_from_rows(
     };
     let base_url = env_base_url
         .filter(|s| !s.trim().is_empty())
+        .map(|s| s.trim().to_string())
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
     LlmConfig {
         api_key: api_key.trim().to_string(),
@@ -57,11 +68,19 @@ pub fn llm_config_from_rows(
     }
 }
 
+/// Pure env reads so the `SKIP_ENV_VAR=0` wiring is unit-testable
+/// (process env itself can't be safely mutated in parallel tests).
+fn llm_config_from_env() -> (String, String, Option<String>) {
+    (
+        std::env::var("LLM_API_KEY").unwrap_or_default(),
+        std::env::var("LLM_MODEL").unwrap_or_default(),
+        std::env::var("LLM_BASE_URL").ok(),
+    )
+}
+
 /// Resolve the effective AI config from DB or env per `SKIP_ENV_VAR`.
 pub async fn resolve_llm_config(pool: &sqlx::PgPool) -> LlmConfig {
-    let env_api_key = std::env::var("LLM_API_KEY").unwrap_or_default();
-    let env_model = std::env::var("LLM_MODEL").unwrap_or_default();
-    let env_base_url = std::env::var("LLM_BASE_URL").ok();
+    let (env_api_key, env_model, env_base_url) = llm_config_from_env();
     if !skip_env_vars() {
         return llm_config_from_rows(&[], env_api_key, env_model, env_base_url, |_| String::new());
     }
@@ -71,6 +90,10 @@ pub async fn resolve_llm_config(pool: &sqlx::PgPool) -> LlmConfig {
     )
     .fetch_all(pool)
     .await
+    .map_err(|e| {
+        tracing::warn!(error=%e, "ai: instance_configurations lookup failed");
+        e
+    })
     .unwrap_or_default();
     let secret = fernet_secret();
     llm_config_from_rows(&rows, env_api_key, env_model, env_base_url, |v| {
@@ -191,5 +214,29 @@ mod tests {
         assert_eq!(cfg.base_url, "http://localhost:11434/v1");
         let cfg = llm_config_from_rows(&[], String::new(), String::new(), Some("  ".into()), |_| String::new());
         assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
+    }
+
+    #[test]
+    fn env_reader_reflects_process_env() {
+        let (key, model, base) = llm_config_from_env();
+        assert_eq!(key, std::env::var("LLM_API_KEY").unwrap_or_default());
+        assert_eq!(model, std::env::var("LLM_MODEL").unwrap_or_default());
+        assert_eq!(base, std::env::var("LLM_BASE_URL").ok());
+    }
+
+    #[test]
+    fn skip_env_path_resolves_from_env_only() {
+        // SKIP_ENV_VAR=0 composition: empty rows → pure env resolution.
+        let (key, model, base) = llm_config_from_env();
+        let cfg = llm_config_from_rows(&[], key.clone(), model.clone(), base.clone(), |_| {
+            String::new()
+        });
+        assert_eq!(cfg.api_key, key.trim());
+        let expected_model = if model.trim().is_empty() {
+            DEFAULT_MODEL.to_string()
+        } else {
+            model.trim().to_string()
+        };
+        assert_eq!(cfg.model, expected_model);
     }
 }
