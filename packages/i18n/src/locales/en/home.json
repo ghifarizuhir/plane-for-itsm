@@ -4,13 +4,14 @@
       "quickstart_guide": "Your quickstart guide",
       "not_right_now": "Not right now",
       "create_project": {
-        "title": "Create a project",
-        "description": "Most things start with a project in Terraline.",
-        "cta": "Get started"
+        "title": "Create your first project",
+        "description": "A project is home to your services, incidents, and work items in Terraline.",
+        "cta": "Get started",
+        "cta_view_services": "View services"
       },
       "invite_team": {
         "title": "Invite your team",
-        "description": "Build, ship, and manage with coworkers.",
+        "description": "Keep services healthy and resolve incidents together.",
         "cta": "Get them in"
       },
       "configure_workspace": {
@@ -40,7 +41,7 @@
     "recents": {
       "title": "Recents",
       "empty": {
-        "project": "Your recent projects will appear here once you visit one.",
+        "project": "Your recent projects will show up here after you visit one.",
         "page": "Your recent pages will appear here once you visit one.",
         "issue": "Your recent work items will appear here once you visit one.",
         "default": "You don't have any recents yet."
