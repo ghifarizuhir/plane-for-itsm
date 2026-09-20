@@ -5,6 +5,7 @@
  */
 
 export * from "./services-list-view";
+export * from "./service-load-error-state";
 export * from "./board/services-board";
 export * from "./board/services-board-row";
 export * from "./health/service-health-dot";
