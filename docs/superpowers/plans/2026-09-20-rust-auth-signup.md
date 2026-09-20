@@ -120,7 +120,7 @@ Isi lengkap `apps/api-rs/crates/api/src/routes/auth_signup.rs`:
 //! Kode error disalin dari `authentication/adapter/error.py:7-26`; bentuk body
 //! `{error_code, error_message}` (`AuthenticationException.get_error_dict`).
 
-use axum::http::StatusCode;
+use axum::{http::StatusCode, Json};
 use serde_json::{json, Value};
 
 // Kode error Django (`adapter/error.py`).

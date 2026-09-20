@@ -158,8 +158,8 @@ kompatibel dua arah dengan Django).
 - Modify: `apps/api-rs/crates/api/src/routes/mod.rs` — daftarkan modul.
 - Modify: `apps/api-rs/crates/api/src/main.rs` — route `/api/auth/signup/` di
   `auth_router` (dekat `:1757`).
-- Modify: `apps/api-rs/crates/api/src/routes/auth.rs` — `set_cookies` +
-  `cookie_pair` jadi `pub(crate)`.
+- Modify: `apps/api-rs/crates/api/src/routes/auth.rs` — `set_cookies` jadi
+  `pub(crate)` (`cookie_pair` tetap privat; hanya dipakai internal).
 - Modify: `apps/api-rs/crates/api/src/routes/invite.rs` —
   `default_ws_member_props()` jadi `pub(crate)` (dipakai auto-join).
 - Modify: `apps/web/core/components/account/auth-forms/password.tsx` — JSON
