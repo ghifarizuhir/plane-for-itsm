@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // icons
@@ -21,8 +21,6 @@ import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-pa
 // constants
 // helpers
 import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
-// services
-import { AuthService } from "@/services/auth.service";
 
 type Props = {
   email: string;
@@ -44,16 +42,11 @@ const defaultValues: TPasswordFormValues = {
   password: "",
 };
 
-const authService = new AuthService();
-
 export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props) {
   const { email, isSMTPConfigured, handleAuthStep, handleEmailClear, mode, nextPath } = props;
   // plane imports
   const { t } = useTranslation();
-  // ref
-  const formRef = useRef<HTMLFormElement>(null);
   // states
-  const [csrfPromise, setCsrfPromise] = useState<Promise<{ csrf_token: string }> | undefined>(undefined);
   const [passwordFormData, setPasswordFormData] = useState<TPasswordFormValues>({ ...defaultValues, email });
   const [showPassword, setShowPassword] = useState({
     password: false,
@@ -63,22 +56,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [isBannerMessage, setBannerMessage] = useState(false);
+  const [signUpErrorCode, setSignUpErrorCode] = useState<number | null>(null);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const handleFormChange = (key: keyof TPasswordFormValues, value: string) =>
     setPasswordFormData((prev) => ({ ...prev, [key]: value }));
-
-  useEffect(() => {
-    // CSRF hanya dibutuhkan mode SIGN_UP (POST native ke Django).
-    // SIGN_IN login JSON ke Rust (/api/auth/login/, cookie HttpOnly) tanpa CSRF.
-    if (mode !== EAuthModes.SIGN_UP) return;
-    if (csrfPromise === undefined) {
-      const promise = authService.requestCSRFToken();
-      setCsrfPromise(promise);
-    }
-  }, [csrfPromise, mode]);
 
   const redirectToUniqueCodeSignIn = async () => {
     handleAuthStep(EAuthSteps.UNIQUE_CODE);
@@ -144,27 +128,49 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     }
   };
 
-  const handleCSRFToken = async () => {
-    if (!formRef || !formRef.current) return;
-    const token = await csrfPromise;
-    if (!token?.csrf_token) return;
-    const csrfElement = formRef.current.querySelector("input[name=csrfmiddlewaretoken]");
-    csrfElement?.setAttribute("value", token?.csrf_token);
-  };
-
   const handleSignUp = async () => {
-    // TODO(spec 2026-09-05-rust-auth-slice1): endpoint POST /api/auth/signup/
-    // BELUM ada di backend Rust (non-goal irisan 1) — pendaftaran baru tetap
-    // POST native ke Django dengan CSRF seperti sebelumnya.
-    await handleCSRFToken();
+    if (isSubmitting) return;
+    setSignUpErrorCode(null);
     const isPasswordValid = getPasswordStrength(passwordFormData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID;
-    if (isPasswordValid) {
-      setIsSubmitting(true);
-      if (formRef.current) formRef.current.submit(); // Manually submit the form if the condition is met
-    } else {
-      setBannerMessage(true);
+    if (!isPasswordValid) {
+      setSignUpErrorCode(5021);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/signup/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: passwordFormData.email, password: passwordFormData.password }),
+      });
+      if (res.ok) {
+        window.location.assign(nextPath || "/");
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error_code?: number };
+      setSignUpErrorCode(data?.error_code ?? 0);
+    } catch {
+      setSignUpErrorCode(0);
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  const signUpErrorMessage = useMemo(() => {
+    switch (signUpErrorCode) {
+      case 5021:
+        return t("auth.sign_up.errors.password.strength");
+      case 5030:
+        return t("auth.sign_up.errors.email_exists");
+      case 5015:
+        return t("auth.sign_up.errors.signup_disabled");
+      case 5045:
+        return t("auth.sign_up.errors.email_invalid");
+      default:
+        return t("something_went_wrong_please_try_again");
+    }
+  }, [signUpErrorCode, t]);
 
   return (
     <>
@@ -185,28 +191,23 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           </button>
         </div>
       )}
-      {isBannerMessage && mode === EAuthModes.SIGN_UP && (
+      {signUpErrorCode !== null && mode === EAuthModes.SIGN_UP && (
         <div className="relative flex items-center gap-2 rounded-md border border-danger-strong/50 bg-danger-subtle p-2">
           <div className="relative flex h-4 w-4 shrink-0 items-center justify-center">
             <InfoOutline width={16} height={16} className="text-danger-primary" />
           </div>
-          <div className="w-full text-13 font-medium text-danger-primary">
-            {t("auth.sign_up.errors.password.strength")}
-          </div>
+          <div className="w-full text-13 font-medium text-danger-primary">{signUpErrorMessage}</div>
           <button
             type="button"
             className="relative ml-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-xs text-accent-primary/80 transition-all hover:bg-danger-subtle-hover"
-            onClick={() => setBannerMessage(false)}
+            onClick={() => setSignUpErrorCode(null)}
           >
             <CloseOutline className="h-4 w-4 shrink-0 text-danger-primary" />
           </button>
         </div>
       )}
       <form
-        ref={formRef}
         className="space-y-4"
-        method="POST"
-        action={`${API_BASE_URL}/auth/${mode === EAuthModes.SIGN_IN ? "sign-in" : "sign-up"}/`}
         onSubmit={async (event) => {
           event.preventDefault(); // Prevent form from submitting by default
           if (mode === EAuthModes.SIGN_UP) {
@@ -219,9 +220,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           setIsSubmitting(false);
         }}
       >
-        <input type="hidden" name="csrfmiddlewaretoken" />
-        <input type="hidden" value={passwordFormData.email} name="email" />
-        {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
         <div className="space-y-1">
           <label htmlFor="email" className="text-13 font-medium text-tertiary">
             {t("auth.common.email.label")}
