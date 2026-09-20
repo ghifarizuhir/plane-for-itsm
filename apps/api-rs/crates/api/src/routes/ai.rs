@@ -7,9 +7,17 @@
 //! when `is_encrypted`) with per-key env fallback; `SKIP_ENV_VAR=0` reads env
 //! directly. `LLM_BASE_URL` is env-only (design 2026-09-21).
 
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use serde_json::{json, Value};
 
 use crate::routes::instance_admin::{decrypt_data, fernet_secret, skip_env_vars};
+use crate::routes::module::guard_am;
+use crate::routes::project::{deny, ws_role};
+use crate::{middleware::auth::AuthUser, state::AppState};
 
 pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
@@ -179,6 +187,65 @@ pub async fn chat_completion(
     Ok(extract_content(&value))
 }
 
+/// Django `if not request.data.get("task", False)` (`base.py:159-161`).
+pub fn task_from_body(body: &Value) -> Option<&str> {
+    body.get("task").and_then(Value::as_str).filter(|s| !s.is_empty())
+}
+
+/// `host` for the 429 body, e.g. `api.openai.com`.
+fn host_of(base_url: &str) -> String {
+    base_url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+pub async fn workspace_ai_assistant(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let cfg = resolve_llm_config(&st.pool).await;
+    if cfg.api_key.is_empty() || cfg.model.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "LLM provider API key and model are required"})),
+        ));
+    }
+    let Some(task) = task_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Task is required"})),
+        ));
+    };
+    let prompt = body.get("prompt").and_then(Value::as_str).unwrap_or("");
+    match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, prompt).await {
+        Ok(text) => {
+            let response_html = text.replace('\n', "<br/>");
+            Ok((
+                StatusCode::OK,
+                Json(json!({"response": text, "response_html": response_html})),
+            ))
+        }
+        Err(LlmError::RateLimited) => Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
+        )),
+        Err(LlmError::Upstream) => Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "An internal error has occurred."})),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +358,14 @@ mod tests {
             model.trim().to_string()
         };
         assert_eq!(cfg.model, expected_model);
+    }
+
+    #[test]
+    fn task_from_body_rules() {
+        assert_eq!(task_from_body(&json!({"task": "hi"})), Some("hi"));
+        assert_eq!(task_from_body(&json!({})), None);
+        assert_eq!(task_from_body(&json!({"task": ""})), None);
+        assert_eq!(task_from_body(&json!({"task": 5})), None);
+        assert_eq!(task_from_body(&json!({"task": null})), None);
     }
 }

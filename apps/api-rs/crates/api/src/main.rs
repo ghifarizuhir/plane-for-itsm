@@ -1748,6 +1748,15 @@ async fn main() {
         // (`views/external/base.py:215-243`): GET 200 `[]` without a key,
         // else upstream passthrough. IsAuthenticated only.
         .route("/api/unsplash/", get(routes::prefs::unsplash))
+        // Parity with `WorkspaceGPTIntegrationEndpoint`
+        // (`views/external/base.py:184-212`, `urls/external.py:19`): POST
+        // 200 `{response, response_html}`; 400 config-missing / `Task is
+        // required`; 500 generic upstream; 429 passthrough. Gate WORKSPACE
+        // ADMIN/MEMBER. OpenAI-compatible via `LLM_BASE_URL` (env).
+        .route(
+            "/api/workspaces/:slug/ai-assistant/",
+            post(routes::ai::workspace_ai_assistant),
+        )
         // Parity with `UserLastProjectWithWorkspaceEndpoint`
         // (`views/workspace/user.py:68-95`): GET 200 (null shape when no
         // workspace). GET-only. IsAuthenticated only.
