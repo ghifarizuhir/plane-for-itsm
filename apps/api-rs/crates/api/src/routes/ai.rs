@@ -126,6 +126,59 @@ pub fn extract_content(v: &Value) -> String {
         .to_string()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LlmError {
+    RateLimited,
+    Upstream,
+}
+
+fn http() -> &'static reqwest::Client {
+    static HTTP: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .expect("ai client")
+    })
+}
+
+/// POST `{base_url}/chat/completions` and return the assistant text.
+/// 429 → `RateLimited`; every other failure → `Upstream`. The API key is
+/// never logged.
+pub async fn chat_completion(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    task: &str,
+    prompt: &str,
+) -> Result<String, LlmError> {
+    let resp = http()
+        .post(chat_url(base_url))
+        .header("Authorization", format!("Bearer {api_key}"))
+        .json(&build_body(model, task, prompt))
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::warn!(error=%e, "ai: upstream request failed");
+            LlmError::Upstream
+        })?;
+    let status = resp.status();
+    if status.as_u16() == 429 {
+        return Err(LlmError::RateLimited);
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let snippet: String = body.chars().take(500).collect();
+        tracing::warn!(status = status.as_u16(), body = %snippet, "ai: upstream error");
+        return Err(LlmError::Upstream);
+    }
+    let value: Value = resp.json().await.map_err(|e| {
+        tracing::warn!(error=%e, "ai: upstream returned invalid json");
+        LlmError::Upstream
+    })?;
+    Ok(extract_content(&value))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
