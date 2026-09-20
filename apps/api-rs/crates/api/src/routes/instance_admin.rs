@@ -1228,7 +1228,7 @@ fn derive_fernet_key(secret: &str) -> [u8; 32] {
     dk
 }
 
-fn fernet_secret() -> String {
+pub(crate) fn fernet_secret() -> String {
     // Django `settings.SECRET_KEY` (`settings/common.py:32` — env
     // `SECRET_KEY`). Must match Django's value or stored secrets won't
     // decrypt (documented wiring requirement, not a fallback).

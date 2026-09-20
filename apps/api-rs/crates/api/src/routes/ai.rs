@@ -1,0 +1,195 @@
+//! `POST /api/workspaces/:slug/ai-assistant/` — parity with Django
+//! `WorkspaceGPTIntegrationEndpoint` (`plane/app/views/external/base.py:184-212`,
+//! `plane/app/urls/external.py:19`).
+//!
+//! Config resolution mirrors `license/utils/instance_value.py:17-39`:
+//! `SKIP_ENV_VAR=1` (default) reads `instance_configurations` (Fernet-decrypt
+//! when `is_encrypted`) with per-key env fallback; `SKIP_ENV_VAR=0` reads env
+//! directly. `LLM_BASE_URL` is env-only (design 2026-09-21).
+
+use serde_json::{json, Value};
+
+use crate::routes::instance_admin::{decrypt_data, fernet_secret, skip_env_vars};
+
+pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
+pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlmConfig {
+    pub api_key: String,
+    pub model: String,
+    pub base_url: String,
+}
+
+/// Pure mapping from raw `(key, value, is_encrypted)` rows + env fallbacks.
+/// A present row masks the env default (Django `instance_value.py:23-33`),
+/// even when its value is NULL (→ empty string).
+pub fn llm_config_from_rows(
+    rows: &[(String, Option<String>, bool)],
+    env_api_key: String,
+    env_model: String,
+    env_base_url: Option<String>,
+    decrypt: impl Fn(&str) -> String,
+) -> LlmConfig {
+    let api_key = match rows.iter().find(|(k, _, _)| k == "LLM_API_KEY") {
+        Some((_, value, is_encrypted)) => {
+            let raw = value.clone().unwrap_or_default();
+            if *is_encrypted {
+                decrypt(&raw)
+            } else {
+                raw
+            }
+        }
+        None => env_api_key,
+    };
+    let model = match rows.iter().find(|(k, _, _)| k == "LLM_MODEL") {
+        Some((_, Some(value), _)) if !value.trim().is_empty() => value.clone(),
+        _ if !env_model.trim().is_empty() => env_model,
+        _ => DEFAULT_MODEL.to_string(),
+    };
+    let base_url = env_base_url
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
+    LlmConfig {
+        api_key: api_key.trim().to_string(),
+        model: model.trim().to_string(),
+        base_url,
+    }
+}
+
+/// Resolve the effective AI config from DB or env per `SKIP_ENV_VAR`.
+pub async fn resolve_llm_config(pool: &sqlx::PgPool) -> LlmConfig {
+    let env_api_key = std::env::var("LLM_API_KEY").unwrap_or_default();
+    let env_model = std::env::var("LLM_MODEL").unwrap_or_default();
+    let env_base_url = std::env::var("LLM_BASE_URL").ok();
+    if !skip_env_vars() {
+        return llm_config_from_rows(&[], env_api_key, env_model, env_base_url, |_| String::new());
+    }
+    let rows: Vec<(String, Option<String>, bool)> = sqlx::query_as(
+        "SELECT key, value, is_encrypted FROM instance_configurations \
+         WHERE key IN ('LLM_API_KEY','LLM_MODEL') AND deleted_at IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let secret = fernet_secret();
+    llm_config_from_rows(&rows, env_api_key, env_model, env_base_url, |v| {
+        decrypt_data(v, &secret)
+    })
+}
+
+/// `{base_url}/chat/completions` with exactly one joining slash.
+pub fn chat_url(base_url: &str) -> String {
+    format!("{}/chat/completions", base_url.trim_end_matches('/'))
+}
+
+/// OpenAI-compatible chat body; Django concatenates `task + "\n" + prompt`
+/// (`views/external/base.py:125`).
+pub fn build_body(model: &str, task: &str, prompt: &str) -> Value {
+    json!({
+        "model": model,
+        "messages": [{"role": "user", "content": format!("{task}\n{prompt}")}],
+    })
+}
+
+/// `choices[0].message.content` as a string; anything missing → `""`.
+pub fn extract_content(v: &Value) -> String {
+    v.get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn chat_url_strips_trailing_slash() {
+        assert_eq!(
+            chat_url("https://api.openai.com/v1/"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+        assert_eq!(
+            chat_url("http://localhost:11434/v1"),
+            "http://localhost:11434/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn build_body_joins_task_and_prompt() {
+        let body = build_body("gpt-4o-mini", "do it", "text");
+        assert_eq!(body["model"], json!("gpt-4o-mini"));
+        assert_eq!(body["messages"][0]["role"], json!("user"));
+        assert_eq!(body["messages"][0]["content"], json!("do it\ntext"));
+    }
+
+    #[test]
+    fn extract_content_handles_missing_and_empty() {
+        assert_eq!(
+            extract_content(&json!({"choices": [{"message": {"content": "hi"}}]})),
+            "hi"
+        );
+        assert_eq!(extract_content(&json!({"choices": []})), "");
+        assert_eq!(
+            extract_content(&json!({"choices": [{"message": {"content": null}}]})),
+            ""
+        );
+    }
+
+    #[test]
+    fn config_encrypted_row_is_decrypted() {
+        let rows = vec![("LLM_API_KEY".to_string(), Some("enc".to_string()), true)];
+        let cfg = llm_config_from_rows(&rows, "env-key".into(), String::new(), None, |v| {
+            format!("dec:{v}")
+        });
+        assert_eq!(cfg.api_key, "dec:enc");
+    }
+
+    #[test]
+    fn config_plain_row_is_used_as_is() {
+        let rows = vec![("LLM_API_KEY".to_string(), Some("plain".to_string()), false)];
+        let cfg = llm_config_from_rows(&rows, "env-key".into(), String::new(), None, |_| String::new());
+        assert_eq!(cfg.api_key, "plain");
+    }
+
+    #[test]
+    fn config_missing_row_falls_back_to_env() {
+        let cfg = llm_config_from_rows(&[], "env-key".into(), "env-model".into(), None, |_| String::new());
+        assert_eq!(cfg.api_key, "env-key");
+        assert_eq!(cfg.model, "env-model");
+    }
+
+    #[test]
+    fn config_null_model_uses_default() {
+        let rows = vec![("LLM_MODEL".to_string(), None, false)];
+        let cfg = llm_config_from_rows(&rows, String::new(), String::new(), None, |_| String::new());
+        assert_eq!(cfg.model, DEFAULT_MODEL);
+    }
+
+    #[test]
+    fn config_empty_env_model_uses_default() {
+        let cfg = llm_config_from_rows(&[], String::new(), "  ".into(), None, |_| String::new());
+        assert_eq!(cfg.model, DEFAULT_MODEL);
+    }
+
+    #[test]
+    fn config_base_url_defaults_and_overrides() {
+        let cfg = llm_config_from_rows(&[], String::new(), String::new(), None, |_| String::new());
+        assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
+        let cfg = llm_config_from_rows(
+            &[],
+            String::new(),
+            String::new(),
+            Some("http://localhost:11434/v1".into()),
+            |_| String::new(),
+        );
+        assert_eq!(cfg.base_url, "http://localhost:11434/v1");
+        let cfg = llm_config_from_rows(&[], String::new(), String::new(), Some("  ".into()), |_| String::new());
+        assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
+    }
+}

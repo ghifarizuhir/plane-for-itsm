@@ -1,4 +1,5 @@
 pub mod analytic;
+pub mod ai;
 pub mod asset;
 pub mod auth;
 pub mod auth_compat;
