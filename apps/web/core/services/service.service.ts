@@ -161,6 +161,18 @@ export class ServiceService extends APIService {
       });
   }
 
+  async linkWorkItems(
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string,
+    serviceId: string,
+    issues: { id: string; identifier?: string; name?: string }[]
+  ): Promise<TServiceWorkItemLink[]> {
+    return Promise.all(
+      issues.map((issue) => this.linkWorkItem(workspaceSlug, workspaceId, projectId, serviceId, issue))
+    );
+  }
+
   async unlinkWorkItem(workspaceSlug: string, _workspaceId: string, projectId: string, linkId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-issues/${linkId}/`)
       .then((response) => response?.data)
