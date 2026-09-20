@@ -15,8 +15,10 @@ import emptyModule from "@/app/assets/empty-state/module.svg?url";
 import { EmptyState } from "@/components/common/empty-state";
 // hooks
 import { useService } from "@/hooks/store/use-service";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
+import { ServiceLoadErrorState } from "../service-load-error-state";
 import { ServiceDependencies } from "./dependencies";
 import { ServiceDetailHeader } from "./header";
 import { ServiceDetailTabs, type TServiceDetailTab } from "./tabs";
@@ -37,13 +39,23 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { fetchedMap, getServiceById } = useService();
+  const { fetchedMap, getServiceById, errorMap, fetchServices } = useService();
+  const { currentWorkspace } = useWorkspace();
   // derived values
   const pid = projectId?.toString();
   const service = getServiceById(serviceId);
   const hasFetched = pid ? fetchedMap[pid] : undefined;
 
+  const workspaceId = currentWorkspace?.id;
+  const hasError = pid ? errorMap[pid] : false;
+
+  const handleRetry = () => {
+    if (!workspaceSlug || !workspaceId || !pid) return;
+    fetchServices(workspaceSlug.toString(), workspaceId, pid);
+  };
+
   if (!service) {
+    if (hasError) return <ServiceLoadErrorState onRetry={handleRetry} />;
     if (!hasFetched) return <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>;
     return (
       <EmptyState
