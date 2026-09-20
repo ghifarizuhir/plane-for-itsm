@@ -152,7 +152,7 @@ pub fn client_ip_from(headers: &HeaderMap, addr: Option<std::net::SocketAddr>) -
         .unwrap_or_else(|| "0.0.0.0".to_string())
 }
 
-fn user_agent_of(headers: &HeaderMap) -> String {
+pub(crate) fn user_agent_of(headers: &HeaderMap) -> String {
     headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())

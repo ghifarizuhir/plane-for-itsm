@@ -39,7 +39,7 @@ fn cookie_pair(secure: bool) -> (&'static str, &'static str) {
     }
 }
 
-fn set_cookies(headers: &mut HeaderMap, at: &str, rt: &str, secure: bool) {
+pub(crate) fn set_cookies(headers: &mut HeaderMap, at: &str, rt: &str, secure: bool) {
     let (at_name, rt_name) = cookie_pair(secure);
     headers.append(
         header::SET_COOKIE,

@@ -668,7 +668,7 @@ pub async fn ws_join_get(
 
 /// Default `WorkspaceMember` props for join-created rows
 /// (`get_default_props` ×2 + `get_issue_props`, `db/models/workspace.py`).
-fn default_ws_member_props() -> (Value, Value, Value) {
+pub(crate) fn default_ws_member_props() -> (Value, Value, Value) {
     let props = json!({
         "filters": {"priority": null, "state": null, "state_group": null, "assignees": null,
             "created_by": null, "labels": null, "start_date": null, "target_date": null,
