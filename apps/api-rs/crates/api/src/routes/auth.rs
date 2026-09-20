@@ -80,7 +80,7 @@ fn read_cookie(headers: &HeaderMap, names: &[&str]) -> Option<String> {
     None
 }
 
-fn family_key(family: &str) -> String {
+pub(crate) fn family_key(family: &str) -> String {
     format!("auth:family:{family}")
 }
 

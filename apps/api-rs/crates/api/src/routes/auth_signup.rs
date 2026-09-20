@@ -26,7 +26,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::routes::auth::{email_valid, set_cookies};
+use crate::routes::auth::{email_valid, family_key, set_cookies};
 use crate::state::AppState;
 use common::auth as authn;
 
@@ -74,10 +74,6 @@ fn err(code: i32, message: &str) -> (StatusCode, HeaderMap, Json<Value>) {
 /// string berisi spasi dianggap terisi → lolos ke validasi email berikutnya.
 pub fn signup_fields_missing(email_raw: &str, password_raw: &str) -> bool {
     email_raw.is_empty() || password_raw.is_empty()
-}
-
-fn family_key(family: &str) -> String {
-    format!("auth:family:{family}")
 }
 
 /// POST /api/auth/signup/ — JSON `{email, password}`.
@@ -152,9 +148,26 @@ pub async fn signup(
 
     let mut tx = st.pool.begin().await?;
 
+    // Invariant gate di dalam tx: invite harus masih ada saat tx dimulai
+    // (menutup balapan admin menghapus invite antara pre-check dan tx).
+    let invites: Vec<(uuid::Uuid, uuid::Uuid, i16)> = sqlx::query_as(
+        "SELECT id, workspace_id, role FROM workspace_member_invites \
+         WHERE email = $1 AND deleted_at IS NULL AND responded_at IS NULL \
+         ORDER BY created_at ASC",
+    )
+    .bind(&email)
+    .fetch_all(&mut *tx)
+    .await?;
+    if invites.is_empty() {
+        tx.rollback().await?;
+        return Ok(err(SIGNUP_DISABLED, "SIGNUP_DISABLED"));
+    }
+
     // users — kolom/nilai persis `instance_admin::sign_up` (`:594-616`),
     // `is_email_verified=false` (default password signup Django).
-    let (uid,): (uuid::Uuid,) = sqlx::query_as(
+    // `ON CONFLICT (email)`: balapan signup email sama → loser 409, bukan 500
+    // unique-violation dengan teks driver.
+    let inserted: Option<(uuid::Uuid,)> = sqlx::query_as(
         "INSERT INTO users (id, email, username, password, first_name, last_name, display_name, \
          avatar, date_joined, token, user_timezone, last_location, created_location, \
          last_login_ip, last_logout_ip, last_login_medium, last_login_uagent, last_active, \
@@ -163,7 +176,7 @@ pub async fn signup(
          is_password_reset_required, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, '', '', $4, '', now(), $5, 'UTC', '', '', \
          $6, '', 'email', $7, now(), now(), now(), true, false, false, false, false, false, \
-         false, false, true, false, now(), now()) RETURNING id",
+         false, false, true, false, now(), now()) ON CONFLICT (email) DO NOTHING RETURNING id",
     )
     .bind(&email)
     .bind(&username)
@@ -172,8 +185,12 @@ pub async fn signup(
     .bind(&token)
     .bind(&ip)
     .bind(&ua)
-    .fetch_one(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await?;
+    let Some((uid,)) = inserted else {
+        tx.rollback().await?;
+        return Ok(err(USER_ALREADY_EXIST, "USER_ALREADY_EXIST"));
+    };
 
     // profiles — kolom/nilai persis `instance_admin::sign_up` (`:617-637`)
     // dengan `company_name` '' (default Django member).
@@ -198,14 +215,6 @@ pub async fn signup(
 
     // Auto-join: semua invite pending → WorkspaceMember (reactivate/insert),
     // row invite di-hard-delete; `last_workspace_id` = workspace pertama.
-    let invites: Vec<(uuid::Uuid, uuid::Uuid, i16)> = sqlx::query_as(
-        "SELECT id, workspace_id, role FROM workspace_member_invites \
-         WHERE email = $1 AND deleted_at IS NULL AND responded_at IS NULL \
-         ORDER BY created_at ASC",
-    )
-    .bind(&email)
-    .fetch_all(&mut *tx)
-    .await?;
     let mut first_workspace: Option<uuid::Uuid> = None;
     for (invite_id, workspace_id, role) in &invites {
         let existing: Option<(uuid::Uuid,)> = sqlx::query_as(
