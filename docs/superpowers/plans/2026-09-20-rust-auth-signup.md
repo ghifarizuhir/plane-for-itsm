@@ -925,6 +925,9 @@ grep -q "$SIGNUP_EMAIL" /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup
 code=$(curl -s -m 10 -b "$SIGNUP_JAR" -H "Origin: $FRONTEND" -o /tmp/smoke_body -w '%{http_code}' "$BASE/api/users/me/workspaces/")
 if [ "$code" = "200" ] && grep -q "$WS" /tmp/smoke_body; then PASS=$((PASS+1)); echo "ok   signup-autologin-join -> $WS";
 else FAIL=$((FAIL+1)); FAILED="$FAILED signup-autologin-join($code)"; echo "FAIL signup-autologin-join -> $code: $(head -c 200 /tmp/smoke_body)"; fi
+# 6) email yang sama → 409 {5030} (race-safe user insert; bukan 500)
+signup_check signup-duplicate-409 409 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+grep -q '"error_code":5030' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-duplicate-body -> 5030"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-duplicate-body"; echo "FAIL signup-duplicate-body: $(head -c 200 /tmp/smoke_body)"; }
 rm -f "$SIGNUP_JAR"
 ```
 
