@@ -20,7 +20,7 @@ import { getPasswordStrength } from "@plane/utils";
 import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-password-popover";
 // constants
 // helpers
-import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
+import { EAuthenticationErrorCodes, EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
 
 type Props = {
   email: string;
@@ -56,7 +56,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [isBannerMessage, setBannerMessage] = useState(false);
-  const [signUpErrorCode, setSignUpErrorCode] = useState<number | null>(null);
+  const [signUpErrorCode, setSignUpErrorCode] = useState<string | null>(null);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -133,7 +133,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     setSignUpErrorCode(null);
     const isPasswordValid = getPasswordStrength(passwordFormData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID;
     if (!isPasswordValid) {
-      setSignUpErrorCode(5021);
+      setSignUpErrorCode(EAuthenticationErrorCodes.PASSWORD_TOO_WEAK);
       return;
     }
     setIsSubmitting(true);
@@ -148,29 +148,30 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         window.location.assign(nextPath || "/");
         return;
       }
-      const data = (await res.json().catch(() => ({}))) as { error_code?: number };
-      setSignUpErrorCode(data?.error_code ?? 0);
+      const data = (await res.json().catch(() => ({}))) as { error_code?: number | string };
+      setSignUpErrorCode(data?.error_code !== undefined ? String(data.error_code) : "");
     } catch {
-      setSignUpErrorCode(0);
+      setSignUpErrorCode("");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const signUpErrorMessage = useMemo(() => {
-    switch (signUpErrorCode) {
-      case 5021:
-        return t("auth.sign_up.errors.password.strength");
-      case 5030:
-        return t("auth.sign_up.errors.email_exists");
-      case 5015:
-        return t("auth.sign_up.errors.signup_disabled");
-      case 5045:
-        return t("auth.sign_up.errors.email_invalid");
-      default:
-        return t("something_went_wrong_please_try_again");
-    }
-  }, [signUpErrorCode, t]);
+  let signUpErrorMessage = t("something_went_wrong_please_try_again");
+  switch (signUpErrorCode) {
+    case EAuthenticationErrorCodes.PASSWORD_TOO_WEAK:
+      signUpErrorMessage = t("auth.sign_up.errors.password.strength");
+      break;
+    case EAuthenticationErrorCodes.USER_ALREADY_EXIST:
+      signUpErrorMessage = t("auth.sign_up.errors.email_exists");
+      break;
+    case EAuthenticationErrorCodes.SIGNUP_DISABLED:
+      signUpErrorMessage = t("auth.sign_up.errors.signup_disabled");
+      break;
+    case EAuthenticationErrorCodes.INVALID_EMAIL_SIGN_UP:
+      signUpErrorMessage = t("auth.sign_up.errors.email_invalid");
+      break;
+  }
 
   return (
     <>
@@ -215,9 +216,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           } else {
             await handleSignIn();
           }
-        }}
-        onError={() => {
-          setIsSubmitting(false);
         }}
       >
         <div className="space-y-1">
