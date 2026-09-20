@@ -30,6 +30,7 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
   const { toggleCreateProjectModal } = useCommandPalette();
   const { data: currentUser } = useUser();
   const { joinedProjectIds } = useProject();
+  const firstJoinedProjectId = joinedProjectIds?.[0];
   const { currentWorkspace: activeWorkspace } = useWorkspace();
   // local storage
   const { storedValue, setValue } = useLocalStorage(`quickstart-guide-${workspaceSlug}`, {
@@ -53,16 +54,21 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       description: "home.empty.create_project.description",
       icon: <ProjectsOutline className="size-4" />,
       flag: "projects",
-      cta: {
-        text: "home.empty.create_project.cta",
-        onClick: (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
-          if (!canCreateProject) return;
-          e.preventDefault();
-          e.stopPropagation();
-          toggleCreateProjectModal(true);
-        },
-        disabled: !canCreateProject,
-      },
+      cta: firstJoinedProjectId
+        ? {
+            text: "home.empty.create_project.cta_view_services",
+            link: `/${workspaceSlug}/projects/${firstJoinedProjectId}/services`,
+          }
+        : {
+            text: "home.empty.create_project.cta",
+            onClick: (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+              if (!canCreateProject) return;
+              e.preventDefault();
+              e.stopPropagation();
+              toggleCreateProjectModal(true);
+            },
+            disabled: !canCreateProject,
+          },
     },
     {
       id: "invite-team",
