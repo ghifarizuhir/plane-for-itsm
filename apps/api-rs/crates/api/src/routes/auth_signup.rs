@@ -70,6 +70,13 @@ fn err(code: i32, message: &str) -> (StatusCode, HeaderMap, Json<Value>) {
     )
 }
 
+/// DB error → 500 generik + log (pola `auth::login`: teks driver tidak boleh
+/// bocor ke body response pada surface auth publik).
+fn db_err(e: sqlx::Error) -> common::errors::AppError {
+    tracing::warn!(error=%e, "auth signup: db error");
+    common::errors::AppError::internal()
+}
+
 /// `if not email or not password` Django pada nilai RAW (sebelum strip):
 /// string berisi spasi dianggap terisi → lolos ke validasi email berikutnya.
 pub fn signup_fields_missing(email_raw: &str, password_raw: &str) -> bool {
@@ -93,7 +100,7 @@ pub async fn signup(
         "SELECT is_setup_done FROM instances WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 1",
     )
     .fetch_optional(&st.pool)
-    .await?;
+    .await.map_err(db_err)?;
     if setup != Some(true) {
         return Ok(err(INSTANCE_NOT_CONFIGURED, "INSTANCE_NOT_CONFIGURED"));
     }
@@ -115,7 +122,7 @@ pub async fn signup(
     let taken: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
         .bind(&email)
         .fetch_one(&st.pool)
-        .await?;
+        .await.map_err(db_err)?;
     if taken {
         return Ok(err(USER_ALREADY_EXIST, "USER_ALREADY_EXIST"));
     }
@@ -126,7 +133,7 @@ pub async fn signup(
     )
     .bind(&email)
     .fetch_one(&st.pool)
-    .await?;
+    .await.map_err(db_err)?;
     if !invited {
         return Ok(err(SIGNUP_DISABLED, "SIGNUP_DISABLED"));
     }
@@ -146,10 +153,11 @@ pub async fn signup(
         uuid::Uuid::new_v4().simple()
     );
 
-    let mut tx = st.pool.begin().await?;
+    let mut tx = st.pool.begin().await.map_err(db_err)?;
 
     // Invariant gate di dalam tx: invite harus masih ada saat tx dimulai
-    // (menutup balapan admin menghapus invite antara pre-check dan tx).
+    // (mempersempit, bukan menutup, jendela balapan admin menghapus invite
+    // antara pre-check dan tx; parity Django).
     let invites: Vec<(uuid::Uuid, uuid::Uuid, i16)> = sqlx::query_as(
         "SELECT id, workspace_id, role FROM workspace_member_invites \
          WHERE email = $1 AND deleted_at IS NULL AND responded_at IS NULL \
@@ -157,9 +165,9 @@ pub async fn signup(
     )
     .bind(&email)
     .fetch_all(&mut *tx)
-    .await?;
+    .await.map_err(db_err)?;
     if invites.is_empty() {
-        tx.rollback().await?;
+        tx.rollback().await.map_err(db_err)?;
         return Ok(err(SIGNUP_DISABLED, "SIGNUP_DISABLED"));
     }
 
@@ -186,9 +194,9 @@ pub async fn signup(
     .bind(&ip)
     .bind(&ua)
     .fetch_optional(&mut *tx)
-    .await?;
+    .await.map_err(db_err)?;
     let Some((uid,)) = inserted else {
-        tx.rollback().await?;
+        tx.rollback().await.map_err(db_err)?;
         return Ok(err(USER_ALREADY_EXIST, "USER_ALREADY_EXIST"));
     };
 
@@ -211,7 +219,7 @@ pub async fn signup(
     .bind(&bg)
     .bind(json!({"work_items": false, "cycles": false, "modules": false, "intake": false, "pages": false}))
     .execute(&mut *tx)
-    .await?;
+    .await.map_err(db_err)?;
 
     // Auto-join: semua invite pending → WorkspaceMember (reactivate/insert),
     // row invite di-hard-delete; `last_workspace_id` = workspace pertama.
@@ -223,7 +231,7 @@ pub async fn signup(
         .bind(workspace_id)
         .bind(uid)
         .fetch_optional(&mut *tx)
-        .await?;
+        .await.map_err(db_err)?;
         if existing.is_some() {
             sqlx::query(
                 "UPDATE workspace_members SET is_active = true, role = $1, updated_at = now() \
@@ -233,7 +241,7 @@ pub async fn signup(
             .bind(workspace_id)
             .bind(uid)
             .execute(&mut *tx)
-            .await?;
+            .await.map_err(db_err)?;
         } else {
             let (view_props, default_props, issue_props) =
                 crate::routes::invite::default_ws_member_props();
@@ -251,12 +259,12 @@ pub async fn signup(
             .bind(&default_props)
             .bind(&issue_props)
             .execute(&mut *tx)
-            .await?;
+            .await.map_err(db_err)?;
         }
         sqlx::query("DELETE FROM workspace_member_invites WHERE id = $1")
             .bind(invite_id)
             .execute(&mut *tx)
-            .await?;
+            .await.map_err(db_err)?;
         if first_workspace.is_none() {
             first_workspace = Some(*workspace_id);
         }
@@ -268,9 +276,9 @@ pub async fn signup(
         .bind(ws)
         .bind(uid)
         .execute(&mut *tx)
-        .await?;
+        .await.map_err(db_err)?;
     }
-    tx.commit().await?;
+    tx.commit().await.map_err(db_err)?;
 
     // Sesi cookie — persis `routes::auth::login` (`auth.rs:204-247`).
     let access = authn::encode_access(&uid, &st.config.jwt_secret, ACCESS_TTL_SECS);
