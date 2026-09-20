@@ -20,8 +20,10 @@ error state instead of an infinite loading spinner.
    (`workspace_search: false`). The Rust backend rejects an `issue_id` that does not belong
    to the same project (`service.rs` `issues_create`), so workspace-level search is not
    offered.
-4. **Already-linked issues are hidden** in the picker via `shouldHideIssue`, in addition to
-   being preselected via `selectedWorkItemIds`.
+4. **Already-linked issues are hidden** in the picker via `shouldHideIssue` only.
+   (`selectedWorkItemIds` was dropped during implementation: the modal's init-selection
+   effect preselects from the unfiltered list, so passing both produced phantom selected
+   chips for hidden rows.)
 5. **Bulk link** — one submit links every selected issue; the backend `service-issues/`
    POST is idempotent, so re-linking is safe.
 6. **Backend unchanged** — the Rust API already implements `service-issues/`
@@ -35,8 +37,7 @@ error state instead of an infinite loading spinner.
 - Add a single **Add work items** button that opens `ExistingIssuesListModal` with:
   - `workspaceSlug`, `projectId={pid}`;
   - `searchParams={{ workspace_search: false }}`;
-  - `selectedWorkItemIds` = issue ids of the current service's links;
-  - `shouldHideIssue={(issue) => linkedSet.has(issue.id)}`;
+  - `shouldHideIssue={(issue) => linkedSet.has(issue.id)}` (linked ids kept in a `Set`);
   - `handleOnSubmit` mapping each `ISearchIssueResponse` to
     `{ id, identifier: `${project__identifier}-${sequence_id}`, name }` and calling the new
     store `linkWorkItems`.

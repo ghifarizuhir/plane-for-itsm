@@ -565,7 +565,7 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
   const pid = projectId?.toString() ?? service.project_id;
   const workspaceId = currentWorkspace?.id;
   const links = getWorkItemLinksByService(serviceId);
-  const linkedIssueIds = links.map((link) => link.issue_id);
+  const linkedIssueIds = new Set(links.map((link) => link.issue_id));
 
   const handleAddWorkItems = async (issues: ISearchIssueResponse[]) => {
     if (!slug || !workspaceId || !pid || issues.length === 0) return;
@@ -606,7 +606,12 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
   return (
     <div className="flex max-w-3xl flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Button variant="primary" size="sm" onClick={() => setIsPickerOpen(true)} disabled={!slug || !pid}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setIsPickerOpen(true)}
+          disabled={!slug || !pid || !workspaceId}
+        >
           {t("service.detail.add_work_items")}
         </Button>
       </div>
@@ -645,8 +650,7 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
         workspaceSlug={slug}
         projectId={pid}
         searchParams={{ workspace_search: false }}
-        selectedWorkItemIds={linkedIssueIds}
-        shouldHideIssue={(issue) => linkedIssueIds.includes(issue.id)}
+        shouldHideIssue={(issue) => linkedIssueIds.has(issue.id)}
         handleOnSubmit={handleAddWorkItems}
       />
     </div>
@@ -660,8 +664,10 @@ Notes:
   `await handleOnSubmit(...).finally(...)` never sees a rejection and always closes.
 - `searchParams.workspace_search: false` keeps the search project-scoped; the Rust
   `service-issues/` POST rejects an issue that does not belong to the project.
-- `shouldHideIssue` removes already-linked issues from the results; `selectedWorkItemIds`
-  keeps the modal's own selection state consistent.
+- `shouldHideIssue` removes already-linked issues from the results. (`selectedWorkItemIds`
+  was dropped during implementation: combining it with `shouldHideIssue` produced phantom
+  selected chips for hidden rows.) The button also guards `!workspaceId` so a transiently
+  unloaded workspace cannot silently discard a selection.
 
 - [ ] **Step 2: Verify types and lint**
 
