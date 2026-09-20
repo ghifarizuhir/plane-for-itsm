@@ -414,13 +414,31 @@ pub async fn logout(
 // `config.frontend_url` (`FRONTEND_URL` — satu-satunya URL frontend yang
 // dibawa AppConfig, dipakai semua redirect auth di file ini).
 fn app_base_url(config: &common::config::AppConfig) -> String {
-    let raw = std::env::var("APP_BASE_URL").unwrap_or_default();
-    let base = raw.trim().trim_end_matches('/');
+    let base = config.app_base_url.trim().trim_end_matches('/');
     if base.is_empty() {
         frontend_base(config)
     } else {
         base.to_string()
     }
+}
+
+/// Origin app yang boleh dipakai sebagai target redirect sign-out:
+/// `Origin` request BILA terdaftar di daftar origin terpercaya
+/// (`CORS_ALLOWED_ORIGINS` + FRONTEND_URL + ADMIN/APP/WEB_BASE_URL — sama
+/// dengan daftar CSRF middleware), else fallback ke `app_base_url` lama.
+/// Deploy tunnel + LAN: user sign-out dari tunnel harus mendarat di tunnel.
+fn resolve_sign_out_origin(config: &common::config::AppConfig, headers: &HeaderMap) -> String {
+    if let Some(o) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+        let origin = o.trim().trim_end_matches('/');
+        if !origin.is_empty()
+            && crate::middleware::origin::allowed_origins_from_env(&config.frontend_url)
+                .iter()
+                .any(|f| f == origin)
+        {
+            return origin.to_string();
+        }
+    }
+    app_base_url(config)
 }
 
 /// POST /auth/sign-out/ — selalu 302 (authed maupun unauthed).
@@ -494,7 +512,7 @@ pub async fn sign_out(
     if let Ok(val) = legacy.parse() {
         out.append("set-cookie", val);
     }
-    out.extend(safe_redirect(app_base_url(&st.config)));
+    out.extend(safe_redirect(resolve_sign_out_origin(&st.config, &headers)));
     (StatusCode::FOUND, out)
 }
 
@@ -1075,6 +1093,7 @@ mod tests {
             jwt_secret: "test-secret".into(),
             cookie_secure: false,
             frontend_url: "http://web:3000".into(),
+            app_base_url: String::new(),
             github_client_id: client_id.into(),
             github_client_secret: client_secret.into(),
             google_client_id: client_id.into(),
@@ -1121,8 +1140,9 @@ mod tests {
     /// body kosong. Tanpa DB/Redis (lazy pool, tanpa cookie → tanpa I/O).
     #[tokio::test]
     async fn sign_out_unauthenticated_302_with_clears() {
-        std::env::remove_var("APP_BASE_URL");
-        let app = sign_out_router(test_state(test_config("id", "secret")));
+        let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = String::new();
+        let app = sign_out_router(test_state(cfg));
         let req = Request::builder()
             .method("POST")
             .uri("/auth/sign-out/")
@@ -1154,8 +1174,8 @@ mod tests {
     /// 401/500 (cermin Django `except Exception → same redirect`).
     #[tokio::test]
     async fn sign_out_authenticated_302_without_infra() {
-        std::env::remove_var("APP_BASE_URL");
-        let cfg = test_config("id", "secret");
+        let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = String::new();
         let uid = uuid::Uuid::new_v4();
         let at = authn::encode_access(&uid, &cfg.jwt_secret, ACCESS_TTL_SECS);
         let app = sign_out_router(test_state(cfg));
@@ -1179,8 +1199,8 @@ mod tests {
     /// `user::cleared_cookie_headers(true)` + legacy `session-id`).
     #[tokio::test]
     async fn sign_out_secure_clears_carry_secure() {
-        std::env::remove_var("APP_BASE_URL");
         let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = String::new();
         cfg.cookie_secure = true;
         let app = sign_out_router(test_state(cfg));
         let req = Request::builder()
@@ -1215,6 +1235,69 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(allow.contains("POST"), "unexpected Allow: {allow}");
+    }
+
+    /// Origin terpercaya (dalam `CORS_ALLOWED_ORIGINS`) menang atas
+    /// `APP_BASE_URL` — deploy tunnel + LAN: user sign-out dari tunnel
+    /// harus mendarat di tunnel, bukan di APP_BASE_URL (LAN IP).
+    #[tokio::test]
+    async fn sign_out_trusted_origin_wins_over_app_base_url() {
+        std::env::set_var(
+            "CORS_ALLOWED_ORIGINS",
+            "https://app.terraline.space,http://192.168.1.11:3000",
+        );
+        let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = "http://192.168.1.11:3000".into();
+        let app = sign_out_router(test_state(cfg));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .header("origin", "https://app.terraline.space")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            location_of(&resp),
+            "https://app.terraline.space",
+            "trusted Origin must override APP_BASE_URL"
+        );
+    }
+
+    /// Origin asing (tidak dalam daftar) diabaikan → fallback APP_BASE_URL.
+    /// Mencegah open-redirect via header Origin palsu.
+    #[tokio::test]
+    async fn sign_out_untrusted_origin_falls_back_to_app_base_url() {
+        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://app.terraline.space");
+        let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = "http://192.168.1.11:3000".into();
+        let app = sign_out_router(test_state(cfg));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .header("origin", "https://evil.example.com")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(location_of(&resp), "http://192.168.1.11:3000");
+    }
+
+    /// Tanpa Origin → perilaku lama: APP_BASE_URL menang atas FRONTEND_URL.
+    #[tokio::test]
+    async fn sign_out_no_origin_uses_app_base_url() {
+        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://app.terraline.space");
+        let mut cfg = test_config("id", "secret");
+        cfg.app_base_url = "http://192.168.1.11:3000".into();
+        let app = sign_out_router(test_state(cfg));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/sign-out/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(location_of(&resp), "http://192.168.1.11:3000");
     }
 
     fn location_of(resp: &axum::response::Response) -> String {
