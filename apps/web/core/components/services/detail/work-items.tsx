@@ -8,10 +8,12 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { Input } from "@makeplane/propel/components/input";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { ISearchIssueResponse } from "@plane/types";
+// components
+import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -23,14 +25,13 @@ type Props = {
 export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props) {
   const { serviceId } = props;
   // states
-  const [issueId, setIssueId] = useState("");
-  const [isLinking, setIsLinking] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getServiceById, getWorkItemLinksByService, linkWorkItem, unlinkWorkItem } = useService();
+  const { getServiceById, getWorkItemLinksByService, linkWorkItems, unlinkWorkItem } = useService();
   const { currentWorkspace } = useWorkspace();
   // derived values
   const service = getServiceById(serviceId);
@@ -39,23 +40,28 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
   const pid = projectId?.toString() ?? service.project_id;
   const workspaceId = currentWorkspace?.id;
   const links = getWorkItemLinksByService(serviceId);
+  const linkedIssueIds = links.map((link) => link.issue_id);
 
-  // Minimal add flow (links by issue id); a full issue picker is out of scope.
-  const handleLink = async () => {
-    const id = issueId.trim();
-    if (!slug || !workspaceId || !pid || !id) return;
-    setIsLinking(true);
+  const handleAddWorkItems = async (issues: ISearchIssueResponse[]) => {
+    if (!slug || !workspaceId || !pid || issues.length === 0) return;
     try {
-      await linkWorkItem(slug, workspaceId, pid, serviceId, { id });
-      setIssueId("");
+      await linkWorkItems(
+        slug,
+        workspaceId,
+        pid,
+        serviceId,
+        issues.map((issue) => ({
+          id: issue.id,
+          identifier: `${issue.project__identifier}-${issue.sequence_id}`,
+          name: issue.name,
+        }))
+      );
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
         message: t("service.detail.link_work_item_error"),
       });
-    } finally {
-      setIsLinking(false);
     }
   };
 
@@ -75,19 +81,8 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
   return (
     <div className="flex max-w-3xl flex-col gap-3">
       <div className="flex items-center gap-2">
-        <div className="w-full max-w-xs">
-          <Input
-            size="lg"
-            id="service-work-item-id"
-            name="service-work-item-id"
-            type="text"
-            value={issueId}
-            onChange={(e) => setIssueId(e.target.value)}
-            placeholder={t("service.detail.issue_id_placeholder")}
-          />
-        </div>
-        <Button variant="primary" size="sm" onClick={handleLink} disabled={!issueId.trim()} loading={isLinking}>
-          {t("add")}
+        <Button variant="primary" size="sm" onClick={() => setIsPickerOpen(true)} disabled={!slug || !pid}>
+          {t("service.detail.add_work_items")}
         </Button>
       </div>
       {links.length === 0 ? (
@@ -119,6 +114,16 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
           ))}
         </div>
       )}
+      <ExistingIssuesListModal
+        isOpen={isPickerOpen}
+        handleClose={() => setIsPickerOpen(false)}
+        workspaceSlug={slug}
+        projectId={pid}
+        searchParams={{ workspace_search: false }}
+        selectedWorkItemIds={linkedIssueIds}
+        shouldHideIssue={(issue) => linkedIssueIds.includes(issue.id)}
+        handleOnSubmit={handleAddWorkItems}
+      />
     </div>
   );
 });
