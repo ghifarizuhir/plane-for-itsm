@@ -3,9 +3,12 @@
 # Exercises reads + writes end-to-end, then cleans up created rows.
 # Requires: stack up (api on 8000), a valid token in api_tokens.
 # Usage: TOKEN=plane_api_... bash apps/api-rs/scripts/smoke.sh
+#   DB_CONTAINER=<nama-container> (default `plane-db`) untuk override container Postgres.
 #
 # Auth smoke (Task 9 + email-check): 10 cek siklus email-check/login/me/refresh/
 # oauth-start, setelah writes, sebelum cleanup. Kredensial dari env:
+# Signup smoke: siklus invite-only (403 tanpa invite, 400 password lemah,
+# 200 + cookie auto-join, 409 duplikat) memakai XFF bucket terpisah.
 #   SMOKE_EMAIL / SMOKE_PASSWORD (JANGAN di-commit).
 # Bila keduanya unset, cek auth DI-SKIP (bukan fail).
 # Buat user smoke sekali via SQL (hash format Django
@@ -162,8 +165,13 @@ echo "== signup (invite-only) =="
 # XFF terpisah agar tidak memakan budget IP 5/mnt auth_router (login dkk).
 SIGNUP_EMAIL="temp-signup-$SFX@example.com"
 SIGNUP_NOINVITE="temp-signup-noinvite-$SFX@example.com"
+SIGNUP_PASS="Smoke-Signup-$SFX!Zq"
 SIGNUP_JAR=/tmp/smoke_signup_jar
-SIGNUP_ARGS=(-s -m 10 -H "X-Forwarded-For: 203.0.113.9" -H 'Content-Type: application/json' -H "Origin: $FRONTEND")
+# Limiter per-IP mempercayai XFF tanpa syarat (rate_limit.rs); IP TEST-NET-3
+# acak per-run memisahkan bucket signup dari bucket auth (5/mnt) dan dari run
+# sebelumnya agar rerun cepat tidak 429.
+SIGNUP_XFF="203.0.113.$((RANDOM % 254 + 1))"
+SIGNUP_ARGS=(-s -m 10 -H "X-Forwarded-For: $SIGNUP_XFF" -H 'Content-Type: application/json' -H "Origin: $FRONTEND")
 signup_check() { # signup_check <label> <expected_status> <curl_args...>
   local label="$1" want="$2"; shift 2
   local code
@@ -172,7 +180,7 @@ signup_check() { # signup_check <label> <expected_status> <curl_args...>
   else FAIL=$((FAIL+1)); FAILED="$FAILED $label($code)"; echo "FAIL $label -> $code want $want: $(head -c 200 /tmp/smoke_body)"; fi
 }
 # 1) tanpa invite → 403 {5015}
-signup_check signup-noinvite-403 403 -X POST -d "{\"email\":\"$SIGNUP_NOINVITE\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+signup_check signup-noinvite-403 403 -X POST -d "{\"email\":\"$SIGNUP_NOINVITE\",\"password\":\"$SIGNUP_PASS\"}" "$BASE/api/auth/signup/"
 grep -q '"error_code":5015' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-noinvite-body -> 5015"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-noinvite-body"; echo "FAIL signup-noinvite-body: $(head -c 200 /tmp/smoke_body)"; }
 # 2) invite lewat API (di luar auth_router → bebas limit IP)
 check signup-invite-create 200 -X POST -d "{\"emails\":[{\"email\":\"$SIGNUP_EMAIL\",\"role\":15}]}" "$BASE/api/workspaces/$WS/invitations/"
@@ -181,14 +189,14 @@ signup_check signup-weak-400 400 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"pass
 grep -q '"error_code":5021' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-weak-body -> 5021"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-weak-body"; echo "FAIL signup-weak-body: $(head -c 200 /tmp/smoke_body)"; }
 # 4) happy path → 200 + cookie sesi
 rm -f "$SIGNUP_JAR"
-signup_check signup-200 200 -c "$SIGNUP_JAR" -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+signup_check signup-200 200 -c "$SIGNUP_JAR" -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"$SIGNUP_PASS\"}" "$BASE/api/auth/signup/"
 grep -q "$SIGNUP_EMAIL" /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-body -> email"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-body"; echo "FAIL signup-body: $(head -c 200 /tmp/smoke_body)"; }
 # 5) cookie hasil signup langsung valid + auto-join workspace
 code=$(curl -s -m 10 -b "$SIGNUP_JAR" -H "Origin: $FRONTEND" -o /tmp/smoke_body -w '%{http_code}' "$BASE/api/users/me/workspaces/")
 if [ "$code" = "200" ] && grep -q "$WS" /tmp/smoke_body; then PASS=$((PASS+1)); echo "ok   signup-autologin-join -> $WS";
 else FAIL=$((FAIL+1)); FAILED="$FAILED signup-autologin-join($code)"; echo "FAIL signup-autologin-join -> $code: $(head -c 200 /tmp/smoke_body)"; fi
 # 6) email yang sama → 409 {5030} (race-safe user insert; bukan 500)
-signup_check signup-duplicate-409 409 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"Smoke-Signup-42!Zq\"}" "$BASE/api/auth/signup/"
+signup_check signup-duplicate-409 409 -X POST -d "{\"email\":\"$SIGNUP_EMAIL\",\"password\":\"$SIGNUP_PASS\"}" "$BASE/api/auth/signup/"
 grep -q '"error_code":5030' /tmp/smoke_body && { PASS=$((PASS+1)); echo "ok   signup-duplicate-body -> 5030"; } || { FAIL=$((FAIL+1)); FAILED="$FAILED signup-duplicate-body"; echo "FAIL signup-duplicate-body: $(head -c 200 /tmp/smoke_body)"; }
 rm -f "$SIGNUP_JAR"
 
@@ -611,7 +619,7 @@ docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM api_tokens
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DO \$\$ DECLARE r record; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('workspaces','projects') LOOP BEGIN EXECUTE format('DELETE FROM %I WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE ''smoke-%%'')', r.tablename); EXCEPTION WHEN undefined_column THEN NULL; WHEN foreign_key_violation THEN NULL; WHEN invalid_text_representation THEN NULL; END; END LOOP; END \$\$;" 2>&1 | head -n 1
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM projects WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE 'smoke-%'); DELETE FROM workspaces WHERE slug LIKE 'smoke-%';" 2>&1 | head -n 1
-echo "== temp-user cleanup (E5 second member + E5 join invitee) =="
+echo "== temp-user cleanup (E5 second member + E5 join invitee + signup) =="
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM api_tokens WHERE label LIKE 'smoke-join-%'; DELETE FROM project_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%'); DELETE FROM users WHERE email LIKE 'temp-member-%' OR email LIKE 'temp-join-%' OR email LIKE 'temp-proj-%';" 2>&1 | head -n 1
 docker exec "$DB_CONTAINER" psql -U plane -d plane -q -c "DELETE FROM workspace_members WHERE member_id IN (SELECT id FROM users WHERE email LIKE 'temp-signup-%'); DELETE FROM workspace_member_invites WHERE email LIKE 'temp-signup-%'; DELETE FROM profiles WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'temp-signup-%'); DELETE FROM users WHERE email LIKE 'temp-signup-%';" 2>&1 | head -n 1
 echo "== leftover-proof (must all be 0) =="
