@@ -19,6 +19,7 @@ export interface IThemeStore {
   epicDetailSidebarCollapsed: boolean | undefined;
   initiativesSidebarCollapsed: boolean | undefined;
   projectOverviewSidebarCollapsed: boolean | undefined;
+  aiSidebarCollapsed: boolean | undefined;
   // actions
   toggleAnySidebarDropdown: (open?: boolean) => void;
   toggleSidebar: (collapsed?: boolean) => void;
@@ -31,6 +32,7 @@ export interface IThemeStore {
   toggleEpicDetailSidebar: (collapsed?: boolean) => void;
   toggleInitiativesSidebar: (collapsed?: boolean) => void;
   toggleProjectOverviewSidebar: (collapsed?: boolean) => void;
+  toggleAiSidebar: (collapsed?: boolean) => void;
 }
 
 export class ThemeStore implements IThemeStore {
@@ -46,6 +48,7 @@ export class ThemeStore implements IThemeStore {
   epicDetailSidebarCollapsed: boolean | undefined = undefined;
   initiativesSidebarCollapsed: boolean | undefined = undefined;
   projectOverviewSidebarCollapsed: boolean | undefined = undefined;
+  aiSidebarCollapsed: boolean | undefined = undefined;
 
   constructor() {
     makeObservable(this, {
@@ -61,6 +64,7 @@ export class ThemeStore implements IThemeStore {
       epicDetailSidebarCollapsed: observable.ref,
       initiativesSidebarCollapsed: observable.ref,
       projectOverviewSidebarCollapsed: observable.ref,
+      aiSidebarCollapsed: observable.ref,
       // action
       toggleAnySidebarDropdown: action,
       toggleSidebar: action,
@@ -73,6 +77,7 @@ export class ThemeStore implements IThemeStore {
       toggleEpicDetailSidebar: action,
       toggleInitiativesSidebar: action,
       toggleProjectOverviewSidebar: action,
+      toggleAiSidebar: action,
     });
   }
 
@@ -194,5 +199,18 @@ export class ThemeStore implements IThemeStore {
       this.projectOverviewSidebarCollapsed = collapsed;
     }
     localStorage.setItem("project_overview_sidebar_collapsed", this.projectOverviewSidebarCollapsed.toString());
+  };
+
+  /**
+   * Toggle the ai assistant sidebar collapsed state
+   * @param collapsed
+   */
+  toggleAiSidebar = (collapsed?: boolean) => {
+    if (collapsed === undefined) {
+      this.aiSidebarCollapsed = !this.aiSidebarCollapsed;
+    } else {
+      this.aiSidebarCollapsed = collapsed;
+    }
+    localStorage.setItem("ai_sidebar_collapsed", this.aiSidebarCollapsed.toString());
   };
 }
