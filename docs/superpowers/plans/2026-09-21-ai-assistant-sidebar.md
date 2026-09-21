@@ -457,7 +457,7 @@ describe("AIAssistantStore", () => {
     expect(store500.messages[1].content).toContain("internal error");
   });
 
-  it("retryLast drops the trailing error and resends the last user question", async () => {
+  it("retryLast pops the trailing error and reuses the existing user question", async () => {
     const failing = makeService(async () => {
       throw Object.assign(new Error("fail"), { status: 500 });
     });
@@ -470,12 +470,50 @@ describe("AIAssistantStore", () => {
     (store as unknown as { aiService: unknown }).aiService = passing;
     await store.retryLast();
 
-    expect(store.messages).toHaveLength(3);
+    expect(store.messages).toHaveLength(2);
     expect(store.messages[0].content).toBe("first question");
-    expect(store.messages[1].content).toBe("first question");
-    expect(store.messages[2].content).toBe("fixed");
+    expect(store.messages[1].content).toBe("fixed");
     const call = (passing.createGptTask as any).mock.calls[0];
     expect(call[1].prompt).toContain("User's new question: first question");
+  });
+
+  it("retryLast is a no-op when the last message is not an error", async () => {
+    const service = makeService(async () => ({ response: "ok", response_html: "ok" }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    await store.sendMessage("hi");
+    await store.retryLast();
+    expect((service.createGptTask as any).mock.calls).toHaveLength(1);
+    expect(store.messages).toHaveLength(2);
+  });
+
+  it("drops stale responses after workspace switch", async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const service = makeService(() => new Promise((resolve) => { resolveFirst = resolve; }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    const first = store.sendMessage("q1");
+    await flush();
+    store.setWorkspace("other");
+    expect(store.messages).toHaveLength(0);
+    resolveFirst?.({ response: "ok", response_html: "late" });
+    await first;
+    store.setWorkspace("acme");
+    expect(store.messages.map((m: TAiMessage) => m.content)).toEqual(["q1"]);
+  });
+
+  it("setWorkspace resets context and generation flag", async () => {
+    const service = makeService(() => new Promise(() => {}));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    store.setActiveIssueContext(CONTEXT);
+    const pending = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+    store.setWorkspace("other");
+    expect(store.hasActiveIssue).toBe(false);
+    expect(store.isGenerating).toBe(false);
+    void pending;
   });
 
   it("clearConversation empties messages and persists", async () => {
@@ -573,6 +611,10 @@ export class AIAssistantStore implements IAIAssistantStore {
   }
 
   setWorkspace = (workspaceSlug: string | undefined) => {
+    if (workspaceSlug !== this.workspaceSlug) {
+      this.activeIssueContext = undefined;
+      this.isGenerating = false;
+    }
     this.workspaceSlug = workspaceSlug;
     this.messages = this.restore();
   };
@@ -586,12 +628,13 @@ export class AIAssistantStore implements IAIAssistantStore {
   sendMessage = async (question: string) => {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
+    const slug = this.workspaceSlug;
     const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: trimmed };
     runInAction(() => {
       this.messages.push(userMessage);
       this.persist();
     });
-    await this.request(userMessage.content);
+    await this.request(userMessage.content, slug);
   };
 
   retryLast = async () => {
@@ -604,18 +647,13 @@ export class AIAssistantStore implements IAIAssistantStore {
       }
     }
     if (!lastUserQuestion) return;
-    if (this.messages[this.messages.length - 1]?.isError) {
-      runInAction(() => {
-        this.messages.pop();
-        this.persist();
-      });
-    }
-    const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: lastUserQuestion };
+    if (!this.messages[this.messages.length - 1]?.isError) return;
     runInAction(() => {
-      this.messages.push(userMessage);
+      this.messages.pop();
       this.persist();
     });
-    await this.request(lastUserQuestion);
+    const slug = this.workspaceSlug;
+    await this.request(lastUserQuestion, slug);
   };
 
   clearConversation = () => {
@@ -644,13 +682,14 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   }
 
-  private async request(question: string) {
+  private async request(question: string, slug: string) {
     this.isGenerating = true;
     try {
-      const res = await this.aiService.createGptTask(this.workspaceSlug ?? "", {
+      const res = await this.aiService.createGptTask(slug, {
         task: AI_ASSISTANT_TASK,
         prompt: buildAiPrompt(this.activeIssueContext, this.messages.slice(0, -1), question),
       });
+      if (this.workspaceSlug !== slug) return;
       const assistantMessage: TAiMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -662,6 +701,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } catch (err: any) {
+      if (this.workspaceSlug !== slug) return;
       const errorContent =
         err?.status === 429
           ? err?.data?.error || "Rate limit exceeded."
@@ -673,9 +713,11 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } finally {
-      runInAction(() => {
-        this.isGenerating = false;
-      });
+      if (this.workspaceSlug === slug) {
+        runInAction(() => {
+          this.isGenerating = false;
+        });
+      }
     }
   }
 }
