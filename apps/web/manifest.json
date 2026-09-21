@@ -4,9 +4,9 @@
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
-  "name": "Terraline | Modern work management",
+  "name": "Terraline | IT service management",
   "short_name": "Terraline",
-  "description": "Terraline accelerates software development for agencies and product companies.",
+  "description": "Run your services, handle requests, and keep delivery work moving — all in Terraline.",
   "icons": [
     {
       "src": "/icon-192x192.png",

@@ -19,13 +19,17 @@ import type { Route } from "./+types/root";
 import ErrorPage from "./error";
 import { AppProviders } from "./providers";
 // fonts
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource-variable/inter";
 import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/material-symbols-rounded";
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Terraline Publish | Make your Terraline boards public with one-click";
-const APP_DESCRIPTION = "Terraline Publish is a customer feedback management tool built on top of terraline.space";
+const APP_TITLE = "Terraline Publish | Share your Terraline projects publicly with one click";
+const APP_DESCRIPTION =
+  "Terraline Publish is a public publishing tool for your Terraline projects, built on top of terraline.space";
 
 export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", sizes: "180x180", href: appleTouchIcon },
@@ -78,7 +82,7 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "keywords",
     content:
-      "software development, customer feedback, software, accelerate, code management, release management, project management, work item tracking, agile, scrum, kanban, collaboration",
+      "IT service management, ITSM, service desk, public service status, customer feedback, service catalog, IT operations, knowledge base, collaboration",
   },
 ];
 

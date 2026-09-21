@@ -1,7 +1,7 @@
 {
   "name": "Terraline Space",
   "short_name": "Terraline Space",
-  "description": "Terraline helps you plan your work items, cycles, and product modules.",
+  "description": "Terraline helps you run services, handle requests, and track work items.",
   "icons": [
     { "src": "/favicon/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/favicon/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" }

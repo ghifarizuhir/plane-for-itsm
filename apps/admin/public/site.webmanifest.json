@@ -1,7 +1,7 @@
 {
   "name": "Terraline God Mode",
   "short_name": "Terraline God Mode",
-  "description": "Terraline helps you plan your issues, cycles, and product modules.",
+  "description": "Terraline helps you run services, handle requests, and track work items.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f9fafb",

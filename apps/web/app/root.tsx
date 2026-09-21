@@ -27,12 +27,15 @@ import { isStaleAssetError, recoverFromStaleAsset } from "@/lib/stale-asset-erro
 // local
 import { CustomErrorComponent } from "./error";
 // fonts
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource-variable/inter";
 import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/material-symbols-rounded";
+// oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Terraline | Simple, extensible, open-source project management tool.";
+const APP_TITLE = "Terraline | Open-source IT service management platform.";
 
 export const links: LinksFunction = () => [
   { rel: "icon", type: "image/png", sizes: "32x32", href: favicon32 },
@@ -88,23 +91,24 @@ export const meta: Route.MetaFunction = () => [
   { property: "og:title", content: APP_TITLE },
   {
     property: "og:description",
-    content: "Open-source project management tool to manage work items, cycles, and product roadmaps easily",
+    content:
+      "Open-source IT service management platform to run services, handle requests, and track delivery work in one place",
   },
   { property: "og:url", content: "https://app.terraline.space/" },
   { property: "og:image", content: ogImage },
   { property: "og:image:width", content: "1200" },
   { property: "og:image:height", content: "630" },
-  { property: "og:image:alt", content: "Terraline - Modern work management" },
+  { property: "og:image:alt", content: "Terraline - Open-source IT service management" },
   {
     name: "keywords",
     content:
-      "software development, plan, ship, software, accelerate, code management, release management, project management, work item tracking, agile, scrum, kanban, collaboration",
+      "IT service management, ITSM, service desk, helpdesk, service catalog, service map, service health, IT operations, incident tracking, knowledge base, work items",
   },
   { name: "twitter:card", content: "summary_large_image" },
   { name: "twitter:image", content: ogImage },
   { name: "twitter:image:width", content: "1200" },
   { name: "twitter:image:height", content: "630" },
-  { name: "twitter:image:alt", content: "Terraline - Modern work management" },
+  { name: "twitter:image:alt", content: "Terraline - Open-source IT service management" },
 ];
 
 // Root stays shell-thin: in SPA mode React Router server-builds only the root route, so

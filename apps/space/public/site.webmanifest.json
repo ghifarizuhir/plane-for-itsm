@@ -1,7 +1,7 @@
 {
   "name": "Terraline Space",
   "short_name": "Terraline Space",
-  "description": "Terraline helps you plan your work items, cycles, and product modules.",
+  "description": "Terraline helps you run services, handle requests, and track work items.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f9fafb",
