@@ -42,7 +42,7 @@
     },
     "cycles": {
       "title": "Group and timebox your work in Cycles.",
-      "description": "Break work down by timeboxed chunks, work backwards from your project deadline to set dates, and make tangible progress as a team.",
+      "description": "Break delivery work into timeboxed chunks, set dates around your deadlines, and keep your team's progress visible.",
       "cta_primary": "Set your first cycle"
     },
     "cycle_work_items": {
@@ -52,8 +52,8 @@
       "cta_secondary": "Add existing work item"
     },
     "modules": {
-      "title": "Map your project goals to Modules and track easily.",
-      "description": "Modules are made up of interconnected work items. They assist in monitoring progress through project phases, each with specific deadlines and analytics to indicate how close you are to achieving those phases.",
+      "title": "Group related work into Modules and track it easily.",
+      "description": "Modules group interconnected work items — by service, platform, or phase — with their own deadlines and analytics, so you can see how close you are to done.",
       "cta_primary": "Set your first module"
     },
     "module_work_items": {
@@ -78,8 +78,8 @@
       "cta_primary": "Add work item"
     },
     "pages": {
-      "title": "Document everything — from notes to PRDs",
-      "description": "Pages let you capture and organize information in one place. Write meeting notes, project documentation, and PRDs, embed work items, and structure them with ready-to-use components.",
+      "title": "Document everything — from runbooks to postmortems",
+      "description": "Pages let you capture and organize operational knowledge in one place. Write runbooks, SOPs, shift handovers, and postmortems, embed work items, and structure them with ready-to-use components.",
       "cta_primary": "Create your first Page"
     },
     "archive_pages": {
@@ -88,15 +88,15 @@
     },
     "intake_sidebar": {
       "title": "Log Intake requests",
-      "description": "Submit new requests to be reviewed, prioritized, and tracked within your project's workflow.",
+      "description": "Submit service requests to be reviewed, prioritized, and tracked in your project's workflow.",
       "cta_primary": "Create Intake request"
     },
     "intake_main": {
       "title": "Select an Intake work item to view its details"
     },
     "epics": {
-      "title": "Turn complex projects into structured epics.",
-      "description": "An epic helps you organize big goals into smaller, trackable tasks.",
+      "title": "Turn large efforts into structured Epics.",
+      "description": "An Epic helps you organize a large initiative into smaller, trackable work items.",
       "cta_primary": "Create an Epic",
       "cta_secondary": "Documentation"
     },
@@ -160,7 +160,7 @@
       "title": "Create projects with work items and assignees to start tracking performance, progress, and team impact here."
     },
     "analytics_no_cycle": {
-      "title": "Create cycles to organise work into time-bound phases and track progress across sprints."
+      "title": "Create cycles to organize work into time-bound phases and track delivery progress."
     },
     "analytics_no_module": {
       "title": "Create modules to organize your work and track progress across different stages."
@@ -188,7 +188,7 @@
     },
     "wiki": {
       "title": "Write a note, a doc, or a full knowledge base.",
-      "description": "Pages are thought spotting space in Terraline. Take down meeting notes, format them easily, embed work items, lay them out using a library of components, and keep them all in your project's context.",
+      "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context.",
       "cta_primary": "Create your page"
     },
     "project_overview_state_sidebar": {
