@@ -966,7 +966,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
           name: issue.name ?? "",
           descriptionHtml: issue.description_html ?? "",
           state: stateName,
-          priority: issue.priority,
+          priority: issue.priority ?? undefined,
         }
       : undefined;
     setActiveIssueContext(context);
