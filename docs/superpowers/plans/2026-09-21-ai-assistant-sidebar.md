@@ -440,8 +440,9 @@ describe("AIAssistantStore", () => {
       throw Object.assign(new Error("fail"), { status: 400, data: { error: "LLM provider API key and model are required" } });
     });
     const store400 = new AIAssistantStore(service400);
-    store400.setWorkspace("acme");
+    store400.setWorkspace("acme-400");
     await store400.sendMessage("hi");
+    expect(store400.messages).toHaveLength(2);
     expect(store400.messages[1].isError).toBe(true);
     expect(store400.messages[1].content).toBe("AI is not configured for this instance.");
 
@@ -449,8 +450,9 @@ describe("AIAssistantStore", () => {
       throw Object.assign(new Error("fail"), { status: 500 });
     });
     const store500 = new AIAssistantStore(service500);
-    store500.setWorkspace("acme");
+    store500.setWorkspace("acme-500");
     await store500.sendMessage("hi");
+    expect(store500.messages).toHaveLength(2);
     expect(store500.messages[1].isError).toBe(true);
     expect(store500.messages[1].content).toContain("internal error");
   });
@@ -608,6 +610,11 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     }
+    const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: lastUserQuestion };
+    runInAction(() => {
+      this.messages.push(userMessage);
+      this.persist();
+    });
     await this.request(lastUserQuestion);
   };
 
