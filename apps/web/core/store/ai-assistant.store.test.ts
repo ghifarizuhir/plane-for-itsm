@@ -128,12 +128,59 @@ describe("AIAssistantStore", () => {
     (store as unknown as { aiService: unknown }).aiService = passing;
     await store.retryLast();
 
-    expect(store.messages).toHaveLength(3);
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[0].role).toBe("user");
     expect(store.messages[0].content).toBe("first question");
-    expect(store.messages[1].content).toBe("first question");
-    expect(store.messages[2].content).toBe("fixed");
+    expect(store.messages[1].role).toBe("assistant");
+    expect(store.messages[1].content).toBe("fixed");
     const call = (passing.createGptTask as any).mock.calls[0];
     expect(call[1].prompt).toContain("User's new question: first question");
+  });
+
+  it("retryLast is a no-op when the last message is not an error", async () => {
+    const service = makeService(async () => ({ response: "ok", response_html: "ok" }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    await store.sendMessage("hello");
+    expect(store.messages).toHaveLength(2);
+    await store.retryLast();
+    expect((service.createGptTask as any).mock.calls).toHaveLength(1);
+    expect(store.messages).toHaveLength(2);
+  });
+
+  it("drops stale responses after workspace switch", async () => {
+    let resolvePending!: (value: unknown) => void;
+    const service = makeService(() => new Promise((resolve) => { resolvePending = resolve; }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    const pending = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+    store.setWorkspace("other");
+    resolvePending({ response: "ok", response_html: "late answer" });
+    await pending;
+    store.setWorkspace("acme");
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].role).toBe("user");
+    expect(store.messages[0].content).toBe("q1");
+    store.setWorkspace("other");
+    expect(store.messages).toHaveLength(0);
+  });
+
+  it("setWorkspace resets context and generation flag", async () => {
+    let resolvePending!: (value: unknown) => void;
+    const service = makeService(() => new Promise((resolve) => { resolvePending = resolve; }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    store.setActiveIssueContext(CONTEXT);
+    const pending = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+    store.setWorkspace("other");
+    expect(store.hasActiveIssue).toBe(false);
+    expect(store.isGenerating).toBe(false);
+    resolvePending({ response: "ok", response_html: "late" });
+    await pending;
   });
 
   it("clearConversation empties messages and persists", async () => {

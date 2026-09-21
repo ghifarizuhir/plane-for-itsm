@@ -51,6 +51,10 @@ export class AIAssistantStore implements IAIAssistantStore {
   }
 
   setWorkspace = (workspaceSlug: string | undefined) => {
+    if (workspaceSlug !== this.workspaceSlug) {
+      this.activeIssueContext = undefined;
+      this.isGenerating = false;
+    }
     this.workspaceSlug = workspaceSlug;
     this.messages = this.restore();
   };
@@ -64,12 +68,13 @@ export class AIAssistantStore implements IAIAssistantStore {
   sendMessage = async (question: string) => {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
+    const slug = this.workspaceSlug;
     const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: trimmed };
     runInAction(() => {
       this.messages.push(userMessage);
       this.persist();
     });
-    await this.request(userMessage.content);
+    await this.request(userMessage.content, slug);
   };
 
   retryLast = async () => {
@@ -82,18 +87,13 @@ export class AIAssistantStore implements IAIAssistantStore {
       }
     }
     if (!lastUserQuestion) return;
-    if (this.messages[this.messages.length - 1]?.isError) {
-      runInAction(() => {
-        this.messages.pop();
-        this.persist();
-      });
-    }
-    const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: lastUserQuestion };
+    if (!this.messages[this.messages.length - 1]?.isError) return;
     runInAction(() => {
-      this.messages.push(userMessage);
+      this.messages.pop();
       this.persist();
     });
-    await this.request(lastUserQuestion);
+    const slug = this.workspaceSlug;
+    await this.request(lastUserQuestion, slug);
   };
 
   clearConversation = () => {
@@ -122,13 +122,14 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   }
 
-  private async request(question: string) {
+  private async request(question: string, slug: string) {
     this.isGenerating = true;
     try {
-      const res = await this.aiService.createGptTask(this.workspaceSlug ?? "", {
+      const res = await this.aiService.createGptTask(slug, {
         task: AI_ASSISTANT_TASK,
         prompt: buildAiPrompt(this.activeIssueContext, this.messages.slice(0, -1), question),
       });
+      if (this.workspaceSlug !== slug) return;
       const assistantMessage: TAiMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
@@ -140,6 +141,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } catch (err: any) {
+      if (this.workspaceSlug !== slug) return;
       const errorContent =
         err?.status === 429
           ? err?.data?.error || "Rate limit exceeded."
@@ -151,9 +153,11 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } finally {
-      runInAction(() => {
-        this.isGenerating = false;
-      });
+      if (this.workspaceSlug === slug) {
+        runInAction(() => {
+          this.isGenerating = false;
+        });
+      }
     }
   }
 }
