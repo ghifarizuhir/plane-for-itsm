@@ -7,7 +7,7 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     IssueDetailRow, IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
-    is_workspace_admin, page_window, project_gate_allows, require_project_write,
+    is_workspace_admin, page_window, parse_date, project_gate_allows, require_project_write,
 };
 use crate::routes::issue_query::{DETAIL_SELECT_SQL, LIST_SELECT_SQL, build_ungrouped_envelope};
 use crate::routes::issue_write::resolve_effective_state;
@@ -534,15 +534,6 @@ enum BindValue {
 }
 
 pub const V1_PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
-
-fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDate>, String> {
-    match raw.as_deref().map(str::trim) {
-        None | Some("") => Ok(None),
-        Some(s) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
-            .map(Some)
-            .map_err(|_| format!("Invalid date: {s}")),
-    }
-}
 
 /// Wraps plain text into a single paragraph, escaping HTML metacharacters so
 /// the documented plain-text field cannot inject markup.

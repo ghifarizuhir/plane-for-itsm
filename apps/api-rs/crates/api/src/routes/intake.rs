@@ -573,7 +573,13 @@ pub async fn create_issue(
             project_id,
             state_id: Some(triage_id),
             name: &name,
+            description_html: "<p></p>",
             priority: &priority,
+            start_date: None,
+            target_date: None,
+            parent_id: None,
+            type_id: None,
+            estimate_point_id: None,
             created_by: auth.0,
         },
     )

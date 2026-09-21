@@ -200,6 +200,21 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM estimate_points WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM estimates WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM issue_types WHERE workspace_id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM issues WHERE project_id = $1")
             .bind(self.project_id)
             .execute(pool)
@@ -251,6 +266,85 @@ impl Scratch {
 }
 
 /// Drop leftovers from earlier failed runs so scratch slugs never collide.
+fn base_body(name: &str, state_id: Uuid) -> CreateIssue {
+    CreateIssue {
+        name: name.to_string(),
+        assignee_ids: None,
+        label_ids: None,
+        state_id: Some(state_id),
+        description_html: None,
+        priority: None,
+        start_date: None,
+        target_date: None,
+        parent_id: None,
+        type_id: None,
+        estimate_point: None,
+    }
+}
+
+async fn create_body(
+    st: &AppState,
+    scratch: &Scratch,
+    actor: Uuid,
+    body: CreateIssue,
+) -> (StatusCode, Value) {
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(actor),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(body),
+    )
+    .await
+    .expect("handler must return a response");
+    (status, serde_json::to_value(body).expect("json body"))
+}
+
+async fn insert_issue_type(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
+         is_default, level, is_epic, created_at, updated_at) \
+         VALUES ($1, $2, '', '{}'::jsonb, $3, true, false, 0, false, now(), now())",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch issue type");
+    id
+}
+
+async fn insert_estimate_with_point(pool: &PgPool, project_id: Uuid, workspace_id: Uuid) -> Uuid {
+    let estimate_id = Uuid::new_v4();
+    let point_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO estimates (id, name, description, type, last_used, project_id, workspace_id, \
+         created_at, updated_at) \
+         VALUES ($1, 'Points', '', 'points', true, $2, $3, now(), now())",
+    )
+    .bind(estimate_id)
+    .bind(project_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch estimate");
+    sqlx::query(
+        "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, \
+         workspace_id, created_at, updated_at) \
+         VALUES ($1, $2, 0, '1', '', $3, $4, now(), now())",
+    )
+    .bind(point_id)
+    .bind(estimate_id)
+    .bind(project_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch estimate point");
+    point_id
+}
+
+/// Drop leftovers from earlier failed runs so scratch slugs never collide.
 async fn purge(pool: &PgPool) {
     let stale: Vec<Uuid> =
         sqlx::query_scalar("SELECT id FROM workspaces WHERE slug LIKE 'itseq-%'")
@@ -272,10 +366,16 @@ async fn purge(pool: &PgPool) {
                 "DELETE FROM intakes WHERE project_id = $1",
                 "DELETE FROM states WHERE project_id = $1",
                 "DELETE FROM project_members WHERE project_id = $1",
+                "DELETE FROM estimate_points WHERE project_id = $1",
+                "DELETE FROM estimates WHERE project_id = $1",
             ] {
                 let _ = sqlx::query(stmt).bind(project_id).execute(pool).await;
             }
         }
+        let _ = sqlx::query("DELETE FROM issue_types WHERE workspace_id = $1")
+            .bind(workspace_id)
+            .execute(pool)
+            .await;
         let _ = sqlx::query("DELETE FROM projects WHERE workspace_id = $1")
             .bind(workspace_id)
             .execute(pool)
@@ -315,12 +415,7 @@ async fn create_allocates_distinct_sequences_and_records_counter_rows() {
     let st = state().await;
     let scratch = Scratch::new(&st.pool).await;
 
-    let body = |name: &str| CreateIssue {
-        name: name.to_string(),
-        assignee_ids: None,
-        label_ids: None,
-        state_id: Some(scratch.state_id),
-    };
+    let body = |name: &str| base_body(name, scratch.state_id);
 
     let (s1, Json(first)) = create(
         State(st.clone()),
@@ -537,20 +632,7 @@ async fn create_as(
     actor: Uuid,
     name: &str,
 ) -> (StatusCode, Value) {
-    let (status, Json(body)) = create(
-        State(st.clone()),
-        AuthUser(actor),
-        Path((scratch.slug.clone(), scratch.project_id)),
-        Json(CreateIssue {
-            name: name.to_string(),
-            assignee_ids: None,
-            label_ids: None,
-            state_id: Some(scratch.state_id),
-        }),
-    )
-    .await
-    .expect("handler must return a response");
-    (status, serde_json::to_value(body).expect("json body"))
+    create_body(st, scratch, actor, base_body(name, scratch.state_id)).await
 }
 
 #[tokio::test]
@@ -591,6 +673,13 @@ async fn gate_runs_before_body_validation() {
             assignee_ids: None,
             label_ids: None,
             state_id: None,
+            description_html: None,
+            priority: None,
+            start_date: None,
+            target_date: None,
+            parent_id: None,
+            type_id: None,
+            estimate_point: None,
         }),
     )
     .await;
@@ -674,6 +763,206 @@ async fn workspace_admin_without_project_membership_is_forbidden() {
         body,
         json!({"error": "You don't have the required permissions."})
     );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_persists_extended_fields() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let (parent_status, parent_body) = create_as(&st, &scratch, scratch.user_id, "parent-probe").await;
+    assert_eq!(parent_status, StatusCode::CREATED);
+    let parent_id = Uuid::parse_str(parent_body["id"].as_str().expect("id")).unwrap();
+
+    let mut body = base_body("extended-probe", scratch.state_id);
+    body.description_html = Some("<p>hello world</p>".to_string());
+    body.priority = Some("high".to_string());
+    body.start_date = Some("2026-09-01".to_string());
+    body.target_date = Some("2026-09-30".to_string());
+    body.parent_id = Some(parent_id);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let row: (String, String, Option<String>, Option<String>, Option<Uuid>, Option<Uuid>) =
+        sqlx::query_as(
+            "SELECT description_html, priority, start_date::text, target_date::text, parent_id, \
+             updated_by_id FROM issues WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(row.0, "<p>hello world</p>");
+    assert_eq!(row.1, "high");
+    assert_eq!(row.2.as_deref(), Some("2026-09-01"));
+    assert_eq!(row.3.as_deref(), Some("2026-09-30"));
+    assert_eq!(row.4, Some(parent_id));
+    assert_eq!(row.5, None, "updated_by must stay NULL on create (Django parity)");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_persists_type_and_estimate_point() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let type_id = insert_issue_type(&st.pool, scratch.workspace_id, "Bug").await;
+    let point_id =
+        insert_estimate_with_point(&st.pool, scratch.project_id, scratch.workspace_id).await;
+
+    let mut body = base_body("typed-probe", scratch.state_id);
+    body.type_id = Some(type_id);
+    body.estimate_point = Some(point_id);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let row: (Option<Uuid>, Option<Uuid>) =
+        sqlx::query_as("SELECT type_id, estimate_point_id FROM issues WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.pool)
+            .await
+            .unwrap();
+    assert_eq!(row.0, Some(type_id));
+    assert_eq!(row.1, Some(point_id));
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_defaults_description_and_priority_when_absent() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let (status, payload) =
+        create_body(&st, &scratch, scratch.user_id, base_body("defaults-probe", scratch.state_id))
+            .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let row: (String, String, Option<String>, Option<Uuid>, Option<Uuid>, Option<Uuid>) =
+        sqlx::query_as(
+            "SELECT description_html, priority, description_stripped, parent_id, type_id, \
+             estimate_point_id FROM issues WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_one(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(row.0, "<p></p>");
+    assert_eq!(row.1, "none");
+    assert_eq!(row.2, None);
+    assert_eq!(row.3, None);
+    assert_eq!(row.4, None);
+    assert_eq!(row.5, None);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_validation_errors_return_400() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let cases: Vec<(&str, CreateIssue, &str)> = vec![
+        ("blank-name", base_body("", scratch.state_id), "name is required"),
+        (
+            "unknown-assignee",
+            {
+                let mut b = base_body("unknown-assignee", scratch.state_id);
+                b.assignee_ids = Some(vec![Uuid::new_v4()]);
+                b
+            },
+            "invalid assignee: not a project member",
+        ),
+        (
+            "unknown-label",
+            {
+                let mut b = base_body("unknown-label", scratch.state_id);
+                b.label_ids = Some(vec![Uuid::new_v4()]);
+                b
+            },
+            "invalid label: not in project",
+        ),
+        (
+            "unknown-state",
+            {
+                let mut b = base_body("unknown-state", scratch.state_id);
+                b.state_id = Some(Uuid::new_v4());
+                b
+            },
+            "State is not valid please pass a valid state_id",
+        ),
+        (
+            "unknown-type",
+            {
+                let mut b = base_body("unknown-type", scratch.state_id);
+                b.type_id = Some(Uuid::new_v4());
+                b
+            },
+            "type_id is not valid",
+        ),
+        (
+            "unknown-parent",
+            {
+                let mut b = base_body("unknown-parent", scratch.state_id);
+                b.parent_id = Some(Uuid::new_v4());
+                b
+            },
+            "parent is not valid",
+        ),
+        (
+            "unknown-estimate",
+            {
+                let mut b = base_body("unknown-estimate", scratch.state_id);
+                b.estimate_point = Some(Uuid::new_v4());
+                b
+            },
+            "estimate_point is not valid",
+        ),
+        (
+            "bad-date",
+            {
+                let mut b = base_body("bad-date", scratch.state_id);
+                b.start_date = Some("09/01/2026".to_string());
+                b
+            },
+            "Invalid date: 09/01/2026",
+        ),
+    ];
+
+    for (case, body, expected) in cases {
+        let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "case {case} must 400");
+        assert_eq!(payload, json!({"error": expected}), "case {case} body");
+    }
+
+    let persisted: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM issues WHERE project_id = $1")
+        .bind(scratch.project_id)
+        .fetch_one(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(persisted, 0, "failed validation must not insert an issue");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn invalid_priority_returns_400() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let mut body = base_body("bad-priority", scratch.state_id);
+    body.priority = Some("critical".to_string());
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(payload, json!({"error": "Invalid priority"}));
 
     scratch.cleanup(&st.pool).await;
 }

@@ -506,3 +506,13 @@ pub(crate) async fn require_project_write(
         ws_admin,
     ))
 }
+
+/// Shared `%Y-%m-%d` parser (moved from `v1::work_item`).
+pub(crate) fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDate>, String> {
+    match raw.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(s) => chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+            .map(Some)
+            .map_err(|_| format!("Invalid date: {s}")),
+    }
+}

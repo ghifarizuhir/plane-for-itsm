@@ -8,6 +8,13 @@ fn rejects_empty_name() {
         assignee_ids: None,
         label_ids: None,
         state_id: None,
+        description_html: None,
+        priority: None,
+        start_date: None,
+        target_date: None,
+        parent_id: None,
+        type_id: None,
+        estimate_point: None,
     };
     assert!(validate_create(&i).is_err());
 }
@@ -19,6 +26,13 @@ fn rejects_name_over_255() {
         assignee_ids: None,
         label_ids: None,
         state_id: None,
+        description_html: None,
+        priority: None,
+        start_date: None,
+        target_date: None,
+        parent_id: None,
+        type_id: None,
+        estimate_point: None,
     };
     assert!(validate_create(&i).is_err());
 }
@@ -31,6 +45,13 @@ fn rejects_start_after_target_via_dates() {
         assignee_ids: None,
         label_ids: None,
         state_id: None,
+        description_html: None,
+        priority: None,
+        start_date: None,
+        target_date: None,
+        parent_id: None,
+        type_id: None,
+        estimate_point: None,
     };
     // pure name validation passes; date check lives in handler with real dates.
     // This test documents that empty assignee vec is OK (no silent drop yet).
@@ -44,6 +65,13 @@ fn accepts_valid_issue_with_ids() {
         assignee_ids: Some(vec![uuid::Uuid::new_v4()]),
         label_ids: Some(vec![]),
         state_id: None,
+        description_html: None,
+        priority: None,
+        start_date: None,
+        target_date: None,
+        parent_id: None,
+        type_id: None,
+        estimate_point: None,
     };
     assert!(validate_create(&i).is_ok());
 }

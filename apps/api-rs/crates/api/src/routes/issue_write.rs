@@ -67,7 +67,23 @@ pub struct CreateIssue {
     pub label_ids: Option<Vec<uuid::Uuid>>,
     #[serde(default, deserialize_with = "de_opt_uuid_lax")]
     pub state_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub description_html: Option<String>,
+    #[serde(default)]
+    pub priority: Option<String>,
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub target_date: Option<String>,
+    #[serde(default, deserialize_with = "de_opt_uuid_lax")]
+    pub parent_id: Option<uuid::Uuid>,
+    #[serde(default, deserialize_with = "de_opt_uuid_lax")]
+    pub type_id: Option<uuid::Uuid>,
+    #[serde(default, deserialize_with = "de_opt_uuid_lax")]
+    pub estimate_point: Option<uuid::Uuid>,
 }
+
+const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
 
 pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
     if body.name.trim().is_empty() {
@@ -75,6 +91,114 @@ pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
     }
     if body.name.chars().count() > 255 {
         return Err("name max length 255".to_string());
+    }
+    if let Some(p) = &body.priority {
+        if !PRIORITIES.contains(&p.as_str()) {
+            return Err("Invalid priority".to_string());
+        }
+    }
+    super::issue_common::parse_date(&body.start_date)?;
+    super::issue_common::parse_date(&body.target_date)?;
+    Ok(())
+}
+
+fn bad(msg: &str) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(json!({"error": msg})))
+}
+
+/// DB-backed create validation; every failure is 400 (brainstorming decision:
+/// strict, not Django's silent filter for assignee/label ids).
+async fn validate_create_refs(
+    st: &AppState,
+    project_id: uuid::Uuid,
+    body: &CreateIssue,
+    assignees: &[uuid::Uuid],
+    labels: &[uuid::Uuid],
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let error = |e: sqlx::Error| {
+        let _ = e;
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Something went wrong please try again later"})),
+        )
+    };
+    if !assignees.is_empty() {
+        let (n,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND member_id = ANY($2) \
+             AND is_active = true AND role >= 15 AND deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(assignees)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if n != assignees.len() as i64 {
+            return Err(bad("invalid assignee: not a project member"));
+        }
+    }
+    if !labels.is_empty() {
+        let (n,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(labels)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if n != labels.len() as i64 {
+            return Err(bad("invalid label: not in project"));
+        }
+    }
+    if let Some(state_id) = body.state_id {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if !ok {
+            return Err(bad("State is not valid please pass a valid state_id"));
+        }
+    }
+    if let Some(t) = body.type_id {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM issue_types WHERE id = $1 AND deleted_at IS NULL)",
+        )
+        .bind(t)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if !ok {
+            return Err(bad("type_id is not valid"));
+        }
+    }
+    if let Some(parent) = body.parent_id {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+        )
+        .bind(parent)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if !ok {
+            return Err(bad("parent is not valid"));
+        }
+    }
+    if let Some(ep) = body.estimate_point {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM estimate_points WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+        )
+        .bind(ep)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if !ok {
+            return Err(bad("estimate_point is not valid"));
+        }
     }
     Ok(())
 }
@@ -133,7 +257,13 @@ pub struct NewIssue<'a> {
     pub project_id: uuid::Uuid,
     pub state_id: Option<uuid::Uuid>,
     pub name: &'a str,
+    pub description_html: &'a str,
     pub priority: &'a str,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub target_date: Option<chrono::NaiveDate>,
+    pub parent_id: Option<uuid::Uuid>,
+    pub type_id: Option<uuid::Uuid>,
+    pub estimate_point_id: Option<uuid::Uuid>,
     pub created_by: uuid::Uuid,
 }
 
@@ -164,20 +294,26 @@ pub async fn insert_issue(
     .await?;
 
     let row: (uuid::Uuid, String) = sqlx::query_as(
-        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
-         sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, \
-         updated_by_id, created_at, updated_at) \
-         SELECT gen_random_uuid(), $1, '<p></p>', '{}', $2, false, \
-         COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $3 AND state_id IS NOT DISTINCT FROM $4), 65535 - 10000) + 10000, \
-         $5, $4, $3, w.id, $6, $6, now(), now() \
-         FROM workspaces w WHERE w.slug = $7 RETURNING id, name",
+        "INSERT INTO issues (id, name, description_html, description_json, priority, start_date, \
+         target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, \
+         created_by_id, updated_by_id, estimate_point_id, type_id, parent_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, $5, false, \
+         COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $6 AND state_id IS NOT DISTINCT FROM $7), 65535 - 10000) + 10000, \
+         $8, $7, $6, w.id, $9, NULL, $10, $11, $12, now(), now() \
+         FROM workspaces w WHERE w.slug = $13 RETURNING id, name",
     )
     .bind(issue.name)
+    .bind(issue.description_html)
     .bind(issue.priority)
+    .bind(issue.start_date)
+    .bind(issue.target_date)
     .bind(issue.project_id)
     .bind(issue.state_id)
     .bind(sequence as i32)
     .bind(issue.created_by)
+    .bind(issue.estimate_point_id)
+    .bind(issue.type_id)
+    .bind(issue.parent_id)
     .bind(issue.slug)
     .fetch_one(&mut **tx)
     .await?;
@@ -212,59 +348,37 @@ pub async fn create(
     if !require_project_write(&st, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
-
-    // #9526 fix: reject unknown assignees (must be active project members role>=15)
-    if let Some(ids) = &body.assignee_ids {
-        if !ids.is_empty() {
-            let count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND member_id = ANY($2) AND is_active = true AND role >= 15",
-            )
-            .bind(project_id)
-            .bind(ids)
-            .fetch_one(&st.pool)
-            .await?;
-            if count.0 != ids.len() as i64 {
-                return Err(anyhow::anyhow!("invalid assignee_id: not a project member").into());
-            }
-        }
+    if let Err(msg) = validate_create(&body) {
+        return Ok(bad(&msg));
     }
-    // #9526 fix: reject unknown labels (must belong to project)
-    if let Some(ids) = &body.label_ids {
-        if !ids.is_empty() {
-            let count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2)",
-            )
-            .bind(project_id)
-            .bind(ids)
-            .fetch_one(&st.pool)
-            .await?;
-            if count.0 != ids.len() as i64 {
-                return Err(anyhow::anyhow!("invalid label_id: not in project").into());
-            }
-        }
-    }
-    // state must belong to project if provided
-    if let Some(state_id) = &body.state_id {
-        let exists: (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)",
-        )
-        .bind(state_id)
-        .bind(project_id)
-        .fetch_one(&st.pool)
-        .await?;
-        if !exists.0 {
-            return Err(anyhow::anyhow!("State is not valid please pass a valid state_id").into());
-        }
+    if let Err(e) = validate_create_refs(
+        &st,
+        project_id,
+        &body,
+        body.assignee_ids.as_deref().unwrap_or(&[]),
+        body.label_ids.as_deref().unwrap_or(&[]),
+    )
+    .await
+    {
+        return Ok(e);
     }
 
-    // Django `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`):
-    // a missing state resolves to the project's default non-triage state so
-    // the row survives the list triage exclusion (NULL rows are dropped).
     let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
+    let start_date = match super::issue_common::parse_date(&body.start_date) {
+        Ok(v) => v,
+        Err(e) => return Ok(bad(&e)),
+    };
+    let target_date = match super::issue_common::parse_date(&body.target_date) {
+        Ok(v) => v,
+        Err(e) => return Ok(bad(&e)),
+    };
+    let description_html = body
+        .description_html
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("<p></p>");
+    let priority = body.priority.as_deref().unwrap_or("none");
 
-    // Sequence allocation + counter row + sort_order live in `insert_issue`
-    // (Django `Issue.save` parity: `plane/db/models/issue.py:190-216`).
     let mut tx = st.pool.begin().await?;
     let out = insert_issue(
         &mut tx,
@@ -273,7 +387,13 @@ pub async fn create(
             project_id,
             state_id,
             name: &body.name,
-            priority: "none",
+            description_html,
+            priority,
+            start_date,
+            target_date,
+            parent_id: body.parent_id,
+            type_id: body.type_id,
+            estimate_point_id: body.estimate_point,
             created_by: auth.0,
         },
     )
