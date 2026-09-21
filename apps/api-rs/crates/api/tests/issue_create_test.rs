@@ -1400,15 +1400,24 @@ async fn create_response_has_26_key_list_shape() {
         assert!(obj.contains_key(key), "missing response key: {key}");
     }
     for absent in ["description_html", "type_id"] {
-        assert!(!obj.contains_key(absent), "unexpected response key: {absent}");
+        assert!(
+            !obj.contains_key(absent),
+            "unexpected response key: {absent}"
+        );
     }
 
     let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
     let sequence_id = sequence_of(&st.pool, id).await;
     assert_eq!(payload["name"], "response-probe");
     assert_eq!(payload["priority"], "medium");
-    assert_eq!(payload["state_id"].as_str().unwrap(), scratch.state_id.to_string());
-    assert_eq!(payload["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+    assert_eq!(
+        payload["state_id"].as_str().unwrap(),
+        scratch.state_id.to_string()
+    );
+    assert_eq!(
+        payload["project_id"].as_str().unwrap(),
+        scratch.project_id.to_string()
+    );
     assert_eq!(payload["sequence_id"].as_i64(), Some(sequence_id as i64));
     assert_eq!(payload["assignee_ids"], json!([member.to_string()]));
     assert_eq!(payload["label_ids"], json!([label.to_string()]));
@@ -1418,7 +1427,10 @@ async fn create_response_has_26_key_list_shape() {
     assert_eq!(payload["link_count"], 0);
     assert_eq!(payload["is_draft"], false);
     assert!(payload["updated_by"].is_null());
-    assert_eq!(payload["created_by"].as_str().unwrap(), scratch.user_id.to_string());
+    assert_eq!(
+        payload["created_by"].as_str().unwrap(),
+        scratch.user_id.to_string()
+    );
     assert!(payload["archived_at"].is_null());
     assert!(payload["deleted_at"].is_null());
 
