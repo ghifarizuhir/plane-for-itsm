@@ -2,6 +2,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::routes::project::ws_role;
+use crate::state::AppState;
 
 
 #[derive(Debug, Clone, Serialize)]
@@ -481,4 +482,27 @@ pub struct ArchiveRow {
     pub assignee_ids: Vec<uuid::Uuid>,
     pub label_ids: Vec<uuid::Uuid>,
     pub module_ids: Vec<uuid::Uuid>,
+}
+
+/// PROJECT-level ADMIN/MEMBER write gate, mirroring
+/// `@allow_permission([ROLE.ADMIN, ROLE.MEMBER])` (`permissions/base.py:53-81`):
+/// branch 1 is an active project role 20/15; the fallback is any active
+/// project membership plus a workspace ADMIN role. Shared by the v1
+/// work-item handlers and the legacy issue create.
+pub(crate) async fn require_project_write(
+    st: &AppState,
+    user_id: uuid::Uuid,
+    slug: &str,
+    project_id: uuid::Uuid,
+) -> Result<bool, common::errors::AppError> {
+    if !crate::routes::work_item::ws_active_member(&st.pool, user_id, slug).await? {
+        return Ok(false);
+    }
+    let member_role = fetch_project_member_role(&st.pool, user_id, slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, user_id, slug).await?;
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20) | Some(15)),
+        member_role.is_some(),
+        ws_admin,
+    ))
 }

@@ -552,17 +552,6 @@ pub async fn create_issue(
         }
     };
 
-    let issue_id: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, '<p></p>', '{}', $2, false, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $4 AND state_id IS NOT DISTINCT FROM $3), 65535 - 10000) + 10000, COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $4), 0) + 1, $3, $4, $5, now(), now()) RETURNING id",
-    )
-    .bind(&name)
-    .bind(&priority)
-    .bind(triage_id)
-    .bind(project_id)
-    .bind(workspace_id)
-    .fetch_one(&st.pool)
-    .await?;
-
     // The viewset attaches to the project's first intake (base.py:271).
     let intake_id: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT id FROM intakes WHERE project_id = $1 AND deleted_at IS NULL LIMIT 1",
@@ -574,15 +563,33 @@ pub async fn create_issue(
         return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
     };
 
+    // Issue + counter row + intake link commit together, mirroring the
+    // Django viewset's atomic create.
+    let mut tx = st.pool.begin().await?;
+    let issue = super::issue_write::insert_issue(
+        &mut tx,
+        super::issue_write::NewIssue {
+            slug: &slug,
+            project_id,
+            state_id: Some(triage_id),
+            name: &name,
+            priority: &priority,
+            created_by: auth.0,
+        },
+    )
+    .await?;
+
     let row = sqlx::query_as::<_, common::models::intake::IntakeIssue>(
         "INSERT INTO intake_issues (id, intake_id, issue_id, status, extra, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, -2, '{}'::jsonb, $3, $4, now(), now()) RETURNING id, status",
     )
     .bind(intake_id)
-    .bind(issue_id)
+    .bind(issue.id)
     .bind(project_id)
     .bind(workspace_id)
-    .fetch_one(&st.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
+    let issue_id = issue.id;
     // Django `create` (`intake/base.py:330`) returns 200 (not 201) with the
     // full `IntakeIssueDetailSerializer`.
     match fetch_inbox_detail(&st.pool, &slug, project_id, row.id, issue_id, auth.0).await? {

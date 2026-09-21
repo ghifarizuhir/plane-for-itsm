@@ -7,7 +7,7 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     IssueDetailRow, IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
-    is_workspace_admin, page_window, project_gate_allows,
+    is_workspace_admin, page_window, project_gate_allows, require_project_write,
 };
 use crate::routes::issue_query::{DETAIL_SELECT_SQL, LIST_SELECT_SQL, build_ungrouped_envelope};
 use crate::routes::issue_write::resolve_effective_state;
@@ -565,25 +565,6 @@ fn description_of(body: &V1WriteWorkItem) -> String {
         return wrap_stripped(plain);
     }
     "<p></p>".to_string()
-}
-
-/// 403 unless the caller is a project ADMIN/MEMBER (or ws admin).
-async fn require_project_write(
-    st: &AppState,
-    user_id: uuid::Uuid,
-    slug: &str,
-    project_id: uuid::Uuid,
-) -> Result<bool, common::errors::AppError> {
-    if !ws_active_member(&st.pool, user_id, slug).await? {
-        return Ok(false);
-    }
-    let member_role = fetch_project_member_role(&st.pool, user_id, slug, project_id).await?;
-    let ws_admin = is_workspace_admin(&st.pool, user_id, slug).await?;
-    Ok(project_gate_allows(
-        matches!(member_role, Some(20) | Some(15)),
-        member_role.is_some(),
-        ws_admin,
-    ))
 }
 
 fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {

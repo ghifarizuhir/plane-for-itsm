@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
-use super::issue_common::{IssueOut, fetch_project_member_role, is_workspace_admin, project_gate_allows};
+use super::issue_common::{IssueOut, fetch_project_member_role, is_workspace_admin, project_gate_allows, require_project_write};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
@@ -126,12 +126,92 @@ async fn resolve_issue_state(
     Ok(resolve_effective_state(explicit, default_id, first_id))
 }
 
+/// Input for [`insert_issue`], shared by the legacy create endpoint and the
+/// intake create path so both allocate sequences the same way.
+pub struct NewIssue<'a> {
+    pub slug: &'a str,
+    pub project_id: uuid::Uuid,
+    pub state_id: Option<uuid::Uuid>,
+    pub name: &'a str,
+    pub priority: &'a str,
+    pub created_by: uuid::Uuid,
+}
+
+/// Insert an issue plus its `issue_sequences` counter row inside `tx`.
+///
+/// Django `Issue.save` (`plane/db/models/issue.py:190-216`) locks the project
+/// (`pg_advisory_xact_lock`), takes `IssueSequence` max+1, inserts the issue
+/// and then the `IssueSequence` row — the counter write is what keeps the
+/// next create from reusing a number. `FOR UPDATE` on the project row plays
+/// the advisory-lock role and serializes concurrent creates.
+pub async fn insert_issue(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issue: NewIssue<'_>,
+) -> Result<IssueOut, sqlx::Error> {
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM projects WHERE id = $1 FOR UPDATE")
+        .bind(issue.project_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+    let sequence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(GREATEST(\
+            (SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $1), \
+            (SELECT MAX(sequence_id) FROM issues WHERE project_id = $1 AND deleted_at IS NULL)\
+         ), 0) + 1",
+    )
+    .bind(issue.project_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    let row: (uuid::Uuid, String) = sqlx::query_as(
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
+         sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, \
+         updated_by_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, '<p></p>', '{}', $2, false, \
+         COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $3 AND state_id IS NOT DISTINCT FROM $4), 65535 - 10000) + 10000, \
+         $5, $4, $3, w.id, $6, $6, now(), now() \
+         FROM workspaces w WHERE w.slug = $7 RETURNING id, name",
+    )
+    .bind(issue.name)
+    .bind(issue.priority)
+    .bind(issue.project_id)
+    .bind(issue.state_id)
+    .bind(sequence as i32)
+    .bind(issue.created_by)
+    .bind(issue.slug)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, \
+         created_by_id, deleted, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, (SELECT workspace_id FROM projects WHERE id = $3), \
+         $4, false, now(), now())",
+    )
+    .bind(sequence)
+    .bind(row.0)
+    .bind(issue.project_id)
+    .bind(issue.created_by)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(IssueOut {
+        id: row.0,
+        name: row.1,
+    })
+}
+
 pub async fn create(
     State(st): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateIssue>,
-) -> Result<(StatusCode, Json<IssueOut>), common::errors::AppError> {
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    // Django's permission decorator runs before serializer validation
+    // (`views/issue/base.py:404`): a non-member gets 403 even with a bad body.
+    if !require_project_write(&st, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
 
     // #9526 fix: reject unknown assignees (must be active project members role>=15)
@@ -183,20 +263,25 @@ pub async fn create(
     // the row survives the list triage exclusion (NULL rows are dropped).
     let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
 
-    // Django `Issue.save` (`plane/db/models/issue.py:190-216`): sequence_id from
-    // IssueSequence max+1 per project; sort_order max+10000 per (project, state).
-    let row = sqlx::query_as::<_, common::models::issue::Issue>(
-        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, '<p></p>', '{}', 'none', false, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $2 AND state_id IS NOT DISTINCT FROM $3), 65535 - 10000) + 10000, COALESCE((SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $2), 0) + 1, $3, $2, w.id, now(), now() FROM workspaces w WHERE w.slug = $4 RETURNING id, name",
+    // Sequence allocation + counter row + sort_order live in `insert_issue`
+    // (Django `Issue.save` parity: `plane/db/models/issue.py:190-216`).
+    let mut tx = st.pool.begin().await?;
+    let out = insert_issue(
+        &mut tx,
+        NewIssue {
+            slug: &slug,
+            project_id,
+            state_id,
+            name: &body.name,
+            priority: "none",
+            created_by: auth.0,
+        },
     )
-    .bind(&body.name)
-    .bind(project_id)
-    .bind(state_id)
-    .bind(&slug)
-    .fetch_one(&st.pool)
     .await?;
+    tx.commit().await?;
     Ok((
         StatusCode::CREATED,
-        Json(IssueOut { id: row.id, name: row.name }),
+        Json(serde_json::to_value(out).expect("IssueOut serializes")),
     ))
 }
 

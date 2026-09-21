@@ -1,0 +1,679 @@
+//! Regression tests for the legacy issue-create handler
+//! (`issue_write::create`, backing both `/issues/` and `/work-items/`):
+//! per-project sequence allocation and PROJECT-level ADMIN/MEMBER authz.
+
+use api::middleware::auth::AuthUser;
+use api::routes::intake::{
+    create_issue as intake_create_issue, CreateIntakeIssue, IntakeIssuePayload,
+};
+use api::routes::issue_write::{create, CreateIssue};
+use api::state::AppState;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::Json;
+use common::config::AppConfig;
+use serde_json::{json, Value};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+fn database_url() -> String {
+    std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://plane:plane@localhost:5432/plane".into())
+}
+
+async fn pool() -> PgPool {
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url())
+        .await
+        .expect("test database must be reachable (set DATABASE_URL)")
+}
+
+async fn state() -> AppState {
+    AppState {
+        pool: pool().await,
+        redis: redis::Client::open("redis://127.0.0.1:6379").expect("redis client"),
+        config: AppConfig::from_env(),
+    }
+}
+
+struct Scratch {
+    slug: String,
+    workspace_id: Uuid,
+    user_id: Uuid,
+    project_id: Uuid,
+    state_id: Uuid,
+    extra_users: Vec<Uuid>,
+}
+
+async fn insert_user(pool: &PgPool, user_id: Uuid, username: &str) {
+    sqlx::query(
+        "INSERT INTO users (id, password, username, email, first_name, last_name, avatar, \
+         date_joined, created_at, updated_at, last_location, created_location, is_superuser, \
+         is_managed, is_password_expired, is_active, is_staff, is_email_verified, \
+         is_password_autoset, token, user_timezone, last_login_ip, last_logout_ip, \
+         last_login_medium, last_login_uagent, is_bot, display_name, is_email_valid, \
+         is_password_reset_required) \
+         VALUES ($1, '', $2, $3, '', '', '', now(), now(), now(), '', '', false, false, \
+         false, true, false, false, true, $4, 'UTC', '', '', '', '', false, $2, true, false)",
+    )
+    .bind(user_id)
+    .bind(username)
+    .bind(format!("{username}@example.invalid"))
+    .bind(Uuid::new_v4().simple().to_string())
+    .execute(pool)
+    .await
+    .expect("scratch user");
+}
+
+async fn insert_workspace_member(pool: &PgPool, user_id: Uuid, workspace_id: Uuid, role: i16) {
+    sqlx::query(
+        "INSERT INTO workspace_members (id, created_at, updated_at, role, member_id, \
+         workspace_id, view_props, default_props, issue_props, explored_features, \
+         getting_started_checklist, tips, is_active) \
+         VALUES (gen_random_uuid(), now(), now(), $1, $2, $3, '{}', '{}', '{}', '{}', '{}', \
+         '{}', true)",
+    )
+    .bind(role)
+    .bind(user_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch workspace member");
+}
+
+async fn insert_project_member(
+    pool: &PgPool,
+    user_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    role: i16,
+) {
+    sqlx::query(
+        "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, is_active, \
+         view_props, default_props, sort_order, preferences, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, true, '{}', '{}', 65535, '{}', now(), now())",
+    )
+    .bind(user_id)
+    .bind(role)
+    .bind(project_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch project member");
+}
+
+impl Scratch {
+    async fn new(pool: &PgPool) -> Self {
+        purge(pool).await;
+
+        let slug = format!("itseq-{}", Uuid::new_v4().simple());
+        let user_id = Uuid::new_v4();
+        let workspace_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+        let state_id = Uuid::new_v4();
+        let identifier =
+            format!("ITSQ{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
+
+        insert_user(pool, user_id, &slug).await;
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, \
+             background_color) VALUES ($1, 'IT Seq Scratch', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+        )
+        .bind(workspace_id)
+        .bind(&slug)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .expect("scratch workspace");
+
+        insert_workspace_member(pool, user_id, workspace_id, 20).await;
+
+        sqlx::query(
+            "INSERT INTO projects (id, created_at, updated_at, name, description, network, \
+             identifier, workspace_id, cycle_view, module_view, issue_views_view, page_view, \
+             intake_view, archive_in, close_in, logo_props, is_time_tracking_enabled, \
+             is_issue_type_enabled, guest_view_all_features, timezone) \
+             VALUES ($1, now(), now(), 'IT Seq Scratch', '', 2, $2, $3, false, false, false, \
+             false, false, 30, 30, '{}'::jsonb, false, false, false, 'UTC')",
+        )
+        .bind(project_id)
+        .bind(&identifier)
+        .bind(workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch project");
+
+        insert_project_member(pool, user_id, project_id, workspace_id, 20).await;
+
+        sqlx::query(
+            "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, \
+             sequence, \"group\", \"default\", is_triage, created_at, updated_at) \
+             VALUES ($1, 'Backlog', '', '#60646C', 'backlog', $2, $3, 65535, 'backlog', true, \
+             false, now(), now())",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .bind(workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch state");
+
+        Self {
+            slug,
+            workspace_id,
+            user_id,
+            project_id,
+            state_id,
+            extra_users: Vec::new(),
+        }
+    }
+
+    async fn add_actor(
+        &mut self,
+        pool: &PgPool,
+        ws_role: Option<i16>,
+        project_role: Option<i16>,
+    ) -> Uuid {
+        let user_id = Uuid::new_v4();
+        let username = format!("{}-{}", self.slug, &user_id.simple().to_string()[..8]);
+        insert_user(pool, user_id, &username).await;
+        if let Some(role) = ws_role {
+            insert_workspace_member(pool, user_id, self.workspace_id, role).await;
+        }
+        if let Some(role) = project_role {
+            insert_project_member(pool, user_id, self.project_id, self.workspace_id, role).await;
+        }
+        self.extra_users.push(user_id);
+        user_id
+    }
+
+    async fn cleanup(&self, pool: &PgPool) {
+        sqlx::query("DELETE FROM intake_issues WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM issue_sequences WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM issues WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM intakes WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM states WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM project_members WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM projects WHERE id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM workspace_members WHERE workspace_id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM workspaces WHERE id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(self.user_id)
+            .execute(pool)
+            .await
+            .ok();
+        for user_id in &self.extra_users {
+            sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(user_id)
+                .execute(pool)
+                .await
+                .ok();
+        }
+    }
+}
+
+/// Drop leftovers from earlier failed runs so scratch slugs never collide.
+async fn purge(pool: &PgPool) {
+    let stale: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug LIKE 'itseq-%'")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+    for workspace_id in stale {
+        let projects: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM projects WHERE workspace_id = $1")
+                .bind(workspace_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+        for project_id in &projects {
+            for stmt in [
+                "DELETE FROM intake_issues WHERE project_id = $1",
+                "DELETE FROM issue_sequences WHERE project_id = $1",
+                "DELETE FROM issues WHERE project_id = $1",
+                "DELETE FROM intakes WHERE project_id = $1",
+                "DELETE FROM states WHERE project_id = $1",
+                "DELETE FROM project_members WHERE project_id = $1",
+            ] {
+                let _ = sqlx::query(stmt).bind(project_id).execute(pool).await;
+            }
+        }
+        let _ = sqlx::query("DELETE FROM projects WHERE workspace_id = $1")
+            .bind(workspace_id)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM workspace_members WHERE workspace_id = $1")
+            .bind(workspace_id)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM workspaces WHERE id = $1")
+            .bind(workspace_id)
+            .execute(pool)
+            .await;
+    }
+    let _ = sqlx::query("DELETE FROM users WHERE username LIKE 'itseq-%'")
+        .execute(pool)
+        .await;
+}
+
+async fn sequence_of(pool: &PgPool, issue_id: Uuid) -> i32 {
+    sqlx::query_scalar("SELECT sequence_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(pool)
+        .await
+        .expect("issue row")
+}
+
+async fn sequence_rows(pool: &PgPool, issue_id: Uuid) -> Vec<i64> {
+    sqlx::query_scalar("SELECT sequence FROM issue_sequences WHERE issue_id = $1")
+        .bind(issue_id)
+        .fetch_all(pool)
+        .await
+        .expect("sequence rows")
+}
+
+#[tokio::test]
+async fn create_allocates_distinct_sequences_and_records_counter_rows() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let body = |name: &str| CreateIssue {
+        name: name.to_string(),
+        assignee_ids: None,
+        label_ids: None,
+        state_id: Some(scratch.state_id),
+    };
+
+    let (s1, Json(first)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(body("seq-probe-a")),
+    )
+    .await
+    .expect("first create must succeed");
+    assert_eq!(s1, axum::http::StatusCode::CREATED);
+    let first_id = Uuid::parse_str(first["id"].as_str().expect("id")).unwrap();
+
+    let (s2, Json(second)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(body("seq-probe-b")),
+    )
+    .await
+    .expect("second create must succeed");
+    assert_eq!(s2, axum::http::StatusCode::CREATED);
+    let second_id = Uuid::parse_str(second["id"].as_str().expect("id")).unwrap();
+
+    let seq1 = sequence_of(&st.pool, first_id).await;
+    let seq2 = sequence_of(&st.pool, second_id).await;
+    assert_ne!(seq1, seq2, "consecutive creates must not reuse a sequence");
+
+    assert_eq!(
+        sequence_rows(&st.pool, first_id).await,
+        vec![seq1 as i64],
+        "create must persist the issue_sequences counter row"
+    );
+    assert_eq!(
+        sequence_rows(&st.pool, second_id).await,
+        vec![seq2 as i64],
+        "create must persist the issue_sequences counter row"
+    );
+
+    let created_by: Option<Uuid> =
+        sqlx::query_scalar("SELECT created_by_id FROM issues WHERE id = $1")
+            .bind(first_id)
+            .fetch_one(&st.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        created_by,
+        Some(scratch.user_id),
+        "creator must be recorded"
+    );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn intake_create_allocates_distinct_sequences_and_records_counter_rows() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    sqlx::query(
+        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, \
+         project_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Intake', '', true, '{}'::jsonb, '{}'::jsonb, $1, $2, now(), now())",
+    )
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .execute(&st.pool)
+    .await
+    .expect("scratch intake");
+
+    let body = |name: &str| CreateIntakeIssue {
+        issue: IntakeIssuePayload {
+            name: Some(name.to_string()),
+            priority: Some("none".to_string()),
+        },
+    };
+
+    let (s1, Json(_)) = intake_create_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(body("intake-probe-a")),
+    )
+    .await
+    .expect("first intake create must succeed");
+    assert_eq!(s1, axum::http::StatusCode::OK);
+
+    let (s2, Json(_)) = intake_create_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(body("intake-probe-b")),
+    )
+    .await
+    .expect("second intake create must succeed");
+    assert_eq!(s2, axum::http::StatusCode::OK);
+
+    let ids: Vec<(Uuid, i32)> = sqlx::query_as(
+        "SELECT id, sequence_id FROM issues WHERE project_id = $1 ORDER BY created_at",
+    )
+    .bind(scratch.project_id)
+    .fetch_all(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(ids.len(), 2, "both intake creates must persist an issue");
+    assert_ne!(
+        ids[0].1, ids[1].1,
+        "consecutive creates must not reuse a sequence"
+    );
+    for (issue_id, sequence) in ids {
+        assert_eq!(
+            sequence_rows(&st.pool, issue_id).await,
+            vec![sequence as i64],
+            "intake create must persist the issue_sequences counter row"
+        );
+    }
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn no_active_issue_shares_a_sequence_within_a_project() {
+    let pool = pool().await;
+    let duplicates: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ( \
+           SELECT project_id, sequence_id FROM issues WHERE deleted_at IS NULL \
+           GROUP BY project_id, sequence_id HAVING COUNT(*) > 1 \
+         ) dup",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        duplicates, 0,
+        "active issues must have unique per-project sequences"
+    );
+}
+
+#[tokio::test]
+async fn every_active_issue_has_a_matching_sequence_row() {
+    let pool = pool().await;
+    let missing: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issues i WHERE i.deleted_at IS NULL \
+         AND NOT EXISTS (SELECT 1 FROM issue_sequences sq WHERE sq.issue_id = i.id)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        missing, 0,
+        "every active issue must have an issue_sequences row"
+    );
+
+    let lagging: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM projects p WHERE \
+         COALESCE((SELECT MAX(sequence_id) FROM issues i \
+                   WHERE i.project_id = p.id AND i.deleted_at IS NULL), 0) \
+         > COALESCE((SELECT MAX(sequence) FROM issue_sequences sq \
+                     WHERE sq.project_id = p.id), 0)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        lagging, 0,
+        "issue_sequences counter must cover the highest issue sequence"
+    );
+}
+
+#[tokio::test]
+async fn unique_index_rejects_duplicate_active_sequence() {
+    let pool = pool().await;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE indexname = \
+         'issue_unique_project_sequence_active')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        exists,
+        "partial unique index on active (project_id, sequence_id) must exist"
+    );
+
+    let source: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM issues WHERE deleted_at IS NULL LIMIT 1")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+    let Some(source) = source else {
+        return;
+    };
+
+    let mut tx = pool.begin().await.unwrap();
+    let result = sqlx::query(
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
+         sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), name, description_html, description_json, priority, is_draft, \
+         sort_order, sequence_id, state_id, project_id, workspace_id, now(), now() \
+         FROM issues WHERE id = $1",
+    )
+    .bind(source)
+    .execute(&mut *tx)
+    .await;
+    assert!(
+        result.is_err(),
+        "duplicate active sequence must be rejected by the unique index"
+    );
+    let _ = tx.rollback().await;
+}
+
+async fn create_as(
+    st: &AppState,
+    scratch: &Scratch,
+    actor: Uuid,
+    name: &str,
+) -> (StatusCode, Value) {
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(actor),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateIssue {
+            name: name.to_string(),
+            assignee_ids: None,
+            label_ids: None,
+            state_id: Some(scratch.state_id),
+        }),
+    )
+    .await
+    .expect("handler must return a response");
+    (status, serde_json::to_value(body).expect("json body"))
+}
+
+#[tokio::test]
+async fn outsider_create_is_forbidden_without_insert() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let outsider = scratch.add_actor(&st.pool, None, None).await;
+
+    let (status, body) = create_as(&st, &scratch, outsider, "outsider-probe").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        body,
+        json!({"error": "You don't have the required permissions."})
+    );
+
+    let persisted: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM issues WHERE project_id = $1")
+        .bind(scratch.project_id)
+        .fetch_one(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(persisted, 0, "forbidden create must not insert an issue");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn gate_runs_before_body_validation() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let outsider = scratch.add_actor(&st.pool, None, None).await;
+
+    let result = create(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateIssue {
+            name: String::new(),
+            assignee_ids: None,
+            label_ids: None,
+            state_id: None,
+        }),
+    )
+    .await;
+
+    match result {
+        Ok((status, Json(body))) => {
+            assert_eq!(
+                status,
+                StatusCode::FORBIDDEN,
+                "gate must win over validation"
+            );
+            assert_eq!(
+                serde_json::to_value(body).unwrap(),
+                json!({"error": "You don't have the required permissions."})
+            );
+        }
+        Err(e) => panic!("expected 403 before validation, got handler error: {e:?}"),
+    }
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn guest_project_member_is_forbidden() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let guest = scratch.add_actor(&st.pool, Some(5), Some(5)).await;
+
+    let (status, body) = create_as(&st, &scratch, guest, "guest-probe").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        body,
+        json!({"error": "You don't have the required permissions."})
+    );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn project_member_role_15_can_create() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+
+    let (status, body) = create_as(&st, &scratch, member, "member-probe").await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let id = Uuid::parse_str(body["id"].as_str().expect("id in body")).unwrap();
+    let created_by: Option<Uuid> =
+        sqlx::query_scalar("SELECT created_by_id FROM issues WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.pool)
+            .await
+            .unwrap();
+    assert_eq!(created_by, Some(member));
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn workspace_admin_with_any_project_membership_can_create() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let admin = scratch.add_actor(&st.pool, Some(20), Some(5)).await;
+
+    let (status, _) = create_as(&st, &scratch, admin, "ws-admin-probe").await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn workspace_admin_without_project_membership_is_forbidden() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let admin = scratch.add_actor(&st.pool, Some(20), None).await;
+
+    let (status, body) = create_as(&st, &scratch, admin, "ws-admin-outsider-probe").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        body,
+        json!({"error": "You don't have the required permissions."})
+    );
+
+    scratch.cleanup(&st.pool).await;
+}
