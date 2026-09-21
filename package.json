@@ -2,7 +2,7 @@
   "name": "plane",
   "version": "1.4.2",
   "private": true,
-  "description": "Open-source project management that unlocks customer value",
+  "description": "Open-source IT service management that keeps services running",
   "license": "AGPL-3.0",
   "repository": "https://github.com/makeplane/plane.git",
   "scripts": {
