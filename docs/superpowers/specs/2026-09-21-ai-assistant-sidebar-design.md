@@ -32,7 +32,9 @@ issue.
 - **AIAssistantStore** (baru, `apps/web/core/store/ai-assistant.store.ts`):
   observable `messages[]` (`role: "user" | "assistant"`), `isGenerating`,
   `activeIssueContext`, `sendMessage()`, `clearConversation()`, restore/save
-  localStorage per workspace.
+  localStorage per workspace. ID pesan via `uuidv4()` (bukan
+  `crypto.randomUUID()` — harus jalan di origin insecure http). Percakapan
+  tersimpan di-purge saat sign-out (`resetOnSignOut`).
 - **Hook akses:** `useAiAssistant()` mengikuti konvensi
   `apps/web/core/hooks/store/*`.
 - **Panel** (baru, `apps/web/core/components/ai/assistant-sidebar/`):
@@ -50,7 +52,7 @@ issue.
 ## Sumber konteks (prioritas)
 
 1. Issue yang sedang di-peek → `useIssueDetail().peekIssue` (judul, deskripsi,
-   state, prioritas, assignee).
+   state, prioritas). Assignee sengaja tidak disertakan di iterasi ini.
 2. Issue detail page terbuka (route param `projectId` + `issueId`) → issue dari
    store/service yang sudah ada.
 3. Tidak keduanya → empty state panel: "No active issue — your question will

@@ -341,11 +341,17 @@ Store percakapan: messages, isGenerating, activeIssueContext, persist localStora
 
 ```ts
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AIAssistantStore } from "./ai-assistant.store";
+import { AIAssistantStore, clearPersistedAiConversations } from "./ai-assistant.store";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 
 class LocalStorageStub {
   private store = new Map<string, string>();
+  get length() {
+    return this.store.size;
+  }
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
   getItem(key: string) {
     return this.store.get(key) ?? null;
   }
@@ -528,6 +534,17 @@ describe("AIAssistantStore", () => {
     expect(rehydrated.messages).toHaveLength(0);
   });
 
+  it("clearPersistedAiConversations purges stored chats across workspaces", async () => {
+    const store = new AIAssistantStore(makeService());
+    store.setWorkspace("acme");
+    await store.sendMessage("hi");
+    expect(store.messages).toHaveLength(2);
+    clearPersistedAiConversations();
+    const rehydrated = new AIAssistantStore(makeService());
+    rehydrated.setWorkspace("acme");
+    expect(rehydrated.messages).toHaveLength(0);
+  });
+
   it("serializes sendMessage while generating", async () => {
     let resolveFirst!: (value: unknown) => void;
     const service = makeService(
@@ -565,6 +582,7 @@ Expected: FAIL — `Failed to resolve import "./ai-assistant.store"`.
  */
 
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { v4 as uuidv4 } from "uuid";
 import { AIService } from "@/services/ai.service";
 import { AI_ASSISTANT_TASK, buildAiPrompt } from "@/lib/ai-context";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
@@ -583,7 +601,23 @@ export interface IAIAssistantStore {
   clearConversation: () => void;
 }
 
-const storageKey = (workspaceSlug: string | undefined) => `ai_assistant_messages_${workspaceSlug ?? "unknown"}`;
+export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
+
+export const clearPersistedAiConversations = () => {
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(AI_ASSISTANT_STORAGE_PREFIX)) keys.push(key);
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // storage unavailable — best-effort
+  }
+};
+
+const storageKey = (workspaceSlug: string | undefined) =>
+  `${AI_ASSISTANT_STORAGE_PREFIX}${workspaceSlug ?? "unknown"}`;
 
 export class AIAssistantStore implements IAIAssistantStore {
   messages: TAiMessage[] = [];
@@ -629,7 +663,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
     const slug = this.workspaceSlug;
-    const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: trimmed };
+    const userMessage: TAiMessage = { id: uuidv4(), role: "user", content: trimmed };
     runInAction(() => {
       this.messages.push(userMessage);
       this.persist();
@@ -691,7 +725,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
       if (this.workspaceSlug !== slug) return;
       const assistantMessage: TAiMessage = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         role: "assistant",
         content: res.response_html ?? "",
         isError: false,
@@ -709,7 +743,7 @@ export class AIAssistantStore implements IAIAssistantStore {
             ? "AI is not configured for this instance."
             : "An internal error has occurred. Please try again.";
       runInAction(() => {
-        this.messages.push({ id: crypto.randomUUID(), role: "assistant", content: errorContent, isError: true });
+        this.messages.push({ id: uuidv4(), role: "assistant", content: errorContent, isError: true });
         this.persist();
       });
     } finally {
@@ -752,7 +786,7 @@ Tambahkan import (letakkan dekat import theme.store, baris 71–72):
 
 ```ts
 import type { IAIAssistantStore } from "./ai-assistant.store";
-import { AIAssistantStore } from "./ai-assistant.store";
+import { AIAssistantStore, clearPersistedAiConversations } from "./ai-assistant.store";
 ```
 
 Tambahkan field di class `CoreRootStore` setelah `timelineStore: ITimelineStore;` (baris 111):
@@ -767,9 +801,10 @@ Di constructor setelah `this.timelineStore = new TimeLineStore(this);` (baris 14
     this.aiAssistant = new AIAssistantStore();
 ```
 
-Di `resetOnSignOut()` (setelah baris yang merecreate `timelineStore` — cari `this.timelineStore = new TimeLineStore(this);` di dalam resetOnSignOut, sekitar baris 183) tambahkan baris yang sama:
+Di `resetOnSignOut()` (setelah baris yang merecreate `timelineStore` — cari `this.timelineStore = new TimeLineStore(this);` di dalam resetOnSignOut, sekitar baris 183) tambahkan:
 
 ```ts
+    clearPersistedAiConversations();
     this.aiAssistant = new AIAssistantStore();
 ```
 
@@ -917,6 +952,7 @@ import type { TIssue } from "@plane/types";
 // hooks
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useInstance } from "@/hooks/store/use-instance";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // lib
@@ -925,8 +961,11 @@ import type { TAiIssueContext } from "@/lib/ai-context";
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // router
   const { workspaceSlug, workItem } = useParams<{ workspaceSlug: string; workItem?: string }>();
+  const rawWorkspaceSlug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
+  const rawWorkItem = Array.isArray(workItem) ? workItem[0] : workItem;
   // store hooks
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
+  const { config } = useInstance();
   const {
     messages,
     isGenerating,
@@ -946,16 +985,17 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
 
   // restore conversation for the current workspace
   useEffect(() => {
-    if (workspaceSlug) setWorkspace(workspaceSlug.toString());
-  }, [workspaceSlug, setWorkspace]);
+    if (rawWorkspaceSlug) setWorkspace(rawWorkspaceSlug.toString());
+  }, [rawWorkspaceSlug, setWorkspace]);
 
   // resolve active issue: peek view first, then browse route identifier
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
-  const [projectIdentifier, sequenceId] = (workItem ?? "").split("-");
-  const shouldFetchRouteIssue = !peekedIssue && !!projectIdentifier && !!sequenceId;
+  const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
+  const shouldFetchRouteIssue =
+    aiSidebarCollapsed === false && !peekedIssue && !!projectIdentifier && !!sequenceId;
   const { data: routeIssueMeta } = useSWR<TIssue>(
-    shouldFetchRouteIssue ? `ISSUE_DETAIL_${workspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
-    () => fetchIssueWithIdentifier(workspaceSlug!.toString(), projectIdentifier, sequenceId)
+    shouldFetchRouteIssue ? `ISSUE_DETAIL_${rawWorkspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
+    () => fetchIssueWithIdentifier(rawWorkspaceSlug!.toString(), projectIdentifier, sequenceId)
   );
   const issue = peekedIssue ?? (routeIssueMeta?.id ? getIssueById(routeIssueMeta.id) : undefined);
   const stateName = getStateById(issue?.state_id ?? null)?.name;
@@ -984,7 +1024,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     void sendMessage(value);
   };
 
-  if (aiSidebarCollapsed !== false) return null;
+  if (aiSidebarCollapsed !== false || !config?.has_llm_configured) return null;
 
   return (
     <aside className="fixed right-0 top-10 bottom-0 z-[30] flex w-[24rem] max-w-full flex-col border-l border-subtle bg-surface-1 shadow-sm">
