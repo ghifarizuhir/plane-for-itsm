@@ -555,9 +555,11 @@ SCRIPT_CAPABLE_MIME_TYPES: frozenset[str] = frozenset(
     ]
 )
 
-# Seed data kanonik pindah ke api-rs (`apps/api-rs/crates/api/assets/seeds`);
-# lihat docs/superpowers/specs/2026-09-22-itsm-copy-kit-wave2-design.md.
-SEED_DIR = os.path.join(BASE_DIR, "..", "..", "api-rs", "crates", "api", "assets", "seeds")
+# Canonical seed data moved to api-rs (`apps/api-rs/crates/api/assets/seeds`);
+# see docs/superpowers/specs/2026-09-22-itsm-copy-kit-wave2-design.md.
+SEED_DIR = os.path.normpath(
+    os.path.join(BASE_DIR, "..", "..", "api-rs", "crates", "api", "assets", "seeds")
+)
 
 ENABLE_DRF_SPECTACULAR = os.environ.get("ENABLE_DRF_SPECTACULAR", "0") == "1"
 
