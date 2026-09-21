@@ -4,22 +4,22 @@
  * See the LICENSE file for details.
  */
 
-export const SITE_NAME = "Terraline | Simple, extensible, open-source project management tool.";
-export const SITE_TITLE = "Terraline | Simple, extensible, open-source project management tool.";
+export const SITE_NAME = "Terraline | Open-source IT service management platform.";
+export const SITE_TITLE = "Terraline | Open-source IT service management platform.";
 export const SITE_DESCRIPTION =
-  "Open-source project management tool to manage work items, cycles, and product roadmaps easily";
+  "Open-source IT service management platform to run services, handle requests, and track delivery work in one place";
 export const SITE_KEYWORDS =
-  "software development, plan, ship, software, accelerate, code management, release management, project management, work items tracking, agile, scrum, kanban, collaboration";
+  "IT service management, ITSM, service desk, helpdesk, service catalog, service map, service health, IT operations, incident tracking, knowledge base, work items";
 export const SITE_URL = "https://app.terraline.space/";
-export const TWITTER_USER_NAME = "Terraline | Simple, extensible, open-source project management tool.";
+export const TWITTER_USER_NAME = "Terraline | Open-source IT service management platform.";
 
 // Terraline Sites Metadata
 export const SPACE_SITE_NAME =
-  "Terraline Publish | Make your Terraline boards and roadmaps public with just one-click. ";
-export const SPACE_SITE_TITLE = "Terraline Publish | Make your Terraline boards public with one-click";
+  "Terraline Publish | Share your Terraline projects and work items publicly with one click. ";
+export const SPACE_SITE_TITLE = "Terraline Publish | Share your Terraline projects publicly with one click";
 export const SPACE_SITE_DESCRIPTION =
-  "Terraline Publish is a customer feedback management tool built on top of terraline.space";
+  "Terraline Publish is a public publishing tool for your Terraline projects, built on top of terraline.space";
 export const SPACE_SITE_KEYWORDS =
-  "software development, customer feedback, software, accelerate, code management, release management, project management, work items tracking, agile, scrum, kanban, collaboration";
+  "IT service management, ITSM, service desk, public service status, customer feedback, service catalog, IT operations, knowledge base, collaboration";
 export const SPACE_SITE_URL = "https://app.terraline.space/";
 export const SPACE_TWITTER_USER_NAME = "terraline";
