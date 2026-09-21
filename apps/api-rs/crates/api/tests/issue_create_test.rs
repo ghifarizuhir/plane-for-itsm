@@ -230,6 +230,16 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM issue_activities WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM issue_subscribers WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM issues WHERE project_id = $1")
             .bind(self.project_id)
             .execute(pool)
@@ -416,6 +426,8 @@ async fn purge(pool: &PgPool) {
                 "DELETE FROM issue_sequences WHERE project_id = $1",
                 "DELETE FROM issue_assignees WHERE project_id = $1",
                 "DELETE FROM issue_labels WHERE project_id = $1",
+                "DELETE FROM issue_activities WHERE project_id = $1",
+                "DELETE FROM issue_subscribers WHERE project_id = $1",
                 "DELETE FROM labels WHERE project_id = $1",
                 "DELETE FROM issues WHERE project_id = $1",
                 "DELETE FROM intakes WHERE project_id = $1",
@@ -1185,6 +1197,131 @@ async fn duplicate_assignee_ids_are_deduped() {
         vec![member],
         "duplicate ids must collapse to one bridge row"
     );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_writes_created_activity_and_assignee_artifacts() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    let display_name: String = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(member)
+        .fetch_one(&st.pool)
+        .await
+        .unwrap();
+
+    let mut body = base_body("activity-probe", scratch.state_id);
+    body.assignee_ids = Some(vec![member]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let created: Vec<(String, Option<String>, String, Option<Uuid>, Option<Uuid>, Option<Uuid>)> =
+        sqlx::query_as(
+            "SELECT verb, field, comment, actor_id, created_by_id, updated_by_id FROM issue_activities \
+             WHERE issue_id = $1 AND verb = 'created'",
+        )
+        .bind(id)
+        .fetch_all(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(created.len(), 1, "exactly one created activity row");
+    assert_eq!(created[0].0, "created");
+    assert_eq!(created[0].1, None);
+    assert_eq!(created[0].2, "created the issue");
+    assert_eq!(created[0].3, Some(scratch.user_id));
+    assert_eq!(created[0].4, Some(scratch.user_id));
+    assert_eq!(created[0].5, None);
+
+    let assignee_acts: Vec<(String, String, String, String, Option<Uuid>, Option<Uuid>)> =
+        sqlx::query_as(
+            "SELECT field, old_value, new_value, comment, new_identifier, created_by_id \
+             FROM issue_activities WHERE issue_id = $1 AND field = 'assignees'",
+        )
+        .bind(id)
+        .fetch_all(&st.pool)
+        .await
+        .unwrap();
+    assert_eq!(assignee_acts.len(), 1);
+    assert_eq!(assignee_acts[0].0, "assignees");
+    assert_eq!(assignee_acts[0].1, "");
+    assert_eq!(assignee_acts[0].2, display_name);
+    assert_eq!(assignee_acts[0].3, "added assignee ");
+    assert_eq!(assignee_acts[0].4, Some(member));
+    assert_eq!(assignee_acts[0].5, None, "bulk_create parity leaves created_by_id NULL");
+
+    let subs: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT subscriber_id, created_by_id, updated_by_id FROM issue_subscribers \
+         WHERE issue_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_all(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(subs.len(), 1);
+    assert_eq!(subs[0].0, member);
+    assert_eq!(subs[0].1, Some(member), "subscriber row is authored by the assignee");
+    assert_eq!(subs[0].2, Some(member));
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn default_assignee_gets_no_activity_or_subscriber() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let default_user = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    set_default_assignee(&st.pool, scratch.project_id, default_user).await;
+
+    let (status, payload) = create_body(
+        &st,
+        &scratch,
+        scratch.user_id,
+        base_body("default-activity", scratch.state_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let counts: (i64, i64, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND field = 'assignees'), \
+         (SELECT COUNT(*) FROM issue_subscribers WHERE issue_id = $1 AND deleted_at IS NULL), \
+         (SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND verb = 'created')",
+    )
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(counts, (0, 0, 1), "default assignee is not tracked");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn labels_get_no_activity_rows() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let label = insert_label(&st.pool, scratch.project_id, scratch.workspace_id, "bug").await;
+
+    let mut body = base_body("label-activity", scratch.state_id);
+    body.label_ids = Some(vec![label]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let label_activities: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND field = 'labels'",
+    )
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(label_activities, 0, "Django has no track_labels on create");
 
     scratch.cleanup(&st.pool).await;
 }

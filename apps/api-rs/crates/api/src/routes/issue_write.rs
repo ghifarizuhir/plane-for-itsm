@@ -2,6 +2,9 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::issue_activity_write::{
+    insert_assignee_activities, insert_created_activity, insert_subscribers,
+};
 use super::issue_common::{
     apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows,
     require_project_write, IssueOut,
@@ -421,6 +424,21 @@ pub async fn create(
         &labels,
     )
     .await?;
+    let epoch = chrono::Utc::now().timestamp() as f64;
+    insert_created_activity(&mut tx, out.id, project_id, workspace_id, auth.0, epoch).await?;
+    if body.assignee_ids.is_some() {
+        insert_assignee_activities(
+            &mut tx,
+            out.id,
+            project_id,
+            workspace_id,
+            auth.0,
+            &assignees,
+            epoch,
+        )
+        .await?;
+    }
+    insert_subscribers(&mut tx, out.id, project_id, workspace_id, &assignees).await?;
     tx.commit().await?;
     Ok((
         StatusCode::CREATED,
