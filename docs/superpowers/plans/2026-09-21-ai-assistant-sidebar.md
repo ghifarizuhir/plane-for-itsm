@@ -834,14 +834,17 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 
 export const AiAssistantSidebarToggle = observer(function AiAssistantSidebarToggle() {
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
+  const isOpen = aiSidebarCollapsed === false;
 
   return (
     <Tooltip label="AI Assistant" side="bottom">
       <button
         type="button"
-        onClick={() => toggleAiSidebar()}
+        aria-label="AI Assistant"
+        aria-expanded={isOpen}
+        onClick={() => toggleAiSidebar(isOpen)}
         className={cn("flex size-8 items-center justify-center rounded-md transition-colors hover:bg-layer-1-hover", {
-          "bg-layer-1": !aiSidebarCollapsed,
+          "bg-layer-1": isOpen,
         })}
       >
         <AiStar1Outline className="size-5 text-primary" />
@@ -981,7 +984,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     void sendMessage(value);
   };
 
-  if (aiSidebarCollapsed) return null;
+  if (aiSidebarCollapsed !== false) return null;
 
   return (
     <aside className="fixed right-0 top-10 bottom-0 z-[30] flex w-[24rem] max-w-full flex-col border-l border-subtle bg-surface-1 shadow-sm">
