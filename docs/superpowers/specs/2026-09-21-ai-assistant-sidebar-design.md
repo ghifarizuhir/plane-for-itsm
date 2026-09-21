@@ -56,6 +56,10 @@ issue.
 3. Tidak keduanya → empty state panel: "No active issue — your question will
    be answered without issue context"; chat tetap berfungsi.
 
+Konteks detail page diraih lewat route param `workItem` (identifier
+`PROJ-142` di `/browse/...`) dengan SWR key yang sama dengan halaman detail
+(`ISSUE_DETAIL_<ws>_<proj>_<seq>`) sehingga dedupe cache, bukan fetch ganda.
+
 Konteks dibaca saat `sendMessage` dipanggil dan hanya di-inject ke prompt —
 tidak ditampilkan sebagai pesan.
 
@@ -97,7 +101,9 @@ Gating: tombol sparkle + panel hanya dirender jika `config?.has_llm_configured`
   konteks.
 - Unit `AIAssistantStore`: `sendMessage` (service dimock), path error
   400/429/500 → bubble benar, persist/restore localStorage, clear.
-- Component test panel: render bubble, empty state, gating.
+- Component test panel (render bubble, empty state, gating) ditunda: apps/web
+  belum punya environment test komponen; slice ini menambahkan vitest node-only
+  sehingga cakupan unit lib + store sudah menguji perilaku inti.
 
 ## Konvensi yang diikuti
 
