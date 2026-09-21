@@ -70,6 +70,8 @@ import type { IStickyStore } from "./sticky/sticky.store";
 import { StickyStore } from "./sticky/sticky.store";
 import type { IThemeStore } from "./theme.store";
 import { ThemeStore } from "./theme.store";
+import type { IAIAssistantStore } from "./ai-assistant.store";
+import { AIAssistantStore } from "./ai-assistant.store";
 import type { IUserStore } from "./user";
 import { UserStore } from "./user";
 import type { IWorkspaceRootStore } from "./workspace";
@@ -109,6 +111,7 @@ export class CoreRootStore {
   workItemFilters: IWorkItemFilterStore;
   powerK: IPowerKStore;
   timelineStore: ITimelineStore;
+  aiAssistant: IAIAssistantStore;
 
   constructor() {
     this.router = new RouterStore();
@@ -143,6 +146,7 @@ export class CoreRootStore {
     this.workItemFilters = new WorkItemFilterStore();
     this.powerK = new PowerKStore();
     this.timelineStore = new TimeLineStore(this);
+    this.aiAssistant = new AIAssistantStore();
   }
 
   resetOnSignOut() {
@@ -179,6 +183,7 @@ export class CoreRootStore {
     this.workItemFilters = new WorkItemFilterStore();
     this.powerK = new PowerKStore();
     this.timelineStore = new TimeLineStore(this);
+    this.aiAssistant = new AIAssistantStore();
   }
 }
 
