@@ -105,8 +105,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col overflow-hidden border-subtle bg-surface-1 transition-[width] duration-300 ease-in-out",
-        isOpen ? "w-[24rem] max-w-[85vw] border-l" : "w-0 border-l-0"
+        "relative flex h-full shrink-0 flex-col overflow-hidden bg-surface-1 transition-[width] duration-300 ease-in-out",
+        isOpen ? "mr-2 mb-2 w-[24rem] max-w-[85vw] rounded-xl border border-subtle" : "w-0 border-0"
       )}
       aria-hidden={!isOpen}
     >
