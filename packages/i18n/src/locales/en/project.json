@@ -103,12 +103,12 @@
     "empty_state": {
       "general": {
         "title": "Group and timebox your work in Cycles.",
-        "description": "Break work down by timeboxed chunks, work backwards from your project deadline to set dates, and make tangible progress as a team.",
+        "description": "Break delivery work into timeboxed chunks, set dates around your deadlines, and keep your team's progress visible.",
         "primary_button": {
           "text": "Set your first cycle",
           "comic": {
             "title": "Cycles are repetitive time-boxes.",
-            "description": "A sprint, an iteration, and or any other term you use for weekly or fortnightly tracking of work is a cycle."
+            "description": "A recurring window — weekly, fortnightly, or per maintenance cycle — used to track a chunk of work is a Cycle."
           }
         }
       },
@@ -191,12 +191,12 @@
     "empty_state": {
       "no_issues": {
         "title": "Create a work item and assign it to someone, even yourself",
-        "description": "Think of work items as jobs, tasks, work, or JTBD. Which we like. A work item and its sub-work items are usually time-based actionables assigned to members of your team. Your team creates, assigns, and completes work items to move your project towards its goal.",
+        "description": "Think of work items as tasks, tickets, or requests. A work item and its sub-work items are usually time-based actionables assigned to members of your team. Your team creates, assigns, and completes work items to move your project forward.",
         "primary_button": {
           "text": "Create your first work item",
           "comic": {
             "title": "Work items are building blocks in Terraline.",
-            "description": "Redesign the Terraline UI, Rebrand the company, or Launch the new fuel injection system are examples of work items that likely have sub-work items."
+            "description": "Onboard a new identity provider, migrate a database, or roll out a service desk process are examples of work items that likely have sub-work items."
           }
         }
       },
@@ -224,13 +224,13 @@
     "delete_module": "Delete module",
     "empty_state": {
       "general": {
-        "title": "Map your project milestones to Modules and track aggregated work easily.",
-        "description": "A group of work items that belong to a logical, hierarchical parent form a module. Think of them as a way to track work by project milestones. They have their own periods and deadlines as well as analytics to help you see how close or far you are from a milestone.",
+        "title": "Group related work into Modules and track it easily.",
+        "description": "A Module groups work items under a logical parent — a service, a platform, or a large initiative. Modules have their own periods, deadlines, and analytics so you can see how far you are from done.",
         "primary_button": {
           "text": "Build your first module",
           "comic": {
             "title": "Modules help group work by hierarchy.",
-            "description": "A cart module, a chassis module, and a warehouse module are all good example of this grouping."
+            "description": "A payments service module, an identity platform module, and a data warehouse module are good examples of this grouping."
           }
         }
       },
@@ -272,7 +272,7 @@
     "empty_state": {
       "general": {
         "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Terraline's AI assistant, to help you get started",
-        "description": "Pages are thoughts potting space in Terraline. Take down meeting notes, format them easily, embed work items, lay them out using a library of components, and keep them all in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
+        "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
         "primary_button": {
           "text": "Create your first page"
         }
