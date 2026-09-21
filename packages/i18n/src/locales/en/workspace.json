@@ -54,12 +54,12 @@
     "empty_state": {
       "general": {
         "title": "Overview of your projects, activity, and metrics",
-        "description": "Welcome to Terraline, we are excited to have you here. Create your first project and track your work items, and this page will transform into a space that helps you progress. Admins will also see items which help their team progress.",
+        "description": "Welcome to Terraline. Create your first project, add your services, and start tracking requests and work items — this page will turn into your operations overview.",
         "primary_button": {
           "text": "Build your first project",
           "comic": {
             "title": "Everything starts with a project in Terraline",
-            "description": "A project could be a product's roadmap, a marketing campaign, or launching a new car."
+            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       }
@@ -121,13 +121,13 @@
         "description": "Work items assigned to you, broken down by state, will show up here."
       },
       "general": {
-        "title": "Track progress, workloads, and allocations. Spot trends, remove blockers, and move work faster",
-        "description": "See scope versus demand, estimates, and scope creep. Get performance by team members and teams, and make sure your project runs on time.",
+        "title": "Track throughput, workloads, and trends. Spot bottlenecks and keep work moving",
+        "description": "See how work moves from open to done, where time goes, and how your team is performing — so services stay on track.",
         "primary_button": {
           "text": "Start your first project",
           "comic": {
             "title": "Analytics works best with Cycles + Modules",
-            "description": "First, timebox your issues into Cycles and, if you can, group issues that span more than a cycle into Modules. Check out both on the left nav."
+            "description": "First, timebox your work items into Cycles and group longer efforts into Modules. Check out both on the left nav."
           }
         }
       },
@@ -196,12 +196,12 @@
     "empty_state": {
       "general": {
         "title": "No active projects",
-        "description": "Think of each project as the parent for goal-oriented work. Projects are where Jobs, Cycles, and Modules live and, along with your colleagues, help you achieve that goal. Create a new project or filter for archived projects.",
+        "description": "Think of each project as the home for a service or an initiative. Projects are where services, requests, and work items live, and where your team keeps everything on track. Create a new project or filter for archived projects.",
         "primary_button": {
           "text": "Start your first project",
           "comic": {
             "title": "Everything starts with a project in Terraline",
-            "description": "A project could be a product's roadmap, a marketing campaign, or launching a new car."
+            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       },
@@ -212,7 +212,7 @@
           "text": "Start your first project",
           "comic": {
             "title": "Everything starts with a project in Terraline",
-            "description": "A project could be a product's roadmap, a marketing campaign, or launching a new car."
+            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       },
@@ -230,7 +230,7 @@
     "empty_state": {
       "all-issues": {
         "title": "No work items in the project",
-        "description": "First project done! Now, slice your work into trackable pieces with work items. Let's go!",
+        "description": "First project done! Now break your work into trackable pieces with work items.",
         "primary_button": {
           "text": "Create new work item"
         }
@@ -290,14 +290,14 @@
     "empty_state": {
       "general": {
         "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Terraline's AI assistant, to help you get started",
-        "description": "Pages are thoughts potting space in Terraline. Take down meeting notes, format them easily, embed work items, lay them out using a library of components, and keep them all in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
+        "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
         "primary_button": {
           "text": "Create your first page"
         }
       },
       "private": {
         "title": "No private pages yet",
-        "description": "Keep your private thoughts here. When you're ready to share, the team's just a click away.",
+        "description": "Keep private notes here. When you're ready to share, your team is a click away.",
         "primary_button": {
           "text": "Create your first page"
         }
