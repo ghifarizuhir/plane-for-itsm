@@ -38,25 +38,24 @@ const TOUR_STEPS: {
 }[] = [
   {
     key: "work-items",
-    title: "Plan with work items",
+    title: "Start with work items",
     description:
-      "The work item is the building block of the Terraline. Most concepts in Terraline are either associated with work items and their properties.",
+      "Work items are the building block of Terraline. Most concepts are tied to work items and their properties.",
     image: IssuesTour,
     nextStep: "cycles",
   },
   {
     key: "cycles",
     title: "Move with cycles",
-    description:
-      "Cycles help you and your team to progress faster, similar to the sprints commonly used in agile development.",
+    description: "Cycles group work into timeboxed windows so you and your team can move delivery forward together.",
     image: CyclesTour,
     prevStep: "work-items",
     nextStep: "modules",
   },
   {
     key: "modules",
-    title: "Break into modules",
-    description: "Modules break your big thing into Projects or Features, to help you organize better.",
+    title: "Group work in modules",
+    description: "Modules group work items by service, platform, or initiative to keep large efforts organized.",
     image: ModulesTour,
     prevStep: "cycles",
     nextStep: "views",
@@ -73,7 +72,7 @@ const TOUR_STEPS: {
   {
     key: "pages",
     title: "Document with pages",
-    description: "Use Pages to quickly jot down work items when you're in a meeting or starting a day.",
+    description: "Use Pages to write runbooks, SOPs, and postmortems — your team's operational knowledge base.",
     image: PagesTour,
     prevStep: "views",
   },
@@ -103,8 +102,8 @@ export const TourRoot = observer(function TourRoot(props: TOnboardingTourProps) 
                 Welcome to Terraline, {currentUser?.first_name} {currentUser?.last_name}
               </h3>
               <p className="mt-3 text-13 text-secondary">
-                We{"'"}re glad that you decided to try out Terraline. You can now manage your projects with ease. Get
-                started by creating a project.
+                We{"'"}re glad you decided to try Terraline. Run your services, handle requests, and keep delivery work
+                moving. Get started by creating a project.
               </p>
               <div className="flex h-full items-end">
                 <div className="mt-12 flex items-center gap-6">

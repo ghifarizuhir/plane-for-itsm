@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import Link from "next/link";
 import { GOD_MODE_URL } from "@plane/constants";
 // assets
 import GradientLogo from "@/app/assets/auth/gradient-logo.webp?url";
@@ -41,7 +40,8 @@ export function InstanceNotReady() {
               <div className="flex max-w-124 flex-col items-center gap-3">
                 <h1 className="text-h2-semibold text-primary">Welcome to Terraline</h1>
                 <p className="text-center text-body-md-regular text-secondary">
-                  Set up your instance and create your first workspace to begin managing projects and work.
+                  Set up your instance and create your first workspace to begin running services, requests, and delivery
+                  work.
                 </p>
               </div>
             </div>

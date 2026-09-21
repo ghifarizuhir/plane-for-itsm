@@ -31,12 +31,12 @@ type Props = {
 };
 
 const ROLES = [
-  { id: "product-manager", label: "Product Manager", icon: CubeOutline },
-  { id: "engineering-manager", label: "Engineering Manager", icon: ViewsOutline },
-  { id: "designer", label: "Designer", icon: PenTool },
-  { id: "developer", label: "Developer", icon: MonitorOutline },
-  { id: "founder-executive", label: "Founder/Executive", icon: RocketOutline },
-  { id: "operations-manager", label: "Operations Manager", icon: RefreshOutline },
+  { id: "product-manager", label: "Service Desk Manager", icon: CubeOutline },
+  { id: "engineering-manager", label: "IT Operations Manager", icon: ViewsOutline },
+  { id: "designer", label: "Incident Manager", icon: PenTool },
+  { id: "developer", label: "IT Support Agent", icon: MonitorOutline },
+  { id: "founder-executive", label: "IT Manager/Executive", icon: RocketOutline },
+  { id: "operations-manager", label: "Platform Engineer", icon: RefreshOutline },
   { id: "others", label: "Others", icon: CubeOutline },
 ];
 
@@ -66,10 +66,7 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
       role: formData.role,
     };
     try {
-      await Promise.all([
-        updateUserProfile(profileUpdatePayload),
-        // totalSteps > 2 && stepChange({ profile_complete: true }),
-      ]);
+      await updateUserProfile(profileUpdatePayload);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Success",
@@ -94,7 +91,7 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
     handleStepChange(EOnboardingSteps.ROLE_SETUP);
   };
 
-  const isButtonDisabled = !isSubmitting && isValid ? false : true;
+  const isButtonDisabled = isSubmitting || !isValid;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10">
