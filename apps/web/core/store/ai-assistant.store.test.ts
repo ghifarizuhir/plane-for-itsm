@@ -1,0 +1,167 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AIAssistantStore } from "./ai-assistant.store";
+import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
+
+class LocalStorageStub {
+  private store = new Map<string, string>();
+  getItem(key: string) {
+    return this.store.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    this.store.set(key, value);
+  }
+  removeItem(key: string) {
+    this.store.delete(key);
+  }
+  clear() {
+    this.store.clear();
+  }
+}
+
+type TCreateGptTask = (workspaceSlug: string, data: { prompt: string; task: string }) => Promise<any>;
+
+const makeService = (impl: TCreateGptTask = async () => ({ response: "ok", response_html: "ok" })) => ({
+  createGptTask: vi.fn(impl) as unknown as TCreateGptTask,
+});
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const CONTEXT: TAiIssueContext = {
+  name: "Login fails with SSO",
+  descriptionHtml: "<p>SSO broken.</p>",
+  state: "In Progress",
+  priority: "high",
+};
+
+beforeEach(() => {
+  vi.stubGlobal("localStorage", new LocalStorageStub());
+});
+
+describe("AIAssistantStore", () => {
+  it("restores persisted messages when workspace is set", async () => {
+    const first = new AIAssistantStore(makeService());
+    first.setWorkspace("acme");
+    await first.sendMessage("hello");
+    expect(first.messages).toHaveLength(2);
+
+    const second = new AIAssistantStore(makeService());
+    second.setWorkspace("acme");
+    expect(second.messages).toHaveLength(2);
+
+    const third = new AIAssistantStore(makeService());
+    third.setWorkspace("other-ws");
+    expect(third.messages).toHaveLength(0);
+  });
+
+  it("sendMessage appends user + assistant message and builds prompt with context", async () => {
+    const service = makeService(async (_slug, data) => ({ response: "ok", response_html: "ok html" }));
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    store.setActiveIssueContext(CONTEXT);
+
+    await store.sendMessage("what is wrong?");
+    expect(store.isGenerating).toBe(false);
+    expect(store.messages[0].role).toBe("user");
+    expect(store.messages[0].content).toBe("what is wrong?");
+    expect(store.messages[1].role).toBe("assistant");
+    expect(store.messages[1].content).toBe("ok html");
+    expect(store.messages[1].isError).toBe(false);
+
+    const call = (service.createGptTask as any).mock.calls[0];
+    expect(call[0]).toBe("acme");
+    expect(call[1].task).toContain("ITSM work-item assistant");
+    expect(call[1].prompt).toContain("Work item context:");
+    expect(call[1].prompt).toContain("User's new question: what is wrong?");
+  });
+
+  it("sendMessage ignores empty or whitespace questions", async () => {
+    const service = makeService();
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    await store.sendMessage("   ");
+    expect(store.messages).toHaveLength(0);
+    expect((service.createGptTask as any).mock.calls).toHaveLength(0);
+  });
+
+  it("maps errors to error bubbles and keeps the user message", async () => {
+    const service = makeService(async () => {
+      throw Object.assign(new Error("fail"), { status: 429, data: { error: "Rate limit exceeded for openrouter.ai" } });
+    });
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    await store.sendMessage("hi");
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages[1].isError).toBe(true);
+    expect(store.messages[1].content).toBe("Rate limit exceeded for openrouter.ai");
+
+    const service400 = makeService(async () => {
+      throw Object.assign(new Error("fail"), { status: 400, data: { error: "LLM provider API key and model are required" } });
+    });
+    const store400 = new AIAssistantStore(service400);
+    store400.setWorkspace("acme-400");
+    await store400.sendMessage("hi");
+    expect(store400.messages).toHaveLength(2);
+    expect(store400.messages[1].isError).toBe(true);
+    expect(store400.messages[1].content).toBe("AI is not configured for this instance.");
+
+    const service500 = makeService(async () => {
+      throw Object.assign(new Error("fail"), { status: 500 });
+    });
+    const store500 = new AIAssistantStore(service500);
+    store500.setWorkspace("acme-500");
+    await store500.sendMessage("hi");
+    expect(store500.messages).toHaveLength(2);
+    expect(store500.messages[1].isError).toBe(true);
+    expect(store500.messages[1].content).toContain("internal error");
+  });
+
+  it("retryLast drops the trailing error and resends the last user question", async () => {
+    const failing = makeService(async () => {
+      throw Object.assign(new Error("fail"), { status: 500 });
+    });
+    const store = new AIAssistantStore(failing);
+    store.setWorkspace("acme");
+    await store.sendMessage("first question");
+    await flush();
+
+    const passing = makeService(async () => ({ response: "ok", response_html: "fixed" }));
+    (store as unknown as { aiService: unknown }).aiService = passing;
+    await store.retryLast();
+
+    expect(store.messages).toHaveLength(3);
+    expect(store.messages[0].content).toBe("first question");
+    expect(store.messages[1].content).toBe("first question");
+    expect(store.messages[2].content).toBe("fixed");
+    const call = (passing.createGptTask as any).mock.calls[0];
+    expect(call[1].prompt).toContain("User's new question: first question");
+  });
+
+  it("clearConversation empties messages and persists", async () => {
+    const store = new AIAssistantStore(makeService());
+    store.setWorkspace("acme");
+    await store.sendMessage("hi");
+    store.clearConversation();
+    expect(store.messages).toHaveLength(0);
+
+    const rehydrated = new AIAssistantStore(makeService());
+    rehydrated.setWorkspace("acme");
+    expect(rehydrated.messages).toHaveLength(0);
+  });
+
+  it("serializes sendMessage while generating", async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const service = makeService(
+      () => new Promise((resolve) => { resolveFirst = resolve; })
+    );
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+    const first = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+    await store.sendMessage("q2");
+    expect(store.messages.map((m: TAiMessage) => m.content)).toEqual(["q1"]);
+    resolveFirst?.({ response: "ok", response_html: "ok" });
+    await first;
+    expect(store.isGenerating).toBe(false);
+  });
+});
