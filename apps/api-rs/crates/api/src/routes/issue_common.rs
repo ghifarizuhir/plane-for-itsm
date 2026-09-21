@@ -540,8 +540,12 @@ pub(crate) async fn replace_bridges(
         }
     }
     if let Some(ids) = labels {
-        sqlx::query("UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
-            .bind(issue_id).execute(&mut **tx).await?;
+        sqlx::query(
+            "UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(issue_id)
+        .execute(&mut **tx)
+        .await?;
         for id in ids {
             sqlx::query(
                 "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \

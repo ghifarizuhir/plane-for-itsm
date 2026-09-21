@@ -2,9 +2,12 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use super::issue_common::{
+    apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows,
+    require_project_write, IssueOut,
+};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
-use super::issue_common::{IssueOut, apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows, require_project_write};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
