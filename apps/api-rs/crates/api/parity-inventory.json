@@ -148,7 +148,7 @@
           "fe_pages": [],
           "batch_task": "Batch G T1",
           "out_scope": false,
-          "notes": "verified IssueViewSet.list 12-key paginated envelope vs list; POST vs issue_write::create 201"
+          "notes": "verified IssueViewSet.list 12-key paginated envelope vs list; POST create: full payload persisted, assignee/label bridges + default assignee, created/assignee activities + subscribers, 26-key row 201"
         },
         {
           "methods": ["GET"],
