@@ -15,6 +15,7 @@ import type { TIssue } from "@plane/types";
 // hooks
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useInstance } from "@/hooks/store/use-instance";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // lib
@@ -23,8 +24,11 @@ import type { TAiIssueContext } from "@/lib/ai-context";
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // router
   const { workspaceSlug, workItem } = useParams<{ workspaceSlug: string; workItem?: string }>();
+  const rawWorkspaceSlug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
+  const rawWorkItem = Array.isArray(workItem) ? workItem[0] : workItem;
   // store hooks
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
+  const { config } = useInstance();
   const {
     messages,
     isGenerating,
@@ -44,16 +48,17 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
 
   // restore conversation for the current workspace
   useEffect(() => {
-    if (workspaceSlug) setWorkspace(workspaceSlug.toString());
-  }, [workspaceSlug, setWorkspace]);
+    if (rawWorkspaceSlug) setWorkspace(rawWorkspaceSlug.toString());
+  }, [rawWorkspaceSlug, setWorkspace]);
 
   // resolve active issue: peek view first, then browse route identifier
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
-  const [projectIdentifier, sequenceId] = (workItem ?? "").split("-");
-  const shouldFetchRouteIssue = !peekedIssue && !!projectIdentifier && !!sequenceId;
+  const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
+  const shouldFetchRouteIssue =
+    aiSidebarCollapsed === false && !peekedIssue && !!projectIdentifier && !!sequenceId;
   const { data: routeIssueMeta } = useSWR<TIssue>(
-    shouldFetchRouteIssue ? `ISSUE_DETAIL_${workspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
-    () => fetchIssueWithIdentifier(workspaceSlug!.toString(), projectIdentifier, sequenceId)
+    shouldFetchRouteIssue ? `ISSUE_DETAIL_${rawWorkspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
+    () => fetchIssueWithIdentifier(rawWorkspaceSlug!.toString(), projectIdentifier, sequenceId)
   );
   const issue = peekedIssue ?? (routeIssueMeta?.id ? getIssueById(routeIssueMeta.id) : undefined);
   const stateName = getStateById(issue?.state_id ?? null)?.name;
@@ -82,7 +87,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     void sendMessage(value);
   };
 
-  if (aiSidebarCollapsed !== false) return null;
+  if (aiSidebarCollapsed !== false || !config?.has_llm_configured) return null;
 
   return (
     <aside className="fixed right-0 top-10 bottom-0 z-[30] flex w-[24rem] max-w-full flex-col border-l border-subtle bg-surface-1 shadow-sm">

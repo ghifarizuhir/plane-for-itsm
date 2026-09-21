@@ -5,6 +5,7 @@
  */
 
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { v4 as uuidv4 } from "uuid";
 import { AIService } from "@/services/ai.service";
 import { AI_ASSISTANT_TASK, buildAiPrompt } from "@/lib/ai-context";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
@@ -23,7 +24,21 @@ export interface IAIAssistantStore {
   clearConversation: () => void;
 }
 
-const storageKey = (workspaceSlug: string | undefined) => `ai_assistant_messages_${workspaceSlug ?? "unknown"}`;
+export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
+export const clearPersistedAiConversations = () => {
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (key?.startsWith(AI_ASSISTANT_STORAGE_PREFIX)) keys.push(key);
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {
+    // storage unavailable — best-effort
+  }
+};
+
+const storageKey = (workspaceSlug: string | undefined) => `${AI_ASSISTANT_STORAGE_PREFIX}${workspaceSlug ?? "unknown"}`;
 
 export class AIAssistantStore implements IAIAssistantStore {
   messages: TAiMessage[] = [];
@@ -69,7 +84,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
     const slug = this.workspaceSlug;
-    const userMessage: TAiMessage = { id: crypto.randomUUID(), role: "user", content: trimmed };
+    const userMessage: TAiMessage = { id: uuidv4(), role: "user", content: trimmed };
     runInAction(() => {
       this.messages.push(userMessage);
       this.persist();
@@ -131,7 +146,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
       if (this.workspaceSlug !== slug) return;
       const assistantMessage: TAiMessage = {
-        id: crypto.randomUUID(),
+        id: uuidv4(),
         role: "assistant",
         content: res.response_html ?? "",
         isError: false,
@@ -149,7 +164,7 @@ export class AIAssistantStore implements IAIAssistantStore {
             ? "AI is not configured for this instance."
             : "An internal error has occurred. Please try again.";
       runInAction(() => {
-        this.messages.push({ id: crypto.randomUUID(), role: "assistant", content: errorContent, isError: true });
+        this.messages.push({ id: uuidv4(), role: "assistant", content: errorContent, isError: true });
         this.persist();
       });
     } finally {

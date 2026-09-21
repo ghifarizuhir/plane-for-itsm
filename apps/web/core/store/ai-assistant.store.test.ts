@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AIAssistantStore } from "./ai-assistant.store";
+import { AIAssistantStore, clearPersistedAiConversations } from "./ai-assistant.store";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 
 class LocalStorageStub {
   private store = new Map<string, string>();
+  get length() {
+    return this.store.size;
+  }
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
   getItem(key: string) {
     return this.store.get(key) ?? null;
   }
@@ -190,6 +196,17 @@ describe("AIAssistantStore", () => {
     store.clearConversation();
     expect(store.messages).toHaveLength(0);
 
+    const rehydrated = new AIAssistantStore(makeService());
+    rehydrated.setWorkspace("acme");
+    expect(rehydrated.messages).toHaveLength(0);
+  });
+
+  it("clearPersistedAiConversations purges stored chats across workspaces", async () => {
+    const store = new AIAssistantStore(makeService());
+    store.setWorkspace("acme");
+    await store.sendMessage("hi");
+    expect(store.messages).toHaveLength(2);
+    clearPersistedAiConversations();
     const rehydrated = new AIAssistantStore(makeService());
     rehydrated.setWorkspace("acme");
     expect(rehydrated.messages).toHaveLength(0);
