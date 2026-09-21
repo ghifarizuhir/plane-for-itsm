@@ -7,7 +7,8 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     IssueDetailRow, IssueListRow, PageWindow, fetch_guest_scoped, fetch_project_member_role,
-    is_workspace_admin, page_window, parse_date, project_gate_allows, require_project_write,
+    is_workspace_admin, page_window, parse_date, project_gate_allows, replace_bridges,
+    require_project_write,
 };
 use crate::routes::issue_query::{DETAIL_SELECT_SQL, LIST_SELECT_SQL, build_ungrouped_envelope};
 use crate::routes::issue_write::resolve_effective_state;
@@ -614,40 +615,6 @@ async fn validate_write(
     }
     parse_date(&body.start_date).map_err(bad)?;
     parse_date(&body.target_date).map_err(bad)?;
-    Ok(())
-}
-
-/// Replaces the live assignee/label bridge rows when the SDK sent the key.
-async fn replace_bridges(
-    tx: &mut sqlx::Transaction<'_, Postgres>,
-    issue_id: uuid::Uuid,
-    project_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-    assignees: Option<&[uuid::Uuid]>,
-    labels: Option<&[uuid::Uuid]>,
-) -> Result<(), common::errors::AppError> {
-    if let Some(ids) = assignees {
-        sqlx::query("UPDATE issue_assignees SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
-            .bind(issue_id).execute(&mut **tx).await?;
-        for id in ids {
-            sqlx::query(
-                "INSERT INTO issue_assignees (id, issue_id, assignee_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
-                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
-                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
-            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
-        }
-    }
-    if let Some(ids) = labels {
-        sqlx::query("UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
-            .bind(issue_id).execute(&mut **tx).await?;
-        for id in ids {
-            sqlx::query(
-                "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
-                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
-                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
-            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
-        }
-    }
     Ok(())
 }
 

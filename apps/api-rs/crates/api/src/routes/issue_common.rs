@@ -1,5 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::Postgres;
+use uuid::Uuid;
 
 use crate::routes::project::ws_role;
 use crate::state::AppState;
@@ -515,4 +517,133 @@ pub(crate) fn parse_date(raw: &Option<String>) -> Result<Option<chrono::NaiveDat
             .map(Some)
             .map_err(|_| format!("Invalid date: {s}")),
     }
+}
+
+/// Replaces the live assignee/label bridge rows when the SDK sent the key.
+pub(crate) async fn replace_bridges(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    issue_id: Uuid,
+    project_id: Uuid,
+    user_id: Uuid,
+    assignees: Option<&[Uuid]>,
+    labels: Option<&[Uuid]>,
+) -> Result<(), common::errors::AppError> {
+    if let Some(ids) = assignees {
+        sqlx::query("UPDATE issue_assignees SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
+            .bind(issue_id).execute(&mut **tx).await?;
+        for id in ids {
+            sqlx::query(
+                "INSERT INTO issue_assignees (id, issue_id, assignee_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
+                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
+        }
+    }
+    if let Some(ids) = labels {
+        sqlx::query("UPDATE issue_labels SET deleted_at = now() WHERE issue_id = $1 AND deleted_at IS NULL")
+            .bind(issue_id).execute(&mut **tx).await?;
+        for id in ids {
+            sqlx::query(
+                "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+                 SELECT gen_random_uuid(), $1, $2, $3, w.id, $4, $4, now(), now() FROM workspaces w \
+                 WHERE w.id = (SELECT workspace_id FROM projects WHERE id = $3)",
+            ).bind(issue_id).bind(id).bind(project_id).bind(user_id).execute(&mut **tx).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn insert_assignee_bridge(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    issue_id: Uuid,
+    assignee_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    creator: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO issue_assignees (id, issue_id, assignee_id, project_id, workspace_id, \
+         created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULL, now(), now()) \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(issue_id)
+    .bind(assignee_id)
+    .bind(project_id)
+    .bind(workspace_id)
+    .bind(creator)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn insert_label_bridge(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    issue_id: Uuid,
+    label_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    creator: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, \
+         created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULL, now(), now()) \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(issue_id)
+    .bind(label_id)
+    .bind(project_id)
+    .bind(workspace_id)
+    .bind(creator)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Create-path bridge writer (Django `IssueCreateSerializer.create`,
+/// `serializers/issue.py:214-272`): requested ids win; otherwise the project
+/// default assignee is applied when it is an active project member role >= 15.
+/// Rows carry `updated_by_id = NULL` (issue's `updated_by` is NULL on create).
+pub(crate) async fn apply_create_bridges(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    issue_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    creator: Uuid,
+    requested_assignees: &[Uuid],
+    requested_labels: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    if requested_assignees.is_empty() {
+        let default_assignee: Option<Uuid> = sqlx::query_scalar(
+            "SELECT p.default_assignee_id FROM projects p \
+             WHERE p.id = $1 AND p.default_assignee_id IS NOT NULL \
+             AND EXISTS(SELECT 1 FROM project_members pm \
+                        WHERE pm.project_id = p.id AND pm.member_id = p.default_assignee_id \
+                        AND pm.role >= 15 AND pm.is_active = true AND pm.deleted_at IS NULL)",
+        )
+        .bind(project_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some(assignee_id) = default_assignee {
+            insert_assignee_bridge(tx, issue_id, assignee_id, project_id, workspace_id, creator)
+                .await?;
+        }
+    } else {
+        for assignee_id in requested_assignees {
+            insert_assignee_bridge(
+                tx,
+                issue_id,
+                *assignee_id,
+                project_id,
+                workspace_id,
+                creator,
+            )
+            .await?;
+        }
+    }
+    for label_id in requested_labels {
+        insert_label_bridge(tx, issue_id, *label_id, project_id, workspace_id, creator).await?;
+    }
+    Ok(())
 }

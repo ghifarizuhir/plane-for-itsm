@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
-use super::issue_common::{IssueOut, fetch_project_member_role, is_workspace_admin, project_gate_allows, require_project_write};
+use super::issue_common::{IssueOut, apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows, require_project_write};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
@@ -104,6 +104,18 @@ pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
 
 fn bad(msg: &str) -> (StatusCode, Json<Value>) {
     (StatusCode::BAD_REQUEST, Json(json!({"error": msg})))
+}
+
+/// Order-preserving dedupe (Django's bulk_create loses the whole batch on a
+/// duplicate; we keep the first occurrence of each id).
+fn dedupe_ids(ids: &Option<Vec<uuid::Uuid>>) -> Vec<uuid::Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    ids.as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .copied()
+        .filter(|id| seen.insert(*id))
+        .collect()
 }
 
 /// DB-backed create validation; every failure is 400 (brainstorming decision:
@@ -347,18 +359,12 @@ pub async fn create(
     if !require_project_write(&st, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
+    let assignees = dedupe_ids(&body.assignee_ids);
+    let labels = dedupe_ids(&body.label_ids);
     if let Err(msg) = validate_create(&body) {
         return Ok(bad(&msg));
     }
-    if let Err(e) = validate_create_refs(
-        &st,
-        project_id,
-        &body,
-        body.assignee_ids.as_deref().unwrap_or(&[]),
-        body.label_ids.as_deref().unwrap_or(&[]),
-    )
-    .await
-    {
+    if let Err(e) = validate_create_refs(&st, project_id, &body, &assignees, &labels).await {
         return Ok(e);
     }
 
@@ -395,6 +401,21 @@ pub async fn create(
             estimate_point_id: body.estimate_point,
             created_by: auth.0,
         },
+    )
+    .await?;
+    let workspace_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    apply_create_bridges(
+        &mut tx,
+        out.id,
+        project_id,
+        workspace_id,
+        auth.0,
+        &assignees,
+        &labels,
     )
     .await?;
     tx.commit().await?;

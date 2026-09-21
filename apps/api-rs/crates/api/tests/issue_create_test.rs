@@ -215,6 +215,21 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM issue_assignees WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM issue_labels WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM labels WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM issues WHERE project_id = $1")
             .bind(self.project_id)
             .execute(pool)
@@ -315,6 +330,43 @@ async fn insert_issue_type(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uui
     id
 }
 
+async fn insert_label(pool: &PgPool, project_id: Uuid, workspace_id: Uuid, name: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO labels (id, name, color, description, sort_order, project_id, workspace_id, \
+         created_at, updated_at) \
+         VALUES ($1, $2, '#60646C', '', 65535, $3, $4, now(), now())",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(project_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch label");
+    id
+}
+
+async fn set_default_assignee(pool: &PgPool, project_id: Uuid, user_id: Uuid) {
+    sqlx::query("UPDATE projects SET default_assignee_id = $2 WHERE id = $1")
+        .bind(project_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .expect("set default assignee");
+}
+
+async fn live_assignees(pool: &PgPool, issue_id: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar(
+        "SELECT assignee_id FROM issue_assignees WHERE issue_id = $1 AND deleted_at IS NULL \
+         ORDER BY created_at",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("assignee rows")
+}
+
 async fn insert_estimate_with_point(pool: &PgPool, project_id: Uuid, workspace_id: Uuid) -> Uuid {
     let estimate_id = Uuid::new_v4();
     let point_id = Uuid::new_v4();
@@ -362,6 +414,9 @@ async fn purge(pool: &PgPool) {
             for stmt in [
                 "DELETE FROM intake_issues WHERE project_id = $1",
                 "DELETE FROM issue_sequences WHERE project_id = $1",
+                "DELETE FROM issue_assignees WHERE project_id = $1",
+                "DELETE FROM issue_labels WHERE project_id = $1",
+                "DELETE FROM labels WHERE project_id = $1",
                 "DELETE FROM issues WHERE project_id = $1",
                 "DELETE FROM intakes WHERE project_id = $1",
                 "DELETE FROM states WHERE project_id = $1",
@@ -987,6 +1042,149 @@ async fn invalid_priority_returns_400() {
     let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(payload, json!({"error": "Invalid priority"}));
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_writes_assignee_and_label_bridges() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    let label = insert_label(&st.pool, scratch.project_id, scratch.workspace_id, "urgent").await;
+
+    let mut body = base_body("bridge-probe", scratch.state_id);
+    body.assignee_ids = Some(vec![member]);
+    body.label_ids = Some(vec![label]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let rows: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT assignee_id, created_by_id, updated_by_id FROM issue_assignees \
+         WHERE issue_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_all(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1, "exactly one live assignee bridge");
+    assert_eq!(rows[0].0, member);
+    assert_eq!(rows[0].1, Some(scratch.user_id));
+    assert_eq!(rows[0].2, None, "bridge updated_by_id stays NULL on create");
+
+    let labels: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT label_id FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_all(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(labels, vec![label]);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_applies_default_assignee_when_absent() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let default_user = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    set_default_assignee(&st.pool, scratch.project_id, default_user).await;
+
+    let (status, payload) = create_body(
+        &st,
+        &scratch,
+        scratch.user_id,
+        base_body("default-absent", scratch.state_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    assert_eq!(live_assignees(&st.pool, id).await, vec![default_user]);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_applies_default_assignee_when_empty() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let default_user = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    set_default_assignee(&st.pool, scratch.project_id, default_user).await;
+
+    let mut body = base_body("default-empty", scratch.state_id);
+    body.assignee_ids = Some(vec![]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    assert_eq!(live_assignees(&st.pool, id).await, vec![default_user]);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_ignores_default_assignee_when_assignees_sent() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let default_user = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    let chosen = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    set_default_assignee(&st.pool, scratch.project_id, default_user).await;
+
+    let mut body = base_body("default-ignored", scratch.state_id);
+    body.assignee_ids = Some(vec![chosen]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    assert_eq!(live_assignees(&st.pool, id).await, vec![chosen]);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_skips_ineligible_default_assignee() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let guest = scratch.add_actor(&st.pool, Some(15), Some(5)).await;
+    set_default_assignee(&st.pool, scratch.project_id, guest).await;
+
+    let (status, payload) = create_body(
+        &st,
+        &scratch,
+        scratch.user_id,
+        base_body("default-ineligible", scratch.state_id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    assert!(
+        live_assignees(&st.pool, id).await.is_empty(),
+        "role < 15 default assignee must not be bridged"
+    );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn duplicate_assignee_ids_are_deduped() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+
+    let mut body = base_body("dedupe-probe", scratch.state_id);
+    body.assignee_ids = Some(vec![member, member]);
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    assert_eq!(
+        live_assignees(&st.pool, id).await,
+        vec![member],
+        "duplicate ids must collapse to one bridge row"
+    );
 
     scratch.cleanup(&st.pool).await;
 }
