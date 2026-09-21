@@ -7,7 +7,7 @@
       },
       "step_one": {
         "title": "Click “+ Add work item”",
-        "description": "Start by clicking the “+ New Work Item” button. You can create tasks, bugs, or custom type that fits your needs."
+        "description": "Start by clicking the “+ New Work Item” button. You can create requests, incidents, tasks, or any custom type that fits your needs."
       },
       "step_two": {
         "title": "Filter your work items",
@@ -46,12 +46,12 @@
     },
     "module": {
       "step_zero": {
-        "title": "Break your project down into Modules",
-        "description": "Modules are smaller, focused projects that help users group and organize work items within specific time frames."
+        "title": "Group related work into Modules",
+        "description": "Modules group and organize work items within specific time frames — by service, platform, or initiative."
       },
       "step_one": {
         "title": "Create Module",
-        "description": "Modules are smaller, focused projects that help users group and organize work items within specific time frames."
+        "description": "Modules group and organize work items within specific time frames — by service, platform, or initiative."
       },
       "step_two": {
         "title": "Click “+ ”",
@@ -69,7 +69,7 @@
     "page": {
       "step_zero": {
         "title": "Document with AI-powered Pages",
-        "description": "Pages in Terraline let you capture, organize, and collaborate on project info—no external tools needed."
+        "description": "Pages in Terraline let you capture, organize, and collaborate on operational knowledge — no external tools needed."
       },
       "step_one": {
         "title": "Make page Public or Private",
@@ -95,7 +95,7 @@
     "intake": {
       "step_zero": {
         "title": "Streamline requests with intake",
-        "description": "A Terraline-only feature that lets Guests create work items for bugs, requests, or tickets."
+        "description": "A Terraline-only feature that lets Guests create work items for requests, incidents, or tickets."
       },
       "step_one": {
         "title": "Open/closed intake requests",
@@ -149,7 +149,7 @@
     },
     "seed_data": {
       "title": "Here is your demo project",
-      "description": "Projects let you manage your teams, tasks, and everything you need to get things done within your workspace."
+      "description": "Projects are where your services, requests, and delivery work live — everything your team needs in one place."
     }
   },
   "get_started": {
