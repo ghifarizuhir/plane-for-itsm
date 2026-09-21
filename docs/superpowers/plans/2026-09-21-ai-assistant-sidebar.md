@@ -992,7 +992,12 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
   const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
   const shouldFetchRouteIssue =
-    aiSidebarCollapsed === false && !peekedIssue && !!projectIdentifier && !!sequenceId;
+    aiSidebarCollapsed === false &&
+    !!config?.has_llm_configured &&
+    !!rawWorkspaceSlug &&
+    !peekedIssue &&
+    !!projectIdentifier &&
+    !!sequenceId;
   const { data: routeIssueMeta } = useSWR<TIssue>(
     shouldFetchRouteIssue ? `ISSUE_DETAIL_${rawWorkspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
     () => fetchIssueWithIdentifier(rawWorkspaceSlug!.toString(), projectIdentifier, sequenceId)
