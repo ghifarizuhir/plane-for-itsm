@@ -150,14 +150,13 @@ async fn validate_create_refs(
         }
     }
     if let Some(state_id) = body.state_id {
-        let (ok,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)",
-        )
-        .bind(state_id)
-        .bind(project_id)
-        .fetch_one(&st.pool)
-        .await
-        .map_err(error)?;
+        let (ok,): (bool,) =
+            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)")
+                .bind(state_id)
+                .bind(project_id)
+                .fetch_one(&st.pool)
+                .await
+                .map_err(error)?;
         if !ok {
             return Err(bad("State is not valid please pass a valid state_id"));
         }

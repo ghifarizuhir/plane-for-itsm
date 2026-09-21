@@ -772,7 +772,8 @@ async fn create_persists_extended_fields() {
     let st = state().await;
     let scratch = Scratch::new(&st.pool).await;
 
-    let (parent_status, parent_body) = create_as(&st, &scratch, scratch.user_id, "parent-probe").await;
+    let (parent_status, parent_body) =
+        create_as(&st, &scratch, scratch.user_id, "parent-probe").await;
     assert_eq!(parent_status, StatusCode::CREATED);
     let parent_id = Uuid::parse_str(parent_body["id"].as_str().expect("id")).unwrap();
 
@@ -787,21 +788,30 @@ async fn create_persists_extended_fields() {
     assert_eq!(status, StatusCode::CREATED);
     let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
 
-    let row: (String, String, Option<String>, Option<String>, Option<Uuid>, Option<Uuid>) =
-        sqlx::query_as(
-            "SELECT description_html, priority, start_date::text, target_date::text, parent_id, \
+    let row: (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) = sqlx::query_as(
+        "SELECT description_html, priority, start_date::text, target_date::text, parent_id, \
              updated_by_id FROM issues WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_one(&st.pool)
-        .await
-        .unwrap();
+    )
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await
+    .unwrap();
     assert_eq!(row.0, "<p>hello world</p>");
     assert_eq!(row.1, "high");
     assert_eq!(row.2.as_deref(), Some("2026-09-01"));
     assert_eq!(row.3.as_deref(), Some("2026-09-30"));
     assert_eq!(row.4, Some(parent_id));
-    assert_eq!(row.5, None, "updated_by must stay NULL on create (Django parity)");
+    assert_eq!(
+        row.5, None,
+        "updated_by must stay NULL on create (Django parity)"
+    );
 
     scratch.cleanup(&st.pool).await;
 }
@@ -839,21 +849,31 @@ async fn create_defaults_description_and_priority_when_absent() {
     let st = state().await;
     let scratch = Scratch::new(&st.pool).await;
 
-    let (status, payload) =
-        create_body(&st, &scratch, scratch.user_id, base_body("defaults-probe", scratch.state_id))
-            .await;
+    let (status, payload) = create_body(
+        &st,
+        &scratch,
+        scratch.user_id,
+        base_body("defaults-probe", scratch.state_id),
+    )
+    .await;
     assert_eq!(status, StatusCode::CREATED);
     let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
 
-    let row: (String, String, Option<String>, Option<Uuid>, Option<Uuid>, Option<Uuid>) =
-        sqlx::query_as(
-            "SELECT description_html, priority, description_stripped, parent_id, type_id, \
+    let row: (
+        String,
+        String,
+        Option<String>,
+        Option<Uuid>,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) = sqlx::query_as(
+        "SELECT description_html, priority, description_stripped, parent_id, type_id, \
              estimate_point_id FROM issues WHERE id = $1",
-        )
-        .bind(id)
-        .fetch_one(&st.pool)
-        .await
-        .unwrap();
+    )
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await
+    .unwrap();
     assert_eq!(row.0, "<p></p>");
     assert_eq!(row.1, "none");
     assert_eq!(row.2, None);
@@ -870,7 +890,11 @@ async fn create_validation_errors_return_400() {
     let scratch = Scratch::new(&st.pool).await;
 
     let cases: Vec<(&str, CreateIssue, &str)> = vec![
-        ("blank-name", base_body("", scratch.state_id), "name is required"),
+        (
+            "blank-name",
+            base_body("", scratch.state_id),
+            "name is required",
+        ),
         (
             "unknown-assignee",
             {
