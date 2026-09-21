@@ -9,7 +9,7 @@ use super::issue_common::{
     apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows,
     require_project_write, IssueOut,
 };
-use crate::routes::project::deny;
+use crate::routes::project::{deny, missing};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
@@ -440,10 +440,13 @@ pub async fn create(
     }
     insert_subscribers(&mut tx, out.id, project_id, workspace_id, &assignees).await?;
     tx.commit().await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(serde_json::to_value(out).expect("IssueOut serializes")),
-    ))
+    match super::issue_query::fetch_issue_row(&st.pool, project_id, out.id).await? {
+        Some(row) => Ok((
+            StatusCode::CREATED,
+            Json(serde_json::to_value(row).expect("IssueListRow serializes")),
+        )),
+        None => Ok(missing()),
+    }
 }
 
 // ---- Batch C I3 ----

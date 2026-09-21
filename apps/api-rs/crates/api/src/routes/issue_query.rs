@@ -428,6 +428,29 @@ pub async fn list_by_ids(
     Ok((StatusCode::OK, Json(json!(rows))))
 }
 
+/// Fetch one issue in the same 26-key shape as the list page. Mirrors the
+/// Django create response re-query (`views/issue/base.py:432-441`), which runs
+/// through `Issue.issue_objects` (`db/models/issue.py:92-101`): non-deleted,
+/// non-archived, non-draft, non-triage, project not archived.
+pub(crate) async fn fetch_issue_row(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+) -> Result<Option<IssueListRow>, sqlx::Error> {
+    let sql = format!(
+        "{LIST_SELECT_SQL} WHERE i.project_id = $1 AND i.id = $2 \
+         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
+         AND s.\"group\" <> 'triage' \
+         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = i.project_id \
+         AND p.archived_at IS NULL AND p.deleted_at IS NULL)"
+    );
+    sqlx::query_as::<_, IssueListRow>(&sql)
+        .bind(project_id)
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await
+}
+
 /// Query params for `list_detail`. Every filter key is optional; unknown
 /// query keys are ignored by serde — matching Django, where
 /// `issue_filters()` only applies its known `ISSUE_FILTER` keys

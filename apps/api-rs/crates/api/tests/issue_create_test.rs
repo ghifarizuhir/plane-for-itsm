@@ -1350,3 +1350,77 @@ async fn labels_get_no_activity_rows() {
 
     scratch.cleanup(&st.pool).await;
 }
+
+#[tokio::test]
+async fn create_response_has_26_key_list_shape() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    let label = insert_label(&st.pool, scratch.project_id, scratch.workspace_id, "urgent").await;
+
+    let mut body = base_body("response-probe", scratch.state_id);
+    body.assignee_ids = Some(vec![member]);
+    body.label_ids = Some(vec![label]);
+    body.priority = Some("medium".to_string());
+    body.description_html = Some("<p>resp</p>".to_string());
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let obj = payload.as_object().expect("response must be a JSON object");
+    assert_eq!(obj.len(), 26, "response must have exactly the 26 list keys");
+    for key in [
+        "id",
+        "name",
+        "state_id",
+        "sort_order",
+        "completed_at",
+        "estimate_point",
+        "priority",
+        "start_date",
+        "target_date",
+        "sequence_id",
+        "project_id",
+        "parent_id",
+        "cycle_id",
+        "module_ids",
+        "label_ids",
+        "assignee_ids",
+        "sub_issues_count",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+        "attachment_count",
+        "link_count",
+        "is_draft",
+        "archived_at",
+        "deleted_at",
+    ] {
+        assert!(obj.contains_key(key), "missing response key: {key}");
+    }
+    for absent in ["description_html", "type_id"] {
+        assert!(!obj.contains_key(absent), "unexpected response key: {absent}");
+    }
+
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+    let sequence_id = sequence_of(&st.pool, id).await;
+    assert_eq!(payload["name"], "response-probe");
+    assert_eq!(payload["priority"], "medium");
+    assert_eq!(payload["state_id"].as_str().unwrap(), scratch.state_id.to_string());
+    assert_eq!(payload["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+    assert_eq!(payload["sequence_id"].as_i64(), Some(sequence_id as i64));
+    assert_eq!(payload["assignee_ids"], json!([member.to_string()]));
+    assert_eq!(payload["label_ids"], json!([label.to_string()]));
+    assert_eq!(payload["module_ids"], json!([]));
+    assert_eq!(payload["sub_issues_count"], 0);
+    assert_eq!(payload["attachment_count"], 0);
+    assert_eq!(payload["link_count"], 0);
+    assert_eq!(payload["is_draft"], false);
+    assert!(payload["updated_by"].is_null());
+    assert_eq!(payload["created_by"].as_str().unwrap(), scratch.user_id.to_string());
+    assert!(payload["archived_at"].is_null());
+    assert!(payload["deleted_at"].is_null());
+
+    scratch.cleanup(&st.pool).await;
+}
