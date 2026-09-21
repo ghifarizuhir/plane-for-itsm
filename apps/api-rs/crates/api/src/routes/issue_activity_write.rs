@@ -1,6 +1,6 @@
 //! Create-path writers for `issue_activities` and `issue_subscribers`,
 //! mirroring Django's `issue_activities_task` create flow
-//! (`plane/bgtasks/issue_activities_task.py:557-423`).
+//! (`plane/bgtasks/issue_activities_task.py:357-591`).
 
 use uuid::Uuid;
 

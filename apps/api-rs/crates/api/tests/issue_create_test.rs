@@ -1201,6 +1201,16 @@ async fn duplicate_assignee_ids_are_deduped() {
     scratch.cleanup(&st.pool).await;
 }
 
+type CreatedActRow = (
+    String,
+    Option<String>,
+    String,
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<Uuid>,
+);
+type AssigneeActRow = (String, String, String, String, Option<Uuid>, Option<Uuid>);
+
 #[tokio::test]
 async fn create_writes_created_activity_and_assignee_artifacts() {
     let st = state().await;
@@ -1219,7 +1229,7 @@ async fn create_writes_created_activity_and_assignee_artifacts() {
     assert_eq!(status, StatusCode::CREATED);
     let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
 
-    let created: Vec<(String, Option<String>, String, Option<Uuid>, Option<Uuid>, Option<Uuid>)> =
+    let created: Vec<CreatedActRow> =
         sqlx::query_as(
             "SELECT verb, field, comment, actor_id, created_by_id, updated_by_id FROM issue_activities \
              WHERE issue_id = $1 AND verb = 'created'",
@@ -1236,22 +1246,24 @@ async fn create_writes_created_activity_and_assignee_artifacts() {
     assert_eq!(created[0].4, Some(scratch.user_id));
     assert_eq!(created[0].5, None);
 
-    let assignee_acts: Vec<(String, String, String, String, Option<Uuid>, Option<Uuid>)> =
-        sqlx::query_as(
-            "SELECT field, old_value, new_value, comment, new_identifier, created_by_id \
-             FROM issue_activities WHERE issue_id = $1 AND field = 'assignees'",
-        )
-        .bind(id)
-        .fetch_all(&st.pool)
-        .await
-        .unwrap();
+    let assignee_acts: Vec<AssigneeActRow> = sqlx::query_as(
+        "SELECT field, old_value, new_value, comment, new_identifier, created_by_id \
+              FROM issue_activities WHERE issue_id = $1 AND field = 'assignees'",
+    )
+    .bind(id)
+    .fetch_all(&st.pool)
+    .await
+    .unwrap();
     assert_eq!(assignee_acts.len(), 1);
     assert_eq!(assignee_acts[0].0, "assignees");
     assert_eq!(assignee_acts[0].1, "");
     assert_eq!(assignee_acts[0].2, display_name);
     assert_eq!(assignee_acts[0].3, "added assignee ");
     assert_eq!(assignee_acts[0].4, Some(member));
-    assert_eq!(assignee_acts[0].5, None, "bulk_create parity leaves created_by_id NULL");
+    assert_eq!(
+        assignee_acts[0].5, None,
+        "bulk_create parity leaves created_by_id NULL"
+    );
 
     let subs: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
         "SELECT subscriber_id, created_by_id, updated_by_id FROM issue_subscribers \
@@ -1263,7 +1275,11 @@ async fn create_writes_created_activity_and_assignee_artifacts() {
     .unwrap();
     assert_eq!(subs.len(), 1);
     assert_eq!(subs[0].0, member);
-    assert_eq!(subs[0].1, Some(member), "subscriber row is authored by the assignee");
+    assert_eq!(
+        subs[0].1,
+        Some(member),
+        "subscriber row is authored by the assignee"
+    );
     assert_eq!(subs[0].2, Some(member));
 
     scratch.cleanup(&st.pool).await;
@@ -1322,6 +1338,15 @@ async fn labels_get_no_activity_rows() {
     .await
     .unwrap();
     assert_eq!(label_activities, 0, "Django has no track_labels on create");
+
+    let created_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND verb = 'created'",
+    )
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await
+    .unwrap();
+    assert_eq!(created_count, 1);
 
     scratch.cleanup(&st.pool).await;
 }
