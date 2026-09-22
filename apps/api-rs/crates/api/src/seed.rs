@@ -531,6 +531,115 @@ async fn insert_issues(
     Ok(())
 }
 
+async fn insert_views(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    for v in parse_seed::<ViewSeed>(VIEWS_JSON) {
+        sqlx::query(
+            "INSERT INTO issue_views (id, name, description, query, filters, display_filters, \
+             display_properties, rich_filters, logo_props, access, sort_order, is_locked, \
+             project_id, workspace_id, owned_by_id, created_by_id, updated_by_id, created_at, \
+             updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, '{}', $3, $4, $5, $6, '{}', $7, $8, false, $9, \
+             $10, $11, $11, $11, now(), now())",
+        )
+        .bind(&v.name)
+        .bind(&v.description)
+        .bind(&v.filters)
+        .bind(&v.display_filters)
+        .bind(&v.display_properties)
+        .bind(&v.rich_filters)
+        .bind(v.access)
+        .bind(v.sort_order)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(bot_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn insert_pages(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    for p in parse_seed::<PageSeed>(PAGES_JSON) {
+        let (page_id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO pages (id, name, description_json, description_binary, description_html, \
+             description_stripped, owned_by_id, created_by_id, updated_by_id, workspace_id, color, \
+             access, parent_id, archived_at, is_locked, view_props, logo_props, is_global, \
+             sort_order, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, '{}', NULL, $2, $3, $4, $4, $4, $5, '', $6, NULL, \
+             NULL, false, '{}', '{}', false, 65535, now(), now()) RETURNING id",
+        )
+        .bind(&p.name)
+        .bind(&p.description_html)
+        .bind(p.description_stripped.as_deref())
+        .bind(bot_id)
+        .bind(workspace_id)
+        .bind(p.access)
+        .fetch_one(&mut **tx)
+        .await?;
+        if p.project_id.is_some() && p.page_type == "PROJECT" {
+            sqlx::query(
+                "INSERT INTO project_pages (id, workspace_id, project_id, page_id, created_by_id, \
+                 updated_by_id, created_at, updated_at) \
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now())",
+            )
+            .bind(workspace_id)
+            .bind(project_id)
+            .bind(page_id)
+            .bind(bot_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Seed demo untuk satu workspace baru. Semua insert dalam satu transaksi;
+/// error menggagalkan seluruh seed (caller hanya mencatat log).
+pub async fn seed_workspace(pool: &PgPool, workspace_id: Uuid) -> Result<(), anyhow::Error> {
+    let mut tx = pool.begin().await?;
+    let workspace_name: Option<(String,)> =
+        sqlx::query_as("SELECT name FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
+            .bind(workspace_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((workspace_name,)) = workspace_name else {
+        anyhow::bail!("seed: workspace {workspace_id} not found");
+    };
+    let bot_id = insert_bot_user(&mut tx, workspace_id).await?;
+    insert_workspace_member(&mut tx, workspace_id, bot_id).await?;
+    let project_id = insert_project(&mut tx, workspace_id, &workspace_name, bot_id).await?;
+    insert_project_members_and_props(&mut tx, workspace_id, project_id, bot_id).await?;
+    let states = insert_states(&mut tx, workspace_id, project_id, bot_id).await?;
+    let labels = insert_labels(&mut tx, workspace_id, project_id, bot_id).await?;
+    let cycles = insert_cycles(&mut tx, workspace_id, project_id, bot_id).await?;
+    let modules = insert_modules(&mut tx, workspace_id, project_id, bot_id).await?;
+    insert_issues(
+        &mut tx,
+        workspace_id,
+        project_id,
+        bot_id,
+        &states,
+        &labels,
+        &cycles,
+        &modules,
+    )
+    .await?;
+    insert_views(&mut tx, workspace_id, project_id, bot_id).await?;
+    insert_pages(&mut tx, workspace_id, project_id, bot_id).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
