@@ -3,10 +3,9 @@
 //! descriptions, merge into the latest row when it is the same owner within
 //! 600 s, otherwise insert a fresh snapshot.
 //!
-//! Takes a plain `PgConnection` rather than a `Transaction` so the intake
-//! PATCH path (no surrounding transaction — Django's task opens its own
-//! `transaction.atomic()`, `issue_description_version_task.py:56`) can call
-//! it too; transaction-holding callers pass `&mut *tx`.
+//! Takes a plain `PgConnection` rather than a `Transaction`, so both a
+//! caller-held transaction and a standalone connection work; callers with
+//! a transaction pass `&mut tx`.
 
 use serde_json::Value;
 use uuid::Uuid;

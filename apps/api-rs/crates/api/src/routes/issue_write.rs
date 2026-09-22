@@ -340,7 +340,7 @@ pub async fn create(
     // Django create also records the initial description version
     // (`base.py:483-488`, `is_creating=True`).
     super::issue_version_write::record_description_version(
-        &mut *tx,
+        &mut tx,
         out.id,
         project_id,
         workspace_id,

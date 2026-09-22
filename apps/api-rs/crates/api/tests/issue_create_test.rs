@@ -1884,7 +1884,15 @@ async fn intake_create_and_patch_record_description_versions() {
     );
     assert_eq!(versions[0].0, "<p>intake edit</p>");
 
-    // Unchanged description → no new version.
+    // Unchanged description → no new version: a merge would bump
+    // `last_saved_at`, so compare it around the no-op PATCH.
+    let saved_before: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "SELECT last_saved_at FROM issue_description_versions WHERE issue_id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let (status, _) = intake_patch_issue(
         State(st.clone()),
         AuthUser(scratch.user_id),
@@ -1900,6 +1908,17 @@ async fn intake_create_and_patch_record_description_versions() {
     .await
     .expect("intake patch must respond");
     assert_eq!(status, StatusCode::OK);
+    let saved_after: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "SELECT last_saved_at FROM issue_description_versions WHERE issue_id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        saved_before, saved_after,
+        "unchanged html must not touch the version"
+    );
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM issue_description_versions WHERE issue_id = $1")
             .bind(issue_id)

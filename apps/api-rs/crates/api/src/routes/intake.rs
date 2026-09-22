@@ -667,9 +667,9 @@ pub async fn create_issue(
     .await?;
 
     // Django create records the initial description version
-    // (`views/intake/base.py:292-297`, `is_creating=True`).
+    // (`views/intake/base.py:293-298`, `is_creating=True`).
     super::issue_version_write::record_description_version(
-        &mut *tx,
+        &mut tx,
         issue.id,
         project_id,
         workspace_id,
@@ -1431,16 +1431,28 @@ pub async fn patch_issue(
         }
     }
 
+    let new_description = issue.and_then(|i| i.description_html.clone());
     // Pre-update snapshot for the description-version diff
     // (`issue_description_version_task` compares the old html with the
     // stored one, `bgtasks/issue_description_version_task.py:53`).
-    let pre: (String, Value, Option<uuid::Uuid>, uuid::Uuid) = sqlx::query_as(
-        "SELECT i.description_html, i.description_json, i.created_by_id, i.workspace_id \
-         FROM issues i WHERE i.id = $1",
-    )
-    .bind(issue_id)
-    .fetch_one(&st.pool)
-    .await?;
+    let pre = match &new_description {
+        Some(_) => Some(
+            sqlx::query_as::<_, (String, Value, Option<uuid::Uuid>, uuid::Uuid)>(
+                "SELECT i.description_html, i.description_json, i.created_by_id, i.workspace_id \
+                 FROM issues i WHERE i.id = $1",
+            )
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await?,
+        ),
+        None => None,
+    };
+
+    // Issue UPDATE + version row commit together: a version-write failure
+    // rolls the update back so the client can retry (Django's async task
+    // swallows errors and never retries — `issue_description_version_task.py:76-77`
+    // — this is the crate's documented "single tx" deviation, stronger than Django).
+    let mut tx = st.pool.begin().await?;
 
     // Nested `issue` write (`IssueCreateSerializer` partial, `base.py:403-418`).
     if !narrowed {
@@ -1465,7 +1477,7 @@ pub async fn patch_issue(
             .bind(&new_priority)
             .bind(issue_id)
             .bind(user_id)
-            .execute(&st.pool)
+            .execute(&mut *tx)
             .await?;
         }
     } else {
@@ -1484,38 +1496,39 @@ pub async fn patch_issue(
             .bind(&desc_json)
             .bind(issue_id)
             .bind(user_id)
-            .execute(&st.pool)
+            .execute(&mut *tx)
             .await?;
         }
     }
 
-    // Intake PATCH version parity (`views/intake/base.py:447-456`). Django
+    // Intake PATCH version parity (`views/intake/base.py:454-459`). Django
     // suppresses it only for the migration-client case
-    // (`skip_activity and is_description_update`, base.py:337,437), where
+    // (`skip_activity and is_description_update`, base.py:336-337,437), where
     // `is_description_update` probes the TOP-LEVEL `description_html`; the
     // web nests it under `issue`, so the probe is None and the version is
     // written. Mirrored here: Rust's intake body drops top-level keys, so
     // that migration shape has no counterpart on this path.
-    if let Some(new_html) = issue.and_then(|i| i.description_html.clone()) {
+    if let (Some(new_html), Some(pre)) = (new_description.as_deref(), pre.as_ref()) {
         if new_html != pre.0 {
             let new_json = issue
                 .and_then(|i| i.description_json.clone())
                 .unwrap_or(pre.1.clone());
-            let mut conn = st.pool.acquire().await?;
             super::issue_version_write::record_description_version(
-                &mut conn,
+                &mut tx,
                 issue_id,
                 project_id,
                 pre.3,
                 user_id,
                 pre.2,
                 Some(user_id),
-                &new_html,
+                new_html,
                 &new_json,
             )
             .await?;
         }
     }
+
+    tx.commit().await?;
 
     // Intake-level write (`IntakeIssueSerializer` partial, `base.py:426-431`).
     if may_write_intake {
