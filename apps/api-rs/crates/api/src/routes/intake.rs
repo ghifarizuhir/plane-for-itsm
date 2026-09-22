@@ -666,6 +666,21 @@ pub async fn create_issue(
     )
     .await?;
 
+    // Django create records the initial description version
+    // (`views/intake/base.py:292-297`, `is_creating=True`).
+    super::issue_version_write::record_description_version(
+        &mut *tx,
+        issue.id,
+        project_id,
+        workspace_id,
+        auth.0,
+        Some(auth.0),
+        None,
+        "<p></p>",
+        &json!({}),
+    )
+    .await?;
+
     let row = sqlx::query_as::<_, common::models::intake::IntakeIssue>(
         "INSERT INTO intake_issues (id, intake_id, issue_id, status, extra, project_id, workspace_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, -2, '{}'::jsonb, $3, $4, now(), now()) RETURNING id, status",
     )
@@ -1416,6 +1431,17 @@ pub async fn patch_issue(
         }
     }
 
+    // Pre-update snapshot for the description-version diff
+    // (`issue_description_version_task` compares the old html with the
+    // stored one, `bgtasks/issue_description_version_task.py:53`).
+    let pre: (String, Value, Option<uuid::Uuid>, uuid::Uuid) = sqlx::query_as(
+        "SELECT i.description_html, i.description_json, i.created_by_id, i.workspace_id \
+         FROM issues i WHERE i.id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(&st.pool)
+    .await?;
+
     // Nested `issue` write (`IssueCreateSerializer` partial, `base.py:403-418`).
     if !narrowed {
         let desc_html = issue.and_then(|i| i.description_html.clone());
@@ -1459,6 +1485,34 @@ pub async fn patch_issue(
             .bind(issue_id)
             .bind(user_id)
             .execute(&st.pool)
+            .await?;
+        }
+    }
+
+    // Intake PATCH version parity (`views/intake/base.py:447-456`). Django
+    // suppresses it only for the migration-client case
+    // (`skip_activity and is_description_update`, base.py:337,437), where
+    // `is_description_update` probes the TOP-LEVEL `description_html`; the
+    // web nests it under `issue`, so the probe is None and the version is
+    // written. Mirrored here: Rust's intake body drops top-level keys, so
+    // that migration shape has no counterpart on this path.
+    if let Some(new_html) = issue.and_then(|i| i.description_html.clone()) {
+        if new_html != pre.0 {
+            let new_json = issue
+                .and_then(|i| i.description_json.clone())
+                .unwrap_or(pre.1.clone());
+            let mut conn = st.pool.acquire().await?;
+            super::issue_version_write::record_description_version(
+                &mut conn,
+                issue_id,
+                project_id,
+                pre.3,
+                user_id,
+                pre.2,
+                Some(user_id),
+                &new_html,
+                &new_json,
+            )
             .await?;
         }
     }

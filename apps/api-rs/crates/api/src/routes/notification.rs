@@ -212,7 +212,7 @@ pub async fn list(
     if types.contains(&"assigned") {
         // Django's `IssueAssignee.objects` is a plain manager and related
         // lookups use base managers — these filters intentionally have NO
-        // `deleted_at` predicate (parity with `views/notification/base.py:112,119`).
+        // `deleted_at` predicate (parity with `views/notification/base.py:119-123`).
         type_clauses.push(
             "n.entity_identifier IN (SELECT a.issue_id FROM issue_assignees a \
              JOIN workspaces w2 ON w2.id = a.workspace_id WHERE w2.slug = $1 \

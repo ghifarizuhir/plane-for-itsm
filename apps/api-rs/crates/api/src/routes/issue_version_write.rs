@@ -2,6 +2,11 @@
 //! (`plane/bgtasks/issue_description_version_task.py:44-80`): skip unchanged
 //! descriptions, merge into the latest row when it is the same owner within
 //! 600 s, otherwise insert a fresh snapshot.
+//!
+//! Takes a plain `PgConnection` rather than a `Transaction` so the intake
+//! PATCH path (no surrounding transaction — Django's task opens its own
+//! `transaction.atomic()`, `issue_description_version_task.py:56`) can call
+//! it too; transaction-holding callers pass `&mut *tx`.
 
 use serde_json::Value;
 use uuid::Uuid;
@@ -10,7 +15,7 @@ use super::page::strip_tags_text;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn record_description_version(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conn: &mut sqlx::PgConnection,
     issue_id: Uuid,
     project_id: Uuid,
     workspace_id: Uuid,
@@ -25,7 +30,7 @@ pub(crate) async fn record_description_version(
          WHERE issue_id = $1 ORDER BY last_saved_at DESC LIMIT 1",
     )
     .bind(issue_id)
-    .fetch_optional(&mut **tx)
+    .fetch_optional(&mut *conn)
     .await?;
 
     let stripped: Option<String> = if description_html.is_empty() {
@@ -50,7 +55,7 @@ pub(crate) async fn record_description_version(
             .bind(stripped)
             .bind(description_json.clone())
             .bind(id)
-            .execute(&mut **tx)
+            .execute(&mut *conn)
             .await?;
             return Ok(());
         }
@@ -71,7 +76,7 @@ pub(crate) async fn record_description_version(
     .bind(workspace_id)
     .bind(issue_created_by_id)
     .bind(issue_updated_by_id)
-    .execute(&mut **tx)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }

@@ -7,7 +7,8 @@ use api::routes::draft::{
     create as draft_create, create_draft_to_issue as draft_convert, ConvertBody, CreateDraftBody,
 };
 use api::routes::intake::{
-    create_issue as intake_create_issue, CreateIntakeIssue, IntakeIssuePayload,
+    create_issue as intake_create_issue, patch_issue as intake_patch_issue, CreateIntakeIssue,
+    InboxIssueFields, InboxIssuePatch, IntakeIssuePayload,
 };
 use api::routes::issue_write::{create, CreateIssue};
 use api::state::AppState;
@@ -1793,6 +1794,119 @@ async fn draft_conversion_writes_description_stripped() {
             .unwrap();
     assert_eq!(row.0, "", "explicit empty html is stored as-is");
     assert_eq!(row.1, None, "empty html → NULL stripped");
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn intake_create_and_patch_record_description_versions() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    sqlx::query(
+        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, \
+         project_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Intake', '', true, '{}'::jsonb, '{}'::jsonb, $1, $2, now(), now())",
+    )
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .execute(&pool)
+    .await
+    .expect("scratch intake");
+
+    let (status, Json(_)) = intake_create_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateIntakeIssue {
+            issue: IntakeIssuePayload {
+                name: Some("intake-version-probe".to_string()),
+                priority: Some("none".to_string()),
+            },
+        }),
+    )
+    .await
+    .expect("intake create must respond");
+    assert_eq!(status, StatusCode::OK);
+
+    let issue_id: Uuid = sqlx::query_scalar("SELECT id FROM issues WHERE project_id = $1")
+        .bind(scratch.project_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // Django calls the task with `is_creating=True` (`intake/base.py:292-297`).
+    let versions: Vec<(String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT description_html, updated_by_id FROM issue_description_versions WHERE issue_id = $1",
+    )
+    .bind(issue_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        versions.len(),
+        1,
+        "intake create records the initial version"
+    );
+    assert_eq!(versions[0].0, "<p></p>");
+    assert_eq!(versions[0].1, None, "create leaves updated_by NULL");
+
+    // Intake PATCH with a nested description (`base.py:447-456`); the same
+    // actor edits within 600 s, so the create row is merged in place.
+    let (status, _) = intake_patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(InboxIssuePatch {
+            issue: Some(InboxIssueFields {
+                description_html: Some("<p>intake edit</p>".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("intake patch must respond");
+    assert_eq!(status, StatusCode::OK);
+
+    let versions: Vec<(String,)> = sqlx::query_as(
+        "SELECT description_html FROM issue_description_versions WHERE issue_id = $1",
+    )
+    .bind(issue_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        versions.len(),
+        1,
+        "same-owner edit merges into the create row"
+    );
+    assert_eq!(versions[0].0, "<p>intake edit</p>");
+
+    // Unchanged description → no new version.
+    let (status, _) = intake_patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(InboxIssuePatch {
+            issue: Some(InboxIssueFields {
+                description_html: Some("<p>intake edit</p>".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("intake patch must respond");
+    assert_eq!(status, StatusCode::OK);
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM issue_description_versions WHERE issue_id = $1")
+            .bind(issue_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
 
     scratch.cleanup(&pool).await;
 }

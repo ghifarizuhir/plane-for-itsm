@@ -946,7 +946,7 @@ pub async fn patch_issue(
                 .flatten()
                 .unwrap_or_else(|| current.description_json.clone());
             record_description_version(
-                &mut tx,
+                &mut *tx,
                 pk,
                 project_id,
                 workspace_id,
