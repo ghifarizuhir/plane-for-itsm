@@ -24,7 +24,7 @@ import type { TAiIssueContext } from "@/lib/ai-context";
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
   "Draft a status comment for this work item",
-  "Suggest acceptance criteria for this work item",
+  "Suggest resolution steps for this work item",
 ];
 
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
@@ -121,7 +121,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                   isGenerating ? "ai-status-orb bg-accent-primary" : "bg-accent-primary"
                 )}
               />
-              <span className="text-sm font-semibold text-primary">AI Assistant</span>
+              <span className="text-sm font-semibold text-primary">Galileo</span>
               {isGenerating && (
                 <span className="font-mono text-[10px] uppercase tracking-widest text-tertiary">thinking</span>
               )}
@@ -163,7 +163,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 </span>
               </>
             ) : (
-              <span className="truncate text-xs text-tertiary">No issue in view — general answers</span>
+              <span className="truncate text-xs text-tertiary">No work item in view — general answers</span>
             )}
           </div>
           {/* messages */}
@@ -175,7 +175,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 </span>
                 <p className="mt-3 text-sm font-medium text-primary">Ask about this work item</p>
                 <p className="mt-1 text-xs leading-relaxed text-tertiary">
-                  Summaries, descriptions, comment drafts — grounded in the issue on screen.
+                  Summaries, descriptions, comment drafts — grounded in the work item on screen.
                 </p>
                 <div className="mt-4 flex flex-col gap-1.5 self-stretch">
                   {SUGGESTIONS.map((suggestion) => (
