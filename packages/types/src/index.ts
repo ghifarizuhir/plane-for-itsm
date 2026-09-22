@@ -37,7 +37,6 @@ export * from "./module";
 export * from "./service";
 export * from "./navigation-preferences";
 export * from "./page";
-export * from "./payment";
 export * from "./pragmatic";
 export * from "./project";
 export * from "./publish";
