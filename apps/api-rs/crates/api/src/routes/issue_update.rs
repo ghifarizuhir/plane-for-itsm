@@ -4,8 +4,9 @@
 //!
 //! Wire contract: ADMIN/MEMBER (or creator) gate → miss 404
 //! `{"error": "Issue not found"}` verbatim → serializer validation (400) →
-//! one transaction writing the issue row, bridges, activities and the
-//! description version → 204 empty.
+//! 204 empty. Task 1 covers the request surface + validation; writes for
+//! scalars, bridges, activities and description versions land in later tasks
+//! of this slice.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;

@@ -1,7 +1,6 @@
 //! Regression tests for the legacy issue PATCH handler
-//! (`issue_update::patch_issue`): full web payload persistence, Django
-//! serializer validation, bridges, update activities and description
-//! versions.
+//! (`issue_update::patch_issue`): request validation and handler contract
+//! (later tasks extend the write assertions).
 
 use api::middleware::auth::AuthUser;
 use api::routes::issue_update::{patch_issue, PatchIssue};
@@ -473,6 +472,33 @@ async fn patch_403_for_non_member_and_outsider() {
         patch(json!({"name": "x"})),
     )
     .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_denied_miss_is_403_not_404() {
+    // Django `@allow_permission` runs before the body/queryset: a denied
+    // caller gets 403 even when the issue does not exist (`base.py:627`).
+    let st = state().await;
+    let pool = pool().await;
+    let mut scratch = Scratch::new(&pool).await;
+    let outsider = scratch.add_actor(&pool, None, None).await;
+    let ws_only = scratch.add_actor(&pool, Some(15), None).await;
+    let missing = Uuid::new_v4();
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        outsider,
+        missing,
+        patch(json!({"name": "x"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) =
+        patch_issue_req(&st, &scratch, ws_only, missing, patch(json!({"name": "x"}))).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     scratch.cleanup(&pool).await;
