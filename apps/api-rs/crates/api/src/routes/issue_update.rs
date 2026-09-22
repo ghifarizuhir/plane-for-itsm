@@ -16,7 +16,7 @@ use uuid::Uuid;
 use super::issue_common::{
     bad, de_double_opt_f64, de_double_opt_i32, de_double_opt_json, de_double_opt_string,
     de_double_opt_uuid_lax, de_double_opt_uuid_vec_lax, dedupe_ids, fetch_project_member_role,
-    is_workspace_admin, parse_date, project_gate_allows, PRIORITIES,
+    is_workspace_admin, parse_date, project_gate_allows, resolve_issue_state, PRIORITIES,
 };
 use super::work_item::ws_active_member;
 use crate::routes::project::deny;
@@ -229,6 +229,36 @@ async fn validate_patch_refs(
     Ok(())
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct CurrentIssue {
+    pub name: String,
+    pub description_html: String,
+    pub description_json: Value,
+    pub priority: String,
+    pub state_id: Option<Uuid>,
+    pub parent_id: Option<Uuid>,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub target_date: Option<chrono::NaiveDate>,
+    pub sort_order: f64,
+    pub point: Option<i32>,
+    pub estimate_point_id: Option<Uuid>,
+    pub created_by_id: Option<Uuid>,
+}
+
+enum BindValue {
+    Text(Option<String>),
+    Json(Value),
+    Date(Option<chrono::NaiveDate>),
+    Uuid(Option<Uuid>),
+    Int(Option<i32>),
+    Float(f64),
+}
+
+fn add(sets: &mut Vec<String>, values: &mut Vec<BindValue>, col: &str, v: BindValue) {
+    values.push(v);
+    sets.push(format!("{col} = ${}", values.len()));
+}
+
 pub async fn patch_issue(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -262,20 +292,28 @@ pub async fn patch_issue(
     // Existence uses `get_queryset()` = `issue_objects` (`base.py:628-629`):
     // drafts, archived issues, triage-state issues and archived-project
     // issues all miss with 404 `{"error": "Issue not found"}` verbatim.
-    let row: Option<(Option<Uuid>,)> = sqlx::query_as(
-        "SELECT i.created_by_id FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND (s.id IS NULL OR s.\"group\" != 'triage') AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)",
+    // The row is also the snapshot `Issue.save` reads (`_state.adding ==
+    // false`): `has_changed("state_id")` compares against it.
+    let current: Option<CurrentIssue> = sqlx::query_as(
+        "SELECT i.name, i.description_html, i.description_json, i.priority, i.state_id, i.parent_id, \
+         i.start_date, i.target_date, i.sort_order, i.point, i.estimate_point_id, i.created_by_id \
+         FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
+         AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
+         AND (s.id IS NULL OR s.\"group\" != 'triage') \
+         AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)",
     )
     .bind(pk)
     .bind(project_id)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
-    if row.is_none() {
+    let Some(current) = current else {
         return Ok((
             StatusCode::NOT_FOUND,
             Json(json!({"error": ISSUE_PATCH_MISS_MSG})),
         ));
-    }
+    };
     if let Err(msg) = validate_patch(&body) {
         return Ok(bad(&msg));
     }
@@ -284,17 +322,184 @@ pub async fn patch_issue(
     if let Err(e) = validate_patch_refs(&st, project_id, &body, &assignees, &labels).await {
         return Ok(e);
     }
-    // TEMP (Task 2 replaces this with the full dynamic UPDATE + side effects):
-    sqlx::query(
-        "UPDATE issues SET name = COALESCE($1, name), description_html = COALESCE($2, description_html), description_json = COALESCE($3::jsonb, description_json), priority = COALESCE($4, priority), updated_at = now() WHERE id = $5 AND project_id = $6 AND deleted_at IS NULL",
-    )
-    .bind(body.name.clone().flatten())
-    .bind(body.description_html.clone().flatten())
-    .bind(body.description.clone().flatten())
-    .bind(body.priority.clone().flatten())
-    .bind(pk)
-    .bind(project_id)
-    .execute(&st.pool)
-    .await?;
+    // Django sanitizes `description_html` in `IssueCreateSerializer.validate`
+    // (`serializers/issue.py:135-143`); failures are 400
+    // `{"error": "html content is not valid"}`.
+    let sanitized_html: Option<String> = match &body.description_html {
+        Some(Some(h)) => match super::page::clean_description_html(h) {
+            Ok(v) => Some(v),
+            Err(_) => return Ok(bad("html content is not valid")),
+        },
+        _ => None,
+    };
+    let start_date = match parse_tri_date(&body.start_date) {
+        Ok(v) => v,
+        Err(e) => return Ok(bad(&e)),
+    };
+    let target_date = match parse_tri_date(&body.target_date) {
+        Ok(v) => v,
+        Err(e) => return Ok(bad(&e)),
+    };
+    // `Issue._ensure_default_state` (`db/models/issue.py:180-236`).
+    let new_state_id = match body.state_id {
+        Some(Some(id)) => Some(id),
+        Some(None) => resolve_issue_state(&st.pool, project_id, None).await?,
+        None => match current.state_id {
+            Some(id) => Some(id),
+            None => resolve_issue_state(&st.pool, project_id, None).await?,
+        },
+    };
+    let state_changed = new_state_id != current.state_id;
+    let new_state_group: Option<String> = if state_changed {
+        match new_state_id {
+            Some(id) => {
+                sqlx::query_scalar("SELECT \"group\" FROM states WHERE id = $1 AND project_id = $2")
+                    .bind(id)
+                    .bind(project_id)
+                    .fetch_optional(&st.pool)
+                    .await?
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    let mut tx = st.pool.begin().await?;
+    let mut sets: Vec<String> = Vec::new();
+    let mut values: Vec<BindValue> = Vec::new();
+    // `BaseModel.save` on update (`db/models/base.py:43-46`).
+    add(
+        &mut sets,
+        &mut values,
+        "updated_by_id",
+        BindValue::Uuid(Some(auth.0)),
+    );
+    sets.push("updated_at = now()".to_string());
+    // `Issue.save` recomputes `description_stripped` on every update
+    // (`db/models/issue.py:212-217`).
+    let effective_html = sanitized_html
+        .as_deref()
+        .unwrap_or(&current.description_html);
+    let stripped = if effective_html.is_empty() {
+        None
+    } else {
+        Some(super::page::strip_tags_text(effective_html))
+    };
+    add(
+        &mut sets,
+        &mut values,
+        "description_stripped",
+        BindValue::Text(stripped),
+    );
+    if let Some(Some(v)) = body.name.clone() {
+        add(&mut sets, &mut values, "name", BindValue::Text(Some(v)));
+    }
+    if let Some(v) = sanitized_html.clone() {
+        add(
+            &mut sets,
+            &mut values,
+            "description_html",
+            BindValue::Text(Some(v)),
+        );
+    }
+    if let Some(Some(v)) = body.description.clone() {
+        add(
+            &mut sets,
+            &mut values,
+            "description_json",
+            BindValue::Json(v),
+        );
+    }
+    if let Some(Some(v)) = body.priority.clone() {
+        add(&mut sets, &mut values, "priority", BindValue::Text(Some(v)));
+    }
+    if body.start_date.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "start_date",
+            BindValue::Date(start_date),
+        );
+    }
+    if body.target_date.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "target_date",
+            BindValue::Date(target_date),
+        );
+    }
+    if let Some(Some(v)) = body.sort_order {
+        add(&mut sets, &mut values, "sort_order", BindValue::Float(v));
+    }
+    if body.point.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "point",
+            BindValue::Int(body.point.flatten()),
+        );
+    }
+    if body.parent_id.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "parent_id",
+            BindValue::Uuid(body.parent_id.flatten()),
+        );
+    }
+    if body.estimate_point.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "estimate_point_id",
+            BindValue::Uuid(body.estimate_point.flatten()),
+        );
+    }
+    if body.type_id.is_some() {
+        add(
+            &mut sets,
+            &mut values,
+            "type_id",
+            BindValue::Uuid(body.type_id.flatten()),
+        );
+    }
+    if state_changed {
+        add(
+            &mut sets,
+            &mut values,
+            "state_id",
+            BindValue::Uuid(new_state_id),
+        );
+        if new_state_id.is_some() {
+            // `_sync_completed_at` (`db/models/issue.py:240-256`).
+            if new_state_group.as_deref() == Some("completed") {
+                sets.push("completed_at = now()".to_string());
+            } else {
+                sets.push("completed_at = NULL".to_string());
+            }
+        }
+    }
+
+    let pk_pos = values.len() + 1;
+    let project_pos = values.len() + 2;
+    let sql = format!(
+        "UPDATE issues SET {} WHERE id = ${pk_pos} AND project_id = ${project_pos} AND deleted_at IS NULL",
+        sets.join(", ")
+    );
+    let mut q = sqlx::query(&sql);
+    for v in &values {
+        q = match v {
+            BindValue::Text(s) => q.bind(s.clone()),
+            BindValue::Json(j) => q.bind(j.clone()),
+            BindValue::Date(d) => q.bind(*d),
+            BindValue::Uuid(u) => q.bind(*u),
+            BindValue::Int(n) => q.bind(*n),
+            BindValue::Float(f) => q.bind(*f),
+        };
+    }
+    q.bind(pk).bind(project_id).execute(&mut *tx).await?;
+    tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }

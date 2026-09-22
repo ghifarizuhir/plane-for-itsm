@@ -339,6 +339,80 @@ async fn insert_estimate_with_point(pool: &PgPool, project_id: Uuid, workspace_i
     point_id
 }
 
+async fn insert_state(
+    pool: &PgPool,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    name: &str,
+    group: &str,
+    is_default: bool,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
+         \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, $2, '', '#60646C', $3, $4, $5, 65535, $6, $7, false, now(), now())",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(name.to_lowercase())
+    .bind(project_id)
+    .bind(workspace_id)
+    .bind(group)
+    .bind(is_default)
+    .execute(pool)
+    .await
+    .expect("scratch state");
+    id
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct IssueRow {
+    name: String,
+    description_html: String,
+    description_stripped: Option<String>,
+    description_json: Value,
+    priority: String,
+    state_id: Option<Uuid>,
+    parent_id: Option<Uuid>,
+    start_date: Option<chrono::NaiveDate>,
+    target_date: Option<chrono::NaiveDate>,
+    sort_order: f64,
+    point: Option<i32>,
+    estimate_point_id: Option<Uuid>,
+    type_id: Option<Uuid>,
+    updated_by_id: Option<Uuid>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+async fn issue_row(pool: &PgPool, issue_id: Uuid) -> IssueRow {
+    sqlx::query_as(
+        "SELECT name, description_html, description_stripped, description_json, priority, state_id, \
+         parent_id, start_date, target_date, sort_order, point, estimate_point_id, type_id, \
+         updated_by_id, completed_at FROM issues WHERE id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await
+    .expect("issue row")
+}
+
+async fn insert_issue_type(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
+         is_default, level, is_epic, created_at, updated_at) \
+         VALUES ($1, $2, '', '{}'::jsonb, $3, true, false, 0, false, now(), now())",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch issue type");
+    id
+}
+
 /// Drop leftovers from earlier failed runs so scratch slugs never collide.
 async fn purge(pool: &PgPool) {
     let stale: Vec<Uuid> =
@@ -614,6 +688,208 @@ async fn patch_400_validation_messages() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_persists_scalars_and_recomputes_stripped() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "scalars").await;
+    let label = insert_label(&pool, scratch.project_id, scratch.workspace_id, "l1").await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({
+            "name": "renamed",
+            "description_html": "<p>hello <b>world</b></p>",
+            "description": {"type": "doc"},
+            "priority": "high",
+            "start_date": "2026-09-01",
+            "target_date": "2026-09-30",
+            "sort_order": 1234.5,
+            "point": 3,
+            "parent_id": null,
+            "label_ids": [label],
+            "project_id": Uuid::new_v4(),
+            "id": Uuid::new_v4(),
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.name, "renamed");
+    assert_eq!(row.description_html, "<p>hello <b>world</b></p>");
+    assert_eq!(row.description_stripped.as_deref(), Some("hello world"));
+    assert_eq!(row.description_json, json!({"type": "doc"}));
+    assert_eq!(row.priority, "high");
+    assert_eq!(
+        row.start_date.map(|d| d.to_string()),
+        Some("2026-09-01".to_string())
+    );
+    assert_eq!(
+        row.target_date.map(|d| d.to_string()),
+        Some("2026-09-30".to_string())
+    );
+    assert_eq!(row.sort_order, 1234.5);
+    assert_eq!(row.point, Some(3));
+    assert_eq!(row.updated_by_id, Some(scratch.user_id));
+
+    // Explicit nulls clear nullable fields; empty html stores NULL stripped.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({
+            "start_date": null,
+            "target_date": null,
+            "point": null,
+            "description_html": "",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.start_date, None);
+    assert_eq!(row.target_date, None);
+    assert_eq!(row.point, None);
+    assert_eq!(row.description_html, "");
+    assert_eq!(row.description_stripped, None);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_state_writes_completed_at_and_default_fallback() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "state").await;
+
+    let done = insert_state(
+        &pool,
+        scratch.project_id,
+        scratch.workspace_id,
+        "Done",
+        "completed",
+        false,
+    )
+    .await;
+    let started = insert_state(
+        &pool,
+        scratch.project_id,
+        scratch.workspace_id,
+        "Doing",
+        "started",
+        false,
+    )
+    .await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"state_id": done})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.state_id, Some(done));
+    assert!(row.completed_at.is_some());
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"state_id": started})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.state_id, Some(started));
+    assert_eq!(row.completed_at, None);
+
+    // `state_id: null` falls back to the default state (Django
+    // `_ensure_default_state`); the fixture default is `scratch.state_id`.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"state_id": null})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.state_id, Some(scratch.state_id));
+    assert_eq!(row.completed_at, None);
+
+    // An issue whose state is NULL gets the default on ANY update
+    // (`Issue.save` runs `_ensure_default_state` every save).
+    sqlx::query("UPDATE issues SET state_id = NULL WHERE id = $1")
+        .bind(issue_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"priority": "low"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.state_id, Some(scratch.state_id));
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_type_and_estimate_persist() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "refs").await;
+    let estimate_point =
+        insert_estimate_with_point(&pool, scratch.project_id, scratch.workspace_id).await;
+    let issue_type = insert_issue_type(&pool, scratch.workspace_id, "Bug").await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"estimate_point": estimate_point, "type_id": issue_type})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.estimate_point_id, Some(estimate_point));
+    assert_eq!(row.type_id, Some(issue_type));
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"estimate_point": null, "type_id": null})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row = issue_row(&pool, issue_id).await;
+    assert_eq!(row.estimate_point_id, None);
+    assert_eq!(row.type_id, None);
 
     scratch.cleanup(&pool).await;
 }
