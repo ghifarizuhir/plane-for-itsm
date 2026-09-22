@@ -980,6 +980,34 @@ async fn create_defaults_description_and_priority_when_absent() {
 }
 
 #[tokio::test]
+async fn create_with_explicit_empty_html_stores_empty_html_and_null_stripped() {
+    // Django parity: `Issue.save` (`db/models/issue.py:196-206`) stores `""`
+    // and NULL stripped for an explicit empty `description_html`; omitting
+    // the field uses the model default `<p></p>` (stripped `""`, pinned by
+    // `create_defaults_description_and_priority_when_absent`).
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let mut body = base_body("empty-html-probe", scratch.state_id);
+    body.description_html = Some(String::new());
+
+    let (status, payload) = create_body(&st, &scratch, scratch.user_id, body).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
+
+    let row: (String, Option<String>) =
+        sqlx::query_as("SELECT description_html, description_stripped FROM issues WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.pool)
+            .await
+            .unwrap();
+    assert_eq!(row.0, "", "explicit empty html is stored as-is");
+    assert_eq!(row.1, None, "empty html → NULL stripped");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
 async fn create_validation_errors_return_400() {
     let st = state().await;
     let scratch = Scratch::new(&st.pool).await;
@@ -1643,6 +1671,16 @@ async fn draft_default_state_uses_state_sequence_ordering() {
     .await
     .unwrap();
 
+    let fixture_sequence: f64 = sqlx::query_scalar("SELECT sequence FROM states WHERE id = $1")
+        .bind(scratch.state_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(
+        fixture_sequence > 100.0,
+        "probe sequence must stay below the fixture's to discriminate"
+    );
+
     let (status, Json(_)) = draft_create(
         State(st.clone()),
         AuthUser(scratch.user_id),
@@ -1715,6 +1753,46 @@ async fn draft_conversion_writes_description_stripped() {
             .await
             .unwrap();
     assert_eq!(stripped.as_deref(), Some("converted body"));
+
+    // Explicit `""` → stored `""` with NULL stripped (same `Issue.save` rule).
+    let empty_draft_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO draft_issues (id, name, description_html, description_json, priority, sort_order, \
+         state_id, project_id, workspace_id, created_by_id, created_at, updated_at) \
+         VALUES ($1, 'empty-draft-probe', '<p>draft</p>', '{}', 'none', 65535, $2, $3, $4, $5, now(), now())",
+    )
+    .bind(empty_draft_id)
+    .bind(scratch.state_id)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(body)) = draft_convert(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), empty_draft_id)),
+        Some(Json(ConvertBody {
+            name: Some("converted-empty".to_string()),
+            description_html: Some(String::new()),
+            ..Default::default()
+        })),
+    )
+    .await
+    .expect("draft conversion must respond");
+    assert_eq!(status, StatusCode::CREATED);
+    let empty_issue_id: Uuid = body["id"].as_str().expect("id").parse().unwrap();
+
+    let row: (String, Option<String>) =
+        sqlx::query_as("SELECT description_html, description_stripped FROM issues WHERE id = $1")
+            .bind(empty_issue_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(row.0, "", "explicit empty html is stored as-is");
+    assert_eq!(row.1, None, "empty html → NULL stripped");
 
     scratch.cleanup(&pool).await;
 }

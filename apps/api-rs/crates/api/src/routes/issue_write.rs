@@ -282,11 +282,10 @@ pub async fn create(
         Ok(v) => v,
         Err(e) => return Ok(bad(&e)),
     };
-    let description_html = body
-        .description_html
-        .as_deref()
-        .filter(|s| !s.is_empty())
-        .unwrap_or("<p></p>");
+    // Django parity (`Issue.save`, `db/models/issue.py:196-206`): an explicit
+    // `""` is stored as-is with NULL stripped (`blank=True` → `allow_blank`);
+    // only an omitted field falls back to the model default `<p></p>`.
+    let description_html = body.description_html.as_deref().unwrap_or("<p></p>");
     let priority = body.priority.as_deref().unwrap_or("none");
 
     let mut tx = st.pool.begin().await?;

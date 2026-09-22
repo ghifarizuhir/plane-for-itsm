@@ -93,8 +93,13 @@ use super::issue_common::{
 ///   Django's full `IssueCreateSerializer` `__all__` — status parity,
 ///   key-set subset (smoke checks status only; FE already holds the draft
 ///   payload it sent).
-/// - `sort_order`/default-state/`completed_at`/`description_stripped` are
-///   mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
+/// - `sort_order`/default-state/`completed_at` are mirrored from
+///   `DraftIssue.save` / `Issue.save` (see handlers), and the promoted issue
+///   gets `description_stripped` (`create_draft_to_issue`). Remaining
+///   deviation: the draft row's own `draft_issues.description_stripped`
+///   stays NULL on draft INSERT/PATCH where Django computes it in
+///   `DraftIssue.save` (`db/models/draft.py:112-135`, column at :48); no
+///   draft response key exposes it, so it is not consumer-visible.
 
 /// Quoted from `plane/app/views/workspace/draft.py:166` (PATCH miss —
 /// NON-standard, differs from the standard `missing()` body).
@@ -1310,16 +1315,14 @@ pub async fn create_draft_to_issue(
     .await?;
     // Same rule as `insert_issue`/`Issue.save`: empty → NULL else stripped.
     // The INSERT stores `COALESCE($2, '<p></p>')`, so mirror that value.
-    let effective_html: String = b
-        .description_html
-        .clone()
-        .unwrap_or_else(|| "<p></p>".to_string());
+    let effective_html = b.description_html.as_deref().unwrap_or("<p></p>");
     let description_stripped: Option<String> = if effective_html.is_empty() {
         None
     } else {
-        Some(super::page::strip_tags_text(&effective_html))
+        Some(super::page::strip_tags_text(effective_html))
     };
     let mut tx = st.pool.begin().await?;
+    // `$16` = `description_stripped`, bound last.
     let issue_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO issues (id, name, description_html, description_json, priority, \
          start_date, target_date, sequence_id, sort_order, completed_at, is_draft, \
