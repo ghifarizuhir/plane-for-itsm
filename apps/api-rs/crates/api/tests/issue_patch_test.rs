@@ -1,6 +1,7 @@
 //! Regression tests for the legacy issue PATCH handler
-//! (`issue_update::patch_issue`): request validation and handler contract
-//! (later tasks extend the write assertions).
+//! (`issue_update::patch_issue`): the full write contract — request
+//! validation and handler contract, scalar persistence, bridge replacement,
+//! per-field activities and description versions.
 
 use api::middleware::auth::AuthUser;
 use api::routes::issue_update::{patch_issue, PatchIssue};
@@ -258,13 +259,13 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
-        sqlx::query("DELETE FROM project_members WHERE project_id = $1")
-            .bind(self.project_id)
+        sqlx::query("DELETE FROM project_members WHERE workspace_id = $1")
+            .bind(self.workspace_id)
             .execute(pool)
             .await
             .ok();
-        sqlx::query("DELETE FROM projects WHERE id = $1")
-            .bind(self.project_id)
+        sqlx::query("DELETE FROM projects WHERE workspace_id = $1")
+            .bind(self.workspace_id)
             .execute(pool)
             .await
             .ok();

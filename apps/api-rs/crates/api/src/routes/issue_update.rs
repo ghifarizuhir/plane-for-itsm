@@ -5,10 +5,10 @@
 //! Wire contract: ADMIN/MEMBER (or creator) gate → miss 404
 //! `{"error": "Issue not found"}` verbatim → serializer validation (400) →
 //! 204 empty. This handler writes every scalar field with `Issue.save`'s
-//! side effects (`description_stripped`, `completed_at`, `updated_by`) and
-//! replaces the assignee/label bridges when their keys are present; it also
-//! writes the per-field update activities and `issue_subscribers` rows
-//! (description versions land in a later task of this slice).
+//! side effects (`description_stripped`, `completed_at`, `updated_by`),
+//! replaces the assignee/label bridges when their keys are present, and
+//! writes the per-field update activities, `issue_subscribers` rows and
+//! description versions.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
