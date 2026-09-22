@@ -993,6 +993,24 @@ async fn patch_parent_set_and_clear() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(issue_row(&pool, issue_id).await.parent_id, Some(parent_id));
 
+    let expected_new: String = sqlx::query_scalar(
+        "SELECT p.identifier || '-' || i.sequence_id FROM issues i JOIN projects p ON p.id = i.project_id WHERE i.id = $1",
+    )
+    .bind(parent_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let rows = activities(&pool, issue_id).await;
+    let parent_row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("parent"))
+        .expect("parent activity");
+    assert_eq!(parent_row.2, "updated the parent issue to");
+    assert_eq!(parent_row.3.as_deref(), Some(""));
+    assert_eq!(parent_row.4.as_deref(), Some(expected_new.as_str()));
+    assert_eq!(parent_row.5, None);
+    assert_eq!(parent_row.6, Some(parent_id));
+
     let (status, _) = patch_issue_req(
         &st,
         &scratch,
@@ -1003,6 +1021,16 @@ async fn patch_parent_set_and_clear() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(issue_row(&pool, issue_id).await.parent_id, None);
+
+    let rows = activities(&pool, issue_id).await;
+    let clear_row = rows
+        .iter()
+        .rev()
+        .find(|r| r.1.as_deref() == Some("parent") && r.4.as_deref() == Some(""))
+        .expect("parent clear activity");
+    assert_eq!(clear_row.3.as_deref(), Some(expected_new.as_str()));
+    assert_eq!(clear_row.5, Some(parent_id));
+    assert_eq!(clear_row.6, None);
 
     scratch.cleanup(&pool).await;
 }
@@ -1462,6 +1490,41 @@ async fn patch_estimate_activity_field_uses_estimate_type() {
     assert_eq!(row.4.as_deref(), Some("1"));
     assert_eq!(row.6, Some(estimate_point));
 
+    // Change to a second point on the same estimate → old_value is the previous point value.
+    let second_point = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, workspace_id, created_at, updated_at) \
+         SELECT $1, estimate_id, 1, '2', '', project_id, workspace_id, now(), now() FROM estimate_points WHERE id = $2",
+    )
+    .bind(second_point)
+    .bind(estimate_point)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"estimate_point": second_point})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = activities(&pool, issue_id).await;
+    let change = rows
+        .iter()
+        .rev()
+        .find(|r| r.1.as_deref() == Some("estimate_points"))
+        .expect("estimate change row");
+    assert_eq!(
+        change.3.as_deref(),
+        Some("1"),
+        "old_value is the previous point value"
+    );
+    assert_eq!(change.4.as_deref(), Some("2"));
+    assert_eq!(change.5, Some(estimate_point));
+    assert_eq!(change.6, Some(second_point));
+
     // Clearing the estimate writes no estimate row (Django's task NPEs and
     // loses the whole batch; documented deviation 6) but other fields still log.
     let (status, _) = patch_issue_req(
@@ -1478,7 +1541,7 @@ async fn patch_estimate_activity_field_uses_estimate_type() {
         .iter()
         .filter(|r| r.1.as_deref() == Some("estimate_points"))
         .count();
-    assert_eq!(estimate_rows, 1, "clearing writes no estimate row");
+    assert_eq!(estimate_rows, 2, "clearing writes no estimate row");
     assert!(rows
         .iter()
         .any(|r| r.1.as_deref() == Some("priority") && r.4.as_deref() == Some("low")));

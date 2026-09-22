@@ -15,7 +15,11 @@ pub(crate) struct ActivityCtx {
 
 /// One `verb`/`field` activity row for the update flow. `created_by_id` and
 /// `updated_by_id` stay NULL (Django `bulk_create` skips `save()`);
-/// `attachments` is `'{}'` (ArrayField default).
+/// `attachments` is `'{}'` (ArrayField default). Timestamps use
+/// `clock_timestamp()` (per-statement) instead of `now()` (transaction
+/// start) so batch rows get distinct, insertion-ordered `created_at` like
+/// Django's per-instance defaults — `merge_last_description_activity` and
+/// the activity feed depend on that ordering.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn insert_activity_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -33,7 +37,7 @@ pub(crate) async fn insert_activity_row(
          issue_id, project_id, workspace_id, actor_id, created_by_id, updated_by_id, \
          old_identifier, new_identifier, epoch, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::varchar[], $6, $7, $8, $9, NULL, NULL, \
-         $10, $11, $12, now(), now())",
+         $10, $11, $12, clock_timestamp(), clock_timestamp())",
     )
     .bind(verb)
     .bind(field)
@@ -101,7 +105,7 @@ pub(crate) async fn insert_assignee_activities(
          issue_id, project_id, workspace_id, actor_id, created_by_id, updated_by_id, new_identifier, \
          epoch, created_at, updated_at) \
          SELECT gen_random_uuid(), 'updated', 'assignees', '', u.display_name, 'added assignee ', \
-                '{}'::varchar[], $1, $2, $3, $4, NULL, NULL, u.id, $5, now(), now() \
+                '{}'::varchar[], $1, $2, $3, $4, NULL, NULL, u.id, $5, clock_timestamp(), clock_timestamp() \
          FROM users u WHERE u.id = ANY($6)",
     )
     .bind(issue_id)
