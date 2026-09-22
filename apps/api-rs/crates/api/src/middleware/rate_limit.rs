@@ -63,7 +63,10 @@ impl RateLimiter {
     }
 
     fn allow(&self) -> bool {
-        self.bucket.lock().map(|mut b| b.allow(Instant::now())).unwrap_or(true)
+        self.bucket
+            .lock()
+            .map(|mut b| b.allow(Instant::now()))
+            .unwrap_or(true)
     }
 }
 
@@ -103,14 +106,20 @@ pub struct IpRateLimiter {
 
 impl IpRateLimiter {
     pub fn new(quota: u64, per: Duration) -> Self {
-        Self { buckets: Arc::new(Mutex::new(HashMap::new())), quota, per }
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+            quota,
+            per,
+        }
     }
     pub fn allow_ip(&self, ip: IpAddr) -> bool {
         let mut map = self.buckets.lock().unwrap();
         if map.len() > 10_000 {
             map.clear();
         }
-        map.entry(ip).or_insert_with(|| Bucket::new(self.quota, self.per)).allow(Instant::now())
+        map.entry(ip)
+            .or_insert_with(|| Bucket::new(self.quota, self.per))
+            .allow(Instant::now())
     }
 }
 
@@ -121,7 +130,11 @@ impl IpRateLimiter {
 /// terekspos langsung, penyerang dapat memutar IP arbitrer via header XFF
 /// dan lolos dari limit login 5/mnt per IP.
 pub fn client_ip(req: &Request, fallback: IpAddr) -> IpAddr {
-    if let Some(xff) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+    if let Some(xff) = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
         if let Some(first) = xff.split(',').next() {
             if let Ok(ip) = first.trim().parse() {
                 return ip;
@@ -143,6 +156,10 @@ pub async fn ip_rate_limit_middleware(
     if lim.allow_ip(ip) {
         next.run(req).await
     } else {
-        (StatusCode::TOO_MANY_REQUESTS, axum::Json(json!({"error": "rate limit exceeded"}))).into_response()
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            axum::Json(json!({"error": "rate limit exceeded"})),
+        )
+            .into_response()
     }
 }

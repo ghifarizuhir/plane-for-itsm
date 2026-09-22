@@ -189,7 +189,9 @@ pub async fn chat_completion(
 
 /// Django `if not request.data.get("task", False)` (`base.py:159-161`).
 pub fn task_from_body(body: &Value) -> Option<&str> {
-    body.get("task").and_then(Value::as_str).filter(|s| !s.is_empty())
+    body.get("task")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
 }
 
 /// `host` for the 429 body, e.g. `api.openai.com`.
@@ -296,13 +298,17 @@ mod tests {
     #[test]
     fn config_plain_row_is_used_as_is() {
         let rows = vec![("LLM_API_KEY".to_string(), Some("plain".to_string()), false)];
-        let cfg = llm_config_from_rows(&rows, "env-key".into(), String::new(), None, |_| String::new());
+        let cfg = llm_config_from_rows(&rows, "env-key".into(), String::new(), None, |_| {
+            String::new()
+        });
         assert_eq!(cfg.api_key, "plain");
     }
 
     #[test]
     fn config_missing_row_falls_back_to_env() {
-        let cfg = llm_config_from_rows(&[], "env-key".into(), "env-model".into(), None, |_| String::new());
+        let cfg = llm_config_from_rows(&[], "env-key".into(), "env-model".into(), None, |_| {
+            String::new()
+        });
         assert_eq!(cfg.api_key, "env-key");
         assert_eq!(cfg.model, "env-model");
     }
@@ -310,7 +316,8 @@ mod tests {
     #[test]
     fn config_null_model_uses_default() {
         let rows = vec![("LLM_MODEL".to_string(), None, false)];
-        let cfg = llm_config_from_rows(&rows, String::new(), String::new(), None, |_| String::new());
+        let cfg =
+            llm_config_from_rows(&rows, String::new(), String::new(), None, |_| String::new());
         assert_eq!(cfg.model, DEFAULT_MODEL);
     }
 
@@ -332,7 +339,10 @@ mod tests {
             |_| String::new(),
         );
         assert_eq!(cfg.base_url, "http://localhost:11434/v1");
-        let cfg = llm_config_from_rows(&[], String::new(), String::new(), Some("  ".into()), |_| String::new());
+        let cfg =
+            llm_config_from_rows(&[], String::new(), String::new(), Some("  ".into()), |_| {
+                String::new()
+            });
         assert_eq!(cfg.base_url, DEFAULT_BASE_URL);
     }
 

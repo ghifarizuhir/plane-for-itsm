@@ -27,13 +27,7 @@ pub struct StateOut {
     pub group: String,
 }
 
-pub const ALLOWED_GROUPS: &[&str] = &[
-    "backlog",
-    "unstarted",
-    "started",
-    "completed",
-    "cancelled",
-];
+pub const ALLOWED_GROUPS: &[&str] = &["backlog", "unstarted", "started", "completed", "cancelled"];
 
 pub fn validate_create(body: &CreateState) -> Result<(), String> {
     if body.name.trim().is_empty() {
@@ -88,7 +82,11 @@ async fn gate_state_admin(
 ) -> Result<bool, sqlx::Error> {
     let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(matches!(member_role, Some(20)), member_role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20)),
+        member_role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// Full-row SELECT prefix for the 9 persisted `StateSerializer` keys
@@ -127,7 +125,10 @@ pub async fn list(
         let n = seen.entry(r.group.clone()).or_insert(0);
         *n += 1;
         let count = counts.get(&r.group).copied().unwrap_or(1).max(1) as f64;
-        ordered.push((r.group.clone(), state_serializer_json(r, Some(*n as f64 / count))));
+        ordered.push((
+            r.group.clone(),
+            state_serializer_json(r, Some(*n as f64 / count)),
+        ));
     }
     // `?grouped=true` dict mode (`base.py:91-100`): states are sorted by
     // group first (`sorted(states, key=group)`), so dict insertion order
@@ -137,14 +138,19 @@ pub async fn list(
         sorted.sort_by(|a, b| a.0.cmp(&b.0));
         let mut dict = serde_json::Map::new();
         for (group, val) in sorted {
-            let slot = dict.entry(group).or_insert_with(|| Value::Array(Vec::new()));
+            let slot = dict
+                .entry(group)
+                .or_insert_with(|| Value::Array(Vec::new()));
             if let Value::Array(items) = slot {
                 items.push(val);
             }
         }
         return Ok((StatusCode::OK, Json(Value::Object(dict))));
     }
-    Ok((StatusCode::OK, Json(Value::Array(ordered.into_iter().map(|(_, v)| v).collect()))))
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(ordered.into_iter().map(|(_, v)| v).collect())),
+    ))
 }
 
 pub async fn create(
@@ -214,7 +220,11 @@ pub struct PatchState {
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     // Django `retrieve` is DRF-default with auth-only permission
     // (`views/base.py:51`): no 403 — but the queryset is member-scoped
@@ -242,7 +252,11 @@ pub async fn detail(
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchState>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     // Django `partial_update` (`state/base.py:61`): ADMIN/MEMBER/GUEST.
@@ -251,7 +265,10 @@ pub async fn patch(
     }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid name"})),
+            ));
         }
         // Django dup-name 400 (`state/base.py:61-75`): `{"name": [...]}` shape.
         let dup: bool = sqlx::query_scalar(
@@ -271,7 +288,10 @@ pub async fn patch(
     }
     if let Some(group) = &body.group {
         if group == "triage" || !ALLOWED_GROUPS.contains(&group.as_str()) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid group"})),
+            ));
         }
     }
     let n = sqlx::query(
@@ -304,7 +324,11 @@ pub async fn patch(
 pub async fn destroy(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     // Django `destroy` (`state/base.py:113`): ADMIN-only.
     if !gate_state_admin(&st.pool, auth.0, &slug, project_id).await? {
@@ -331,7 +355,10 @@ pub async fn destroy(
         .fetch_one(&st.pool)
         .await?;
     if let Err(e) = guard_delete(is_default, count.0) {
-        return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": e})),
+        ));
     }
     sqlx::query("UPDATE states SET deleted_at = now() WHERE id = $1")
         .bind(pk)
@@ -382,7 +409,11 @@ pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
 pub async fn mark_default(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), common::errors::AppError> {
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;

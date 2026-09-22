@@ -52,7 +52,11 @@ pub fn validate_create(body: &CreateView) -> Result<(), String> {
 
 /// Mirrors `plane/app/views/view/base.py:retrieve`: a project guest sees a
 /// view only when guests may view all features or they own it.
-pub fn guard_guest_access(is_guest: bool, guest_view_all: bool, is_owner: bool) -> Result<(), String> {
+pub fn guard_guest_access(
+    is_guest: bool,
+    guest_view_all: bool,
+    is_owner: bool,
+) -> Result<(), String> {
     if is_guest && !guest_view_all && !is_owner {
         return Err("You are not allowed to view this issue".to_string());
     }
@@ -189,12 +193,21 @@ pub fn build_view_query(filters: &Value) -> Value {
     }
     q.insert("label_issue__deleted_at__isnull".to_string(), json!(true));
     if present_nonempty("assignees").is_some() {
-        q.insert("assignees__in".to_string(), get("assignees").unwrap().clone());
+        q.insert(
+            "assignees__in".to_string(),
+            get("assignees").unwrap().clone(),
+        );
     }
-    q.insert("issue_assignee__deleted_at__isnull".to_string(), json!(true));
+    q.insert(
+        "issue_assignee__deleted_at__isnull".to_string(),
+        json!(true),
+    );
     q.insert("issue_cycle__deleted_at__isnull".to_string(), json!(true));
     q.insert("issue_module__deleted_at__isnull".to_string(), json!(true));
-    q.insert("issue_subscribers__deleted_at__isnull".to_string(), json!(true));
+    q.insert(
+        "issue_subscribers__deleted_at__isnull".to_string(),
+        json!(true),
+    );
     // Name (non-empty only).
     if let Some(Value::String(s)) = get("name") {
         if !s.is_empty() {
@@ -336,7 +349,12 @@ fn apply_view_fields(mut v: Value, fields: &[String]) -> Value {
 fn parse_view_fields(params: &HashMap<String, String>) -> Vec<String> {
     params
         .get("fields")
-        .map(|s| s.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -359,11 +377,12 @@ async fn list_view_rows(
         .fetch_optional(&st.pool)
         .await?;
         if role == Some(5) {
-            let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
-                .bind(pid)
-                .fetch_optional(&st.pool)
-                .await?
-                .unwrap_or(false);
+            let gva: bool =
+                sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                    .bind(pid)
+                    .fetch_optional(&st.pool)
+                    .await?
+                    .unwrap_or(false);
             !gva
         } else {
             false
@@ -371,8 +390,16 @@ async fn list_view_rows(
     } else {
         matches!(ws_role(&st.pool, user, slug).await?, Some(5))
     };
-    let guest_filter_proj = if guest_owned_only { "AND v.owned_by_id = $4" } else { "" };
-    let guest_filter_ws = if guest_owned_only { "AND v.owned_by_id = $3" } else { "" };
+    let guest_filter_proj = if guest_owned_only {
+        "AND v.owned_by_id = $4"
+    } else {
+        ""
+    };
+    let guest_filter_ws = if guest_owned_only {
+        "AND v.owned_by_id = $3"
+    } else {
+        ""
+    };
     // Project views: fixed `-is_favorite, name` (`base.py:269-293`); global
     // views: order_by allowlist {created_at,updated_at,name} (`base.py:60-75).
     let order_expr = match project_id {
@@ -397,7 +424,11 @@ async fn list_view_rows(
     // Scope mirrors the querysets: project views require an ACTIVE project
     // membership on a live project (`base.py:269-293`); global views are
     // ws-scoped with owned|access (`base.py:60-75`).
-    let guest_filter = if guest_owned_only { "AND v.owned_by_id = $4" } else { "" };
+    let guest_filter = if guest_owned_only {
+        "AND v.owned_by_id = $4"
+    } else {
+        ""
+    };
     let rows: Vec<ViewFullRow> = if let Some(pid) = project_id {
         sqlx::query_as(&format!(
             "SELECT v.id, v.created_at, v.updated_at, v.created_by_id, v.updated_by_id, \
@@ -459,7 +490,13 @@ pub async fn list(
     }
     let rows = list_view_rows(&st, &slug, Some(project_id), auth.0, None).await?;
     let fields = parse_view_fields(&params);
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(|r| apply_view_fields(view_full_json(r), &fields)).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(|r| apply_view_fields(view_full_json(r), &fields))
+            .collect::<Vec<_>>())),
+    ))
 }
 
 /// GET `workspaces/:slug/views/` — parity with
@@ -475,9 +512,22 @@ pub async fn list_global(
     if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
         return Ok(deny_detail());
     }
-    let rows = list_view_rows(&st, &slug, None, auth.0, params.get("order_by").map(|s| s.as_str())).await?;
+    let rows = list_view_rows(
+        &st,
+        &slug,
+        None,
+        auth.0,
+        params.get("order_by").map(|s| s.as_str()),
+    )
+    .await?;
     let fields = parse_view_fields(&params);
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(|r| apply_view_fields(view_full_json(r), &fields)).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(|r| apply_view_fields(view_full_json(r), &fields))
+            .collect::<Vec<_>>())),
+    ))
 }
 
 async fn create_view_row(
@@ -489,14 +539,23 @@ async fn create_view_row(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let name = body.get("name").and_then(Value::as_str).unwrap_or("");
     if name.trim().is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"name": ["This field may not be blank."]}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"name": ["This field may not be blank."]})),
+        ));
     }
     if name.chars().count() > 255 {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"name": ["Ensure this field has no more than 255 characters."]}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"name": ["Ensure this field has no more than 255 characters."]})),
+        ));
     }
     let access = body.get("access").and_then(Value::as_i64).unwrap_or(1);
     if access != 0 && access != 1 {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"access": ["\"1\" is not a valid choice."]}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"access": ["\"1\" is not a valid choice."]})),
+        ));
     }
     let filters = body.get("filters").cloned().unwrap_or(json!({}));
     let query = build_view_query(&filters);
@@ -538,7 +597,10 @@ async fn create_view_row(
         Ok(v) => v,
         // Unknown project FK → DRF IntegrityError body (`views/base.py:92-97`).
         Err(e) if is_constraint_violation(&e) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": PAYLOAD_INVALID_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": PAYLOAD_INVALID_MSG})),
+            ));
         }
         Err(e) => return Err(e.into()),
     };
@@ -548,7 +610,10 @@ async fn create_view_row(
             Some(r) => Ok((StatusCode::CREATED, Json(view_full_json(&r)))),
             None => Ok((StatusCode::CREATED, Json(json!({"id": id, "name": name})))),
         },
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        )),
     }
 }
 
@@ -653,7 +718,10 @@ async fn view_detail_row(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let row = fetch_view_full(&st.pool, slug, project_id, pk, auth.0).await?;
     let Some(r) = row else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "View not found"})),
+        ));
     };
     // Guest gate mirrors `IssueViewViewSet.retrieve` (`base.py:324-342`).
     // AuthUser identitas sudah tervalidasi di extractor.
@@ -685,7 +753,11 @@ async fn view_detail_row(
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((_slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     view_detail_row(&st, &auth, &_slug, Some(project_id), pk).await
 }
@@ -713,7 +785,10 @@ async fn patch_view_row(
     body: &Value,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let Some(cur) = fetch_view_full(&st.pool, slug, project_id, pk, auth.0).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "View not found"})),
+        ));
     };
     // Creator-only decorator (`base.py:348` / `:86`): the in-view "Only the
     // owner..." 400 below it is unreachable in Django too (the decorator
@@ -722,14 +797,23 @@ async fn patch_view_row(
         return Ok(deny());
     }
     if cur.is_locked {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "view is locked"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "view is locked"})),
+        ));
     }
     if let Some(name) = body.get("name").and_then(Value::as_str) {
         if name.trim().is_empty() {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"name": ["This field may not be blank."]}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"name": ["This field may not be blank."]})),
+            ));
         }
         if name.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"name": ["Ensure this field has no more than 255 characters."]}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"name": ["Ensure this field has no more than 255 characters."]})),
+            ));
         }
     }
     let mut tx = st.pool.begin().await?;
@@ -765,14 +849,21 @@ async fn patch_view_row(
     tx.commit().await?;
     match fetch_view_full(&st.pool, slug, project_id, pk, auth.0).await? {
         Some(r) => Ok((StatusCode::OK, Json(view_full_json(&r)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "View not found"})),
+        )),
     }
 }
 
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     patch_view_row(&st, auth, &slug, Some(project_id), pk, &body).await
@@ -791,7 +882,10 @@ async fn destroy_view_row(
     pk: uuid::Uuid,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let Some(cur) = fetch_view_full(&st.pool, slug, project_id, pk, auth.0).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "View not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "View not found"})),
+        ));
     };
     let is_admin = match project_id {
         Some(pid) => matches!(project_role(&st.pool, auth.0, pid).await?, Some(20)),
@@ -805,25 +899,36 @@ async fn destroy_view_row(
     }
     let mut tx = st.pool.begin().await?;
     sqlx::query("UPDATE issue_views SET deleted_at = now() WHERE id = $1")
-        .bind(pk).execute(&mut *tx).await?;
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
     if let Some(pid) = project_id {
         sqlx::query(
             "UPDATE user_favorites SET deleted_at = now() WHERE project_id = $1 \
              AND entity_identifier = $2 AND entity_type = 'view' AND deleted_at IS NULL",
         )
-        .bind(pid).bind(pk).execute(&mut *tx).await?;
+        .bind(pid)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
         sqlx::query(
             "DELETE FROM user_recent_visits WHERE project_id = $1 \
              AND entity_identifier = $2 AND entity_name = 'view'",
         )
-        .bind(pid).bind(pk).execute(&mut *tx).await?;
+        .bind(pid)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
     } else {
         sqlx::query(
             "UPDATE user_favorites SET deleted_at = now() WHERE workspace_id = \
              (SELECT id FROM workspaces WHERE slug = $1) AND entity_identifier = $2 \
              AND entity_type = 'view' AND project_id IS NULL AND deleted_at IS NULL",
         )
-        .bind(slug).bind(pk).execute(&mut *tx).await?;
+        .bind(slug)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
     }
     tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
@@ -832,7 +937,11 @@ async fn destroy_view_row(
 pub async fn destroy(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     destroy_view_row(&st, auth, &slug, Some(project_id), pk).await
 }
@@ -919,8 +1028,7 @@ mod view_e6_tests {
         assert_eq!(favorite_entity_identifier(&body), None);
 
         let id = uuid::Uuid::new_v4();
-        let body: CreateFavorite =
-            serde_json::from_value(json!({ "view": id })).unwrap();
+        let body: CreateFavorite = serde_json::from_value(json!({ "view": id })).unwrap();
         assert_eq!(body.view, Some(id));
         assert_eq!(favorite_entity_identifier(&body), Some(id));
     }
@@ -933,12 +1041,20 @@ mod view_e6_tests {
             q["state__group__in"],
             json!(["backlog", "unstarted", "started", "completed", "cancelled"])
         );
-        assert_eq!(build_view_query(&json!({"type": "active"}))["state__group__in"], json!(["unstarted", "started"]));
+        assert_eq!(
+            build_view_query(&json!({"type": "active"}))["state__group__in"],
+            json!(["unstarted", "started"])
+        );
         // `sub_issue` missing or "false" filters parents out; JSON false
         // does NOT (Python `False != "false"`).
         assert_eq!(build_view_query(&json!({}))["parent__isnull"], json!(true));
-        assert_eq!(build_view_query(&json!({"sub_issue": "false"}))["parent__isnull"], json!(true));
-        assert!(build_view_query(&json!({"sub_issue": false})).get("parent__isnull").is_none());
+        assert_eq!(
+            build_view_query(&json!({"sub_issue": "false"}))["parent__isnull"],
+            json!(true)
+        );
+        assert!(build_view_query(&json!({"sub_issue": false}))
+            .get("parent__isnull")
+            .is_none());
         // `intake_status` reads the `inbox_status` value (quirk).
         let q = build_view_query(&json!({"inbox_status": [-2]}));
         assert_eq!(q["issue_intake__status__in"], json!([-2]));

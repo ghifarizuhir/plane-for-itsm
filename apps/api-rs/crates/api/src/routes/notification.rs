@@ -3,13 +3,13 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::{middleware::auth::AuthUser, state::AppState};
 use crate::routes::issue_common::{
-    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-    total_pages, DetailEnvelope, PageWindow,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+    DetailEnvelope, PageWindow,
 };
 use crate::routes::member::deny_detail;
 use crate::routes::project::ws_role;
+use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Mirrors `plane/app/views/notification/base.py` for
 /// `plane/app/urls/notification.py`: list (receiver-scoped), unread counts,
@@ -143,7 +143,10 @@ fn notif_full_json(r: &NotifFullRow) -> Value {
     o.insert("archived_at".to_string(), json!(r.archived_at));
     o.insert("is_inbox_issue".to_string(), json!(r.is_inbox_issue));
     o.insert("is_intake_issue".to_string(), json!(r.is_intake_issue));
-    o.insert("is_mentioned_notification".to_string(), json!(r.is_mentioned_notification));
+    o.insert(
+        "is_mentioned_notification".to_string(),
+        json!(r.is_mentioned_notification),
+    );
     Value::Object(o)
 }
 
@@ -183,7 +186,10 @@ pub async fn list(
     let read = params.get("read").map(|s| s.as_str());
     // `base.py:56` — `request.GET.get("mentioned", False)`: ANY present
     // non-empty value (even "false") is truthy → mentioned-only.
-    let mentioned = params.get("mentioned").map(|s| !s.is_empty()).unwrap_or(false);
+    let mentioned = params
+        .get("mentioned")
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
     let types: Vec<&str> = params
         .get("type")
         .map(|s| s.split(',').collect())
@@ -203,7 +209,8 @@ pub async fn list(
         type_clauses.push(
             "n.entity_identifier IN (SELECT a.issue_id FROM issue_assignees a \
              JOIN workspaces w2 ON w2.id = a.workspace_id WHERE w2.slug = $1 \
-             AND a.assignee_id = $2)".to_string(),
+             AND a.assignee_id = $2)"
+                .to_string(),
         );
     }
     if types.contains(&"created") {
@@ -216,7 +223,8 @@ pub async fn list(
         type_clauses.push(
             "n.entity_identifier IN (SELECT i.id FROM issues i \
              JOIN workspaces w2 ON w2.id = i.workspace_id WHERE w2.slug = $1 \
-             AND i.created_by_id = $2)".to_string(),
+             AND i.created_by_id = $2)"
+                .to_string(),
         );
     }
     let type_filter = if type_clauses.is_empty() {
@@ -259,16 +267,29 @@ pub async fn list(
             Ok(v) => v,
             Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
         };
-        let cursor = match parse_cursor(params.get("cursor").map(|s| s.as_str()).unwrap_or("1000:0:0")) {
+        let cursor = match parse_cursor(
+            params
+                .get("cursor")
+                .map(|s| s.as_str())
+                .unwrap_or("1000:0:0"),
+        ) {
             Ok(c) => c,
             Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
         };
         let window = match page_window(cursor.page, limit) {
             Ok(w) => w,
-            Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+            Err(()) => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"detail": "Error in parsing"})),
+                ))
+            }
         };
         // `sanitize_order_by(..., NOTIFICATION_ORDER_BY_ALLOWLIST={created_at,updated_at})`.
-        let order_raw = params.get("order_by").map(|s| s.as_str()).unwrap_or("-created_at");
+        let order_raw = params
+            .get("order_by")
+            .map(|s| s.as_str())
+            .unwrap_or("-created_at");
         let (bare, desc) = match order_raw.strip_prefix('-') {
             Some(b) => (b, true),
             None => (order_raw, false),
@@ -331,7 +352,10 @@ pub async fn list(
     .bind(receiver)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(notif_full_json).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(notif_full_json).collect::<Vec<_>>())),
+    ))
 }
 
 pub async fn unread(
@@ -387,7 +411,11 @@ pub async fn mark_all_read(
     let sql = format!(
         "UPDATE notifications n SET read_at = now() FROM workspaces w WHERE w.id = n.workspace_id AND w.slug = $1 AND n.receiver_id = $2 AND n.read_at IS NULL AND n.deleted_at IS NULL {snoozed_filter} {archived_filter} {type_filter}"
     );
-    sqlx::query(&sql).bind(&slug).bind(receiver).execute(&st.pool).await?;
+    sqlx::query(&sql)
+        .bind(&slug)
+        .bind(receiver)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::OK, Json(json!({"message": "Successful"}))))
 }
 
@@ -420,12 +448,18 @@ pub async fn mark_read(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
     if !toggle(&st, &slug, receiver, pk, "read_at", true).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     // Django `mark_read` (`base.py:168-174`) returns the 200 full serializer row.
     match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
         Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -436,12 +470,18 @@ pub async fn mark_unread(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
     if !toggle(&st, &slug, receiver, pk, "read_at", false).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     // Django `mark_unread` (`base.py:176-182`) returns the 200 full serializer row.
     match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
         Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -452,12 +492,18 @@ pub async fn archive(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
     if !toggle(&st, &slug, receiver, pk, "archived_at", true).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     // Django `archive` (`base.py:184-190`) returns the 200 full serializer row.
     match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
         Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -468,12 +514,18 @@ pub async fn unarchive(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let receiver = auth.0;
     if !toggle(&st, &slug, receiver, pk, "archived_at", false).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     // Django `unarchive` (`base.py:192-198`) returns the 200 full serializer row.
     match fetch_notif_full(&st.pool, &slug, pk, receiver).await? {
         Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -507,7 +559,10 @@ pub async fn get_notification(
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     match fetch_notif_full(&st.pool, &slug, pk, auth.0).await? {
         Some(n) => Ok((StatusCode::OK, Json(notif_full_json(&n)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -535,14 +590,20 @@ pub async fn patch_notification(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     // 200 serializer row (`base.py:165`); the row exists (we just updated
     // it), re-read through the GET twin's scope (a concurrent delete
     // racing us here misses → 404, never a panic).
     match fetch_notif_full(&st.pool, &slug, pk, auth.0).await? {
         Some(row) => Ok((StatusCode::OK, Json(notif_full_json(&row)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        )),
     }
 }
 
@@ -566,7 +627,10 @@ pub async fn destroy_notification(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Notification not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Notification not found"})),
+        ));
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
@@ -653,7 +717,10 @@ pub fn preference_patch_errors(patch: &HashMap<String, Value>) -> Value {
     for key in keys {
         let value = &patch[key];
         if !PREFERENCE_KEYS.contains(&key.as_str()) {
-            errors.insert(key.clone(), json!([format!("unknown preference key: {key}")]));
+            errors.insert(
+                key.clone(),
+                json!([format!("unknown preference key: {key}")]),
+            );
         } else if !value.is_boolean() {
             errors.insert(key.clone(), json!(["Must be a valid boolean."]));
         }
@@ -680,7 +747,10 @@ pub async fn patch_preferences(
     // Tak valid → 400 bentuk `serializer.errors` (`{field: [pesan]}`),
     // cermin `Response(serializer.errors, 400)` (`base.py:313`).
     if validate_preference_patch(&body).is_err() {
-        return Ok((StatusCode::BAD_REQUEST, Json(preference_patch_errors(&body))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(preference_patch_errors(&body)),
+        ));
     }
     let receiver = auth.0;
     // Pastikan baris ada dulu (sama seperti GET), lalu terapkan patch.
@@ -688,7 +758,11 @@ pub async fn patch_preferences(
     for key in PREFERENCE_KEYS {
         if let Some(value) = body.get(key) {
             let sql = format!("UPDATE user_notification_preferences SET {key} = $1, updated_at = now() WHERE user_id = $2 AND deleted_at IS NULL");
-            sqlx::query(&sql).bind(value.as_bool().unwrap_or(true)).bind(receiver).execute(&st.pool).await?;
+            sqlx::query(&sql)
+                .bind(value.as_bool().unwrap_or(true))
+                .bind(receiver)
+                .execute(&st.pool)
+                .await?;
         }
     }
     // 200 objek penuh yang sudah ter-update (cermin
@@ -753,9 +827,20 @@ mod tests {
         };
         let v = preference_json(&r);
         for k in [
-            "id", "user", "workspace", "project",
-            "property_change", "state_change", "comment", "mention", "issue_completed",
-            "created_at", "updated_at", "created_by", "updated_by", "deleted_at",
+            "id",
+            "user",
+            "workspace",
+            "project",
+            "property_change",
+            "state_change",
+            "comment",
+            "mention",
+            "issue_completed",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
+            "deleted_at",
         ] {
             assert!(v.get(k).is_some(), "missing {k}");
         }
@@ -768,6 +853,9 @@ mod tests {
     fn notification_patch_only_updates_snoozed_till() {
         // Django hardcodes notification_data = {"snoozed_till": ...} (base.py:160).
         let body = serde_json::json!({"snoozed_till": "2026-09-09T00:00:00Z", "read_at": "2026-09-08T00:00:00Z"});
-        assert_eq!(snoozed_till_from_body(&body), Some("2026-09-09T00:00:00Z".to_string()));
+        assert_eq!(
+            snoozed_till_from_body(&body),
+            Some("2026-09-09T00:00:00Z".to_string())
+        );
     }
 }

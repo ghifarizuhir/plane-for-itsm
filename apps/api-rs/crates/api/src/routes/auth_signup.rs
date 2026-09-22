@@ -122,7 +122,8 @@ pub async fn signup(
     let taken: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
         .bind(&email)
         .fetch_one(&st.pool)
-        .await.map_err(db_err)?;
+        .await
+        .map_err(db_err)?;
     if taken {
         return Ok(err(USER_ALREADY_EXIST, "USER_ALREADY_EXIST"));
     }
@@ -133,7 +134,8 @@ pub async fn signup(
     )
     .bind(&email)
     .fetch_one(&st.pool)
-    .await.map_err(db_err)?;
+    .await
+    .map_err(db_err)?;
     if !invited {
         return Ok(err(SIGNUP_DISABLED, "SIGNUP_DISABLED"));
     }
@@ -165,7 +167,8 @@ pub async fn signup(
     )
     .bind(&email)
     .fetch_all(&mut *tx)
-    .await.map_err(db_err)?;
+    .await
+    .map_err(db_err)?;
     if invites.is_empty() {
         tx.rollback().await.map_err(db_err)?;
         return Ok(err(SIGNUP_DISABLED, "SIGNUP_DISABLED"));
@@ -194,7 +197,8 @@ pub async fn signup(
     .bind(&ip)
     .bind(&ua)
     .fetch_optional(&mut *tx)
-    .await.map_err(db_err)?;
+    .await
+    .map_err(db_err)?;
     let Some((uid,)) = inserted else {
         tx.rollback().await.map_err(db_err)?;
         return Ok(err(USER_ALREADY_EXIST, "USER_ALREADY_EXIST"));
@@ -231,7 +235,8 @@ pub async fn signup(
         .bind(workspace_id)
         .bind(uid)
         .fetch_optional(&mut *tx)
-        .await.map_err(db_err)?;
+        .await
+        .map_err(db_err)?;
         if existing.is_some() {
             sqlx::query(
                 "UPDATE workspace_members SET is_active = true, role = $1, updated_at = now() \
@@ -241,7 +246,8 @@ pub async fn signup(
             .bind(workspace_id)
             .bind(uid)
             .execute(&mut *tx)
-            .await.map_err(db_err)?;
+            .await
+            .map_err(db_err)?;
         } else {
             let (view_props, default_props, issue_props) =
                 crate::routes::invite::default_ws_member_props();
@@ -264,7 +270,8 @@ pub async fn signup(
         sqlx::query("DELETE FROM workspace_member_invites WHERE id = $1")
             .bind(invite_id)
             .execute(&mut *tx)
-            .await.map_err(db_err)?;
+            .await
+            .map_err(db_err)?;
         if first_workspace.is_none() {
             first_workspace = Some(*workspace_id);
         }
@@ -276,7 +283,8 @@ pub async fn signup(
         .bind(ws)
         .bind(uid)
         .execute(&mut *tx)
-        .await.map_err(db_err)?;
+        .await
+        .map_err(db_err)?;
     }
     tx.commit().await.map_err(db_err)?;
 
@@ -333,14 +341,26 @@ mod tests {
     #[test]
     fn error_status_mapping() {
         assert_eq!(signup_error_status(SIGNUP_DISABLED), StatusCode::FORBIDDEN);
-        assert_eq!(signup_error_status(USER_ALREADY_EXIST), StatusCode::CONFLICT);
-        assert_eq!(signup_error_status(PASSWORD_TOO_WEAK), StatusCode::BAD_REQUEST);
-        assert_eq!(signup_error_status(INVALID_EMAIL_SIGN_UP), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            signup_error_status(USER_ALREADY_EXIST),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            signup_error_status(PASSWORD_TOO_WEAK),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            signup_error_status(INVALID_EMAIL_SIGN_UP),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(
             signup_error_status(REQUIRED_EMAIL_PASSWORD_SIGN_UP),
             StatusCode::BAD_REQUEST
         );
-        assert_eq!(signup_error_status(INSTANCE_NOT_CONFIGURED), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            signup_error_status(INSTANCE_NOT_CONFIGURED),
+            StatusCode::BAD_REQUEST
+        );
         assert_eq!(signup_error_status(9999), StatusCode::BAD_REQUEST);
     }
 

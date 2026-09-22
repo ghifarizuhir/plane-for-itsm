@@ -27,8 +27,8 @@ use serde_json::{json, Value};
 
 use crate::routes::member::{
     coerce_role_value, deny_detail, gate_project, is_valid_email, parse_drf_bool,
-    project_in_workspace, ws_member_full_json, WsMemberRow, WS_MEMBER_COLS, ROLES,
-    VALID_DETAIL_MSG,
+    project_in_workspace, ws_member_full_json, WsMemberRow, ROLES, VALID_DETAIL_MSG,
+    WS_MEMBER_COLS,
 };
 use crate::routes::project::{deny, missing, ws_role};
 use crate::routes::users_me::workspace_invite_link;
@@ -192,7 +192,11 @@ pub fn ws_accepted_truthy(v: Option<&Value>) -> bool {
 /// WS-role cap for project-join workspace creation
 /// (`project/invite.py:245`): `15 if invite.role >= 15 else invite.role`.
 pub fn cap_role_for_ws(invite_role: i16) -> i16 {
-    if invite_role >= 15 { 15 } else { invite_role }
+    if invite_role >= 15 {
+        15
+    } else {
+        invite_role
+    }
 }
 
 /// One parsed invite entry: normalized email + role (default 5).
@@ -221,10 +225,7 @@ async fn gate_ws_invite(
     })
 }
 
-async fn ws_id_by_slug(
-    pool: &sqlx::PgPool,
-    slug: &str,
-) -> Result<Option<uuid::Uuid>, sqlx::Error> {
+async fn ws_id_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
         .bind(slug)
         .fetch_optional(pool)
@@ -254,7 +255,8 @@ pub(crate) struct WsInviteRow {
     updated_by_id: Option<uuid::Uuid>,
 }
 
-pub(crate) const WS_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
+pub(crate) const WS_INVITE_COLS: &str =
+    "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
     i.message, i.responded_at, i.role, i.workspace_id, \
     w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
     i.created_by_id, i.updated_by_id";
@@ -331,7 +333,8 @@ pub(crate) struct ProjInviteRow {
     updated_by_id: Option<uuid::Uuid>,
 }
 
-pub(crate) const PROJ_INVITE_COLS: &str = "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
+pub(crate) const PROJ_INVITE_COLS: &str =
+    "i.id, i.created_at, i.updated_at, i.email, i.accepted, i.token, \
     i.message, i.responded_at, i.role, i.workspace_id, \
     w.name AS ws_name, w.slug AS ws_slug, w.logo AS ws_logo, \
     p.id AS project_id, p.identifier AS proj_identifier, p.name AS proj_name, \
@@ -427,7 +430,10 @@ fn parse_invite_entries(body: &Value) -> Result<Vec<(Value, InviteEntry)>, Strin
         let email_raw = raw.get("email").and_then(Value::as_str).unwrap_or("");
         out.push((
             raw.clone(),
-            InviteEntry { email: normalize_email(email_raw), role },
+            InviteEntry {
+                email: normalize_email(email_raw),
+                role,
+            },
         ));
     }
     Ok(out)
@@ -677,7 +683,8 @@ pub(crate) fn default_ws_member_props() -> (Value, Value, Value) {
             "sub_issue": true, "show_empty_groups": true, "layout": "list",
             "calendar_date_range": ""},
     });
-    let issue_props = json!({"subscribed": true, "assigned": true, "created": true, "all_issues": true});
+    let issue_props =
+        json!({"subscribed": true, "assigned": true, "created": true, "all_issues": true});
     (props.clone(), props, issue_props)
 }
 
@@ -812,7 +819,10 @@ pub async fn proj_list(
     _auth: AuthUser,
     Path((slug, project_id)): Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
     let rows: Vec<ProjInviteRow> = sqlx::query_as(&format!(
@@ -848,7 +858,10 @@ pub async fn proj_create(
     let Some(workspace_id) = project_in_workspace(&st.pool, project_id, &slug).await? else {
         return Ok(missing());
     };
-    if gate_project(&st.pool, auth.0, &slug, project_id, true).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, true)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     let entries = match parse_invite_entries(&body) {

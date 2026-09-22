@@ -201,7 +201,12 @@ mod tests {
     fn target_preserves_key_and_query_verbatim() {
         let _env = pin_default_env();
         assert_eq!(
-            proxy_target("uploads", "abc/file.png", Some("X-Amz-Algorithm=AWS4-HMAC-SHA256")).as_deref(),
+            proxy_target(
+                "uploads",
+                "abc/file.png",
+                Some("X-Amz-Algorithm=AWS4-HMAC-SHA256")
+            )
+            .as_deref(),
             Some("http://plane-minio:9000/uploads/abc/file.png?X-Amz-Algorithm=AWS4-HMAC-SHA256")
         );
     }

@@ -29,7 +29,9 @@ where
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
-        Some(Value::String(s)) => uuid::Uuid::parse_str(s.trim()).map(Some).map_err(serde::de::Error::custom),
+        Some(Value::String(s)) => uuid::Uuid::parse_str(s.trim())
+            .map(Some)
+            .map_err(serde::de::Error::custom),
         Some(other) => Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
     }
 }
@@ -55,12 +57,16 @@ where
                     Value::String(s) => {
                         out.push(uuid::Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
                     }
-                    other => return Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+                    other => {
+                        return Err(serde::de::Error::custom(format!("invalid UUID: {other}")))
+                    }
                 }
             }
             Ok(Some(out))
         }
-        Some(other) => Err(serde::de::Error::custom(format!("invalid UUID list: {other}"))),
+        Some(other) => Err(serde::de::Error::custom(format!(
+            "invalid UUID list: {other}"
+        ))),
     }
 }
 
@@ -484,7 +490,9 @@ pub(crate) fn require_issue_ids(ids: &[uuid::Uuid]) -> Result<(), &'static str> 
 /// on `BulkIssueIds` still covers the explicit `{}` case.)
 pub(crate) fn resolve_bulk_ids(body: Option<Json<BulkIssueIds>>) -> Result<Vec<uuid::Uuid>, Value> {
     let ids = body.map(|Json(b)| b.issue_ids).unwrap_or_default();
-    require_issue_ids(&ids).map(|()| ids).map_err(|e| json!({"error": e}))
+    require_issue_ids(&ids)
+        .map(|()| ids)
+        .map_err(|e| json!({"error": e}))
 }
 
 /// Error code for archiving a non-done issue, byte-exact from
@@ -843,7 +851,10 @@ mod bulk_tests {
         // queryset (`base.py:781-789`): both bridge UPDATEs must use this
         // same subquery, not bare ids.
         let sub = bulk_delete_issue_set_sql();
-        assert!(sub.contains("LEFT JOIN states s ON s.id = i.state_id"), "{sub}");
+        assert!(
+            sub.contains("LEFT JOIN states s ON s.id = i.state_id"),
+            "{sub}"
+        );
         assert!(sub.contains("i.id = ANY($3)"), "{sub}");
         assert!(sub.contains(&bulk_delete_scope_sql("i")), "{sub}");
     }
@@ -870,7 +881,10 @@ mod bulk_tests {
         );
         let id = uuid::Uuid::nil();
         assert_eq!(
-            resolve_bulk_ids(Some(Json(BulkIssueIds { issue_ids: vec![id] }))).unwrap(),
+            resolve_bulk_ids(Some(Json(BulkIssueIds {
+                issue_ids: vec![id]
+            })))
+            .unwrap(),
             vec![id]
         );
     }

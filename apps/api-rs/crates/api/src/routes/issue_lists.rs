@@ -9,15 +9,15 @@ use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{
-    ArchiveRow, DetailEnvelope, PageWindow, build_cursor, detail_order_expr,
-    fetch_project_member_role, is_workspace_admin, next_cursor_str, page_window, parse_cursor,
-    parse_per_page, prev_cursor_str, project_gate_allows, sanitize_order_by, total_pages,
+    build_cursor, detail_order_expr, fetch_project_member_role, is_workspace_admin,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+    project_gate_allows, sanitize_order_by, total_pages, ArchiveRow, DetailEnvelope, PageWindow,
 };
 use super::issue_query::{
-    DetailIssuesQuery, GENERIC_500_MSG, apply_complex_filter, archive_group_by_allowlist_error,
-    archive_group_by_conflict, archive_grouping_unsupported, parse_complex_filter,
+    apply_complex_filter, archive_group_by_allowlist_error, archive_group_by_conflict,
+    archive_grouping_unsupported, parse_complex_filter, DetailIssuesQuery, GENERIC_500_MSG,
 };
-use super::versions::{VersionEnvelope, parse_version_cursor};
+use super::versions::{parse_version_cursor, VersionEnvelope};
 
 /// Workspace issues + v2 issues + user-issues — parity with Django
 /// `WorkspaceViewIssuesViewSet.list` (`plane/app/views/view/base.py:222-259`,
@@ -252,7 +252,10 @@ fn parse_django_datetime(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
         "%Y-%m-%dT%H:%M",
     ] {
         if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-            return Some(chrono::DateTime::from_naive_utc_and_offset(naive, chrono::Utc));
+            return Some(chrono::DateTime::from_naive_utc_and_offset(
+                naive,
+                chrono::Utc,
+            ));
         }
     }
     None
@@ -628,7 +631,10 @@ pub async fn workspace_issues(
         Ok(v) => v,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
@@ -737,17 +743,23 @@ async fn grouped_user_response(
     order_dir: &str,
     tree: Option<&Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    use grouped::{
+        group_universe, grouped_envelope, plan_grouped, scan_universe, ScanRow, SCAN_DERIVED_FIELDS,
+    };
     const SCAN_FROM: &str = "FROM issues i LEFT JOIN states s ON s.id = i.state_id";
-    let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(super::issue_query::GROUP_SCAN_SELECT_SQL);
+    let mut scan_qb: QueryBuilder<Postgres> =
+        QueryBuilder::new(super::issue_query::GROUP_SCAN_SELECT_SQL);
     scan_qb.push(" ");
     scan_qb.push(SCAN_FROM);
     if let Err(e) = push_user_where(&mut scan_qb, slug, uid, requester, tree) {
         return Ok(bad_request(json!({"message": e.message, "code": e.code})));
     }
-    scan_qb.push(" ORDER BY ").push(order_expr).push(" ").push(order_dir).push(
-        " NULLS LAST, i.created_at DESC, i.id ASC",
-    );
+    scan_qb
+        .push(" ORDER BY ")
+        .push(order_expr)
+        .push(" ")
+        .push(order_dir)
+        .push(" NULLS LAST, i.created_at DESC, i.id ASC");
     let scan: Vec<ScanRow> = scan_qb.build_query_as().fetch_all(pool).await?;
     let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
         scan_universe(&scan, group)
@@ -762,7 +774,10 @@ async fn grouped_user_response(
         .iter()
         .flat_map(|b| {
             if sub.is_some() {
-                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+                b.subs
+                    .iter()
+                    .flat_map(|s| s.page_ids.iter().cloned())
+                    .collect::<Vec<_>>()
             } else {
                 b.page_ids.clone()
             }
@@ -774,17 +789,33 @@ async fn grouped_user_response(
         if let Err(e) = push_user_where(&mut rows_qb, slug, uid, requester, tree) {
             return Ok(bad_request(json!({"message": e.message, "code": e.code})));
         }
-        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
-        let rows: Vec<super::issue_common::ArchiveRow> = rows_qb.build_query_as().fetch_all(pool).await?;
+        rows_qb
+            .push(" AND i.id = ANY(")
+            .push_bind(page_ids)
+            .push(")");
+        let rows: Vec<super::issue_common::ArchiveRow> =
+            rows_qb.build_query_as().fetch_all(pool).await?;
         for row in &rows {
             if let Ok(v) = serde_json::to_value(row) {
-                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                if let Some(id) = v
+                    .get("id")
+                    .and_then(|id| id.as_str())
+                    .and_then(|s| s.parse().ok())
+                {
                     rows_by_id.insert(id, v);
                 }
             }
         }
     }
-    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    let env = grouped_envelope(
+        group,
+        sub,
+        scan.len() as i64,
+        limit,
+        page,
+        &plan,
+        &rows_by_id,
+    );
     Ok((StatusCode::OK, Json(env)))
 }
 
@@ -800,24 +831,33 @@ pub async fn user_issues(
     }
     // View-level conflict check precedes `paginate()` (`user.py:175-181`).
     if archive_group_by_conflict(q.group_by.as_deref(), q.sub_group_by.as_deref()).is_some() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": GROUPBY_SAME_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": GROUPBY_SAME_MSG})),
+        ));
     }
     let per_page = match parse_per_page(q.per_page.as_deref()) {
         Ok(v) => v,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
     };
     // Allowlist gate inside `paginate()` (`paginator.py:690-699`) precedes
     // the window check.
-    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+    if let Some(msg) =
+        archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref())
+    {
         return Ok(bad_request(json!({"detail": msg})));
     }
     // Truthy grouped fields fall through to the F5 grouped branch below.
-    let grouped_mode = archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref());
+    let grouped_mode =
+        archive_grouping_unsupported(q.group_by.as_deref(), q.sub_group_by.as_deref());
     let limit = per_page.min(1000);
     let window = match page_window(cursor.page, limit) {
         Err(()) => return Ok(bad_request(json!({"detail": "Error in parsing"}))),
@@ -996,7 +1036,9 @@ pub async fn v2_issues(
             push_v2_where(&mut page_qb, &slug, project_id, auth.0, guest_scoped, gt);
             // Fixed ORDER BY updated_at ASC (`base.py:906-907`) — no
             // tiebreak in Django (mirrored literally).
-            page_qb.push(" ORDER BY i.updated_at ASC LIMIT ").push_bind(size);
+            page_qb
+                .push(" ORDER BY i.updated_at ASC LIMIT ")
+                .push_bind(size);
             page_qb.push(" OFFSET ").push_bind(offset);
             page_qb.build_query_as().fetch_all(&st.pool).await?
         }
@@ -1052,7 +1094,10 @@ mod batch_d_d12_tests {
             archive_group_by_conflict(Some("priority"), Some("priority")),
             Some(GROUPBY_SAME_MSG)
         );
-        assert_eq!(archive_group_by_conflict(Some("priority"), Some("state_id")), None);
+        assert_eq!(
+            archive_group_by_conflict(Some("priority"), Some("state_id")),
+            None
+        );
         assert_eq!(archive_group_by_conflict(Some("priority"), None), None);
         assert_eq!(archive_group_by_conflict(None, Some("priority")), None);
         assert_eq!(archive_group_by_conflict(Some(""), Some("")), None);
@@ -1099,14 +1144,17 @@ mod batch_d_d12_tests {
         assert_eq!(V2_ISSUE_KEYS[26], "description_html");
         // Trailing id-array/count cluster (differs from the D12a order —
         // hence the dedicated struct, "do NOT reuse I1/I2 structs").
-        assert_eq!(&V2_ISSUE_KEYS[20..26], [
-            "module_ids",
-            "label_ids",
-            "assignee_ids",
-            "link_count",
-            "attachment_count",
-            "sub_issues_count",
-        ]);
+        assert_eq!(
+            &V2_ISSUE_KEYS[20..26],
+            [
+                "module_ids",
+                "label_ids",
+                "assignee_ids",
+                "link_count",
+                "attachment_count",
+                "sub_issues_count",
+            ]
+        );
     }
 
     fn sample_v2_row() -> V2IssueRow {
@@ -1158,8 +1206,12 @@ mod batch_d_d12_tests {
         // With-description branch (handler inserts the skipped field).
         let mut with = v.clone();
         with["description_html"] = json!("<p>hi</p>");
-        let mut keys27: Vec<&str> =
-            with.as_object().unwrap().keys().map(String::as_str).collect();
+        let mut keys27: Vec<&str> = with
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
         keys27.sort_unstable();
         let mut want27 = V2_ISSUE_KEYS.to_vec();
         want27.sort_unstable();
@@ -1174,7 +1226,10 @@ mod batch_d_d12_tests {
         assert_eq!(WS_ISSUE_KEYS.len(), 26);
         assert_eq!(WS_ISSUE_KEYS[3], "sort_order");
         assert_eq!(WS_ISSUE_KEYS[22], "state__group");
-        assert_eq!(&WS_ISSUE_KEYS[23..26], ["assignee_ids", "label_ids", "module_ids"]);
+        assert_eq!(
+            &WS_ISSUE_KEYS[23..26],
+            ["assignee_ids", "label_ids", "module_ids"]
+        );
         let row = ArchiveRow {
             id: uuid::Uuid::nil(),
             name: "Bug".to_string(),
@@ -1253,7 +1308,8 @@ mod batch_d_d12_tests {
     }
 
     #[test]
-    fn description_flag_is_case_insensitive_true_only() {        // `str(request.GET.get("description", "false")).lower() == "true"`
+    fn description_flag_is_case_insensitive_true_only() {
+        // `str(request.GET.get("description", "false")).lower() == "true"`
         // (`base.py:867,900`).
         assert!(!is_description_required(None));
         assert!(is_description_required(Some("true")));
@@ -1271,13 +1327,17 @@ mod batch_d_d12_tests {
         assert_eq!(parse_updated_at_gt(Some("")).unwrap(), None);
         // RFC3339 `Z` + naive variants (naive assumed UTC, `TIME_ZONE`).
         assert_eq!(
-            parse_updated_at_gt(Some("2026-09-06T12:00:00Z")).unwrap().unwrap(),
+            parse_updated_at_gt(Some("2026-09-06T12:00:00Z"))
+                .unwrap()
+                .unwrap(),
             "2026-09-06T12:00:00Z"
                 .parse::<chrono::DateTime<chrono::Utc>>()
                 .unwrap()
         );
         assert_eq!(
-            parse_updated_at_gt(Some("2026-09-06 12:00:00")).unwrap().unwrap(),
+            parse_updated_at_gt(Some("2026-09-06 12:00:00"))
+                .unwrap()
+                .unwrap(),
             "2026-09-06T12:00:00Z"
                 .parse::<chrono::DateTime<chrono::Utc>>()
                 .unwrap()

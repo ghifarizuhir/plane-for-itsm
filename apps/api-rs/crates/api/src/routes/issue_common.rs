@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::routes::project::ws_role;
 use crate::state::AppState;
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct IssueOut {
     pub id: uuid::Uuid,
@@ -355,15 +354,21 @@ pub(crate) fn detail_order_expr(sanitized: &str) -> (&'static str, bool) {
         "completed_at" => "i.completed_at",
         "archived_at" => "i.archived_at",
         "state__name" => "s.name",
-        "assignees__first_name" => "(SELECT MIN(u.first_name) FROM issue_assignees ia \
+        "assignees__first_name" => {
+            "(SELECT MIN(u.first_name) FROM issue_assignees ia \
             JOIN users u ON u.id = ia.assignee_id \
-            WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL)",
-        "labels__name" => "(SELECT MIN(l.name) FROM issue_labels il \
+            WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL)"
+        }
+        "labels__name" => {
+            "(SELECT MIN(l.name) FROM issue_labels il \
             JOIN labels l ON l.id = il.label_id \
-            WHERE il.issue_id = i.id AND il.deleted_at IS NULL AND l.deleted_at IS NULL)",
-        "issue_module__module__name" => "(SELECT MIN(m.name) FROM module_issues mi \
+            WHERE il.issue_id = i.id AND il.deleted_at IS NULL AND l.deleted_at IS NULL)"
+        }
+        "issue_module__module__name" => {
+            "(SELECT MIN(m.name) FROM module_issues mi \
             JOIN modules m ON m.id = mi.module_id \
-            WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL AND m.deleted_at IS NULL)",
+            WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL AND m.deleted_at IS NULL)"
+        }
         _ => "i.created_at",
     };
     (expr, desc)

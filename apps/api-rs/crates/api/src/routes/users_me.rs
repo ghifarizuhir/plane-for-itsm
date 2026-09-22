@@ -10,7 +10,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::middleware::auth::AuthUser;
-use crate::routes::invite::{proj_invite_json, ws_invite_json, ProjInviteRow, WsInviteRow, PROJ_INVITE_COLS, WS_INVITE_COLS};
+use crate::routes::invite::{
+    proj_invite_json, ws_invite_json, ProjInviteRow, WsInviteRow, PROJ_INVITE_COLS, WS_INVITE_COLS,
+};
 use crate::routes::member::deny_detail;
 use crate::routes::user::{cleared_cookie_headers, fetch_me, me_json};
 use crate::state::AppState;
@@ -53,24 +55,34 @@ async fn validate_new_email(
         return Err((StatusCode::BAD_REQUEST, plain_error("Invalid email format")));
     }
     if email == current {
-        return Err((StatusCode::BAD_REQUEST, plain_error("New email must be different from current email")));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            plain_error("New email must be different from current email"),
+        ));
     }
     // NOTE: tabel `users` tidak punya `deleted_at` (skema aktual) — filter email saja.
     // Galat DB di sini jangan fail-open (bisa melewatkan duplikat) — balas 500.
-    let taken: Option<bool> = match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
-        .bind(&email)
-        .bind(uid)
-        .fetch_optional(pool)
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(error = %e, "generate-code: duplicate-email check failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
-        }
-    };
+    let taken: Option<bool> =
+        match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
+            .bind(&email)
+            .bind(uid)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "generate-code: duplicate-email check failed");
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal error"})),
+                ));
+            }
+        };
     if taken == Some(true) {
-        return Err((StatusCode::BAD_REQUEST, plain_error("An account with this email already exists")));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            plain_error("An account with this email already exists"),
+        ));
     }
     Ok(email)
 }
@@ -91,20 +103,32 @@ pub async fn generate_email_code(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "generate-code: current-email lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((current,)) = email_row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
-    let email = match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
-        Ok(e) => e,
-        Err(err) => return err,
-    };
+    let email =
+        match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
+            Ok(e) => e,
+            Err(err) => return err,
+        };
     let mut conn = match st.redis_client().await {
         Ok(c) => c,
         // `base.py:169-174`: cache/celery failure → 400 verbatim (not 500).
-        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to generate verification code. Please try again."}))),
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Failed to generate verification code. Please try again."})),
+            )
+        }
     };
     // INCR gagal = fail-closed (anggap budget habis) agar throttle tak bisa
     // dilewati saat Redis bermasalah.
@@ -141,7 +165,9 @@ pub async fn generate_email_code(
         let secs = (ttl / 1000).max(1);
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({"detail": format!("Request was throttled. Expected available in {secs} seconds.")})),
+            Json(
+                json!({"detail": format!("Request was throttled. Expected available in {secs} seconds.")}),
+            ),
         );
     }
     let code = new_email_code();
@@ -154,11 +180,17 @@ pub async fn generate_email_code(
         .await;
     if stored.is_err() {
         // `base.py:169-174`: cache write failure → 400 verbatim (not 500).
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to generate verification code. Please try again."})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Failed to generate verification code. Please try again."})),
+        );
     }
     // SMTP belum ada: kode tersimpan di Redis 10 mnt; pengiriman email = follow-up.
     tracing::info!(user_id = %auth.0, "email verification code stored (delivery pending SMTP)");
-    (StatusCode::OK, Json(json!({"message": "Verification code sent to email"})))
+    (
+        StatusCode::OK,
+        Json(json!({"message": "Verification code sent to email"})),
+    )
 }
 
 #[derive(Deserialize)]
@@ -184,23 +216,42 @@ pub async fn update_email(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "update-email: current-email lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((current,)) = row else {
-        return (StatusCode::UNAUTHORIZED, HeaderMap::new(), Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            HeaderMap::new(),
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
-    let email = match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
-        Ok(e) => e,
-        Err((s, j)) => return (s, HeaderMap::new(), j),
-    };
+    let email =
+        match validate_new_email(&st.pool, auth.0, &current.to_lowercase(), body.email).await {
+            Ok(e) => e,
+            Err((s, j)) => return (s, HeaderMap::new(), j),
+        };
     let code = body.code.unwrap_or_default().trim().to_string();
     if code.is_empty() {
-        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Verification code is required"));
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            plain_error("Verification code is required"),
+        );
     }
     let mut conn = match st.redis_client().await {
         Ok(c) => c,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"}))),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                Json(json!({"error": "internal error"})),
+            )
+        }
     };
     let key = email_code_key(&auth.0, &email);
     // `base.py:200-222`: the try wraps cache.get + json.loads + compare —
@@ -213,11 +264,19 @@ pub async fn update_email(
     let cached = match cached {
         Ok(v) => v,
         Err(_) => {
-            return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Failed to verify code. Please try again."));
+            return (
+                StatusCode::BAD_REQUEST,
+                HeaderMap::new(),
+                plain_error("Failed to verify code. Please try again."),
+            );
         }
     };
     let Some(raw) = cached else {
-        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Verification code has expired or is invalid"));
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            plain_error("Verification code has expired or is invalid"),
+        );
     };
     let stored: Option<String> = serde_json::from_str::<Value>(&raw).ok().and_then(|v| {
         let t = v.get("token")?;
@@ -228,31 +287,64 @@ pub async fn update_email(
             .or_else(|| t.as_u64().map(|n| n.to_string()))
     });
     let Some(stored) = stored else {
-        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Failed to verify code. Please try again."));
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            plain_error("Failed to verify code. Please try again."),
+        );
     };
     if stored != code {
-        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("Invalid verification code"));
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            plain_error("Invalid verification code"),
+        );
     }
     // Cek ulang duplikat (bisa diambil user lain antara generate dan update);
     // galat DB = 500 agar tak fail-open menimpa email duplikat.
-    let taken: Option<bool> = match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
-        .bind(&email).bind(auth.0).fetch_optional(&st.pool).await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(error = %e, "update-email: duplicate-email recheck failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
-        }
-    };
+    let taken: Option<bool> =
+        match sqlx::query_scalar("SELECT true FROM users WHERE email = $1 AND id <> $2")
+            .bind(&email)
+            .bind(auth.0)
+            .fetch_optional(&st.pool)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "update-email: duplicate-email recheck failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    HeaderMap::new(),
+                    Json(json!({"error": "internal error"})),
+                );
+            }
+        };
     if taken == Some(true) {
-        return (StatusCode::BAD_REQUEST, HeaderMap::new(), plain_error("An account with this email already exists"));
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            plain_error("An account with this email already exists"),
+        );
     }
-    let upd = sqlx::query("UPDATE users SET email = $1, is_email_verified = false, updated_at = now() WHERE id = $2")
-        .bind(&email).bind(auth.0).execute(&st.pool).await;
+    let upd = sqlx::query(
+        "UPDATE users SET email = $1, is_email_verified = false, updated_at = now() WHERE id = $2",
+    )
+    .bind(&email)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await;
     if upd.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            HeaderMap::new(),
+            Json(json!({"error": "internal error"})),
+        );
     }
-    let _: () = redis::cmd("DEL").arg(&key).query_async(&mut conn).await.unwrap_or(());
+    let _: () = redis::cmd("DEL")
+        .arg(&key)
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(());
     // `logout(request)` (`user/base.py:241`): flush sesi via clear-cookie
     // headers `plane_at`/`plane_rt` (cermin `auth::logout`), flag `Secure`
     // mengikuti `cookie_secure` (`common/src/config.rs:9`).
@@ -262,17 +354,27 @@ pub async fn update_email(
     // sama (`fetch_me`/`me_json`), bukan bentuk kedua yang di-fork.
     match fetch_me(&st.pool, auth.0).await {
         Ok(Some(r)) => (StatusCode::OK, headers, Json(me_json(&r))),
-        Ok(None) => (StatusCode::NOT_FOUND, HeaderMap::new(), Json(json!({"error": "User not found"}))),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            HeaderMap::new(),
+            Json(json!({"error": "User not found"})),
+        ),
         Err(e) => {
             tracing::warn!(error = %e, "update-email: re-read after update failed");
-            (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), Json(json!({"error": "internal error"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                Json(json!({"error": "internal error"})),
+            )
         }
     }
 }
 
 /// Logo workspace: aset file diutamakan, fallback ke kolom `logo` lama.
 pub fn pick_logo_url(asset: Option<&str>, logo: Option<&str>) -> Option<String> {
-    asset.map(str::to_string).or_else(|| logo.map(str::to_string))
+    asset
+        .map(str::to_string)
+        .or_else(|| logo.map(str::to_string))
 }
 
 #[derive(sqlx::FromRow)]
@@ -315,7 +417,9 @@ pub async fn my_workspaces(
     // Field `url` DIHILANGKAN: tidak ada kolomnya di `workspaces` dan tidak
     // ada kode FE yang membaca properti `workspace.url`.
     let search = params.get("search").cloned().unwrap_or_default();
-    let owner: Option<uuid::Uuid> = params.get("owner").and_then(|s| uuid::Uuid::parse_str(s).ok());
+    let owner: Option<uuid::Uuid> = params
+        .get("owner")
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
     let rows: Vec<MyWorkspaceRow> = match sqlx::query_as(
         "SELECT w.id, w.name, w.slug, w.timezone, w.organization_size, w.logo, \
                 fa.asset AS logo_asset_url, \
@@ -345,13 +449,21 @@ pub async fn my_workspaces(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "my-workspaces: lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     // `?fields=a,b,c` (`base.py:181`): subset projection, unknown keys ignored.
     let fields: Vec<String> = params
         .get("fields")
-        .map(|s| s.split(',').map(|f| f.trim().to_string()).filter(|f| !f.is_empty()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|f| f.trim().to_string())
+                .filter(|f| !f.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
     let out: Vec<Value> = rows
         .into_iter()
@@ -403,11 +515,17 @@ pub async fn my_workspace_invitations(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "ws-invitations: current-email lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((email,)) = email_row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
     // Full `WorkSpaceMemberInviteSerializer` rows (`__all__` + workspace
     // lite + invite_link) via the shared invite-row SELECT + builder
@@ -426,7 +544,10 @@ pub async fn my_workspace_invitations(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "ws-invitations: lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let out: Vec<Value> = rows.iter().map(ws_invite_json).collect();
@@ -483,11 +604,17 @@ pub async fn join_workspaces(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "ws-join: current-email lookup failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ));
         }
     };
     let Some((email,)) = email_row else {
-        return Err((StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"}))));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        ));
     };
     if body.invitations.is_empty() {
         return Ok(StatusCode::NO_CONTENT);
@@ -496,7 +623,10 @@ pub async fn join_workspaces(
         Ok(tx) => tx,
         Err(e) => {
             tracing::warn!(error = %e, "ws-join: begin transaction failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ));
         }
     };
     // Hanya invite milik email user ini (cermin `filter(pk__in=..., email=...)`).
@@ -513,7 +643,10 @@ pub async fn join_workspaces(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "ws-join: invite lookup failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ));
         }
     };
     let view_props = default_view_props();
@@ -532,7 +665,10 @@ pub async fn join_workspaces(
         .is_err()
         {
             tracing::warn!("ws-join: member activation failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ));
         }
         // `ON CONFLICT DO NOTHING` tanpa target: cermin
         // `bulk_create(ignore_conflicts=True)` — kena constraint mana pun
@@ -557,7 +693,10 @@ pub async fn join_workspaces(
         .is_err()
         {
             tracing::warn!("ws-join: member insert failed");
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            ));
         }
     }
     let joined_ids: Vec<uuid::Uuid> = invites.into_iter().map(|(id, _, _)| id).collect();
@@ -568,11 +707,17 @@ pub async fn join_workspaces(
         .is_err()
     {
         tracing::warn!("ws-join: invite delete failed");
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        ));
     }
     if tx.commit().await.is_err() {
         tracing::warn!("ws-join: commit failed");
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        ));
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -602,11 +747,17 @@ pub async fn my_project_invitations(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-invitations: current-email lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((email,)) = email_row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
     // Workspace harus ada (404) dan requester member aktif (403).
     let ws: Option<(uuid::Uuid,)> = match sqlx::query_as(
@@ -623,7 +774,10 @@ pub async fn my_project_invitations(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-invitations: membership lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((workspace_id,)) = ws else {
@@ -638,13 +792,19 @@ pub async fn my_project_invitations(
             Ok(v) => v == Some(true),
             Err(e) => {
                 tracing::warn!(error = %e, "project-invitations: workspace lookup failed");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal error"})),
+                );
             }
         };
         if exists {
             return (StatusCode::FORBIDDEN, Json(json!({"error": "forbidden"})));
         }
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})));
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        );
     };
     // Full `ProjectMemberInviteSerializer` rows (`__all__` + project/
     // workspace lite); the path-workspace scoping stays (documented).
@@ -664,7 +824,10 @@ pub async fn my_project_invitations(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-invitations: lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let out: Vec<Value> = rows.iter().map(proj_invite_json).collect();
@@ -719,7 +882,12 @@ fn default_user_props() -> (Value, Value, Value, Value) {
         "link": true, "priority": true, "start_date": true, "state": true,
         "sub_issue_count": true, "updated_on": true,
     });
-    (filters, display_filters, display_properties, default_project_preferences())
+    (
+        filters,
+        display_filters,
+        display_properties,
+        default_project_preferences(),
+    )
 }
 
 /// POST /api/users/me/workspaces/:slug/projects/invitations/ — paritas
@@ -733,21 +901,26 @@ pub async fn join_projects(
     Json(body): Json<JoinProjectsBody>,
 ) -> (StatusCode, Json<Value>) {
     // 1. Resolve workspace id by slug → 404 bila tak dikenal.
-    let ws: Option<(uuid::Uuid,)> = match sqlx::query_as(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(error = %e, "project-join: workspace lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
-        }
-    };
+    let ws: Option<(uuid::Uuid,)> =
+        match sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(error = %e, "project-join: workspace lookup failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal error"})),
+                );
+            }
+        };
     let Some((workspace_id,)) = ws else {
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})));
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        );
     };
     // 2-3. Membership aktif + role ADMIN(20)/MEMBER(15), cermin
     // `@allow_permission([ADMIN, MEMBER], WORKSPACE)`; selain itu 403.
@@ -763,7 +936,10 @@ pub async fn join_projects(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-join: membership lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let Some((ws_role,)) = membership else {
@@ -786,7 +962,10 @@ pub async fn join_projects(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-join: project lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     for (_, network) in &projects {
@@ -803,7 +982,10 @@ pub async fn join_projects(
         Ok(tx) => tx,
         Err(e) => {
             tracing::warn!(error = %e, "project-join: begin transaction failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let validated: Vec<uuid::Uuid> = projects.into_iter().map(|(id, _)| id).collect();
@@ -819,7 +1001,10 @@ pub async fn join_projects(
     .is_err()
     {
         tracing::warn!("project-join: member activation failed");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        );
     }
     let member_props = default_project_props();
     let member_prefs = default_project_preferences();
@@ -847,7 +1032,10 @@ pub async fn join_projects(
         .is_err()
         {
             tracing::warn!("project-join: member insert failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
         // Kolom user = `user_id` (BUKAN `member_id` — terverifikasi via
         // `\d project_user_properties` 2026-09-05).
@@ -872,21 +1060,32 @@ pub async fn join_projects(
         .is_err()
         {
             tracing::warn!("project-join: user-property insert failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     }
     if tx.commit().await.is_err() {
         tracing::warn!("project-join: commit failed");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        );
     }
     // 6. Pesan byte-exact dari Django.
-    (StatusCode::CREATED, Json(json!({"message": "Projects joined successfully"})))
+    (
+        StatusCode::CREATED,
+        Json(json!({"message": "Projects joined successfully"})),
+    )
 }
 
 /// Pembentuk peta `{project_id: role}` untuk respons project-roles.
 pub fn project_roles_map(pairs: Vec<(String, i32)>) -> Value {
     let mut m = serde_json::Map::new();
-    for (k, v) in pairs { m.insert(k, json!(v)); }
+    for (k, v) in pairs {
+        m.insert(k, json!(v));
+    }
     Value::Object(m)
 }
 
@@ -914,7 +1113,10 @@ pub async fn my_project_roles(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-roles: membership lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     if member != Some(true) {
@@ -941,7 +1143,10 @@ pub async fn my_project_roles(
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "project-roles: lookup failed");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            );
         }
     };
     let mapped: Vec<(String, i32)> = pairs
@@ -959,8 +1164,14 @@ mod tests {
     #[test]
     fn email_code_throttle_key_format() {
         let uid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        assert_eq!(email_code_throttle_key(&uid), "emailcode:throttle:11111111-1111-1111-1111-111111111111");
-        assert_eq!(email_code_key(&uid, "a@b.co"), "emailcode:11111111-1111-1111-1111-111111111111:a@b.co");
+        assert_eq!(
+            email_code_throttle_key(&uid),
+            "emailcode:throttle:11111111-1111-1111-1111-111111111111"
+        );
+        assert_eq!(
+            email_code_key(&uid, "a@b.co"),
+            "emailcode:11111111-1111-1111-1111-111111111111:a@b.co"
+        );
     }
 
     #[test]
@@ -977,7 +1188,10 @@ mod tests {
     fn email_update_clears_key_format() {
         // key yang dihapus setelah sukses harus sama dengan key generate
         let uid = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        assert_eq!(email_code_key(&uid, "n@x.io"), "emailcode:11111111-1111-1111-1111-111111111111:n@x.io");
+        assert_eq!(
+            email_code_key(&uid, "n@x.io"),
+            "emailcode:11111111-1111-1111-1111-111111111111:n@x.io"
+        );
     }
 
     #[test]
@@ -989,7 +1203,10 @@ mod tests {
 
     #[test]
     fn invite_link_shape() {
-        assert_eq!(workspace_invite_link("1", "s", "t"), "/workspace-invitations/?invitation_id=1&slug=s&token=t");
+        assert_eq!(
+            workspace_invite_link("1", "s", "t"),
+            "/workspace-invitations/?invitation_id=1&slug=s&token=t"
+        );
     }
 
     #[test]
@@ -1047,10 +1264,24 @@ mod tests {
         };
         let v = me_json(&r);
         for k in [
-            "id", "avatar", "cover_image", "avatar_url", "cover_image_url",
-            "date_joined", "display_name", "email", "first_name", "last_name",
-            "is_active", "is_bot", "is_email_verified", "user_timezone",
-            "username", "is_password_autoset", "last_login_medium", "last_login_time",
+            "id",
+            "avatar",
+            "cover_image",
+            "avatar_url",
+            "cover_image_url",
+            "date_joined",
+            "display_name",
+            "email",
+            "first_name",
+            "last_name",
+            "is_active",
+            "is_bot",
+            "is_email_verified",
+            "user_timezone",
+            "username",
+            "is_password_autoset",
+            "last_login_medium",
+            "last_login_time",
         ] {
             assert!(v.get(k).is_some(), "missing {k}");
         }
@@ -1076,7 +1307,10 @@ mod tests {
             for name in ["plane_at", "__Host-plane_at", "plane_rt", "__Host-plane_rt"] {
                 let v = set.iter().find(|v| v.starts_with(&format!("{name}=;")));
                 assert!(v.is_some(), "secure={secure}: {name} tak di-clear: {set:?}");
-                assert!(v.expect("ada").contains("Max-Age=0"), "harus expired: {set:?}");
+                assert!(
+                    v.expect("ada").contains("Max-Age=0"),
+                    "harus expired: {set:?}"
+                );
                 assert_eq!(v.expect("ada").contains("Secure"), secure, "{set:?}");
             }
         }

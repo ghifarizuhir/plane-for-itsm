@@ -6,8 +6,8 @@ use crate::routes::project::{deny, missing};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{
-    build_cursor, fetch_project_member_role, is_workspace_admin, next_cursor_str,
-    parse_python_int, project_gate_allows, total_pages,
+    build_cursor, fetch_project_member_role, is_workspace_admin, next_cursor_str, parse_python_int,
+    project_gate_allows, total_pages,
 };
 use super::issue_query::GENERIC_500_MSG;
 
@@ -334,10 +334,7 @@ pub(crate) struct IssueVersionDetailRow {
 /// Renders `bytea` as a base64 STANDARD string (null stays null) — see the
 /// module-docs wire evidence. `Option<Vec<u8>>` is what sqlx decodes
 /// `bytea` into.
-fn base64_or_null<S: serde::Serializer>(
-    v: &Option<Vec<u8>>,
-    s: S,
-) -> Result<S::Ok, S::Error> {
+fn base64_or_null<S: serde::Serializer>(v: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
     match v {
         Some(b) => s.serialize_str(&base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
@@ -678,8 +675,15 @@ pub async fn desc_versions_list(
     if !allowed {
         return Ok(deny());
     }
-    if let Some(resp) =
-        desc_gate_chain(&st.pool, auth.0, &slug, project_id, work_item_id, member_role).await?
+    if let Some(resp) = desc_gate_chain(
+        &st.pool,
+        auth.0,
+        &slug,
+        project_id,
+        work_item_id,
+        member_role,
+    )
+    .await?
     {
         return Ok(resp);
     }
@@ -719,8 +723,15 @@ pub async fn desc_version_detail(
     if !allowed {
         return Ok(deny());
     }
-    if let Some(resp) =
-        desc_gate_chain(&st.pool, auth.0, &slug, project_id, work_item_id, member_role).await?
+    if let Some(resp) = desc_gate_chain(
+        &st.pool,
+        auth.0,
+        &slug,
+        project_id,
+        work_item_id,
+        member_role,
+    )
+    .await?
     {
         return Ok(resp);
     }
@@ -760,8 +771,15 @@ pub async fn intake_desc_versions_list(
     if !allowed {
         return Ok(deny());
     }
-    if let Some(resp) =
-        desc_gate_chain(&st.pool, auth.0, &slug, project_id, work_item_id, member_role).await?
+    if let Some(resp) = desc_gate_chain(
+        &st.pool,
+        auth.0,
+        &slug,
+        project_id,
+        work_item_id,
+        member_role,
+    )
+    .await?
     {
         return Ok(resp);
     }
@@ -804,8 +822,15 @@ pub async fn intake_desc_version_detail(
     if !allowed {
         return Ok(deny());
     }
-    if let Some(resp) =
-        desc_gate_chain(&st.pool, auth.0, &slug, project_id, work_item_id, member_role).await?
+    if let Some(resp) = desc_gate_chain(
+        &st.pool,
+        auth.0,
+        &slug,
+        project_id,
+        work_item_id,
+        member_role,
+    )
+    .await?
     {
         return Ok(resp);
     }
@@ -965,7 +990,10 @@ mod batch_d_d6_tests {
         // emit once (first position, after `estimate_point`).
         assert_eq!(ISSUE_VERSION_DETAIL_KEYS.len(), 30);
         assert_eq!(
-            ISSUE_VERSION_DETAIL_KEYS.iter().filter(|&&k| k == "name").count(),
+            ISSUE_VERSION_DETAIL_KEYS
+                .iter()
+                .filter(|&&k| k == "name")
+                .count(),
             1
         );
         let v = serde_json::to_value(&sample_issue_version_row()).unwrap();
@@ -1030,7 +1058,10 @@ mod batch_d_d6_tests {
         assert_eq!(keys, want);
         // `bytea` renders base64-on-the-wire (see module docs):
         // `base64.b64encode(b"test binary").decode()`.
-        assert_eq!(v.get("description_binary"), Some(&json!("dGVzdCBiaW5hcnk=")));
+        assert_eq!(
+            v.get("description_binary"),
+            Some(&json!("dGVzdCBiaW5hcnk="))
+        );
         let mut null_row = sample_desc_version_row();
         null_row.description_binary = None;
         let nv = serde_json::to_value(&null_row).unwrap();

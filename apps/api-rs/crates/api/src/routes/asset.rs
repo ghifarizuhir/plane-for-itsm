@@ -282,7 +282,9 @@ pub fn validate_upload_init(body: &CreateAssetInit) -> Result<(), String> {
     }
     let file_type = body.file_type.as_deref().unwrap_or("image/jpeg");
     if !ALLOWED_FILE_TYPES.contains(&file_type) {
-        return Err("Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.".to_string());
+        return Err(
+            "Invalid file type. Only JPEG, PNG, WebP, JPG and GIF files are allowed.".to_string(),
+        );
     }
     Ok(())
 }
@@ -417,7 +419,10 @@ fn presign_post(
     now: chrono::DateTime<Utc>,
 ) -> Value {
     let (amzdate, datestamp) = amz_dates(now);
-    let credential = format!("{}/{datestamp}/{}/s3/aws4_request", conf.access, conf.region);
+    let credential = format!(
+        "{}/{datestamp}/{}/s3/aws4_request",
+        conf.access, conf.region
+    );
     let expiration = (now + chrono::Duration::seconds(conf.expiration))
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
@@ -438,8 +443,10 @@ fn presign_post(
             {"x-amz-date": amzdate},
         ],
     });
-    let policy_b64 =
-        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, policy.to_string());
+    let policy_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        policy.to_string(),
+    );
     let signing = derive_signing_key(&conf.secret, &datestamp, &conf.region, "s3");
     let signature = hex::encode(hmac_sha256(&signing, policy_b64.as_bytes()));
     let url = format!("{}/{}/", endpoint.trim_end_matches('/'), conf.bucket);
@@ -464,7 +471,10 @@ fn content_disposition(disposition: &str, filename: Option<&str>) -> String {
         .filter(|n| !n.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
-    format!("{disposition}; filename*=UTF-8''{}", pct_encode(&name, true))
+    format!(
+        "{disposition}; filename*=UTF-8''{}",
+        pct_encode(&name, true)
+    )
 }
 
 /// Replicates `S3Storage.generate_presigned_url` (`storage.py:112-140`) for
@@ -484,7 +494,10 @@ fn presign_get(
     let host = endpoint_authority(endpoint).to_string();
     let disp = content_disposition(disposition, filename);
     let mut params: Vec<(String, String)> = vec![
-        ("X-Amz-Algorithm".to_string(), "AWS4-HMAC-SHA256".to_string()),
+        (
+            "X-Amz-Algorithm".to_string(),
+            "AWS4-HMAC-SHA256".to_string(),
+        ),
         ("X-Amz-Credential".to_string(), credential),
         ("X-Amz-Date".to_string(), amzdate.clone()),
         ("X-Amz-Expires".to_string(), conf.expiration.to_string()),
@@ -506,8 +519,10 @@ fn presign_get(
     let canonical_req = format!(
         "GET\n{canonical_uri}\n{canonical_qs}\n{canonical_headers}\nhost\nUNSIGNED-PAYLOAD"
     );
-    let string_to_sign =
-        format!("AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}", sha256_hex(canonical_req.as_bytes()));
+    let string_to_sign = format!(
+        "AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}",
+        sha256_hex(canonical_req.as_bytes())
+    );
     let signing = derive_signing_key(&conf.secret, &datestamp, &conf.region, "s3");
     let signature = hex::encode(hmac_sha256(&signing, string_to_sign.as_bytes()));
     format!(
@@ -527,17 +542,27 @@ async fn s3_copy_object(conf: &S3Conf, endpoint: &str, src_key: &str, dst_key: &
     let (amzdate, datestamp) = amz_dates(now);
     let scope = format!("{datestamp}/{}/s3/aws4_request", conf.region);
     let host = endpoint_authority(endpoint).to_string();
-    let copy_source = format!("/{}/{}", pct_encode(&conf.bucket, false), pct_encode(src_key, true));
+    let copy_source = format!(
+        "/{}/{}",
+        pct_encode(&conf.bucket, false),
+        pct_encode(src_key, true)
+    );
     let payload_hash = sha256_hex(b"");
-    let canonical_uri = format!("/{}/{}", pct_encode(&conf.bucket, false), pct_encode(dst_key, true));
+    let canonical_uri = format!(
+        "/{}/{}",
+        pct_encode(&conf.bucket, false),
+        pct_encode(dst_key, true)
+    );
     let canon_headers = format!(
         "host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-copy-source:{copy_source}\nx-amz-date:{amzdate}\n"
     );
     let signed_headers = "host;x-amz-content-sha256;x-amz-copy-source;x-amz-date";
     let canonical_req =
         format!("PUT\n{canonical_uri}\n\n{canon_headers}\n{signed_headers}\n{payload_hash}");
-    let string_to_sign =
-        format!("AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}", sha256_hex(canonical_req.as_bytes()));
+    let string_to_sign = format!(
+        "AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}",
+        sha256_hex(canonical_req.as_bytes())
+    );
     let signing = derive_signing_key(&conf.secret, &datestamp, &conf.region, "s3");
     let signature = hex::encode(hmac_sha256(&signing, string_to_sign.as_bytes()));
     let auth = format!(
@@ -607,10 +632,7 @@ struct WsRow {
     id: uuid::Uuid,
 }
 
-async fn workspace_by_slug(
-    pool: &sqlx::PgPool,
-    slug: &str,
-) -> Result<Option<WsRow>, sqlx::Error> {
+async fn workspace_by_slug(pool: &sqlx::PgPool, slug: &str) -> Result<Option<WsRow>, sqlx::Error> {
     sqlx::query_as::<_, WsRow>("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
         .bind(slug)
         .fetch_optional(pool)
@@ -661,7 +683,8 @@ struct AssetRow {
     storage_metadata: Option<Value>,
 }
 
-const ASSET_COLS: &str = "id, created_at, updated_at, created_by_id, updated_by_id, attributes, asset, \
+const ASSET_COLS: &str =
+    "id, created_at, updated_at, created_by_id, updated_by_id, attributes, asset, \
     user_id, workspace_id, draft_issue_id, project_id, issue_id, comment_id, page_id, entity_type, \
     entity_identifier, is_deleted, is_archived, external_id, external_source, size, is_uploaded, \
     storage_metadata";
@@ -685,7 +708,9 @@ fn asset_url_for(
             _ => Value::Null,
         },
         Some(
-            "ISSUE_DESCRIPTION" | "COMMENT_DESCRIPTION" | "PAGE_DESCRIPTION"
+            "ISSUE_DESCRIPTION"
+            | "COMMENT_DESCRIPTION"
+            | "PAGE_DESCRIPTION"
             | "DRAFT_ISSUE_DESCRIPTION",
         ) => match (ws_slug, project_id) {
             (Some(s), Some(p)) => {
@@ -802,7 +827,10 @@ async fn check_project_access(
 /// (no DRAFT branch → `{}` → FK stays NULL); only the project-presign
 /// mapping (`v2.py:551-577`) has the `DRAFT_ISSUE_DESCRIPTION` →
 /// `draft_issue_id` branch (`v2.py:576-577`).
-fn entity_fk_fragment(entity_type: &str, entity_id: Option<&str>) -> (&'static str, Option<uuid::Uuid>) {
+fn entity_fk_fragment(
+    entity_type: &str,
+    entity_id: Option<&str>,
+) -> (&'static str, Option<uuid::Uuid>) {
     let id = entity_id.and_then(|s| s.parse::<uuid::Uuid>().ok());
     let col = match entity_type {
         "WORKSPACE_LOGO" => "workspace_id",
@@ -835,19 +863,26 @@ pub async fn ws_presign(
     if !gate_ws_roles(&st.pool, auth.0, &slug, AMG).await? {
         return Ok(deny());
     }
-    let entity_type = body.get("entity_type").and_then(Value::as_str).unwrap_or("");
+    let entity_type = body
+        .get("entity_type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if !ENTITY_TYPES.contains(&entity_type) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": INVALID_ENTITY_MSG, "status": false})),
         ));
     }
-    if entity_type == "WORKSPACE_LOGO"
-        && !gate_ws_roles(&st.pool, auth.0, &slug, &[20]).await?
-    {
-        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": WS_LOGO_ADMIN_MSG}))));
+    if entity_type == "WORKSPACE_LOGO" && !gate_ws_roles(&st.pool, auth.0, &slug, &[20]).await? {
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": WS_LOGO_ADMIN_MSG})),
+        ));
     }
-    let mime = body.get("type").and_then(Value::as_str).unwrap_or("image/jpeg");
+    let mime = body
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("image/jpeg");
     if !is_image_mime(mime) {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -860,7 +895,10 @@ pub async fn ws_presign(
         // Django `int(...)` (`v2.py:344`) raises → 500; map to a 400
         // (documented normalize-crash).
         Err(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid size."}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid size."})),
+            ));
         }
     };
     let size_limit = clamp_size(size).min(conf.file_limit);
@@ -869,7 +907,11 @@ pub async fn ws_presign(
     };
     let raw_name = body.get("name").and_then(Value::as_str);
     let name = sanitize_filename(raw_name).unwrap_or_else(|| "unnamed".to_string());
-    let key = ws_asset_key(&ws.id.to_string(), &uuid::Uuid::new_v4().simple().to_string(), &name);
+    let key = ws_asset_key(
+        &ws.id.to_string(),
+        &uuid::Uuid::new_v4().simple().to_string(),
+        &name,
+    );
     let entity_id = body.get("entity_identifier").and_then(Value::as_str);
     let (fk_col, fk_id) = entity_fk_fragment(entity_type, entity_id);
     let now = Utc::now();
@@ -935,7 +977,13 @@ pub async fn ws_presign(
         .fetch_one(&st.pool).await?,
     };
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let upload_data = presign_post(&conf, &endpoint, &key, mime, size_limit, now);
     Ok((
         StatusCode::OK,
@@ -956,14 +1004,20 @@ pub async fn user_presign(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let entity_type = body.get("entity_type").and_then(Value::as_str).unwrap_or("");
+    let entity_type = body
+        .get("entity_type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if !["USER_AVATAR", "USER_COVER"].contains(&entity_type) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": INVALID_ENTITY_MSG, "status": false})),
         ));
     }
-    let mime = body.get("type").and_then(Value::as_str).unwrap_or("image/jpeg");
+    let mime = body
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("image/jpeg");
     if !is_image_mime(mime) {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -974,7 +1028,10 @@ pub async fn user_presign(
     let size = match parse_size(body.get("size"), conf.file_limit) {
         Ok(v) => v,
         Err(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid size."}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid size."})),
+            ));
         }
     };
     let size_limit = clamp_size(size).min(conf.file_limit);
@@ -994,7 +1051,13 @@ pub async fn user_presign(
     .fetch_one(&st.pool)
     .await?;
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let upload_data = presign_post(&conf, &endpoint, &key, mime, size_limit, now);
     Ok((
         StatusCode::OK,
@@ -1025,14 +1088,20 @@ pub async fn project_presign(
     if !gate_project_roles(&st.pool, auth.0, &slug, project_id, AMG).await? {
         return Ok(deny());
     }
-    let entity_type = body.get("entity_type").and_then(Value::as_str).unwrap_or("");
+    let entity_type = body
+        .get("entity_type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if !ENTITY_TYPES.contains(&entity_type) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": INVALID_ENTITY_MSG, "status": false})),
         ));
     }
-    let mime = body.get("type").and_then(Value::as_str).unwrap_or("image/jpeg");
+    let mime = body
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("image/jpeg");
     if !is_image_mime(mime) {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -1043,13 +1112,20 @@ pub async fn project_presign(
     let size = match parse_size(body.get("size"), conf.file_limit) {
         Ok(v) => v,
         Err(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid size."}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid size."})),
+            ));
         }
     };
     let size_limit = clamp_size(size).min(conf.file_limit);
     let raw_name = body.get("name").and_then(Value::as_str);
     let name = sanitize_filename(raw_name).unwrap_or_else(|| "unnamed".to_string());
-    let key = ws_asset_key(&ws.id.to_string(), &uuid::Uuid::new_v4().simple().to_string(), &name);
+    let key = ws_asset_key(
+        &ws.id.to_string(),
+        &uuid::Uuid::new_v4().simple().to_string(),
+        &name,
+    );
     let entity_id = body.get("entity_identifier").and_then(Value::as_str);
     let (fk_col, fk_id) = entity_fk_fragment(entity_type, entity_id);
     let now = Utc::now();
@@ -1095,7 +1171,13 @@ pub async fn project_presign(
         .fetch_one(&st.pool).await?,
     };
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let upload_data = presign_post(&conf, &endpoint, &key, mime, size_limit, now);
     Ok((
         StatusCode::OK,
@@ -1152,13 +1234,20 @@ pub async fn issue_presign(
     let size = match parse_size(body.get("size"), conf.file_limit) {
         Ok(v) => v,
         Err(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid size."}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid size."})),
+            ));
         }
     };
     let size_limit = clamp_size(size).min(conf.file_limit);
     let raw_name = body.get("name").and_then(Value::as_str);
     let name = sanitize_filename(raw_name).unwrap_or_else(|| "unnamed".to_string());
-    let key = ws_asset_key(&ws.id.to_string(), &uuid::Uuid::new_v4().simple().to_string(), &name);
+    let key = ws_asset_key(
+        &ws.id.to_string(),
+        &uuid::Uuid::new_v4().simple().to_string(),
+        &name,
+    );
     let now = Utc::now();
     let row: (uuid::Uuid,) = sqlx::query_as(
         "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, project_id, issue_id, created_by_id, entity_type, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
@@ -1173,13 +1262,20 @@ pub async fn issue_presign(
     .bind(auth.0)
     .fetch_one(&st.pool)
     .await?;
-    let full: Option<AssetRow> =
-        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
-            .bind(row.0)
-            .fetch_optional(&st.pool)
-            .await?;
+    let full: Option<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"
+    ))
+    .bind(row.0)
+    .fetch_optional(&st.pool)
+    .await?;
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let upload_data = presign_post(&conf, &endpoint, &key, mime, size_limit, now);
     Ok((
         StatusCode::OK,
@@ -1213,13 +1309,17 @@ pub async fn mark_uploaded(
         return Ok(missing());
     };
     if !check_project_access(&st, &auth, &asset).await? {
-        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))));
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": NO_ASSET_ACCESS_MSG})),
+        ));
     }
-    let full: Option<AssetRow> =
-        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
-            .bind(asset_id)
-            .fetch_optional(&st.pool)
-            .await?;
+    let full: Option<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"
+    ))
+    .bind(asset_id)
+    .fetch_optional(&st.pool)
+    .await?;
     if let Some(r) = full {
         match r.entity_type.as_deref() {
             Some("WORKSPACE_LOGO") => {
@@ -1234,8 +1334,13 @@ pub async fn mark_uploaded(
                         sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
                             .bind(p).execute(&st.pool).await?;
                     }
-                    sqlx::query("UPDATE workspaces SET logo = '', logo_asset_id = $1 WHERE id = $2")
-                        .bind(asset_id).bind(wsid).execute(&st.pool).await?;
+                    sqlx::query(
+                        "UPDATE workspaces SET logo = '', logo_asset_id = $1 WHERE id = $2",
+                    )
+                    .bind(asset_id)
+                    .bind(wsid)
+                    .execute(&st.pool)
+                    .await?;
                 }
             }
             Some("PROJECT_COVER") => {
@@ -1294,11 +1399,18 @@ pub async fn user_complete(
                     .await?
                     .flatten();
             if let Some(p) = prev.filter(|p| *p != asset_id) {
-                sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
-                    .bind(p).execute(&st.pool).await?;
+                sqlx::query(
+                    "UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1",
+                )
+                .bind(p)
+                .execute(&st.pool)
+                .await?;
             }
             sqlx::query("UPDATE users SET avatar = '', avatar_asset_id = $1 WHERE id = $2")
-                .bind(asset_id).bind(auth.0).execute(&st.pool).await?;
+                .bind(asset_id)
+                .bind(auth.0)
+                .execute(&st.pool)
+                .await?;
         }
         Some("USER_COVER") => {
             let prev: Option<uuid::Uuid> =
@@ -1308,11 +1420,20 @@ pub async fn user_complete(
                     .await?
                     .flatten();
             if let Some(p) = prev.filter(|p| *p != asset_id) {
-                sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
-                    .bind(p).execute(&st.pool).await?;
+                sqlx::query(
+                    "UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1",
+                )
+                .bind(p)
+                .execute(&st.pool)
+                .await?;
             }
-            sqlx::query("UPDATE users SET cover_image = NULL, cover_image_asset_id = $1 WHERE id = $2")
-                .bind(asset_id).bind(auth.0).execute(&st.pool).await?;
+            sqlx::query(
+                "UPDATE users SET cover_image = NULL, cover_image_asset_id = $1 WHERE id = $2",
+            )
+            .bind(asset_id)
+            .bind(auth.0)
+            .execute(&st.pool)
+            .await?;
         }
         _ => {}
     }
@@ -1374,10 +1495,18 @@ pub async fn issue_complete(
         "UPDATE file_assets SET is_uploaded = true WHERE id = $1 AND workspace_id = $2 \
          AND project_id = $3 AND issue_id = $4 AND deleted_at IS NULL",
     )
-    .bind(pk).bind(ws.id).bind(project_id).bind(issue_id)
-    .execute(&st.pool).await?.rows_affected();
+    .bind(pk)
+    .bind(ws.id)
+    .bind(project_id)
+    .bind(issue_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
     if updated == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG})),
+        ));
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
@@ -1403,25 +1532,33 @@ pub async fn soft_delete(
         return Ok(missing());
     };
     if !check_project_access(&st, &auth, &asset).await? {
-        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))));
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": NO_ASSET_ACCESS_MSG})),
+        ));
     }
-    let full: Option<AssetRow> =
-        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
-            .bind(asset_id)
-            .fetch_optional(&st.pool)
-            .await?;
+    let full: Option<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"
+    ))
+    .bind(asset_id)
+    .fetch_optional(&st.pool)
+    .await?;
     if let Some(r) = full {
         match r.entity_type.as_deref() {
             Some("WORKSPACE_LOGO") => {
                 if let Some(wsid) = r.workspace_id {
                     sqlx::query("UPDATE workspaces SET logo_asset_id = NULL WHERE id = $1")
-                        .bind(wsid).execute(&st.pool).await?;
+                        .bind(wsid)
+                        .execute(&st.pool)
+                        .await?;
                 }
             }
             Some("PROJECT_COVER") => {
                 if let Some(pid) = r.project_id {
                     sqlx::query("UPDATE projects SET cover_image_asset_id = NULL WHERE id = $1")
-                        .bind(pid).execute(&st.pool).await?;
+                        .bind(pid)
+                        .execute(&st.pool)
+                        .await?;
                 }
             }
             _ => {}
@@ -1454,16 +1591,22 @@ pub async fn user_delete(
     match r.entity_type.as_deref() {
         Some("USER_AVATAR") => {
             sqlx::query("UPDATE users SET avatar_asset_id = NULL WHERE id = $1")
-                .bind(auth.0).execute(&st.pool).await?;
+                .bind(auth.0)
+                .execute(&st.pool)
+                .await?;
         }
         Some("USER_COVER") => {
             sqlx::query("UPDATE users SET cover_image_asset_id = NULL WHERE id = $1")
-                .bind(auth.0).execute(&st.pool).await?;
+                .bind(auth.0)
+                .execute(&st.pool)
+                .await?;
         }
         _ => {}
     }
     sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
-        .bind(asset_id).execute(&st.pool).await?;
+        .bind(asset_id)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -1486,8 +1629,12 @@ pub async fn project_delete(
         "UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1 \
          AND workspace_id = $2 AND project_id = $3 AND deleted_at IS NULL",
     )
-    .bind(pk).bind(ws.id).bind(project_id)
-    .execute(&st.pool).await?.rows_affected();
+    .bind(pk)
+    .bind(ws.id)
+    .bind(project_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
     if updated == 0 {
         return Ok(missing());
     }
@@ -1517,11 +1664,17 @@ pub async fn issue_delete(
         "SELECT created_by_id FROM file_assets WHERE id = $1 AND workspace_id = $2 \
          AND project_id = $3 AND issue_id = $4 AND deleted_at IS NULL",
     )
-    .bind(pk).bind(ws.id).bind(project_id).bind(issue_id)
+    .bind(pk)
+    .bind(ws.id)
+    .bind(project_id)
+    .bind(issue_id)
     .fetch_optional(&st.pool)
     .await?;
     let Some((created_by,)) = row else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG})),
+        ));
     };
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
@@ -1530,7 +1683,9 @@ pub async fn issue_delete(
         return Ok(deny());
     }
     sqlx::query("DELETE FROM file_assets WHERE id = $1")
-        .bind(pk).execute(&st.pool).await?;
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -1554,21 +1709,43 @@ pub async fn ws_get(
         return Ok(missing().into_response());
     };
     if !check_project_access(&st, &auth, &asset).await? {
-        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": NO_ASSET_ACCESS_MSG}))).into_response());
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": NO_ASSET_ACCESS_MSG})),
+        )
+            .into_response());
     }
-    let full: Option<AssetRow> =
-        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"))
-            .bind(asset_id)
-            .fetch_optional(&st.pool)
-            .await?;
+    let full: Option<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE id = $1"
+    ))
+    .bind(asset_id)
+    .fetch_optional(&st.pool)
+    .await?;
     let Some(r) = full.filter(|r| r.is_uploaded) else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        )
+            .into_response());
     };
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let name = r.attributes.get("name").and_then(Value::as_str);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, "attachment", name, Utc::now()))
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        "attachment",
+        name,
+        Utc::now(),
+    ))
 }
 
 /// `ProjectAssetEndpoint.get` (`v2.py:674-695`): same 302 shape scoped to the
@@ -1594,13 +1771,30 @@ pub async fn project_get(
     .bind(pk).bind(ws.id).bind(project_id)
     .fetch_optional(&st.pool).await?;
     let Some(r) = full.filter(|r| r.is_uploaded) else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        )
+            .into_response());
     };
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let name = r.attributes.get("name").and_then(Value::as_str);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, "attachment", name, Utc::now()))
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        "attachment",
+        name,
+        Utc::now(),
+    ))
 }
 
 /// `IssueAttachmentV2Endpoint.get` (single, `attachment.py:173-191`):
@@ -1626,19 +1820,37 @@ pub async fn issue_get(
     .bind(pk).bind(ws.id).bind(project_id).bind(issue_id)
     .fetch_optional(&st.pool).await?;
     let Some(r) = full else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ISSUE_ATTACHMENT_MISSING_MSG})),
+        )
+            .into_response());
     };
     if !r.is_uploaded {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(json!({"error": ASSET_NOT_UPLOADED_MSG, "status": false})),
-        ).into_response());
+        )
+            .into_response());
     }
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let name = r.attributes.get("name").and_then(Value::as_str);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, "attachment", name, Utc::now()))
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        "attachment",
+        name,
+        Utc::now(),
+    ))
 }
 
 /// `IssueAttachmentV2Endpoint.get` (list, `attachment.py:193-203`): uploaded
@@ -1666,7 +1878,10 @@ pub async fn issue_list(
     .fetch_all(&st.pool).await?;
     Ok((
         StatusCode::OK,
-        Json(json!(rows.iter().map(|r| full_asset_json(r, Some(&slug))).collect::<Vec<_>>())),
+        Json(json!(rows
+            .iter()
+            .map(|r| full_asset_json(r, Some(&slug)))
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -1803,17 +2018,22 @@ pub async fn static_get(
     headers: HeaderMap,
     Path(asset_id): Path<uuid::Uuid>,
 ) -> Result<Response, common::errors::AppError> {
-    let full: Option<AssetRow> =
-        sqlx::query_as(&format!("SELECT {ASSET_COLS} FROM file_assets WHERE id = $1 AND deleted_at IS NULL"))
-            .bind(asset_id)
-            .fetch_optional(&st.pool)
-            .await?;
+    let full: Option<AssetRow> = sqlx::query_as(&format!(
+        "SELECT {ASSET_COLS} FROM file_assets WHERE id = $1 AND deleted_at IS NULL"
+    ))
+    .bind(asset_id)
+    .fetch_optional(&st.pool)
+    .await?;
     let Some(r) = full else {
         // Django `.get` (`v2.py:498`) miss → generic 404 via `views/base.py:92-96`.
         return Ok(missing().into_response());
     };
     if !r.is_uploaded {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        )
+            .into_response());
     }
     match r.entity_type.as_deref() {
         Some("USER_AVATAR" | "USER_COVER" | "WORKSPACE_LOGO" | "PROJECT_COVER") => {}
@@ -1821,15 +2041,33 @@ pub async fn static_get(
             return Ok((
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": INVALID_ENTITY_MSG, "status": false})),
-            ).into_response());
+            )
+                .into_response());
         }
     }
-    let mime = r.attributes.get("type").and_then(Value::as_str).unwrap_or("");
+    let mime = r
+        .attributes
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let disposition = disposition_for(mime);
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, disposition, None, Utc::now()))
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        disposition,
+        None,
+        Utc::now(),
+    ))
 }
 
 // ============================================================================
@@ -1897,18 +2135,30 @@ pub async fn duplicate(
     if !gate_ws_roles(&st.pool, auth.0, &slug, AMG).await? {
         return Ok(deny());
     }
-    let entity_type = body.get("entity_type").and_then(Value::as_str).unwrap_or("");
+    let entity_type = body
+        .get("entity_type")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if entity_type.is_empty() || !ENTITY_TYPES.contains(&entity_type) {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": INVALID_ENTITY_DUP_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": INVALID_ENTITY_DUP_MSG})),
+        ));
     }
-    let project_id = body.get("project_id").and_then(Value::as_str).and_then(|s| s.parse::<uuid::Uuid>().ok());
+    let project_id = body
+        .get("project_id")
+        .and_then(Value::as_str)
+        .and_then(|s| s.parse::<uuid::Uuid>().ok());
     let entity_id = body.get("entity_id").and_then(Value::as_str);
     let Some(ws) = workspace_by_slug(&st.pool, &slug).await? else {
         return Ok(missing());
     };
     if let Some(pid) = project_id {
         if !project_in_workspace(&st.pool, pid, ws.id).await? {
-            return Ok((StatusCode::NOT_FOUND, Json(json!({"error": PROJECT_NOT_FOUND_MSG}))));
+            return Ok((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": PROJECT_NOT_FOUND_MSG})),
+            ));
         }
     }
     let src: Option<AssetRow> = sqlx::query_as(&format!(
@@ -1917,11 +2167,18 @@ pub async fn duplicate(
     .bind(asset_id).bind(ws.id)
     .fetch_optional(&st.pool).await?;
     let Some(src) = src else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_NOT_FOUND_MSG}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_NOT_FOUND_MSG})),
+        ));
     };
     let orig_name = src.attributes.get("name").and_then(Value::as_str);
     let clean = sanitize_filename(orig_name).unwrap_or_else(|| "unnamed".to_string());
-    let dest_key = ws_asset_key(&ws.id.to_string(), &uuid::Uuid::new_v4().simple().to_string(), &clean);
+    let dest_key = ws_asset_key(
+        &ws.id.to_string(),
+        &uuid::Uuid::new_v4().simple().to_string(),
+        &clean,
+    );
     let (fk_col, fk_id) = entity_fk_fragment(entity_type, entity_id);
     let attrs = json!({
         "name": src.attributes.get("name").cloned().unwrap_or(Value::Null),
@@ -1970,10 +2227,18 @@ pub async fn duplicate(
     };
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     s3_copy_object(&conf, &endpoint, &src.asset, &dest_key).await;
     sqlx::query("UPDATE file_assets SET is_uploaded = true WHERE id = $1")
-        .bind(dup.0).execute(&st.pool).await?;
+        .bind(dup.0)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::OK, Json(json!({"asset_id": dup.0}))))
 }
 
@@ -1996,13 +2261,30 @@ pub async fn ws_download(
     .bind(asset_id).bind(&slug)
     .fetch_optional(&st.pool).await?;
     let Some(r) = full else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        )
+            .into_response());
     };
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let name = r.attributes.get("name").and_then(Value::as_str);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, "attachment", name, Utc::now()))
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        "attachment",
+        name,
+        Utc::now(),
+    ))
 }
 
 /// `ProjectAssetDownloadEndpoint.get` (`v2.py:895-919`): PROJECT-level gate;
@@ -2029,13 +2311,30 @@ pub async fn project_download(
     .bind(asset_id).bind(ws.id).bind(project_id)
     .fetch_optional(&st.pool).await?;
     let Some(r) = full else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))).into_response());
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        )
+            .into_response());
     };
     let conf = s3_conf();
     let (host, scheme) = request_host_scheme(&headers);
-    let endpoint = s3_endpoint_for(conf.use_minio, conf.minio_ssl, &host, &scheme, &conf.raw_endpoint);
+    let endpoint = s3_endpoint_for(
+        conf.use_minio,
+        conf.minio_ssl,
+        &host,
+        &scheme,
+        &conf.raw_endpoint,
+    );
     let name = r.attributes.get("name").and_then(Value::as_str);
-    redirect_302(presign_get(&conf, &endpoint, &r.asset, "attachment", name, Utc::now()))
+    redirect_302(presign_get(
+        &conf,
+        &endpoint,
+        &r.asset,
+        "attachment",
+        name,
+        Utc::now(),
+    ))
 }
 
 /// `ProjectBulkAssetEndpoint.post` (`v2.py:698-767`): PROJECT-level gate;
@@ -2068,34 +2367,53 @@ pub async fn bulk(
         })
         .unwrap_or_default();
     if ids.is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": NO_ASSET_IDS_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": NO_ASSET_IDS_MSG})),
+        ));
     }
     let rows: Vec<AssetRow> = sqlx::query_as(&format!(
         "SELECT {ASSET_COLS} FROM file_assets WHERE id = ANY($1) AND workspace_id = $2 \
          AND created_by_id = $3 AND (project_id = $4 OR project_id IS NULL) AND deleted_at IS NULL \
          ORDER BY created_at DESC"
     ))
-    .bind(&ids).bind(ws.id).bind(auth.0).bind(project_id)
-    .fetch_all(&st.pool).await?;
+    .bind(&ids)
+    .bind(ws.id)
+    .bind(auth.0)
+    .bind(project_id)
+    .fetch_all(&st.pool)
+    .await?;
     let Some(first) = rows.first() else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": ASSET_MISSING_MSG}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": ASSET_MISSING_MSG})),
+        ));
     };
     let ids_scoped: Vec<uuid::Uuid> = rows.iter().map(|r| r.id).collect();
     match first.entity_type.as_deref() {
         Some("PROJECT_COVER") => {
             sqlx::query("UPDATE file_assets SET project_id = $1 WHERE id = ANY($2)")
-                .bind(project_id).bind(&ids_scoped).execute(&st.pool).await?;
+                .bind(project_id)
+                .bind(&ids_scoped)
+                .execute(&st.pool)
+                .await?;
             for r in &rows {
                 sqlx::query("UPDATE projects SET cover_image_asset_id = $1 WHERE id = $2")
-                    .bind(r.id).bind(project_id).execute(&st.pool).await?;
+                    .bind(r.id)
+                    .bind(project_id)
+                    .execute(&st.pool)
+                    .await?;
             }
         }
         Some("ISSUE_DESCRIPTION") => {
             let r = sqlx::query(
                 "UPDATE file_assets SET issue_id = $1, project_id = $2 WHERE id = ANY($3)",
             )
-            .bind(entity_id).bind(project_id).bind(&ids_scoped)
-            .execute(&st.pool).await;
+            .bind(entity_id)
+            .bind(project_id)
+            .bind(&ids_scoped)
+            .execute(&st.pool)
+            .await;
             // Django swallows post-delete integrity races (`v2.py:743-746`).
             if let Err(e) = r {
                 if !is_fk_violation(&e) {
@@ -2105,8 +2423,10 @@ pub async fn bulk(
         }
         Some("COMMENT_DESCRIPTION") => {
             let r = sqlx::query("UPDATE file_assets SET comment_id = $1 WHERE id = ANY($2)")
-                .bind(entity_id).bind(&ids_scoped)
-                .execute(&st.pool).await;
+                .bind(entity_id)
+                .bind(&ids_scoped)
+                .execute(&st.pool)
+                .await;
             if let Err(e) = r {
                 if !is_fk_violation(&e) {
                     return Err(e.into());
@@ -2115,12 +2435,17 @@ pub async fn bulk(
         }
         Some("PAGE_DESCRIPTION") => {
             sqlx::query("UPDATE file_assets SET page_id = $1 WHERE id = ANY($2)")
-                .bind(entity_id).bind(&ids_scoped).execute(&st.pool).await?;
+                .bind(entity_id)
+                .bind(&ids_scoped)
+                .execute(&st.pool)
+                .await?;
         }
         Some("DRAFT_ISSUE_DESCRIPTION") => {
             let r = sqlx::query("UPDATE file_assets SET draft_issue_id = $1 WHERE id = ANY($2)")
-                .bind(entity_id).bind(&ids_scoped)
-                .execute(&st.pool).await;
+                .bind(entity_id)
+                .bind(&ids_scoped)
+                .execute(&st.pool)
+                .await;
             if let Err(e) = r {
                 if !is_fk_violation(&e) {
                     return Err(e.into());
@@ -2179,12 +2504,10 @@ pub async fn legacy_ws_get(
             Json(json!({"error": LEGACY_KEY_MISSING_MSG, "status": false})),
         ));
     }
-    let ws_slug: Option<String> = sqlx::query_scalar(
-        "SELECT slug FROM workspaces WHERE id = $1",
-    )
-    .bind(workspace_id)
-    .fetch_optional(&st.pool)
-    .await?;
+    let ws_slug: Option<String> = sqlx::query_scalar("SELECT slug FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .fetch_optional(&st.pool)
+        .await?;
     Ok((
         StatusCode::OK,
         Json(json!({
@@ -2206,11 +2529,13 @@ pub async fn legacy_ws_delete(
         return Ok(deny());
     }
     let asset_key = format!("{workspace_id}/{key}");
-    let updated = sqlx::query("UPDATE file_assets SET is_deleted = true WHERE asset = $1 AND deleted_at IS NULL")
-        .bind(&asset_key)
-        .execute(&st.pool)
-        .await?
-        .rows_affected();
+    let updated = sqlx::query(
+        "UPDATE file_assets SET is_deleted = true WHERE asset = $1 AND deleted_at IS NULL",
+    )
+    .bind(&asset_key)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
     if updated == 0 {
         return Ok(missing());
     }
@@ -2228,11 +2553,13 @@ pub async fn legacy_ws_restore(
         return Ok(deny());
     }
     let asset_key = format!("{workspace_id}/{key}");
-    let updated = sqlx::query("UPDATE file_assets SET is_deleted = false WHERE asset = $1 AND deleted_at IS NULL")
-        .bind(&asset_key)
-        .execute(&st.pool)
-        .await?
-        .rows_affected();
+    let updated = sqlx::query(
+        "UPDATE file_assets SET is_deleted = false WHERE asset = $1 AND deleted_at IS NULL",
+    )
+    .bind(&asset_key)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
     if updated == 0 {
         return Ok(missing());
     }
@@ -2363,7 +2690,10 @@ mod e9_tests {
     #[test]
     fn sanitize_matches_path_validator() {
         // `plane/utils/path_validator.py:14-51`.
-        assert_eq!(sanitize_filename(Some("../x.png")), Some("x.png".to_string()));
+        assert_eq!(
+            sanitize_filename(Some("../x.png")),
+            Some("x.png".to_string())
+        );
         assert_eq!(sanitize_filename(Some("  ")), None);
         assert_eq!(sanitize_filename(None), None);
     }
@@ -2397,10 +2727,15 @@ mod e9_tests {
             Some(iid),
         );
         let s = url.as_str().expect("asset_url is a string");
-        assert!(s.starts_with("/api/assets/v2/workspaces/"), "v2 prefix: {s}");
+        assert!(
+            s.starts_with("/api/assets/v2/workspaces/"),
+            "v2 prefix: {s}"
+        );
         assert_eq!(
             s,
-            format!("/api/assets/v2/workspaces/ws-slug/projects/{pid}/issues/{iid}/attachments/{id}/")
+            format!(
+                "/api/assets/v2/workspaces/ws-slug/projects/{pid}/issues/{iid}/attachments/{id}/"
+            )
         );
     }
 
@@ -2416,7 +2751,10 @@ mod e9_tests {
         let (col_a, _) = entity_fk_fragment("DRAFT_ISSUE_ATTACHMENT", Some(eid));
         let (col_d, id_d) = entity_fk_fragment("DRAFT_ISSUE_DESCRIPTION", Some(eid));
         assert_eq!(col_a, "", "DRAFT_ISSUE_ATTACHMENT binds no FK");
-        assert_eq!(col_d, "draft_issue_id", "DRAFT_ISSUE_DESCRIPTION binds draft_issue_id");
+        assert_eq!(
+            col_d, "draft_issue_id",
+            "DRAFT_ISSUE_DESCRIPTION binds draft_issue_id"
+        );
         assert_eq!(id_d.unwrap().to_string(), eid);
         // Regression pin: the non-DRAFT mapping is unchanged.
         let (col_i, id_i) = entity_fk_fragment("ISSUE_ATTACHMENT", Some(eid));
@@ -2535,7 +2873,11 @@ mod e9_tests {
         let now = Utc::now();
         let post = presign_post(&conf, &endpoint, &key, "text/plain", 64, now);
         let url = post.get("url").and_then(Value::as_str).unwrap().to_string();
-        let fields = post.get("fields").and_then(Value::as_object).unwrap().clone();
+        let fields = post
+            .get("fields")
+            .and_then(Value::as_object)
+            .unwrap()
+            .clone();
         // Hand-built multipart FormData (reqwest has no `multipart` feature
         // in this workspace — same bytes curl would send).
         let boundary = "e9liveboundary123";
@@ -2571,7 +2913,14 @@ mod e9_tests {
         let text = res.text().await.unwrap_or_default();
         assert!(status.is_success(), "presigned POST: {status} {text}");
 
-        let get_url = presign_get(&conf, &endpoint, &key, "attachment", Some("proof.txt"), Utc::now());
+        let get_url = presign_get(
+            &conf,
+            &endpoint,
+            &key,
+            "attachment",
+            Some("proof.txt"),
+            Utc::now(),
+        );
         let res = reqwest::Client::new()
             .get(&get_url)
             .send()

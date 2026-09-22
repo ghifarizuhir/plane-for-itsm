@@ -16,7 +16,8 @@ use crate::{
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 
 /// Allowed `status` values (`packages/types/src/service/core.ts`).
-pub const SERVICE_STATUSES: &[&str] = &["active", "planned", "maintenance", "deprecated", "retired"];
+pub const SERVICE_STATUSES: &[&str] =
+    &["active", "planned", "maintenance", "deprecated", "retired"];
 /// Allowed `criticality` values.
 pub const SERVICE_CRITICALITIES: &[&str] = &["critical", "high", "medium", "low"];
 /// Allowed `type` values.
@@ -148,7 +149,11 @@ async fn gate_writer(
 ) -> Result<bool, sqlx::Error> {
     let role = fetch_project_member_role(pool, user, slug, project_id).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(matches!(role, Some(20) | Some(15)), role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        matches!(role, Some(20) | Some(15)),
+        role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// Deserialize a present-but-null field as `Some(None)` so PATCH can clear it.
@@ -194,7 +199,10 @@ pub struct PatchService {
 }
 
 fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
-    (StatusCode::BAD_REQUEST, Json(json!({ "error": msg.into() })))
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": msg.into() })),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +224,10 @@ pub async fn list(
     .bind(project_id)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(Value::Array(rows.iter().map(service_json).collect()))))
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(service_json).collect())),
+    ))
 }
 
 pub async fn create(
@@ -234,8 +245,14 @@ pub async fn create(
         .filter(|n| !n.trim().is_empty())
         .unwrap_or_else(|| "Untitled service".to_string());
     let status = body.status.clone().unwrap_or_else(|| "planned".to_string());
-    let criticality = body.criticality.clone().unwrap_or_else(|| "medium".to_string());
-    let service_type = body.service_type.clone().unwrap_or_else(|| "internal".to_string());
+    let criticality = body
+        .criticality
+        .clone()
+        .unwrap_or_else(|| "medium".to_string());
+    let service_type = body
+        .service_type
+        .clone()
+        .unwrap_or_else(|| "internal".to_string());
     if let Err(e) = validate_enum("status", &status, SERVICE_STATUSES) {
         return Ok(bad_request(e));
     }
@@ -263,7 +280,9 @@ pub async fn create(
             .fetch_one(&st.pool)
             .await?;
         if !exists {
-            return Ok(bad_request(format!("Invalid owner_id \"{owner}\" - object does not exist.")));
+            return Ok(bad_request(format!(
+                "Invalid owner_id \"{owner}\" - object does not exist."
+            )));
         }
     }
     let max_order: f64 = sqlx::query_scalar(
@@ -353,7 +372,10 @@ pub async fn patch(
     if name.trim().is_empty() {
         return Ok(bad_request("Invalid name"));
     }
-    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    let status = body
+        .status
+        .clone()
+        .unwrap_or_else(|| current.status.clone());
     let criticality = body
         .criticality
         .clone()
@@ -384,7 +406,10 @@ pub async fn patch(
         return Ok(bad_request("A service with this name already exists."));
     }
 
-    let description = body.description.clone().unwrap_or_else(|| current.description.clone());
+    let description = body
+        .description
+        .clone()
+        .unwrap_or_else(|| current.description.clone());
     let description_html = body
         .description_html
         .clone()
@@ -399,7 +424,9 @@ pub async fn patch(
             .fetch_one(&st.pool)
             .await?;
         if !exists {
-            return Ok(bad_request(format!("Invalid owner_id \"{owner}\" - object does not exist.")));
+            return Ok(bad_request(format!(
+                "Invalid owner_id \"{owner}\" - object does not exist."
+            )));
         }
     }
     let repository_url = match body.repository_url {
@@ -515,7 +542,11 @@ pub struct CreateDependency {
     pub to_service_id: Uuid,
 }
 
-async fn service_exists(pool: &sqlx::PgPool, project_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
+async fn service_exists(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    id: Uuid,
+) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
     )
@@ -702,7 +733,10 @@ pub async fn issues_create(
         return Ok(deny());
     }
     if !service_exists(&st.pool, project_id, body.service_id).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Service not found."}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Service not found."})),
+        ));
     }
     let issue_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
@@ -712,7 +746,10 @@ pub async fn issues_create(
     .fetch_one(&st.pool)
     .await?;
     if !issue_exists {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found."}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Issue not found."})),
+        ));
     }
     let existing: Option<ServiceIssueRow> = sqlx::query_as(&format!(
         "{SERVICE_ISSUE_SELECT} WHERE si.project_id = $1 AND si.service_id = $2 \

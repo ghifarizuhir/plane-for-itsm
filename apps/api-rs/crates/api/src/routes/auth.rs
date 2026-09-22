@@ -126,9 +126,17 @@ pub async fn email_check(
     .await
     .unwrap_or(None);
     if setup != Some(true) {
-        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5000, "INSTANCE_NOT_CONFIGURED"),
+        );
     }
-    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    let email = body
+        .email
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        .to_string();
     if email.is_empty() {
         return (StatusCode::BAD_REQUEST, auth_error(5010, "EMAIL_REQUIRED"));
     }
@@ -145,7 +153,8 @@ pub async fn email_check(
     // (`get_configuration_value`); Rust membaca env langsung seperti
     // `routes::instance` (AppConfig hanya membawa field auth/frontend).
     let smtp_configured = !std::env::var("EMAIL_HOST").unwrap_or_default().is_empty();
-    let magic_enabled = std::env::var("ENABLE_MAGIC_LINK_LOGIN").unwrap_or_else(|_| "1".to_string()) == "1";
+    let magic_enabled =
+        std::env::var("ENABLE_MAGIC_LINK_LOGIN").unwrap_or_else(|_| "1".to_string()) == "1";
     let magic = smtp_configured && magic_enabled;
     match autoset {
         Some(is_autoset) => (
@@ -233,7 +242,11 @@ pub async fn login(
         })?;
     let mut headers = HeaderMap::new();
     set_cookies(&mut headers, &access, &raw_rt, st.config.cookie_secure);
-    Ok((StatusCode::OK, headers, Json(json!({"id": uid, "email": db_email}))))
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(json!({"id": uid, "email": db_email})),
+    ))
 }
 
 /// POST /api/auth/refresh/ — rotasi pasangan token dari cookie refresh.
@@ -346,7 +359,11 @@ pub async fn refresh(
         })?;
     let mut headers = HeaderMap::new();
     set_cookies(&mut headers, &access, &raw_rt, st.config.cookie_secure);
-    Ok((StatusCode::OK, headers, Json(json!({"id": uid, "email": db_email}))))
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(json!({"id": uid, "email": db_email})),
+    ))
 }
 
 /// POST /api/auth/logout/ — hapus hash refresh + clear kedua cookie → 200.
@@ -393,7 +410,11 @@ pub async fn logout(
     }
     let mut headers = HeaderMap::new();
     clear_cookies(&mut headers, st.config.cookie_secure);
-    Ok((StatusCode::OK, headers, Json(json!({"message": "Logged out"}))))
+    Ok((
+        StatusCode::OK,
+        headers,
+        Json(json!({"message": "Logged out"})),
+    ))
 }
 
 // ---------------------------------------------------------------------------

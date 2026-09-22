@@ -2,8 +2,8 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::routes::project::{deny, missing, user_avatar_url, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
-use crate::routes::project::{FORBIDDEN_MSG, deny, missing, user_avatar_url};
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 
@@ -157,7 +157,11 @@ pub fn validate_issue_patch(body: &PatchIssue) -> Result<(), String> {
 
 type Scope = (String, uuid::Uuid, uuid::Uuid);
 
-async fn issue_exists(st: &AppState, project_id: uuid::Uuid, issue_id: uuid::Uuid) -> Result<bool, common::errors::AppError> {
+async fn issue_exists(
+    st: &AppState,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+) -> Result<bool, common::errors::AppError> {
     let exists: (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
     )
@@ -273,13 +277,12 @@ async fn comment_ctx(
     .await?;
     let project_detail = match project {
         Some((id, identifier, name, cover_image, cover_asset_id, logo_props, description)) => {
-            let cover_entity: Option<String> = sqlx::query_scalar(
-                "SELECT entity_type FROM file_assets WHERE id = $1",
-            )
-            .bind(cover_asset_id)
-            .fetch_optional(pool)
-            .await?
-            .flatten();
+            let cover_entity: Option<String> =
+                sqlx::query_scalar("SELECT entity_type FROM file_assets WHERE id = $1")
+                    .bind(cover_asset_id)
+                    .fetch_optional(pool)
+                    .await?
+                    .flatten();
             super::history::project_lite_json(
                 id,
                 &identifier,
@@ -293,7 +296,13 @@ async fn comment_ctx(
         }
         None => Value::Null,
     };
-    let ws: Option<(uuid::Uuid, String, String, Option<String>, Option<uuid::Uuid>)> = sqlx::query_as(
+    let ws: Option<(
+        uuid::Uuid,
+        String,
+        String,
+        Option<String>,
+        Option<uuid::Uuid>,
+    )> = sqlx::query_as(
         "SELECT id, name, slug, logo, logo_asset_id FROM workspaces WHERE slug = $1",
     )
     .bind(slug)
@@ -301,18 +310,28 @@ async fn comment_ctx(
     .await?;
     let workspace_detail = match ws {
         Some((id, name, wslug, logo, logo_asset_id)) => {
-            let logo_entity: Option<String> = sqlx::query_scalar(
-                "SELECT entity_type FROM file_assets WHERE id = $1",
+            let logo_entity: Option<String> =
+                sqlx::query_scalar("SELECT entity_type FROM file_assets WHERE id = $1")
+                    .bind(logo_asset_id)
+                    .fetch_optional(pool)
+                    .await?
+                    .flatten();
+            super::history::workspace_lite_json(
+                id,
+                &name,
+                &wslug,
+                &logo,
+                logo_asset_id,
+                logo_entity.as_deref(),
             )
-            .bind(logo_asset_id)
-            .fetch_optional(pool)
-            .await?
-            .flatten();
-            super::history::workspace_lite_json(id, &name, &wslug, &logo, logo_asset_id, logo_entity.as_deref())
         }
         None => Value::Null,
     };
-    Ok(CommentCtx { issue_detail, project_detail, workspace_detail })
+    Ok(CommentCtx {
+        issue_detail,
+        project_detail,
+        workspace_detail,
+    })
 }
 
 /// `comment_reactions` per comment (`CommentReactionSerializer`,
@@ -322,7 +341,8 @@ async fn comment_reactions_map(
     pool: &sqlx::PgPool,
     comment_ids: &[uuid::Uuid],
 ) -> Result<std::collections::HashMap<uuid::Uuid, Vec<Value>>, common::errors::AppError> {
-    let mut map: std::collections::HashMap<uuid::Uuid, Vec<Value>> = std::collections::HashMap::new();
+    let mut map: std::collections::HashMap<uuid::Uuid, Vec<Value>> =
+        std::collections::HashMap::new();
     if comment_ids.is_empty() {
         return Ok(map);
     }
@@ -452,7 +472,14 @@ pub async fn list_comments(
     let reactions = comment_reactions_map(&st.pool, &ids).await?;
     Ok(Json(
         rows.iter()
-            .map(|c| comment_json(c, true, &ctx, reactions.get(&c.id).map(Vec::as_slice).unwrap_or(&[])))
+            .map(|c| {
+                comment_json(
+                    c,
+                    true,
+                    &ctx,
+                    reactions.get(&c.id).map(Vec::as_slice).unwrap_or(&[]),
+                )
+            })
             .collect(),
     ))
 }
@@ -470,11 +497,12 @@ pub async fn create_comment(
         return Ok(deny());
     };
     if role == 5 {
-        let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(&st.pool)
-            .await?
-            .unwrap_or(false);
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
         let creator: Option<uuid::Uuid> = sqlx::query_scalar(
             "SELECT created_by_id FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
         )
@@ -534,7 +562,12 @@ pub async fn create_comment(
 pub async fn get_comment(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `retrieve` is DRF-default on the member-filtered queryset
     // (`comment.py:35-61`): non-members 404 (not 403) — the filter hides
@@ -573,7 +606,12 @@ pub async fn get_comment(
 pub async fn patch_comment(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchComment>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `partial_update` (`comment.py:109-141`):
@@ -593,9 +631,7 @@ pub async fn patch_comment(
     .await?;
     let role = comment_member(&st, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
-    if !creator
-        && !project_gate_allows(matches!(role, Some(20)), role.is_some(), ws_admin)
-    {
+    if !creator && !project_gate_allows(matches!(role, Some(20)), role.is_some(), ws_admin) {
         return Ok(deny());
     }
     let row: Option<(String,)> = sqlx::query_as(
@@ -649,7 +685,12 @@ pub async fn patch_comment(
 pub async fn delete_comment(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `destroy` (`comment.py:144-160`): same decorator-first gate as
     // `partial_update`; then the scoped `.get()` miss → 404. NOTE Django
@@ -668,9 +709,7 @@ pub async fn delete_comment(
     .await?;
     let role = comment_member(&st, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
-    if !creator
-        && !project_gate_allows(matches!(role, Some(20)), role.is_some(), ws_admin)
-    {
+    if !creator && !project_gate_allows(matches!(role, Some(20)), role.is_some(), ws_admin) {
         return Ok(deny());
     }
     let row: Option<(uuid::Uuid,)> = sqlx::query_as(
@@ -685,12 +724,10 @@ pub async fn delete_comment(
     if row.is_none() {
         return Ok(missing());
     }
-    sqlx::query(
-        "UPDATE issue_comments SET deleted_at = now() WHERE id = $1",
-    )
-    .bind(pk)
-    .execute(&st.pool)
-    .await?;
+    sqlx::query("UPDATE issue_comments SET deleted_at = now() WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -704,7 +741,11 @@ pub(crate) const LINK_DUP_MSG: &str = "URL already exists for this Issue";
 pub(crate) const LINK_INVALID_MSG: &str = "Invalid URL format.";
 
 pub(crate) fn normalize_link_url(url: &str) -> String {
-    if url.starts_with("http://") || url.starts_with("https://") { url.to_string() } else { format!("http://{url}") }
+    if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{url}")
+    }
 }
 
 /// Mirrors `validate_url` (`serializers/issue.py`, Django `URLValidator`):
@@ -913,7 +954,10 @@ pub async fn create_link(
     if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    let title = body.get("title").and_then(Value::as_str).map(str::to_string);
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let raw_url = body.get("url").and_then(Value::as_str).unwrap_or("");
     // Django renders every serializer-validation failure as 400 (not 500).
     if let Err(e) = validate_link_create(&CreateLink {
@@ -923,13 +967,19 @@ pub async fn create_link(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     if !issue_exists(&st, project_id, issue_id).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Issue not found"})),
+        ));
     }
     // `to_internal_value` (`serializers/issue.py`): prepend `http://` when
     // the scheme is missing, then `validate_url` (Django `URLValidator`).
     let url = normalize_link_url(raw_url);
     if !valid_link_url(&url) {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_INVALID_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": LINK_INVALID_MSG})),
+        ));
     }
     // `IssueLinkSerializer.create` dup branch (live rows only, same
     // soft-delete precedent as the relations dup check in this file).
@@ -941,7 +991,10 @@ pub async fn create_link(
     .fetch_one(&st.pool)
     .await?;
     if dup {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_DUP_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": LINK_DUP_MSG})),
+        ));
     }
     let metadata = body.get("metadata").cloned().unwrap_or(json!({}));
     let row: (uuid::Uuid,) = sqlx::query_as(
@@ -965,21 +1018,34 @@ pub async fn create_link(
 pub async fn get_link(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !link_read_gate(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
     match fetch_link(&st.pool, &slug, project_id, issue_id, pk).await? {
         Some(l) => Ok((StatusCode::OK, Json(link_json(&l)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Link not found"})),
+        )),
     }
 }
 
 pub async fn patch_link(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchLink>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
@@ -987,11 +1053,17 @@ pub async fn patch_link(
     }
     let existing = fetch_link(&st.pool, &slug, project_id, issue_id, pk).await?;
     if existing.is_none() {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Link not found"})),
+        ));
     }
     if let Some(title) = &body.title {
         if title.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "title max length 255"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "title max length 255"})),
+            ));
         }
     }
     // Mirror `to_internal_value` + `validate_url`, then the
@@ -1001,7 +1073,10 @@ pub async fn patch_link(
     let new_url = body.url.as_deref().map(normalize_link_url);
     if let Some(url) = &new_url {
         if !valid_link_url(url) {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_INVALID_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": LINK_INVALID_MSG})),
+            ));
         }
         let dup: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM issue_links WHERE url = $1 AND issue_id = $2 AND id <> $3 AND deleted_at IS NULL)",
@@ -1012,7 +1087,10 @@ pub async fn patch_link(
         .fetch_one(&st.pool)
         .await?;
         if dup {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": LINK_DUP_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": LINK_DUP_MSG})),
+            ));
         }
     }
     let n = sqlx::query(
@@ -1029,18 +1107,29 @@ pub async fn patch_link(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Link not found"})),
+        ));
     }
     match fetch_link(&st.pool, &slug, project_id, issue_id, pk).await? {
         Some(link) => Ok((StatusCode::OK, Json(link_json(&link)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Link not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Link not found"})),
+        )),
     }
 }
 
 pub async fn delete_link(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !link_write_gate(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
@@ -1225,8 +1314,10 @@ pub async fn list_relations(
     // `else if`): a self-loop pair matches both of its sides, exactly like
     // the Django filters. Stored types outside this table (e.g. unknown
     // pass-through types) belong to NO group.
-    let mut buckets: std::collections::HashMap<&'static str, Vec<uuid::Uuid>> =
-        relation_groups().into_iter().map(|g| (g, Vec::new())).collect();
+    let mut buckets: std::collections::HashMap<&'static str, Vec<uuid::Uuid>> = relation_groups()
+        .into_iter()
+        .map(|g| (g, Vec::new()))
+        .collect();
     let mut push = |group: &'static str, id: uuid::Uuid| {
         let v = buckets.entry(group).or_default();
         if !v.contains(&id) {
@@ -1265,7 +1356,13 @@ pub async fn list_relations(
             push("finish_before", p.related_issue_id);
         }
     }
-    let all: Vec<uuid::Uuid> = buckets.values().flatten().copied().collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let all: Vec<uuid::Uuid> = buckets
+        .values()
+        .flatten()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
     let rows: Vec<RelationIssueRow> = if all.is_empty() {
         Vec::new()
     } else {
@@ -1300,7 +1397,12 @@ pub async fn list_relations(
         group_rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         out.insert(
             group.to_string(),
-            Value::Array(group_rows.iter().map(|r| relation_issue_json(r, group)).collect()),
+            Value::Array(
+                group_rows
+                    .iter()
+                    .map(|r| relation_issue_json(r, group))
+                    .collect(),
+            ),
         );
     }
     Ok((StatusCode::OK, Json(Value::Object(out))))
@@ -1353,10 +1455,16 @@ pub async fn create_relations(
         return Ok(deny());
     }
     let Some(requested) = body.relation_type.clone() else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": RELATION_TYPE_REQUIRED_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"message": RELATION_TYPE_REQUIRED_MSG})),
+        ));
     };
     if !issue_exists(&st, project_id, issue_id).await? {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Issue not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Issue not found"})),
+        ));
     }
     // Django `Project.objects.get(pk=project_id)` (`relation.py:218`) supplies
     // `workspace_id`; a missing project misses here → 404 `missing()` (Django
@@ -1390,7 +1498,11 @@ pub async fn create_relations(
     let swapped = relation_swaps_direction(&requested);
     let mut out = Vec::new();
     for cand in body.issues.iter().filter(|id| scoped.contains(id)) {
-        let (fwd, back) = if swapped { (*cand, issue_id) } else { (issue_id, *cand) };
+        let (fwd, back) = if swapped {
+            (*cand, issue_id)
+        } else {
+            (issue_id, *cand)
+        };
         // `bulk_create(..., ignore_conflicts=True)` (`relation.py:229-246`):
         // per-candidate `ON CONFLICT DO NOTHING` (partial unique index on
         // live `(issue_id, related_issue_id)`) → duplicates silently skipped,
@@ -1531,13 +1643,22 @@ pub async fn list_activities(
     .bind(issue_id)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(rows.into_iter().map(|a| json!({"id": a.id, "verb": a.verb})).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|a| json!({"id": a.id, "verb": a.verb}))
+            .collect(),
+    ))
 }
 
 pub async fn get_activity(
     State(st): State<AppState>,
     _auth: AuthUser,
-    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((_slug, project_id, issue_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let row: Option<common::models::work_item::IssueActivity> = sqlx::query_as(
         "SELECT id, verb FROM issue_activities WHERE id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
@@ -1549,7 +1670,10 @@ pub async fn get_activity(
     .await?;
     match row {
         Some(a) => Ok((StatusCode::OK, Json(json!({"id": a.id, "verb": a.verb})))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Activity not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Activity not found"})),
+        )),
     }
 }
 
@@ -1563,7 +1687,11 @@ pub async fn get_activity(
 pub async fn get_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     use super::issue_common::IssueDetailRow;
     use super::issue_query::DETAIL_SELECT_SQL;
@@ -1605,11 +1733,12 @@ pub async fn get_issue(
     // Guest-view rule inside the body (`base.py:596-609`): guests whose
     // project hides member work and who did not create the issue → 403.
     if matches!(member_role, Some(5)) && !creator {
-        let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(&st.pool)
-            .await?
-            .unwrap_or(false);
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
         if !gva {
             return Ok((
                 StatusCode::FORBIDDEN,
@@ -1660,7 +1789,11 @@ pub(crate) const ISSUE_PATCH_MISS_MSG: &str = "Issue not found";
 pub async fn patch_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchIssue>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `partial_update` (`base.py:627`): `@allow_permission([ADMIN,
@@ -1728,7 +1861,11 @@ pub async fn patch_issue(
 pub async fn delete_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `destroy` (`base.py:716`): `@allow_permission([ADMIN],
     // creator=True, model=Issue)` first, then `Issue.objects.get(...)`
@@ -1746,7 +1883,11 @@ pub async fn delete_issue(
     let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
     if !creator
-        && !project_gate_allows(matches!(member_role, Some(20)), member_role.is_some(), ws_admin)
+        && !project_gate_allows(
+            matches!(member_role, Some(20)),
+            member_role.is_some(),
+            ws_admin,
+        )
     {
         return Ok(deny());
     }
@@ -1793,7 +1934,9 @@ pub async fn workspace_issue_search(
     .bind(&pattern)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(json!({"results": rows.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>()})))
+    Ok(Json(
+        json!({"results": rows.into_iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>()}),
+    ))
 }
 
 pub async fn get_by_identifier(
@@ -1807,7 +1950,10 @@ pub async fn get_by_identifier(
     // express `:a-:b` in one segment, so the `:ident/` route shape stays and
     // the constraint is enforced here.
     let Ok((proj_ident, seq_raw)) = resolve_identifier(&ident) else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": INVALID_IDENTIFIER_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": INVALID_IDENTIFIER_MSG})),
+        ));
     };
     // Project lookup: `identifier__iexact` + `workspace__slug` (miss → 404).
     let project_id: Option<uuid::Uuid> = sqlx::query_scalar(
@@ -1824,7 +1970,10 @@ pub async fn get_by_identifier(
     // Active project membership required (miss → 403, exact message).
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     if role.is_none() {
-        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": IDENTIFIER_FORBIDDEN_MSG}))));
+        return Ok((
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": IDENTIFIER_FORBIDDEN_MSG})),
+        ));
     }
     // `strict_str_to_int`-shaped identifiers that overflow `i32` match no
     // row (Django queries the ORM `sequence_id` with the unbounded int) →
@@ -1843,7 +1992,12 @@ pub async fn get_by_identifier(
         return Ok(missing());
     };
     // Same serializer shape as the detail endpoint — delegate to `get_issue`.
-    get_issue(State(st), auth, axum::extract::Path((slug, project_id, issue_id))).await
+    get_issue(
+        State(st),
+        auth,
+        axum::extract::Path((slug, project_id, issue_id)),
+    )
+    .await
 }
 
 /// `IssueDetailIdentifierEndpoint` identifier errors
@@ -1884,7 +2038,10 @@ mod batch_d_d9_tests {
         // just filters with None → `.first()` → None → `None.delete()` →
         // AttributeError (500 in Django). Rust returns 404 `missing()`
         // instead (intentional deviation, sane).
-        assert!(resolve_related_issue(&RemoveRelationBody { related_issue: None }).is_err());
+        assert!(resolve_related_issue(&RemoveRelationBody {
+            related_issue: None
+        })
+        .is_err());
         let (status, body) = missing();
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(body.0, json!({"error": NOT_FOUND_MSG}));
@@ -1894,7 +2051,9 @@ mod batch_d_d9_tests {
     fn present_related_issue_resolves() {
         let id = uuid::Uuid::nil();
         assert_eq!(
-            resolve_related_issue(&RemoveRelationBody { related_issue: Some(id) }),
+            resolve_related_issue(&RemoveRelationBody {
+                related_issue: Some(id)
+            }),
             Ok(id)
         );
     }
@@ -1952,7 +2111,12 @@ mod batch_d_d9_tests {
             "updated_at": "2026-09-08T00:00:00Z",
             "created_by_detail": {"id": "00000000-0000-0000-0000-000000000005", "first_name": "A", "last_name": "B", "display_name": "A B"}
         });
-        let keys: std::collections::BTreeSet<&str> = row.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+        let keys: std::collections::BTreeSet<&str> = row
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|s| s.as_str())
+            .collect();
         assert_eq!(keys.len(), 12);
     }
 
@@ -1971,13 +2135,25 @@ mod batch_d_d9_tests {
     #[test]
     fn relation_list_has_eight_groups() {
         // Django `relation.py:174-205` — keys are fixed.
-        let groups = ["blocking", "blocked_by", "duplicate", "relates_to", "start_after", "start_before", "finish_after", "finish_before"];
+        let groups = [
+            "blocking",
+            "blocked_by",
+            "duplicate",
+            "relates_to",
+            "start_after",
+            "start_before",
+            "finish_after",
+            "finish_before",
+        ];
         assert_eq!(relation_groups(), groups);
     }
 
     #[test]
     fn relation_create_requires_relation_type() {
-        assert_eq!(RELATION_TYPE_REQUIRED_MSG, "Issue relation type is required");
+        assert_eq!(
+            RELATION_TYPE_REQUIRED_MSG,
+            "Issue relation type is required"
+        );
     }
 
     #[test]
@@ -1990,15 +2166,21 @@ mod batch_d_d9_tests {
 
     #[test]
     fn identifier_split_and_strict_int_match_django() {
-        assert_eq!(resolve_identifier("ABC-123"), Ok(("ABC".to_string(), "123".to_string())));
+        assert_eq!(
+            resolve_identifier("ABC-123"),
+            Ok(("ABC".to_string(), "123".to_string()))
+        );
         assert!(resolve_identifier("ABC-xyz").is_err()); // not an int
-        assert!(resolve_identifier("ABC").is_err());     // no dash
+        assert!(resolve_identifier("ABC").is_err()); // no dash
     }
 
     #[test]
     fn identifier_errors_match_django() {
         assert_eq!(INVALID_IDENTIFIER_MSG, "Invalid issue identifier");
-        assert_eq!(IDENTIFIER_FORBIDDEN_MSG, "You are not allowed to view this issue");
+        assert_eq!(
+            IDENTIFIER_FORBIDDEN_MSG,
+            "You are not allowed to view this issue"
+        );
     }
 
     #[test]

@@ -93,7 +93,11 @@ pub async fn origin_middleware(
     next: Next,
 ) -> Response {
     if !origin_allowed_many(req.method(), req.headers(), &frontends) {
-        return (StatusCode::FORBIDDEN, axum::Json(json!({"error": "bad origin"}))).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            axum::Json(json!({"error": "bad origin"})),
+        )
+            .into_response();
     }
     next.run(req).await
 }

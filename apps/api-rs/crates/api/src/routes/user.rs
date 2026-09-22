@@ -360,7 +360,10 @@ pub(crate) fn me_json(r: &MeRow) -> Value {
     })
 }
 
-pub(crate) async fn fetch_me(pool: &sqlx::PgPool, uid: uuid::Uuid) -> Result<Option<MeRow>, sqlx::Error> {
+pub(crate) async fn fetch_me(
+    pool: &sqlx::PgPool,
+    uid: uuid::Uuid,
+) -> Result<Option<MeRow>, sqlx::Error> {
     sqlx::query_as::<_, MeRow>(
         "SELECT u.id, u.avatar, u.cover_image, fa.asset AS avatar_asset, fc.asset AS cover_asset, \
                 u.date_joined, u.display_name, u.email, u.first_name, u.last_name, \
@@ -1062,15 +1065,16 @@ pub async fn list_accounts(
     State(st): State<AppState>,
     auth: AuthUser,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let rows: Vec<Value> =
-        sqlx::query_scalar(&format!("SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.user_id = $1"))
-            .bind(auth.0)
-            .fetch_all(&st.pool)
-            .await
-            .map_err(|e| {
-                tracing::warn!(error = %e, "accounts: list failed");
-                common::errors::AppError::internal()
-            })?;
+    let rows: Vec<Value> = sqlx::query_scalar(&format!(
+        "SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.user_id = $1"
+    ))
+    .bind(auth.0)
+    .fetch_all(&st.pool)
+    .await
+    .map_err(|e| {
+        tracing::warn!(error = %e, "accounts: list failed");
+        common::errors::AppError::internal()
+    })?;
     Ok((StatusCode::OK, Json(Value::Array(rows))))
 }
 
@@ -1079,16 +1083,17 @@ pub async fn get_account(
     auth: AuthUser,
     Path(pk): Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let row: Option<Value> =
-        sqlx::query_scalar(&format!("SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.id = $1 AND a.user_id = $2"))
-            .bind(pk)
-            .bind(auth.0)
-            .fetch_optional(&st.pool)
-            .await
-            .map_err(|e| {
-                tracing::warn!(error = %e, "accounts: get failed");
-                common::errors::AppError::internal()
-            })?;
+    let row: Option<Value> = sqlx::query_scalar(&format!(
+        "SELECT {ACCOUNT_JSON} FROM accounts a WHERE a.id = $1 AND a.user_id = $2"
+    ))
+    .bind(pk)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
+    .await
+    .map_err(|e| {
+        tracing::warn!(error = %e, "accounts: get failed");
+        common::errors::AppError::internal()
+    })?;
     match row {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         // Django `.get` (`user/base.py:402`) miss → generic 404 via `views/base.py:92-96`.
@@ -2116,7 +2121,10 @@ mod tests {
             "".to_string(),
             "".to_string(),
         ]));
-        assert!(raw.starts_with("\"Actor name\",\"Issue ID\""), "body=\n{raw}");
+        assert!(
+            raw.starts_with("\"Actor name\",\"Issue ID\""),
+            "body=\n{raw}"
+        );
         assert!(!raw.contains("\\\""), "tak boleh ada escape JSON: {raw}");
         assert!(raw.contains("\r\n\""), "baris data dikutip setelah CRLF");
         let wrapped = serde_json::to_string(&raw).expect("json wrap");

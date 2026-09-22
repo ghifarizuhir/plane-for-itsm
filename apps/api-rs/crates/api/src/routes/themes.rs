@@ -217,11 +217,10 @@ pub async fn create(
         return Ok(field_errors(errors));
     }
     let (name, colors) = (name.unwrap(), colors.unwrap());
-    let ws: Option<(uuid::Uuid,)> =
-        sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1")
-            .bind(&slug)
-            .fetch_optional(&st.pool)
-            .await?;
+    let ws: Option<(uuid::Uuid,)> = sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_optional(&st.pool)
+        .await?;
     let Some((ws_id,)) = ws else {
         return Ok(missing());
     };

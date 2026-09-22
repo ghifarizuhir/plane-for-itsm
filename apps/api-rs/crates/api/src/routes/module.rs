@@ -8,15 +8,17 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::routes::cycle::{burndown_chart, extract_date_part, format_archived_at, parse_point_value};
-use crate::routes::{grouped, issue_query::archive_group_by_allowlist_error};
+use crate::routes::cycle::{
+    burndown_chart, extract_date_part, format_archived_at, parse_point_value,
+};
 use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
+use crate::routes::{grouped, issue_query::archive_group_by_allowlist_error};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{
-    DetailEnvelope, PageWindow, detail_order_expr, fetch_project_member_role, is_workspace_admin,
-    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-    project_gate_allows, sanitize_order_by, total_pages,
+    detail_order_expr, fetch_project_member_role, is_workspace_admin, next_cursor_str, page_window,
+    parse_cursor, parse_per_page, prev_cursor_str, project_gate_allows, sanitize_order_by,
+    total_pages, DetailEnvelope, PageWindow,
 };
 
 // ============================================================================
@@ -79,7 +81,14 @@ const MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL: &str =
 /// Mirrors `Module.save` status default + `ModuleStatus`
 /// (`plane/db/models/module.py:58-85`): absent → `planned`; unknown → Err.
 pub fn normalize_status(raw: Option<&str>) -> Result<String, String> {
-    const ALLOWED: &[&str] = &["backlog", "planned", "in-progress", "paused", "completed", "cancelled"];
+    const ALLOWED: &[&str] = &[
+        "backlog",
+        "planned",
+        "in-progress",
+        "paused",
+        "completed",
+        "cancelled",
+    ];
     match raw {
         None => Ok("planned".to_string()),
         Some(s) if ALLOWED.contains(&s) => Ok(s.to_string()),
@@ -325,7 +334,10 @@ fn count_sub(alias: &str, group_filter: &str) -> String {
 }
 
 fn points_sub(alias: &str, group_filter: &str) -> String {
-    format!("(SELECT {PT_SUM} {} ) AS {alias}", points_issue_join(group_filter))
+    format!(
+        "(SELECT {PT_SUM} {} ) AS {alias}",
+        points_issue_join(group_filter)
+    )
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -579,7 +591,10 @@ fn deny_detail() -> (StatusCode, Json<Value>) {
     )
 }
 
-async fn project_has_points_estimate(pool: &sqlx::PgPool, pid: uuid::Uuid) -> Result<bool, sqlx::Error> {
+async fn project_has_points_estimate(
+    pool: &sqlx::PgPool,
+    pid: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 \
          AND type = 'points' AND deleted_at IS NULL)",
@@ -679,7 +694,11 @@ pub async fn create(
     if !gate_am(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
-    let name = body.get("name").and_then(Value::as_str).unwrap_or("").to_string();
+    let name = body
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     if body.get("name").is_none() {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -745,7 +764,10 @@ pub async fn create(
     .fetch_one(&st.pool)
     .await?;
     if guard_dup_name(dup.0).is_err() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": DUP_NAME_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": DUP_NAME_MSG})),
+        ));
     }
     let description = body
         .get("description")
@@ -853,10 +875,7 @@ fn link_json(r: &LinkRow) -> Value {
     })
 }
 
-async fn fetch_links(
-    pool: &sqlx::PgPool,
-    mid: uuid::Uuid,
-) -> Result<Vec<LinkRow>, sqlx::Error> {
+async fn fetch_links(pool: &sqlx::PgPool, mid: uuid::Uuid) -> Result<Vec<LinkRow>, sqlx::Error> {
     sqlx::query_as::<_, LinkRow>(
         "SELECT id, title, url, metadata, module_id, project_id, workspace_id, \
          created_by_id, updated_by_id, created_at, updated_at \
@@ -1056,7 +1075,9 @@ async fn estimate_distribution(
     for r in arows {
         let v = parse_point_value(r.value.as_deref()).unwrap_or(0.0);
         let key = r.assignee_id.map(|u| u.to_string()).unwrap_or_default();
-        let e = amap.entry(key).or_insert_with(|| (r.clone(), Acc::default()));
+        let e = amap
+            .entry(key)
+            .or_insert_with(|| (r.clone(), Acc::default()));
         e.1.total += v;
         if r.completed_at.is_some() && r.archived_at.is_none() && !r.is_draft {
             e.1.completed += v;
@@ -1069,7 +1090,9 @@ async fn estimate_distribution(
     for r in lrows {
         let v = parse_point_value(r.value.as_deref()).unwrap_or(0.0);
         let key = r.label_id.map(|u| u.to_string()).unwrap_or_default();
-        let e = lmap.entry(key).or_insert_with(|| (r.clone(), Acc::default()));
+        let e = lmap
+            .entry(key)
+            .or_insert_with(|| (r.clone(), Acc::default()));
         e.1.total += v;
         if r.completed_at.is_some() && r.archived_at.is_none() && !r.is_draft {
             e.1.completed += v;
@@ -1169,7 +1192,8 @@ async fn module_burndown(
         }
         for r in rows {
             if let Some(d) = r.day {
-                *done.entry(d).or_insert(0.0) += parse_point_value(r.value.as_deref()).unwrap_or(0.0);
+                *done.entry(d).or_insert(0.0) +=
+                    parse_point_value(r.value.as_deref()).unwrap_or(0.0);
             }
         }
     } else {
@@ -1245,7 +1269,8 @@ async fn detail_body(
     });
     if has_range && row.total_issues > 0 {
         if let (Some(s), Some(t)) = (row.start_date, row.target_date) {
-            dist["completion_chart"] = module_burndown(pool, row.id, pid, slug, s, t, false).await?;
+            dist["completion_chart"] =
+                module_burndown(pool, row.id, pid, slug, s, t, false).await?;
         }
     }
     obj.insert("distribution".to_string(), dist);
@@ -1254,7 +1279,8 @@ async fn detail_body(
         edist = estimate_distribution(pool, row.id, pid, slug).await?;
         if has_range && row.total_issues > 0 {
             if let (Some(s), Some(t)) = (row.start_date, row.target_date) {
-                edist["completion_chart"] = module_burndown(pool, row.id, pid, slug, s, t, true).await?;
+                edist["completion_chart"] =
+                    module_burndown(pool, row.id, pid, slug, s, t, true).await?;
             }
         }
     }
@@ -1281,7 +1307,10 @@ pub async fn detail(
             Json(json!({"error": MODULE_NOT_FOUND_MSG})),
         ));
     };
-    Ok((StatusCode::OK, Json(detail_body(&st.pool, &row, pid, &slug).await?)))
+    Ok((
+        StatusCode::OK,
+        Json(detail_body(&st.pool, &row, pid, &slug).await?),
+    ))
 }
 
 async fn apply_update(
@@ -1292,17 +1321,21 @@ async fn apply_update(
     mid: uuid::Uuid,
     body: &Value,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    let cur: Option<(Option<chrono::DateTime<chrono::Utc>>, String, Option<NaiveDate>, Option<NaiveDate>)> =
-        sqlx::query_as(
-            "SELECT m.archived_at, m.status, m.start_date, m.target_date FROM modules m \
+    let cur: Option<(
+        Option<chrono::DateTime<chrono::Utc>>,
+        String,
+        Option<NaiveDate>,
+        Option<NaiveDate>,
+    )> = sqlx::query_as(
+        "SELECT m.archived_at, m.status, m.start_date, m.target_date FROM modules m \
              JOIN workspaces w ON w.id = m.workspace_id \
              WHERE m.id = $1 AND m.project_id = $2 AND w.slug = $3 AND m.deleted_at IS NULL",
-        )
-        .bind(mid)
-        .bind(pid)
-        .bind(slug)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(mid)
+    .bind(pid)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await?;
     // Django `.first()` on empty → AttributeError → 500; sane 404 instead
     // (documented normalize-crash).
     let Some((archived_at, _status, cur_start, cur_target)) = cur else {
@@ -1341,7 +1374,10 @@ async fn apply_update(
         .fetch_one(pool)
         .await?;
         if guard_dup_name(dup.0).is_err() {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": DUP_NAME_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": DUP_NAME_MSG})),
+            ));
         }
     }
     // Dates: provided values replace; absent keep current. Both-provided →
@@ -1372,7 +1408,8 @@ async fn apply_update(
             ));
         }
     }
-    if body.get("start_date").is_some() && body.get("target_date").is_some()
+    if body.get("start_date").is_some()
+        && body.get("target_date").is_some()
         && guard_date_order(new_start, new_target).is_err()
     {
         return Ok((
@@ -1414,30 +1451,31 @@ async fn apply_update(
     } else {
         None
     };
-    let lead: Option<Option<uuid::Uuid>> = if body.get("lead_id").is_some() || body.get("lead").is_some() {
-        let raw = body.get("lead_id").or_else(|| body.get("lead"));
-        match raw {
-            None | Some(Value::Null) => Some(None),
-            Some(Value::String(s)) if s.trim().is_empty() => Some(None),
-            Some(Value::String(s)) => match s.parse() {
-                Ok(u) => Some(Some(u)),
-                Err(_) => {
+    let lead: Option<Option<uuid::Uuid>> =
+        if body.get("lead_id").is_some() || body.get("lead").is_some() {
+            let raw = body.get("lead_id").or_else(|| body.get("lead"));
+            match raw {
+                None | Some(Value::Null) => Some(None),
+                Some(Value::String(s)) if s.trim().is_empty() => Some(None),
+                Some(Value::String(s)) => match s.parse() {
+                    Ok(u) => Some(Some(u)),
+                    Err(_) => {
+                        return Ok((
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({"error": VALID_DETAIL_MSG})),
+                        ));
+                    }
+                },
+                _ => {
                     return Ok((
                         StatusCode::BAD_REQUEST,
                         Json(json!({"error": VALID_DETAIL_MSG})),
                     ));
                 }
-            },
-            _ => {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": VALID_DETAIL_MSG})),
-                ));
             }
-        }
-    } else {
-        None
-    };
+        } else {
+            None
+        };
     // All writes share one tx.
     let mut tx = pool.begin().await?;
     sqlx::query(
@@ -1589,10 +1627,12 @@ pub async fn destroy(
         .bind(mid)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE module_issues SET deleted_at = now() WHERE module_id = $1 AND deleted_at IS NULL")
-        .bind(mid)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE module_issues SET deleted_at = now() WHERE module_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(mid)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "UPDATE user_favorites SET deleted_at = now() WHERE user_id = $1 \
          AND entity_type = 'module' AND entity_identifier = $2 AND project_id = $3 \
@@ -1649,12 +1689,17 @@ pub async fn issues_list(
     // `issue.py:129-133`: group_by == sub_group_by → 400.
     if let (Some(g), Some(s)) = (q.group_by.as_deref(), q.sub_group_by.as_deref()) {
         if !g.is_empty() && g == s {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": GROUP_DUP_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": GROUP_DUP_MSG})),
+            ));
         }
     }
     // Group-by allowlist inside `paginate()` (`paginator.py:690-699`):
     // invalid fields 400 byte-exact (`{"detail"}`).
-    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+    if let Some(msg) =
+        archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref())
+    {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
     }
     let per_page = match parse_per_page(q.per_page.as_deref()) {
@@ -1672,7 +1717,11 @@ pub async fn issues_list(
     // `-created_at` (differs from the cycle twin; mirrored literally).
     let sanitized = sanitize_order_by(q.order_by.as_deref().unwrap_or("created_at"));
     let (expr, desc) = detail_order_expr(&sanitized);
-    let dir = if desc { "DESC NULLS LAST" } else { "ASC NULLS LAST" };
+    let dir = if desc {
+        "DESC NULLS LAST"
+    } else {
+        "ASC NULLS LAST"
+    };
     let order = format!("{expr} {dir}, i.created_at DESC");
     let base = "FROM issues i JOIN module_issues mi ON mi.issue_id = i.id \
         AND mi.module_id = $1 AND mi.deleted_at IS NULL \
@@ -1782,7 +1831,10 @@ pub async fn issues_list(
         total_pages: pages,
         total_results: total,
         extra_stats: None,
-        results: rows.iter().map(|r| serde_json::to_value(r).unwrap_or(Value::Null)).collect(),
+        results: rows
+            .iter()
+            .map(|r| serde_json::to_value(r).unwrap_or(Value::Null))
+            .collect(),
     };
     Ok((StatusCode::OK, Json(json!(env))))
 }
@@ -1932,12 +1984,12 @@ pub async fn issue_modules_create(
     }
     if !removed.is_empty() {
         sqlx::query(MODULE_ISSUES_REMOVE_SOFT_DELETE_SQL)
-        .bind(iid)
-        .bind(&removed)
-        .bind(pid)
-        .bind(ws_id)
-        .execute(&mut *tx)
-        .await?;
+            .bind(iid)
+            .bind(&removed)
+            .bind(pid)
+            .bind(ws_id)
+            .execute(&mut *tx)
+            .await?;
     }
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(json!({"message": "success"}))))
@@ -1970,7 +2022,9 @@ async fn grouped_module_response(
     page: i128,
     order: &str,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    use grouped::{
+        group_universe, grouped_envelope, plan_grouped, scan_universe, ScanRow, SCAN_DERIVED_FIELDS,
+    };
     const BASE: &str = "FROM issues i JOIN module_issues mi ON mi.issue_id = i.id AND mi.module_id = $1 AND mi.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi2.module_id::text) FROM module_issues mi2 WHERE mi2.issue_id = i.id AND mi2.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
     // Page-id fetch in the shared 26-col shape (same as the flat list).
@@ -1991,14 +2045,20 @@ async fn grouped_module_response(
         group_universe(pool, group, slug, Some(pid)).await?
     };
     let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": "Error in parsing"})),
+        ));
     };
     let page_ids: Vec<uuid::Uuid> = plan
         .buckets
         .iter()
         .flat_map(|b| {
             if sub.is_some() {
-                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+                b.subs
+                    .iter()
+                    .flat_map(|s| s.page_ids.iter().cloned())
+                    .collect::<Vec<_>>()
             } else {
                 b.page_ids.clone()
             }
@@ -2006,18 +2066,28 @@ async fn grouped_module_response(
         .collect();
     let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
     if !page_ids.is_empty() {
-        let rows: Vec<super::issue_common::ArchiveRow> =
-            sqlx::query_as(&format!("{} {ROWS_BASE}", super::issue_lists::USER_SELECT_SQL))
-                .bind(mid)
-                .bind(pid)
-                .bind(&page_ids)
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<super::issue_common::ArchiveRow> = sqlx::query_as(&format!(
+            "{} {ROWS_BASE}",
+            super::issue_lists::USER_SELECT_SQL
+        ))
+        .bind(mid)
+        .bind(pid)
+        .bind(&page_ids)
+        .fetch_all(pool)
+        .await?;
         for r in &rows {
             rows_by_id.insert(r.id, serde_json::to_value(r).unwrap_or(Value::Null));
         }
     }
-    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    let env = grouped_envelope(
+        group,
+        sub,
+        scan.len() as i64,
+        limit,
+        page,
+        &plan,
+        &rows_by_id,
+    );
     Ok((StatusCode::OK, Json(env)))
 }
 
@@ -2352,7 +2422,10 @@ pub async fn links_create(
     .fetch_one(&st.pool)
     .await?;
     if dup.0 {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": URL_EXISTS_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": URL_EXISTS_MSG})),
+        ));
     }
     let title = body.get("title").and_then(Value::as_str);
     let row: Option<LinkRow> = sqlx::query_as(
@@ -2567,11 +2640,10 @@ pub async fn fav_list(
     .await?;
     Ok((
         StatusCode::OK,
-        Json(json!(
-            rows.into_iter()
-                .map(|(id, module)| json!({"id": id, "module": module}))
-                .collect::<Vec<_>>()
-        )),
+        Json(json!(rows
+            .into_iter()
+            .map(|(id, module)| json!({"id": id, "module": module}))
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -2708,7 +2780,10 @@ pub async fn archived_detail(
     let Some(row) = fetch_row(&st.pool, pk, pid, &slug, auth.0, true).await? else {
         return Ok(missing());
     };
-    Ok((StatusCode::OK, Json(detail_body(&st.pool, &row, pid, &slug).await?)))
+    Ok((
+        StatusCode::OK,
+        Json(detail_body(&st.pool, &row, pid, &slug).await?),
+    ))
 }
 
 pub async fn archive(
@@ -2766,7 +2841,10 @@ pub async fn archive(
     tx.commit().await?;
     // `str(timezone.now())` format (`%Y-%m-%d %H:%M:%S%.6f+00:00`) — shared
     // with E2 (`cycle::format_archived_at`).
-    Ok((StatusCode::OK, Json(json!({"archived_at": format_archived_at(now)}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"archived_at": format_archived_at(now)})),
+    ))
 }
 
 pub async fn unarchive(
@@ -3036,7 +3114,10 @@ mod module_e3_tests {
         // Detail miss verbatim (`base.py:415`).
         assert_eq!(MODULE_NOT_FOUND_MSG, "Module not found");
         // Serializer order (`serializers/module.py:61`).
-        assert_eq!(START_EXCEEDS_TARGET_MSG, "Start date cannot exceed target date");
+        assert_eq!(
+            START_EXCEEDS_TARGET_MSG,
+            "Start date cannot exceed target date"
+        );
     }
 
     #[test]

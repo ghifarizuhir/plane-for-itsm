@@ -96,15 +96,68 @@ pub const PROJECT_VIEWS_FORBIDDEN_MSG: &str = "Forbidden";
 /// calendar, drive, channels, upgrade, billing) kept for create-validation,
 /// so the slug-check uses this complete copy instead of reusing it.
 pub const RESTRICTED_WORKSPACE_SLUGS: &[&str] = &[
-    "404", "accounts", "api", "create-workspace", "god-mode", "installations", "invitations",
-    "onboarding", "profile", "spaces", "workspace-invitations", "password", "flags", "monitor",
-    "monitoring", "ingest", "plane-pro", "plane-ultimate", "enterprise", "plane-enterprise",
-    "disco", "silo", "chat", "calendar", "drive", "channels", "upgrade", "billing", "sign-in",
-    "sign-up", "signin", "signup", "config", "live", "admin", "m", "import", "importers",
-    "integrations", "integration", "configuration", "initiatives", "initiative", "workflow",
-    "workflows", "epics", "epic", "story", "mobile", "dashboard", "desktop", "onload",
-    "real-time", "one", "pages", "business", "pro", "settings", "license", "licenses",
-    "instances", "instance",
+    "404",
+    "accounts",
+    "api",
+    "create-workspace",
+    "god-mode",
+    "installations",
+    "invitations",
+    "onboarding",
+    "profile",
+    "spaces",
+    "workspace-invitations",
+    "password",
+    "flags",
+    "monitor",
+    "monitoring",
+    "ingest",
+    "plane-pro",
+    "plane-ultimate",
+    "enterprise",
+    "plane-enterprise",
+    "disco",
+    "silo",
+    "chat",
+    "calendar",
+    "drive",
+    "channels",
+    "upgrade",
+    "billing",
+    "sign-in",
+    "sign-up",
+    "signin",
+    "signup",
+    "config",
+    "live",
+    "admin",
+    "m",
+    "import",
+    "importers",
+    "integrations",
+    "integration",
+    "configuration",
+    "initiatives",
+    "initiative",
+    "workflow",
+    "workflows",
+    "epics",
+    "epic",
+    "story",
+    "mobile",
+    "dashboard",
+    "desktop",
+    "onload",
+    "real-time",
+    "one",
+    "pages",
+    "business",
+    "pro",
+    "settings",
+    "license",
+    "licenses",
+    "instances",
+    "instance",
 ];
 
 /// Sidebar keys in enum declaration order
@@ -209,7 +262,13 @@ pub fn validate_link_url(url: &str) -> Result<(), String> {
         .strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))
         .ok_or_else(|| INVALID_URL_MSG.to_string())?;
-    let host = rest.split('/').next().unwrap_or("").split('@').next_back().unwrap_or("");
+    let host = rest
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split('@')
+        .next_back()
+        .unwrap_or("");
     let host = host.split(':').next().unwrap_or("");
     if host.is_empty() || url.chars().any(|c| c.is_whitespace()) {
         return Err(INVALID_URL_MSG.to_string());
@@ -572,12 +631,11 @@ pub async fn sidebar_get(
     if !gate_ws_amg(&st.pool, auth.0, &slug).await? {
         return Ok(deny());
     }
-    let ws_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let ws_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(ws_id) = ws_id else {
         return Ok(missing());
     };
@@ -629,7 +687,10 @@ pub async fn sidebar_get(
     // (`user_preference.py:65-85`).
     let mut map = serde_json::Map::new();
     for r in &rows {
-        map.insert(r.key.clone(), json!({"is_pinned": r.is_pinned, "sort_order": r.sort_order}));
+        map.insert(
+            r.key.clone(),
+            json!({"is_pinned": r.is_pinned, "sort_order": r.sort_order}),
+        );
     }
     Ok((StatusCode::OK, Json(Value::Object(map))))
 }
@@ -685,7 +746,10 @@ pub async fn sidebar_patch(
         .await?;
     }
     tx.commit().await?;
-    Ok((StatusCode::OK, Json(json!({"message": SIDEBAR_UPDATED_MSG}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"message": SIDEBAR_UPDATED_MSG})),
+    ))
 }
 
 // ============================================================================
@@ -710,12 +774,11 @@ pub async fn home_list(
     if !gate_ws_amg(&st.pool, auth.0, &slug).await? {
         return Ok(deny());
     }
-    let ws_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let ws_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(ws_id) = ws_id else {
         return Ok(missing());
     };
@@ -837,19 +900,13 @@ pub async fn home_patch(
     let new_enabled = match home_bool_opt(body.get("is_enabled"), cur.is_enabled) {
         Ok(b) => b,
         Err(msg) => {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(json!({"is_enabled": [msg]})),
-            ));
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"is_enabled": [msg]}))));
         }
     };
     let new_order = match home_order_opt(body.get("sort_order"), cur.sort_order) {
         Ok(n) => n,
         Err(msg) => {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(json!({"sort_order": [msg]})),
-            ));
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"sort_order": [msg]}))));
         }
     };
     let res = sqlx::query(
@@ -938,12 +995,11 @@ pub async fn quick_create(
     if !gate_ws_amg(&st.pool, auth.0, &slug).await? {
         return Ok(deny());
     }
-    let ws_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let ws_id: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(ws_id) = ws_id else {
         return Ok(missing());
     };
@@ -1187,10 +1243,7 @@ struct RecentRow {
 /// project_identifier}`. `state`/`type` are the FK ids; `assignees` are
 /// live `issue_assignees` member ids; miss → null (mirrors the
 /// `try/except DoesNotExist → None`, `workspace.py:322-326`).
-async fn recent_issue_data(
-    pool: &sqlx::PgPool,
-    id: uuid::Uuid,
-) -> Result<Value, sqlx::Error> {
+async fn recent_issue_data(pool: &sqlx::PgPool, id: uuid::Uuid) -> Result<Value, sqlx::Error> {
     #[derive(Debug, Clone, sqlx::FromRow)]
     struct IssueHit {
         id: uuid::Uuid,
@@ -1268,10 +1321,7 @@ async fn recent_page_data(pool: &sqlx::PgPool, id: uuid::Uuid) -> Result<Value, 
 /// `ProjectRecentVisitSerializer` (`serializers/workspace.py:260-272`):
 /// `{id,name,logo_props,project_members,identifier}` — members are live
 /// non-bot member ids.
-async fn recent_project_data(
-    pool: &sqlx::PgPool,
-    id: uuid::Uuid,
-) -> Result<Value, sqlx::Error> {
+async fn recent_project_data(pool: &sqlx::PgPool, id: uuid::Uuid) -> Result<Value, sqlx::Error> {
     #[derive(Debug, Clone, sqlx::FromRow)]
     struct ProjHit {
         id: uuid::Uuid,
@@ -1596,7 +1646,10 @@ pub async fn slug_check(
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!({"status": slug_available(exists, &slug)}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"status": slug_available(exists, &slug)})),
+    ))
 }
 
 // ============================================================================
@@ -1650,8 +1703,7 @@ pub async fn unsplash(
             ));
         }
     };
-    let status = StatusCode::from_u16(resp.status().as_u16())
-        .unwrap_or(StatusCode::BAD_GATEWAY);
+    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     // Passthrough `resp.json()` + upstream status (`external/base.py:242-243`);
     // non-JSON upstream → sane 502 (Django would 500 decoding it).
     match resp.json::<Value>().await {
@@ -1787,12 +1839,11 @@ pub async fn last_visited(
     // (`user.py:74-79`). The live dev DB predates the column — an
     // `UndefinedColumn` (42703) degrades to the same null-shape instead
     // of 500 (locked Django-500 rule, documented).
-    let last_ws: Result<Option<Option<uuid::Uuid>>, sqlx::Error> = sqlx::query_scalar(
-        "SELECT last_workspace_id FROM users WHERE id = $1",
-    )
-    .bind(auth.0)
-    .fetch_optional(&st.pool)
-    .await;
+    let last_ws: Result<Option<Option<uuid::Uuid>>, sqlx::Error> =
+        sqlx::query_scalar("SELECT last_workspace_id FROM users WHERE id = $1")
+            .bind(auth.0)
+            .fetch_optional(&st.pool)
+            .await;
     let last_ws: Option<uuid::Uuid> = match last_ws {
         Ok(v) => v.flatten(),
         Err(e) => {
@@ -1868,7 +1919,10 @@ mod tests {
             assert_eq!(*pinned, sidebar_pinned(k));
         }
         let orders: Vec<f64> = d.iter().map(|(_, _, s)| *s).collect();
-        assert_eq!(orders, vec![65535.0, 75535.0, 85535.0, 95535.0, 105535.0, 115535.0, 125535.0]);
+        assert_eq!(
+            orders,
+            vec![65535.0, 75535.0, 85535.0, 95535.0, 105535.0, 115535.0, 125535.0]
+        );
     }
 
     #[test]
@@ -2019,12 +2073,8 @@ mod tests {
             u_display: Some("A".to_string()),
         };
         let v = pm_detail_json(&row);
-        let keys: std::collections::BTreeSet<&str> = v
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
+        let keys: std::collections::BTreeSet<&str> =
+            v.as_object().unwrap().keys().map(String::as_str).collect();
         let expected: std::collections::BTreeSet<&str> = [
             "id",
             "created_at",

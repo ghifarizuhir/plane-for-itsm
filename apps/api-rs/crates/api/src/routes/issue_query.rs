@@ -4,18 +4,17 @@ use serde_json::{json, Value};
 use sqlx::{Postgres, QueryBuilder};
 use std::collections::HashMap;
 
+#[cfg(test)]
+use super::issue_common::{build_cursor, parse_python_int};
+use super::issue_common::{
+    detail_order_expr, fetch_guest_scoped, fetch_project_member_role, is_workspace_admin,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+    project_gate_allows, sanitize_order_by, total_pages, ArchiveRow, DetailEnvelope,
+    IssueDetailRow, IssueListRow, IssueRelationItem, PageWindow,
+};
 use crate::routes::grouped;
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
-use super::issue_common::{
-    ArchiveRow, DetailEnvelope, IssueDetailRow, IssueListRow, IssueRelationItem,
-    PageWindow, detail_order_expr, fetch_guest_scoped, fetch_project_member_role,
-    is_workspace_admin, next_cursor_str, page_window, parse_cursor, parse_per_page,
-    prev_cursor_str, project_gate_allows, sanitize_order_by, total_pages,
-};
-#[cfg(test)]
-use super::issue_common::{build_cursor, parse_python_int};
-
 
 /// Query params for `GET .../issues/` (ungrouped `IssueViewSet.list`,
 /// `plane/app/views/issue/base.py:266-402`). Field names match the FE query
@@ -79,7 +78,12 @@ pub(crate) const LIST_SCAN_SELECT_SQL: &str = "SELECT i.id, i.state_id::text AS 
 /// visibility (`base.py:266-294`) — project scoping (slug enforced by the
 /// project-exists check above) + not deleted + not archived + not draft +
 /// triage-state exclusion — then the GUEST scoping (`base.py:310-321`).
-fn push_list_where(qb: &mut QueryBuilder<Postgres>, project_id: uuid::Uuid, guest_scoped: bool, user_id: uuid::Uuid) {
+fn push_list_where(
+    qb: &mut QueryBuilder<Postgres>,
+    project_id: uuid::Uuid,
+    guest_scoped: bool,
+    user_id: uuid::Uuid,
+) {
     qb.push(" WHERE i.project_id = ").push_bind(project_id).push(
         " AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'",
     );
@@ -104,7 +108,9 @@ async fn grouped_list_response(
     limit: i64,
     page: i128,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    use grouped::{
+        group_universe, grouped_envelope, plan_grouped, scan_universe, ScanRow, SCAN_DERIVED_FIELDS,
+    };
     let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SCAN_SELECT_SQL);
     scan_qb.push(" FROM issues i LEFT JOIN states s ON s.id = i.state_id");
     push_list_where(&mut scan_qb, project_id, guest_scoped, user_id);
@@ -118,7 +124,10 @@ async fn grouped_list_response(
         group_universe(pool, group, slug, Some(project_id)).await?
     };
     let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": "Error in parsing"})),
+        ));
     };
     // Phase 2: full rows for the page ids via the flat row query.
     let page_ids: Vec<uuid::Uuid> = plan
@@ -126,7 +135,10 @@ async fn grouped_list_response(
         .iter()
         .flat_map(|b| {
             if sub.is_some() {
-                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+                b.subs
+                    .iter()
+                    .flat_map(|s| s.page_ids.iter().cloned())
+                    .collect::<Vec<_>>()
             } else {
                 b.page_ids.clone()
             }
@@ -136,17 +148,32 @@ async fn grouped_list_response(
     if !page_ids.is_empty() {
         let mut rows_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
         push_list_where(&mut rows_qb, project_id, guest_scoped, user_id);
-        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
+        rows_qb
+            .push(" AND i.id = ANY(")
+            .push_bind(page_ids)
+            .push(")");
         let rows: Vec<IssueListRow> = rows_qb.build_query_as().fetch_all(pool).await?;
         for row in &rows {
             if let Ok(v) = serde_json::to_value(row) {
-                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                if let Some(id) = v
+                    .get("id")
+                    .and_then(|id| id.as_str())
+                    .and_then(|s| s.parse().ok())
+                {
                     rows_by_id.insert(id, v);
                 }
             }
         }
     }
-    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    let env = grouped_envelope(
+        group,
+        sub,
+        scan.len() as i64,
+        limit,
+        page,
+        &plan,
+        &rows_by_id,
+    );
     Ok((StatusCode::OK, Json(env)))
 }
 
@@ -175,7 +202,10 @@ pub async fn list(
     .fetch_optional(&st.pool)
     .await?;
     if exists.is_none() {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project not found"})),
+        ));
     }
     // 3. Group-by validation mirrors the Django view + paginator
     // (`base.py:323-331`, `paginator.py:690-699`): equal truthy
@@ -189,7 +219,10 @@ pub async fn list(
         Ok(v) => v,
         Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
@@ -197,16 +230,26 @@ pub async fn list(
     // Group-by allowlist BEFORE the window check: Django validates the
     // field names while constructing the paginator, which precedes
     // `get_result` (the offset/window 400).
-    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+    if let Some(msg) =
+        archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref())
+    {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
     }
     let limit = per_page.min(1000);
     let window = match page_window(cursor.page, limit) {
-        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Err(()) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"detail": "Error in parsing"})),
+            ))
+        }
         Ok(w) => w,
     };
     if limit <= 0 {
-        return Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": GENERIC_500_MSG}))));
+        return Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": GENERIC_500_MSG})),
+        ));
     }
     // 5. Guest scoping: GUEST role on non-view-all project sees own rows only.
     let guest_scoped = fetch_guest_scoped(&st.pool, auth.0, project_id).await?;
@@ -250,7 +293,9 @@ pub async fn list(
         Some(offset) => {
             let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
             push_list_where(&mut page_qb, project_id, guest_scoped, auth.0);
-            page_qb.push(" ORDER BY i.created_at DESC LIMIT ").push_bind(limit);
+            page_qb
+                .push(" ORDER BY i.created_at DESC LIMIT ")
+                .push_bind(limit);
             page_qb.push(" OFFSET ").push_bind(offset);
             page_qb.build_query_as().fetch_all(&st.pool).await?
         }
@@ -617,7 +662,11 @@ fn push_legacy_uuid_in(
         }
     }
     if !ids.is_empty() {
-        qb.push(" AND ").push(col).push(" = ANY(").push_bind(ids).push(")");
+        qb.push(" AND ")
+            .push(col)
+            .push(" = ANY(")
+            .push_bind(ids)
+            .push(")");
     }
 }
 
@@ -700,10 +749,8 @@ fn push_legacy_date(
                     let days: i128 = duration
                         .checked_mul(if term == "months" { 30 } else { 7 })
                         .ok_or(LegacyFilterError::Server)?;
-                    let span = chrono::Days::new(
-                        days.try_into()
-                            .map_err(|_| LegacyFilterError::Server)?,
-                    );
+                    let span =
+                        chrono::Days::new(days.try_into().map_err(|_| LegacyFilterError::Server)?);
                     // `subsequent == "after"` → `__gte`, else `__lte`;
                     // `offset == "fromnow"` → future, else past
                     // (`issue_filters.py:31-52`).
@@ -721,8 +768,9 @@ fn push_legacy_date(
                 }
                 continue;
             }
-            let day: chrono::NaiveDate =
-                parts[0].parse().map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?;
+            let day: chrono::NaiveDate = parts[0]
+                .parse()
+                .map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?;
             // `"after" in date_query` tests the whole `;` list, but the
             // bound value is always `date_query[0]` (`issue_filters.py:76-79`).
             if parts.iter().any(|p| *p == "after") {
@@ -770,7 +818,9 @@ fn split_relative_head(head: &str) -> (&str, &str) {
 /// (`issue_filters.py:99,110,125,353,368`): ANY `""` token (after the
 /// exact-`"null"` drops) skips the WHOLE key.
 fn has_empty_token(raw: &str) -> bool {
-    raw.split(',').filter(|t| *t != "null").any(|t| t.is_empty())
+    raw.split(',')
+        .filter(|t| *t != "null")
+        .any(|t| t.is_empty())
 }
 
 /// Applies every supported legacy `issue_filters` GET key
@@ -809,7 +859,9 @@ fn apply_legacy_filters(
             "active" => &["unstarted", "started"],
             _ => &["backlog", "unstarted", "started", "completed", "cancelled"],
         };
-        qb.push(" AND s.\"group\" = ANY(").push_bind(groups).push(")");
+        qb.push(" AND s.\"group\" = ANY(")
+            .push_bind(groups)
+            .push(")");
     } else if let Some(raw) = q.state_group.as_deref() {
         // `state__group__in` (`issue_filters.py:96-100`): raw strings, no
         // validation; exact-`"null"` tokens dropped, but ANY `""` token
@@ -818,9 +870,15 @@ fn apply_legacy_filters(
         if has_empty_token(raw) {
             // Whole-key no-op.
         } else {
-            let groups: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
+            let groups: Vec<String> = raw
+                .split(',')
+                .filter(|t| *t != "null")
+                .map(str::to_string)
+                .collect();
             if !groups.is_empty() {
-                qb.push(" AND s.\"group\" = ANY(").push_bind(groups).push(")");
+                qb.push(" AND s.\"group\" = ANY(")
+                    .push_bind(groups)
+                    .push(")");
             }
         }
     }
@@ -839,7 +897,9 @@ fn apply_legacy_filters(
                             .map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?,
                     );
                 }
-                qb.push(" AND i.estimate_point_id = ANY(").push_bind(parsed).push(")");
+                qb.push(" AND i.estimate_point_id = ANY(")
+                    .push_bind(parsed)
+                    .push(")");
             }
         }
     }
@@ -847,7 +907,11 @@ fn apply_legacy_filters(
         // Raw strings (`issue_filters.py:122-126`); `""` skips the whole key
         // (`issue_filters.py:125`).
         if !has_empty_token(raw) {
-            let pris: Vec<String> = raw.split(',').filter(|t| *t != "null").map(str::to_string).collect();
+            let pris: Vec<String> = raw
+                .split(',')
+                .filter(|t| *t != "null")
+                .map(str::to_string)
+                .collect();
             if !pris.is_empty() {
                 qb.push(" AND i.priority = ANY(").push_bind(pris).push(")");
             }
@@ -867,11 +931,13 @@ fn apply_legacy_filters(
         // sets NO `deleted_at` condition — mirrored literally.
         let ids = legacy_uuid_list(raw);
         if !ids.is_empty() {
-            qb.push(" AND EXISTS(SELECT 1 FROM issue_mentions im \
+            qb.push(
+                " AND EXISTS(SELECT 1 FROM issue_mentions im \
                 WHERE im.issue_id = i.id \
-                AND im.mention_id = ANY(")
-                .push_bind(ids)
-                .push("))");
+                AND im.mention_id = ANY(",
+            )
+            .push_bind(ids)
+            .push("))");
         }
     }
     if let Some(raw) = q.created_by.as_deref() {
@@ -955,11 +1021,13 @@ fn apply_legacy_filters(
                     .map_err(|_| LegacyFilterError::BadRequest(BAD.to_string()))?,
             );
         }
-        qb.push(" AND EXISTS(SELECT 1 FROM intake_issues ii \
+        qb.push(
+            " AND EXISTS(SELECT 1 FROM intake_issues ii \
             WHERE ii.issue_id = i.id \
-            AND ii.status = ANY(")
-            .push_bind(statuses)
-            .push("))");
+            AND ii.status = ANY(",
+        )
+        .push_bind(statuses)
+        .push("))");
     }
     if let Some(raw) = q.sub_issue.as_deref() {
         // `filter_sub_issue_toggle` (`issue_filters.py:380-389`): the key
@@ -1054,7 +1122,9 @@ pub(crate) const COMPLEX_FILTER_ALLOWLIST: &[&str] = &[
 /// Otherwise the structure is validated (`_validate_structure`,
 /// `max_depth=5` from `default_max_depth`) and every leaf field checked
 /// against the FilterSet (`_validate_fields`).
-pub(crate) fn parse_complex_filter(raw: Option<&str>) -> Result<Option<serde_json::Value>, ComplexFilterError> {
+pub(crate) fn parse_complex_filter(
+    raw: Option<&str>,
+) -> Result<Option<serde_json::Value>, ComplexFilterError> {
     const MAX_DEPTH: usize = 5;
     let Some(s) = raw else {
         return Ok(None);
@@ -1130,7 +1200,9 @@ fn validate_filter_node(
     if let Some(op_key) = logical.first() {
         if obj.len() != 1 {
             return Err(ComplexFilterError::new(
-                &format!("Cannot mix logical operator '{op_key}' with field keys at the same level"),
+                &format!(
+                    "Cannot mix logical operator '{op_key}' with field keys at the same level"
+                ),
                 "mixed_operator_and_fields",
             ));
         }
@@ -1172,7 +1244,9 @@ fn validate_filter_node(
 }
 
 /// Mirrors `_validate_leaf` (`filter_backend.py:411-456`); messages byte-exact.
-fn validate_filter_leaf(obj: &serde_json::Map<String, serde_json::Value>) -> Result<(), ComplexFilterError> {
+fn validate_filter_leaf(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), ComplexFilterError> {
     if obj.is_empty() {
         return Err(ComplexFilterError::new(
             "Leaf filter must be a non-empty JSON object",
@@ -1277,8 +1351,13 @@ pub(crate) fn apply_complex_filter(
     eval_filter_node(qb, tree)
 }
 
-fn eval_filter_node(qb: &mut QueryBuilder<Postgres>, node: &serde_json::Value) -> Result<(), ComplexFilterError> {
-    let obj = node.as_object().ok_or_else(ComplexFilterError::invalid_filterset)?;
+fn eval_filter_node(
+    qb: &mut QueryBuilder<Postgres>,
+    node: &serde_json::Value,
+) -> Result<(), ComplexFilterError> {
+    let obj = node
+        .as_object()
+        .ok_or_else(ComplexFilterError::invalid_filterset)?;
     // Exact-lowercase single operator keys only (see `apply_complex_filter`).
     if obj.len() == 1 {
         if let Some(items) = obj.get("or").and_then(|v| v.as_array()) {
@@ -1361,7 +1440,12 @@ fn apply_complex_leaf(
     let pieces: Vec<String> = match value {
         serde_json::Value::Array(items) => items
             .iter()
-            .flat_map(|item| leaf_scalar_string(item).split(',').map(str::to_string).collect::<Vec<_>>())
+            .flat_map(|item| {
+                leaf_scalar_string(item)
+                    .split(',')
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
             .collect(),
         scalar => leaf_scalar_string(scalar)
             .split(',')
@@ -1473,10 +1557,13 @@ fn apply_complex_uuid_leaf(
             qb.push(col.unwrap_or("i.id")).push(" = ").push_bind(id);
             return Ok(());
         }
-        qb.push("EXISTS(SELECT 1 FROM ").push(table).push(
-            " b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.",
-        );
-        qb.push(col.unwrap_or("id")).push(" = ").push_bind(id).push(")");
+        qb.push("EXISTS(SELECT 1 FROM ")
+            .push(table)
+            .push(" b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.");
+        qb.push(col.unwrap_or("id"))
+            .push(" = ")
+            .push_bind(id)
+            .push(")");
         return Ok(());
     }
     let kept: Vec<&String> = pieces.iter().filter(|p| !p.is_empty()).collect();
@@ -1490,16 +1577,24 @@ fn apply_complex_uuid_leaf(
     }
     let mut ids = Vec::with_capacity(kept.len());
     for piece in kept {
-        ids.push(uuid::Uuid::parse_str(piece).map_err(|_| ComplexFilterError::invalid_filterset())?);
+        ids.push(
+            uuid::Uuid::parse_str(piece).map_err(|_| ComplexFilterError::invalid_filterset())?,
+        );
     }
     if table.is_empty() {
-        qb.push(col.unwrap_or("i.id")).push(" = ANY(").push_bind(ids).push(")");
+        qb.push(col.unwrap_or("i.id"))
+            .push(" = ANY(")
+            .push_bind(ids)
+            .push(")");
         return Ok(());
     }
-    qb.push("EXISTS(SELECT 1 FROM ").push(table).push(
-        " b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.",
-    );
-    qb.push(col.unwrap_or("id")).push(" = ANY(").push_bind(ids).push("))");
+    qb.push("EXISTS(SELECT 1 FROM ")
+        .push(table)
+        .push(" b WHERE b.issue_id = i.id AND b.deleted_at IS NULL AND b.");
+    qb.push(col.unwrap_or("id"))
+        .push(" = ANY(")
+        .push_bind(ids)
+        .push("))");
     Ok(())
 }
 
@@ -1512,7 +1607,10 @@ fn apply_complex_text_leaf(
     suffix: &str,
 ) -> Result<(), ComplexFilterError> {
     if suffix == "in" {
-        qb.push(col).push(" = ANY(").push_bind(pieces.to_vec()).push(")");
+        qb.push(col)
+            .push(" = ANY(")
+            .push_bind(pieces.to_vec())
+            .push(")");
     } else {
         // Repeated values → Django `QueryDict` keeps the LAST.
         qb.push(col)
@@ -1535,9 +1633,17 @@ fn apply_complex_date_leaf(
         if pieces.len() != 2 {
             return Err(ComplexFilterError::invalid_filterset());
         }
-        let lo: chrono::NaiveDate = pieces[0].parse().map_err(|_| ComplexFilterError::invalid_filterset())?;
-        let hi: chrono::NaiveDate = pieces[1].parse().map_err(|_| ComplexFilterError::invalid_filterset())?;
-        qb.push(lhs).push(" BETWEEN ").push_bind(lo).push(" AND ").push_bind(hi);
+        let lo: chrono::NaiveDate = pieces[0]
+            .parse()
+            .map_err(|_| ComplexFilterError::invalid_filterset())?;
+        let hi: chrono::NaiveDate = pieces[1]
+            .parse()
+            .map_err(|_| ComplexFilterError::invalid_filterset())?;
+        qb.push(lhs)
+            .push(" BETWEEN ")
+            .push_bind(lo)
+            .push(" AND ")
+            .push_bind(hi);
         return Ok(());
     }
     let first = pieces.last().map(String::as_str).unwrap_or("");
@@ -1545,7 +1651,9 @@ fn apply_complex_date_leaf(
         qb.push(lhs).push(" IS NULL");
         return Ok(());
     }
-    let day: chrono::NaiveDate = first.parse().map_err(|_| ComplexFilterError::invalid_filterset())?;
+    let day: chrono::NaiveDate = first
+        .parse()
+        .map_err(|_| ComplexFilterError::invalid_filterset())?;
     qb.push(lhs).push(" = ").push_bind(day);
     Ok(())
 }
@@ -1574,15 +1682,15 @@ fn push_detail_where(
     today: chrono::NaiveDate,
 ) -> Result<(), DetailWhereError> {
     qb.push(" WHERE i.project_id = ")
-    .push_bind(project_id)
-    .push(" AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
-    .push_bind(slug.to_string())
-    .push(
-        ") AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
+        .push_bind(project_id)
+        .push(" AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = ")
+        .push_bind(slug.to_string())
+        .push(
+            ") AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
          AND s.\"group\" <> 'triage' \
          AND EXISTS(SELECT 1 FROM projects p \
            WHERE p.id = i.project_id AND p.archived_at IS NULL AND p.deleted_at IS NULL)",
-    );
+        );
     if guest_scoped {
         qb.push(" AND i.created_by_id = ").push_bind(user_id);
     }
@@ -1704,7 +1812,10 @@ pub async fn list_detail(
         Ok(v) => v,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
@@ -1754,9 +1865,8 @@ pub async fn list_detail(
     // Total over the pre-annotation filtered queryset
     // (`total_issue_queryset = copy.deepcopy(issue)`, `base.py:1086`, counted
     // at `paginator.py:160`).
-    let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
-        "SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id",
-    );
+    let mut count_qb: QueryBuilder<Postgres> =
+        QueryBuilder::new("SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id");
     match push_detail_where(
         &mut count_qb,
         &slug,
@@ -1838,8 +1948,10 @@ pub async fn list_detail(
 
     // Expanded relations, in model `-created_at` order
     // (`IssueRelation.Meta.ordering`).
-    let mut relations: std::collections::HashMap<uuid::Uuid, Vec<Value>> = std::collections::HashMap::new();
-    let mut related: std::collections::HashMap<uuid::Uuid, Vec<Value>> = std::collections::HashMap::new();
+    let mut relations: std::collections::HashMap<uuid::Uuid, Vec<Value>> =
+        std::collections::HashMap::new();
+    let mut related: std::collections::HashMap<uuid::Uuid, Vec<Value>> =
+        std::collections::HashMap::new();
     if (want_relation || want_related) && !rows.is_empty() {
         let ids: Vec<uuid::Uuid> = rows.iter().map(|r| r.id).collect();
         if want_relation {
@@ -1855,7 +1967,10 @@ pub async fn list_detail(
             .fetch_all(&st.pool)
             .await?;
             for rel in rel_rows {
-                relations.entry(rel.owner_id).or_default().push(rel_to_value(&rel));
+                relations
+                    .entry(rel.owner_id)
+                    .or_default()
+                    .push(rel_to_value(&rel));
             }
         }
         if want_related {
@@ -1871,7 +1986,10 @@ pub async fn list_detail(
             .fetch_all(&st.pool)
             .await?;
             for rel in rel_rows {
-                related.entry(rel.owner_id).or_default().push(rel_to_value(&rel));
+                related
+                    .entry(rel.owner_id)
+                    .or_default()
+                    .push(rel_to_value(&rel));
             }
         }
     }
@@ -1938,7 +2056,10 @@ mod issue_list_tests {
         // (`plane/app/views/base.py:182-186`) to 400
         // `{"error": "Please provide valid detail"}`.
         assert_eq!(parse_issue_csv(None).unwrap_err(), "Issues are required");
-        assert_eq!(parse_issue_csv(Some("")).unwrap_err(), "Issues are required");
+        assert_eq!(
+            parse_issue_csv(Some("")).unwrap_err(),
+            "Issues are required"
+        );
         // `",,,"` is truthy in Python → passes the `if not` check, all
         // tokens dropped → empty id list → Django 200 `[]`.
         assert!(parse_issue_csv(Some(",,,")).unwrap().is_empty());
@@ -2048,7 +2169,16 @@ mod issue_detail_tests {
         // the value in `OffsetPaginator`, `paginator.py:144`).
         let c = parse_cursor("10.5:0:0").unwrap();
         assert_eq!((c.limit_value, c.page, c.is_prev), (10.5, 0, false));
-        for bad in ["junk", "", "1:2", "1:2:3:4", "x:0:0", "10:x:0", "10:0:x", "10.5:0:0:0"] {
+        for bad in [
+            "junk",
+            "",
+            "1:2",
+            "1:2:3:4",
+            "x:0:0",
+            "10:x:0",
+            "10:0:x",
+            "10.5:0:0:0",
+        ] {
             assert_eq!(
                 parse_cursor(bad).unwrap_err(),
                 "Invalid cursor parameter.",
@@ -2122,7 +2252,10 @@ mod issue_detail_tests {
         assert_eq!(sanitize_order_by("priority"), "priority");
         assert_eq!(sanitize_order_by("-priority"), "-priority");
         assert_eq!(sanitize_order_by("state__group"), "state__group");
-        assert_eq!(sanitize_order_by("assignees__first_name"), "assignees__first_name");
+        assert_eq!(
+            sanitize_order_by("assignees__first_name"),
+            "assignees__first_name"
+        );
         assert_eq!(sanitize_order_by("junk"), "-created_at");
         assert_eq!(sanitize_order_by("--created_at"), "-created_at");
         assert_eq!(sanitize_order_by(""), "-created_at");
@@ -2225,7 +2358,10 @@ mod issue_detail_tests {
         let deep = r#"{"and": [{"and": [{"and": [{"and": [{"and": [{"priority": "high"}]}]}]}]}]}"#;
         let err = parse_complex_filter(Some(deep)).unwrap_err();
         assert_eq!(err.code, "max_depth_exceeded");
-        assert_eq!(err.message, "Filter nesting is too deep (max 5); found depth 6");
+        assert_eq!(
+            err.message,
+            "Filter nesting is too deep (max 5); found depth 6"
+        );
         // Five levels validate fine (unknown-field check would fire first
         // for bad keys, so use a real key).
         let ok5 = r#"{"and": [{"and": [{"and": [{"and": [{"priority": "high"}]}]}]}]}"#;
@@ -2261,7 +2397,9 @@ mod issue_detail_tests {
             parse_python_int("-99999999999999999999999999999999999999999"),
             Some(i128::MIN)
         );
-        for bad in ["", "   ", "abc", "1__0", "_1", "1_", "+-1", "0x10", "10.5", "+_1"] {
+        for bad in [
+            "", "   ", "abc", "1__0", "_1", "1_", "+-1", "0x10", "10.5", "+_1",
+        ] {
             assert_eq!(parse_python_int(bad), None, "input {bad:?}");
         }
     }
@@ -2363,7 +2501,12 @@ mod issue_detail_tests {
         let mut q = DetailIssuesQuery::default();
         q.labels = Some("zzz".to_string());
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
-        apply_legacy_filters(&mut qb, &q, chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()).unwrap();
+        apply_legacy_filters(
+            &mut qb,
+            &q,
+            chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(),
+        )
+        .unwrap();
         let sql = qb.sql();
         assert!(sql.contains("EXISTS(SELECT 1 FROM issue_labels"), "{sql}");
         assert!(!sql.contains("= ANY"), "{sql}");
@@ -2378,7 +2521,12 @@ mod issue_detail_tests {
         q.mentions = Some("12345678-1234-5678-1234-567812345678".to_string());
         q.intake_status = Some("1".to_string());
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
-        apply_legacy_filters(&mut qb, &q, chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()).unwrap();
+        apply_legacy_filters(
+            &mut qb,
+            &q,
+            chrono::NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(),
+        )
+        .unwrap();
         let sql = qb.sql();
         assert!(!sql.contains("im.deleted_at"), "{sql}");
         assert!(!sql.contains("ii.deleted_at"), "{sql}");
@@ -2463,7 +2611,9 @@ mod issue_detail_tests {
         assert!(!qb.sql().contains("'{}'"), "{}", qb.sql());
         // A surviving invalid id still 400s.
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1");
-        assert!(apply_complex_leaf(&mut qb, "state_id__in", &serde_json::json!(["", "zzz"])).is_err());
+        assert!(
+            apply_complex_leaf(&mut qb, "state_id__in", &serde_json::json!(["", "zzz"])).is_err()
+        );
     }
 
     #[test]
@@ -2483,7 +2633,10 @@ mod issue_detail_tests {
     #[test]
     fn generic_500_body_matches_django() {
         // `BaseAPIView.handle_exception` (`app/views/base.py:200-204`).
-        assert_eq!(GENERIC_500_MSG, "Something went wrong please try again later");
+        assert_eq!(
+            GENERIC_500_MSG,
+            "Something went wrong please try again later"
+        );
     }
 }
 
@@ -2504,7 +2657,9 @@ pub struct DeletedIssuesQuery {
 /// Garbage raises Django `ValidationError`, mapped by
 /// `BaseAPIView.handle_exception` (`views/base.py:182-186`) to 400
 /// `{"error": "Please provide valid detail"}`.
-pub(crate) fn parse_deleted_updated_at_gt(raw: &str) -> Result<chrono::DateTime<chrono::Utc>, &'static str> {
+pub(crate) fn parse_deleted_updated_at_gt(
+    raw: &str,
+) -> Result<chrono::DateTime<chrono::Utc>, &'static str> {
     const BAD: &str = "Please provide valid detail";
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
         return Ok(dt.with_timezone(&chrono::Utc));
@@ -2667,7 +2822,10 @@ pub(crate) const ARCHIVE_GROUPING_UNSUPPORTED_MSG: &str = "Grouped pagination is
 /// (flat path — no gap-400 and no allowlist-400, since the allowlist block
 /// in `paginate` is nested under truthy `group_by`). Only truthy `group_by`
 /// groups.
-pub(crate) fn archive_grouping_unsupported(group_by: Option<&str>, _sub_group_by: Option<&str>) -> bool {
+pub(crate) fn archive_grouping_unsupported(
+    group_by: Option<&str>,
+    _sub_group_by: Option<&str>,
+) -> bool {
     group_by.is_some_and(|g| !g.is_empty())
 }
 
@@ -2803,7 +2961,9 @@ fn push_archive_where(
 /// Map an archive-WHERE build failure to the flat path's exact responses.
 fn archive_where_err(e: DetailWhereError) -> (StatusCode, Json<Value>) {
     match e {
-        DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg)) => detail_400(json!({"error": msg})),
+        DetailWhereError::Legacy(LegacyFilterError::BadRequest(msg)) => {
+            detail_400(json!({"error": msg}))
+        }
         DetailWhereError::Legacy(LegacyFilterError::Server) => server_error(),
         DetailWhereError::Complex(e) => detail_400(json!({"message": e.message, "code": e.code})),
     }
@@ -2834,15 +2994,20 @@ async fn grouped_archive_response(
     tree: Option<&Value>,
     today: chrono::NaiveDate,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    use grouped::{
+        group_universe, grouped_envelope, plan_grouped, scan_universe, ScanRow, SCAN_DERIVED_FIELDS,
+    };
     let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(GROUP_SCAN_SELECT_SQL);
     scan_qb.push(" FROM issues i LEFT JOIN states s ON s.id = i.state_id LEFT JOIN issue_types t ON t.id = i.type_id");
     if let Err(e) = push_archive_where(&mut scan_qb, slug, project_id, q, tree, today) {
         return Ok(archive_where_err(e));
     }
-    scan_qb.push(" ORDER BY ").push(order_expr).push(" ").push(order_dir).push(
-        " NULLS LAST, i.created_at DESC, i.id ASC",
-    );
+    scan_qb
+        .push(" ORDER BY ")
+        .push(order_expr)
+        .push(" ")
+        .push(order_dir)
+        .push(" NULLS LAST, i.created_at DESC, i.id ASC");
     let scan: Vec<ScanRow> = scan_qb.build_query_as().fetch_all(pool).await?;
     let universe: Vec<String> = if SCAN_DERIVED_FIELDS.contains(&group) {
         scan_universe(&scan, group)
@@ -2858,7 +3023,10 @@ async fn grouped_archive_response(
         .iter()
         .flat_map(|b| {
             if sub.is_some() {
-                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+                b.subs
+                    .iter()
+                    .flat_map(|s| s.page_ids.iter().cloned())
+                    .collect::<Vec<_>>()
             } else {
                 b.page_ids.clone()
             }
@@ -2870,17 +3038,32 @@ async fn grouped_archive_response(
         if let Err(e) = push_archive_where(&mut rows_qb, slug, project_id, q, tree, today) {
             return Ok(archive_where_err(e));
         }
-        rows_qb.push(" AND i.id = ANY(").push_bind(page_ids).push(")");
+        rows_qb
+            .push(" AND i.id = ANY(")
+            .push_bind(page_ids)
+            .push(")");
         let rows: Vec<ArchiveRow> = rows_qb.build_query_as().fetch_all(pool).await?;
         for row in &rows {
             if let Ok(v) = serde_json::to_value(row) {
-                if let Some(id) = v.get("id").and_then(|id| id.as_str()).and_then(|s| s.parse().ok()) {
+                if let Some(id) = v
+                    .get("id")
+                    .and_then(|id| id.as_str())
+                    .and_then(|s| s.parse().ok())
+                {
                     rows_by_id.insert(id, v);
                 }
             }
         }
     }
-    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    let env = grouped_envelope(
+        group,
+        sub,
+        scan.len() as i64,
+        limit,
+        page,
+        &plan,
+        &rows_by_id,
+    );
     Ok((StatusCode::OK, Json(env)))
 }
 
@@ -2898,7 +3081,11 @@ pub async fn archived_list(
     // ADMIN passes. Shared `project_gate_allows`, same as I1/I3.
     let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
-    if !project_gate_allows(matches!(member_role, Some(20) | Some(15)), member_role.is_some(), ws_admin) {
+    if !project_gate_allows(
+        matches!(member_role, Some(20) | Some(15)),
+        member_role.is_some(),
+        ws_admin,
+    ) {
         return Ok(deny());
     }
     if let Some(msg) = archive_group_by_conflict(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
@@ -2908,7 +3095,10 @@ pub async fn archived_list(
         Ok(v) => v,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok(detail_400(json!({"detail": msg}))),
@@ -2917,7 +3107,9 @@ pub async fn archived_list(
     // field names while constructing the paginator
     // (`paginator.py:690-699`), which precedes `get_result` (the
     // offset/window 400). Invalid fields 400 byte-exact (`{"detail"}`).
-    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+    if let Some(msg) =
+        archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref())
+    {
         return Ok(detail_400(json!({"detail": msg})));
     }
     // Truthy grouped fields fall through to the F5 grouped branch below
@@ -3085,7 +3277,11 @@ mod batch_c_i4_tests {
         // fallback (any active membership + workspace ADMIN) unchanged —
         // shared `project_gate_allows`, same as I1.
         let allows = |role: Option<i16>, ws_admin: bool| {
-            project_gate_allows(matches!(role, Some(20) | Some(15) | Some(5)), role.is_some(), ws_admin)
+            project_gate_allows(
+                matches!(role, Some(20) | Some(15) | Some(5)),
+                role.is_some(),
+                ws_admin,
+            )
         };
         assert!(allows(Some(20), false));
         assert!(allows(Some(15), false));
@@ -3106,7 +3302,11 @@ mod batch_c_i4_tests {
         // is workspace ADMIN passes; expressed through the shared
         // `project_gate_allows` like I1/I3.
         let allows = |role: Option<i16>, ws_admin: bool| {
-            project_gate_allows(matches!(role, Some(20) | Some(15)), role.is_some(), ws_admin)
+            project_gate_allows(
+                matches!(role, Some(20) | Some(15)),
+                role.is_some(),
+                ws_admin,
+            )
         };
         assert!(allows(Some(20), false));
         assert!(allows(Some(15), false));
@@ -3142,7 +3342,10 @@ mod batch_c_i4_tests {
             archive_group_by_allowlist_error(Some("nope"), Some("zzz")),
             Some("Invalid group_by field: nope".to_string())
         );
-        assert_eq!(archive_group_by_allowlist_error(Some("priority"), Some("state__group")), None);
+        assert_eq!(
+            archive_group_by_allowlist_error(Some("priority"), Some("state__group")),
+            None
+        );
         assert_eq!(archive_group_by_allowlist_error(None, None), None);
         assert_eq!(archive_group_by_allowlist_error(Some(""), Some("")), None);
         assert_eq!(archive_group_by_allowlist_error(None, Some("zzz")), None);
@@ -3156,13 +3359,19 @@ mod batch_c_i4_tests {
         // Django `if group_by:` (`archive.py:140`) never groups on it, so
         // it takes the flat path (no gap-400, no allowlist-400).
         assert!(archive_grouping_unsupported(Some("priority"), None));
-        assert!(archive_grouping_unsupported(Some("priority"), Some("state__group")));
+        assert!(archive_grouping_unsupported(
+            Some("priority"),
+            Some("state__group")
+        ));
         assert!(!archive_grouping_unsupported(None, None));
         assert!(!archive_grouping_unsupported(Some(""), Some("")));
         assert!(!archive_grouping_unsupported(Some(""), None));
         assert!(!archive_grouping_unsupported(None, Some("priority")));
         assert!(!archive_grouping_unsupported(None, Some("zzz")));
-        assert_eq!(ARCHIVE_GROUPING_UNSUPPORTED_MSG, "Grouped pagination is not supported");
+        assert_eq!(
+            ARCHIVE_GROUPING_UNSUPPORTED_MSG,
+            "Grouped pagination is not supported"
+        );
     }
 
     #[test]

@@ -216,9 +216,15 @@ pub async fn create(
         // 201 full shape (`base.py:78-80`, DRF default create).
         Some(id) => match fetch_intake_full(&st.pool, &slug, project_id, id).await? {
             Some(r) => Ok((StatusCode::CREATED, Json(intake_full_json(&r)))),
-            None => Ok((StatusCode::CREATED, Json(json!({"id": id, "name": body.name})))),
+            None => Ok((
+                StatusCode::CREATED,
+                Json(json!({"id": id, "name": body.name})),
+            )),
         },
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        )),
     }
 }
 
@@ -286,7 +292,9 @@ fn csv_filter(raw: Option<&str>) -> Vec<String> {
 }
 
 fn uuid_list(vals: &[String]) -> Vec<uuid::Uuid> {
-    vals.iter().filter_map(|v| uuid::Uuid::parse_str(v).ok()).collect()
+    vals.iter()
+        .filter_map(|v| uuid::Uuid::parse_str(v).ok())
+        .collect()
 }
 
 /// Date-range parsing for `filter_created_at/updated_at` GET
@@ -298,7 +306,12 @@ fn uuid_list(vals: &[String]) -> Vec<uuid::Uuid> {
 fn date_bounds(raw: Option<&str>) -> (Option<String>, Option<String>) {
     let mut gte: Option<String> = None;
     let mut lte: Option<String> = None;
-    for item in raw.unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+    for item in raw
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let bits: Vec<&str> = item.split(';').collect();
         if bits.len() >= 2 {
             if bits[1] == "after" {
@@ -330,11 +343,14 @@ pub async fn list_issues(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     use crate::routes::issue_common::{
-        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-        total_pages, DetailEnvelope, PageWindow,
+        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+        DetailEnvelope, PageWindow,
     };
     // AMG (`base.py:177`); DRF permission-class deny shape.
-    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(crate::routes::member::deny_detail());
     }
     // First intake by name order (`Intake.Meta.ordering`); absent → 404
@@ -349,7 +365,10 @@ pub async fn list_issues(
     .fetch_optional(&st.pool)
     .await?;
     let Some((intake_id,)) = intake else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Intake not found"})),
+        ));
     };
     let status_raw = params.get("status").map(|s| s.as_str()).unwrap_or("-2");
     let statuses: Vec<i32> = csv_filter(Some(status_raw))
@@ -358,27 +377,37 @@ pub async fn list_issues(
         .collect();
     let prios = csv_filter(params.get("priority").map(|s| s.as_str()));
     let label_ids = uuid_list(&csv_filter(params.get("labels").map(|s| s.as_str())));
-    let labels_none = params.get("labels").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false);
+    let labels_none = params
+        .get("labels")
+        .map(|s| s.split(',').any(|t| t == "None"))
+        .unwrap_or(false);
     let state_ids = uuid_list(&csv_filter(params.get("state").map(|s| s.as_str())));
     let assignee_ids = uuid_list(&csv_filter(params.get("assignees").map(|s| s.as_str())));
-    let assignees_none = params.get("assignees").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false);
+    let assignees_none = params
+        .get("assignees")
+        .map(|s| s.split(',').any(|t| t == "None"))
+        .unwrap_or(false);
     let creator_ids = uuid_list(&csv_filter(params.get("created_by").map(|s| s.as_str())));
     let (created_gte, created_lte) = date_bounds(params.get("created_at").map(|s| s.as_str()));
     let (updated_gte, updated_lte) = date_bounds(params.get("updated_at").map(|s| s.as_str()));
     // Guest scope (`base.py:211-221`).
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     let guest_only = if matches!(role, Some(r) if r <= 5) {
-        let gva: bool = sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(&st.pool)
-            .await?
-            .unwrap_or(false);
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
         !gva
     } else {
         false
     };
     // `order_by` allowlist (`order_queryset.py:36-48`, default `-issue__created_at`).
-    let order_raw = params.get("order_by").map(|s| s.as_str()).unwrap_or("-issue__created_at");
+    let order_raw = params
+        .get("order_by")
+        .map(|s| s.as_str())
+        .unwrap_or("-issue__created_at");
     let (bare, desc) = match order_raw.strip_prefix('-') {
         Some(b) => (b, true),
         None => (order_raw, false),
@@ -422,12 +451,32 @@ pub async fn list_issues(
          AND ($14::date IS NULL OR i.updated_at::date <= $14) \
          AND (NOT $15::boolean OR ii.created_by_id = $16)"
     );
-    let status_arr: Option<Vec<i32>> = if statuses.is_empty() { None } else { Some(statuses) };
+    let status_arr: Option<Vec<i32>> = if statuses.is_empty() {
+        None
+    } else {
+        Some(statuses)
+    };
     let prio_arr: Option<Vec<String>> = if prios.is_empty() { None } else { Some(prios) };
-    let label_arr: Option<Vec<uuid::Uuid>> = if label_ids.is_empty() { None } else { Some(label_ids) };
-    let state_arr: Option<Vec<uuid::Uuid>> = if state_ids.is_empty() { None } else { Some(state_ids) };
-    let assignee_arr: Option<Vec<uuid::Uuid>> = if assignee_ids.is_empty() { None } else { Some(assignee_ids) };
-    let creator_arr: Option<Vec<uuid::Uuid>> = if creator_ids.is_empty() { None } else { Some(creator_ids) };
+    let label_arr: Option<Vec<uuid::Uuid>> = if label_ids.is_empty() {
+        None
+    } else {
+        Some(label_ids)
+    };
+    let state_arr: Option<Vec<uuid::Uuid>> = if state_ids.is_empty() {
+        None
+    } else {
+        Some(state_ids)
+    };
+    let assignee_arr: Option<Vec<uuid::Uuid>> = if assignee_ids.is_empty() {
+        None
+    } else {
+        Some(assignee_ids)
+    };
+    let creator_arr: Option<Vec<uuid::Uuid>> = if creator_ids.is_empty() {
+        None
+    } else {
+        Some(creator_ids)
+    };
     let parse_date = |s: Option<String>| -> Option<chrono::NaiveDate> {
         s.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok())
     };
@@ -441,11 +490,22 @@ pub async fn list_issues(
          WHERE ii.intake_id = $1 AND ii.project_id = $2 AND ii.deleted_at IS NULL {where_extra}"
     );
     let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {base_from}"))
-        .bind(intake_id).bind(project_id)
-        .bind(&status_arr).bind(&prio_arr).bind(&label_arr).bind(labels_none)
-        .bind(&state_arr).bind(&assignee_arr).bind(assignees_none)
-        .bind(&creator_arr).bind(cg).bind(cl).bind(ug).bind(ul)
-        .bind(guest_only).bind(auth.0)
+        .bind(intake_id)
+        .bind(project_id)
+        .bind(&status_arr)
+        .bind(&prio_arr)
+        .bind(&label_arr)
+        .bind(labels_none)
+        .bind(&state_arr)
+        .bind(&assignee_arr)
+        .bind(assignees_none)
+        .bind(&creator_arr)
+        .bind(cg)
+        .bind(cl)
+        .bind(ug)
+        .bind(ul)
+        .bind(guest_only)
+        .bind(auth.0)
         .fetch_one(&st.pool)
         .await?;
     // OffsetPaginator envelope (`self.paginate`, `base.py:222-226`).
@@ -453,14 +513,22 @@ pub async fn list_issues(
         Ok(v) => v,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
     };
-    let cursor_raw = params.get("cursor").cloned().unwrap_or_else(|| format!("{limit}:0:0"));
+    let cursor_raw = params
+        .get("cursor")
+        .cloned()
+        .unwrap_or_else(|| format!("{limit}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
     };
     let window = match page_window(cursor.page, limit) {
         Ok(w) => w,
-        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Err(()) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"detail": "Error in parsing"})),
+            ))
+        }
     };
     let mut rows: Vec<InboxListRow> = match window {
         PageWindow::Rows(offset) => sqlx::query_as(&format!(
@@ -509,12 +577,19 @@ pub async fn create_issue(
     Json(body): Json<CreateIntakeIssue>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // AMG (`base.py:228`).
-    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(crate::routes::member::deny_detail());
     }
     validate_issue_create(&body).map_err(|e| anyhow::anyhow!(e))?;
     let name = body.issue.name.clone().unwrap_or_default();
-    let priority = body.issue.priority.clone().unwrap_or_else(|| "none".to_string());
+    let priority = body
+        .issue
+        .priority
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
 
     let workspace_id: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
@@ -522,7 +597,10 @@ pub async fn create_issue(
             .fetch_optional(&st.pool)
             .await?;
     let Some(workspace_id) = workspace_id else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        ));
     };
 
     // Triage state lookup-or-create mirrors
@@ -560,7 +638,10 @@ pub async fn create_issue(
     .fetch_optional(&st.pool)
     .await?;
     let Some(intake_id) = intake_id else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Intake not found"})),
+        ));
     };
 
     // Issue + counter row + intake link commit together, mirroring the
@@ -629,7 +710,11 @@ pub struct PatchIntake {
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
         Some(r) if r >= 15 => {}
@@ -637,14 +722,21 @@ pub async fn detail(
     }
     match fetch_intake_full(&st.pool, &slug, project_id, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(intake_full_json(&r)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Intake not found"})),
+        )),
     }
 }
 
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchIntake>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
@@ -653,7 +745,10 @@ pub async fn patch(
     }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid name"})),
+            ));
         }
     }
     let n = sqlx::query(
@@ -679,20 +774,30 @@ pub async fn patch(
             return Err(common::errors::AppError(anyhow::anyhow!(e)));
         }
         Ok(r) if r.rows_affected() == 0 => {
-            return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+            return Ok((
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Intake not found"})),
+            ));
         }
         Ok(_) => {}
     }
     match fetch_intake_full(&st.pool, &slug, project_id, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(intake_full_json(&r)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Intake not found"})),
+        )),
     }
 }
 
 pub async fn destroy(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
         Some(r) if r >= 15 => {}
@@ -706,7 +811,10 @@ pub async fn destroy(
     .fetch_optional(&st.pool)
     .await?;
     let Some((is_default,)) = row else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Intake not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Intake not found"})),
+        ));
     };
     if let Err(e) = guard_delete(is_default) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
@@ -766,14 +874,18 @@ async fn fetch_inbox_detail(
     issue_id: uuid::Uuid,
     user: uuid::Uuid,
 ) -> Result<Option<InboxIssueDetail>, sqlx::Error> {
-    let fresh: Option<(i32, Option<uuid::Uuid>, Option<chrono::DateTime<chrono::Utc>>, Option<String>)> =
-        sqlx::query_as(
-            "SELECT status, duplicate_to_id, snoozed_till, source FROM intake_issues \
+    let fresh: Option<(
+        i32,
+        Option<uuid::Uuid>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT status, duplicate_to_id, snoozed_till, source FROM intake_issues \
               WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(row_id)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(row_id)
+    .fetch_optional(pool)
+    .await?;
     let Some((status, duplicate_to, snoozed_till, source)) = fresh else {
         return Ok(None);
     };
@@ -816,10 +928,17 @@ async fn fetch_inbox_detail(
 pub async fn detail_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // AMG ws gate (decorator, `base.py:503`).
-    if crate::routes::project::ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(crate::routes::member::deny_detail());
     }
     let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
@@ -829,13 +948,12 @@ pub async fn detail_issue(
     // not creator → 403 verbatim.
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
     if matches!(role, Some(r) if r <= 5) {
-        let gva: bool = sqlx::query_scalar(
-            "SELECT guest_view_all_features FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_optional(&st.pool)
-        .await?
-        .unwrap_or(false);
+        let gva: bool =
+            sqlx::query_scalar("SELECT guest_view_all_features FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .unwrap_or(false);
         if !gva && scope.created_by_id != Some(auth.0) {
             return Ok((
                 StatusCode::FORBIDDEN,
@@ -843,7 +961,16 @@ pub async fn detail_issue(
             ));
         }
     }
-    match fetch_inbox_detail(&st.pool, &slug, project_id, scope.row_id, scope.issue_id, auth.0).await? {
+    match fetch_inbox_detail(
+        &st.pool,
+        &slug,
+        project_id,
+        scope.row_id,
+        scope.issue_id,
+        auth.0,
+    )
+    .await?
+    {
         Some(d) => Ok((StatusCode::OK, Json(serde_json::to_value(&d).unwrap()))),
         None => Ok(missing()),
     }
@@ -858,19 +985,22 @@ pub async fn detail_issue(
 pub async fn destroy_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
         return Ok(missing());
     };
     let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
-    let issue_creator: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT created_by_id FROM issues WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(scope.issue_id)
-    .fetch_optional(&st.pool)
-    .await?
-    .flatten();
+    let issue_creator: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT created_by_id FROM issues WHERE id = $1 AND deleted_at IS NULL")
+            .bind(scope.issue_id)
+            .fetch_optional(&st.pool)
+            .await?
+            .flatten();
     let is_creator = issue_creator == Some(auth.0);
     if !matches!(role, Some(20)) && !is_creator {
         return Ok(crate::routes::project::deny());
@@ -1032,10 +1162,7 @@ pub(crate) fn guard_inbox_patch(
     is_ws_admin: bool,
 ) -> Result<(), (StatusCode, String)> {
     if !has_membership && !is_ws_admin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            ONLY_ADMIN_OR_CREATOR_MSG.to_string(),
-        ));
+        return Err((StatusCode::FORBIDDEN, ONLY_ADMIN_OR_CREATOR_MSG.to_string()));
     }
     if matches!(role, Some(r) if r <= 5) && !is_ws_admin && !is_creator {
         return Err((StatusCode::BAD_REQUEST, CANNOT_EDIT_INTAKE_MSG.to_string()));
@@ -1220,7 +1347,11 @@ const INBOX_ISSUE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_or
 pub async fn patch_issue(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<InboxIssuePatch>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Scope: pk = ISSUE id under the project's first intake
@@ -1247,21 +1378,30 @@ pub async fn patch_issue(
     let new_name = issue.and_then(|i| i.name.clone());
     if let Some(name) = &new_name {
         if name.trim().is_empty() {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Name is required"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Name is required"})),
+            ));
         }
     }
     let new_priority = issue.and_then(|i| i.priority.clone());
     if !narrowed {
         if let Some(p) = &new_priority {
             if !PRIORITIES.contains(&p.as_str()) {
-                return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid priority"}))));
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "Invalid priority"})),
+                ));
             }
         }
     }
     if may_write_intake {
         if let Some(s) = body.status {
             if !INTAKE_STATUSES.contains(&s) {
-                return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid status"}))));
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "Invalid status"})),
+                ));
             }
         }
         if let Some(Some(dup)) = body.duplicate_to {
@@ -1280,7 +1420,11 @@ pub async fn patch_issue(
     if !narrowed {
         let desc_html = issue.and_then(|i| i.description_html.clone());
         let desc_json = issue.and_then(|i| i.description_json.clone());
-        if new_name.is_some() || desc_html.is_some() || desc_json.is_some() || new_priority.is_some() {
+        if new_name.is_some()
+            || desc_html.is_some()
+            || desc_json.is_some()
+            || new_priority.is_some()
+        {
             sqlx::query(
                 "UPDATE issues SET name = COALESCE($1, name), \
                   description_html = COALESCE($2, description_html), \
@@ -1367,10 +1511,7 @@ pub async fn patch_issue(
     // `IntakeIssueDetailSerializer(intake_issue)`, 200 — `id` is the
     // intake-issue ROW id).
     match fetch_inbox_detail(&st.pool, &slug, project_id, row_id, issue_id, user_id).await? {
-        Some(detail) => Ok((
-            StatusCode::OK,
-            Json(serde_json::to_value(&detail).unwrap()),
-        )),
+        Some(detail) => Ok((StatusCode::OK, Json(serde_json::to_value(&detail).unwrap()))),
         None => Ok(missing()),
     }
 }
@@ -1393,10 +1534,7 @@ mod inbox_patch_tests {
         ] {
             assert_eq!(
                 guard_inbox_patch(has_pm, role, creator, ws_admin),
-                Err((
-                    StatusCode::FORBIDDEN,
-                    ONLY_ADMIN_OR_CREATOR_MSG.to_string()
-                )),
+                Err((StatusCode::FORBIDDEN, ONLY_ADMIN_OR_CREATOR_MSG.to_string())),
                 "has_pm={has_pm} role={role:?} creator={creator} ws_admin={ws_admin}",
             );
         }
@@ -1404,10 +1542,7 @@ mod inbox_patch_tests {
         // edit intake issues".
         assert_eq!(
             guard_inbox_patch(true, Some(5), false, false),
-            Err((
-                StatusCode::BAD_REQUEST,
-                CANNOT_EDIT_INTAKE_MSG.to_string()
-            )),
+            Err((StatusCode::BAD_REQUEST, CANNOT_EDIT_INTAKE_MSG.to_string())),
         );
         // admin | member | creator | ws-admin → ok.
         for (has_pm, role, creator, ws_admin) in [

@@ -109,7 +109,10 @@ pub(crate) fn extract_new_date(raw: Option<&Value>) -> Result<Option<NaiveDate>,
 /// (`issue/base.py:1113-1114`): a truthy new date (already mapped through
 /// `extract_new_date`, so falsy inputs are `None` here) wins, else the
 /// current column value is kept.
-pub(crate) fn resolve_date(new: Option<NaiveDate>, current: Option<NaiveDate>) -> Option<NaiveDate> {
+pub(crate) fn resolve_date(
+    new: Option<NaiveDate>,
+    current: Option<NaiveDate>,
+) -> Option<NaiveDate> {
     new.or(current)
 }
 
@@ -255,10 +258,8 @@ pub async fn bulk_update_dates(
     // the query for an empty list), mirrored by skipping the UPDATE.
     if !pending.is_empty() {
         let p_ids: Vec<uuid::Uuid> = pending.iter().map(|(id, _, _)| *id).collect();
-        let p_starts: Vec<Option<NaiveDate>> =
-            pending.iter().map(|(_, s, _)| *s).collect();
-        let p_targets: Vec<Option<NaiveDate>> =
-            pending.iter().map(|(_, _, t)| *t).collect();
+        let p_starts: Vec<Option<NaiveDate>> = pending.iter().map(|(_, s, _)| *s).collect();
+        let p_targets: Vec<Option<NaiveDate>> = pending.iter().map(|(_, _, t)| *t).collect();
         sqlx::query(
             "UPDATE issues AS i SET start_date = d.start_date, target_date = d.target_date \
              FROM (SELECT unnest($1::uuid[]) AS id, unnest($2::date[]) AS start_date, \
@@ -336,10 +337,7 @@ mod batch_d_d5_tests {
         // is falsy too (`"" or current → current`).
         assert_eq!(extract_new_date(None).unwrap(), None);
         assert_eq!(extract_new_date(Some(&Value::Null)).unwrap(), None);
-        assert_eq!(
-            extract_new_date(Some(&json!(""))).unwrap(),
-            None
-        );
+        assert_eq!(extract_new_date(Some(&json!(""))).unwrap(), None);
         // Non-empty `%Y-%m-%d` strings parse (`strptime`,
         // `base.py:1117-1120`); other formats fail (Django `ValueError`
         // → 500, mapped by the handler to `AppError`).
@@ -373,11 +371,7 @@ mod batch_d_d5_tests {
             "You don't have the required permissions."
         );
         let allows = |role: Option<i16>, ws_admin: bool| {
-            project_gate_allows(
-                guard_issue_dates(role).is_ok(),
-                role.is_some(),
-                ws_admin,
-            )
+            project_gate_allows(guard_issue_dates(role).is_ok(), role.is_some(), ws_admin)
         };
         assert!(allows(Some(20), false));
         assert!(allows(Some(15), false));

@@ -25,7 +25,8 @@ use super::issue_lists::USER_SELECT_SQL;
 
 /// `plane/app/views/cycle/base.py:331`
 /// ("Both start date and end date are either required or are to be null").
-pub const BOTH_DATES_MSG: &str = "Both start date and end date are either required or are to be null";
+pub const BOTH_DATES_MSG: &str =
+    "Both start date and end date are either required or are to be null";
 /// `plane/app/serializers/cycle.py:22` (`CycleWriteSerializer.validate`).
 pub const START_EXCEEDS_END_MSG: &str = "Start date cannot exceed end date";
 /// `plane/app/views/cycle/base.py:459` (retrieve miss — verbatim).
@@ -33,11 +34,13 @@ pub const CYCLE_NOT_FOUND_MSG: &str = "Cycle not found";
 /// `plane/app/views/cycle/base.py:341` (patch archived).
 pub const ARCHIVED_IMMUTABLE_MSG: &str = "Archived cycle cannot be updated";
 /// `plane/app/views/cycle/base.py:355` (patch completed without sort_order).
-pub const COMPLETED_IMMUTABLE_MSG: &str = "The Cycle has already been completed so it cannot be edited";
+pub const COMPLETED_IMMUTABLE_MSG: &str =
+    "The Cycle has already been completed so it cannot be edited";
 /// `plane/app/views/cycle/issue.py:228` (cycle-issues POST empty).
 pub const ISSUES_REQUIRED_MSG: &str = "Issues are required";
 /// `plane/app/views/cycle/issue.py:234` (cycle-issues POST to completed).
-pub const COMPLETED_NO_ADD_MSG: &str = "The Cycle has already been completed so no new issues can be added";
+pub const COMPLETED_NO_ADD_MSG: &str =
+    "The Cycle has already been completed so no new issues can be added";
 /// `plane/app/views/cycle/issue.py:148` (group_by == sub_group_by).
 pub const GROUP_DUP_MSG: &str = "Group by and sub group by cannot have same parameters";
 /// `plane/app/views/cycle/base.py:528` (date-check missing dates).
@@ -47,7 +50,8 @@ pub const DATECHECK_OVERLAP_MSG: &str = "You have a cycle already on the given d
 /// `plane/app/views/cycle/base.py:600` (transfer missing new_cycle_id).
 pub const TRANSFER_TARGET_REQUIRED_MSG: &str = "New Cycle Id is required";
 /// `plane/utils/cycle_transfer_issues.py:64` (transfer to completed target).
-pub const TRANSFER_TARGET_COMPLETED_MSG: &str = "The cycle where the issues are transferred is already completed";
+pub const TRANSFER_TARGET_COMPLETED_MSG: &str =
+    "The cycle where the issues are transferred is already completed";
 /// `plane/utils/cycle_transfer_issues.py:147` (transfer bad source).
 pub const TRANSFER_SOURCE_MISSING_MSG: &str = "Source cycle not found";
 /// `plane/app/views/cycle/archive.py:592` (archive non-completed).
@@ -325,7 +329,11 @@ pub fn burndown_chart(
     let mut map = serde_json::Map::new();
     let mut day = start;
     while day <= end {
-        let cum: f64 = done.iter().filter(|(d, _)| **d <= day).map(|(_, v)| v).sum();
+        let cum: f64 = done
+            .iter()
+            .filter(|(d, _)| **d <= day)
+            .map(|(_, v)| v)
+            .sum();
         let pending = total - cum;
         let key = day.to_string();
         if day > today {
@@ -391,9 +399,11 @@ struct CycleListRow {
 // status columns used by both the list and archived selects below.
 // (Field order differs per shape, so fragments compose per shape instead
 // of one monolithic string; every column text lives in exactly one const.)
-const FRAG_IS_FAVORITE: &str = "EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'cycle' \
+const FRAG_IS_FAVORITE: &str =
+    "EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'cycle' \
     AND uf.entity_identifier = c.id AND uf.user_id = $3 AND uf.deleted_at IS NULL) AS is_favorite";
-const FRAG_TOTAL_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
+const FRAG_TOTAL_ISSUES: &str =
+    "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id \
     WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
     AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS total_issues";
 const FRAG_COMPLETED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
@@ -411,7 +421,8 @@ const FRAG_UNSTARTED_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN 
 const FRAG_BACKLOG_ISSUES: &str = "(SELECT COUNT(*) FROM cycle_issues ci JOIN issues i ON i.id = ci.issue_id JOIN states s ON s.id = i.state_id \
     WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
     AND s.\"group\" = 'backlog' AND i.archived_at IS NULL AND i.is_draft = false AND i.deleted_at IS NULL) AS backlog_issues";
-const FRAG_ASSIGNEE_IDS: &str = "COALESCE(ARRAY(SELECT DISTINCT ia.assignee_id FROM cycle_issues ci2 \
+const FRAG_ASSIGNEE_IDS: &str =
+    "COALESCE(ARRAY(SELECT DISTINCT ia.assignee_id FROM cycle_issues ci2 \
     JOIN issue_assignees ia ON ia.issue_id = ci2.issue_id AND ia.deleted_at IS NULL \
     WHERE ci2.cycle_id = c.id AND ci2.deleted_at IS NULL), '{}') AS assignee_ids";
 const FRAG_STATUS: &str = "CASE WHEN c.start_date <= now() AND c.end_date >= now() THEN 'CURRENT' \
@@ -502,16 +513,10 @@ fn cycle_json(v: CycleJson<'_>) -> Value {
     m.insert("sort_order".to_string(), json!(v.sort_order));
     m.insert("external_source".to_string(), opt_str(v.external_source));
     m.insert("external_id".to_string(), opt_str(v.external_id));
-    m.insert(
-        "progress_snapshot".to_string(),
-        v.progress_snapshot.clone(),
-    );
+    m.insert("progress_snapshot".to_string(), v.progress_snapshot.clone());
     m.insert("is_favorite".to_string(), json!(v.is_favorite));
     m.insert("total_issues".to_string(), json!(v.total_issues));
-    m.insert(
-        "completed_issues".to_string(),
-        json!(v.completed_issues),
-    );
+    m.insert("completed_issues".to_string(), json!(v.completed_issues));
     m.insert("assignee_ids".to_string(), json!(v.assignee_ids));
     m.insert("status".to_string(), json!(v.status));
     if let Some(c) = v.cancelled_issues {
@@ -694,11 +699,11 @@ async fn convert_to_utc(
     is_start: bool,
 ) -> Result<DateTime<Utc>, sqlx::Error> {
     sqlx::query_scalar(convert_to_utc_sql())
-    .bind(date_part)
-    .bind(project_tz)
-    .bind(is_start)
-    .fetch_one(pool)
-    .await
+        .bind(date_part)
+        .bind(project_tz)
+        .bind(is_start)
+        .fetch_one(pool)
+        .await
 }
 
 async fn fetch_list_row(
@@ -716,12 +721,12 @@ async fn fetch_list_row(
          AND c.archived_at IS NULL"
     );
     sqlx::query_as::<_, CycleListRow>(&sql)
-    .bind(cid)
-    .bind(pid)
-    .bind(user)
-    .bind(slug)
-    .fetch_optional(pool)
-    .await
+        .bind(cid)
+        .bind(pid)
+        .bind(user)
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
 }
 
 fn is_constraint_violation(e: &sqlx::Error) -> bool {
@@ -794,7 +799,11 @@ pub async fn create(
     if !gate_am(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
-    let name = body.get("name").and_then(Value::as_str).unwrap_or("").to_string();
+    let name = body
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     if body.get("name").is_none() {
         return Ok((
             StatusCode::BAD_REQUEST,
@@ -965,7 +974,10 @@ pub async fn patch(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     if completed && has_sort {
-        let sort = body.get("sort_order").and_then(Value::as_f64).unwrap_or(cur.sort_order);
+        let sort = body
+            .get("sort_order")
+            .and_then(Value::as_f64)
+            .unwrap_or(cur.sort_order);
         sqlx::query("UPDATE cycles SET sort_order = $1, updated_at = now() WHERE id = $2")
             .bind(sort)
             .bind(cid)
@@ -1146,7 +1158,11 @@ fn order_sql(sanitized: &str) -> String {
     // detail ordering, reused not forked (comment per locked conventions).
     use super::issue_common::detail_order_expr;
     let (expr, desc) = detail_order_expr(sanitized);
-    let dir = if desc { "DESC NULLS LAST" } else { "ASC NULLS LAST" };
+    let dir = if desc {
+        "DESC NULLS LAST"
+    } else {
+        "ASC NULLS LAST"
+    };
     format!("{expr} {dir}, i.created_at DESC")
 }
 
@@ -1165,12 +1181,17 @@ pub async fn cycle_issues_list(
     // `issue.py:145-150`: group_by == sub_group_by → 400.
     if let (Some(g), Some(s)) = (q.group_by.as_deref(), q.sub_group_by.as_deref()) {
         if !g.is_empty() && g == s {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": GROUP_DUP_MSG}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": GROUP_DUP_MSG})),
+            ));
         }
     }
     // Group-by allowlist inside `paginate()` (`paginator.py:690-699`):
     // invalid fields 400 byte-exact (`{"detail"}`).
-    if let Some(msg) = archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref()) {
+    if let Some(msg) =
+        archive_group_by_allowlist_error(q.group_by.as_deref(), q.sub_group_by.as_deref())
+    {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
     }
     // Cursor/per_page mirror `BasePaginator` (`paginator.py:643-653,677-681`,
@@ -1295,7 +1316,10 @@ pub async fn cycle_issues_list(
         total_pages: pages,
         total_results: total,
         extra_stats: None,
-        results: rows.iter().map(|r| serde_json::to_value(r).unwrap_or(Value::Null)).collect(),
+        results: rows
+            .iter()
+            .map(|r| serde_json::to_value(r).unwrap_or(Value::Null))
+            .collect(),
     };
     Ok((StatusCode::OK, Json(json!(env))))
 }
@@ -1415,10 +1439,12 @@ pub async fn cycle_issue_detail(
     if role.is_none() {
         return Ok(missing());
     }
-    let archived: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND archived_at IS NOT NULL)")
-        .bind(pid)
-        .fetch_one(&st.pool)
-        .await?;
+    let archived: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND archived_at IS NOT NULL)",
+    )
+    .bind(pid)
+    .fetch_one(&st.pool)
+    .await?;
     if archived {
         return Ok(missing());
     }
@@ -1461,7 +1487,17 @@ async fn cycle_issue_full_json(
     .bind(iid)
     .fetch_optional(pool)
     .await?;
-    let Some((id, created_at, updated_at, created_by, updated_by, workspace_id, project_id, cycle_id, issue_id)) = ci
+    let Some((
+        id,
+        created_at,
+        updated_at,
+        created_by,
+        updated_by,
+        workspace_id,
+        project_id,
+        cycle_id,
+        issue_id,
+    )) = ci
     else {
         return Ok(None);
     };
@@ -1719,7 +1755,9 @@ async fn grouped_cycle_response(
     page: i128,
     order: &str,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    use grouped::{ScanRow, group_universe, grouped_envelope, plan_grouped, scan_universe, SCAN_DERIVED_FIELDS};
+    use grouped::{
+        group_universe, grouped_envelope, plan_grouped, scan_universe, ScanRow, SCAN_DERIVED_FIELDS,
+    };
     const BASE: &str = "FROM issues i JOIN cycle_issues ci ON ci.issue_id = i.id AND ci.cycle_id = $1 AND ci.deleted_at IS NULL LEFT JOIN states s ON s.id = i.state_id WHERE i.project_id = $2 AND i.deleted_at IS NULL";
     const KEYS: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci2.cycle_id::text FROM cycle_issues ci2 WHERE ci2.issue_id = i.id AND ci2.deleted_at IS NULL ORDER BY ci2.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date ";
     // Twin of the flat row SELECT above (shared 26-col shape + id filter).
@@ -1740,14 +1778,20 @@ async fn grouped_cycle_response(
         group_universe(pool, group, slug, Some(pid)).await?
     };
     let Some(plan) = plan_grouped(&scan, group, sub, &universe, limit, page) else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": "Error in parsing"})),
+        ));
     };
     let page_ids: Vec<uuid::Uuid> = plan
         .buckets
         .iter()
         .flat_map(|b| {
             if sub.is_some() {
-                b.subs.iter().flat_map(|s| s.page_ids.iter().cloned()).collect::<Vec<_>>()
+                b.subs
+                    .iter()
+                    .flat_map(|s| s.page_ids.iter().cloned())
+                    .collect::<Vec<_>>()
             } else {
                 b.page_ids.clone()
             }
@@ -1755,18 +1799,25 @@ async fn grouped_cycle_response(
         .collect();
     let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
     if !page_ids.is_empty() {
-        let rows: Vec<super::issue_common::ArchiveRow> =
-            sqlx::query_as(&format!("{rows_select}"))
-                .bind(cid)
-                .bind(pid)
-                .bind(&page_ids)
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<super::issue_common::ArchiveRow> = sqlx::query_as(&format!("{rows_select}"))
+            .bind(cid)
+            .bind(pid)
+            .bind(&page_ids)
+            .fetch_all(pool)
+            .await?;
         for r in &rows {
             rows_by_id.insert(r.id, serde_json::to_value(r).unwrap_or(Value::Null));
         }
     }
-    let env = grouped_envelope(group, sub, scan.len() as i64, limit, page, &plan, &rows_by_id);
+    let env = grouped_envelope(
+        group,
+        sub,
+        scan.len() as i64,
+        limit,
+        page,
+        &plan,
+        &rows_by_id,
+    );
     Ok((StatusCode::OK, Json(env)))
 }
 
@@ -1881,11 +1932,10 @@ pub async fn fav_list(
     .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(json!(
-        rows.into_iter()
-            .map(|(id, cycle)| json!({"id": id, "cycle": cycle}))
-            .collect::<Vec<_>>()
-    )))
+    Ok(Json(json!(rows
+        .into_iter()
+        .map(|(id, cycle)| json!({"id": id, "cycle": cycle}))
+        .collect::<Vec<_>>())))
 }
 
 pub async fn fav_create(
@@ -1967,7 +2017,10 @@ pub async fn fav_destroy(
 // E2f — transfer issues.
 // ============================================================================
 
-async fn project_has_points_estimate(pool: &sqlx::PgPool, pid: uuid::Uuid) -> Result<bool, sqlx::Error> {
+async fn project_has_points_estimate(
+    pool: &sqlx::PgPool,
+    pid: uuid::Uuid,
+) -> Result<bool, sqlx::Error> {
     // `cycle_transfer_issues.py:151-156` (`estimate__type="points"`).
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 \
@@ -2341,10 +2394,7 @@ pub async fn transfer(
         .await?;
     // `cycle_transfer_issues.py:61-65`.
     if let Err(e) = guard_transfer_target(target_end, now) {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e})),
-        ));
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let src: Option<SrcCycleRow> = sqlx::query_as(
         "SELECT c.workspace_id, c.start_date, c.end_date FROM cycles c \
@@ -2507,7 +2557,10 @@ pub async fn archived_list(
     .await?;
     Ok((
         StatusCode::OK,
-        Json(json!(rows.iter().map(archived_list_json).collect::<Vec<_>>())),
+        Json(json!(rows
+            .iter()
+            .map(archived_list_json)
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -2549,8 +2602,7 @@ pub async fn archived_detail(
     let issues_chart =
         completion_chart(&st.pool, pk, pid, ws_id, cyc_start, cyc_end, false).await?;
     let estimate_distribution = if estimate_type {
-        let chart_p =
-            completion_chart(&st.pool, pk, pid, ws_id, cyc_start, cyc_end, true).await?;
+        let chart_p = completion_chart(&st.pool, pk, pid, ws_id, cyc_start, cyc_end, true).await?;
         json!({"assignees": [], "labels": [], "completion_chart": chart_p})
     } else {
         json!({})
@@ -2619,7 +2671,10 @@ pub async fn archive(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok((StatusCode::OK, Json(json!({"archived_at": format_archived_at(now)}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"archived_at": format_archived_at(now)})),
+    ))
 }
 
 pub async fn unarchive(
@@ -2752,7 +2807,9 @@ pub async fn progress(
     };
     // `base.py:712-765`: snapshot counts win when the snapshot is truthy.
     let snap_obj = snap.as_object();
-    let snap_live = snap_obj.map(|o| o.contains_key("total_issues")).unwrap_or(false);
+    let snap_live = snap_obj
+        .map(|o| o.contains_key("total_issues"))
+        .unwrap_or(false);
     let (backlog, unstarted, started, cancelled, completed, total) = if snap_live {
         let g = |k: &str| snap.get(k).and_then(Value::as_i64).unwrap_or(0);
         (
@@ -2814,17 +2871,16 @@ pub async fn analytics(
     }
     // Django crashes on a missing cycle (`None.start_date`); sane 404
     // (documented normalize-crash).
-    let cyc: Option<AnalyticsCycleRow> =
-        sqlx::query_as(
-            "SELECT c.start_date, c.end_date, c.progress_snapshot, c.workspace_id \
+    let cyc: Option<AnalyticsCycleRow> = sqlx::query_as(
+        "SELECT c.start_date, c.end_date, c.progress_snapshot, c.workspace_id \
              FROM cycles c JOIN workspaces w ON w.id = c.workspace_id \
              WHERE c.id = $1 AND c.project_id = $2 AND w.slug = $3 AND c.deleted_at IS NULL",
-        )
-        .bind(cid)
-        .bind(pid)
-        .bind(&slug)
-        .fetch_optional(&st.pool)
-        .await?;
+    )
+    .bind(cid)
+    .bind(pid)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
     let Some((start, end, snap, ws_id)) = cyc else {
         return Ok((
             StatusCode::NOT_FOUND,
@@ -3045,9 +3101,18 @@ mod cycle_e2_tests {
         // Mirrors the Case (`base.py:153-167`): now-in-PROJECT-tz vs
         // start/end; both-null → DRAFT; partial-null → default DRAFT.
         let now = dt(2026, 6, 15);
-        assert_eq!(cycle_status(Some(dt(2026, 6, 1)), Some(dt(2026, 6, 30)), now), "CURRENT");
-        assert_eq!(cycle_status(Some(dt(2026, 7, 1)), Some(dt(2026, 7, 31)), now), "UPCOMING");
-        assert_eq!(cycle_status(Some(dt(2026, 5, 1)), Some(dt(2026, 5, 31)), now), "COMPLETED");
+        assert_eq!(
+            cycle_status(Some(dt(2026, 6, 1)), Some(dt(2026, 6, 30)), now),
+            "CURRENT"
+        );
+        assert_eq!(
+            cycle_status(Some(dt(2026, 7, 1)), Some(dt(2026, 7, 31)), now),
+            "UPCOMING"
+        );
+        assert_eq!(
+            cycle_status(Some(dt(2026, 5, 1)), Some(dt(2026, 5, 31)), now),
+            "COMPLETED"
+        );
         assert_eq!(cycle_status(None, None, now), "DRAFT");
         assert_eq!(cycle_status(Some(dt(2026, 6, 1)), None, now), "DRAFT");
         assert_eq!(cycle_status(None, Some(dt(2026, 6, 30)), now), "DRAFT");
@@ -3059,10 +3124,30 @@ mod cycle_e2_tests {
     fn date_check_overlap_returns_200_status_false() {
         // `base.py:548-554`: overlap → **200** (NOT 4xx) with the verbatim
         // error + status:false; no overlap → 200 status:true.
-        assert!(cycles_overlap(dt(2026, 6, 1), dt(2026, 6, 30), dt(2026, 6, 15), dt(2026, 7, 15)));
-        assert!(cycles_overlap(dt(2026, 6, 1), dt(2026, 6, 30), dt(2026, 5, 1), dt(2026, 6, 1)));
-        assert!(cycles_overlap(dt(2026, 6, 10), dt(2026, 6, 12), dt(2026, 6, 1), dt(2026, 6, 30)));
-        assert!(!cycles_overlap(dt(2026, 6, 1), dt(2026, 6, 30), dt(2026, 7, 1), dt(2026, 7, 31)));
+        assert!(cycles_overlap(
+            dt(2026, 6, 1),
+            dt(2026, 6, 30),
+            dt(2026, 6, 15),
+            dt(2026, 7, 15)
+        ));
+        assert!(cycles_overlap(
+            dt(2026, 6, 1),
+            dt(2026, 6, 30),
+            dt(2026, 5, 1),
+            dt(2026, 6, 1)
+        ));
+        assert!(cycles_overlap(
+            dt(2026, 6, 10),
+            dt(2026, 6, 12),
+            dt(2026, 6, 1),
+            dt(2026, 6, 30)
+        ));
+        assert!(!cycles_overlap(
+            dt(2026, 6, 1),
+            dt(2026, 6, 30),
+            dt(2026, 7, 1),
+            dt(2026, 7, 31)
+        ));
         let (code, body) = date_check_result(true);
         assert_eq!(code, StatusCode::OK);
         assert_eq!(body.get("status"), Some(&json!(false)));
@@ -3082,14 +3167,23 @@ mod cycle_e2_tests {
         assert!(sql.contains("THEN now()"), "same-day start stores now()");
         assert!(sql.contains("00:00:01"), "start-of-day rule present");
         assert!(sql.contains("23:59:00"), "end-of-day rule present");
-        assert!(sql.contains("AT TIME ZONE"), "project-tz conversion present");
+        assert!(
+            sql.contains("AT TIME ZONE"),
+            "project-tz conversion present"
+        );
         // Decision bit on top of the SQL rule:
         assert!(convert_start_is_today("2026-06-15", "2026-06-15"));
         assert!(!convert_start_is_today("2026-06-14", "2026-06-15"));
         assert!(!convert_start_is_today("2026-06-16", "2026-06-15"));
         // Date-part extraction discards input times (`serializers/cycle.py:30`).
-        assert_eq!(extract_date_part("2026-06-15T10:30:00Z"), Some("2026-06-15".to_string()));
-        assert_eq!(extract_date_part("2026-06-15"), Some("2026-06-15".to_string()));
+        assert_eq!(
+            extract_date_part("2026-06-15T10:30:00Z"),
+            Some("2026-06-15".to_string())
+        );
+        assert_eq!(
+            extract_date_part("2026-06-15"),
+            Some("2026-06-15".to_string())
+        );
         assert_eq!(extract_date_part("not-a-date"), None);
         assert_eq!(extract_date_part("2026-13-40"), None);
     }
@@ -3098,8 +3192,7 @@ mod cycle_e2_tests {
     fn transfer_guards_behavior() {
         // `base.py:597-603`: missing/unparseable `new_cycle_id` parses to
         // None (the handler then 400s `TRANSFER_TARGET_REQUIRED_MSG`).
-        let parse_target =
-            |v: Option<&str>| v.and_then(|s| s.parse::<uuid::Uuid>().ok());
+        let parse_target = |v: Option<&str>| v.and_then(|s| s.parse::<uuid::Uuid>().ok());
         assert!(parse_target(None).is_none());
         assert!(parse_target(Some("not-a-uuid")).is_none());
         assert!(parse_target(Some("123e4567-e89b-12d3-a456-426614174000")).is_some());
@@ -3113,10 +3206,7 @@ mod cycle_e2_tests {
         assert!(guard_transfer_target(Some(dt(2026, 7, 1)), now).is_ok());
         assert!(guard_transfer_target(None, now).is_ok());
         // `issue.py:227-228` via the real guard: empty list → 400 verbatim.
-        assert_eq!(
-            guard_issues_present(0).unwrap_err(),
-            ISSUES_REQUIRED_MSG
-        );
+        assert_eq!(guard_issues_present(0).unwrap_err(), ISSUES_REQUIRED_MSG);
         assert!(guard_issues_present(3).is_ok());
         // `issue.py:232-236` via the real guard: completed cycle → 400 verbatim.
         assert_eq!(
@@ -3157,10 +3247,7 @@ mod cycle_e2_tests {
             DATECHECK_REQUIRED_MSG
         );
         assert!(guard_datecheck_present(true, true).is_ok());
-        assert_eq!(
-            guard_cycle_dated(true, false).unwrap_err(),
-            NO_DATES_MSG
-        );
+        assert_eq!(guard_cycle_dated(true, false).unwrap_err(), NO_DATES_MSG);
         assert!(guard_cycle_dated(true, true).is_ok());
         // Overlap-miss message surfaces through the real response builder.
         let (code, body) = date_check_result(true);
@@ -3238,7 +3325,7 @@ mod cycle_e2_tests {
         assert!(v.get("2020-01-01").is_some());
         assert!(v.get("2022-01-02").is_some()); // start + 732d
         assert!(v.get("2022-01-03").is_none()); // clamped away
-        // A range exactly at the cap is untouched.
+                                                // A range exactly at the cap is untouched.
         let end = start + chrono::Duration::days(732);
         let v = burndown_chart(start, end, today, 5.0, &done, true);
         assert_eq!(v.as_object().map(|o| o.len()), Some(733));
@@ -3264,9 +3351,21 @@ mod cycle_e2_tests {
     fn fold_group_counts_maps_buckets_and_ignores_null_group() {
         // Pure fold behind the single-`GROUP BY` `group_counts` helper.
         let rows = vec![
-            GroupCountRow { total: 7, g: Some("completed".to_string()), n: 3 },
-            GroupCountRow { total: 7, g: Some("backlog".to_string()), n: 2 },
-            GroupCountRow { total: 7, g: None, n: 2 }, // stateless: total only
+            GroupCountRow {
+                total: 7,
+                g: Some("completed".to_string()),
+                n: 3,
+            },
+            GroupCountRow {
+                total: 7,
+                g: Some("backlog".to_string()),
+                n: 2,
+            },
+            GroupCountRow {
+                total: 7,
+                g: None,
+                n: 2,
+            }, // stateless: total only
         ];
         let c = fold_group_counts(&rows);
         assert_eq!(

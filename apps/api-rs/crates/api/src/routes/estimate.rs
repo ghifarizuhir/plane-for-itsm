@@ -121,7 +121,11 @@ async fn gate_estimate_read(
 ) -> Result<bool, sqlx::Error> {
     let role = fetch_project_member_role(pool, user, slug, pid).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(role.is_some(), role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        role.is_some(),
+        role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// `ProjectEntityPermission` unsafe branch (writes): ADMIN/MEMBER only.
@@ -133,7 +137,11 @@ async fn gate_estimate_write(
 ) -> Result<bool, sqlx::Error> {
     let role = fetch_project_member_role(pool, user, slug, pid).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(matches!(role, Some(20) | Some(15)), role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        matches!(role, Some(20) | Some(15)),
+        role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// Mirrors `EstimatePointSerializer.validate`:
@@ -242,27 +250,46 @@ pub async fn create(
         .or_else(|| body.get("type").and_then(Value::as_str))
         .unwrap_or("categories");
     if name.trim().is_empty() && !nested {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "name is required"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "name is required"})),
+        ));
     }
     if estimate_type != "categories" && estimate_type != "points" {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "type must be one of: categories, points"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "type must be one of: categories, points"})),
+        ));
     }
     let final_name = if name.trim().is_empty() {
-        format!("estimate-{}", &uuid::Uuid::new_v4().simple().to_string()[..10])
+        format!(
+            "estimate-{}",
+            &uuid::Uuid::new_v4().simple().to_string()[..10]
+        )
     } else {
         name
     };
     if final_name.chars().count() > 255 {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "name max length 255"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "name max length 255"})),
+        ));
     }
-    let last_used = estimate_node.and_then(|e| e.get("last_used")).and_then(Value::as_bool).unwrap_or(false);
+    let last_used = estimate_node
+        .and_then(|e| e.get("last_used"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     // Bulk points use serializer defaults (`key=0`, `value=""`,
     // `base.py:83-96`); over-long values 400 like the single-point rule
     // (`serializers/estimate.py:20-32` validate).
     let mut points: Vec<(i32, String, String)> = Vec::new();
     if let Some(arr) = body.get("estimate_points").and_then(Value::as_array) {
         for p in arr {
-            let value = p.get("value").and_then(Value::as_str).unwrap_or("").to_string();
+            let value = p
+                .get("value")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             if value.chars().count() > 20 {
                 return Ok((
                     StatusCode::BAD_REQUEST,
@@ -270,7 +297,11 @@ pub async fn create(
                 ));
             }
             let key = p.get("key").and_then(Value::as_i64).unwrap_or(0) as i32;
-            let description = p.get("description").and_then(Value::as_str).unwrap_or("").to_string();
+            let description = p
+                .get("description")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             points.push((key, value, description));
         }
     }
@@ -293,7 +324,10 @@ pub async fn create(
         ));
     }
     let workspace_id: Option<uuid::Uuid> =
-        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1").bind(&slug).fetch_optional(&st.pool).await?;
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(workspace_id) = workspace_id else {
         return Ok(missing());
     };
@@ -331,7 +365,11 @@ pub async fn create(
 pub async fn create_point(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<CreateEstimatePoint>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `create` (`base.py:154`): ADMIN/MEMBER (permission classes
@@ -356,7 +394,10 @@ pub async fn create_point(
     .fetch_optional(&st.pool)
     .await?;
     if estimate.is_none() {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Estimate not found"})),
+        ));
     }
 
     let row: EstimatePointFull = sqlx::query_as(&format!(
@@ -395,7 +436,11 @@ pub struct PatchEstimate {
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `retrieve` (`base.py:103-106`): `ProjectEntityPermission`
     // (permission classes run BEFORE the body, so a non-member 403s even
@@ -422,7 +467,11 @@ pub async fn detail(
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchEstimate>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `partial_update` (`base.py:109`): ADMIN/MEMBER writes
@@ -446,12 +495,18 @@ pub async fn patch(
     }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid name"})),
+            ));
         }
     }
     if let Some(t) = &body.estimate_type {
         if t != "categories" && t != "points" {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid estimate type"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid estimate type"})),
+            ));
         }
     }
     // A rename that collides hits the partial unique constraint →
@@ -519,7 +574,11 @@ pub async fn patch(
 pub async fn destroy(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, estimate_id)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `destroy` (`base.py:146-150`): ADMIN/MEMBER writes
     // (permission classes first → miss+non-member is 403, not 404).
@@ -594,7 +653,10 @@ pub async fn patch_point(
     .await?
     .rows_affected();
     if n == 0 {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate point not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Estimate point not found"})),
+        ));
     }
     // Django returns 200 full `EstimatePointSerializer`.
     let row: Option<EstimatePointFull> = sqlx::query_as(&format!(
@@ -605,7 +667,10 @@ pub async fn patch_point(
     .await?;
     match row {
         Some(p) => Ok((StatusCode::OK, Json(point_json(&p)))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate point not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Estimate point not found"})),
+        )),
     }
 }
 
@@ -642,11 +707,15 @@ pub async fn destroy_point(
         .fetch_optional(&st.pool)
         .await?;
     let Some(old_key) = old_key else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Estimate point not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Estimate point not found"})),
+        ));
     };
-    let new_point = body.get("new_estimate_id").and_then(|v| v.as_str()).and_then(
-        |s| uuid::Uuid::parse_str(s).ok(),
-    );
+    let new_point = body
+        .get("new_estimate_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
     sqlx::query("UPDATE issues SET estimate_point_id = $1 WHERE estimate_point_id = $2")
         .bind(new_point)
         .bind(point_id)
@@ -674,7 +743,10 @@ pub async fn destroy_point(
     .bind(old_key)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(point_json).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(point_json).collect::<Vec<_>>())),
+    ))
 }
 
 /// Empty-body helper for `project_estimates` below, mirroring
@@ -800,30 +872,24 @@ mod tests {
     fn point_create_rejects_falsy_key_like_django() {
         // Django `create` (`base.py:157-161`): `not request.data.get("key")`
         // — missing AND `0` both 400 (single-create only).
-        assert!(
-            validate_point_create(&CreateEstimatePoint {
-                key: Some(0),
-                value: Some("x".to_string()),
-                description: None,
-            })
-            .is_err()
-        );
-        assert!(
-            validate_point_create(&CreateEstimatePoint {
-                key: None,
-                value: Some("x".to_string()),
-                description: None,
-            })
-            .is_err()
-        );
-        assert!(
-            validate_point_create(&CreateEstimatePoint {
-                key: Some(1),
-                value: Some("x".to_string()),
-                description: None,
-            })
-            .is_ok()
-        );
+        assert!(validate_point_create(&CreateEstimatePoint {
+            key: Some(0),
+            value: Some("x".to_string()),
+            description: None,
+        })
+        .is_err());
+        assert!(validate_point_create(&CreateEstimatePoint {
+            key: None,
+            value: Some("x".to_string()),
+            description: None,
+        })
+        .is_err());
+        assert!(validate_point_create(&CreateEstimatePoint {
+            key: Some(1),
+            value: Some("x".to_string()),
+            description: None,
+        })
+        .is_ok());
     }
 
     #[test]

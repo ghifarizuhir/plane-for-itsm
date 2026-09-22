@@ -3,14 +3,14 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{middleware::auth::AuthUser, state::AppState};
 use crate::routes::issue_common::{
-    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-    total_pages, DetailEnvelope, PageWindow,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+    DetailEnvelope, PageWindow,
 };
 use crate::routes::member::deny_detail;
 use crate::routes::page::{clean_description_html, decode_description_binary, strip_tags_text};
 use crate::routes::project::{deny, missing, ws_role};
+use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Sweep-up for the small URL modules:
 /// - `GET /api/timezones/` (plane/app/urls/timezone.py:TimezoneEndpoint,
@@ -61,7 +61,11 @@ pub async fn timezones() -> Json<Value> {
         .into_iter()
         .filter_map(|v| {
             let value = v.get("value")?.as_str()?.to_string();
-            let label = v.get("label").and_then(Value::as_str).unwrap_or("").to_string();
+            let label = v
+                .get("label")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             let tz: chrono_tz::Tz = value.parse().ok()?;
             let off = {
                 use chrono::Offset as _;
@@ -134,7 +138,10 @@ pub async fn create_export(
     .bind(&slug)
     .execute(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!({"message": "Once the export is ready you will be able to download it"}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"message": "Once the export is ready you will be able to download it"})),
+    ))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -204,8 +211,8 @@ pub async fn export_history(
     axum::extract::Query(q): axum::extract::Query<ExportHistoryQuery>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     use crate::routes::issue_common::{
-        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-        total_pages, DetailEnvelope, PageWindow,
+        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+        DetailEnvelope, PageWindow,
     };
     // ADMIN/MEMBER at WORKSPACE level (`exporter/base.py:67`).
     match crate::routes::project::ws_role(&st.pool, auth.0, &slug).await? {
@@ -213,7 +220,10 @@ pub async fn export_history(
         _ => return Ok(crate::routes::project::deny()),
     }
     if q.per_page.is_none() || q.cursor.is_none() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "per_page and cursor are required"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "per_page and cursor are required"})),
+        ));
     }
     let limit = match parse_per_page(q.per_page.map(|v| v.to_string()).as_deref()) {
         Ok(v) => v,
@@ -225,7 +235,12 @@ pub async fn export_history(
     };
     let window = match page_window(cursor.page, limit) {
         Ok(w) => w,
-        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Err(()) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"detail": "Error in parsing"})),
+            ))
+        }
     };
     // `order_by` passthrough, default `-created_at` (`base.py:73-80`).
     let order_raw = q.order_by.as_deref().unwrap_or("-created_at");
@@ -300,7 +315,8 @@ pub struct CreateApiToken {
 
 /// Columns for the read shape; kept in sync with Django's
 /// `APITokenReadSerializer` (all model fields except the secret `token`).
-const API_TOKEN_READ_COLUMNS: &str = "id, label, description, last_used, user_type, created_by_id, \
+const API_TOKEN_READ_COLUMNS: &str =
+    "id, label, description, last_used, user_type, created_by_id, \
     updated_by_id, user_id, workspace_id, expired_at, is_service, allowed_rate_limit, \
     created_at, updated_at, deleted_at";
 
@@ -372,7 +388,9 @@ pub async fn list_tokens(
         .fetch_all(&st.pool)
         .await?;
     let now = Utc::now();
-    Ok(Json(rows.iter().map(|t| api_token_read_json(t, now)).collect()))
+    Ok(Json(
+        rows.iter().map(|t| api_token_read_json(t, now)).collect(),
+    ))
 }
 
 pub async fn create_token(
@@ -404,7 +422,10 @@ pub async fn create_token(
         .bind(user)
         .fetch_one(&st.pool)
         .await?;
-    Ok((StatusCode::CREATED, Json(api_token_created_json(&row, &secret, Utc::now()))))
+    Ok((
+        StatusCode::CREATED,
+        Json(api_token_created_json(&row, &secret, Utc::now())),
+    ))
 }
 
 pub async fn get_token(
@@ -413,7 +434,10 @@ pub async fn get_token(
     axum::extract::Path(pk): axum::extract::Path<uuid::Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let user = auth.0;
-    let sql = format!("{} AND user_id = $2 AND is_service = false AND deleted_at IS NULL", read_token_by_id_query());
+    let sql = format!(
+        "{} AND user_id = $2 AND is_service = false AND deleted_at IS NULL",
+        read_token_by_id_query()
+    );
     let row: Option<common::models::misc::ApiToken> = sqlx::query_as(&sql)
         .bind(pk)
         .bind(user)
@@ -421,7 +445,10 @@ pub async fn get_token(
         .await?;
     match row {
         Some(t) => Ok((StatusCode::OK, Json(api_token_read_json(&t, Utc::now())))),
-        None => Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Token not found"})))),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Token not found"})),
+        )),
     }
 }
 
@@ -531,7 +558,10 @@ pub async fn list_stickies(
     let window = match page_window(cursor.page, limit) {
         Ok(w) => w,
         Err(()) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"detail": "Error in parsing"})),
+            ));
         }
     };
     let search = q.query.unwrap_or_default();
@@ -546,19 +576,21 @@ pub async fn list_stickies(
     .fetch_one(&st.pool)
     .await?;
     let mut rows: Vec<StickyRow> = match window {
-        PageWindow::Rows(offset) => sqlx::query_as(&format!(
-            "SELECT {STICKY_COLS} FROM stickies s JOIN workspaces w ON w.id = s.workspace_id \
+        PageWindow::Rows(offset) => {
+            sqlx::query_as(&format!(
+                "SELECT {STICKY_COLS} FROM stickies s JOIN workspaces w ON w.id = s.workspace_id \
              WHERE w.slug = $1 AND s.owner_id = $2 AND s.deleted_at IS NULL \
              AND ($3 = '' OR s.description_stripped ILIKE '%' || $3 || '%') \
              ORDER BY s.sort_order DESC, s.created_at DESC LIMIT $4 OFFSET $5",
-        ))
-        .bind(&slug)
-        .bind(auth.0)
-        .bind(&search)
-        .bind(limit + 1)
-        .bind(offset)
-        .fetch_all(&st.pool)
-        .await?,
+            ))
+            .bind(&slug)
+            .bind(auth.0)
+            .bind(&search)
+            .bind(limit + 1)
+            .bind(offset)
+            .fetch_all(&st.pool)
+            .await?
+        }
         PageWindow::BeyondEnd => Vec::new(),
     };
     let next_page_results = rows.len() as i64 > limit;
@@ -585,20 +617,33 @@ pub async fn list_stickies(
 /// is not valid"}`; bad binary → `{"description_binary": [...]}` (page
 /// wire rules). Returns the cleaned (html, binary) pair.
 fn clean_sticky_body(body: &Value) -> Result<(String, Option<Vec<u8>>), (StatusCode, Json<Value>)> {
-    let raw_html = body.get("description_html").and_then(Value::as_str).unwrap_or("<p></p>");
-    let html = clean_description_html(raw_html)
-        .map_err(|_| (StatusCode::BAD_REQUEST, Json(json!({"error": "html content is not valid"}))))?;
+    let raw_html = body
+        .get("description_html")
+        .and_then(Value::as_str)
+        .unwrap_or("<p></p>");
+    let html = clean_description_html(raw_html).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "html content is not valid"})),
+        )
+    })?;
     let binary: Option<Vec<u8>> = match body.get("description_binary") {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) => match decode_description_binary(s) {
             Ok(b) if b.is_empty() && s.is_empty() => None,
             Ok(b) => Some(b),
             Err(e) => {
-                return Err((StatusCode::BAD_REQUEST, Json(json!({"description_binary": [e]}))));
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"description_binary": [e]})),
+                ));
             }
         },
         Some(_) => {
-            return Err((StatusCode::BAD_REQUEST, Json(json!({"description_binary": ["Invalid binary data"]}))));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"description_binary": ["Invalid binary data"]})),
+            ));
         }
     };
     Ok((html, binary))
@@ -635,7 +680,11 @@ pub async fn create_sticky(
     .bind(body.get("name").and_then(Value::as_str))
     .bind(body.get("description").cloned().unwrap_or(json!({})))
     .bind(&html)
-    .bind(if stripped.is_empty() { None } else { Some(stripped) })
+    .bind(if stripped.is_empty() {
+        None
+    } else {
+        Some(stripped)
+    })
     .bind(&binary)
     .bind(body.get("logo_props").cloned())
     .bind(body.get("color").and_then(Value::as_str))
@@ -667,9 +716,7 @@ async fn fetch_owned_sticky(
     .bind(pk)
     .fetch_optional(pool)
     .await
-    .map(|row: Option<StickyRow>| {
-        row.filter(|r| r.owner_id == user)
-    })
+    .map(|row: Option<StickyRow>| row.filter(|r| r.owner_id == user))
 }
 
 pub async fn get_sticky(
@@ -729,11 +776,17 @@ pub async fn patch_sticky(
         Some(Value::String(s)) => match clean_description_html(s) {
             Ok(h) => h,
             Err(_) => {
-                return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "html content is not valid"}))));
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "html content is not valid"})),
+                ));
             }
         },
         Some(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "html content is not valid"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "html content is not valid"})),
+            ));
         }
     };
     let binary: Option<Vec<u8>> = match body.get("description_binary") {
@@ -742,11 +795,17 @@ pub async fn patch_sticky(
             Ok(b) if b.is_empty() && s.is_empty() => None,
             Ok(b) => Some(b),
             Err(e) => {
-                return Ok((StatusCode::BAD_REQUEST, Json(json!({"description_binary": [e]}))));
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"description_binary": [e]})),
+                ));
             }
         },
         Some(_) => {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"description_binary": ["Invalid binary data"]}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"description_binary": ["Invalid binary data"]})),
+            ));
         }
     };
     let stripped = strip_tags_text(&html);
@@ -762,7 +821,11 @@ pub async fn patch_sticky(
     .bind(body.get("name").and_then(Value::as_str))
     .bind(body.get("description").cloned())
     .bind(&html)
-    .bind(if stripped.is_empty() { None } else { Some(stripped) })
+    .bind(if stripped.is_empty() {
+        None
+    } else {
+        Some(stripped)
+    })
     .bind(&binary)
     .bind(body.get("logo_props").cloned())
     .bind(body.get("color").and_then(Value::as_str))

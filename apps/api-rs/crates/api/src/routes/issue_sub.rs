@@ -2,10 +2,9 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::issue_common::{detail_order_expr, fetch_project_member_role, sanitize_order_by};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
-use super::issue_common::{detail_order_expr, fetch_project_member_role, sanitize_order_by};
-
 
 // ---- Batch C I5 ----
 

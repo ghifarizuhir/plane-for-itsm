@@ -75,12 +75,48 @@ pub(crate) struct SeedState {
 }
 
 pub(crate) const DEFAULT_STATES_SEED: &[SeedState] = &[
-    SeedState { name: "Backlog", color: "#60646C", sequence: 15000.0, group: "backlog", default: true },
-    SeedState { name: "Todo", color: "#60646C", sequence: 25000.0, group: "unstarted", default: false },
-    SeedState { name: "In Progress", color: "#F59E0B", sequence: 35000.0, group: "started", default: false },
-    SeedState { name: "Done", color: "#46A758", sequence: 45000.0, group: "completed", default: false },
-    SeedState { name: "Cancelled", color: "#9AA4BC", sequence: 55000.0, group: "cancelled", default: false },
-    SeedState { name: "Triage", color: "#4E5355", sequence: 65000.0, group: "triage", default: false },
+    SeedState {
+        name: "Backlog",
+        color: "#60646C",
+        sequence: 15000.0,
+        group: "backlog",
+        default: true,
+    },
+    SeedState {
+        name: "Todo",
+        color: "#60646C",
+        sequence: 25000.0,
+        group: "unstarted",
+        default: false,
+    },
+    SeedState {
+        name: "In Progress",
+        color: "#F59E0B",
+        sequence: 35000.0,
+        group: "started",
+        default: false,
+    },
+    SeedState {
+        name: "Done",
+        color: "#46A758",
+        sequence: 45000.0,
+        group: "completed",
+        default: false,
+    },
+    SeedState {
+        name: "Cancelled",
+        color: "#9AA4BC",
+        sequence: 55000.0,
+        group: "cancelled",
+        default: false,
+    },
+    SeedState {
+        name: "Triage",
+        color: "#4E5355",
+        sequence: 65000.0,
+        group: "triage",
+        default: false,
+    },
 ];
 
 /// Mirrors `State.save` in `plane/db/models/state.py:117-118`
@@ -113,8 +149,8 @@ pub struct ProjectOut {
 }
 
 const FORBIDDEN: &[char] = &[
-    '&', '+', ',', ':', ';', '$', '^', '}', '{', '*', '=', '?', '@', '#', '|', '\'', '<', '>',
-    '.', '(', ')', '%', '!', '-', '/',
+    '&', '+', ',', ':', ';', '$', '^', '}', '{', '*', '=', '?', '@', '#', '|', '\'', '<', '>', '.',
+    '(', ')', '%', '!', '-', '/',
 ];
 
 fn has_forbidden(s: &str) -> bool {
@@ -195,7 +231,13 @@ pub async fn list(
         .bind(auth.0)
         .fetch_all(&st.pool)
         .await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(project_values_json).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(project_values_json)
+            .collect::<Vec<_>>())),
+    ))
 }
 
 /// The 21-key `.values()` row for the project list (`base.py:175-197`).
@@ -354,8 +396,24 @@ fn proj_lite_json(
 
 fn project_full_json(r: &ProjectFullRow) -> Value {
     let cover_image_url = r.cover_asset.clone().or(r.cover_image.clone());
-    let default_assignee = proj_lite_json(r.da_id, &r.da_first_name, &r.da_last_name, &r.da_avatar, &r.da_avatar_url, &r.da_is_bot, &r.da_display_name);
-    let project_lead = proj_lite_json(r.pl_id, &r.pl_first_name, &r.pl_last_name, &r.pl_avatar, &r.pl_avatar_url, &r.pl_is_bot, &r.pl_display_name);
+    let default_assignee = proj_lite_json(
+        r.da_id,
+        &r.da_first_name,
+        &r.da_last_name,
+        &r.da_avatar,
+        &r.da_avatar_url,
+        &r.da_is_bot,
+        &r.da_display_name,
+    );
+    let project_lead = proj_lite_json(
+        r.pl_id,
+        &r.pl_first_name,
+        &r.pl_last_name,
+        &r.pl_avatar,
+        &r.pl_avatar_url,
+        &r.pl_is_bot,
+        &r.pl_display_name,
+    );
     let mut o = serde_json::Map::with_capacity(41);
     o.insert("id".to_string(), json!(r.id));
     o.insert("created_at".to_string(), json!(r.created_at));
@@ -378,11 +436,23 @@ fn project_full_json(r: &ProjectFullRow) -> Value {
     o.insert("issue_views_view".to_string(), json!(r.issue_views_view));
     o.insert("page_view".to_string(), json!(r.page_view));
     o.insert("intake_view".to_string(), json!(r.intake_view));
-    o.insert("is_time_tracking_enabled".to_string(), json!(r.is_time_tracking_enabled));
-    o.insert("is_issue_type_enabled".to_string(), json!(r.is_issue_type_enabled));
-    o.insert("guest_view_all_features".to_string(), json!(r.guest_view_all_features));
+    o.insert(
+        "is_time_tracking_enabled".to_string(),
+        json!(r.is_time_tracking_enabled),
+    );
+    o.insert(
+        "is_issue_type_enabled".to_string(),
+        json!(r.is_issue_type_enabled),
+    );
+    o.insert(
+        "guest_view_all_features".to_string(),
+        json!(r.guest_view_all_features),
+    );
     o.insert("cover_image".to_string(), json!(r.cover_image));
-    o.insert("cover_image_asset".to_string(), json!(r.cover_image_asset_id));
+    o.insert(
+        "cover_image_asset".to_string(),
+        json!(r.cover_image_asset_id),
+    );
     o.insert("estimate".to_string(), json!(r.estimate_id));
     o.insert("archive_in".to_string(), json!(r.archive_in));
     o.insert("close_in".to_string(), json!(r.close_in));
@@ -399,7 +469,10 @@ fn project_full_json(r: &ProjectFullRow) -> Value {
     o.insert("members".to_string(), json!(r.member_ids));
     o.insert("cover_image_url".to_string(), json!(cover_image_url));
     o.insert("inbox_view".to_string(), json!(r.intake_view));
-    o.insert("next_work_item_sequence".to_string(), json!(r.next_work_item_sequence));
+    o.insert(
+        "next_work_item_sequence".to_string(),
+        json!(r.next_work_item_sequence),
+    );
     Value::Object(o)
 }
 
@@ -442,7 +515,12 @@ pub(crate) async fn fetch_project_full(
          LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
          WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
     );
-    sqlx::query_as(&sql).bind(pk).bind(&slug).bind(user).fetch_optional(pool).await
+    sqlx::query_as(&sql)
+        .bind(pk)
+        .bind(&slug)
+        .bind(user)
+        .fetch_optional(pool)
+        .await
 }
 
 /// 400 body for an unknown `project_lead`, mirroring implicit DRF FK
@@ -489,10 +567,7 @@ pub async fn create(
                 common::errors::AppError(anyhow::anyhow!("internal error"))
             })?;
         if !exists {
-            return Ok((
-                StatusCode::BAD_REQUEST,
-                Json(invalid_lead_body(&lead)),
-            ));
+            return Ok((StatusCode::BAD_REQUEST, Json(invalid_lead_body(&lead))));
         }
     }
     let ws_id: Option<(uuid::Uuid,)> =
@@ -767,11 +842,17 @@ pub async fn patch(
         return Ok(missing());
     };
     if let Err(e) = guard_patch(archived_at.is_some()) {
-        return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": e})),
+        ));
     }
     if let Some(name) = body.get("name").and_then(Value::as_str) {
         if name.trim().is_empty() || name.chars().count() > 255 || has_forbidden(name) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid name"})),
+            ));
         }
         let dup: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM projects WHERE workspace_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL)",
@@ -782,7 +863,10 @@ pub async fn patch(
         .fetch_one(&st.pool)
         .await?;
         if let Err(e) = guard_name_unique(dup) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"name": [e]}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"name": [e]})),
+            ));
         }
     }
     if let Some(identifier) = body.get("identifier").and_then(Value::as_str) {
@@ -802,7 +886,10 @@ pub async fn patch(
         .fetch_one(&st.pool)
         .await?;
         if let Err(e) = guard_identifier_unique(dup) {
-            return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"identifier": [e]}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"identifier": [e]})),
+            ));
         }
     }
     for key in ["project_lead", "default_assignee"] {
@@ -810,17 +897,21 @@ pub async fn patch(
             let id = uuid::Uuid::parse_str(id_str).ok();
             let exists = match id {
                 Some(id) => {
-                    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-                        .bind(id)
-                        .fetch_one(&st.pool)
-                        .await?
+                    sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)",
+                    )
+                    .bind(id)
+                    .fetch_one(&st.pool)
+                    .await?
                 }
                 None => false,
             };
             if !exists {
                 return Ok((
                     StatusCode::BAD_REQUEST,
-                    Json(json!({key: [format!("Invalid pk \"{id_str}\" - object does not exist.")]})),
+                    Json(
+                        json!({key: [format!("Invalid pk \"{id_str}\" - object does not exist.")]}),
+                    ),
                 ));
             }
         }
@@ -845,8 +936,14 @@ pub async fn patch(
     // deleted_at, audit ids) as one tx of small static UPDATEs.
     let mut tx = st.pool.begin().await?;
     if let Some(name) = body.get("name").and_then(Value::as_str) {
-        sqlx::query("UPDATE projects SET name = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
-            .bind(name).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        sqlx::query(
+            "UPDATE projects SET name = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3",
+        )
+        .bind(name)
+        .bind(auth.0)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(identifier) = body.get("identifier").and_then(Value::as_str) {
         let ident = identifier.trim().to_uppercase();
@@ -869,8 +966,11 @@ pub async fn patch(
             .bind(body.get("description_html").cloned()).bind(auth.0).bind(pk).execute(&mut *tx).await?;
     }
     for (key, col) in [
-        ("emoji", "emoji"), ("cover_image", "cover_image"), ("timezone", "timezone"),
-        ("external_source", "external_source"), ("external_id", "external_id"),
+        ("emoji", "emoji"),
+        ("cover_image", "cover_image"),
+        ("timezone", "timezone"),
+        ("external_source", "external_source"),
+        ("external_id", "external_id"),
     ] {
         if let Some(v) = body.get(key).and_then(Value::as_str) {
             sqlx::query(&format!("UPDATE projects SET {col} = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3"))
@@ -884,9 +984,12 @@ pub async fn patch(
         }
     }
     for (_key, col) in [
-        ("module_view", "module_view"), ("cycle_view", "cycle_view"),
-        ("issue_views_view", "issue_views_view"), ("page_view", "page_view"),
-        ("intake_view", "intake_view"), ("is_time_tracking_enabled", "is_time_tracking_enabled"),
+        ("module_view", "module_view"),
+        ("cycle_view", "cycle_view"),
+        ("issue_views_view", "issue_views_view"),
+        ("page_view", "page_view"),
+        ("intake_view", "intake_view"),
+        ("is_time_tracking_enabled", "is_time_tracking_enabled"),
         ("is_issue_type_enabled", "is_issue_type_enabled"),
         ("guest_view_all_features", "guest_view_all_features"),
     ] {
@@ -910,8 +1013,10 @@ pub async fn patch(
         }
     }
     for (key, col) in [
-        ("project_lead", "project_lead_id"), ("default_assignee", "default_assignee_id"),
-        ("estimate", "estimate_id"), ("default_state", "default_state_id"),
+        ("project_lead", "project_lead_id"),
+        ("default_assignee", "default_assignee_id"),
+        ("estimate", "estimate_id"),
+        ("default_state", "default_state_id"),
         ("cover_image_asset", "cover_image_asset_id"),
     ] {
         match body.get(key) {
@@ -931,11 +1036,19 @@ pub async fn patch(
         }
     }
     // `base.py:358-365`: truthy intake_view auto-creates the default Intake.
-    let intake_on = body.get("intake_view").and_then(Value::as_bool).unwrap_or(false)
-        || body.get("inbox_view").and_then(Value::as_bool).unwrap_or(false);
+    let intake_on = body
+        .get("intake_view")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || body
+            .get("inbox_view")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
     if intake_on {
         let pname: (String,) = sqlx::query_as("SELECT name FROM projects WHERE id = $1")
-            .bind(pk).fetch_one(&mut *tx).await?;
+            .bind(pk)
+            .fetch_one(&mut *tx)
+            .await?;
         sqlx::query(
             "INSERT INTO intakes (id, name, project_id, workspace_id, is_default, created_by_id, updated_by_id, created_at, updated_at) \
              SELECT gen_random_uuid(), $1, $2, $3, true, $4, $4, now(), now() \
@@ -980,14 +1093,18 @@ pub async fn destroy(
     if n == 0 {
         return Ok(missing());
     }
-    sqlx::query("UPDATE deploy_boards SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL")
-        .bind(pk)
-        .execute(&st.pool)
-        .await?;
-    sqlx::query("UPDATE user_favorites SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL")
-        .bind(pk)
-        .execute(&st.pool)
-        .await?;
+    sqlx::query(
+        "UPDATE deploy_boards SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    sqlx::query(
+        "UPDATE user_favorites SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
     Ok((StatusCode::NO_CONTENT, Json(serde_json::json!(null))))
 }
 
@@ -1114,9 +1231,7 @@ pub(crate) fn cover_image_url(
         }
         return None;
     }
-    cover_image
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+    cover_image.filter(|s| !s.is_empty()).map(|s| s.to_string())
 }
 
 /// One row of the `project_details` listing: all `projects` model columns
@@ -1204,7 +1319,10 @@ pub(crate) fn project_detail_json(row: &DetailRow, members: &[uuid::Uuid]) -> Va
     put("default_state", opt_id(&row.default_state_id));
     put("logo_props", json!(&row.logo_props));
     put("archived_at", json!(&row.archived_at));
-    put("is_time_tracking_enabled", json!(row.is_time_tracking_enabled));
+    put(
+        "is_time_tracking_enabled",
+        json!(row.is_time_tracking_enabled),
+    );
     put("is_issue_type_enabled", json!(row.is_issue_type_enabled));
     // Always null here: the listing query filters `deleted_at IS NULL`
     // (Django includes the field as null the same way).
@@ -1578,11 +1696,10 @@ pub async fn fav_list(
     .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
-    Ok(Json(json!(
-        rows.into_iter()
-            .map(|(id, project)| json!({"id": id, "project": project}))
-            .collect::<Vec<_>>()
-    )))
+    Ok(Json(json!(rows
+        .into_iter()
+        .map(|(id, project)| json!({"id": id, "project": project}))
+        .collect::<Vec<_>>())))
 }
 
 pub async fn fav_add(
@@ -1906,10 +2023,7 @@ mod batch_c_tests {
     fn default_states_seed_count() {
         // Source: `plane/db/models/state.py:24-66` (DEFAULT_STATES).
         assert_eq!(DEFAULT_STATES_SEED.len(), 6);
-        assert_eq!(
-            DEFAULT_STATES_SEED.iter().filter(|s| s.default).count(),
-            1
-        );
+        assert_eq!(DEFAULT_STATES_SEED.iter().filter(|s| s.default).count(), 1);
     }
 
     #[test]
@@ -1958,7 +2072,11 @@ mod batch_c_tests {
             Some(format!("/api/assets/v2/static/{asset}/"))
         );
         assert_eq!(
-            cover_image_url(Some(asset), Some("ISSUE_ATTACHMENT"), Some("https://x/y.png")),
+            cover_image_url(
+                Some(asset),
+                Some("ISSUE_ATTACHMENT"),
+                Some("https://x/y.png")
+            ),
             None
         );
         assert_eq!(

@@ -63,21 +63,40 @@ pub async fn change_password(
             .await
             .unwrap_or(None);
     let Some((autoset, hash)) = row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
     if !autoset {
         let Some(old) = body.old_password.as_deref().filter(|s| !s.is_empty()) else {
-            return (StatusCode::BAD_REQUEST, auth_error_payload(5138, "MISSING_PASSWORD", "Old password is missing"));
+            return (
+                StatusCode::BAD_REQUEST,
+                auth_error_payload(5138, "MISSING_PASSWORD", "Old password is missing"),
+            );
         };
         if !authn::verify_django_password(old, &hash) {
-            return (StatusCode::BAD_REQUEST, auth_error_payload(5135, "INCORRECT_OLD_PASSWORD", "Old password is not correct"));
+            return (
+                StatusCode::BAD_REQUEST,
+                auth_error_payload(
+                    5135,
+                    "INCORRECT_OLD_PASSWORD",
+                    "Old password is not correct",
+                ),
+            );
         }
     }
     let Some(new) = body.new_password.as_deref().filter(|s| !s.is_empty()) else {
-        return (StatusCode::BAD_REQUEST, auth_error_payload(5138, "MISSING_PASSWORD", "Old or new password is missing"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error_payload(5138, "MISSING_PASSWORD", "Old or new password is missing"),
+        );
     };
     if !password_strong_enough(new) {
-        return (StatusCode::BAD_REQUEST, auth_error(5021, "PASSWORD_TOO_WEAK"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5021, "PASSWORD_TOO_WEAK"),
+        );
     }
     let updated = sqlx::query("UPDATE users SET password = $1, is_password_autoset = false, updated_at = now() WHERE id = $2")
         .bind(authn::make_django_password(new))
@@ -85,9 +104,15 @@ pub async fn change_password(
         .execute(&st.pool)
         .await;
     if updated.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        );
     }
-    (StatusCode::OK, Json(json!({"message": "Password updated successfully"})))
+    (
+        StatusCode::OK,
+        Json(json!({"message": "Password updated successfully"})),
+    )
 }
 
 #[derive(Deserialize)]
@@ -116,16 +141,32 @@ pub async fn set_password(
             .await
             .unwrap_or(None);
     let Some((autoset,)) = row else {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "invalid credentials"})));
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "invalid credentials"})),
+        );
     };
     if !autoset {
-        return (StatusCode::BAD_REQUEST, auth_error_payload(5145, "PASSWORD_ALREADY_SET", "Your password is already set please change your password from profile"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error_payload(
+                5145,
+                "PASSWORD_ALREADY_SET",
+                "Your password is already set please change your password from profile",
+            ),
+        );
     }
     let Some(pw) = body.password.as_deref().filter(|s| !s.is_empty()) else {
-        return (StatusCode::BAD_REQUEST, auth_error(5020, "INVALID_PASSWORD"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5020, "INVALID_PASSWORD"),
+        );
     };
     if !password_strong_enough(pw) {
-        return (StatusCode::BAD_REQUEST, auth_error(5020, "INVALID_PASSWORD"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5020, "INVALID_PASSWORD"),
+        );
     }
     let hash = authn::make_django_password(pw);
     let upd = sqlx::query("UPDATE users SET password = $1, is_password_autoset = false, updated_at = now() WHERE id = $2")
@@ -134,7 +175,10 @@ pub async fn set_password(
         .execute(&st.pool)
         .await;
     if upd.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "internal error"})),
+        );
     }
     let back: Option<(String, String, String)> =
         sqlx::query_as("SELECT email, first_name, last_name FROM users WHERE id = $1")
@@ -147,7 +191,10 @@ pub async fn set_password(
             StatusCode::OK,
             Json(user_subset_json(&auth.0.to_string(), &email, &first, &last)),
         ),
-        None => (StatusCode::NOT_FOUND, Json(json!({"error": "User not found"}))),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "User not found"})),
+        ),
     }
 }
 
@@ -171,26 +218,44 @@ pub async fn forgot_password(
     .await
     .unwrap_or(None);
     if setup != Some(true) {
-        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5000, "INSTANCE_NOT_CONFIGURED"),
+        );
     }
     if !smtp_configured(&std::env::var("EMAIL_HOST").unwrap_or_default()) {
-        return (StatusCode::BAD_REQUEST, auth_error(5025, "SMTP_NOT_CONFIGURED"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5025, "SMTP_NOT_CONFIGURED"),
+        );
     }
-    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    let email = body
+        .email
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        .to_string();
     if email.is_empty() || !email_valid(&email) {
         return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
     }
-    let exists: Option<bool> =
-        sqlx::query_scalar("SELECT true FROM users WHERE email = $1")
-            .bind(&email)
-            .fetch_optional(&st.pool)
-            .await
-            .unwrap_or(None);
+    let exists: Option<bool> = sqlx::query_scalar("SELECT true FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_optional(&st.pool)
+        .await
+        .unwrap_or(None);
     if exists != Some(true) {
-        return (StatusCode::BAD_REQUEST, auth_error(5060, "USER_DOES_NOT_EXIST"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5060, "USER_DOES_NOT_EXIST"),
+        );
     }
     // SMTP terkonfigurasi tapi pengiriman email belum ada → katakan terus terang.
-    (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "password-reset email delivery not implemented yet"})))
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(
+            json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "password-reset email delivery not implemented yet"}),
+        ),
+    )
 }
 
 /// POST /auth/magic-generate/ — paritas `MagicGenerateEndpoint` (`magic.py:36-61`)
@@ -208,19 +273,35 @@ pub async fn magic_generate(
     .await
     .unwrap_or(None);
     if setup != Some(true) {
-        return (StatusCode::BAD_REQUEST, auth_error(5000, "INSTANCE_NOT_CONFIGURED"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5000, "INSTANCE_NOT_CONFIGURED"),
+        );
     }
     if !smtp_configured(&std::env::var("EMAIL_HOST").unwrap_or_default()) {
-        return (StatusCode::BAD_REQUEST, auth_error(5025, "SMTP_NOT_CONFIGURED"));
+        return (
+            StatusCode::BAD_REQUEST,
+            auth_error(5025, "SMTP_NOT_CONFIGURED"),
+        );
     }
-    let email = body.email.unwrap_or_default().to_lowercase().trim().to_string();
+    let email = body
+        .email
+        .unwrap_or_default()
+        .to_lowercase()
+        .trim()
+        .to_string();
     if email.is_empty() || !email_valid(&email) {
         return (StatusCode::BAD_REQUEST, auth_error(5005, "INVALID_EMAIL"));
     }
     // SMTP terkonfigurasi tapi penerbitan kode + email belum ada → katakan terus terang.
     // Follow-up saat EMAIL_HOST dikonfigurasi: ganti fallback ini dengan
     // penerbitan kode via `magic_key_json` → 200 `{"key": str}`.
-    (StatusCode::NOT_IMPLEMENTED, Json(json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "magic-code email delivery not implemented yet"})))
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(
+            json!({"error_code": 5025, "error_message": "SMTP_NOT_CONFIGURED", "error": "magic-code email delivery not implemented yet"}),
+        ),
+    )
 }
 
 /// Bentuk sukses follow-up magic-generate — mengunci kontrak Django

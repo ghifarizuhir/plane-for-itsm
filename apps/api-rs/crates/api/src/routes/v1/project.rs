@@ -1,16 +1,20 @@
 //! v1 project handlers (`/api/v1/workspaces/.../projects/...`). Object
 //! endpoints delegate to the app-API handlers; list/derived shapes live here.
 
-use axum::{extract::{Path, Query, State}, http::StatusCode, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::FromRow;
 
-use crate::{middleware::auth::AuthUser, state::AppState};
 use crate::routes::issue_query::build_ungrouped_envelope;
 use crate::routes::member::deny_detail;
 use crate::routes::project::{cover_image_url, missing, ws_role};
 use crate::routes::v1::common::PageParams;
+use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Trimmed project row for the `projects-lite` shape (`ProjectLiteSerializer`
 /// fields the SDK's `ProjectLite` model consumes).
@@ -44,10 +48,14 @@ pub fn v1_project_lite_json(r: &ProjectLiteRow) -> Value {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct LiteListQuery {
-    #[serde(default)] pub cursor: Option<String>,
-    #[serde(default)] pub per_page: Option<String>,
-    #[serde(default)] pub order_by: Option<String>,
-    #[serde(default)] pub include_archived: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub per_page: Option<String>,
+    #[serde(default)]
+    pub order_by: Option<String>,
+    #[serde(default)]
+    pub include_archived: Option<String>,
 }
 
 impl LiteListQuery {
@@ -71,14 +79,24 @@ pub async fn list_lite(
     let Some(role) = ws_role(&st.pool, auth.0, &slug).await? else {
         return Ok(deny_detail());
     };
-    let (per_page, cursor) = match (PageParams { cursor: q.cursor.clone(), per_page: q.per_page.clone() }).resolve() {
+    let (per_page, cursor) = match (PageParams {
+        cursor: q.cursor.clone(),
+        per_page: q.per_page.clone(),
+    })
+    .resolve()
+    {
         Ok(v) => v,
         Err(msg) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg})))),
     };
     let limit = per_page.min(1000);
     let window = match crate::routes::v1::common::window_for(cursor.page, limit) {
         Ok(w) => w,
-        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+        Err(()) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"detail": "Error in parsing"})),
+            ))
+        }
     };
     let scope = if role <= 5 {
         "AND EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
@@ -89,7 +107,11 @@ pub async fn list_lite(
     } else {
         ""
     };
-    let archived_clause = if q.include_archived() { "" } else { "AND p.archived_at IS NULL" };
+    let archived_clause = if q.include_archived() {
+        ""
+    } else {
+        "AND p.archived_at IS NULL"
+    };
     let base = format!(
         "FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
          LEFT JOIN file_assets fa ON fa.id = p.cover_image_asset_id \
@@ -123,7 +145,10 @@ pub async fn list_lite(
         None => Vec::new(),
     };
     let results: Vec<Value> = rows.iter().map(v1_project_lite_json).collect();
-    Ok((StatusCode::OK, Json(build_ungrouped_envelope(total, limit, cursor.page, results))))
+    Ok((
+        StatusCode::OK,
+        Json(build_ungrouped_envelope(total, limit, cursor.page, results)),
+    ))
 }
 pub fn v1_project_features_json(
     modules: bool,
@@ -154,22 +179,43 @@ pub async fn get_features(
     if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
         return Ok(deny_detail());
     }
-    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+    let Some(row) =
+        crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await?
+    else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        ));
     };
     if row.archived_at.is_some() {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        ));
     }
     if !row.member_ids.contains(&auth.0) {
         if row.network == 0 {
-            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": "You do not have permission"}))));
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "You do not have permission"})),
+            ));
         }
-        return Ok((StatusCode::CONFLICT, Json(json!({"error": "You are not a member of this project"}))));
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "You are not a member of this project"})),
+        ));
     }
-    Ok((StatusCode::OK, Json(v1_project_features_json(
-        row.module_view, row.cycle_view, row.issue_views_view,
-        row.page_view, row.intake_view, row.is_issue_type_enabled,
-    ))))
+    Ok((
+        StatusCode::OK,
+        Json(v1_project_features_json(
+            row.module_view,
+            row.cycle_view,
+            row.issue_views_view,
+            row.page_view,
+            row.intake_view,
+            row.is_issue_type_enabled,
+        )),
+    ))
 }
 /// Maps an SDK `ProjectFeature` key to the backing column. Unknown keys are
 /// ignored (the SDK sends `extra` keys this fork has no column for).
@@ -192,18 +238,26 @@ pub async fn patch_features(
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let ws_admin = matches!(ws_role(&st.pool, auth.0, &slug).await?, Some(r) if r >= 20);
-    let proj_admin = matches!(crate::routes::project::project_role(&st.pool, auth.0, project_id).await?, Some(20));
+    let proj_admin = matches!(
+        crate::routes::project::project_role(&st.pool, auth.0, project_id).await?,
+        Some(20)
+    );
     if !ws_admin && !proj_admin {
         return Ok(crate::routes::project::deny());
     }
-    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
+    let Some(row) =
+        crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await?
+    else {
         return Ok(missing());
     };
     if let Err(e) = crate::routes::project::guard_patch(row.archived_at.is_some()) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let Some(obj) = body.as_object() else {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Invalid payload"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": "Invalid payload"})),
+        ));
     };
     let mut sets: Vec<String> = Vec::new();
     let mut binds: Vec<bool> = Vec::new();
@@ -214,7 +268,10 @@ pub async fn patch_features(
         }
     }
     if sets.is_empty() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "No supported feature keys"}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"detail": "No supported feature keys"})),
+        ));
     }
     let sql = format!(
         "UPDATE projects SET {}, updated_at = now() \
@@ -230,7 +287,10 @@ pub async fn patch_features(
         q = q.bind(b);
     }
     match q.fetch_optional(&st.pool).await? {
-        Some((m, c, v, p, i, t)) => Ok((StatusCode::OK, Json(v1_project_features_json(m, c, v, p, i, t)))),
+        Some((m, c, v, p, i, t)) => Ok((
+            StatusCode::OK,
+            Json(v1_project_features_json(m, c, v, p, i, t)),
+        )),
         None => Ok(missing()),
     }
 }
@@ -246,17 +306,31 @@ pub async fn total_worklogs(
     if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
         return Ok(deny_detail());
     }
-    let Some(row) = crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+    let Some(row) =
+        crate::routes::project::fetch_project_full(&st.pool, &slug, project_id, auth.0).await?
+    else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        ));
     };
     if row.archived_at.is_some() {
-        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Project does not exist"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Project does not exist"})),
+        ));
     }
     if !row.member_ids.contains(&auth.0) {
         if row.network == 0 {
-            return Ok((StatusCode::FORBIDDEN, Json(json!({"error": "You do not have permission"}))));
+            return Ok((
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "You do not have permission"})),
+            ));
         }
-        return Ok((StatusCode::CONFLICT, Json(json!({"error": "You are not a member of this project"}))));
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "You are not a member of this project"})),
+        ));
     }
     Ok((StatusCode::OK, Json(json!([]))))
 }
@@ -272,7 +346,10 @@ mod tests {
         assert_eq!(feature_column("views"), Some("issue_views_view"));
         assert_eq!(feature_column("pages"), Some("page_view"));
         assert_eq!(feature_column("intakes"), Some("intake_view"));
-        assert_eq!(feature_column("work_item_types"), Some("is_issue_type_enabled"));
+        assert_eq!(
+            feature_column("work_item_types"),
+            Some("is_issue_type_enabled")
+        );
         assert_eq!(feature_column("epics"), None);
     }
 }

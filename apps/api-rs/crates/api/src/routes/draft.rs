@@ -6,8 +6,8 @@ use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{
-    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
-    total_pages, DetailEnvelope, PageWindow,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+    DetailEnvelope, PageWindow,
 };
 
 /// Workspace drafts + draft-to-issue — parity with Django
@@ -109,7 +109,8 @@ pub(crate) const STATE_MSG: &str = "State is not valid please pass a valid state
 /// Quoted from `plane/app/serializers/draft.py:129`.
 pub(crate) const PARENT_MSG: &str = "Parent is not valid issue_id please pass a valid issue_id";
 /// Quoted from `plane/app/serializers/draft.py:138`.
-pub(crate) const ESTIMATE_MSG: &str = "Estimate point is not valid please pass a valid estimate_point_id";
+pub(crate) const ESTIMATE_MSG: &str =
+    "Estimate point is not valid please pass a valid estimate_point_id";
 /// Generic IntegrityError body, byte-exact from
 /// `plane/app/views/base.py:80-84` (Django maps EVERY `IntegrityError` →
 /// 400 `{"error": "The payload is not valid"}`).
@@ -220,7 +221,10 @@ fn bad_request(body: Value) -> (StatusCode, Json<Value>) {
 }
 
 fn patch_miss() -> (StatusCode, Json<Value>) {
-    (StatusCode::NOT_FOUND, Json(json!({"error": PATCH_MISS_MSG})))
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({"error": PATCH_MISS_MSG})),
+    )
 }
 
 /// One `DraftIssueSerializer` row (21 keys,
@@ -648,7 +652,11 @@ async fn fetch_draft(
     pk: uuid::Uuid,
     only_own: Option<uuid::Uuid>,
 ) -> Result<Option<DraftRow>, sqlx::Error> {
-    let own_filter = if only_own.is_some() { "AND d.created_by_id = $3" } else { "" };
+    let own_filter = if only_own.is_some() {
+        "AND d.created_by_id = $3"
+    } else {
+        ""
+    };
     let sql = format!(
         "SELECT {} FROM draft_issues d WHERE d.id = $1 \
          AND d.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $2) \
@@ -687,7 +695,10 @@ pub async fn list(
         Ok(v) => v,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
     };
-    let cursor_raw = q.cursor.clone().unwrap_or_else(|| format!("{per_page}:0:0"));
+    let cursor_raw = q
+        .cursor
+        .clone()
+        .unwrap_or_else(|| format!("{per_page}:0:0"));
     let cursor = match parse_cursor(&cursor_raw) {
         Ok(c) => c,
         Err(msg) => return Ok(bad_request(json!({"detail": msg}))),
@@ -821,9 +832,14 @@ pub async fn create(
     let state_id = resolve_default_state(&st.pool, b.project_id, b.state_id).await?;
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
-        if group.as_deref() == Some("completed") { Some(chrono::Utc::now()) } else { None };
+        if group.as_deref() == Some("completed") {
+            Some(chrono::Utc::now())
+        } else {
+            None
+        };
     let sort_order = draft_sort_order(&st.pool, b.project_id, state_id).await?;
-    let assignees = filter_assignees(&st.pool, b.project_id, &b.assignee_ids.unwrap_or_default()).await?;
+    let assignees =
+        filter_assignees(&st.pool, b.project_id, &b.assignee_ids.unwrap_or_default()).await?;
     let labels = filter_labels(&st.pool, b.project_id, &b.label_ids.unwrap_or_default()).await?;
     let mut tx = st.pool.begin().await?;
     let draft_id: uuid::Uuid = match sqlx::query_scalar(
@@ -857,8 +873,7 @@ pub async fn create(
         // Django maps EVERY `IntegrityError` → 400
         // `{"error": "The payload is not valid"}` (`views/base.py:80-84`).
         Err(e)
-            if e
-                .as_database_error()
+            if e.as_database_error()
                 .and_then(|d| d.code())
                 .map(|c| c.as_ref().starts_with("23"))
                 .unwrap_or(false) =>
@@ -1238,7 +1253,11 @@ pub async fn create_draft_to_issue(
     let state_id = resolve_default_state(&st.pool, Some(project_id), b.state_id).await?;
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
-        if group.as_deref() == Some("completed") { Some(chrono::Utc::now()) } else { None };
+        if group.as_deref() == Some("completed") {
+            Some(chrono::Utc::now())
+        } else {
+            None
+        };
     let sort_order: f64 = {
         let max: Option<f64> = sqlx::query_scalar(
             "SELECT MAX(sort_order) FROM issues WHERE project_id = $1 AND state_id IS NOT DISTINCT FROM $2 AND deleted_at IS NULL",
@@ -1251,18 +1270,22 @@ pub async fn create_draft_to_issue(
         max.map(|m| m + 10000.0).unwrap_or(65535.0)
     };
     let sequence: i64 = {
-        let max: Option<i64> = sqlx::query_scalar(
-            "SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $1",
-        )
-        .bind(project_id)
-        .fetch_optional(&st.pool)
-        .await?
-        .flatten();
+        let max: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(sequence) FROM issue_sequences WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+                .flatten();
         max.unwrap_or(0) + 1
     };
     // Assignees: provided → filtered (silent drop); absent → default
     // assignee when eligible (`serializers/issue.py:214-253`).
-    let mut assignees = filter_assignees(&st.pool, Some(project_id), &b.assignee_ids.clone().unwrap_or_default()).await?;
+    let mut assignees = filter_assignees(
+        &st.pool,
+        Some(project_id),
+        &b.assignee_ids.clone().unwrap_or_default(),
+    )
+    .await?;
     if b.assignee_ids.is_none() {
         if let Some(def) = default_assignee {
             let ok: bool = sqlx::query_scalar(
@@ -1278,7 +1301,12 @@ pub async fn create_draft_to_issue(
             }
         }
     }
-    let labels = filter_labels(&st.pool, Some(project_id), &b.label_ids.clone().unwrap_or_default()).await?;
+    let labels = filter_labels(
+        &st.pool,
+        Some(project_id),
+        &b.label_ids.clone().unwrap_or_default(),
+    )
+    .await?;
     let mut tx = st.pool.begin().await?;
     let issue_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO issues (id, name, description_html, description_json, priority, \

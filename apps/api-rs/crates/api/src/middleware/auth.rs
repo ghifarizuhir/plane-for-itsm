@@ -18,7 +18,10 @@ pub struct AuthUser(pub uuid::Uuid);
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let unauthorized = || {
             (
                 StatusCode::UNAUTHORIZED,

@@ -1,7 +1,7 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
 
-use crate::routes::project::{FORBIDDEN_MSG, deny, missing, user_avatar_url};
+use crate::routes::project::{deny, missing, user_avatar_url, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::fetch_project_member_role;
@@ -424,7 +424,17 @@ pub async fn subscriber_create(
     .fetch_optional(&st.pool)
     .await?;
     match row {
-        Some((id, created_at, updated_at, created_by, updated_by, workspace_id, project_id, issue_id, subscriber_id)) => Ok((
+        Some((
+            id,
+            created_at,
+            updated_at,
+            created_by,
+            updated_by,
+            workspace_id,
+            project_id,
+            issue_id,
+            subscriber_id,
+        )) => Ok((
             StatusCode::CREATED,
             Json(json!({
                 "id": id,
@@ -501,8 +511,14 @@ mod batch_d_d1_tests {
     fn subscribed_body_shapes_match_django() {
         // Mirrors `subscription_status` (`subscriber.py:97-104`) → 200
         // `{"subscribed": bool}`.
-        assert_eq!(subscribed_body(true), serde_json::json!({"subscribed": true}));
-        assert_eq!(subscribed_body(false), serde_json::json!({"subscribed": false}));
+        assert_eq!(
+            subscribed_body(true),
+            serde_json::json!({"subscribed": true})
+        );
+        assert_eq!(
+            subscribed_body(false),
+            serde_json::json!({"subscribed": false})
+        );
     }
 
     #[test]
@@ -551,7 +567,15 @@ mod batch_d_d1_tests {
         assert!(v.get("id").is_some());
         assert_eq!(v.get("is_subscribed"), Some(&serde_json::json!(true)));
         let member = v.get("member").unwrap();
-        for key in ["id", "first_name", "last_name", "avatar", "avatar_url", "is_bot", "display_name"] {
+        for key in [
+            "id",
+            "first_name",
+            "last_name",
+            "avatar",
+            "avatar_url",
+            "is_bot",
+            "display_name",
+        ] {
             assert!(member.get(key).is_some(), "UserLite missing key {key}");
         }
         // NULL member FK renders `member: null` (Django renders the nested

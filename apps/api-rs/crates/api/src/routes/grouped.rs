@@ -65,11 +65,13 @@ use std::collections::HashMap;
 
 /// m2m fields that explode one issue into many groups
 /// (`paginator.py:197-201, 393-397` FIELD_MAPPER keys).
-pub(crate) const GROUP_M2M_FIELDS: &[&str] = &["labels__id", "assignees__id", "issue_module__module_id"];
+pub(crate) const GROUP_M2M_FIELDS: &[&str] =
+    &["labels__id", "assignees__id", "issue_module__module_id"];
 
 /// Fixed universes (`issue_group_values`, `grouper.py:187-196`).
 pub(crate) const PRIORITY_UNIVERSE: &[&str] = &["low", "medium", "high", "urgent", "none"];
-pub(crate) const STATE_GROUP_UNIVERSE: &[&str] = &["backlog", "unstarted", "started", "completed", "cancelled"];
+pub(crate) const STATE_GROUP_UNIVERSE: &[&str] =
+    &["backlog", "unstarted", "started", "completed", "cancelled"];
 
 /// Scope-distinct fields whose universe derives from the scan rows
 /// (same scope as Django's queryset-derived universes).
@@ -198,7 +200,10 @@ pub(crate) fn plan_grouped(
                         entry.push(s.clone());
                     }
                 }
-                part_idx.entry((g.clone(), s.clone())).or_default().push(idx);
+                part_idx
+                    .entry((g.clone(), s.clone()))
+                    .or_default()
+                    .push(idx);
             }
         }
     }
@@ -323,7 +328,10 @@ pub(crate) fn grouped_envelope(
     rows_by_id: &HashMap<uuid::Uuid, Value>,
 ) -> Value {
     let rows_of = |ids: &[uuid::Uuid]| -> Vec<Value> {
-        ids.iter().filter_map(|id| rows_by_id.get(id)).cloned().collect()
+        ids.iter()
+            .filter_map(|id| rows_by_id.get(id))
+            .cloned()
+            .collect()
     };
     let mut results = Map::new();
     for b in &plan.buckets {
@@ -499,7 +507,15 @@ mod grouped_tests {
             row(3, Some("high"), &[]),
             row(4, Some("low"), &[]),
         ];
-        let plan = plan_grouped(&scan, "priority", None, &["high".into(), "low".into()], 2, 0).unwrap();
+        let plan = plan_grouped(
+            &scan,
+            "priority",
+            None,
+            &["high".into(), "low".into()],
+            2,
+            0,
+        )
+        .unwrap();
         assert_eq!(plan.total_count, 4);
         assert_eq!(plan.page_rows, 3);
         assert!(plan.next_has);
@@ -509,11 +525,27 @@ mod grouped_tests {
         assert_eq!(plan.buckets[0].page_ids.len(), 2);
         assert_eq!(plan.buckets[1].page_ids.len(), 1);
         // Empty universe keys still appear.
-        let plan = plan_grouped(&scan, "priority", None, &["high".into(), "low".into(), "urgent".into()], 50, 0).unwrap();
+        let plan = plan_grouped(
+            &scan,
+            "priority",
+            None,
+            &["high".into(), "low".into(), "urgent".into()],
+            50,
+            0,
+        )
+        .unwrap();
         assert_eq!(plan.buckets.len(), 3);
         assert_eq!(plan.buckets[2].total, 0);
         // Page 1 → high's last row only.
-        let plan = plan_grouped(&scan, "priority", None, &["high".into(), "low".into()], 2, 1).unwrap();
+        let plan = plan_grouped(
+            &scan,
+            "priority",
+            None,
+            &["high".into(), "low".into()],
+            2,
+            1,
+        )
+        .unwrap();
         assert_eq!(plan.page_rows, 1);
         assert!(!plan.next_has);
         assert!(plan.buckets[1].page_ids.is_empty());
@@ -532,8 +564,16 @@ mod grouped_tests {
     #[test]
     fn single_m2m_lists_page_groups_in_encounter_order() {
         let scan = vec![row(1, None, &["a", "b"]), row(2, None, &[])];
-        let plan = plan_grouped(&scan, "labels__id", None, &["a".into(), "b".into()], 50, 0).unwrap();
-        let ids = |key: &str| plan.buckets.iter().find(|b| b.key == key).unwrap().page_ids.clone();
+        let plan =
+            plan_grouped(&scan, "labels__id", None, &["a".into(), "b".into()], 50, 0).unwrap();
+        let ids = |key: &str| {
+            plan.buckets
+                .iter()
+                .find(|b| b.key == key)
+                .unwrap()
+                .page_ids
+                .clone()
+        };
         assert_eq!(ids("a").len(), 1);
         assert_eq!(ids("b").len(), 1);
         assert_eq!(ids("a"), ids("b"));
@@ -545,8 +585,20 @@ mod grouped_tests {
 
     #[test]
     fn nested_partitions_within_group() {
-        let scan = vec![row(1, Some("high"), &["x"]), row(2, Some("high"), &["y"]), row(3, Some("high"), &["x"])];
-        let plan = plan_grouped(&scan, "priority", Some("labels__id"), &["high".into(), "low".into()], 1, 0).unwrap();
+        let scan = vec![
+            row(1, Some("high"), &["x"]),
+            row(2, Some("high"), &["y"]),
+            row(3, Some("high"), &["x"]),
+        ];
+        let plan = plan_grouped(
+            &scan,
+            "priority",
+            Some("labels__id"),
+            &["high".into(), "low".into()],
+            1,
+            0,
+        )
+        .unwrap();
         assert_eq!(plan.buckets.len(), 2);
         let high = &plan.buckets[0];
         assert_eq!(high.total, 3);
@@ -573,9 +625,18 @@ mod grouped_tests {
         rows.insert(uuid::Uuid::from_u128(1), serde_json::json!({"id": "x"}));
         let env = grouped_envelope("priority", None, 1, 50, 0, &plan, &rows);
         for key in [
-            "grouped_by", "sub_grouped_by", "total_count", "next_cursor", "prev_cursor",
-            "next_page_results", "prev_page_results", "count", "total_pages",
-            "total_results", "extra_stats", "results",
+            "grouped_by",
+            "sub_grouped_by",
+            "total_count",
+            "next_cursor",
+            "prev_cursor",
+            "next_page_results",
+            "prev_page_results",
+            "count",
+            "total_pages",
+            "total_results",
+            "extra_stats",
+            "results",
         ] {
             assert!(env.get(key).is_some(), "missing {key}");
         }
@@ -583,7 +644,10 @@ mod grouped_tests {
         assert!(env["sub_grouped_by"].is_null());
         assert_eq!(env["next_cursor"], serde_json::json!("50:1:0"));
         assert_eq!(env["prev_cursor"], serde_json::json!("50:-1:1"));
-        assert_eq!(env["results"]["high"]["total_results"], serde_json::json!(1));
+        assert_eq!(
+            env["results"]["high"]["total_results"],
+            serde_json::json!(1)
+        );
         assert_eq!(env["total_pages"], serde_json::json!(1));
     }
 }

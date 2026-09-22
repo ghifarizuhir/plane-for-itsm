@@ -86,7 +86,8 @@ pub fn export_message(email: &str) -> String {
 /// Mirrors the axis guards in AnalyticsEndpoint.get / SavedAnalyticEndpoint.
 pub fn validate_axes(p: &AxisParams) -> Result<(), String> {
     match (&p.x_axis, &p.y_axis) {
-        (Some(x), Some(y)) if VALID_X_AXIS.contains(&x.as_str()) && VALID_Y_AXIS.contains(&y.as_str()) => {}
+        (Some(x), Some(y))
+            if VALID_X_AXIS.contains(&x.as_str()) && VALID_Y_AXIS.contains(&y.as_str()) => {}
         _ => return Err(AXIS_REQUIRED_MSG.to_string()),
     }
     let x = p.x_axis.as_deref().unwrap_or("");
@@ -101,7 +102,9 @@ pub fn validate_segment(x_axis: &str, segment: Option<&str>) -> Result<(), Strin
     match segment {
         None => Ok(()),
         Some(s) if s.is_empty() => Ok(()),
-        Some(s) if !VALID_X_AXIS.contains(&s) || s == x_axis => Err(SEGMENT_INVALID_MSG.to_string()),
+        Some(s) if !VALID_X_AXIS.contains(&s) || s == x_axis => {
+            Err(SEGMENT_INVALID_MSG.to_string())
+        }
         _ => Ok(()),
     }
 }
@@ -155,18 +158,29 @@ fn analytics_filters(params: &std::collections::HashMap<String, String>) -> Anal
                     return Vec::new();
                 }
                 let kept: Vec<String> = parts.into_iter().filter(|p| p != "null").collect();
-                if kept.is_empty() { Vec::new() } else { kept }
+                if kept.is_empty() {
+                    Vec::new()
+                } else {
+                    kept
+                }
             }
             None => Vec::new(),
         }
     }
     fn uuids(v: &[String]) -> Vec<uuid::Uuid> {
-        v.iter().filter_map(|s| uuid::Uuid::parse_str(s).ok()).collect()
+        v.iter()
+            .filter_map(|s| uuid::Uuid::parse_str(s).ok())
+            .collect()
     }
     fn bounds(raw: Option<&str>) -> (Option<String>, Option<String>) {
         let mut gte = None;
         let mut lte = None;
-        for item in raw.unwrap_or("").split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for item in raw
+            .unwrap_or("")
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             let bits: Vec<&str> = item.split(';').collect();
             if bits.len() >= 2 {
                 if bits[1] == "after" {
@@ -181,7 +195,8 @@ fn analytics_filters(params: &std::collections::HashMap<String, String>) -> Anal
         }
         (gte, lte)
     }
-    let parse = |s: Option<String>| s.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok());
+    let parse =
+        |s: Option<String>| s.and_then(|d| chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d").ok());
     let (cg, cl) = bounds(params.get("created_at").map(|s| s.as_str()));
     let (ug, ul) = bounds(params.get("updated_at").map(|s| s.as_str()));
     let opt_vec = |v: Vec<uuid::Uuid>| if v.is_empty() { None } else { Some(v) };
@@ -189,10 +204,16 @@ fn analytics_filters(params: &std::collections::HashMap<String, String>) -> Anal
     AnalyticsFilters {
         prios: if prio.is_empty() { None } else { Some(prio) },
         label_ids: opt_vec(uuids(&csv(params.get("labels").map(|s| s.as_str())))),
-        labels_none: params.get("labels").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false),
+        labels_none: params
+            .get("labels")
+            .map(|s| s.split(',').any(|t| t == "None"))
+            .unwrap_or(false),
         state_ids: opt_vec(uuids(&csv(params.get("state").map(|s| s.as_str())))),
         assignee_ids: opt_vec(uuids(&csv(params.get("assignees").map(|s| s.as_str())))),
-        assignees_none: params.get("assignees").map(|s| s.split(',').any(|t| t == "None")).unwrap_or(false),
+        assignees_none: params
+            .get("assignees")
+            .map(|s| s.split(',').any(|t| t == "None"))
+            .unwrap_or(false),
         creator_ids: opt_vec(uuids(&csv(params.get("created_by").map(|s| s.as_str())))),
         cg: parse(cg),
         cl: parse(cl),
@@ -275,25 +296,55 @@ pub async fn default_analytics(
          AND i.archived_at IS NULL AND i.is_draft = false AND p.archived_at IS NULL \
          {ANALYTICS_FILTER_SQL}"
     );
-    let total: (i64,) = bind_af!(sqlx::query_as(&format!("SELECT COUNT(*) {scope}")), &slug, f).fetch_one(&st.pool).await?;
+    let total: (i64,) = bind_af!(
+        sqlx::query_as(&format!("SELECT COUNT(*) {scope}")),
+        &slug,
+        f
+    )
+    .fetch_one(&st.pool)
+    .await?;
 
-    let classified: Vec<(Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
-        "SELECT s.\"group\", COUNT(*) {scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
-    )), &slug, f).fetch_all(&st.pool).await?;
+    let classified: Vec<(Option<String>, i64)> = bind_af!(
+        sqlx::query_as(&format!(
+            "SELECT s.\"group\", COUNT(*) {scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
+        )),
+        &slug,
+        f
+    )
+    .fetch_all(&st.pool)
+    .await?;
 
     let open_scope = format!("{scope} AND s.\"group\" IN ('backlog','unstarted','started')");
-    let open: (i64,) = bind_af!(sqlx::query_as(&format!("SELECT COUNT(*) {open_scope}")), &slug, f).fetch_one(&st.pool).await?;
+    let open: (i64,) = bind_af!(
+        sqlx::query_as(&format!("SELECT COUNT(*) {open_scope}")),
+        &slug,
+        f
+    )
+    .fetch_one(&st.pool)
+    .await?;
 
-    let open_classified: Vec<(Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
-        "SELECT s.\"group\", COUNT(*) {open_scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
-    )), &slug, f).fetch_all(&st.pool).await?;
+    let open_classified: Vec<(Option<String>, i64)> = bind_af!(
+        sqlx::query_as(&format!(
+            "SELECT s.\"group\", COUNT(*) {open_scope} GROUP BY s.\"group\" ORDER BY s.\"group\""
+        )),
+        &slug,
+        f
+    )
+    .fetch_all(&st.pool)
+    .await?;
 
     // Django-tz year (`base.py:275`); UTC equivalent kept per file precedent.
-    let month_wise: Vec<(Option<i32>, i64)> = bind_af!(sqlx::query_as(&format!(
-        "SELECT EXTRACT(MONTH FROM i.completed_at)::int, COUNT(*) {scope} \
+    let month_wise: Vec<(Option<i32>, i64)> = bind_af!(
+        sqlx::query_as(&format!(
+            "SELECT EXTRACT(MONTH FROM i.completed_at)::int, COUNT(*) {scope} \
          AND EXTRACT(YEAR FROM i.completed_at) = EXTRACT(YEAR FROM now()) \
          GROUP BY 1 ORDER BY 1"
-    )), &slug, f).fetch_all(&st.pool).await?;
+        )),
+        &slug,
+        f
+    )
+    .fetch_all(&st.pool)
+    .await?;
 
     // NOTE: creator join appended after the scope (u bound here).
     let top_creators: Vec<(uuid::Uuid, Option<String>, Option<String>, Option<String>, Option<String>, i64)> = bind_af!(sqlx::query_as(&format!(
@@ -335,21 +386,36 @@ pub async fn default_analytics(
              ORDER BY COUNT(*) DESC"
         )), &slug, f).fetch_all(&st.pool).await?;
 
-    let open_estimate: (Option<i64>,) = bind_af!(sqlx::query_as(&format!("SELECT SUM(i.point) {open_scope}")), &slug, f).fetch_one(&st.pool).await?;
-    let total_estimate: (Option<i64>,) = bind_af!(sqlx::query_as(&format!("SELECT SUM(i.point) {scope}")), &slug, f).fetch_one(&st.pool).await?;
+    let open_estimate: (Option<i64>,) = bind_af!(
+        sqlx::query_as(&format!("SELECT SUM(i.point) {open_scope}")),
+        &slug,
+        f
+    )
+    .fetch_one(&st.pool)
+    .await?;
+    let total_estimate: (Option<i64>,) = bind_af!(
+        sqlx::query_as(&format!("SELECT SUM(i.point) {scope}")),
+        &slug,
+        f
+    )
+    .fetch_one(&st.pool)
+    .await?;
 
-    Ok((StatusCode::OK, Json(json!({
-        "total_issues": total.0,
-        "total_issues_classified": classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
-        "open_issues": open.0,
-        "open_issues_classified": open_classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
-        "issue_completed_month_wise": month_wise.into_iter().map(|(m, c)| json!({"month": m, "count": c})).collect::<Vec<_>>(),
-        "most_issue_created_user": top_creators.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
-        "most_issue_closed_user": top_closers.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
-        "pending_issue_user": pending.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
-        "open_estimate_sum": open_estimate.0,
-        "total_estimate_sum": total_estimate.0,
-    }))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "total_issues": total.0,
+            "total_issues_classified": classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
+            "open_issues": open.0,
+            "open_issues_classified": open_classified.into_iter().map(|(g, c)| json!({"state_group": g, "state_count": c})).collect::<Vec<_>>(),
+            "issue_completed_month_wise": month_wise.into_iter().map(|(m, c)| json!({"month": m, "count": c})).collect::<Vec<_>>(),
+            "most_issue_created_user": top_creators.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
+            "most_issue_closed_user": top_closers.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
+            "pending_issue_user": pending.into_iter().map(|(id, first, last, display, avatar, c)| analytics_user_json(&id, &first, &last, &display, &avatar, &c)).collect::<Vec<_>>(),
+            "open_estimate_sum": open_estimate.0,
+            "total_estimate_sum": total_estimate.0,
+        })),
+    ))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -360,7 +426,13 @@ pub struct ProjectStatsQuery {
     pub project_ids: Option<String>,
 }
 
-const STAT_FIELDS: [&str; 5] = ["total_issues", "completed_issues", "total_members", "total_cycles", "total_modules"];
+const STAT_FIELDS: [&str; 5] = [
+    "total_issues",
+    "completed_issues",
+    "total_members",
+    "total_cycles",
+    "total_modules",
+];
 
 pub async fn project_stats(
     State(st): State<AppState>,
@@ -375,14 +447,20 @@ pub async fn project_stats(
         return Ok(deny_detail());
     }
     let requested: Vec<&str> = match &q.fields {
-        Some(f) => f.split(',').map(str::trim).filter(|f| STAT_FIELDS.contains(f)).collect(),
+        Some(f) => f
+            .split(',')
+            .map(str::trim)
+            .filter(|f| STAT_FIELDS.contains(f))
+            .collect(),
         None => vec![],
     };
     let all = requested.is_empty();
     let want = |f: &str| all || requested.contains(&f);
 
     let ids: Option<Vec<uuid::Uuid>> = q.project_ids.as_deref().map(|s| {
-        s.split(',').filter_map(|p| p.trim().parse::<uuid::Uuid>().ok()).collect()
+        s.split(',')
+            .filter_map(|p| p.trim().parse::<uuid::Uuid>().ok())
+            .collect()
     });
 
     let projects: Vec<(uuid::Uuid,)> = sqlx::query_as(
@@ -395,8 +473,12 @@ pub async fn project_stats(
         let mut row = serde_json::Map::new();
         row.insert("id".to_string(), json!(pid));
         if want("total_issues") {
-            let (c,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM issues WHERE project_id = $1 AND deleted_at IS NULL")
-                .bind(pid).fetch_one(&st.pool).await?;
+            let (c,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM issues WHERE project_id = $1 AND deleted_at IS NULL",
+            )
+            .bind(pid)
+            .fetch_one(&st.pool)
+            .await?;
             row.insert("total_issues".to_string(), json!(c));
         }
         if want("completed_issues") {
@@ -410,13 +492,21 @@ pub async fn project_stats(
             row.insert("total_members".to_string(), json!(c));
         }
         if want("total_cycles") {
-            let (c,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM cycles WHERE project_id = $1 AND deleted_at IS NULL")
-                .bind(pid).fetch_one(&st.pool).await?;
+            let (c,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM cycles WHERE project_id = $1 AND deleted_at IS NULL",
+            )
+            .bind(pid)
+            .fetch_one(&st.pool)
+            .await?;
             row.insert("total_cycles".to_string(), json!(c));
         }
         if want("total_modules") {
-            let (c,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM modules WHERE project_id = $1 AND deleted_at IS NULL")
-                .bind(pid).fetch_one(&st.pool).await?;
+            let (c,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM modules WHERE project_id = $1 AND deleted_at IS NULL",
+            )
+            .bind(pid)
+            .fetch_one(&st.pool)
+            .await?;
             row.insert("total_modules".to_string(), json!(c));
         }
         out.push(Value::Object(row));
@@ -444,7 +534,13 @@ pub async fn list_views(
     .bind(&slug)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(analytic_view_json).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(analytic_view_json)
+            .collect::<Vec<_>>())),
+    ))
 }
 
 pub async fn create_view(
@@ -462,14 +558,24 @@ pub async fn create_view(
     }
     let name = body.get("name").and_then(Value::as_str).unwrap_or("");
     if name.trim().is_empty() {
-        return Ok((axum::http::StatusCode::BAD_REQUEST, Json(json!({"name": ["This field may not be blank."]}))));
+        return Ok((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"name": ["This field may not be blank."]})),
+        ));
     }
     if name.chars().count() > 255 {
-        return Ok((axum::http::StatusCode::BAD_REQUEST, Json(json!({"name": ["Ensure this field has no more than 255 characters."]}))));
+        return Ok((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"name": ["Ensure this field has no more than 255 characters."]})),
+        ));
     }
     // `query` is read-only, built from `query_dict` (`serializers/analytic.py:16-22`).
     let query_dict = body.get("query_dict").cloned().unwrap_or(json!({}));
-    let query = if query_dict.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+    let query = if query_dict
+        .as_object()
+        .map(|o| !o.is_empty())
+        .unwrap_or(false)
+    {
         crate::routes::view::build_view_query(&query_dict)
     } else {
         json!({})
@@ -487,8 +593,14 @@ pub async fn create_view(
     .await?;
     match row {
         // 201 full row (`base.py:176-186`, DRF default create).
-        Some(r) => Ok((axum::http::StatusCode::CREATED, Json(analytic_view_json(&r)))),
-        None => Ok((axum::http::StatusCode::NOT_FOUND, Json(json!({"error": "Workspace not found"})))),
+        Some(r) => Ok((
+            axum::http::StatusCode::CREATED,
+            Json(analytic_view_json(&r)),
+        )),
+        None => Ok((
+            axum::http::StatusCode::NOT_FOUND,
+            Json(json!({"error": "Workspace not found"})),
+        )),
     }
 }
 
@@ -591,7 +703,11 @@ pub fn resolve_advance_tab(raw: Option<&str>) -> Result<AdvTab, String> {
 /// → 400 `{"message": "Invalid type"}` (`advance.py:169,318`,
 /// `project_analytics.py:179,367`). NOTE A6 defaults to `"projects"` which
 /// is NOT in its allowed list, so a bare A6 call 400s — mirrored literally.
-pub fn resolve_advance_type(raw: Option<&str>, default: &str, allowed: &[&str]) -> Result<String, String> {
+pub fn resolve_advance_type(
+    raw: Option<&str>,
+    default: &str,
+    allowed: &[&str],
+) -> Result<String, String> {
     let t = raw.unwrap_or(default);
     if allowed.contains(&t) {
         Ok(t.to_string())
@@ -689,9 +805,15 @@ pub fn chart_window(date_filter: Option<&str>, today: NaiveDate) -> Option<(Naiv
     match date_filter {
         None => None,
         Some("yesterday") => today.pred_opt().map(|y| (y, y)),
-        Some("last_7_days") => today.checked_sub_days(chrono::Days::new(7)).map(|s| (s, today)),
-        Some("last_30_days") => today.checked_sub_days(chrono::Days::new(30)).map(|s| (s, today)),
-        Some("last_3_months") => today.checked_sub_days(chrono::Days::new(90)).map(|s| (s, today)),
+        Some("last_7_days") => today
+            .checked_sub_days(chrono::Days::new(7))
+            .map(|s| (s, today)),
+        Some("last_30_days") => today
+            .checked_sub_days(chrono::Days::new(30))
+            .map(|s| (s, today)),
+        Some("last_3_months") => today
+            .checked_sub_days(chrono::Days::new(90))
+            .map(|s| (s, today)),
         Some(_) => None,
     }
 }
@@ -819,7 +941,10 @@ pub fn detail_400(msg: String) -> (StatusCode, Json<Value>) {
 
 /// DRF permission-class deny body (deploy boards).
 pub fn deny_detail() -> (StatusCode, Json<Value>) {
-    (StatusCode::FORBIDDEN, Json(json!({"detail": PERMISSION_DETAIL_MSG})))
+    (
+        StatusCode::FORBIDDEN,
+        Json(json!({"detail": PERMISSION_DETAIL_MSG})),
+    )
 }
 
 /// One row of the simple (ungrouped) chart (`build_simple_chart_response`,
@@ -863,9 +988,19 @@ pub fn process_grouped(rows: &[GroupedInput]) -> (Vec<Value>, Value) {
         let raw_key = r.key.clone().unwrap_or_default();
         let disp = r.display.clone().filter(|s| !s.is_empty());
         let name = disp
-            .or_else(|| if falsy_key { None } else { Some(raw_key.clone()) })
+            .or_else(|| {
+                if falsy_key {
+                    None
+                } else {
+                    Some(raw_key.clone())
+                }
+            })
             .unwrap_or_else(|| "None".to_string());
-        let out_key = if falsy_key { "none".to_string() } else { raw_key.clone() };
+        let out_key = if falsy_key {
+            "none".to_string()
+        } else {
+            raw_key.clone()
+        };
         let bucket = buckets.entry(raw_key.clone()).or_insert_with(|| {
             order.push(raw_key.clone());
             let mut m = serde_json::Map::new();
@@ -883,7 +1018,11 @@ pub fn process_grouped(rows: &[GroupedInput]) -> (Vec<Value>, Value) {
         } else {
             r.group_key.clone().unwrap_or_default()
         };
-        let gn = r.group_name.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| "None".to_string());
+        let gn = r
+            .group_name
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "None".to_string());
         schema.insert(gk.clone(), json!(gn));
         let cur = bucket.get(&gk).and_then(Value::as_i64).unwrap_or(0);
         bucket.insert(gk, json!(cur + r.count));
@@ -954,7 +1093,9 @@ pub fn daily_series(
 ) -> Vec<Value> {
     let mut end = end;
     if (end - start).num_days() > MAX_SERIES_DAYS {
-        end = start.checked_add_days(chrono::Days::new(MAX_SERIES_DAYS as u64)).unwrap_or(end);
+        end = start
+            .checked_add_days(chrono::Days::new(MAX_SERIES_DAYS as u64))
+            .unwrap_or(end);
     }
     let mut out = vec![];
     let mut cur = start;
@@ -1041,7 +1182,11 @@ pub fn deploy_views_patch(body: &Value) -> Option<Value> {
 /// — missing/null/non-bool → false).
 pub fn deploy_flags(body: &Value) -> (bool, bool, bool) {
     let flag = |k: &str| body.get(k).and_then(Value::as_bool).unwrap_or(false);
-    (flag("is_comments_enabled"), flag("is_reactions_enabled"), flag("is_votes_enabled"))
+    (
+        flag("is_comments_enabled"),
+        flag("is_reactions_enabled"),
+        flag("is_votes_enabled"),
+    )
 }
 
 /// Parses an optional `intake` body value: missing/null → `Ok(None)`;
@@ -1050,7 +1195,11 @@ pub fn deploy_flags(body: &Value) -> (bool, bool, bool) {
 pub fn parse_intake_id(body: &Value) -> Result<Option<uuid::Uuid>, String> {
     match body.get("intake") {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) => s.trim().parse::<uuid::Uuid>().map(Some).map_err(|_| "Invalid intake.".to_string()),
+        Some(Value::String(s)) => s
+            .trim()
+            .parse::<uuid::Uuid>()
+            .map(Some)
+            .map_err(|_| "Invalid intake.".to_string()),
         Some(_) => Err("Invalid intake.".to_string()),
     }
 }
@@ -1075,7 +1224,11 @@ async fn project_in_workspace(
 }
 
 /// Gate for A1–A3: workspace ADMIN/MEMBER (`advance.py:104,158,285`).
-async fn gate_ws_am(pool: &sqlx::PgPool, user: uuid::Uuid, slug: &str) -> Result<bool, sqlx::Error> {
+async fn gate_ws_am(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+) -> Result<bool, sqlx::Error> {
     Ok(guard_ws_am(ws_role(pool, user, slug).await?).is_ok())
 }
 
@@ -1090,7 +1243,11 @@ async fn gate_project_am(
 ) -> Result<bool, sqlx::Error> {
     let role = fetch_project_member_role(pool, user, slug, pid).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(guard_am(role).is_ok(), role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        guard_am(role).is_ok(),
+        role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// Gate for A6: `@allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])`
@@ -1103,7 +1260,11 @@ async fn gate_project_amg(
 ) -> Result<bool, sqlx::Error> {
     let role = fetch_project_member_role(pool, user, slug, pid).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(guard_amg(role).is_ok(), role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        guard_amg(role).is_ok(),
+        role.is_some(),
+        ws_admin,
+    ))
 }
 
 /// Gate for deploy-board SAFE reads: any active project member, strict.
@@ -1119,7 +1280,11 @@ async fn gate_deploy_read(
 
 /// Gate for deploy-board POST: workspace ADMIN/MEMBER
 /// (`permissions/project.py:70-76`).
-async fn gate_deploy_post(pool: &sqlx::PgPool, user: uuid::Uuid, slug: &str) -> Result<bool, sqlx::Error> {
+async fn gate_deploy_post(
+    pool: &sqlx::PgPool,
+    user: uuid::Uuid,
+    slug: &str,
+) -> Result<bool, sqlx::Error> {
     Ok(guard_ws_am(ws_role(pool, user, slug).await?).is_ok())
 }
 
@@ -1151,7 +1316,8 @@ async fn gate_deploy_write(
 ///
 /// (The `deleted_at` half of the soft manager is spelled out at each call
 /// site's table.)
-const PRED_ISSUE_OBJECTS: &str = "i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" != 'triage'";
+const PRED_ISSUE_OBJECTS: &str =
+    "i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" != 'triage'";
 
 /// `project__deleted_at__isnull + project__archived_at__isnull`
 /// (`date_utils.py:158-159`).
@@ -1212,7 +1378,9 @@ fn count_issues_sql(group: Option<&str>) -> String {
     let member = pred_member("i.project_id", "$2");
     let idf = pred_ids("i.project_id", "$3");
     let range = pred_analytics_range("i.created_at", "$4", "$5");
-    let grp = group.map(|g| format!(" AND s.\"group\" = '{g}'")).unwrap_or_default();
+    let grp = group
+        .map(|g| format!(" AND s.\"group\" = '{g}'"))
+        .unwrap_or_default();
     format!(
         "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id = i.project_id \
          JOIN workspaces w ON w.id = i.workspace_id JOIN states s ON s.id = i.state_id \
@@ -1342,23 +1510,37 @@ async fn count_members(
     // a workspace-slug constraint. Mirrored literally.
     if let Some(id_list) = ids {
         let range = pred_analytics_range("pm.created_at", "$2", "$3");
-        let role_f = role.map(|r| format!(" AND pm.role = {r}")).unwrap_or_default();
+        let role_f = role
+            .map(|r| format!(" AND pm.role = {r}"))
+            .unwrap_or_default();
         let sql = format!(
             "SELECT COUNT(*) FROM project_members pm JOIN users u ON u.id = pm.member_id \
              WHERE pm.project_id = ANY($1) AND pm.is_active = true AND pm.deleted_at IS NULL \
              AND u.is_bot = false{role_f} AND {range}"
         );
-        sqlx::query_scalar(&sql).bind(id_list.clone()).bind(gte).bind(lte).fetch_one(pool).await
+        sqlx::query_scalar(&sql)
+            .bind(id_list.clone())
+            .bind(gte)
+            .bind(lte)
+            .fetch_one(pool)
+            .await
     } else {
         let range = pred_analytics_range("wm.created_at", "$2", "$3");
-        let role_f = role.map(|r| format!(" AND wm.role = {r}")).unwrap_or_default();
+        let role_f = role
+            .map(|r| format!(" AND wm.role = {r}"))
+            .unwrap_or_default();
         let sql = format!(
             "SELECT COUNT(*) FROM workspace_members wm JOIN users u ON u.id = wm.member_id \
              JOIN workspaces w ON w.id = wm.workspace_id \
              WHERE w.slug = $1 AND wm.is_active = true AND wm.deleted_at IS NULL \
              AND u.is_bot = false{role_f} AND {range}"
         );
-        sqlx::query_scalar(&sql).bind(slug).bind(gte).bind(lte).fetch_one(pool).await
+        sqlx::query_scalar(&sql)
+            .bind(slug)
+            .bind(gte)
+            .bind(lte)
+            .fetch_one(pool)
+            .await
     }
 }
 
@@ -1378,8 +1560,15 @@ pub async fn advance_overview(
     };
     let ids = parse_project_ids(q.project_ids.as_deref());
     let today = Utc::now().date_naive();
-    let window = analytics_window(q.date_filter.as_deref(), q.start_date.as_deref(), q.end_date.as_deref(), today);
-    let (gte, lte) = window.map(|w| (Some(w.gte), Some(w.lte))).unwrap_or((None, None));
+    let window = analytics_window(
+        q.date_filter.as_deref(),
+        q.start_date.as_deref(),
+        q.end_date.as_deref(),
+        today,
+    );
+    let (gte, lte) = window
+        .map(|w| (Some(w.gte), Some(w.lte)))
+        .unwrap_or((None, None));
     match tab {
         AdvTab::Overview => {
             let counts = [
@@ -1456,7 +1645,10 @@ pub async fn advance_stats(
         return Ok(deny());
     }
     if resolve_advance_type(q.r#type.as_deref(), "work-items", &["work-items"]).is_err() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": INVALID_TYPE_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"message": INVALID_TYPE_MSG})),
+        ));
     }
     // `date_filter` is accepted (Django inits chart filters at `:160`) but
     // the effective helper ignores it — consumed for surface parity.
@@ -1479,9 +1671,19 @@ pub async fn advance_stats(
          AND {member} AND {idf} \
          GROUP BY i.project_id, p.name ORDER BY i.project_id"
     );
-    let rows: Vec<ProjectStatRow> =
-        sqlx::query_as(&sql).bind(&slug).bind(auth.0).bind(ids.clone()).fetch_all(&st.pool).await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(project_stat_json).collect::<Vec<_>>()))))
+    let rows: Vec<ProjectStatRow> = sqlx::query_as(&sql)
+        .bind(&slug)
+        .bind(auth.0)
+        .bind(ids.clone())
+        .fetch_all(&st.pool)
+        .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(project_stat_json)
+            .collect::<Vec<_>>())),
+    ))
 }
 
 // ============================================================================
@@ -1513,7 +1715,13 @@ fn chart_count_row(key: &str, count: i64) -> Value {
 
 /// Row aliases keeping the chart SELECTs under the complexity lint.
 type SimpleRow = (Option<String>, Option<String>, i64);
-type GroupedRow = (Option<String>, Option<String>, Option<String>, Option<String>, i64);
+type GroupedRow = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    i64,
+);
 type MonthRow = (NaiveDate, i64, i64);
 type DateRangeRow = (Option<DateTime<Utc>>, Option<DateTime<Utc>>);
 
@@ -1561,7 +1769,11 @@ pub async fn advance_charts(
     if !gate_ws_am(&st.pool, auth.0, &slug).await? {
         return Ok(deny());
     }
-    let t = match resolve_advance_type(q.r#type.as_deref(), "projects", &["projects", "custom-work-items", "work-items"]) {
+    let t = match resolve_advance_type(
+        q.r#type.as_deref(),
+        "projects",
+        &["projects", "custom-work-items", "work-items"],
+    ) {
         Ok(t) => t,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": e})))),
     };
@@ -1571,7 +1783,9 @@ pub async fn advance_charts(
     // has no custom branch); `start_date`/`end_date` are accepted for
     // surface parity and ignored.
     let _ = (q.start_date.as_deref(), q.end_date.as_deref());
-    let (start, end) = chart_window(q.date_filter.as_deref(), today).map(|(s, e)| (Some(s), Some(e))).unwrap_or((None, None));
+    let (start, end) = chart_window(q.date_filter.as_deref(), today)
+        .map(|(s, e)| (Some(s), Some(e)))
+        .unwrap_or((None, None));
     match t.as_str() {
         "projects" => {
             // `project_chart` (`advance.py:173-215`): 7 `{key,name,count}`
@@ -1597,8 +1811,32 @@ pub async fn advance_charts(
                     .fetch_one(&st.pool)
                     .await?
             };
-            let cycles = count_scoped(&st.pool, "cycles", "c", "created_at", &slug, auth.0, &ids, "", start, end).await?;
-            let modules = count_scoped(&st.pool, "modules", "m", "created_at", &slug, auth.0, &ids, "", start, end).await?;
+            let cycles = count_scoped(
+                &st.pool,
+                "cycles",
+                "c",
+                "created_at",
+                &slug,
+                auth.0,
+                &ids,
+                "",
+                start,
+                end,
+            )
+            .await?;
+            let modules = count_scoped(
+                &st.pool,
+                "modules",
+                "m",
+                "created_at",
+                &slug,
+                auth.0,
+                &ids,
+                "",
+                start,
+                end,
+            )
+            .await?;
             let intake = count_scoped(
                 &st.pool,
                 "issues",
@@ -1618,10 +1856,39 @@ pub async fn advance_charts(
                      WHERE w.slug = $1 AND wm.is_active = true AND wm.deleted_at IS NULL \
                      AND ($2::date IS NULL OR wm.created_at::date >= $2) \
                      AND ($3::date IS NULL OR wm.created_at::date <= $3)";
-                sqlx::query_scalar::<_, i64>(sql).bind(&slug).bind(start).bind(end).fetch_one(&st.pool).await?
+                sqlx::query_scalar::<_, i64>(sql)
+                    .bind(&slug)
+                    .bind(start)
+                    .bind(end)
+                    .fetch_one(&st.pool)
+                    .await?
             };
-            let pages = count_scoped(&st.pool, "project_pages", "pp", "created_at", &slug, auth.0, &ids, "", start, end).await?;
-            let views = count_scoped(&st.pool, "issue_views", "iv", "created_at", &slug, auth.0, &ids, "", start, end).await?;
+            let pages = count_scoped(
+                &st.pool,
+                "project_pages",
+                "pp",
+                "created_at",
+                &slug,
+                auth.0,
+                &ids,
+                "",
+                start,
+                end,
+            )
+            .await?;
+            let views = count_scoped(
+                &st.pool,
+                "issue_views",
+                "iv",
+                "created_at",
+                &slug,
+                auth.0,
+                &ids,
+                "",
+                start,
+                end,
+            )
+            .await?;
             let rows = [
                 ("work_items", work_items),
                 ("cycles", cycles),
@@ -1631,7 +1898,13 @@ pub async fn advance_charts(
                 ("pages", pages),
                 ("views", views),
             ];
-            Ok((StatusCode::OK, Json(json!(rows.iter().map(|(k, c)| chart_count_row(k, *c)).collect::<Vec<_>>()))))
+            Ok((
+                StatusCode::OK,
+                Json(json!(rows
+                    .iter()
+                    .map(|(k, c)| chart_count_row(k, *c))
+                    .collect::<Vec<_>>())),
+            ))
         }
         "custom-work-items" => {
             let x_axis = q.x_axis.clone().unwrap_or_else(|| "PRIORITY".to_string());
@@ -1646,7 +1919,18 @@ pub async fn advance_charts(
                     Err(e) => return Ok(detail_400(e)),
                 },
             };
-            let out = custom_chart(&st.pool, &slug, auth.0, &ids, start, end, None, &field, group.as_ref()).await?;
+            let out = custom_chart(
+                &st.pool,
+                &slug,
+                auth.0,
+                &ids,
+                start,
+                end,
+                None,
+                &field,
+                group.as_ref(),
+            )
+            .await?;
             Ok((StatusCode::OK, Json(out)))
         }
         _ => {
@@ -1659,9 +1943,15 @@ pub async fn advance_charts(
                     .fetch_optional(&st.pool)
                     .await?;
             let Some(ws_created) = ws_created else {
-                return Ok((StatusCode::OK, Json(json!({"data": [], "schema": completion_schema()}))));
+                return Ok((
+                    StatusCode::OK,
+                    Json(json!({"data": [], "schema": completion_schema()})),
+                ));
             };
-            let start_month = ws_created.date_naive().with_day(1).unwrap_or_else(|| ws_created.date_naive());
+            let start_month = ws_created
+                .date_naive()
+                .with_day(1)
+                .unwrap_or_else(|| ws_created.date_naive());
             let now = Utc::now().date_naive();
             let last_month = now.with_day(1).unwrap_or(now);
             let member = pred_member("i.project_id", "$2");
@@ -1690,7 +1980,9 @@ pub async fn advance_charts(
                 .collect();
             Ok((
                 StatusCode::OK,
-                Json(json!({"data": monthly_series(start_month, last_month, &stats), "schema": completion_schema()})),
+                Json(
+                    json!({"data": monthly_series(start_month, last_month, &stats), "schema": completion_schema()}),
+                ),
             ))
         }
     }
@@ -1738,16 +2030,15 @@ async fn custom_chart(
             gk = g.key_sql,
             gn = g.name_sql,
         );
-        let rows: Vec<GroupedRow> =
-            sqlx::query_as(&sql)
-                .bind(slug)
-                .bind(user)
-                .bind(ids.clone())
-                .bind(start)
-                .bind(end)
-                .bind(scope_project)
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<GroupedRow> = sqlx::query_as(&sql)
+            .bind(slug)
+            .bind(user)
+            .bind(ids.clone())
+            .bind(start)
+            .bind(end)
+            .bind(scope_project)
+            .fetch_all(pool)
+            .await?;
         let inputs: Vec<GroupedInput> = rows
             .into_iter()
             .map(|(k, n, gk, gn, c)| GroupedInput {
@@ -1766,7 +2057,11 @@ async fn custom_chart(
         // `build_simple_chart_response` orders by key (`build_chart.py:141`);
         // text ordering matches native ordering except for the integer
         // ESTIMATE_POINTS key, which keeps its native order (documented).
-        let order = if field.numeric_key { format!("ORDER BY {}", field.key_sql) } else { "ORDER BY 1".to_string() };
+        let order = if field.numeric_key {
+            format!("ORDER BY {}", field.key_sql)
+        } else {
+            "ORDER BY 1".to_string()
+        };
         let sql = format!(
             "SELECT ({xk})::text AS k, ({xn})::text AS n, COUNT(DISTINCT i.id) AS c {base} GROUP BY 1, 2 {order}",
             xk = field.key_sql,
@@ -1840,12 +2135,19 @@ async fn count_issue_ids(
     lte: Option<DateTime<Utc>>,
 ) -> Result<i64, sqlx::Error> {
     let range = pred_analytics_range("i.created_at", "$2", "$3");
-    let grp = group.map(|g| format!(" AND s.\"group\" = '{g}'")).unwrap_or_default();
+    let grp = group
+        .map(|g| format!(" AND s.\"group\" = '{g}'"))
+        .unwrap_or_default();
     let sql = format!(
         "SELECT COUNT(*) FROM issues i JOIN states s ON s.id = i.state_id \
          WHERE i.id = ANY($1) AND i.deleted_at IS NULL AND {PRED_ISSUE_OBJECTS} AND {range}{grp}"
     );
-    sqlx::query_scalar(&sql).bind(ids).bind(gte).bind(lte).fetch_one(pool).await
+    sqlx::query_scalar(&sql)
+        .bind(ids)
+        .bind(gte)
+        .bind(lte)
+        .fetch_one(pool)
+        .await
 }
 
 /// Ids of a cycle's/module's link rows scoped by the analytics base
@@ -1891,8 +2193,15 @@ pub async fn project_advance(
         return Ok(deny());
     }
     let today = Utc::now().date_naive();
-    let window = analytics_window(q.date_filter.as_deref(), q.start_date.as_deref(), q.end_date.as_deref(), today);
-    let (gte, lte) = window.map(|w| (Some(w.gte), Some(w.lte))).unwrap_or((None, None));
+    let window = analytics_window(
+        q.date_filter.as_deref(),
+        q.start_date.as_deref(),
+        q.end_date.as_deref(),
+        today,
+    );
+    let (gte, lte) = window
+        .map(|w| (Some(w.gte), Some(w.lte)))
+        .unwrap_or((None, None));
     // `get_work_items_stats` (`:58-82`): `cycle_id` wins over `module_id`
     // wins over the project scope. Unknown ids yield empty sets → zero
     // counts, never 404; unparseable ids 400 (Django's UUID-cast
@@ -1906,9 +2215,24 @@ pub async fn project_advance(
         Ok(v) => v,
         Err(e) => return Ok(uuid_400(e)),
     };
-    let groups = [None, Some("started"), Some("backlog"), Some("unstarted"), Some("completed")];
+    let groups = [
+        None,
+        Some("started"),
+        Some("backlog"),
+        Some("unstarted"),
+        Some("completed"),
+    ];
     if let Some(cid) = cid {
-        let link_ids = scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &ids).await?;
+        let link_ids = scoped_link_ids(
+            &st.pool,
+            "cycle_issues",
+            "cycle_id",
+            cid,
+            &slug,
+            auth.0,
+            &ids,
+        )
+        .await?;
         let mut counts = [0; 5];
         for (i, g) in groups.iter().enumerate() {
             counts[i] = count_issue_ids(&st.pool, &link_ids, *g, gte, lte).await?;
@@ -1916,7 +2240,16 @@ pub async fn project_advance(
         return Ok((StatusCode::OK, Json(work_items_json(counts))));
     }
     if let Some(mid) = mid {
-        let link_ids = scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &ids).await?;
+        let link_ids = scoped_link_ids(
+            &st.pool,
+            "module_issues",
+            "module_id",
+            mid,
+            &slug,
+            auth.0,
+            &ids,
+        )
+        .await?;
         let mut counts = [0; 5];
         for (i, g) in groups.iter().enumerate() {
             counts[i] = count_issue_ids(&st.pool, &link_ids, *g, gte, lte).await?;
@@ -1988,7 +2321,10 @@ pub async fn project_advance_stats(
         return Ok(deny());
     }
     if resolve_advance_type(q.r#type.as_deref(), "work-items", &["work-items"]).is_err() {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": INVALID_TYPE_MSG}))));
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"message": INVALID_TYPE_MSG})),
+        ));
     }
     // `get_work_items_stats` (`:119-163`): cycle/module id__in scoping, else
     // the project scope. `avatar_url` CASE (`:137-153`): the linked avatar
@@ -2007,11 +2343,43 @@ pub async fn project_advance_stats(
         Err(e) => return Ok(uuid_400(e)),
     };
     let scope = if let Some(cid) = cid {
-        let link_ids = scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &parse_project_ids(None)).await?;
-        format!("AND i.id = ANY('{{{}}}'::uuid[])", link_ids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","))
+        let link_ids = scoped_link_ids(
+            &st.pool,
+            "cycle_issues",
+            "cycle_id",
+            cid,
+            &slug,
+            auth.0,
+            &parse_project_ids(None),
+        )
+        .await?;
+        format!(
+            "AND i.id = ANY('{{{}}}'::uuid[])",
+            link_ids
+                .iter()
+                .map(|u| u.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     } else if let Some(mid) = mid {
-        let link_ids = scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &parse_project_ids(None)).await?;
-        format!("AND i.id = ANY('{{{}}}'::uuid[])", link_ids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","))
+        let link_ids = scoped_link_ids(
+            &st.pool,
+            "module_issues",
+            "module_id",
+            mid,
+            &slug,
+            auth.0,
+            &parse_project_ids(None),
+        )
+        .await?;
+        format!(
+            "AND i.id = ANY('{{{}}}'::uuid[])",
+            link_ids
+                .iter()
+                .map(|u| u.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     } else {
         format!("AND i.project_id = '{pid}'")
     };
@@ -2034,8 +2402,18 @@ pub async fn project_advance_stats(
          AND {member} {scope} \
          GROUP BY u.display_name, u.id, u.avatar_asset_id, u.avatar ORDER BY u.display_name"
     );
-    let rows: Vec<AssigneeStatRow> = sqlx::query_as(&sql).bind(&slug).bind(auth.0).fetch_all(&st.pool).await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(assignee_stat_json).collect::<Vec<_>>()))))
+    let rows: Vec<AssigneeStatRow> = sqlx::query_as(&sql)
+        .bind(&slug)
+        .bind(auth.0)
+        .fetch_all(&st.pool)
+        .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(assignee_stat_json)
+            .collect::<Vec<_>>())),
+    ))
 }
 
 // ============================================================================
@@ -2077,14 +2455,20 @@ pub async fn project_advance_charts(
     if !gate_project_amg(&st.pool, auth.0, &slug, pid).await? {
         return Ok(deny());
     }
-    let t = match resolve_advance_type(q.r#type.as_deref(), "projects", &["custom-work-items", "work-items"]) {
+    let t = match resolve_advance_type(
+        q.r#type.as_deref(),
+        "projects",
+        &["custom-work-items", "work-items"],
+    ) {
         Ok(t) => t,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"message": e})))),
     };
     let today = Utc::now().date_naive();
     // Same chart-type rule as A3: only `date_filter` applies.
     let _ = (q.start_date.as_deref(), q.end_date.as_deref());
-    let (start, end) = chart_window(q.date_filter.as_deref(), today).map(|(s, e)| (Some(s), Some(e))).unwrap_or((None, None));
+    let (start, end) = chart_window(q.date_filter.as_deref(), today)
+        .map(|(s, e)| (Some(s), Some(e)))
+        .unwrap_or((None, None));
     if t == "custom-work-items" {
         // `:326-355`: project scope + optional cycle/module id__in + chart
         // range → `build_analytics_chart`.
@@ -2111,16 +2495,49 @@ pub async fn project_advance_charts(
             Err(e) => return Ok(uuid_400(e)),
         };
         if let Some(cid) = chart_cid {
-            ids = Some(scoped_link_ids(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &ids).await?);
+            ids = Some(
+                scoped_link_ids(
+                    &st.pool,
+                    "cycle_issues",
+                    "cycle_id",
+                    cid,
+                    &slug,
+                    auth.0,
+                    &ids,
+                )
+                .await?,
+            );
         } else if let Some(mid) = chart_mid {
-            ids = Some(scoped_link_ids(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &ids).await?);
+            ids = Some(
+                scoped_link_ids(
+                    &st.pool,
+                    "module_issues",
+                    "module_id",
+                    mid,
+                    &slug,
+                    auth.0,
+                    &ids,
+                )
+                .await?,
+            );
         }
         // Feed the id__in set through the shared custom-chart path: stash
         // the scoped ids as the ONLY allowed projects? No — scope by issue
         // ids instead: reuse `custom_chart` with a project pin plus an
         // issue-id prefilter. The prefilter needs its own predicate, so
         // build it here via a dedicated query below.
-        let out = project_custom_chart(&st.pool, &slug, auth.0, pid, ids, start, end, &field, group.as_ref()).await?;
+        let out = project_custom_chart(
+            &st.pool,
+            &slug,
+            auth.0,
+            pid,
+            ids,
+            start,
+            end,
+            &field,
+            group.as_ref(),
+        )
+        .await?;
         return Ok((StatusCode::OK, Json(out)));
     }
     // `work-items` → `work_item_completion_chart` (`:183-315`).
@@ -2139,46 +2556,75 @@ pub async fn project_advance_charts(
         // missing cycle or a missing start date → empty data (`:201`).
         // (A missing end date would crash Django with `None <= date`;
         // normalized to empty + documented.)
-        let cycle: Option<DateRangeRow> =
-            sqlx::query_as("SELECT start_date, end_date FROM cycles WHERE id = $1 AND deleted_at IS NULL")
-                .bind(cid)
-                .fetch_optional(&st.pool)
-                .await?;
+        let cycle: Option<DateRangeRow> = sqlx::query_as(
+            "SELECT start_date, end_date FROM cycles WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(cid)
+        .fetch_optional(&st.pool)
+        .await?;
         let (s, e) = cycle.unwrap_or((None, None));
         let (Some(s), Some(e)) = (s, e) else {
             return Ok((StatusCode::OK, Json(json!({"data": [], "schema": {}}))));
         };
-        let stats = daily_link_stats(&st.pool, "cycle_issues", "cycle_id", cid, &slug, auth.0, &parse_project_ids(None)).await?;
+        let stats = daily_link_stats(
+            &st.pool,
+            "cycle_issues",
+            "cycle_id",
+            cid,
+            &slug,
+            auth.0,
+            &parse_project_ids(None),
+        )
+        .await?;
         return Ok((
             StatusCode::OK,
-            Json(json!({"data": daily_series(s.date_naive(), e.date_naive(), &stats), "schema": completion_schema()})),
+            Json(
+                json!({"data": daily_series(s.date_naive(), e.date_naive(), &stats), "schema": completion_schema()}),
+            ),
         ));
     }
     if let Some(mid) = mid {
         // Daily series over the MODULE's link rows (`:204-214,223-258`).
-        let module: Option<(Option<NaiveDate>, Option<NaiveDate>)> =
-            sqlx::query_as("SELECT start_date, target_date FROM modules WHERE id = $1 AND deleted_at IS NULL")
-                .bind(mid)
-                .fetch_optional(&st.pool)
-                .await?;
+        let module: Option<(Option<NaiveDate>, Option<NaiveDate>)> = sqlx::query_as(
+            "SELECT start_date, target_date FROM modules WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(mid)
+        .fetch_optional(&st.pool)
+        .await?;
         let Some((Some(s), Some(e))) = module else {
             return Ok((StatusCode::OK, Json(json!({"data": [], "schema": {}}))));
         };
-        let stats = daily_link_stats(&st.pool, "module_issues", "module_id", mid, &slug, auth.0, &parse_project_ids(None)).await?;
+        let stats = daily_link_stats(
+            &st.pool,
+            "module_issues",
+            "module_id",
+            mid,
+            &slug,
+            auth.0,
+            &parse_project_ids(None),
+        )
+        .await?;
         return Ok((
             StatusCode::OK,
             Json(json!({"data": daily_series(s, e, &stats), "schema": completion_schema()})),
         ));
     }
     // Monthly series from the project-creation month (`:216-221,259-308`).
-    let proj_created: Option<DateTime<Utc>> = sqlx::query_scalar("SELECT p.created_at FROM projects p WHERE p.id = $1")
-        .bind(pid)
-        .fetch_optional(&st.pool)
-        .await?;
+    let proj_created: Option<DateTime<Utc>> =
+        sqlx::query_scalar("SELECT p.created_at FROM projects p WHERE p.id = $1")
+            .bind(pid)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(proj_created) = proj_created else {
-        return Ok((StatusCode::OK, Json(json!({"data": [], "schema": completion_schema()}))));
+        return Ok((
+            StatusCode::OK,
+            Json(json!({"data": [], "schema": completion_schema()})),
+        ));
     };
-    let start_month = proj_created.date_naive().with_day(1).unwrap_or_else(|| proj_created.date_naive());
+    let start_month = proj_created
+        .date_naive()
+        .with_day(1)
+        .unwrap_or_else(|| proj_created.date_naive());
     let last_month = today.with_day(1).unwrap_or(today);
     let member = pred_member("i.project_id", "$2");
     let sql = format!(
@@ -2199,11 +2645,15 @@ pub async fn project_advance_charts(
         .bind(end)
         .fetch_all(&st.pool)
         .await?;
-    let stats: std::collections::BTreeMap<String, (i64, i64)> =
-        month_rows.into_iter().map(|(m, c, d)| (month_key(m), (c, d))).collect();
+    let stats: std::collections::BTreeMap<String, (i64, i64)> = month_rows
+        .into_iter()
+        .map(|(m, c, d)| (month_key(m), (c, d)))
+        .collect();
     Ok((
         StatusCode::OK,
-        Json(json!({"data": monthly_series(start_month, last_month, &stats), "schema": completion_schema()})),
+        Json(
+            json!({"data": monthly_series(start_month, last_month, &stats), "schema": completion_schema()}),
+        ),
     ))
 }
 
@@ -2243,8 +2693,15 @@ async fn project_custom_chart(
             gk = g.key_sql,
             gn = g.name_sql,
         );
-        let rows: Vec<GroupedRow> =
-            sqlx::query_as(&sql).bind(slug).bind(user).bind(pid).bind(start).bind(end).bind(prefilter).fetch_all(pool).await?;
+        let rows: Vec<GroupedRow> = sqlx::query_as(&sql)
+            .bind(slug)
+            .bind(user)
+            .bind(pid)
+            .bind(start)
+            .bind(end)
+            .bind(prefilter)
+            .fetch_all(pool)
+            .await?;
         let inputs: Vec<GroupedInput> = rows
             .into_iter()
             .map(|(k, n, gk, gn, c)| GroupedInput {
@@ -2260,7 +2717,11 @@ async fn project_custom_chart(
         let (data, schema) = process_grouped(&inputs);
         Ok(json!({"data": data, "schema": schema}))
     } else {
-        let order = if field.numeric_key { format!("ORDER BY {}", field.key_sql) } else { "ORDER BY 1".to_string() };
+        let order = if field.numeric_key {
+            format!("ORDER BY {}", field.key_sql)
+        } else {
+            "ORDER BY 1".to_string()
+        };
         let sql = format!(
             "SELECT ({xk})::text AS k, ({xn})::text AS n, COUNT(DISTINCT i.id) AS c {base} GROUP BY 1, 2 {order}",
             xk = field.key_sql,
@@ -2315,7 +2776,10 @@ async fn daily_link_stats(
         .bind(ids.clone())
         .fetch_all(pool)
         .await?;
-    Ok(rows.into_iter().map(|(d, c, k)| (d.to_string(), (c, k))).collect())
+    Ok(rows
+        .into_iter()
+        .map(|(d, c, k)| (d.to_string(), (c, k)))
+        .collect())
 }
 
 // ============================================================================
@@ -2379,7 +2843,11 @@ const DEPLOY_COLS: &str = "d.id, d.created_at, d.updated_at, d.created_by_id, d.
 /// cover_image_url, logo_props, description) and `workspace_detail` =
 /// `WorkspaceLiteSerializer` (`serializers/workspace.py:86-90`: name, slug,
 /// id, logo_url) — both built with the shared `history.rs` lite builders.
-fn deploy_json_with_details(row: &DeployRow, project_details: Value, workspace_detail: Value) -> Value {
+fn deploy_json_with_details(
+    row: &DeployRow,
+    project_details: Value,
+    workspace_detail: Value,
+) -> Value {
     let mut v = deploy_json(row);
     if let Value::Object(ref mut m) = v {
         m.insert("project_details".to_string(), project_details);
@@ -2455,9 +2923,22 @@ async fn deploy_json_full(pool: &sqlx::PgPool, row: &DeployRow) -> Result<Value,
     .fetch_optional(pool)
     .await?;
     let workspace_detail = w
-        .map(|w| workspace_lite_json(w.id, &w.name, &w.slug, &w.logo, w.logo_asset_id, w.logo_entity_type.as_deref()))
+        .map(|w| {
+            workspace_lite_json(
+                w.id,
+                &w.name,
+                &w.slug,
+                &w.logo,
+                w.logo_asset_id,
+                w.logo_entity_type.as_deref(),
+            )
+        })
         .unwrap_or(Value::Null);
-    Ok(deploy_json_with_details(row, project_details, workspace_detail))
+    Ok(deploy_json_with_details(
+        row,
+        project_details,
+        workspace_detail,
+    ))
 }
 
 /// Scoped lookup for `list`/create-upsert: the project's board in this
@@ -2496,8 +2977,14 @@ fn deploy_pk_sql() -> String {
         .replacen("SELECT id,", "SELECT d.id,", 1)
 }
 
-async fn fetch_deploy_by_pk(pool: &sqlx::PgPool, pk: uuid::Uuid) -> Result<Option<DeployRow>, sqlx::Error> {
-    sqlx::query_as::<_, DeployRow>(&deploy_pk_sql()).bind(pk).fetch_optional(pool).await
+async fn fetch_deploy_by_pk(
+    pool: &sqlx::PgPool,
+    pk: uuid::Uuid,
+) -> Result<Option<DeployRow>, sqlx::Error> {
+    sqlx::query_as::<_, DeployRow>(&deploy_pk_sql())
+        .bind(pk)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn deploy_list(
@@ -2514,7 +3001,10 @@ pub async fn deploy_list(
     // `list` (`base.py:540-546`): `.first()` may be None → `serializer.data`
     // is `null` — Django returns 200 `null`, preserved here (NOT 404).
     match fetch_deploy(&st.pool, pid, &slug, None).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
+        Some(row) => Ok((
+            StatusCode::OK,
+            Json(deploy_json_full(&st.pool, &row).await?),
+        )),
         None => Ok((StatusCode::OK, Json(Value::Null))),
     }
 }
@@ -2601,7 +3091,10 @@ pub async fn deploy_create(
     }
     tx.commit().await?;
     match fetch_deploy(&st.pool, pid, &slug, None).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
+        Some(row) => Ok((
+            StatusCode::OK,
+            Json(deploy_json_full(&st.pool, &row).await?),
+        )),
         None => Ok(missing()),
     }
 }
@@ -2618,7 +3111,10 @@ pub async fn deploy_retrieve(
         return Ok(deny_detail());
     }
     match fetch_deploy_by_pk(&st.pool, pk).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
+        Some(row) => Ok((
+            StatusCode::OK,
+            Json(deploy_json_full(&st.pool, &row).await?),
+        )),
         None => Ok(missing()),
     }
 }
@@ -2702,7 +3198,10 @@ pub async fn deploy_patch(
     .execute(&st.pool)
     .await?;
     match fetch_deploy_by_pk(&st.pool, pk).await? {
-        Some(row) => Ok((StatusCode::OK, Json(deploy_json_full(&st.pool, &row).await?))),
+        Some(row) => Ok((
+            StatusCode::OK,
+            Json(deploy_json_full(&st.pool, &row).await?),
+        )),
         None => Ok(missing()),
     }
 }
@@ -2834,7 +3333,11 @@ const ESTIMATE_JOIN: &str =
 ///
 /// NOTE: the distribution scope is NOT used for `total` — see
 /// `plot_total_scope` (axis/segment LEFT JOINs fan M2M rows out).
-fn plot_scope(x_axis: &str, y_axis: &str, segment: Option<&str>) -> Result<(String, Option<String>, String), String> {
+fn plot_scope(
+    x_axis: &str,
+    y_axis: &str,
+    segment: Option<&str>,
+) -> Result<(String, Option<String>, String), String> {
     let (dim, x_join, x_date) = plot_axis_parts(x_axis)?;
     let (seg_expr, s_join) = match segment {
         None => (None, String::new()),
@@ -2854,7 +3357,11 @@ fn plot_scope(x_axis: &str, y_axis: &str, segment: Option<&str>) -> Result<(Stri
     if y_axis == "estimate" && !joins.iter().any(|j| j.contains("estimate_points epe")) {
         joins.push(ESTIMATE_JOIN.to_string());
     }
-    let join_sql = if joins.is_empty() { String::new() } else { format!(" {}", joins.join(" ")) };
+    let join_sql = if joins.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", joins.join(" "))
+    };
     let mut from_where = format!(
         "FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
          JOIN states s ON s.id = i.state_id JOIN projects p ON p.id = i.project_id\
@@ -2919,9 +3426,15 @@ pub fn sort_plot_keys(keys: Vec<String>, x_axis: &str) -> Vec<String> {
 /// `{dimension_str: [row, ...]}` where NULL dimensions key as `"None"`
 /// (`str(None)`) and rows carry `dimension` + (`segment` | `count` /
 /// `estimate`) exactly like the Django `values()` dicts.
-pub fn plot_distribution(points: Vec<PlotPoint>, y_axis: &str, x_axis: &str, segmented: bool) -> Value {
+pub fn plot_distribution(
+    points: Vec<PlotPoint>,
+    y_axis: &str,
+    x_axis: &str,
+    segmented: bool,
+) -> Value {
     let mut order: Vec<String> = vec![];
-    let mut buckets: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+    let mut buckets: std::collections::HashMap<String, Vec<Value>> =
+        std::collections::HashMap::new();
     for pt in points {
         let key = pt.dim.clone().unwrap_or_else(|| "None".to_string());
         let mut item = serde_json::Map::new();
@@ -2930,10 +3443,16 @@ pub fn plot_distribution(points: Vec<PlotPoint>, y_axis: &str, x_axis: &str, seg
             pt.dim.map(Value::String).unwrap_or(Value::Null),
         );
         if segmented {
-            item.insert("segment".to_string(), pt.seg.clone().map(Value::String).unwrap_or(Value::Null));
+            item.insert(
+                "segment".to_string(),
+                pt.seg.clone().map(Value::String).unwrap_or(Value::Null),
+            );
         }
         if y_axis == "estimate" {
-            item.insert("estimate".to_string(), pt.estimate.map(|e| json!(e)).unwrap_or(Value::Null));
+            item.insert(
+                "estimate".to_string(),
+                pt.estimate.map(|e| json!(e)).unwrap_or(Value::Null),
+            );
         } else {
             item.insert("count".to_string(), json!(pt.count));
         }
@@ -2977,8 +3496,10 @@ async fn run_plot(
     // M2M rows out (1 issue × N labels = N rows) and must not leak into the
     // count — Django counts before `build_graph_plot` joins (`base.py:65`).
     let total_scope = plot_total_scope(x_axis).map_err(|e| anyhow::anyhow!(e))?;
-    let total: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) {total_scope}")).bind(slug).fetch_one(pool).await?;
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {total_scope}"))
+        .bind(slug)
+        .fetch_one(pool)
+        .await?;
     let segmented = seg_expr.is_some();
     let distribution = if y_axis == "estimate" {
         if let Some(se) = seg_expr {
@@ -2990,7 +3511,12 @@ async fn run_plot(
             .await?;
             plot_distribution(
                 rows.into_iter()
-                    .map(|(d, g, e)| PlotPoint { dim: d, seg: g, count: 0, estimate: e })
+                    .map(|(d, g, e)| PlotPoint {
+                        dim: d,
+                        seg: g,
+                        count: 0,
+                        estimate: e,
+                    })
                     .collect(),
                 y_axis,
                 x_axis,
@@ -3004,38 +3530,64 @@ async fn run_plot(
             .fetch_all(pool)
             .await?;
             plot_distribution(
-                rows.into_iter().map(|(d, e)| PlotPoint { dim: d, seg: None, count: 0, estimate: e }).collect(),
+                rows.into_iter()
+                    .map(|(d, e)| PlotPoint {
+                        dim: d,
+                        seg: None,
+                        count: 0,
+                        estimate: e,
+                    })
+                    .collect(),
                 y_axis,
                 x_axis,
                 segmented,
             )
         }
     } else if let Some(se) = seg_expr {
-        let rows: Vec<(Option<String>, Option<String>, i64)> =
-            sqlx::query_as(&format!("SELECT {dim} AS d, {se} AS g, COUNT(*) AS c {fw} GROUP BY 1, 2 ORDER BY 1"))
-                .bind(slug)
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<(Option<String>, Option<String>, i64)> = sqlx::query_as(&format!(
+            "SELECT {dim} AS d, {se} AS g, COUNT(*) AS c {fw} GROUP BY 1, 2 ORDER BY 1"
+        ))
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
         plot_distribution(
-            rows.into_iter().map(|(d, g, c)| PlotPoint { dim: d, seg: g, count: c, estimate: None }).collect(),
+            rows.into_iter()
+                .map(|(d, g, c)| PlotPoint {
+                    dim: d,
+                    seg: g,
+                    count: c,
+                    estimate: None,
+                })
+                .collect(),
             y_axis,
             x_axis,
             segmented,
         )
     } else {
-        let rows: Vec<(Option<String>, i64)> =
-            sqlx::query_as(&format!("SELECT {dim} AS d, COUNT(*) AS c {fw} GROUP BY 1 ORDER BY 1"))
-                .bind(slug)
-                .fetch_all(pool)
-                .await?;
+        let rows: Vec<(Option<String>, i64)> = sqlx::query_as(&format!(
+            "SELECT {dim} AS d, COUNT(*) AS c {fw} GROUP BY 1 ORDER BY 1"
+        ))
+        .bind(slug)
+        .fetch_all(pool)
+        .await?;
         plot_distribution(
-            rows.into_iter().map(|(d, c)| PlotPoint { dim: d, seg: None, count: c, estimate: None }).collect(),
+            rows.into_iter()
+                .map(|(d, c)| PlotPoint {
+                    dim: d,
+                    seg: None,
+                    count: c,
+                    estimate: None,
+                })
+                .collect(),
             y_axis,
             x_axis,
             segmented,
         )
     };
-    Ok(PlotOutput { total, distribution })
+    Ok(PlotOutput {
+        total,
+        distribution,
+    })
 }
 
 /// Workspace + `issue_objects` scope fragment for the extras lookups that
@@ -3147,7 +3699,9 @@ async fn analytics_extras(
         .await?;
         json!(rows
             .into_iter()
-            .map(|(id, name)| json!({"issue_cycle__cycle_id": id, "issue_cycle__cycle__name": name}))
+            .map(
+                |(id, name)| json!({"issue_cycle__cycle_id": id, "issue_cycle__cycle__name": name})
+            )
             .collect::<Vec<_>>())
     } else {
         json!({})
@@ -3205,7 +3759,10 @@ pub async fn workspace_analytics(
     let seg = q.segment.clone();
     let out = run_plot(&st.pool, &slug, &x, &y, seg.as_deref()).await?;
     let extras = analytics_extras(&st.pool, &slug, &x, seg.as_deref()).await?;
-    Ok((StatusCode::OK, Json(json!({"total": out.total, "distribution": out.distribution, "extras": extras}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"total": out.total, "distribution": out.distribution, "extras": extras})),
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -3233,8 +3790,16 @@ pub async fn saved_analytic(
     let Some(view) = fetch_analytic_view(&st.pool, analytic_id, &slug).await? else {
         return Ok(missing());
     };
-    let x = view.query_dict.get("x_axis").and_then(Value::as_str).unwrap_or("");
-    let y = view.query_dict.get("y_axis").and_then(Value::as_str).unwrap_or("");
+    let x = view
+        .query_dict
+        .get("x_axis")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let y = view
+        .query_dict
+        .get("y_axis")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     if !VALID_X_AXIS.contains(&x) || !VALID_Y_AXIS.contains(&y) {
         return Ok(axes_400(AXIS_REQUIRED_MSG.to_string()));
     }
@@ -3242,7 +3807,10 @@ pub async fn saved_analytic(
         return Ok(axes_400(e));
     }
     let out = run_plot(&st.pool, &slug, x, y, q.segment.as_deref()).await?;
-    Ok((StatusCode::OK, Json(json!({"total": out.total, "distribution": out.distribution}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"total": out.total, "distribution": out.distribution})),
+    ))
 }
 
 /// `POST export-analytics/` (`base.py:222-248`): ADMIN/MEMBER gate; body
@@ -3268,7 +3836,10 @@ pub async fn export_analytics(
         .fetch_optional(&st.pool)
         .await?
         .flatten();
-    Ok((StatusCode::OK, Json(json!({"message": export_message(&email.unwrap_or_default())}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"message": export_message(&email.unwrap_or_default())})),
+    ))
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -3285,7 +3856,8 @@ struct AnalyticViewRow {
     workspace_id: uuid::Uuid,
 }
 
-const ANALYTIC_VIEW_COLS: &str = "a.id, a.created_at, a.updated_at, a.name, a.description, a.query, \
+const ANALYTIC_VIEW_COLS: &str =
+    "a.id, a.created_at, a.updated_at, a.name, a.description, a.query, \
     a.query_dict, a.created_by_id, a.updated_by_id, a.workspace_id";
 
 /// Scoped lookup mirroring `AnalyticViewViewset.get_queryset`
@@ -3415,10 +3987,12 @@ pub async fn analytic_view_destroy(
     if fetch_analytic_view(&st.pool, pk, &slug).await?.is_none() {
         return Ok(missing().into_response());
     }
-    sqlx::query("UPDATE analytic_views SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL")
-        .bind(pk)
-        .execute(&st.pool)
-        .await?;
+    sqlx::query(
+        "UPDATE analytic_views SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
@@ -3434,12 +4008,18 @@ mod tests {
     fn tab_defaults_to_overview() {
         assert_eq!(resolve_advance_tab(None), Ok(AdvTab::Overview));
         assert_eq!(resolve_advance_tab(Some("overview")), Ok(AdvTab::Overview));
-        assert_eq!(resolve_advance_tab(Some("work-items")), Ok(AdvTab::WorkItems));
+        assert_eq!(
+            resolve_advance_tab(Some("work-items")),
+            Ok(AdvTab::WorkItems)
+        );
     }
 
     #[test]
     fn tab_invalid_400_const() {
-        assert_eq!(resolve_advance_tab(Some("bogus")), Err(INVALID_TAB_MSG.to_string()));
+        assert_eq!(
+            resolve_advance_tab(Some("bogus")),
+            Err(INVALID_TAB_MSG.to_string())
+        );
         assert_eq!(INVALID_TAB_MSG, "Invalid tab");
     }
 
@@ -3457,11 +4037,17 @@ mod tests {
         );
         // A3 default accepts projects.
         assert_eq!(
-            resolve_advance_type(None, "projects", &["projects", "custom-work-items", "work-items"]),
+            resolve_advance_type(
+                None,
+                "projects",
+                &["projects", "custom-work-items", "work-items"]
+            ),
             Ok("projects".to_string())
         );
         // A6 default is "projects" which is NOT allowed → Invalid type.
-        assert!(resolve_advance_type(None, "projects", &["custom-work-items", "work-items"]).is_err());
+        assert!(
+            resolve_advance_type(None, "projects", &["custom-work-items", "work-items"]).is_err()
+        );
     }
 
     #[test]
@@ -3470,16 +4056,19 @@ mod tests {
         let obj = v.as_object().unwrap();
         assert_eq!(obj.len(), 8);
         for k in OVERVIEW_KEYS {
-            assert_eq!(obj[k], json!({"count": match k {
-                "total_users" => 1,
-                "total_admins" => 2,
-                "total_members" => 3,
-                "total_guests" => 4,
-                "total_projects" => 5,
-                "total_work_items" => 6,
-                "total_cycles" => 7,
-                _ => 8,
-            }}));
+            assert_eq!(
+                obj[k],
+                json!({"count": match k {
+                    "total_users" => 1,
+                    "total_admins" => 2,
+                    "total_members" => 3,
+                    "total_guests" => 4,
+                    "total_projects" => 5,
+                    "total_work_items" => 6,
+                    "total_cycles" => 7,
+                    _ => 8,
+                }})
+            );
         }
     }
 
@@ -3511,18 +4100,41 @@ mod tests {
         assert_eq!(w.gte.to_string(), "2026-09-05 00:00:00 UTC");
         assert!(w.lte.to_string().starts_with("2026-09-05 23:59:59"));
         let w = analytics_window(Some("last_7_days"), None, None, today).unwrap();
-        assert_eq!(w.gte.date_naive(), NaiveDate::from_ymd_opt(2026, 8, 30).unwrap());
+        assert_eq!(
+            w.gte.date_naive(),
+            NaiveDate::from_ymd_opt(2026, 8, 30).unwrap()
+        );
         assert_eq!(w.lte.date_naive(), today);
         let w = analytics_window(Some("last_30_days"), None, None, today).unwrap();
-        assert_eq!(w.gte.date_naive(), NaiveDate::from_ymd_opt(2026, 8, 7).unwrap());
+        assert_eq!(
+            w.gte.date_naive(),
+            NaiveDate::from_ymd_opt(2026, 8, 7).unwrap()
+        );
         let w = analytics_window(Some("last_3_months"), None, None, today).unwrap();
-        assert_eq!(w.gte.date_naive(), NaiveDate::from_ymd_opt(2026, 6, 8).unwrap());
-        let w = analytics_window(Some("custom"), Some("2026-01-01"), Some("2026-01-31"), today).unwrap();
-        assert_eq!(w.gte.date_naive(), NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
-        assert_eq!(w.lte.date_naive(), NaiveDate::from_ymd_opt(2026, 1, 31).unwrap());
+        assert_eq!(
+            w.gte.date_naive(),
+            NaiveDate::from_ymd_opt(2026, 6, 8).unwrap()
+        );
+        let w = analytics_window(
+            Some("custom"),
+            Some("2026-01-01"),
+            Some("2026-01-31"),
+            today,
+        )
+        .unwrap();
+        assert_eq!(
+            w.gte.date_naive(),
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()
+        );
+        assert_eq!(
+            w.lte.date_naive(),
+            NaiveDate::from_ymd_opt(2026, 1, 31).unwrap()
+        );
         // custom without both dates → None (date_utils.py:75-87).
         assert!(analytics_window(Some("custom"), Some("2026-01-01"), None, today).is_none());
-        assert!(analytics_window(Some("custom"), Some("nope"), Some("2026-01-31"), today).is_none());
+        assert!(
+            analytics_window(Some("custom"), Some("nope"), Some("2026-01-31"), today).is_none()
+        );
     }
 
     #[test]
@@ -3534,7 +4146,10 @@ mod tests {
         assert!(chart_window(Some("custom"), today).is_none());
         assert_eq!(
             chart_window(Some("yesterday"), today),
-            Some((NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(), NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()))
+            Some((
+                NaiveDate::from_ymd_opt(2026, 9, 5).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 9, 5).unwrap()
+            ))
         );
         assert_eq!(
             chart_window(Some("last_7_days"), today),
@@ -3551,8 +4166,14 @@ mod tests {
         assert_eq!(chart_field("PRIORITY").unwrap().key_sql, "i.priority");
         assert!(chart_field("ESTIMATE_POINTS").unwrap().numeric_key);
         assert!(!chart_field("PRIORITY").unwrap().numeric_key);
-        assert!(chart_field("LABELS").unwrap().join_sql.contains("issue_labels"));
-        assert!(chart_field("ASSIGNEES").unwrap().join_sql.contains("issue_assignees"));
+        assert!(chart_field("LABELS")
+            .unwrap()
+            .join_sql
+            .contains("issue_labels"));
+        assert!(chart_field("ASSIGNEES")
+            .unwrap()
+            .join_sql
+            .contains("issue_assignees"));
     }
 
     #[test]
@@ -3563,7 +4184,11 @@ mod tests {
         assert_eq!(gerr, "Invalid group_by field: NOPE");
         let (status, body) = detail_400(err);
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body.get("detail").and_then(Value::as_str).unwrap().contains("Invalid x_axis"));
+        assert!(body
+            .get("detail")
+            .and_then(Value::as_str)
+            .unwrap()
+            .contains("Invalid x_axis"));
     }
 
     #[test]
@@ -3708,7 +4333,10 @@ mod tests {
             deploy_views_patch(&json!({"view_props": {"list": true}})),
             Some(json!({"list": true}))
         );
-        assert_eq!(deploy_views_patch(&json!({"views": {"list": true}})), Some(json!({"list": true})));
+        assert_eq!(
+            deploy_views_patch(&json!({"views": {"list": true}})),
+            Some(json!({"list": true}))
+        );
         assert_eq!(deploy_views_patch(&json!({})), None);
     }
 
@@ -3807,10 +4435,20 @@ mod tests {
         let v = deploy_json_with_details(&row, proj, ws);
         let obj = v.as_object().unwrap();
         let pd = obj.get("project_details").expect("project_details present");
-        for k in ["id", "identifier", "name", "cover_image", "cover_image_url", "logo_props", "description"] {
+        for k in [
+            "id",
+            "identifier",
+            "name",
+            "cover_image",
+            "cover_image_url",
+            "logo_props",
+            "description",
+        ] {
             assert!(pd.get(k).is_some(), "project_details.{k}");
         }
-        let wd = obj.get("workspace_detail").expect("workspace_detail present");
+        let wd = obj
+            .get("workspace_detail")
+            .expect("workspace_detail present");
         for k in ["name", "slug", "id", "logo_url"] {
             assert!(wd.get(k).is_some(), "workspace_detail.{k}");
         }
@@ -3855,19 +4493,31 @@ mod tests {
         use axum::response::IntoResponse;
         let resp = StatusCode::NO_CONTENT.into_response();
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
-        assert!(resp.headers().get(axum::http::header::CONTENT_TYPE).is_none());
+        assert!(resp
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .is_none());
     }
 
     #[test]
     fn analytics_axis_validation_matches_django() {
-        assert_eq!(AXIS_REQUIRED_MSG, "x-axis and y-axis dimensions are required and the values should be valid");
-        assert_eq!(SEGMENT_INVALID_MSG, "Both segment and x axis cannot be same and segment should be valid");
+        assert_eq!(
+            AXIS_REQUIRED_MSG,
+            "x-axis and y-axis dimensions are required and the values should be valid"
+        );
+        assert_eq!(
+            SEGMENT_INVALID_MSG,
+            "Both segment and x axis cannot be same and segment should be valid"
+        );
     }
 
     #[test]
     fn export_analytics_message_shape() {
         let msg = export_message("a@b.co");
-        assert_eq!(msg, "Once the export is ready it will be emailed to you at a@b.co");
+        assert_eq!(
+            msg,
+            "Once the export is ready it will be emailed to you at a@b.co"
+        );
     }
 
     #[test]
@@ -3892,7 +4542,11 @@ mod tests {
         );
         assert_eq!(VALID_Y_AXIS, ["issue_count", "estimate"]);
         // `validate_axes` surfaces the const messages.
-        let bad = AxisParams { x_axis: Some("nope".to_string()), y_axis: Some("issue_count".to_string()), segment: None };
+        let bad = AxisParams {
+            x_axis: Some("nope".to_string()),
+            y_axis: Some("issue_count".to_string()),
+            segment: None,
+        };
         assert_eq!(validate_axes(&bad).unwrap_err(), AXIS_REQUIRED_MSG);
         let bad_seg = AxisParams {
             x_axis: Some("priority".to_string()),
@@ -3952,19 +4606,33 @@ mod tests {
         // Date-axis NULL exclusion still applies (same-issue coverage as
         // the distribution); plain axes carry no extra predicate.
         assert!(
-            plot_total_scope("created_at").unwrap().contains("i.created_at IS NOT NULL"),
+            plot_total_scope("created_at")
+                .unwrap()
+                .contains("i.created_at IS NOT NULL"),
             "{}",
             plot_total_scope("created_at").unwrap()
         );
-        assert!(!plot_total_scope("priority").unwrap().contains("IS NOT NULL"));
+        assert!(!plot_total_scope("priority")
+            .unwrap()
+            .contains("IS NOT NULL"));
     }
 
     #[test]
     fn plot_distribution_shape() {
         // Ungrouped count: NULL dimension keys as "None" (str(None)).
         let points = vec![
-            PlotPoint { dim: Some("high".to_string()), seg: None, count: 2, estimate: None },
-            PlotPoint { dim: None, seg: None, count: 1, estimate: None },
+            PlotPoint {
+                dim: Some("high".to_string()),
+                seg: None,
+                count: 2,
+                estimate: None,
+            },
+            PlotPoint {
+                dim: None,
+                seg: None,
+                count: 1,
+                estimate: None,
+            },
         ];
         let v = plot_distribution(points, "issue_count", "state__group", false);
         // Non-priority axes sort ascending ("None" = str(None) sorts first).
@@ -3976,18 +4644,30 @@ mod tests {
         // (incl. the "None" bucket) is dropped, mirroring the
         // `{key: data[key] for key in order ...}` comprehension literally.
         let points = vec![
-            PlotPoint { dim: Some("high".to_string()), seg: None, count: 2, estimate: None },
-            PlotPoint { dim: None, seg: None, count: 1, estimate: None },
+            PlotPoint {
+                dim: Some("high".to_string()),
+                seg: None,
+                count: 2,
+                estimate: None,
+            },
+            PlotPoint {
+                dim: None,
+                seg: None,
+                count: 1,
+                estimate: None,
+            },
         ];
         let v = plot_distribution(points, "issue_count", "priority", false);
         let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
         assert_eq!(keys, vec!["high"]);
         // Non-priority axes sort ascending with "none" last.
-        assert_eq!(sort_plot_keys(vec!["b".to_string(), "none".to_string(), "a".to_string()], "state__group"), vec![
-            "a".to_string(),
-            "b".to_string(),
-            "none".to_string()
-        ]);
+        assert_eq!(
+            sort_plot_keys(
+                vec!["b".to_string(), "none".to_string(), "a".to_string()],
+                "state__group"
+            ),
+            vec!["a".to_string(), "b".to_string(), "none".to_string()]
+        );
         // Segmented estimate rows carry segment + estimate, no count.
         let points = vec![PlotPoint {
             dim: Some("high".to_string()),
@@ -3996,6 +4676,9 @@ mod tests {
             estimate: Some(4.5),
         }];
         let v = plot_distribution(points, "estimate", "priority", true);
-        assert_eq!(v["high"], json!([{"dimension": "high", "segment": "low", "estimate": 4.5}]));
+        assert_eq!(
+            v["high"],
+            json!([{"dimension": "high", "segment": "low", "estimate": 4.5}])
+        );
     }
 }

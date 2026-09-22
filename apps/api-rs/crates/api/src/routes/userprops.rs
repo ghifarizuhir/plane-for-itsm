@@ -378,7 +378,10 @@ pub async fn project_props_get(
     if !gate(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    if fetch_project_row(&st.pool, auth.0, project_id).await?.is_none() {
+    if fetch_project_row(&st.pool, auth.0, project_id)
+        .await?
+        .is_none()
+    {
         insert_project_row(&st.pool, auth.0, project_id, &slug).await?;
     }
     // Unreachable post-gate (the gate's slug-scoped membership lookup
@@ -409,7 +412,10 @@ pub async fn project_props_patch(
     if let Err(msg) = validate_project_prop_patch(&body) {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": msg}))));
     }
-    if fetch_project_row(&st.pool, auth.0, project_id).await?.is_none() {
+    if fetch_project_row(&st.pool, auth.0, project_id)
+        .await?
+        .is_none()
+    {
         insert_project_row(&st.pool, auth.0, project_id, &slug).await?;
     }
     let Some(cur) = fetch_project_row(&st.pool, auth.0, project_id).await? else {
@@ -423,27 +429,26 @@ pub async fn project_props_patch(
         .get("sort_order")
         .and_then(serde_json::Value::as_f64)
         .unwrap_or(cur.sort_order);
-    let updated: Result<Option<ProjectPropRow>, sqlx::Error> = sqlx::query_as::<_, ProjectPropRow>(
-        &format!(
+    let updated: Result<Option<ProjectPropRow>, sqlx::Error> =
+        sqlx::query_as::<_, ProjectPropRow>(&format!(
             "UPDATE project_user_properties SET filters = $1, display_filters = $2, \
             display_properties = $3, rich_filters = $4, preferences = $5, sort_order = $6, \
             updated_by_id = $7, updated_at = now() WHERE id = $8 RETURNING {PROJECT_COLS}"
-        ),
-    )
-    .bind(pick_or(&body, "filters", &cur.filters))
-    .bind(pick_or(&body, "display_filters", &cur.display_filters))
-    .bind(pick_or(
-        &body,
-        "display_properties",
-        &cur.display_properties,
-    ))
-    .bind(pick_or(&body, "rich_filters", &cur.rich_filters))
-    .bind(pick_or(&body, "preferences", &cur.preferences))
-    .bind(sort_order)
-    .bind(auth.0)
-    .bind(cur.id)
-    .fetch_optional(&st.pool)
-    .await;
+        ))
+        .bind(pick_or(&body, "filters", &cur.filters))
+        .bind(pick_or(&body, "display_filters", &cur.display_filters))
+        .bind(pick_or(
+            &body,
+            "display_properties",
+            &cur.display_properties,
+        ))
+        .bind(pick_or(&body, "rich_filters", &cur.rich_filters))
+        .bind(pick_or(&body, "preferences", &cur.preferences))
+        .bind(sort_order)
+        .bind(auth.0)
+        .bind(cur.id)
+        .fetch_optional(&st.pool)
+        .await;
     match updated {
         Ok(Some(row)) => Ok((StatusCode::OK, Json(project_prop_json(&row)))),
         Ok(None) => Ok(missing()),
@@ -663,8 +668,7 @@ pub async fn module_props_patch(
     if !gate(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    let Some(cur) = fetch_module_row(&st.pool, auth.0, module_id, project_id, &slug).await?
-    else {
+    let Some(cur) = fetch_module_row(&st.pool, auth.0, module_id, project_id, &slug).await? else {
         debug_assert_eq!(missing_prop_patch("module"), StatusCode::NOT_FOUND);
         return Ok(missing());
     };
@@ -735,14 +739,8 @@ mod batch_d_d4_tests {
         // (`cycle/base.py:635-642`): present wins, absent keeps old.
         let cur = json!({"priority": null});
         let body = json!({"filters": {"priority": "high"}, "other": 1});
-        assert_eq!(
-            pick_or(&body, "filters", &cur),
-            json!({"priority": "high"})
-        );
-        assert_eq!(
-            pick_or(&body, "rich_filters", &json!({})),
-            json!({})
-        );
+        assert_eq!(pick_or(&body, "filters", &cur), json!({"priority": "high"}));
+        assert_eq!(pick_or(&body, "rich_filters", &json!({})), json!({}));
         // Explicit null passes through like Django's direct assignment
         // (DB `NOT NULL` then rejects it → 400 `PAYLOAD_INVALID_MSG`).
         let null_body = json!({"filters": null});
@@ -758,21 +756,11 @@ mod batch_d_d4_tests {
         // (`serializers/issue.py:354-358`): any non-number (incl. null on
         // the non-nullable column) → Django `ValidationError` → 400
         // `INVALID_DETAIL_MSG` (`views/base.py:100-104`).
-        assert_eq!(
-            INVALID_DETAIL_MSG,
-            "Please provide valid detail"
-        );
-        assert_eq!(
-            PAYLOAD_INVALID_MSG,
-            "The payload is not valid"
-        );
+        assert_eq!(INVALID_DETAIL_MSG, "Please provide valid detail");
+        assert_eq!(PAYLOAD_INVALID_MSG, "The payload is not valid");
         assert!(validate_project_prop_patch(&json!({})).is_ok());
-        assert!(
-            validate_project_prop_patch(&json!({"sort_order": 12345.0})).is_ok()
-        );
-        assert!(
-            validate_project_prop_patch(&json!({"filters": {"a": 1}})).is_ok()
-        );
+        assert!(validate_project_prop_patch(&json!({"sort_order": 12345.0})).is_ok());
+        assert!(validate_project_prop_patch(&json!({"filters": {"a": 1}})).is_ok());
         assert_eq!(
             validate_project_prop_patch(&json!({"sort_order": "high"})).unwrap_err(),
             "Please provide valid detail"
@@ -828,7 +816,10 @@ mod batch_d_d4_tests {
             "preferences",
             "sort_order",
         ] {
-            assert!(v.get(key).is_some(), "ProjectUserProperty missing key {key}");
+            assert!(
+                v.get(key).is_some(),
+                "ProjectUserProperty missing key {key}"
+            );
         }
         assert!(v.get("updated_by").unwrap().is_null());
         assert!(v.get("deleted_at").unwrap().is_null());
@@ -875,7 +866,10 @@ mod batch_d_d4_tests {
             "display_properties",
             "rich_filters",
         ] {
-            assert!(v.get(key).is_some(), "CycleUserProperties missing key {key}");
+            assert!(
+                v.get(key).is_some(),
+                "CycleUserProperties missing key {key}"
+            );
         }
         assert!(v.get("preferences").is_none());
         assert!(v.get("sort_order").is_none());
@@ -920,7 +914,10 @@ mod batch_d_d4_tests {
             "display_properties",
             "rich_filters",
         ] {
-            assert!(v.get(key).is_some(), "ModuleUserProperties missing key {key}");
+            assert!(
+                v.get(key).is_some(),
+                "ModuleUserProperties missing key {key}"
+            );
         }
         assert!(v.get("preferences").is_none());
         assert!(v.get("sort_order").is_none());

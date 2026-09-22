@@ -2,7 +2,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::routes::project::{FORBIDDEN_MSG, deny, missing};
+use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
@@ -206,7 +206,11 @@ pub(crate) struct ArchivedIssueDetailRow {
 pub async fn retrieve(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let (allowed, _) = archive_one_gate(&st.pool, auth.0, &slug, project_id).await?;
     if !allowed {
@@ -282,7 +286,11 @@ pub async fn retrieve(
 pub async fn archive(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let (allowed, _) = archive_one_gate(&st.pool, auth.0, &slug, project_id).await?;
     if !allowed {
@@ -336,7 +344,10 @@ pub async fn archive(
     .bind(today)
     .execute(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!({"archived_at": today.to_string()}))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({"archived_at": today.to_string()})),
+    ))
 }
 
 /// DELETE `/api/workspaces/:slug/projects/:project_id/issues/:pk/archive/`
@@ -350,7 +361,11 @@ pub async fn archive(
 pub async fn unarchive(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let (allowed, _) = archive_one_gate(&st.pool, auth.0, &slug, project_id).await?;
     if !allowed {

@@ -150,7 +150,13 @@ pub async fn list(
     .bind(&slug)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(json!(rows.iter().map(|r| webhook_full_json(r, false)).collect::<Vec<_>>()))))
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(|r| webhook_full_json(r, false))
+            .collect::<Vec<_>>())),
+    ))
 }
 
 pub async fn create(
@@ -184,7 +190,10 @@ pub async fn create(
     .fetch_one(&st.pool)
     .await?;
     if dup {
-        return Ok((StatusCode::CONFLICT, Json(json!({"error": "URL already exists for the workspace"}))));
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "URL already exists for the workspace"})),
+        ));
     }
 
     // `_validate_webhook_url` SSRF/DNS checks (`serializers/webhook.py:30-56`)
@@ -207,7 +216,9 @@ pub async fn create(
     match row {
         // 201 full row WITH secret (`show_secret_key`, `base.py:27`).
         Some(r) => Ok((StatusCode::CREATED, Json(webhook_full_json(&r, true)))),
-        None => Err(common::errors::AppError(anyhow::anyhow!("webhook insert failed"))),
+        None => Err(common::errors::AppError(anyhow::anyhow!(
+            "webhook insert failed"
+        ))),
     }
 }
 
@@ -319,8 +330,14 @@ pub async fn patch(
     }
     let mut tx = st.pool.begin().await?;
     if let Some(url) = body.get("url").and_then(Value::as_str) {
-        sqlx::query("UPDATE webhooks SET url = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")
-            .bind(url).bind(auth.0).bind(pk).execute(&mut *tx).await?;
+        sqlx::query(
+            "UPDATE webhooks SET url = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3",
+        )
+        .bind(url)
+        .bind(auth.0)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
     }
     if let Some(b) = body.get("is_active").and_then(Value::as_bool) {
         sqlx::query("UPDATE webhooks SET is_active = $1, updated_at = now(), updated_by_id = $2 WHERE id = $3")

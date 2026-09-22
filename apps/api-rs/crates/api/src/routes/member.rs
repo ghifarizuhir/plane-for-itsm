@@ -39,7 +39,8 @@ pub const SELF_ROLE_UPDATE_MSG: &str = "You cannot update your own role";
 /// `plane/app/views/workspace/member.py:112` (ws destroy self) and
 /// `plane/app/views/project/member.py:309` (project destroy self — sic
 /// "workspace" reused verbatim on the project path).
-pub const SELF_REMOVE_MSG: &str = "You cannot remove yourself from the workspace. Please use leave workspace";
+pub const SELF_REMOVE_MSG: &str =
+    "You cannot remove yourself from the workspace. Please use leave workspace";
 /// `plane/app/views/workspace/member.py:118` and
 /// `plane/app/views/project/member.py:315` (same text both paths).
 pub const HIGHER_THAN_YOU_MSG: &str = "You cannot remove a user having role higher than you";
@@ -57,7 +58,8 @@ pub const MEMBERS_REQUIRED_MSG: &str = "At least one member is required";
 /// `plane/app/views/project/member.py:75` (bulk role below ws role).
 pub const WS_ROLE_LOWER_MSG: &str = "You cannot add a user with role lower than the workspace role";
 /// `plane/app/views/project/member.py:81` (bulk role above ws role).
-pub const WS_ROLE_HIGHER_MSG: &str = "You cannot add a user with role higher than the workspace role";
+pub const WS_ROLE_HIGHER_MSG: &str =
+    "You cannot add a user with role higher than the workspace role";
 /// `plane/app/views/project/member.py:237` (non-admin role update — 403).
 pub const ROLE_UPDATE_FORBIDDEN_MSG: &str = "You do not have permission to update roles";
 /// `plane/app/views/project/member.py:244` (target >= requester — 403).
@@ -722,7 +724,10 @@ pub async fn list_workspace_members(
     .await?;
     Ok((
         StatusCode::OK,
-        Json(json!(rows.iter().map(|r| ws_member_short_json(r, admin)).collect::<Vec<_>>())),
+        Json(json!(rows
+            .iter()
+            .map(|r| ws_member_short_json(r, admin))
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -988,12 +993,11 @@ pub async fn ws_leave(
     let Some(role) = gate_ws_amg(&st.pool, auth.0, &slug).await? else {
         return Ok(deny());
     };
-    let ws: Option<(uuid::Uuid,)> = sqlx::query_as(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let ws: Option<(uuid::Uuid,)> =
+        sqlx::query_as("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some((workspace_id,)) = ws else {
         return Ok(missing());
     };
@@ -1133,7 +1137,10 @@ pub async fn ws_project_members(
     // Strip the `project` key from each entry (Django `pop("project")`).
     for entries in map.values_mut() {
         for entry in entries.as_array_mut().expect("entries is array") {
-            entry.as_object_mut().expect("entry is object").remove("project");
+            entry
+                .as_object_mut()
+                .expect("entry is object")
+                .remove("project");
         }
     }
     Ok((StatusCode::OK, Json(Value::Object(map))))
@@ -1174,7 +1181,12 @@ fn default_user_props() -> (Value, Value, Value, Value) {
         "due_date": true, "estimate": true, "key": true, "labels": true, "link": true,
         "priority": true, "start_date": true, "state": true, "sub_issue_count": true,
         "updated_on": true});
-    (filters, display_filters, display_properties, default_member_preferences())
+    (
+        filters,
+        display_filters,
+        display_properties,
+        default_member_preferences(),
+    )
 }
 
 /// Mirrors `ProjectMemberViewSet.create`
@@ -1198,7 +1210,10 @@ pub async fn create(
     let Some(workspace_id) = project_in_workspace(&st.pool, project_id, &slug).await? else {
         return Ok(missing());
     };
-    if gate_project(&st.pool, auth.0, &slug, project_id, true).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, true)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     let entries = match parse_members_body(&body) {
@@ -1347,10 +1362,16 @@ pub async fn list(
     auth: AuthUser,
     Path((slug, project_id)): Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
-    if gate_project(&st.pool, auth.0, &slug, project_id, false).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, false)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     let rows: Vec<PmShortRow> = sqlx::query_as(
@@ -1369,7 +1390,10 @@ pub async fn list(
     .await?;
     Ok((
         StatusCode::OK,
-        Json(json!(rows.iter().map(pm_role_short_json).collect::<Vec<_>>())),
+        Json(json!(rows
+            .iter()
+            .map(pm_role_short_json)
+            .collect::<Vec<_>>())),
     ))
 }
 
@@ -1420,7 +1444,10 @@ pub async fn detail(
     auth: AuthUser,
     Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
     let Some(requester_role) = gate_project(&st.pool, auth.0, &slug, project_id, false).await?
@@ -1474,10 +1501,16 @@ pub async fn patch(
     Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<PatchMember>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
-    if gate_project(&st.pool, auth.0, &slug, project_id, false).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, false)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     // `member.py:207` — target (no bot filter on this path — preserved).
@@ -1652,10 +1685,16 @@ pub async fn destroy(
     auth: AuthUser,
     Path((slug, project_id, pk)): Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
-    if gate_project(&st.pool, auth.0, &slug, project_id, true).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, true)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     // Target with bot exclusion (`:292-298`).
@@ -1718,7 +1757,10 @@ pub async fn leave_project(
     auth: AuthUser,
     Path((slug, project_id)): Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
     let Some(role) = gate_project(&st.pool, auth.0, &slug, project_id, false).await? else {
@@ -1797,10 +1839,16 @@ pub async fn pref_get(
     auth: AuthUser,
     Path((slug, project_id, member_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
-    if gate_project(&st.pool, auth.0, &slug, project_id, false).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, false)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     match fetch_pref(&st.pool, &slug, project_id, member_id).await? {
@@ -1820,10 +1868,16 @@ pub async fn pref_patch(
     Path((slug, project_id, member_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
     Json(body): Json<Value>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if project_in_workspace(&st.pool, project_id, &slug).await?.is_none() {
+    if project_in_workspace(&st.pool, project_id, &slug)
+        .await?
+        .is_none()
+    {
         return Ok(missing());
     }
-    if gate_project(&st.pool, auth.0, &slug, project_id, false).await?.is_none() {
+    if gate_project(&st.pool, auth.0, &slug, project_id, false)
+        .await?
+        .is_none()
+    {
         return Ok(deny());
     }
     let Some(cur) = fetch_pref(&st.pool, &slug, project_id, member_id).await? else {
@@ -1881,7 +1935,10 @@ mod tests {
             PatchDeny::BadRequest("You cannot update your own role")
         );
         // Ws-admin bypasses the self rule (`not is_workspace_admin`).
-        let ctx = PatchGateCtx { is_ws_admin: true, ..ctx };
+        let ctx = PatchGateCtx {
+            is_ws_admin: true,
+            ..ctx
+        };
         assert!(project_patch_decision(&ctx).is_ok());
     }
 
@@ -1902,8 +1959,14 @@ mod tests {
             PatchDeny::Forbidden("You do not have permission to update roles")
         );
         // `project/member.py:242-246` — target ≥ requester, verbatim 403.
-        let ctx = PatchGateCtx { requester_role: 20, ..base };
-        let ctx = PatchGateCtx { target_role: 20, ..ctx };
+        let ctx = PatchGateCtx {
+            requester_role: 20,
+            ..base
+        };
+        let ctx = PatchGateCtx {
+            target_role: 20,
+            ..ctx
+        };
         assert_eq!(
             project_patch_decision(&ctx).unwrap_err(),
             PatchDeny::Forbidden(
@@ -1911,19 +1974,30 @@ mod tests {
             )
         );
         // `project/member.py:251-255` — new ≥ requester, verbatim 403.
-        let ctx = PatchGateCtx { target_role: 5, new_role: Some(20), ..ctx };
+        let ctx = PatchGateCtx {
+            target_role: 5,
+            new_role: Some(20),
+            ..ctx
+        };
         assert_eq!(
             project_patch_decision(&ctx).unwrap_err(),
             PatchDeny::Forbidden("You cannot assign a role equal to or higher than your own")
         );
         // `project/member.py:258-262` — ws-guest cap, verbatim 400 (no
         // ws-admin bypass on this branch).
-        let ctx = PatchGateCtx { new_role: Some(15), target_ws_role: 5, ..ctx };
+        let ctx = PatchGateCtx {
+            new_role: Some(15),
+            target_ws_role: 5,
+            ..ctx
+        };
         assert_eq!(
             project_patch_decision(&ctx).unwrap_err(),
             PatchDeny::BadRequest("You cannot add a user with role higher than the workspace role")
         );
-        let ctx = PatchGateCtx { is_ws_admin: true, ..ctx };
+        let ctx = PatchGateCtx {
+            is_ws_admin: true,
+            ..ctx
+        };
         assert_eq!(
             project_patch_decision(&ctx).unwrap_err(),
             PatchDeny::BadRequest("You cannot add a user with role higher than the workspace role")
@@ -1958,7 +2032,11 @@ mod tests {
             PatchDeny::Forbidden("You do not have permission to update member status")
         );
         // `project/member.py:277-281` — verbatim 403.
-        let ctx = PatchGateCtx { requester_role: 20, target_role: 20, ..ctx };
+        let ctx = PatchGateCtx {
+            requester_role: 20,
+            target_role: 20,
+            ..ctx
+        };
         assert_eq!(
             project_patch_decision(&ctx).unwrap_err(),
             PatchDeny::Forbidden(
@@ -1966,7 +2044,12 @@ mod tests {
             )
         );
         // No `is_active` key → block skipped even for guests.
-        let ctx = PatchGateCtx { requester_role: 5, target_role: 5, touches_active: false, ..ctx };
+        let ctx = PatchGateCtx {
+            requester_role: 5,
+            target_role: 5,
+            touches_active: false,
+            ..ctx
+        };
         assert!(project_patch_decision(&ctx).is_ok());
     }
 

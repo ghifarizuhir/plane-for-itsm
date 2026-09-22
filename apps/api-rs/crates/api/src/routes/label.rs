@@ -65,7 +65,10 @@ pub async fn list(
     .await?;
     Ok(Json(
         rows.into_iter()
-            .map(|l| LabelOut { id: l.id, name: l.name })
+            .map(|l| LabelOut {
+                id: l.id,
+                name: l.name,
+            })
             .collect(),
     ))
 }
@@ -91,7 +94,9 @@ pub async fn create(
         if let Some(label) = existing {
             return Ok((
                 StatusCode::CONFLICT,
-                Json(json!({"error": "Label with the same external id and external source already exists", "id": label.id})),
+                Json(
+                    json!({"error": "Label with the same external id and external source already exists", "id": label.id}),
+                ),
             ));
         }
     }
@@ -107,7 +112,9 @@ pub async fn create(
     if let Some(label) = existing {
         return Ok((
             StatusCode::CONFLICT,
-            Json(json!({"error": "Label with the same name already exists in the project", "id": label.id})),
+            Json(
+                json!({"error": "Label with the same name already exists in the project", "id": label.id}),
+            ),
         ));
     }
 
@@ -126,7 +133,10 @@ pub async fn create(
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
-    Ok((StatusCode::CREATED, Json(json!({"id": row.id, "name": row.name}))))
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"id": row.id, "name": row.name})),
+    ))
 }
 
 /// Mirrors `plane/app/views/issue/label.py:partial_update`: renaming onto an
@@ -172,7 +182,15 @@ fn label_json(
     })
 }
 
-type LabelRow = (uuid::Uuid, Option<uuid::Uuid>, String, String, Option<uuid::Uuid>, uuid::Uuid, f64);
+type LabelRow = (
+    uuid::Uuid,
+    Option<uuid::Uuid>,
+    String,
+    String,
+    Option<uuid::Uuid>,
+    uuid::Uuid,
+    f64,
+);
 
 /// Workspace+project member gate for safe label reads: any active project
 /// membership passes (Django `get_queryset` member filter +
@@ -187,13 +205,21 @@ async fn gate_label_admin(
 ) -> Result<bool, sqlx::Error> {
     let member_role = fetch_project_member_role(pool, user, slug, project_id).await?;
     let ws_admin = is_workspace_admin(pool, user, slug).await?;
-    Ok(project_gate_allows(matches!(member_role, Some(20)), member_role.is_some(), ws_admin))
+    Ok(project_gate_allows(
+        matches!(member_role, Some(20)),
+        member_role.is_some(),
+        ws_admin,
+    ))
 }
 
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `retrieve` (DRF-default + `ProjectBasePermission`, SAFE branch
     // `permissions/project.py:18-22`): any ACTIVE WORKSPACE member passes
@@ -219,9 +245,10 @@ pub async fn detail(
     .fetch_optional(&st.pool)
     .await?;
     match row {
-        Some((id, parent, name, color, pid, wsid, sort)) => {
-            Ok((StatusCode::OK, Json(label_json(id, parent, &name, &color, pid, wsid, sort))))
-        }
+        Some((id, parent, name, color, pid, wsid, sort)) => Ok((
+            StatusCode::OK,
+            Json(label_json(id, parent, &name, &color, pid, wsid, sort)),
+        )),
         // Django `retrieve` miss → 404 (DRF `{"detail"}` normalized to
         // `missing()` per repo rule; unifies the old "Label not found").
         None => Ok(missing()),
@@ -231,7 +258,11 @@ pub async fn detail(
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
     Json(body): Json<PatchLabel>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !gate_label_admin(&st.pool, auth.0, &slug, project_id).await? {
@@ -239,7 +270,10 @@ pub async fn patch(
     }
     if let Some(name) = &body.name {
         if name.trim().is_empty() || name.chars().count() > 255 {
-            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid name"}))));
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid name"})),
+            ));
         }
         let dup: Option<(uuid::Uuid,)> = sqlx::query_as(
             "SELECT id FROM labels WHERE project_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL",
@@ -275,9 +309,10 @@ pub async fn patch(
     .fetch_optional(&st.pool)
     .await?;
     match row {
-        Some((id, parent, name, color, pid, wsid, sort)) => {
-            Ok((StatusCode::OK, Json(label_json(id, parent, &name, &color, pid, wsid, sort))))
-        }
+        Some((id, parent, name, color, pid, wsid, sort)) => Ok((
+            StatusCode::OK,
+            Json(label_json(id, parent, &name, &color, pid, wsid, sort)),
+        )),
         None => Ok(missing()),
     }
 }
@@ -285,7 +320,11 @@ pub async fn patch(
 pub async fn destroy(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(String, uuid::Uuid, uuid::Uuid)>,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !gate_label_admin(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());

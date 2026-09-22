@@ -22,22 +22,42 @@ fn split_top_level_and(expr: &str) -> Result<Vec<String>, String> {
     while i < tokens.len() {
         let c = tokens[i];
         match c {
-            '(' => { depth += 1; current.push(c); i += 1; }
-            ')' => { depth -= 1; if depth < 0 { return Err("Unbalanced parentheses in PQL".into()); } current.push(c); i += 1; }
+            '(' => {
+                depth += 1;
+                current.push(c);
+                i += 1;
+            }
+            ')' => {
+                depth -= 1;
+                if depth < 0 {
+                    return Err("Unbalanced parentheses in PQL".into());
+                }
+                current.push(c);
+                i += 1;
+            }
             'A' if depth == 0 && tokens[i..].starts_with(&['A', 'N', 'D']) => {
                 let before_ok = i == 0 || tokens[i - 1].is_whitespace();
                 let after = i + 3;
-                let after_ok = after >= tokens.len() || tokens[after].is_whitespace() || tokens[after] == '(';
+                let after_ok =
+                    after >= tokens.len() || tokens[after].is_whitespace() || tokens[after] == '(';
                 if before_ok && after_ok {
                     parts.push(current.trim().to_string());
                     current.clear();
                     i += 3;
-                } else { current.push(c); i += 1; }
+                } else {
+                    current.push(c);
+                    i += 1;
+                }
             }
-            _ => { current.push(c); i += 1; }
+            _ => {
+                current.push(c);
+                i += 1;
+            }
         }
     }
-    if depth != 0 { return Err("Unbalanced parentheses in PQL".into()); }
+    if depth != 0 {
+        return Err("Unbalanced parentheses in PQL".into());
+    }
     parts.push(current.trim().to_string());
     Ok(parts.into_iter().filter(|p| !p.is_empty()).collect())
 }
@@ -46,7 +66,9 @@ fn split_top_level_and(expr: &str) -> Result<Vec<String>, String> {
 fn strip_outer_parens(mut s: &str) -> &str {
     loop {
         let t = s.trim();
-        if !(t.starts_with('(') && t.ends_with(')')) { return t; }
+        if !(t.starts_with('(') && t.ends_with(')')) {
+            return t;
+        }
         let mut depth = 0i32;
         let mut balanced = true;
         for (idx, c) in t.char_indices() {
@@ -54,24 +76,38 @@ fn strip_outer_parens(mut s: &str) -> &str {
                 '(' => depth += 1,
                 ')' => {
                     depth -= 1;
-                    if depth == 0 && idx != t.len() - 1 { balanced = false; break; }
+                    if depth == 0 && idx != t.len() - 1 {
+                        balanced = false;
+                        break;
+                    }
                 }
                 _ => {}
             }
         }
-        if balanced { s = &t[1..t.len() - 1]; } else { return t; }
+        if balanced {
+            s = &t[1..t.len() - 1];
+        } else {
+            return t;
+        }
     }
 }
 
 fn parse_condition(cond: &str) -> Result<V1Pql, String> {
     let cond = strip_outer_parens(cond);
-    let (lhs, rhs) = cond.split_once('=').ok_or_else(|| format!("Unsupported PQL condition: {cond}"))?;
+    let (lhs, rhs) = cond
+        .split_once('=')
+        .ok_or_else(|| format!("Unsupported PQL condition: {cond}"))?;
     let lhs = lhs.trim();
     let rhs = rhs.trim();
     let unquote = |v: &str| v.trim().trim_matches('"').to_string();
     let mut out = V1Pql::default();
     match lhs {
-        "project" => out.project = Some(uuid::Uuid::parse_str(&unquote(rhs)).map_err(|_| format!("Invalid project id in PQL: {rhs}"))?),
+        "project" => {
+            out.project = Some(
+                uuid::Uuid::parse_str(&unquote(rhs))
+                    .map_err(|_| format!("Invalid project id in PQL: {rhs}"))?,
+            )
+        }
         "priority" => {
             let v = unquote(rhs);
             if !["low", "medium", "high", "urgent", "none"].contains(&v.as_str()) {
@@ -79,8 +115,18 @@ fn parse_condition(cond: &str) -> Result<V1Pql, String> {
             }
             out.priority = Some(v);
         }
-        "state" => out.state = Some(uuid::Uuid::parse_str(&unquote(rhs)).map_err(|_| format!("Invalid state id in PQL: {rhs}"))?),
-        "type" => out.type_id = Some(uuid::Uuid::parse_str(&unquote(rhs)).map_err(|_| format!("Invalid type id in PQL: {rhs}"))?),
+        "state" => {
+            out.state = Some(
+                uuid::Uuid::parse_str(&unquote(rhs))
+                    .map_err(|_| format!("Invalid state id in PQL: {rhs}"))?,
+            )
+        }
+        "type" => {
+            out.type_id = Some(
+                uuid::Uuid::parse_str(&unquote(rhs))
+                    .map_err(|_| format!("Invalid type id in PQL: {rhs}"))?,
+            )
+        }
         "assignee" => {
             if rhs == "currentUser()" {
                 out.assignee_me = true;
@@ -95,24 +141,44 @@ fn parse_condition(cond: &str) -> Result<V1Pql, String> {
 
 pub fn parse_v1_pql(raw: &str) -> Result<V1Pql, String> {
     let trimmed = raw.trim();
-    if trimmed.is_empty() { return Ok(V1Pql::default()); }
+    if trimmed.is_empty() {
+        return Ok(V1Pql::default());
+    }
     let mut out = V1Pql::default();
     for cond in split_top_level_and(trimmed)? {
         let one = parse_condition(&cond)?;
-        if one.project.is_some() { out.project = one.project; }
-        if one.priority.is_some() { out.priority = one.priority; }
-        if one.state.is_some() { out.state = one.state; }
-        if one.type_id.is_some() { out.type_id = one.type_id; }
-        if one.assignee_me { out.assignee_me = true; }
+        if one.project.is_some() {
+            out.project = one.project;
+        }
+        if one.priority.is_some() {
+            out.priority = one.priority;
+        }
+        if one.state.is_some() {
+            out.state = one.state;
+        }
+        if one.type_id.is_some() {
+            out.type_id = one.type_id;
+        }
+        if one.assignee_me {
+            out.assignee_me = true;
+        }
     }
     Ok(out)
 }
 
 pub fn push_pql_where(qb: &mut QueryBuilder<Postgres>, pql: &V1Pql, user_id: uuid::Uuid) {
-    if let Some(p) = pql.project { qb.push(" AND i.project_id = ").push_bind(p); }
-    if let Some(pr) = pql.priority.clone() { qb.push(" AND i.priority = ").push_bind(pr); }
-    if let Some(st) = pql.state { qb.push(" AND i.state_id = ").push_bind(st); }
-    if let Some(t) = pql.type_id { qb.push(" AND i.type_id = ").push_bind(t); }
+    if let Some(p) = pql.project {
+        qb.push(" AND i.project_id = ").push_bind(p);
+    }
+    if let Some(pr) = pql.priority.clone() {
+        qb.push(" AND i.priority = ").push_bind(pr);
+    }
+    if let Some(st) = pql.state {
+        qb.push(" AND i.state_id = ").push_bind(st);
+    }
+    if let Some(t) = pql.type_id {
+        qb.push(" AND i.type_id = ").push_bind(t);
+    }
     if pql.assignee_me {
         qb.push(" AND EXISTS(SELECT 1 FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.assignee_id = ")
           .push_bind(user_id)
@@ -127,7 +193,10 @@ mod tests {
     #[test]
     fn parses_project_scope() {
         let p = parse_v1_pql(r#"project = "11111111-1111-1111-1111-111111111111""#).unwrap();
-        assert_eq!(p.project, Some(uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()));
+        assert_eq!(
+            p.project,
+            Some(uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap())
+        );
         assert_eq!(p.priority, None);
     }
 
