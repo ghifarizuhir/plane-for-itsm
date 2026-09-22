@@ -95,6 +95,7 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 9. **One transaction** for issue + bridges + activities + versions; Django autocommits the issue then writes side-effects asynchronously.
 10. **Activity batch loss on estimate clear is not reproduced** (deviation 6); otherwise the activity rows are byte-identical in shape.
 11. **Activity batch ordering is a fixed field order** (description first, then name/parent/priority/state/dates/labels/assignees/estimate) with per-statement `clock_timestamp()`; Django's `bulk_create` timestamps rows in the request's JSON key order. Observable only when one request mixes `description_html` with other tracked fields AND a later same-actor description-only edit decides merge-vs-insert; the web sends description edits alone in practice.
+12. **Intake create/update do not record description versions.** Django calls the task from `views/intake/base.py:293` (create) and `:454` (update); Rust `intake.rs:650` / `:1428-1463` skip it (the update path documents the skip). The `record_description_version` helper is reusable — wiring intake is a separate follow-up, not part of this slice.
 
 ---
 
