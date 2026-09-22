@@ -7,11 +7,10 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     fetch_guest_scoped, fetch_project_member_role, is_workspace_admin, page_window, parse_date,
-    project_gate_allows, replace_bridges, require_project_write, IssueDetailRow, IssueListRow,
-    PageWindow,
+    project_gate_allows, replace_bridges, require_project_write, resolve_effective_state,
+    IssueDetailRow, IssueListRow, PageWindow,
 };
 use crate::routes::issue_query::{build_ungrouped_envelope, DETAIL_SELECT_SQL, LIST_SELECT_SQL};
-use crate::routes::issue_write::resolve_effective_state;
 use crate::routes::project::{deny, missing};
 use crate::routes::v1::common::PageParams;
 use crate::routes::v1::pql::{parse_v1_pql, push_pql_where, V1Pql};

@@ -22,6 +22,7 @@ pub mod issue_dates;
 pub mod issue_lists;
 pub mod issue_query;
 pub mod issue_sub;
+pub mod issue_update;
 pub mod issue_write;
 pub mod label;
 pub mod member;

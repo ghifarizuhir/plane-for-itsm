@@ -1,4 +1,6 @@
-use serde::Serialize;
+use axum::http::StatusCode;
+use axum::Json;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Postgres;
 use uuid::Uuid;
@@ -655,4 +657,232 @@ pub(crate) async fn apply_create_bridges(
         insert_label_bridge(tx, issue_id, *label_id, project_id, workspace_id, creator).await?;
     }
     Ok(())
+}
+
+/// 400 `{"error": msg}` — the flat error style both create and patch use
+/// (moved from `issue_write.rs`).
+pub(crate) fn bad(msg: &str) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({ "error": msg })),
+    )
+}
+
+/// Issue priority enum (`plane/db/models/issue.py:141-146`).
+pub(crate) const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
+
+/// Order-preserving dedupe (moved from `issue_write.rs`).
+pub(crate) fn dedupe_ids(ids: &Option<Vec<Uuid>>) -> Vec<Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    ids.as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .copied()
+        .filter(|id| seen.insert(*id))
+        .collect()
+}
+
+/// `""`/null → `None`; otherwise a UUID (moved from `issue_write.rs`).
+pub(crate) fn de_opt_uuid_lax<'de, D>(d: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
+        Some(Value::String(s)) => Uuid::parse_str(s.trim())
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+        Some(other) => Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+    }
+}
+
+/// Same lax rule for id vectors (moved from `issue_write.rs`).
+pub(crate) fn de_opt_uuid_vec_lax<'de, D>(d: D) -> Result<Option<Vec<Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
+        Some(Value::Array(items)) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Value::Null => continue,
+                    Value::String(s) if s.trim().is_empty() => continue,
+                    Value::String(s) => {
+                        out.push(Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
+                    }
+                    other => {
+                        return Err(serde::de::Error::custom(format!("invalid UUID: {other}")))
+                    }
+                }
+            }
+            Ok(Some(out))
+        }
+        Some(other) => Err(serde::de::Error::custom(format!(
+            "invalid UUID list: {other}"
+        ))),
+    }
+}
+
+/// Tri-state UUID for PATCH: absent → `None`, `null`/`""` → `Some(None)`
+/// (explicit clear), value → `Some(Some(id))`.
+pub(crate) fn de_double_opt_uuid_lax<'de, D>(d: D) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::String(s) if s.trim().is_empty() => Ok(Some(None)),
+        Value::String(s) => Uuid::parse_str(s.trim())
+            .map(|u| Some(Some(u)))
+            .map_err(serde::de::Error::custom),
+        other => Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+    }
+}
+
+/// Tri-state id vector: absent → `None`, `null` → `Some(None)` (Django
+/// 400s it), array → `Some(Some(ids))` with null/empty elements skipped.
+pub(crate) fn de_double_opt_uuid_vec_lax<'de, D>(
+    d: D,
+) -> Result<Option<Option<Vec<Uuid>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Value::Null => continue,
+                    Value::String(s) if s.trim().is_empty() => continue,
+                    Value::String(s) => {
+                        out.push(Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
+                    }
+                    other => {
+                        return Err(serde::de::Error::custom(format!("invalid UUID: {other}")))
+                    }
+                }
+            }
+            Ok(Some(Some(out)))
+        }
+        other => Err(serde::de::Error::custom(format!(
+            "invalid UUID list: {other}"
+        ))),
+    }
+}
+
+/// Tri-state string: absent → `None`, `null` → `Some(None)`, value →
+/// `Some(Some(s))`. Empty strings stay `Some(Some(""))` so per-field
+/// validation can reject them where Django does.
+pub(crate) fn de_double_opt_string<'de, D>(d: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::String(s) => Ok(Some(Some(s))),
+        other => Err(serde::de::Error::custom(format!("invalid string: {other}"))),
+    }
+}
+
+/// Tri-state JSON: absent → `None`, `null` → `Some(None)`, value →
+/// `Some(Some(v))`.
+pub(crate) fn de_double_opt_json<'de, D>(d: D) -> Result<Option<Option<Value>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = <Option<Value>>::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        None => Ok(Some(None)),
+        Some(v) => Ok(Some(Some(v))),
+    }
+}
+
+/// Tri-state number: absent → `None`, `null` → `Some(None)`, number →
+/// `Some(Some(f64))`.
+pub(crate) fn de_double_opt_f64<'de, D>(d: D) -> Result<Option<Option<f64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::Number(n) => n
+            .as_f64()
+            .map(|f| Some(Some(f)))
+            .ok_or_else(|| serde::de::Error::custom("invalid number")),
+        other => Err(serde::de::Error::custom(format!("invalid number: {other}"))),
+    }
+}
+
+/// Tri-state integer: absent → `None`, `null` → `Some(None)`, number →
+/// `Some(Some(i32))`.
+pub(crate) fn de_double_opt_i32<'de, D>(d: D) -> Result<Option<Option<i32>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::Number(n) => n
+            .as_i64()
+            .and_then(|v| i32::try_from(v).ok())
+            .map(|v| Some(Some(v)))
+            .ok_or_else(|| serde::de::Error::custom("invalid integer")),
+        other => Err(serde::de::Error::custom(format!(
+            "invalid integer: {other}"
+        ))),
+    }
+}
+
+/// Pick the effective state of a new issue, mirroring
+/// `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`)
+/// (moved from `issue_write.rs`, now shared with PATCH). Stays `pub`:
+/// `tests/issue_test.rs` (separate crate) imports it.
+pub fn resolve_effective_state(
+    explicit: Option<Uuid>,
+    default_id: Option<Uuid>,
+    first_id: Option<Uuid>,
+) -> Option<Uuid> {
+    explicit.or(default_id).or(first_id)
+}
+
+/// DB lookup behind [`resolve_effective_state`] (moved from `issue_write.rs`).
+pub(crate) async fn resolve_issue_state(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    explicit: Option<Uuid>,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    if explicit.is_some() {
+        return Ok(explicit);
+    }
+    let default_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
+         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
+         ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if default_id.is_some() {
+        return Ok(default_id);
+    }
+    let first_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
+         AND \"group\" != 'triage' AND is_triage = false \
+         ORDER BY created_at ASC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(resolve_effective_state(explicit, default_id, first_id))
 }

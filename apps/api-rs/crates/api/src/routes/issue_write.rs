@@ -6,70 +6,15 @@ use super::issue_activity_write::{
     insert_assignee_activities, insert_created_activity, insert_subscribers,
 };
 use super::issue_common::{
-    apply_create_bridges, fetch_project_member_role, is_workspace_admin, project_gate_allows,
-    require_project_write, IssueOut,
+    apply_create_bridges, bad, de_opt_uuid_lax, de_opt_uuid_vec_lax, dedupe_ids,
+    fetch_project_member_role, is_workspace_admin, parse_date, project_gate_allows,
+    require_project_write, resolve_issue_state, IssueOut, PRIORITIES,
 };
 use crate::routes::project::{deny, missing};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
-///
-/// `state_id` uses lax deserialization: the web client sends `""` for
-/// "no state selected" (see `issue-modal/base.tsx` payload), while Django's
-/// `PrimaryKeyRelatedField(required=False, allow_null=True)` treats
-/// missing/null as `None`. Strict `Option<Uuid>` turns `""` into Axum's
-/// 422 `JsonRejection` (text/plain) before the handler runs — Django
-/// parity is `None` (no state) here, with the FK check only on `Some`.
-fn de_opt_uuid_lax<'de, D>(d: D) -> Result<Option<uuid::Uuid>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
-    match v {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
-        Some(Value::String(s)) => uuid::Uuid::parse_str(s.trim())
-            .map(Some)
-            .map_err(serde::de::Error::custom),
-        Some(other) => Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
-    }
-}
-
-/// Same lax rule for id vectors: missing/null → `None`, `""` → `None`,
-/// otherwise a UUID array. Null/empty-string *elements* are skipped (sloppy
-/// client payload) so they don't 422; truly unknown UUIDs still reach the
-/// handler's project-membership count check → 400 (the #9526 rule).
-fn de_opt_uuid_vec_lax<'de, D>(d: D) -> Result<Option<Vec<uuid::Uuid>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let v: Option<Value> = Option::deserialize(d).map_err(serde::de::Error::custom)?;
-    match v {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) if s.trim().is_empty() => Ok(None),
-        Some(Value::Array(items)) => {
-            let mut out = Vec::with_capacity(items.len());
-            for item in items {
-                match item {
-                    Value::Null => continue,
-                    Value::String(s) if s.trim().is_empty() => continue,
-                    Value::String(s) => {
-                        out.push(uuid::Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
-                    }
-                    other => {
-                        return Err(serde::de::Error::custom(format!("invalid UUID: {other}")))
-                    }
-                }
-            }
-            Ok(Some(out))
-        }
-        Some(other) => Err(serde::de::Error::custom(format!(
-            "invalid UUID list: {other}"
-        ))),
-    }
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateIssue {
     pub name: String,
@@ -95,8 +40,6 @@ pub struct CreateIssue {
     pub estimate_point: Option<uuid::Uuid>,
 }
 
-const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
-
 pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
     if body.name.trim().is_empty() {
         return Err("name is required".to_string());
@@ -109,25 +52,9 @@ pub fn validate_create(body: &CreateIssue) -> Result<(), String> {
             return Err("Invalid priority".to_string());
         }
     }
-    super::issue_common::parse_date(&body.start_date)?;
-    super::issue_common::parse_date(&body.target_date)?;
+    parse_date(&body.start_date)?;
+    parse_date(&body.target_date)?;
     Ok(())
-}
-
-fn bad(msg: &str) -> (StatusCode, Json<Value>) {
-    (StatusCode::BAD_REQUEST, Json(json!({"error": msg})))
-}
-
-/// Order-preserving dedupe (Django's bulk_create loses the whole batch on a
-/// duplicate; we keep the first occurrence of each id).
-fn dedupe_ids(ids: &Option<Vec<uuid::Uuid>>) -> Vec<uuid::Uuid> {
-    let mut seen = std::collections::HashSet::new();
-    ids.as_deref()
-        .unwrap_or(&[])
-        .iter()
-        .copied()
-        .filter(|id| seen.insert(*id))
-        .collect()
 }
 
 /// DB-backed create validation; every failure is 400 (brainstorming decision:
@@ -224,53 +151,6 @@ async fn validate_create_refs(
         }
     }
     Ok(())
-}
-
-/// Pure pick for the effective state of a new issue, mirroring
-/// `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`):
-/// explicit id wins; else the project's default non-triage state; else the
-/// first non-triage state; else None. Without this fallback create stores
-/// NULL and the list `WHERE s."group" <> 'triage'`
-/// (`issue_query.rs:push_list_where`) drops the row — 201 but invisible.
-pub fn resolve_effective_state(
-    explicit: Option<uuid::Uuid>,
-    default_id: Option<uuid::Uuid>,
-    first_id: Option<uuid::Uuid>,
-) -> Option<uuid::Uuid> {
-    explicit.or(default_id).or(first_id)
-}
-
-/// DB lookup behind [`resolve_effective_state`]: same two queries as
-/// `draft.rs:resolve_default_state` (default non-triage, then first
-/// non-triage). Explicit id is returned untouched (validated by caller).
-async fn resolve_issue_state(
-    pool: &sqlx::PgPool,
-    project_id: uuid::Uuid,
-    explicit: Option<uuid::Uuid>,
-) -> Result<Option<uuid::Uuid>, sqlx::Error> {
-    if explicit.is_some() {
-        return Ok(explicit);
-    }
-    let default_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
-         ORDER BY created_at ASC LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
-    if default_id.is_some() {
-        return Ok(default_id);
-    }
-    let first_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false \
-         ORDER BY created_at ASC LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(resolve_effective_state(explicit, default_id, first_id))
 }
 
 /// Input for [`insert_issue`], shared by the legacy create endpoint and the
@@ -381,11 +261,11 @@ pub async fn create(
     }
 
     let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
-    let start_date = match super::issue_common::parse_date(&body.start_date) {
+    let start_date = match parse_date(&body.start_date) {
         Ok(v) => v,
         Err(e) => return Ok(bad(&e)),
     };
-    let target_date = match super::issue_common::parse_date(&body.target_date) {
+    let target_date = match parse_date(&body.target_date) {
         Ok(v) => v,
         Err(e) => return Ok(bad(&e)),
     };

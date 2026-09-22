@@ -1194,7 +1194,7 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/issues/:pk/",
             get(routes::work_item::get_issue)
-                .patch(routes::work_item::patch_issue)
+                .patch(routes::issue_update::patch_issue)
                 .delete(routes::work_item::delete_issue),
         )
         .route(
@@ -1271,7 +1271,7 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/projects/:project_id/work-items/:pk/",
             get(routes::work_item::get_issue)
-                .patch(routes::work_item::patch_issue)
+                .patch(routes::issue_update::patch_issue)
                 .delete(routes::work_item::delete_issue),
         )
         .route(

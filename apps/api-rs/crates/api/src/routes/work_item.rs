@@ -38,8 +38,6 @@ pub const RELATION_TYPES: [&str; 8] = [
     "finish_after",
 ];
 
-pub const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
-
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct CreateComment {
     #[serde(default)]
@@ -91,23 +89,6 @@ pub struct RemoveRelationBody {
     pub related_issue: Option<uuid::Uuid>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct PatchIssue {
-    #[serde(default)]
-    pub name: Option<String>,
-    // Django `IssueCreateSerializer` (`serializers/issue.py:82-105`,
-    // `fields = "__all__"`): the Issue model has NO `description` column —
-    // description lives in `description_html` (text) + `description_json`
-    // (jsonb). `description` here is the tiptap JSON doc → `description_json`
-    // (same mapping as the intake nested-issue write, `intake.rs:1271-1286`).
-    #[serde(default)]
-    pub description_html: Option<String>,
-    #[serde(default)]
-    pub description: Option<Value>,
-    #[serde(default)]
-    pub priority: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct IssueOut {
     pub id: uuid::Uuid,
@@ -139,20 +120,6 @@ pub fn validate_relation_create(body: &CreateRelation) -> Result<(), String> {
         Some(t) if RELATION_TYPES.contains(&t.as_str()) => Ok(()),
         _ => Err("Invalid relation type".to_string()),
     }
-}
-
-pub fn validate_issue_patch(body: &PatchIssue) -> Result<(), String> {
-    if let Some(name) = &body.name {
-        if name.trim().is_empty() {
-            return Err("name must not be blank".to_string());
-        }
-    }
-    if let Some(priority) = &body.priority {
-        if !PRIORITIES.contains(&priority.as_str()) {
-            return Err("Invalid priority".to_string());
-        }
-    }
-    Ok(())
 }
 
 type Scope = (String, uuid::Uuid, uuid::Uuid);
@@ -1781,83 +1748,6 @@ pub async fn get_issue(
     Ok((StatusCode::OK, Json(v)))
 }
 
-/// Quoted from `plane/app/views/issue/base.py:659-661`
-/// (`IssueViewSet.partial_update`): miss → 404 with this body verbatim
-/// (NOT the standard `missing()`).
-pub(crate) const ISSUE_PATCH_MISS_MSG: &str = "Issue not found";
-
-pub async fn patch_issue(
-    State(st): State<AppState>,
-    auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
-        String,
-        uuid::Uuid,
-        uuid::Uuid,
-    )>,
-    Json(body): Json<PatchIssue>,
-) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    // Django `partial_update` (`base.py:627`): `@allow_permission([ADMIN,
-    // MEMBER], creator=True, model=Issue)` runs BEFORE the body — gate
-    // first (a denied miss is 403, not 404), then the fetch.
-    if !ws_active_member(&st.pool, auth.0, &slug).await? {
-        return Ok(deny());
-    }
-    let creator: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND created_by_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(pk)
-    .bind(auth.0)
-    .fetch_one(&st.pool)
-    .await?;
-    let member_role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
-    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
-    if !creator
-        && !project_gate_allows(
-            matches!(member_role, Some(20) | Some(15)),
-            member_role.is_some(),
-            ws_admin,
-        )
-    {
-        return Ok(deny());
-    }
-    // Existence uses `get_queryset()` = `issue_objects` (`base.py:628-629`,
-    // `models/issue.py:92-101`): drafts, archived issues, triage-state
-    // issues and archived-project issues all miss with 404
-    // `{"error": "Issue not found"}` verbatim (`base.py:659-661`) — NOT the
-    // standard `missing()`.
-    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
-        "SELECT i.created_by_id FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND (s.id IS NULL OR s.\"group\" != 'triage') AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.archived_at IS NULL)",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
-    if row.is_none() {
-        return Ok((
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": ISSUE_PATCH_MISS_MSG})),
-        ));
-    }
-    // Django serializer 400s (never 500s) on invalid bodies.
-    if let Err(e) = validate_issue_patch(&body) {
-        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
-    }
-    sqlx::query(
-        "UPDATE issues SET name = COALESCE($1, name), description_html = COALESCE($2, description_html), description_json = COALESCE($3::jsonb, description_json), priority = COALESCE($4, priority), updated_at = now() WHERE id = $5 AND project_id = $6 AND deleted_at IS NULL",
-    )
-    .bind(&body.name)
-    .bind(body.description_html.as_deref())
-    .bind(&body.description)
-    .bind(&body.priority)
-    .bind(pk)
-    .bind(project_id)
-    .execute(&st.pool)
-    .await?;
-    // Django returns 204 empty (`base.py:713`), not 200 `{id}`.
-    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
-}
-
 pub async fn delete_issue(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -2181,12 +2071,5 @@ mod batch_d_d9_tests {
             IDENTIFIER_FORBIDDEN_MSG,
             "You are not allowed to view this issue"
         );
-    }
-
-    #[test]
-    fn patch_miss_string_is_issue_not_found_not_missing() {
-        // `plane/app/views/issue/base.py:659-661`: partial_update miss →
-        // 404 `{"error": "Issue not found"}` verbatim, NOT `missing()`.
-        assert_eq!(ISSUE_PATCH_MISS_MSG, "Issue not found");
     }
 }

@@ -1,5 +1,6 @@
 use api::routes::issue_query::{build_ungrouped_envelope, ProjectIssuesQuery};
-use api::routes::issue_write::{resolve_effective_state, validate_create, CreateIssue};
+use api::routes::issue_common::resolve_effective_state;
+use api::routes::issue_write::{validate_create, CreateIssue};
 
 #[test]
 fn rejects_empty_name() {
