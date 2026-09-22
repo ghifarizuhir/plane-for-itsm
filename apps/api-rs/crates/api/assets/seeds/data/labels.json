@@ -1,15 +1,15 @@
 [
   {
     "id": 1,
-    "name": "admin",
-    "color": "#0693e3",
+    "name": "incident",
+    "color": "#EF4444",
     "sort_order": 85535,
     "project_id": 1
   },
   {
     "id": 2,
-    "name": "concepts",
-    "color": "#9900ef",
+    "name": "service-request",
+    "color": "#0693e3",
     "sort_order": 95535,
     "project_id": 1
   }

@@ -1,8 +1,8 @@
 [
   {
     "id": 1,
-    "name": "Project Urgent Tasks",
-    "description": "Project Urgent Tasks",
+    "name": "Urgent requests",
+    "description": "Urgent priority work across this service.",
     "access": 1,
     "filters": {},
     "project_id": 1,

@@ -1,26 +1,26 @@
 [
   {
     "id": 1,
-    "name": "Core Workflow (System)",
+    "name": "Service Catalog (System)",
     "project_id": 1,
     "sort_order": 1,
     "status": "planned",
-    "description": "Manage, visualize, and track your work items across views."
+    "description": "The services your team supports and the work that keeps them healthy."
   },
   {
     "id": 2,
-    "name": "Onboarding Flow (Feature)",
+    "name": "Request Fulfilment (Process)",
     "project_id": 1,
     "sort_order": 2,
     "status": "backlog",
-    "description": "Everything about getting started - creating a project, inviting teammates."
+    "description": "Intake, triage, and assignment for incoming service requests."
   },
   {
     "id": 3,
-    "name": "Workspace Setup (Area)",
+    "name": "Knowledge Base (Area)",
     "project_id": 1,
     "sort_order": 3,
     "status": "in-progress",
-    "description": "The personalization layer - settings, labels, automations."
+    "description": "Runbooks, SOPs, and postmortems your team works from."
   }
 ]
