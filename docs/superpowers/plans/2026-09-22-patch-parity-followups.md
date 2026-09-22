@@ -627,7 +627,7 @@ rename the body's `&mut **tx` to `&mut *conn` (three call sites inside), and upd
 
 Update the two existing callers:
 
-- `crates/api/src/routes/issue_update.rs`: `record_description_version(&mut *tx, ...)`
+- `crates/api/src/routes/issue_update.rs` / `issue_write.rs`: `record_description_version(&mut tx, ...)` (`Transaction` derefs; `&mut *tx` only for the two `execute` calls, where sqlx needs it)
 - `crates/api/src/routes/issue_write.rs`: `super::issue_version_write::record_description_version(&mut *tx, ...)`
 
 - [ ] **Step 4: Wire the intake paths**
@@ -656,7 +656,7 @@ In `crates/api/src/routes/intake.rs::patch_issue`, in BOTH issue-write branches 
 ```rust
     // Pre-update snapshot for the description-version diff
     // (`issue_description_version_task` compares the old html with the
-    // stored one, `bgtasks/issue_description_version_task.py:57-59`).
+    // stored one, `bgtasks/issue_description_version_task.py:53`).
     let pre: (String, Value, Option<uuid::Uuid>, uuid::Uuid) = sqlx::query_as(
         "SELECT i.description_html, i.description_json, i.created_by_id, i.workspace_id \
          FROM issues i WHERE i.id = $1",
@@ -666,36 +666,52 @@ In `crates/api/src/routes/intake.rs::patch_issue`, in BOTH issue-write branches 
     .await?;
 ```
 
-and after the whole `if !narrowed { ... } else { ... }` block, before the intake-level write:
+and after the whole `if !narrowed { ... } else { ... }` block, before the intake-level write. **Final reviewed shape** (post review-fix `0e99d9bbe`): the snapshot is gated on an incoming description, the two nested-issue UPDATEs and the version write share one transaction committed before the intake-level write, and the writer receives `&mut tx`:
 
 ```rust
-    // Intake PATCH version parity (`views/intake/base.py:447-456`). Django
-    // suppresses it only for the migration-client case
-    // (`skip_activity and is_description_update`, base.py:337,437), where
-    // `is_description_update` probes the TOP-LEVEL `description_html`; the
-    // web nests it under `issue`, so the probe is None and the version is
-    // written. Mirrored here: Rust's intake body drops top-level keys, so
-    // that migration shape has no counterpart on this path.
-    if let Some(new_html) = issue.and_then(|i| i.description_html.clone()) {
+    let new_description = issue.and_then(|i| i.description_html.clone());
+    let pre: Option<(String, Value, Option<uuid::Uuid>, uuid::Uuid)> = match &new_description {
+        Some(_) => Some(
+            sqlx::query_as(
+                "SELECT i.description_html, i.description_json, i.created_by_id, i.workspace_id \
+                 FROM issues i WHERE i.id = $1",
+            )
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await?,
+        ),
+        None => None,
+    };
+
+    // ... `if !narrowed {` / `} else {` UPDATE branches run on `&mut *tx` ...
+
+    // Issue UPDATE + version row commit together: a version-write failure
+    // rolls the update back so the client can retry (Django's async task
+    // swallows errors and never retries — `issue_description_version_task.py:76-77`
+    // — this is the crate's documented "single tx" deviation, stronger than Django).
+    if let (Some(new_html), Some(pre)) = (new_description.as_deref(), pre.as_ref()) {
+        // Migration-client shape only (`skip_activity and is_description_update`,
+        // `views/intake/base.py:336-337,437`); the web nests `description_html`
+        // under `issue`, so the probe is None and the version is written.
         if new_html != pre.0 {
             let new_json = issue
                 .and_then(|i| i.description_json.clone())
-                .unwrap_or(pre.1.clone());
-            let mut conn = st.pool.acquire().await?;
+                .unwrap_or_else(|| pre.1.clone());
             super::issue_version_write::record_description_version(
-                &mut conn,
+                &mut tx,
                 issue_id,
                 project_id,
                 pre.3,
                 user_id,
                 pre.2,
                 Some(user_id),
-                &new_html,
+                new_html,
                 &new_json,
             )
             .await?;
         }
     }
+    tx.commit().await?;
 ```
 
 (`&mut conn` where `conn: PoolConnection<Postgres>` derefs to `&mut PgConnection`.)
@@ -736,7 +752,7 @@ DATABASE_URL=postgres://plane:plane@localhost:5432/plane REDIS_URL=redis://local
   cargo test -p api -p common --no-fail-fast -- --test-threads=1
 ```
 
-Expected: 0 failed (baseline 1118 + 3 new tests).
+Expected: 0 failed (baseline 1118 + 6 new tests = 1124 passed, 3 ignored).
 
 - [ ] **Step 2: Rebuild the API image and restart the stack**
 
@@ -760,18 +776,19 @@ Expected: `health: HTTP 200`.
 
 - [ ] **Step 4: Note the intake behavior in the parity inventory**
 
-In `crates/api/parity-inventory.json`, append to the notes of the intake-issues PATCH route entry (search for `inbox-issues`/`intake-issues`):
+In `crates/api/parity-inventory.json`, append one concise `| Follow-ups:` clause to each of these entries (keep the existing notes intact):
 
-```
- | Follow-ups: intake create/patch now record issue_description_versions (Django base.py:292-297,447-456).
-```
+- `/api/workspaces/:slug/projects/:project_id/issues/` (create): legacy create now computes `description_stripped` + `completed_at` (Issue.save parity), and an explicit `description_html: ""` stores `""`/NULL instead of defaulting to `<p></p>`.
+- `/api/workspaces/:slug/draft-to-issue/:draft_id/`: promotion writes `description_stripped`; draft default-state resolution now orders by `(sequence, created_at)`.
+- `/api/workspaces/:slug/projects/:project_id/inbox-issues/` (create): records the initial `issue_description_versions` row (Django `base.py:293-298`, `is_creating=True`).
+- `/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/` (PATCH): records a version on description change (`base.py:454-459`), merged within 600 s by owner, in the same transaction as the issue UPDATE.
 
 Commit:
 
 ```bash
 cd /home/ghifari/plane-for-itsm
 git add apps/api-rs/crates/api/parity-inventory.json
-git commit -m "docs(api-rs): parity inventory notes intake description versions"
+git commit -m "docs(api-rs): parity inventory notes follow-up fixes"
 ```
 
 ---
