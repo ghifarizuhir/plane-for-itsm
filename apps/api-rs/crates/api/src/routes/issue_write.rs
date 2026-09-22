@@ -196,13 +196,24 @@ pub async fn insert_issue(
     .fetch_one(&mut **tx)
     .await?;
 
+    // `Issue.save` create branch (`db/models/issue.py:200-205`): empty html
+    // stores NULL, anything else stores the tag-stripped text.
+    let description_stripped: Option<String> = if issue.description_html.is_empty() {
+        None
+    } else {
+        Some(super::page::strip_tags_text(issue.description_html))
+    };
+
     let row: (uuid::Uuid, String) = sqlx::query_as(
         "INSERT INTO issues (id, name, description_html, description_json, priority, start_date, \
          target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, \
-         created_by_id, updated_by_id, estimate_point_id, type_id, parent_id, created_at, updated_at) \
+         created_by_id, updated_by_id, estimate_point_id, type_id, parent_id, description_stripped, \
+         completed_at, created_at, updated_at) \
          SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, $5, false, \
          COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $6 AND state_id IS NOT DISTINCT FROM $7), 65535 - 10000) + 10000, \
-         $8, $7, $6, w.id, $9, NULL, $10, $11, $12, now(), now() \
+         $8, $7, $6, w.id, $9, NULL, $10, $11, $12, $14, \
+         CASE WHEN (SELECT \"group\" FROM states WHERE id = $7) = 'completed' THEN now() ELSE NULL END, \
+         now(), now() \
          FROM workspaces w WHERE w.slug = $13 RETURNING id, name",
     )
     .bind(issue.name)
@@ -218,6 +229,7 @@ pub async fn insert_issue(
     .bind(issue.type_id)
     .bind(issue.parent_id)
     .bind(issue.slug)
+    .bind(description_stripped)
     .fetch_one(&mut **tx)
     .await?;
 

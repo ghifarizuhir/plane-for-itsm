@@ -949,7 +949,8 @@ async fn create_defaults_description_and_priority_when_absent() {
     .unwrap();
     assert_eq!(row.0, "<p></p>");
     assert_eq!(row.1, "none");
-    assert_eq!(row.2, None);
+    // `Issue.save` create branch: non-empty html → `strip_tags` ("" here).
+    assert_eq!(row.2.as_deref(), Some(""));
     assert_eq!(row.3, None);
     assert_eq!(row.4, None);
     assert_eq!(row.5, None);
@@ -1481,5 +1482,73 @@ async fn create_records_initial_description_version() {
         .execute(&pool)
         .await
         .ok();
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn create_writes_stripped_and_completed_at() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let done = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
+         \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, 'Done', '', '#16A34A', 'done', $2, $3, 65535, 'completed', false, false, now(), now())",
+    )
+    .bind(done)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateIssue {
+            state_id: Some(done),
+            description_html: Some("<p>hi <b>there</b></p>".to_string()),
+            ..base_body("completed-create", scratch.state_id)
+        }),
+    )
+    .await
+    .expect("create must return a response");
+    assert_eq!(status, StatusCode::CREATED);
+    let id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+
+    let (stripped, completed): (Option<String>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT description_stripped, completed_at FROM issues WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stripped.as_deref(), Some("hi there"));
+    assert!(
+        completed.is_some(),
+        "create into a completed state stamps completed_at"
+    );
+
+    // Non-completed state (fixture backlog) → completed_at stays NULL.
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(base_body("backlog-create", scratch.state_id)),
+    )
+    .await
+    .expect("create must return a response");
+    assert_eq!(status, StatusCode::CREATED);
+    let id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+    let completed: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT completed_at FROM issues WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(completed, None);
+
     scratch.cleanup(&pool).await;
 }
