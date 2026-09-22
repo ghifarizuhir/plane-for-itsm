@@ -1426,7 +1426,9 @@ pub async fn user_stats(
     .fetch_one(&st.pool)
     .await
     .unwrap_or(0);
-    // Cycles literal Django (`user.py:504-515`): tanpa deleted/archived guard.
+    // Cycles literal Django (`workspace/user.py:504-516`): no
+    // deleted/archived guard, and `issue__assignees` joins do not apply
+    // soft-delete managers — intentional parity.
     let upcoming: Vec<Value> =
         sqlx::query_as::<_, (Option<String>, Option<uuid::Uuid>, Option<uuid::Uuid>)>(
             "SELECT c.name, c.id, c.project_id FROM cycle_issues ci \

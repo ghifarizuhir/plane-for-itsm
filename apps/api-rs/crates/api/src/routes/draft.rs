@@ -93,9 +93,8 @@ use super::issue_common::{
 ///   Django's full `IssueCreateSerializer` `__all__` — status parity,
 ///   key-set subset (smoke checks status only; FE already holds the draft
 ///   payload it sent).
-/// - `description_stripped` never computed (needs the html parser;
-///   sibling writers skip it too); `sort_order`/default-state/`completed_at`
-///   ARE mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
+/// - `sort_order`/default-state/`completed_at`/`description_stripped` are
+///   mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
 
 /// Quoted from `plane/app/views/workspace/draft.py:166` (PATCH miss —
 /// NON-standard, differs from the standard `missing()` body).
@@ -466,6 +465,8 @@ async fn workspace_id(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uu
 /// `DraftIssue.save` (`db/models/draft.py:84-98`) / `Issue._ensure_default_state`
 /// (`db/models/issue.py:231-243`): explicit id wins; else the project's
 /// default non-triage state, else the first non-triage state, else None.
+/// Django's `.first()` uses `State.Meta.ordering = ("sequence",)`
+/// (`db/models/state.py:115`), hence `sequence, created_at` here.
 async fn resolve_default_state(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
@@ -480,7 +481,7 @@ async fn resolve_default_state(
     let row: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
          AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
-         ORDER BY created_at ASC LIMIT 1",
+         ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(pid)
     .fetch_optional(pool)
@@ -491,7 +492,7 @@ async fn resolve_default_state(
     sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
          AND \"group\" != 'triage' AND is_triage = false \
-         ORDER BY created_at ASC LIMIT 1",
+         ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(pid)
     .fetch_optional(pool)
@@ -1307,14 +1308,25 @@ pub async fn create_draft_to_issue(
         &b.label_ids.clone().unwrap_or_default(),
     )
     .await?;
+    // Same rule as `insert_issue`/`Issue.save`: empty → NULL else stripped.
+    // The INSERT stores `COALESCE($2, '<p></p>')`, so mirror that value.
+    let effective_html: String = b
+        .description_html
+        .clone()
+        .unwrap_or_else(|| "<p></p>".to_string());
+    let description_stripped: Option<String> = if effective_html.is_empty() {
+        None
+    } else {
+        Some(super::page::strip_tags_text(&effective_html))
+    };
     let mut tx = st.pool.begin().await?;
     let issue_id: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO issues (id, name, description_html, description_json, priority, \
          start_date, target_date, sequence_id, sort_order, completed_at, is_draft, \
-         estimate_point_id, parent_id, type_id, state_id, project_id, workspace_id, \
-         created_by_id, created_at, updated_at) \
+         estimate_point_id, parent_id, type_id, state_id, description_stripped, project_id, \
+         workspace_id, created_by_id, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, COALESCE($2, '<p></p>'), '{}', COALESCE($3, 'none'), \
-         $4, $5, $6, $7, $8, false, $9, $10, $11, $12, $13, $14, $15, now(), now()) RETURNING id",
+         $4, $5, $6, $7, $8, false, $9, $10, $11, $12, $16, $13, $14, $15, now(), now()) RETURNING id",
     )
     .bind(&name)
     .bind(b.description_html.as_deref())
@@ -1331,6 +1343,7 @@ pub async fn create_draft_to_issue(
     .bind(project_id)
     .bind(workspace_id)
     .bind(auth.0)
+    .bind(description_stripped)
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(

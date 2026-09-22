@@ -3,6 +3,9 @@
 //! per-project sequence allocation and PROJECT-level ADMIN/MEMBER authz.
 
 use api::middleware::auth::AuthUser;
+use api::routes::draft::{
+    create as draft_create, create_draft_to_issue as draft_convert, ConvertBody, CreateDraftBody,
+};
 use api::routes::intake::{
     create_issue as intake_create_issue, CreateIntakeIssue, IntakeIssuePayload,
 };
@@ -255,6 +258,11 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM draft_issues WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM states WHERE project_id = $1")
             .bind(self.project_id)
             .execute(pool)
@@ -437,6 +445,7 @@ async fn purge(pool: &PgPool) {
                 "DELETE FROM labels WHERE project_id = $1",
                 "DELETE FROM issues WHERE project_id = $1",
                 "DELETE FROM intakes WHERE project_id = $1",
+                "DELETE FROM draft_issues WHERE project_id = $1",
                 "DELETE FROM states WHERE project_id = $1",
                 "DELETE FROM project_members WHERE project_id = $1",
                 "DELETE FROM estimate_points WHERE project_id = $1",
@@ -1606,6 +1615,106 @@ async fn insert_issue_handles_null_state_and_empty_html() {
     assert_eq!(html, "", "empty html stored as-is");
     assert_eq!(stripped, None, "empty html → NULL stripped");
     assert_eq!(completed, None, "NULL state → no completed_at");
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn draft_default_state_uses_state_sequence_ordering() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    // Fixture state: sequence 65535, default=true, created FIRST. A second
+    // default with a LOWER sequence but created LATER must win — Django
+    // resolves via `State.objects.filter(...).first()` with
+    // `Meta.ordering = ("sequence",)` (`db/models/state.py:115`,
+    // `db/models/draft.py:84-98`).
+    let second = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
+         \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, 'First by sequence', '', '#60646C', 'first-by-seq', $2, $3, 100, 'backlog', true, false, now(), now())",
+    )
+    .bind(second)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(_)) = draft_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Some(Json(CreateDraftBody {
+            project_id: Some(scratch.project_id),
+            ..Default::default()
+        })),
+    )
+    .await
+    .expect("draft create must respond");
+    assert_eq!(status, StatusCode::CREATED);
+
+    let state_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT state_id FROM draft_issues WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(scratch.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        state_id,
+        Some(second),
+        "sequence ordering must win over created_at"
+    );
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn draft_conversion_writes_description_stripped() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let draft_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO draft_issues (id, name, description_html, description_json, priority, sort_order, \
+         state_id, project_id, workspace_id, created_by_id, created_at, updated_at) \
+         VALUES ($1, 'draft-probe', '<p>draft</p>', '{}', 'none', 65535, $2, $3, $4, $5, now(), now())",
+    )
+    .bind(draft_id)
+    .bind(scratch.state_id)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(body)) = draft_convert(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), draft_id)),
+        Some(Json(ConvertBody {
+            name: Some("converted-probe".to_string()),
+            description_html: Some("<p>converted <b>body</b></p>".to_string()),
+            ..Default::default()
+        })),
+    )
+    .await
+    .expect("draft conversion must respond");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id: Uuid = body["id"].as_str().expect("id").parse().unwrap();
+
+    let stripped: Option<String> =
+        sqlx::query_scalar("SELECT description_stripped FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stripped.as_deref(), Some("converted body"));
 
     scratch.cleanup(&pool).await;
 }

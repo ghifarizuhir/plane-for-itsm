@@ -197,6 +197,9 @@ pub async fn list(
     // `base.py:113-135` type subqueries (OR-combined; empty Q = no-op).
     let mut type_clauses: Vec<String> = Vec::new();
     if types.contains(&"subscribed") {
+        // Django's `IssueAssignee.objects` is a plain manager and related
+        // lookups use base managers — these filters intentionally have NO
+        // `deleted_at` predicate (parity with `views/notification/base.py:112,119`).
         type_clauses.push(
             "n.entity_identifier IN (SELECT s.issue_id FROM issue_subscribers s \
              JOIN workspaces w2 ON w2.id = s.workspace_id WHERE w2.slug = $1 \
@@ -206,6 +209,9 @@ pub async fn list(
         );
     }
     if types.contains(&"assigned") {
+        // Django's `IssueAssignee.objects` is a plain manager and related
+        // lookups use base managers — these filters intentionally have NO
+        // `deleted_at` predicate (parity with `views/notification/base.py:112,119`).
         type_clauses.push(
             "n.entity_identifier IN (SELECT a.issue_id FROM issue_assignees a \
              JOIN workspaces w2 ON w2.id = a.workspace_id WHERE w2.slug = $1 \
@@ -394,6 +400,9 @@ pub async fn mark_all_read(
     // Mirrors the viewset's snoozed/archived/type filter variants.
     let type_filter = match body.r#type.as_deref().unwrap_or("all") {
         "watching" => "AND n.entity_identifier IN (SELECT issue_id FROM issue_subscribers s JOIN workspaces w2 ON w2.id = s.workspace_id WHERE w2.slug = $1 AND s.subscriber_id = $2)",
+        // Django's `IssueAssignee.objects` is a plain manager and related
+        // lookups use base managers — these filters intentionally have NO
+        // `deleted_at` predicate (parity with `views/notification/base.py:112,119`).
         "assigned" => "AND n.entity_identifier IN (SELECT issue_id FROM issue_assignees a JOIN workspaces w2 ON w2.id = a.workspace_id WHERE w2.slug = $1 AND a.assignee_id = $2)",
         "created" => "AND n.entity_identifier IN (SELECT id FROM issues i JOIN workspaces w2 ON w2.id = i.workspace_id WHERE w2.slug = $1 AND i.created_by_id = $2)",
         _ => "",
