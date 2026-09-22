@@ -54,7 +54,7 @@ Green path: gate → 404 `{"error": "Issue not found"}` (miss body verbatim) →
 | `parent_id`, `estimate_point`, `point`, `start_date`, `target_date`      | clear                                                                | no change              |
 | `assignee_ids`, `label_ids`                                              | 400 (`ListField` has no `allow_null`)                                | no change; `[]` clears |
 
-`type_id`: Django's serializer key is `type` (FK) — the web's `type_id` is silently ignored by Django. This plan accepts **both** (`type_id` wins) as a documented superset, consistent with the create slice.
+`type_id`: Django's serializer key is `type` (FK) — the web's `type_id` is silently ignored by Django. This plan accepts `type_id` only (a web-driven superset consistent with the create slice); Django's `type` key is not accepted and is a documented deviation.
 
 **Validation (all → 400; Django order `serializers/issue.py:127-196`):** start>target only when both keys present; HTML sanitize (`nh3`; invalid → `"html content is not valid"`); assignee ids must be active project members role ≥ 15; label ids must be project labels; state must be in project; parent must be in project; estimate point must be in project. The fork's create decision (#9526 strict 400, not Django's silent filter) is kept for `assignee_ids`/`label_ids`.
 
@@ -748,13 +748,18 @@ async fn validate_patch_refs(
         }
     }
     if let Some(Some(state_id)) = body.state_id {
-        let (ok,): (bool,) =
-            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)")
-                .bind(state_id)
-                .bind(project_id)
-                .fetch_one(&st.pool)
-                .await
-                .map_err(internal)?;
+        // Django validates against `State.objects` = `StateManager`
+        // (`db/models/state.py:65-69`, a `SoftDeletionManager` that also
+        // excludes `group='triage'`): soft-deleted and triage states 400.
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+             AND deleted_at IS NULL AND \"group\" != 'triage')",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(internal)?;
         if !ok {
             return Err(bad("State is not valid please pass a valid state_id"));
         }
