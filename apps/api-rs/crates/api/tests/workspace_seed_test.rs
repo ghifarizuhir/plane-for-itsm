@@ -165,7 +165,8 @@ async fn workspace_create_seeds_itsm_demo() {
     assert_eq!(count("project_user_properties").await, 2);
 
     let (bot_count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_bot = true AND bot_type = 'WORKSPACE_SEED' AND email LIKE 'bot_user_%'")
+        sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_bot = true AND bot_type = 'WORKSPACE_SEED' AND username = $1")
+            .bind(format!("bot_user_{ws_id}"))
             .fetch_one(&pool)
             .await
             .expect("bot count");
