@@ -10,7 +10,6 @@ import type {
   CycleDateCheckData,
   ICycle,
   TIssuesResponse,
-  IWorkspaceActiveCyclesResponse,
   TCycleDistribution,
   TProgressSnapshot,
   TCycleEstimateDistribution,
@@ -55,23 +54,6 @@ export class CycleService extends APIService {
     cycleId: string
   ): Promise<TProgressSnapshot> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}/cycle-progress/`)
-      .then((res) => res?.data)
-      .catch((err) => {
-        throw err?.response?.data;
-      });
-  }
-
-  async workspaceActiveCycles(
-    workspaceSlug: string,
-    cursor: string,
-    per_page: number
-  ): Promise<IWorkspaceActiveCyclesResponse> {
-    return this.get(`/api/workspaces/${workspaceSlug}/active-cycles/`, {
-      params: {
-        per_page,
-        cursor,
-      },
-    })
       .then((res) => res?.data)
       .catch((err) => {
         throw err?.response?.data;
