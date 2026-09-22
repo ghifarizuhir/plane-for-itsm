@@ -1458,6 +1458,16 @@ pub async fn patch_issue(
     if !narrowed {
         let desc_html = issue.and_then(|i| i.description_html.clone());
         let desc_json = issue.and_then(|i| i.description_json.clone());
+        // Django's `Issue.save` recomputes `description_stripped` on every
+        // save (`db/models/issue.py:212-217`); mirror it when html is sent.
+        let desc_stripped_flag = desc_html.is_some();
+        let desc_stripped: Option<String> = desc_html.as_deref().and_then(|h| {
+            if h.is_empty() {
+                None
+            } else {
+                Some(super::page::strip_tags_text(h))
+            }
+        });
         if new_name.is_some()
             || desc_html.is_some()
             || desc_json.is_some()
@@ -1468,7 +1478,8 @@ pub async fn patch_issue(
                   description_html = COALESCE($2, description_html), \
                   description_json = COALESCE($3::jsonb, description_json), \
                   priority = COALESCE($4, priority), \
-                  updated_at = now(), updated_by_id = $6 \
+                  updated_at = now(), updated_by_id = $6, \
+                  description_stripped = CASE WHEN $7::boolean THEN $8::text ELSE description_stripped END \
                   WHERE id = $5 AND deleted_at IS NULL",
             )
             .bind(&new_name)
@@ -1477,18 +1488,31 @@ pub async fn patch_issue(
             .bind(&new_priority)
             .bind(issue_id)
             .bind(user_id)
+            .bind(desc_stripped_flag)
+            .bind(&desc_stripped)
             .execute(&mut *tx)
             .await?;
         }
     } else {
         let desc_html = issue.and_then(|i| i.description_html.clone());
         let desc_json = issue.and_then(|i| i.description_json.clone());
+        // Django's `Issue.save` recomputes `description_stripped` on every
+        // save (`db/models/issue.py:212-217`); mirror it when html is sent.
+        let desc_stripped_flag = desc_html.is_some();
+        let desc_stripped: Option<String> = desc_html.as_deref().and_then(|h| {
+            if h.is_empty() {
+                None
+            } else {
+                Some(super::page::strip_tags_text(h))
+            }
+        });
         if new_name.is_some() || desc_html.is_some() || desc_json.is_some() {
             sqlx::query(
                 "UPDATE issues SET name = COALESCE($1, name), \
                   description_html = COALESCE($2, description_html), \
                   description_json = COALESCE($3::jsonb, description_json), \
-                  updated_at = now(), updated_by_id = $5 \
+                  updated_at = now(), updated_by_id = $5, \
+                  description_stripped = CASE WHEN $6::boolean THEN $7::text ELSE description_stripped END \
                   WHERE id = $4 AND deleted_at IS NULL",
             )
             .bind(&new_name)
@@ -1496,12 +1520,14 @@ pub async fn patch_issue(
             .bind(&desc_json)
             .bind(issue_id)
             .bind(user_id)
+            .bind(desc_stripped_flag)
+            .bind(&desc_stripped)
             .execute(&mut *tx)
             .await?;
         }
     }
 
-    // Intake PATCH version parity (`views/intake/base.py:454-459`). Django
+    // Intake PATCH version parity (`views/intake/base.py:454-458`). Django
     // suppresses it only for the migration-client case
     // (`skip_activity and is_description_update`, base.py:336-337,437), where
     // `is_description_update` probes the TOP-LEVEL `description_html`; the

@@ -1884,6 +1884,18 @@ async fn intake_create_and_patch_record_description_versions() {
     );
     assert_eq!(versions[0].0, "<p>intake edit</p>");
 
+    let stripped: Option<String> =
+        sqlx::query_scalar("SELECT description_stripped FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        stripped.as_deref(),
+        Some("intake edit"),
+        "intake PATCH recomputes stripped like Issue.save"
+    );
+
     // Unchanged description → no new version: a merge would bump
     // `last_saved_at`, so compare it around the no-op PATCH.
     let saved_before: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
@@ -1926,6 +1938,30 @@ async fn intake_create_and_patch_record_description_versions() {
             .await
             .unwrap();
     assert_eq!(count, 1);
+
+    // Explicit empty html → NULL stripped (`Issue.save`, db/models/issue.py:212-217).
+    let (status, _) = intake_patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(InboxIssuePatch {
+            issue: Some(InboxIssueFields {
+                description_html: Some(String::new()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("intake patch must respond");
+    assert_eq!(status, StatusCode::OK);
+    let stripped: Option<String> =
+        sqlx::query_scalar("SELECT description_stripped FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stripped, None, "empty html → NULL stripped");
 
     scratch.cleanup(&pool).await;
 }
