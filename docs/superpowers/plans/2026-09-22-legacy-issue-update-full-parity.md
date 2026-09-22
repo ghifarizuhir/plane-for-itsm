@@ -86,7 +86,7 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 
 1. **Strict 400** for invalid assignee/label/state/parent/estimate/type ids (create-slice decision, not Django's silent filter).
 2. **Malformed UUID/type in the body → 422** from the Axum `Json` extractor (create-slice precedent). Django 400s. Not changed in this slice.
-3. **`assignee_ids: null` / `label_ids: null` are treated as absent**, not 400 (single-option lax list deserializer). Web sends `[]` to clear.
+3. **`assignee_ids: null` / `label_ids: null` → 400** (`ListField` has no `allow_null`, Django-exact); `[]` clears. The web only ever sends arrays.
 4. **Bridges soft-delete** (`replace_bridges`: `deleted_at = now()`) unlike Django's hard `QuerySet.delete()`; bridge `updated_by_id` is the actor, Django copies the issue's old `updated_by_id`. Already the v1/create behavior.
 5. **`description` maps to `description_json`** (existing struct behavior; web sends only `description_html`). Django's own key `description_json` is not accepted.
 6. **Estimate clear writes no estimate activity**: Django's `track_estimate_points` raises `AttributeError` on `new_estimate is None`, the task's try/except swallows it and the whole activity batch is lost. Rust writes every other activity and skips the estimate row (saner, documented).
@@ -99,18 +99,18 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 
 ## File structure
 
-| File                                                     | Responsibility                                                                                                                 |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `crates/api/src/routes/issue_update.rs` **(new)**        | `PatchIssue` struct + tri-state deserializers, validation, current-row snapshot, the PATCH handler                             |
-| `crates/api/src/routes/issue_version_write.rs` **(new)** | `record_description_version` (merge ≤600 s / insert)                                                                           |
-| `crates/api/src/routes/issue_activity_write.rs`          | add `ActivityCtx`, `insert_activity_row`                                                                                       |
-| `crates/api/src/routes/issue_common.rs`                  | move `bad`, `PRIORITIES`, `dedupe_ids`, `resolve_issue_state`, `de_opt_uuid_lax`, `de_opt_uuid_vec_lax`; add `de_double_opt_*` |
-| `crates/api/src/routes/issue_write.rs`                   | import moved helpers; call `record_description_version` on create                                                              |
-| `crates/api/src/routes/work_item.rs`                     | remove the moved PATCH code + its unit test                                                                                    |
-| `crates/api/src/routes/mod.rs`, `crates/api/src/main.rs` | module + route wiring                                                                                                          |
-| `crates/api/tests/issue_patch_test.rs` **(new)**         | integration tests (fixture, scalar/bridge/activity/version/validation)                                                         |
-| `crates/api/tests/issue_create_test.rs`                  | one create-path version test (Task 5)                                                                                          |
-| `crates/api/parity-inventory.json`                       | route note                                                                                                                     |
+| File                                                     | Responsibility                                                                                                                                                           |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `crates/api/src/routes/issue_update.rs` **(new)**        | `PatchIssue` struct + tri-state deserializers, validation, current-row snapshot, the PATCH handler                                                                       |
+| `crates/api/src/routes/issue_version_write.rs` **(new)** | `record_description_version` (merge ≤600 s / insert)                                                                                                                     |
+| `crates/api/src/routes/issue_activity_write.rs`          | add `ActivityCtx`, `insert_activity_row`                                                                                                                                 |
+| `crates/api/src/routes/issue_common.rs`                  | move `bad`, `PRIORITIES`, `dedupe_ids`, `resolve_issue_state`/`resolve_effective_state`, `de_opt_uuid_lax`, `de_opt_uuid_vec_lax`; add `de_double_opt_*` (incl. the vec) |
+| `crates/api/src/routes/issue_write.rs`                   | import moved helpers; call `record_description_version` on create                                                                                                        |
+| `crates/api/src/routes/work_item.rs`                     | remove the moved PATCH code + its unit test                                                                                                                              |
+| `crates/api/src/routes/mod.rs`, `crates/api/src/main.rs` | module + route wiring                                                                                                                                                    |
+| `crates/api/tests/issue_patch_test.rs` **(new)**         | integration tests (fixture, scalar/bridge/activity/version/validation)                                                                                                   |
+| `crates/api/tests/issue_create_test.rs`                  | one create-path version test (Task 5)                                                                                                                                    |
+| `crates/api/parity-inventory.json`                       | route note                                                                                                                                                               |
 
 ---
 
@@ -210,6 +210,33 @@ where
     }
 }
 
+/// Tri-state id vector: absent → `None`, `null` → `Some(None)` (Django
+/// 400s it), array → `Some(Some(ids))` with null/empty elements skipped.
+pub(crate) fn de_double_opt_uuid_vec_lax<'de, D>(d: D) -> Result<Option<Option<Vec<Uuid>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = Value::deserialize(d).map_err(serde::de::Error::custom)?;
+    match v {
+        Value::Null => Ok(Some(None)),
+        Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                match item {
+                    Value::Null => continue,
+                    Value::String(s) if s.trim().is_empty() => continue,
+                    Value::String(s) => {
+                        out.push(Uuid::parse_str(s.trim()).map_err(serde::de::Error::custom)?)
+                    }
+                    other => return Err(serde::de::Error::custom(format!("invalid UUID: {other}"))),
+                }
+            }
+            Ok(Some(Some(out)))
+        }
+        other => Err(serde::de::Error::custom(format!("invalid UUID list: {other}"))),
+    }
+}
+
 /// Tri-state string: absent → `None`, `null` → `Some(None)`, value →
 /// `Some(Some(s))`. Empty strings stay `Some(Some(""))` so per-field
 /// validation can reject them where Django does.
@@ -275,8 +302,9 @@ where
 
 /// Pick the effective state of a new issue, mirroring
 /// `Issue._ensure_default_state` (`plane/db/models/issue.py:228-236`)
-/// (moved from `issue_write.rs`, now shared with PATCH).
-pub(crate) fn resolve_effective_state(
+/// (moved from `issue_write.rs`, now shared with PATCH). Stays `pub`:
+/// `tests/issue_test.rs` (separate crate) imports it.
+pub fn resolve_effective_state(
     explicit: Option<Uuid>,
     default_id: Option<Uuid>,
     first_id: Option<Uuid>,
@@ -327,7 +355,7 @@ use api::routes::issue_write::{validate_create, CreateIssue};
 
 - [ ] **Step 2: Write the failing unit tests**
 
-Create `crates/api/tests/issue_patch_test.rs` by copying `crates/api/tests/issue_create_test.rs` lines 1-292 (imports, `pool()`/`state()`, `Scratch`, `insert_user`, `insert_workspace_member`, `insert_project_member`, `Scratch::new/add_actor/cleanup`), lines 343-359 (`insert_label`), lines 369-379 (`live_assignees`) and lines 380-409 (`insert_estimate_with_point`), then apply these edits:
+Create `crates/api/tests/issue_patch_test.rs` by copying `crates/api/tests/issue_create_test.rs` lines 1-292 (imports, `pool()`/`state()`, `Scratch`, `insert_user`, `insert_workspace_member`, `insert_project_member`, `Scratch::new/add_actor/cleanup`), lines 343-359 (`insert_label`) and lines 380-409 (`insert_estimate_with_point`), then apply these edits:
 
 1. Replace the module doc comment and imports:
 
@@ -416,94 +444,6 @@ async fn patch_issue_req(
     (status, body)
 }
 
-async fn insert_state(
-    pool: &PgPool,
-    project_id: Uuid,
-    workspace_id: Uuid,
-    name: &str,
-    group: &str,
-    is_default: bool,
-) -> Uuid {
-    let id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
-         \"group\", \"default\", is_triage, created_at, updated_at) \
-         VALUES ($1, $2, '', '#60646C', $3, $4, $5, 65535, $6, $7, false, now(), now())",
-    )
-    .bind(id)
-    .bind(name)
-    .bind(name.to_lowercase())
-    .bind(project_id)
-    .bind(workspace_id)
-    .bind(group)
-    .bind(is_default)
-    .execute(pool)
-    .await
-    .expect("scratch state");
-    id
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct IssueRow {
-    name: String,
-    description_html: String,
-    description_stripped: Option<String>,
-    description_json: Value,
-    priority: String,
-    state_id: Option<Uuid>,
-    parent_id: Option<Uuid>,
-    start_date: Option<chrono::NaiveDate>,
-    target_date: Option<chrono::NaiveDate>,
-    sort_order: f64,
-    point: Option<i32>,
-    estimate_point_id: Option<Uuid>,
-    type_id: Option<Uuid>,
-    updated_by_id: Option<Uuid>,
-    completed_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-async fn issue_row(pool: &PgPool, issue_id: Uuid) -> IssueRow {
-    sqlx::query_as(
-        "SELECT name, description_html, description_stripped, description_json, priority, state_id, \
-         parent_id, start_date, target_date, sort_order, point, estimate_point_id, type_id, \
-         updated_by_id, completed_at FROM issues WHERE id = $1",
-    )
-    .bind(issue_id)
-    .fetch_one(pool)
-    .await
-    .expect("issue row")
-}
-
-async fn live_labels(pool: &PgPool, issue_id: Uuid) -> Vec<Uuid> {
-    sqlx::query_scalar(
-        "SELECT label_id FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NULL ORDER BY created_at",
-    )
-    .bind(issue_id)
-    .fetch_all(pool)
-    .await
-    .expect("label rows")
-}
-
-type ActRow = (String, Option<String>, String, Option<String>, Option<String>, Option<Uuid>, Option<Uuid>);
-
-async fn activities(pool: &PgPool, issue_id: Uuid) -> Vec<ActRow> {
-    sqlx::query_as(
-        "SELECT verb, field, comment, old_value, new_value, old_identifier, new_identifier \
-         FROM issue_activities WHERE issue_id = $1 ORDER BY created_at, field",
-    )
-    .bind(issue_id)
-    .fetch_all(pool)
-    .await
-    .expect("activity rows")
-}
-
-async fn activity_fields(pool: &PgPool, issue_id: Uuid) -> Vec<String> {
-    activities(pool, issue_id)
-        .await
-        .into_iter()
-        .filter_map(|r| r.1)
-        .collect()
-}
 ```
 
 Now add the Task-1 tests at the bottom of the file:
@@ -646,7 +586,7 @@ use uuid::Uuid;
 
 use super::issue_common::{
     bad, de_double_opt_f64, de_double_opt_i32, de_double_opt_json, de_double_opt_string,
-    de_double_opt_uuid_lax, de_opt_uuid_vec_lax, dedupe_ids, fetch_project_member_role,
+    de_double_opt_uuid_lax, de_double_opt_uuid_vec_lax, dedupe_ids, fetch_project_member_role,
     is_workspace_admin, parse_date, project_gate_allows, PRIORITIES,
 };
 use super::work_item::ws_active_member;
@@ -686,10 +626,10 @@ pub struct PatchIssue {
     pub estimate_point: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "de_double_opt_uuid_lax")]
     pub type_id: Option<Option<Uuid>>,
-    #[serde(default, deserialize_with = "de_opt_uuid_vec_lax")]
-    pub assignee_ids: Option<Vec<Uuid>>,
-    #[serde(default, deserialize_with = "de_opt_uuid_vec_lax")]
-    pub label_ids: Option<Vec<Uuid>>,
+    #[serde(default, deserialize_with = "de_double_opt_uuid_vec_lax")]
+    pub assignee_ids: Option<Option<Vec<Uuid>>>,
+    #[serde(default, deserialize_with = "de_double_opt_uuid_vec_lax")]
+    pub label_ids: Option<Option<Vec<Uuid>>>,
     #[serde(default)]
     pub skip_activity: Option<Value>,
 }
@@ -756,8 +696,12 @@ pub fn validate_patch(body: &PatchIssue) -> Result<(), String> {
             return Err("point must be between 0 and 12".to_string());
         }
     }
-    // `assignee_ids: null` / `label_ids: null` never reach here — the lax
-    // list deserializer maps null to absent; Django 400s it (deviation 3).
+    if matches!(body.assignee_ids, Some(None)) {
+        return Err("assignee_ids may not be null".to_string());
+    }
+    if matches!(body.label_ids, Some(None)) {
+        return Err("label_ids may not be null".to_string());
+    }
     Ok(())
 }
 
@@ -906,8 +850,8 @@ pub async fn patch_issue(
     if let Err(msg) = validate_patch(&body) {
         return Ok(bad(&msg));
     }
-    let assignees = dedupe_ids(&body.assignee_ids);
-    let labels = dedupe_ids(&body.label_ids);
+    let assignees = dedupe_ids(&body.assignee_ids.clone().flatten());
+    let labels = dedupe_ids(&body.label_ids.clone().flatten());
     if let Err(e) = validate_patch_refs(&st, project_id, &body, &assignees, &labels).await {
         return Ok(e);
     }
@@ -982,7 +926,68 @@ git commit -m "refactor(api-rs): extract legacy issue PATCH with full request va
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `crates/api/tests/issue_patch_test.rs`:
+Append these helpers, then the tests, to `crates/api/tests/issue_patch_test.rs`:
+
+```rust
+async fn insert_state(
+    pool: &PgPool,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    name: &str,
+    group: &str,
+    is_default: bool,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
+         \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, $2, '', '#60646C', $3, $4, $5, 65535, $6, $7, false, now(), now())",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(name.to_lowercase())
+    .bind(project_id)
+    .bind(workspace_id)
+    .bind(group)
+    .bind(is_default)
+    .execute(pool)
+    .await
+    .expect("scratch state");
+    id
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct IssueRow {
+    name: String,
+    description_html: String,
+    description_stripped: Option<String>,
+    description_json: Value,
+    priority: String,
+    state_id: Option<Uuid>,
+    parent_id: Option<Uuid>,
+    start_date: Option<chrono::NaiveDate>,
+    target_date: Option<chrono::NaiveDate>,
+    sort_order: f64,
+    point: Option<i32>,
+    estimate_point_id: Option<Uuid>,
+    type_id: Option<Uuid>,
+    updated_by_id: Option<Uuid>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+async fn issue_row(pool: &PgPool, issue_id: Uuid) -> IssueRow {
+    sqlx::query_as(
+        "SELECT name, description_html, description_stripped, description_json, priority, state_id, \
+         parent_id, start_date, target_date, sort_order, point, estimate_point_id, type_id, \
+         updated_by_id, completed_at FROM issues WHERE id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(pool)
+    .await
+    .expect("issue row")
+}
+
+```
 
 ```rust
 #[tokio::test]
@@ -1009,7 +1014,6 @@ async fn patch_persists_scalars_and_recomputes_stripped() {
             "point": 3,
             "parent_id": null,
             "label_ids": [label],
-            "assignee_ids": null,
             "project_id": Uuid::new_v4(),
             "id": Uuid::new_v4(),
         })),
@@ -1380,6 +1384,21 @@ git commit -m "feat(api-rs): legacy issue PATCH persists every scalar field with
 
 - [ ] **Step 1: Write the failing tests**
 
+Append `live_labels` below and `live_assignees` (copy `issue_create_test.rs:369-379`), then the test:
+
+```rust
+async fn live_labels(pool: &PgPool, issue_id: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar(
+        "SELECT label_id FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NULL ORDER BY created_at",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("label rows")
+}
+
+```
+
 ```rust
 #[tokio::test]
 async fn patch_replaces_assignee_and_label_bridges() {
@@ -1471,10 +1490,10 @@ In `crates/api/src/routes/issue_update.rs`, inside `patch_issue` after the UPDAT
 ```rust
     // Django `IssueCreateSerializer.update` (`serializers/issue.py:276-320`):
     // present keys replace the whole bridge set.
-    if body.assignee_ids.is_some() {
+    if matches!(body.assignee_ids, Some(Some(_))) {
         replace_bridges(&mut tx, pk, project_id, auth.0, Some(&assignees), None).await?;
     }
-    if body.label_ids.is_some() {
+    if matches!(body.label_ids, Some(Some(_))) {
         replace_bridges(&mut tx, pk, project_id, auth.0, None, Some(&labels)).await?;
     }
 ```
@@ -1511,6 +1530,31 @@ git commit -m "feat(api-rs): legacy issue PATCH replaces assignee and label brid
 - Test: `crates/api/tests/issue_patch_test.rs`
 
 - [ ] **Step 1: Write the failing tests**
+
+Append these helpers, then the tests:
+
+```rust
+type ActRow = (String, Option<String>, String, Option<String>, Option<String>, Option<Uuid>, Option<Uuid>);
+
+async fn activities(pool: &PgPool, issue_id: Uuid) -> Vec<ActRow> {
+    sqlx::query_as(
+        "SELECT verb, field, comment, old_value, new_value, old_identifier, new_identifier \
+         FROM issue_activities WHERE issue_id = $1 ORDER BY created_at, field",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("activity rows")
+}
+
+async fn activity_fields(pool: &PgPool, issue_id: Uuid) -> Vec<String> {
+    activities(pool, issue_id)
+        .await
+        .into_iter()
+        .filter_map(|r| r.1)
+        .collect()
+}
+```
 
 ```rust
 #[tokio::test]
@@ -2032,7 +2076,7 @@ async fn write_update_activities(
             .await?;
         }
     }
-    if let Some(requested) = &body.label_ids {
+    if let Some(Some(requested)) = &body.label_ids {
         let requested: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
         let current_set: std::collections::HashSet<Uuid> = current_label_ids.iter().copied().collect();
         let added: Vec<Uuid> = requested.difference(&current_set).copied().collect();
@@ -2053,7 +2097,7 @@ async fn write_update_activities(
             .await?;
         }
     }
-    if let Some(requested) = &body.assignee_ids {
+    if let Some(Some(requested)) = &body.assignee_ids {
         let requested: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
         let current_set: std::collections::HashSet<Uuid> = current_assignee_ids.iter().copied().collect();
         let added: Vec<Uuid> = requested.difference(&current_set).copied().collect();
@@ -2140,10 +2184,10 @@ Wire it in `patch_issue` **before** the bridge block added in Task 3 (the diff m
         write_update_activities(&mut tx, &ctx, &current, &body, &label_ids_current, &assignee_ids_current)
             .await?;
     }
-    if body.assignee_ids.is_some() {
+    if matches!(body.assignee_ids, Some(Some(_))) {
         replace_bridges(&mut tx, pk, project_id, auth.0, Some(&assignees), None).await?;
     }
-    if body.label_ids.is_some() {
+    if matches!(body.label_ids, Some(Some(_))) {
         replace_bridges(&mut tx, pk, project_id, auth.0, None, Some(&labels)).await?;
     }
 ```
