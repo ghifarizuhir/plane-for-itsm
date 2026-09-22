@@ -397,6 +397,27 @@ async fn issue_row(pool: &PgPool, issue_id: Uuid) -> IssueRow {
     .expect("issue row")
 }
 
+async fn live_assignees(pool: &PgPool, issue_id: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar(
+        "SELECT assignee_id FROM issue_assignees WHERE issue_id = $1 AND deleted_at IS NULL \
+         ORDER BY created_at",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("assignee rows")
+}
+
+async fn live_labels(pool: &PgPool, issue_id: Uuid) -> Vec<Uuid> {
+    sqlx::query_scalar(
+        "SELECT label_id FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NULL ORDER BY created_at",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("label rows")
+}
+
 async fn insert_issue_type(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uuid {
     let id = Uuid::new_v4();
     sqlx::query(
@@ -1063,6 +1084,86 @@ async fn patch_recomputes_stripped_from_stored_html_when_html_absent() {
             .as_deref(),
         Some("stored")
     );
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_replaces_assignee_and_label_bridges() {
+    let st = state().await;
+    let pool = pool().await;
+    let mut scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "bridges").await;
+    let member = scratch.add_actor(&pool, Some(15), Some(15)).await;
+    let label_a = insert_label(&pool, scratch.project_id, scratch.workspace_id, "a").await;
+    let label_b = insert_label(&pool, scratch.project_id, scratch.workspace_id, "b").await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [member, member], "label_ids": [label_a]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(live_assignees(&pool, issue_id).await, vec![member]);
+    assert_eq!(live_labels(&pool, issue_id).await, vec![label_a]);
+
+    // Replace: one live row, the previous row is soft-deleted.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [scratch.user_id], "label_ids": [label_b]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(live_assignees(&pool, issue_id).await, vec![scratch.user_id]);
+    assert_eq!(live_labels(&pool, issue_id).await, vec![label_b]);
+    let soft: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_assignees WHERE issue_id = $1 AND deleted_at IS NOT NULL",
+    )
+    .bind(issue_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(soft, 1, "replaced bridge rows are soft-deleted");
+
+    // `[]` clears.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [], "label_ids": []})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(live_assignees(&pool, issue_id).await.is_empty());
+    assert!(live_labels(&pool, issue_id).await.is_empty());
+
+    // Absent keys leave bridges untouched.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [member]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"name": "no bridge touch"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(live_assignees(&pool, issue_id).await, vec![member]);
 
     scratch.cleanup(&pool).await;
 }

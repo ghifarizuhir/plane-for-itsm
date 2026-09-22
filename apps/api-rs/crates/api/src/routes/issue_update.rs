@@ -5,9 +5,9 @@
 //! Wire contract: ADMIN/MEMBER (or creator) gate → miss 404
 //! `{"error": "Issue not found"}` verbatim → serializer validation (400) →
 //! 204 empty. This handler writes every scalar field with `Issue.save`'s
-//! side effects (`description_stripped`, `completed_at`, `updated_by`);
-//! bridges, activities and description versions land in later tasks of
-//! this slice.
+//! side effects (`description_stripped`, `completed_at`, `updated_by`) and
+//! replaces the assignee/label bridges when their keys are present;
+//! activities and description versions land in later tasks of this slice.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
@@ -17,7 +17,8 @@ use uuid::Uuid;
 use super::issue_common::{
     bad, de_double_opt_f64, de_double_opt_i32, de_double_opt_json, de_double_opt_string,
     de_double_opt_uuid_lax, de_double_opt_uuid_vec_lax, dedupe_ids, fetch_project_member_role,
-    is_workspace_admin, parse_date, project_gate_allows, resolve_issue_state, PRIORITIES,
+    is_workspace_admin, parse_date, project_gate_allows, replace_bridges, resolve_issue_state,
+    PRIORITIES,
 };
 use super::work_item::ws_active_member;
 use crate::routes::project::deny;
@@ -506,6 +507,18 @@ pub async fn patch_issue(
         };
     }
     q.bind(pk).bind(project_id).execute(&mut *tx).await?;
+
+    // --- Bridge writes (Task 4 inserts live-id reads + activities above) ---
+    // Django `IssueCreateSerializer.update` (`serializers/issue.py:276-320`):
+    // present keys replace the whole bridge set.
+    if matches!(body.assignee_ids, Some(Some(_))) {
+        replace_bridges(&mut tx, pk, project_id, auth.0, Some(&assignees), None).await?;
+    }
+    if matches!(body.label_ids, Some(Some(_))) {
+        replace_bridges(&mut tx, pk, project_id, auth.0, None, Some(&labels)).await?;
+    }
+    // --- End bridge writes ---
+
     tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
