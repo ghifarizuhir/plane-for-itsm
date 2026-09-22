@@ -217,7 +217,7 @@ pub async fn workspace_ai_assistant(
     if cfg.api_key.is_empty() || cfg.model.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "LLM provider API key and model are required"})),
+            Json(json!({"error": "AI is not configured for this workspace."})),
         ));
     }
     let Some(task) = task_from_body(&body) else {
