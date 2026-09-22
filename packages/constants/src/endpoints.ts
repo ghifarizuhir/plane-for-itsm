@@ -29,4 +29,3 @@ export const WEBSITE_URL = process.env.VITE_WEBSITE_URL || "https://terraline.sp
 export const SUPPORT_EMAIL = process.env.VITE_SUPPORT_EMAIL || "support@terraline.space";
 // marketing links
 export const MARKETING_CONTACT_US_PAGE_LINK = "https://terraline.space/contact";
-export const MARKETING_PLANE_ONE_PAGE_LINK = "https://terraline.space/one";

@@ -24,7 +24,6 @@ import { GanttChartSidebar, MonthChartView, QuarterChartView, WeekChartView } fr
 import { useTimeLineChartStore } from "@/hooks/use-timeline-chart";
 import { GanttChartRowList } from "@/components/gantt-chart/blocks/block-row-list";
 import { GanttChartBlocksList } from "@/components/gantt-chart/blocks/blocks-list";
-import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 // local imports
 import { DEFAULT_BLOCK_WIDTH, GANTT_SELECT_GROUP, HEADER_HEIGHT } from "../constants";
@@ -229,7 +228,6 @@ export const GanttChartMainContent = observer(function GanttChartMainContent(pro
               </div>
             </div>
             {quickAdd ? quickAdd : null}
-            <IssueBulkOperationsRoot selectionHelpers={helpers} />
           </>
         )}
       </MultipleSelectGroup>
