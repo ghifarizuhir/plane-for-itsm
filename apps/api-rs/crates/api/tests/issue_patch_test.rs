@@ -1444,6 +1444,18 @@ async fn patch_skip_activity_suppresses_activities_and_versions() {
         issue_row(&pool, issue_id).await.description_html,
         "<p>migrated</p>"
     );
+    let version_html: Option<String> = sqlx::query_scalar(
+        "SELECT description_html FROM issue_description_versions WHERE issue_id = $1 ORDER BY last_saved_at DESC LIMIT 1",
+    )
+    .bind(issue_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        version_html.as_deref(),
+        Some("<p></p>"),
+        "skip_activity must not record a version"
+    );
 
     // `skip_activity` without `description_html` is ignored (Django
     // `is_description_update` gate).
@@ -1739,6 +1751,37 @@ async fn patch_records_description_versions_with_merge_window() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(versions(&pool, issue_id).await.len(), baseline + 1);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_inserts_version_when_merge_window_expires() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "version-window").await;
+    assert_eq!(versions(&pool, issue_id).await.len(), 1);
+
+    // Same owner but older than the 600 s window → a new row.
+    sqlx::query("UPDATE issue_description_versions SET last_saved_at = now() - interval '601 seconds' WHERE issue_id = $1")
+        .bind(issue_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>after window</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = versions(&pool, issue_id).await;
+    assert_eq!(rows.len(), 2, "expired merge window inserts");
+    assert_eq!(rows.last().unwrap().1, "<p>after window</p>");
 
     scratch.cleanup(&pool).await;
 }

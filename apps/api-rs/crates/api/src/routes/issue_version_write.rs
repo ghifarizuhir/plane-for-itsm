@@ -39,6 +39,9 @@ pub(crate) async fn record_description_version(
         // exact duration, not truncated seconds.
         if owned_by == actor && chrono::Utc::now() - last_saved_at <= chrono::Duration::seconds(600)
         {
+            // Django `update_existing_version` copies `issue.description_binary`,
+            // which is always NULL here (no Rust path writes that column) —
+            // revisit if a binary writer is ever added.
             sqlx::query(
                 "UPDATE issue_description_versions SET description_binary = NULL, description_html = $1, \
                  description_stripped = $2, description_json = $3, last_saved_at = now() WHERE id = $4",
