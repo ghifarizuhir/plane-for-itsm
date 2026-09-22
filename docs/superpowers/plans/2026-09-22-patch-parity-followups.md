@@ -27,14 +27,14 @@
 | 1b   | `_sync_completed_at` runs on adding: state group `completed` → `completed_at = now()`, else NULL                                                                                                                                                            | `insert_issue` never writes `completed_at`                                             |
 | 2a   | `State.objects.filter(...).first()` uses `Meta.ordering = ("sequence",)` (`db/models/state.py:115`)                                                                                                                                                         | `draft.rs::resolve_default_state` orders both lookups by `created_at` (2 queries)      |
 | 2b   | `IssueAssignee.objects` is a **plain** manager and `issue__assignees` joins use base managers — Django's notification filters (`views/notification/base.py:112,119`) and cycle lists (`views/workspace/user.py:504-516`) have **no** `deleted_at` predicate | Rust mirrors that (no filter) — correct; add guard comments so it is not "fixed" later |
-| 3a   | Intake create calls `issue_description_version_task(..., is_creating=True)` (`views/intake/base.py:292-297`)                                                                                                                                                | `intake.rs::create_issue` does not write a version                                     |
+| 3a   | Intake create calls `issue_description_version_task(..., is_creating=True)` (`views/intake/base.py:293-298`)                                                                                                                                                | `intake.rs::create_issue` does not write a version                                     |
 | 3b   | Intake partial update calls the task when an issue was updated (`base.py:447-456`); note `is_description_update` reads the TOP-LEVEL `description_html`, which the web nests under `issue`, so `skip_activity` never suppresses it on this path             | `intake.rs::patch_issue` does not write a version                                      |
 
 ## Decisions
 
 1. `description_stripped` is computed in Rust inside `insert_issue` (`strip_tags_text`), so every caller (legacy create, intake create) gets it with no signature change.
 2. `completed_at` on create is computed in SQL: `CASE WHEN (SELECT "group" FROM states WHERE id = <state>) = 'completed' THEN now() ELSE NULL END` — no extra roundtrip, correct for NULL state.
-3. `record_description_version` changes its executor parameter from `&mut sqlx::Transaction<'_, Postgres>` to `&mut sqlx::PgConnection` so the intake patch path (no transaction) can call it; existing callers pass `&mut *tx`.
+3. `record_description_version` changes its executor parameter from `&mut sqlx::Transaction<'_, Postgres>` to `&mut sqlx::PgConnection` so both a caller-held transaction and a standalone connection can call it; existing callers pass `&mut tx` (deref coercion). The intake patch path ends up transactional anyway: review-fix `0e99d9bbe` wraps the nested-issue UPDATE and the version write in one transaction so a version failure rolls back and stays retryable.
 4. **Item 2 is a documentation fix, not a behavior fix**: adding `deleted_at` predicates would _break_ Django parity (the final review's suggestion was based on the wrong assumption that Django filters them). Guard comments prevent future "fixes".
 5. Intake patch ignores `skip_activity` deliberately: Django's `is_description_update = request.data.get("description_html") is not None` checks the top level while the web sends `issue.description_html`, so the migration flag never suppresses the version on this endpoint (quirk mirrored).
 6. The draft ordering test lives in `issue_create_test.rs` (fixture reuse: workspace/project/state already set up there); it is a state-allocation test, same theme as the file's sequence tests.
@@ -412,8 +412,13 @@ Also refresh the module note (draft.rs:96-98) from
 to
 
 ```rust
-/// - `sort_order`/default-state/`completed_at`/`description_stripped` are
-///   mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
+/// - `sort_order`/default-state/`completed_at` are mirrored from
+///   `DraftIssue.save` / `Issue.save` (see handlers), and the promoted issue
+///   gets `description_stripped` (`create_draft_to_issue`). Remaining
+///   deviation: the draft row's own `draft_issues.description_stripped`
+///   stays NULL on draft INSERT/PATCH where Django computes it in
+///   `DraftIssue.save` (`db/models/draft.py:112-135`, column at :48); no
+///   draft response key exposes it, so it is not consumer-visible.
 ```
 
 **Plus (from the Task 2 code-quality review):** `crates/api/src/routes/issue_write.rs` legacy create must stop normalizing an explicit `description_html: ""` to `<p></p>` — Django's `Issue.save` (`db/models/issue.py:196-206`) stores `""` with `description_stripped = NULL` (DRF maps `blank=True` → `allow_blank=True`), while omitting the field uses the model default `<p></p>` (stripped `""`). Use `body.description_html.as_deref().unwrap_or("<p></p>")`, add `create_with_explicit_empty_html_stores_empty_html_and_null_stripped`, and keep the omitted-html assertion (`create_defaults_description_and_priority_when_absent`). Also: the second conversion case (`description_html: Some("")` → stored `""`/stripped `None`), a `// $16 = description_stripped, bound last.` comment above the promotion INSERT, the ordering test asserting the fixture state's sequence exceeds the probe's, and accurate guard-comment citations in `notification.rs` (`IssueSubscriber.objects`/`IssueAssignee.objects`; mark-all-read `base.py:269-273`).
@@ -532,7 +537,7 @@ async fn intake_create_and_patch_record_description_versions() {
         .await
         .unwrap();
 
-    // Django calls the task with `is_creating=True` (`intake/base.py:292-297`).
+    // Django calls the task with `is_creating=True` (`intake/base.py:293-298`).
     let versions: Vec<(String, Option<Uuid>)> = sqlx::query_as(
         "SELECT description_html, updated_by_id FROM issue_description_versions WHERE issue_id = $1",
     )
@@ -623,12 +628,12 @@ to
     conn: &mut sqlx::PgConnection,
 ```
 
-rename the body's `&mut **tx` to `&mut *conn` (three call sites inside), and update the doc comment to note the executor is a plain connection so the intake patch path (no transaction) can call it too.
+rename the body's `&mut **tx` to `&mut *conn` (three call sites inside), and update the doc comment to note the executor is a plain connection so both a caller-held transaction and a standalone connection can call it.
 
 Update the two existing callers:
 
 - `crates/api/src/routes/issue_update.rs` / `issue_write.rs`: `record_description_version(&mut tx, ...)` (`Transaction` derefs; `&mut *tx` only for the two `execute` calls, where sqlx needs it)
-- `crates/api/src/routes/issue_write.rs`: `super::issue_version_write::record_description_version(&mut *tx, ...)`
+- `crates/api/src/routes/issue_write.rs`: `super::issue_version_write::record_description_version(&mut tx, ...)`
 
 - [ ] **Step 4: Wire the intake paths**
 
@@ -636,7 +641,7 @@ In `crates/api/src/routes/intake.rs::create_issue`, after `insert_issue(...)` an
 
 ```rust
     // Django create records the initial description version
-    // (`views/intake/base.py:292-297`, `is_creating=True`).
+    // (`views/intake/base.py:293-298`, `is_creating=True`).
     super::issue_version_write::record_description_version(
         &mut *tx,
         issue.id,
@@ -714,7 +719,7 @@ and after the whole `if !narrowed { ... } else { ... }` block, before the intake
     tx.commit().await?;
 ```
 
-(`&mut conn` where `conn: PoolConnection<Postgres>` derefs to `&mut PgConnection`.)
+(Final code passes `&mut tx` from the review-fix transaction; a `PoolConnection<Postgres>` derefs the same way.)
 
 - [ ] **Step 5: Run to verify pass**
 
@@ -781,7 +786,7 @@ In `crates/api/parity-inventory.json`, append one concise `| Follow-ups:` clause
 - `/api/workspaces/:slug/projects/:project_id/issues/` (create): legacy create now computes `description_stripped` + `completed_at` (Issue.save parity), and an explicit `description_html: ""` stores `""`/NULL instead of defaulting to `<p></p>`.
 - `/api/workspaces/:slug/draft-to-issue/:draft_id/`: promotion writes `description_stripped`; draft default-state resolution now orders by `(sequence, created_at)`.
 - `/api/workspaces/:slug/projects/:project_id/inbox-issues/` (create): records the initial `issue_description_versions` row (Django `base.py:293-298`, `is_creating=True`).
-- `/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/` (PATCH): records a version on description change (`base.py:454-459`), merged within 600 s by owner, in the same transaction as the issue UPDATE.
+- `/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/` (PATCH): records a version on description change (`base.py:454-458`), merged within 600 s by owner, in the same transaction as the issue UPDATE.
 
 Commit:
 
@@ -799,3 +804,24 @@ git commit -m "docs(api-rs): parity inventory notes follow-up fixes"
 - Type consistency: `record_description_version` executor is `&mut PgConnection` everywhere after Task 3 (`&mut *tx` in tx callers, `&mut conn` from the pool in intake patch).
 - The draft test's cleanup addition prevents an FK-blocked workspace delete (draft rows reference states/projects).
 - No placeholders: every step carries the exact code/command.
+
+---
+
+## Completion record (2026-09-23)
+
+All four tasks implemented, reviewed (spec + code quality per task), and verified end-to-end:
+
+| Task                                           | Commit(s)                | Result                                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 create-path stripped/completed_at            | `ffaba96b7`, `939a46b70` | `issue_create_test` 28 → 29/33; direct `insert_issue` NULL-state + empty-html branches pinned                                                                                   |
+| 2 draft ordering + promotion stripped + guards | `ed3858900`, `866323ea1` | draft state resolution ordered `(sequence, created_at)`; promotion writes stripped; legacy create explicit `""` stores `""`/NULL (Django `Issue.save` parity)                   |
+| 3 intake description versions                  | `c6cf70fec`, `0e99d9bbe` | create + PATCH record/merge `issue_description_versions`; UPDATE + version share one tx                                                                                         |
+| 4 verification + ops + inventory               | `8afc0538b`, `889a4bd57` | full suite **1124 passed / 0 failed / 3 ignored**; image `plane-api-rs:local` rebuilt, stack restarted, `https://api.terraline.space/health` 200; 4 inventory entries annotated |
+| final-review gap                               | `889a4bd57`              | intake PATCH now rewrites `issues.description_stripped` (both branches, empty→NULL)                                                                                             |
+
+Open/deferred (documented, not defects introduced here):
+
+- Draft rows (`draft_issues.description_stripped`) stay NULL on draft INSERT/PATCH — documented deviation in `draft.rs:96-102`, not consumer-visible.
+- `resolve_default_state`'s fallback (non-default) query ordering is not test-covered (both fixture states are default).
+- `v1/work_item.rs:775-777` still orders default/first state by `created_at` (fork v1 API, outside legacy parity scope).
+- v1 writers take `description_stripped` from the client and record no description version (intentional for the SDK-facing API; unverified against a Django counterpart).
