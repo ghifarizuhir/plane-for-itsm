@@ -2640,9 +2640,9 @@ docker exec plane-for-itsm-plane-db-1 psql -U plane -d plane -c \
   FROM issues i WHERE i.id = '$ISSUE';"
 ```
 
-Expected: `state=...f008 | completed=t | sort_order=1234.5 | description_stripped=migrated | assignees=1 | labels=1 | activities=9 | versions=1`
+Expected: `state=...f008 | completed=t | sort_order=1234.5 | description_stripped=migrated | assignees=1 | labels=1 | activities=8 | versions=1`
 
-- activities: create's `created` row (1) + patch1's `state` (1), `assignees` (2: added f001, removed f006), `labels` (1), `description` (1), `start_date` (1), `target_date` (1) = 9; patch2 is `skip_activity` → 0.
+- activities: create's `created` row (1, no assignee row because the POST omits `assignee_ids` and the default assignee is applied silently) + patch1's `state` (1), `assignees` (2: added f001, removed f006), `labels` (1), `description` (1), `start_date` (1), `target_date` (1) = 8; patch2 is `skip_activity` → 0.
 - versions: create writes the initial row, then patch1's description edit from the same actor lands within 600 s → merged in place → 1 row holding `<p>edited</p>` (patch2 skipped).
 - The live assignee is now `...f001`; run `SELECT assignee_id FROM issue_assignees WHERE issue_id = '$ISSUE' AND deleted_at IS NULL;` to confirm.
 
