@@ -207,7 +207,7 @@
           "fe_pages": [],
           "batch_task": "Batch Verify-A",
           "out_scope": false,
-          "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716) | F6a: GET full 25-key IssueDetailRow (nested objects stay T1); PATCH 200->204 + AM/creator gates; DELETE ADMIN/creator gate + miss 404; miss bodies unified to missing(). | Verify-A: gate-first decorator order + guest rule + PATCH miss Issue-not-found verbatim + 28-key shape (description_html/is_subscribed/is_intake; pk-retrieve 500-quirk ADR Verify-A.1)."
+          "notes": "GET returns {id,name} only (work_item.rs:1133) vs IssueDetailSerializer full detail (base.py:624); PATCH 200 {id} (work_item.rs:1160) vs 204 empty (base.py:713); no permission gates (work_item.rs:1124) vs allow_permission creator checks (base.py:492,627,716) | F6a: GET full 25-key IssueDetailRow (nested objects stay T1); PATCH 200->204 + AM/creator gates; DELETE ADMIN/creator gate + miss 404; miss bodies unified to missing(). | Verify-A: gate-first decorator order + guest rule + PATCH miss Issue-not-found verbatim + 28-key shape (description_html/is_subscribed/is_intake; pk-retrieve 500-quirk ADR Verify-A.1). | Update-parity: PATCH persists all web-sent scalars (state/parent/dates/sort_order/point/type/estimate), replaces assignee/label bridges, mirrors Issue.save side effects (description_stripped, completed_at, updated_by), writes per-field activities + subscribers and description versions; skip_activity honoured; 404/403/204 unchanged."
         },
         {
           "methods": ["GET", "POST"],
