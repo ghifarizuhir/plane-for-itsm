@@ -223,11 +223,11 @@ git commit -m "fix(api-rs): create path writes description_stripped and complete
 
 ---
 
-### Task 2: Draft state ordering + parity guard comments
+### Task 2: Draft state ordering, conversion stripped, parity guard comments
 
 **Files:**
 
-- Modify: `crates/api/src/routes/draft.rs` (`resolve_default_state`)
+- Modify: `crates/api/src/routes/draft.rs` (`resolve_default_state`, `create_draft_to_issue`, module note)
 - Modify: `crates/api/src/routes/notification.rs` (3 subqueries)
 - Modify: `crates/api/src/routes/user.rs` (cycle queries comment)
 - Test: `crates/api/tests/issue_create_test.rs` (draft ordering test + cleanup)
@@ -299,6 +299,63 @@ Also add to `Scratch::cleanup` (before the `states` delete, since `draft_issues.
 
 (`purge` gets `"DELETE FROM draft_issues WHERE project_id = $1",` in its statement array.)
 
+Append the conversion test as well:
+
+```rust
+#[tokio::test]
+async fn draft_conversion_writes_description_stripped() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let draft_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO draft_issues (id, name, description_html, description_json, priority, sort_order, \
+         state_id, project_id, workspace_id, created_by_id, created_at, updated_at) \
+         VALUES ($1, 'draft-probe', '<p>draft</p>', '{}', 'none', 65535, $2, $3, $4, $5, now(), now())",
+    )
+    .bind(draft_id)
+    .bind(scratch.state_id)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(body)) = draft_convert(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), draft_id)),
+        Some(Json(ConvertBody {
+            description_html: Some("<p>converted <b>body</b></p>".to_string()),
+            ..Default::default()
+        })),
+    )
+    .await
+    .expect("draft conversion must respond");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id: Uuid = body["id"].as_str().expect("id").parse().unwrap();
+
+    let stripped: Option<String> = sqlx::query_scalar("SELECT description_stripped FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stripped.as_deref(), Some("converted body"));
+
+    scratch.cleanup(&pool).await;
+}
+```
+
+And the import line becomes:
+
+```rust
+use api::routes::draft::{
+    create as draft_create, create_draft_to_issue as draft_convert, ConvertBody, CreateDraftBody,
+};
+```
+
 - [ ] **Step 2: Run to verify failure**
 
 ```bash
@@ -308,6 +365,55 @@ DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --tes
 Expected: FAIL — the draft gets the fixture state (created first), not `second`.
 
 - [ ] **Step 3: Implement**
+
+`crates/api/src/routes/draft.rs::create_draft_to_issue` — replace the promotion INSERT so it also writes `description_stripped` (Django computes it in `Issue.save`, `db/models/issue.py:200-205`; the module note claiming it is never computed is now false). Before the INSERT add:
+
+```rust
+    // Same rule as `insert_issue`/`Issue.save`: empty → NULL else stripped.
+    // The INSERT stores `COALESCE($2, '<p></p>')`, so mirror that value.
+    let effective_html: String = b
+        .description_html
+        .clone()
+        .unwrap_or_else(|| "<p></p>".to_string());
+    let description_stripped: Option<String> = if effective_html.is_empty() {
+        None
+    } else {
+        Some(super::page::strip_tags_text(&effective_html))
+    };
+```
+
+then add the column/values/bind (new `$16`):
+
+```rust
+        "INSERT INTO issues (id, name, description_html, description_json, priority, \
+         start_date, target_date, sequence_id, sort_order, completed_at, is_draft, \
+         estimate_point_id, parent_id, type_id, state_id, description_stripped, project_id, \
+         workspace_id, created_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, COALESCE($2, '<p></p>'), '{}', COALESCE($3, 'none'), \
+         $4, $5, $6, $7, $8, false, $9, $10, $11, $12, $16, $13, $14, $15, now(), now()) RETURNING id",
+```
+
+```rust
+    .bind(auth.0)
+    .bind(description_stripped)
+    .fetch_one(&mut *tx)
+    .await?;
+```
+
+Also refresh the module note (draft.rs:96-98) from
+
+```rust
+/// - `description_stripped` never computed (needs the html parser;
+///   sibling writers skip it too); `sort_order`/default-state/`completed_at`
+///   ARE mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
+```
+
+to
+
+```rust
+/// - `sort_order`/default-state/`completed_at`/`description_stripped` are
+///   mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
+```
 
 `crates/api/src/routes/draft.rs::resolve_default_state` — both queries change their ORDER BY and the doc comment gains the ordering note:
 
@@ -355,7 +461,7 @@ async fn resolve_default_state(
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_create_test -- --test-threads=1
 ```
 
-Expected: all pass (29 tests), no leftovers (`scratch.cleanup` now removes drafts).
+Expected: all pass (30 tests), no leftovers (`scratch.cleanup` now removes drafts).
 
 - [ ] **Step 5: Format, lint, commit**
 
@@ -666,7 +772,7 @@ git commit -m "docs(api-rs): parity inventory notes intake description versions"
 
 ## Self-review notes
 
-- Coverage: item 1 → Task 1; item 2 (documentation, not behavior) → Task 2; item 3 → Task 2; item 4 → Task 3; verification → Task 4.
+- Coverage: item 1 → Task 1; item 2 (documentation, not behavior) → Task 2; item 3 → Task 2 (+ the draft→issue conversion gap found in Task 1's review); item 4 → Task 2; intake versions + verification → Tasks 3-4.
 - Type consistency: `record_description_version` executor is `&mut PgConnection` everywhere after Task 3 (`&mut *tx` in tx callers, `&mut conn` from the pool in intake patch).
 - The draft test's cleanup addition prevents an FK-blocked workspace delete (draft rows reference states/projects).
 - No placeholders: every step carries the exact code/command.
