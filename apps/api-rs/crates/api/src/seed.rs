@@ -199,6 +199,14 @@ mod tests {
     }
 
     #[test]
+    fn upcoming_cycle_without_last_end_starts_two_weeks_out() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 22, 10, 0, 0).unwrap();
+        let (start, end) = cycle_dates("UPCOMING", None, now);
+        assert_eq!(start, now + Duration::days(14));
+        assert_eq!(end, start + Duration::days(14));
+    }
+
+    #[test]
     fn module_dates_offset_by_index() {
         let now = Utc.with_ymd_and_hms(2026, 9, 22, 10, 0, 0).unwrap();
         let (start, target) = module_dates(2, now);
@@ -207,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn bot_email_uses_web_url_host() {
+    fn url_host_strips_scheme_userinfo_and_port() {
         assert_eq!(
             url_host("http://192.168.1.11:8000"),
             Some("192.168.1.11".into())
@@ -215,6 +223,10 @@ mod tests {
         assert_eq!(
             url_host("https://terraline.space/path"),
             Some("terraline.space".into())
+        );
+        assert_eq!(
+            url_host("https://user:pw@host.example:8443/x"),
+            Some("host.example".into())
         );
         assert_eq!(url_host(""), None);
     }
