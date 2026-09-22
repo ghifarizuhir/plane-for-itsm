@@ -893,3 +893,176 @@ async fn patch_type_and_estimate_persist() {
 
     scratch.cleanup(&pool).await;
 }
+
+#[tokio::test]
+async fn patch_rejects_triage_and_deleted_states() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "triage-state").await;
+
+    let triage = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, sequence, \
+         \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, 'Triage', '', '#60646C', 'triage', $2, $3, 65535, 'triage', false, true, now(), now())",
+    )
+    .bind(triage)
+    .bind(scratch.project_id)
+    .bind(scratch.workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let deleted = insert_state(
+        &pool,
+        scratch.project_id,
+        scratch.workspace_id,
+        "Gone",
+        "backlog",
+        false,
+    )
+    .await;
+    sqlx::query("UPDATE states SET deleted_at = now() WHERE id = $1")
+        .bind(deleted)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    for state_id in [triage, deleted] {
+        let (status, body) = patch_issue_req(
+            &st,
+            &scratch,
+            scratch.user_id,
+            issue_id,
+            patch(json!({"state_id": state_id})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "state {state_id}");
+        assert_eq!(
+            body["error"],
+            json!("State is not valid please pass a valid state_id")
+        );
+    }
+    assert_eq!(
+        issue_row(&pool, issue_id).await.state_id,
+        Some(scratch.state_id),
+        "state untouched"
+    );
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_parent_set_and_clear() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "child").await;
+    let parent_id = create_issue(&st, &scratch, "parent").await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"parent_id": parent_id})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(issue_row(&pool, issue_id).await.parent_id, Some(parent_id));
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"parent_id": null})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(issue_row(&pool, issue_id).await.parent_id, None);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_same_state_does_not_restamp_completed_at() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "no-restamp").await;
+    let done = insert_state(
+        &pool,
+        scratch.project_id,
+        scratch.workspace_id,
+        "Done",
+        "completed",
+        false,
+    )
+    .await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"state_id": done})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let first = issue_row(&pool, issue_id)
+        .await
+        .completed_at
+        .expect("completed_at set");
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"state_id": done, "sort_order": 42.0})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let second = issue_row(&pool, issue_id)
+        .await
+        .completed_at
+        .expect("completed_at still set");
+    assert_eq!(first, second, "same state must not restamp completed_at");
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_recomputes_stripped_from_stored_html_when_html_absent() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "stripped").await;
+
+    sqlx::query("UPDATE issues SET description_html = '<p>stored</p>', description_stripped = NULL WHERE id = $1")
+        .bind(issue_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"priority": "low"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        issue_row(&pool, issue_id)
+            .await
+            .description_stripped
+            .as_deref(),
+        Some("stored")
+    );
+
+    scratch.cleanup(&pool).await;
+}

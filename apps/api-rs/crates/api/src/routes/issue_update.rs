@@ -4,9 +4,10 @@
 //!
 //! Wire contract: ADMIN/MEMBER (or creator) gate → miss 404
 //! `{"error": "Issue not found"}` verbatim → serializer validation (400) →
-//! 204 empty. Task 1 covers the request surface + validation; writes for
-//! scalars, bridges, activities and description versions land in later tasks
-//! of this slice.
+//! 204 empty. This handler writes every scalar field with `Issue.save`'s
+//! side effects (`description_stripped`, `completed_at`, `updated_by`);
+//! bridges, activities and description versions land in later tasks of
+//! this slice.
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
@@ -177,13 +178,18 @@ async fn validate_patch_refs(
         }
     }
     if let Some(Some(state_id)) = body.state_id {
-        let (ok,): (bool,) =
-            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)")
-                .bind(state_id)
-                .bind(project_id)
-                .fetch_one(&st.pool)
-                .await
-                .map_err(internal)?;
+        // Django validates against `State.objects` = `StateManager`
+        // (`db/models/state.py:65-69`, a `SoftDeletionManager` that also
+        // excludes `group='triage'`): soft-deleted and triage states 400.
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+             AND deleted_at IS NULL AND \"group\" != 'triage')",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(internal)?;
         if !ok {
             return Err(bad("State is not valid please pass a valid state_id"));
         }

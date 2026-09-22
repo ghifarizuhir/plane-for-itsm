@@ -857,6 +857,8 @@ pub fn resolve_effective_state(
 }
 
 /// DB lookup behind [`resolve_effective_state`] (moved from `issue_write.rs`).
+/// Both `.first()` lookups order by `State.Meta.ordering = ("sequence",)`
+/// (`db/models/state.py:115`), `created_at` as the tiebreak.
 pub(crate) async fn resolve_issue_state(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -868,7 +870,7 @@ pub(crate) async fn resolve_issue_state(
     let default_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
          AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
-         ORDER BY created_at ASC LIMIT 1",
+         ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)
     .fetch_optional(pool)
@@ -879,7 +881,7 @@ pub(crate) async fn resolve_issue_state(
     let first_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
          AND \"group\" != 'triage' AND is_triage = false \
-         ORDER BY created_at ASC LIMIT 1",
+         ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)
     .fetch_optional(pool)
