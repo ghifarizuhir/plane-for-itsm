@@ -43,7 +43,7 @@ const MENU_ITEMS: {
   {
     key: AI_EDITOR_TASKS.ASK_ANYTHING,
     icon: AiStar1Outline,
-    label: "Ask Pi",
+    label: "Ask Galileo",
   },
 ];
 
@@ -269,7 +269,7 @@ export function EditorAIMenu(props: Props) {
                   </div>
                 ) : (
                   <p className="text-13 text-secondary">
-                    {activeTask ? LOADING_TEXTS[activeTask] : "Pi is writing"}...
+                    {activeTask ? LOADING_TEXTS[activeTask] : "Galileo is writing"}...
                   </p>
                 )}
               </div>
