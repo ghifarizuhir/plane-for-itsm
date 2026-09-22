@@ -6,14 +6,16 @@
 //! `{"error": "Issue not found"}` verbatim → serializer validation (400) →
 //! 204 empty. This handler writes every scalar field with `Issue.save`'s
 //! side effects (`description_stripped`, `completed_at`, `updated_by`) and
-//! replaces the assignee/label bridges when their keys are present;
-//! activities and description versions land in later tasks of this slice.
+//! replaces the assignee/label bridges when their keys are present; it also
+//! writes the per-field update activities and `issue_subscribers` rows
+//! (description versions land in a later task of this slice).
 
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use super::issue_activity_write::{insert_activity_row, insert_subscribers, ActivityCtx};
 use super::issue_common::{
     bad, de_double_opt_f64, de_double_opt_i32, de_double_opt_json, de_double_opt_string,
     de_double_opt_uuid_lax, de_double_opt_uuid_vec_lax, dedupe_ids, fetch_project_member_role,
@@ -266,6 +268,399 @@ fn add(sets: &mut Vec<String>, values: &mut Vec<BindValue>, col: &str, v: BindVa
     sets.push(format!("{col} = ${}", values.len()));
 }
 
+fn is_truthy(v: &Value) -> bool {
+    match v {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::String(s) => !s.is_empty(),
+        Value::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(false),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+    }
+}
+
+async fn parent_label(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: Option<Uuid>,
+) -> Result<String, sqlx::Error> {
+    let Some(id) = id else {
+        return Ok(String::new());
+    };
+    let label: Option<String> = sqlx::query_scalar(
+        "SELECT p.identifier || '-' || i.sequence_id FROM issues i \
+         JOIN projects p ON p.id = i.project_id WHERE i.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(label.unwrap_or_default())
+}
+
+async fn state_name(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: Option<Uuid>,
+    project_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    let Some(id) = id else { return Ok(None) };
+    sqlx::query_scalar("SELECT name FROM states WHERE id = $1 AND project_id = $2")
+        .bind(id)
+        .bind(project_id)
+        .fetch_optional(&mut **tx)
+        .await
+}
+
+async fn live_label_ids(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issue_id: Uuid,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT label_id FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_all(&mut **tx)
+    .await
+}
+
+/// Mirrors the `IssueDetailSerializer` assignee annotation
+/// (`base.py:633-648`): live bridge rows whose member still has an active
+/// project membership.
+async fn live_assignee_ids(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issue_id: Uuid,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT ia.assignee_id FROM issue_assignees ia \
+         JOIN project_members pm ON pm.project_id = ia.project_id AND pm.member_id = ia.assignee_id \
+         WHERE ia.issue_id = $1 AND ia.deleted_at IS NULL AND pm.is_active = true AND pm.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_all(&mut **tx)
+    .await
+}
+
+async fn names_for(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    table: &str,
+    column: &str,
+    ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, String>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let sql = format!("SELECT id, {column} FROM {table} WHERE id = ANY($1)");
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(&sql).bind(ids).fetch_all(&mut **tx).await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// `(value, estimates.type)` for an estimate point id.
+async fn estimate_info(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: Uuid,
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT ep.value, e.type FROM estimate_points ep \
+         JOIN estimates e ON e.id = ep.estimate_id WHERE ep.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+/// Django's `track_description` merge rule: the issue's latest activity is a
+/// `description` row by the same actor → bump its `created_at` instead of
+/// inserting. Runs before this request's rows so the DB view matches
+/// Django's pre-`bulk_create` lookup.
+async fn merge_last_description_activity(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    issue_id: Uuid,
+    actor: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let last: Option<(Uuid, Option<String>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT id, field, actor_id FROM issue_activities WHERE issue_id = $1 \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(issue_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if let Some((id, Some(field), Some(last_actor))) = last {
+        if field == "description" && last_actor == actor {
+            sqlx::query("UPDATE issue_activities SET created_at = now() WHERE id = $1")
+                .bind(id)
+                .execute(&mut **tx)
+                .await?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn write_update_activities(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ctx: &ActivityCtx,
+    current: &CurrentIssue,
+    body: &PatchIssue,
+    current_label_ids: &[Uuid],
+    current_assignee_ids: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    // description first: Django's merge lookup must see the pre-batch DB.
+    if let Some(Some(html)) = &body.description_html {
+        if &current.description_html != html {
+            let merged = merge_last_description_activity(tx, ctx.issue_id, ctx.actor).await?;
+            if !merged {
+                insert_activity_row(
+                    tx,
+                    ctx,
+                    "updated",
+                    "description",
+                    "updated the description to",
+                    Some(current.description_html.as_str()),
+                    Some(html),
+                    None,
+                    None,
+                )
+                .await?;
+            }
+        }
+    }
+    if let Some(Some(name)) = &body.name {
+        if &current.name != name {
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "name",
+                "updated the name to",
+                Some(current.name.as_str()),
+                Some(name),
+                None,
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(requested) = body.parent_id {
+        if requested != current.parent_id {
+            let old = parent_label(tx, current.parent_id).await?;
+            let new = parent_label(tx, requested).await?;
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "parent",
+                "updated the parent issue to",
+                Some(old.as_str()),
+                Some(new.as_str()),
+                current.parent_id,
+                requested,
+            )
+            .await?;
+        }
+    }
+    if let Some(Some(priority)) = &body.priority {
+        if &current.priority != priority {
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "priority",
+                "updated the priority to",
+                Some(current.priority.as_str()),
+                Some(priority),
+                None,
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(requested) = body.state_id {
+        if requested != current.state_id {
+            let old = state_name(tx, current.state_id, ctx.project_id).await?;
+            let new = state_name(tx, requested, ctx.project_id).await?;
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "state",
+                "updated the state to",
+                old.as_deref(),
+                new.as_deref(),
+                current.state_id,
+                requested,
+            )
+            .await?;
+        }
+    }
+    if let Some(requested) = &body.target_date {
+        let new = parse_tri_date(&body.target_date).unwrap_or(None);
+        if new != current.target_date {
+            let old_value = current
+                .target_date
+                .map(|d| d.to_string())
+                .unwrap_or_default();
+            let new_value = requested.clone().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "target_date",
+                "updated the target date to",
+                Some(old_value.as_str()),
+                Some(new_value.as_str()),
+                None,
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(requested) = &body.start_date {
+        let new = parse_tri_date(&body.start_date).unwrap_or(None);
+        if new != current.start_date {
+            let old_value = current
+                .start_date
+                .map(|d| d.to_string())
+                .unwrap_or_default();
+            let new_value = requested.clone().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "start_date",
+                "updated the start date to ",
+                Some(old_value.as_str()),
+                Some(new_value.as_str()),
+                None,
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(Some(requested)) = &body.label_ids {
+        let requested: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
+        let current_set: std::collections::HashSet<Uuid> =
+            current_label_ids.iter().copied().collect();
+        let added: Vec<Uuid> = requested.difference(&current_set).copied().collect();
+        let dropped: Vec<Uuid> = current_set.difference(&requested).copied().collect();
+        let names = names_for(
+            tx,
+            "labels",
+            "name",
+            &[added.clone(), dropped.clone()].concat(),
+        )
+        .await?;
+        for id in added {
+            let name = names.get(&id).cloned().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "labels",
+                "added label ",
+                Some(""),
+                Some(name.as_str()),
+                None,
+                Some(id),
+            )
+            .await?;
+        }
+        for id in dropped {
+            let name = names.get(&id).cloned().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "labels",
+                "removed label ",
+                Some(name.as_str()),
+                Some(""),
+                Some(id),
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(Some(requested)) = &body.assignee_ids {
+        let requested: std::collections::HashSet<Uuid> = requested.iter().copied().collect();
+        let current_set: std::collections::HashSet<Uuid> =
+            current_assignee_ids.iter().copied().collect();
+        let added: Vec<Uuid> = requested.difference(&current_set).copied().collect();
+        let dropped: Vec<Uuid> = current_set.difference(&requested).copied().collect();
+        let names = names_for(
+            tx,
+            "users",
+            "display_name",
+            &[added.clone(), dropped.clone()].concat(),
+        )
+        .await?;
+        for id in &added {
+            let name = names.get(id).cloned().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "assignees",
+                "added assignee ",
+                Some(""),
+                Some(name.as_str()),
+                None,
+                Some(*id),
+            )
+            .await?;
+        }
+        insert_subscribers(tx, ctx.issue_id, ctx.project_id, ctx.workspace_id, &added).await?;
+        for id in dropped {
+            let name = names.get(&id).cloned().unwrap_or_default();
+            insert_activity_row(
+                tx,
+                ctx,
+                "updated",
+                "assignees",
+                "removed assignee ",
+                Some(name.as_str()),
+                Some(""),
+                Some(id),
+                None,
+            )
+            .await?;
+        }
+    }
+    if let Some(requested) = body.estimate_point {
+        if requested != current.estimate_point_id {
+            // `track_estimate_points` NPEs when the new estimate is None
+            // (Django loses the whole batch); skip the row (deviation 6).
+            if let Some(new_id) = requested {
+                let old = match current.estimate_point_id {
+                    Some(id) => estimate_info(tx, id).await?,
+                    None => None,
+                };
+                let new = estimate_info(tx, new_id).await?;
+                let (old_value, new_value, field) = match new {
+                    Some((new_value, estimate_type)) => (
+                        old.as_ref().map(|(v, _)| v.clone()),
+                        Some(new_value),
+                        format!("estimate_{estimate_type}"),
+                    ),
+                    None => (None, None, String::new()),
+                };
+                if !field.is_empty() {
+                    insert_activity_row(
+                        tx,
+                        ctx,
+                        "updated",
+                        &field,
+                        "updated the estimate point to ",
+                        old_value.as_deref(),
+                        new_value.as_deref(),
+                        current.estimate_point_id,
+                        Some(new_id),
+                    )
+                    .await?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn patch_issue(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -508,7 +903,37 @@ pub async fn patch_issue(
     }
     q.bind(pk).bind(project_id).execute(&mut *tx).await?;
 
-    // --- Bridge writes (Task 4 inserts live-id reads + activities above) ---
+    // --- Update activities (`update_issue_activity`,
+    // `issue_activities_task.py:594-638`): diffed against the pre-update
+    // snapshot and the pre-request bridge sets. ---
+    let skip_activity = body.skip_activity.as_ref().map(is_truthy).unwrap_or(false)
+        && body.description_html.is_some();
+    if !skip_activity {
+        let workspace_id: Uuid =
+            sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let ctx = ActivityCtx {
+            issue_id: pk,
+            project_id,
+            workspace_id,
+            actor: auth.0,
+            epoch: chrono::Utc::now().timestamp() as f64,
+        };
+        let label_ids_current = live_label_ids(&mut tx, pk).await?;
+        let assignee_ids_current = live_assignee_ids(&mut tx, pk).await?;
+        write_update_activities(
+            &mut tx,
+            &ctx,
+            &current,
+            &body,
+            &label_ids_current,
+            &assignee_ids_current,
+        )
+        .await?;
+    }
+    // --- Bridge writes ---
     // Django `IssueCreateSerializer.update` (`serializers/issue.py:276-320`):
     // present keys replace the whole bridge set.
     if matches!(body.assignee_ids, Some(Some(_))) {

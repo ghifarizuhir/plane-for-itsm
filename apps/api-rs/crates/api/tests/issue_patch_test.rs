@@ -1205,3 +1205,283 @@ async fn patch_replaces_assignee_and_label_bridges() {
 
     scratch.cleanup(&pool).await;
 }
+
+type ActRow = (
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<Uuid>,
+    Option<Uuid>,
+);
+
+async fn activities(pool: &PgPool, issue_id: Uuid) -> Vec<ActRow> {
+    sqlx::query_as(
+        "SELECT verb, field, comment, old_value, new_value, old_identifier, new_identifier \
+         FROM issue_activities WHERE issue_id = $1 ORDER BY created_at, field",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("activity rows")
+}
+
+async fn activity_fields(pool: &PgPool, issue_id: Uuid) -> Vec<String> {
+    activities(pool, issue_id)
+        .await
+        .into_iter()
+        .filter_map(|r| r.1)
+        .collect()
+}
+
+#[tokio::test]
+async fn patch_writes_per_field_activities() {
+    let st = state().await;
+    let pool = pool().await;
+    let mut scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "activities").await;
+    let member = scratch.add_actor(&pool, Some(15), Some(15)).await;
+    let label = insert_label(&pool, scratch.project_id, scratch.workspace_id, "sev1").await;
+    let started = insert_state(
+        &pool,
+        scratch.project_id,
+        scratch.workspace_id,
+        "Doing",
+        "started",
+        false,
+    )
+    .await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({
+            "name": "renamed",
+            "description_html": "<p>body</p>",
+            "priority": "urgent",
+            "state_id": started,
+            "start_date": "2026-09-01",
+            "target_date": "2026-09-30",
+            "assignee_ids": [member],
+            "label_ids": [label],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let rows = activities(&pool, issue_id).await;
+    for field in [
+        "name",
+        "description",
+        "priority",
+        "state",
+        "start_date",
+        "target_date",
+        "assignees",
+        "labels",
+    ] {
+        assert!(
+            rows.iter().any(|r| r.1.as_deref() == Some(field)),
+            "missing {field}: {rows:?}"
+        );
+    }
+    let name_row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("name"))
+        .unwrap();
+    assert_eq!(name_row.0, "updated");
+    assert_eq!(name_row.2, "updated the name to");
+    assert_eq!(name_row.3.as_deref(), Some("activities"));
+    assert_eq!(name_row.4.as_deref(), Some("renamed"));
+    let state_row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("state"))
+        .unwrap();
+    assert_eq!(state_row.3.as_deref(), Some("Backlog"));
+    assert_eq!(state_row.4.as_deref(), Some("Doing"));
+    assert_eq!(state_row.5, Some(scratch.state_id));
+    assert_eq!(state_row.6, Some(started));
+    let date_row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("start_date"))
+        .unwrap();
+    assert_eq!(date_row.2, "updated the start date to ");
+    assert_eq!(date_row.4.as_deref(), Some("2026-09-01"));
+    let assignee_row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("assignees"))
+        .unwrap();
+    assert_eq!(assignee_row.2, "added assignee ");
+    assert_eq!(assignee_row.6, Some(member));
+    let subscriber: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_subscribers WHERE issue_id = $1 AND subscriber_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .bind(member)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(subscriber, 1, "added assignees are subscribed");
+
+    // Removals + clearing write the matching rows.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [], "label_ids": [], "start_date": null})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = activities(&pool, issue_id).await;
+    let removed_assignee = rows.iter().find(|r| r.2 == "removed assignee ").unwrap();
+    assert!(
+        removed_assignee.3.is_some(),
+        "old_value is the display name"
+    );
+    assert_eq!(removed_assignee.4.as_deref(), Some(""));
+    let removed_label = rows.iter().find(|r| r.2 == "removed label ").unwrap();
+    assert_eq!(removed_label.3.as_deref(), Some("sev1"));
+    assert_eq!(removed_label.4.as_deref(), Some(""));
+    let start_date_rows = rows
+        .iter()
+        .filter(|r| r.1.as_deref() == Some("start_date"))
+        .count();
+    assert_eq!(start_date_rows, 2, "set + cleared");
+
+    // Description merge: two consecutive description-only patches by the same
+    // actor keep one row (Django's `track_description` bumps `created_at`).
+    let before = activities(&pool, issue_id).await.len();
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>body 2</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(activities(&pool, issue_id).await.len(), before + 1);
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>body 3</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        activities(&pool, issue_id).await.len(),
+        before + 1,
+        "same actor merges into the previous description row"
+    );
+
+    // Different actor → new row.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        member,
+        issue_id,
+        patch(json!({"description_html": "<p>body 4</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(activities(&pool, issue_id).await.len(), before + 2);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_skip_activity_suppresses_activities_and_versions() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "skip").await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>migrated</p>", "skip_activity": "true"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(activity_fields(&pool, issue_id).await.is_empty());
+    assert_eq!(
+        issue_row(&pool, issue_id).await.description_html,
+        "<p>migrated</p>"
+    );
+
+    // `skip_activity` without `description_html` is ignored (Django
+    // `is_description_update` gate).
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"name": "still logged", "skip_activity": "true"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        activity_fields(&pool, issue_id).await,
+        vec!["name".to_string()]
+    );
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_estimate_activity_field_uses_estimate_type() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "estimate").await;
+    let estimate_point =
+        insert_estimate_with_point(&pool, scratch.project_id, scratch.workspace_id).await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"estimate_point": estimate_point})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = activities(&pool, issue_id).await;
+    let row = rows
+        .iter()
+        .find(|r| r.1.as_deref() == Some("estimate_points"))
+        .expect("estimate_points activity");
+    assert_eq!(row.4.as_deref(), Some("1"));
+    assert_eq!(row.6, Some(estimate_point));
+
+    // Clearing the estimate writes no estimate row (Django's task NPEs and
+    // loses the whole batch; documented deviation 6) but other fields still log.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"estimate_point": null, "priority": "low"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = activities(&pool, issue_id).await;
+    let estimate_rows = rows
+        .iter()
+        .filter(|r| r.1.as_deref() == Some("estimate_points"))
+        .count();
+    assert_eq!(estimate_rows, 1, "clearing writes no estimate row");
+    assert!(rows
+        .iter()
+        .any(|r| r.1.as_deref() == Some("priority") && r.4.as_deref() == Some("low")));
+
+    scratch.cleanup(&pool).await;
+}

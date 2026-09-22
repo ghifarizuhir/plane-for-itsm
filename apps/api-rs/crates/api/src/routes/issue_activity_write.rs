@@ -1,8 +1,56 @@
-//! Create-path writers for `issue_activities` and `issue_subscribers`,
-//! mirroring Django's `issue_activities_task` create flow
-//! (`plane/bgtasks/issue_activities_task.py:357-591`).
+//! Create- and update-path writers for `issue_activities` and
+//! `issue_subscribers`, mirroring Django's `issue_activities_task` create and
+//! update flows (`plane/bgtasks/issue_activities_task.py:357-638`).
 
 use uuid::Uuid;
+
+/// Context shared by the update-path activity rows.
+pub(crate) struct ActivityCtx {
+    pub issue_id: Uuid,
+    pub project_id: Uuid,
+    pub workspace_id: Uuid,
+    pub actor: Uuid,
+    pub epoch: f64,
+}
+
+/// One `verb`/`field` activity row for the update flow. `created_by_id` and
+/// `updated_by_id` stay NULL (Django `bulk_create` skips `save()`);
+/// `attachments` is `'{}'` (ArrayField default).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn insert_activity_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ctx: &ActivityCtx,
+    verb: &str,
+    field: &str,
+    comment: &str,
+    old_value: Option<&str>,
+    new_value: Option<&str>,
+    old_identifier: Option<Uuid>,
+    new_identifier: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO issue_activities (id, verb, field, old_value, new_value, comment, attachments, \
+         issue_id, project_id, workspace_id, actor_id, created_by_id, updated_by_id, \
+         old_identifier, new_identifier, epoch, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::varchar[], $6, $7, $8, $9, NULL, NULL, \
+         $10, $11, $12, now(), now())",
+    )
+    .bind(verb)
+    .bind(field)
+    .bind(old_value)
+    .bind(new_value)
+    .bind(comment)
+    .bind(ctx.issue_id)
+    .bind(ctx.project_id)
+    .bind(ctx.workspace_id)
+    .bind(ctx.actor)
+    .bind(old_identifier)
+    .bind(new_identifier)
+    .bind(ctx.epoch)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
 
 /// One `verb="created"` row. `actor_id` is the issue creator;
 /// `created_by_id` follows Django's `objects.create()` (crum user),
