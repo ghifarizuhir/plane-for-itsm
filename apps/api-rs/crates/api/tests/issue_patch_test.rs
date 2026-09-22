@@ -1144,6 +1144,44 @@ async fn patch_replaces_assignee_and_label_bridges() {
     assert!(live_assignees(&pool, issue_id).await.is_empty());
     assert!(live_labels(&pool, issue_id).await.is_empty());
 
+    // A change to one bridge must not touch the other. A fresh issue keeps
+    // the soft-delete counters clean (the steps above already soft-deleted
+    // two label rows on `issue_id`).
+    let isolated_id = create_issue(&st, &scratch, "bridge-isolation").await;
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        isolated_id,
+        patch(json!({"assignee_ids": [member], "label_ids": [label_a]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        isolated_id,
+        patch(json!({"assignee_ids": []})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(live_assignees(&pool, isolated_id).await.is_empty());
+    assert_eq!(
+        live_labels(&pool, isolated_id).await,
+        vec![label_a],
+        "labels untouched by assignee clear"
+    );
+    let soft_labels: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_labels WHERE issue_id = $1 AND deleted_at IS NOT NULL",
+    )
+    .bind(isolated_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(soft_labels, 0, "no label rows were replaced");
+
     // Absent keys leave bridges untouched.
     let (status, _) = patch_issue_req(
         &st,
