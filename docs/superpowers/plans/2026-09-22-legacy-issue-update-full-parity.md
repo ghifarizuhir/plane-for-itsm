@@ -94,6 +94,7 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 8. **Notifications / `model_activity` webhooks / `origin` redis write** are not built (create-slice precedent, infra absent).
 9. **One transaction** for issue + bridges + activities + versions; Django autocommits the issue then writes side-effects asynchronously.
 10. **Activity batch loss on estimate clear is not reproduced** (deviation 6); otherwise the activity rows are byte-identical in shape.
+11. **Activity batch ordering is a fixed field order** (description first, then name/parent/priority/state/dates/labels/assignees/estimate) with per-statement `clock_timestamp()`; Django's `bulk_create` timestamps rows in the request's JSON key order. Observable only when one request mixes `description_html` with other tracked fields AND a later same-actor description-only edit decides merge-vs-insert; the web sends description edits alone in practice.
 
 ---
 
@@ -1826,7 +1827,7 @@ pub(crate) async fn insert_activity_row(
 
 - [ ] **Step 4: Add the diff writer to `issue_update.rs`**
 
-Add to the module imports: `use super::issue_activity_write::{insert_activity_row, insert_subscribers, ActivityCtx};` (and drop the fully-qualified call form below accordingly).
+Add to the module imports: `use super::issue_activity_write::{insert_activity_row, insert_assignee_activities, insert_subscribers, ActivityCtx};` (and drop the fully-qualified call form below accordingly). While there, switch `insert_assignee_activities`' `created_at`/`updated_at` from `now()` (transaction start) to `clock_timestamp()` so rows reused from the create writer keep the update batch's insertion ordering; the create path's observable behavior is unchanged.
 
 ```rust
 fn is_truthy(v: &Value) -> bool {
@@ -2122,15 +2123,20 @@ async fn write_update_activities(
         let current_set: std::collections::HashSet<Uuid> = current_assignee_ids.iter().copied().collect();
         let added: Vec<Uuid> = requested.difference(&current_set).copied().collect();
         let dropped: Vec<Uuid> = current_set.difference(&requested).copied().collect();
-        let names = names_for(tx, "users", "display_name", &[added.clone(), dropped.clone()].concat()).await?;
-        for id in &added {
-            let name = names.get(id).cloned().unwrap_or_default();
-            insert_activity_row(
-                tx, ctx, "updated", "assignees", "added assignee ", Some(""), Some(name.as_str()), None, Some(*id),
-            )
-            .await?;
-        }
+        // Reuse the create-path "added assignee" writer (identical row shape:
+        // `old_value=''`, `new_value=display_name`, `new_identifier=user`).
+        insert_assignee_activities(
+            tx,
+            ctx.issue_id,
+            ctx.project_id,
+            ctx.workspace_id,
+            ctx.actor,
+            &added,
+            ctx.epoch,
+        )
+        .await?;
         insert_subscribers(tx, ctx.issue_id, ctx.project_id, ctx.workspace_id, &added).await?;
+        let names = names_for(tx, "users", "display_name", &dropped).await?;
         for id in dropped {
             let name = names.get(&id).cloned().unwrap_or_default();
             insert_activity_row(
