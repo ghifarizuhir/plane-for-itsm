@@ -91,10 +91,7 @@ export function GptAssistantPopover(props: Props) {
 
   const handleServiceError = (err: any) => {
     const error = err?.data?.error;
-    const errorMessage =
-      err?.status === 429
-        ? error || "You have reached the maximum number of requests of 50 requests per month per user."
-        : error || "Some error occurred. Please try again.";
+    const errorMessage = error || "Something went wrong. Please try again.";
 
     setToast({
       type: TOAST_TYPE.ERROR,
@@ -125,7 +122,7 @@ export function GptAssistantPopover(props: Props) {
     setToast({
       type: TOAST_TYPE.ERROR,
       title: "Error!",
-      message: "Please enter some task to get AI assistance.",
+      message: "Enter a prompt to get AI assistance.",
     });
   };
 
@@ -271,7 +268,7 @@ export function GptAssistantPopover(props: Props) {
                   onChange={onChange}
                   ref={ref}
                   placeholder={`${
-                    prompt && prompt !== "" ? "Tell AI what action to perform on this content..." : "Ask AI anything..."
+                    prompt && prompt !== "" ? "Tell Galileo what to do with this content..." : "Ask Galileo anything..."
                   }`}
                   // Autofocus is intentional here: the popover is a single-purpose prompt input.
                   // eslint-disable-next-line jsx-a11y/no-autofocus
