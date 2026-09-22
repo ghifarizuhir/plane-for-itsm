@@ -1,5 +1,6 @@
 pub mod middleware;
 pub mod routes;
+pub mod seed;
 pub mod state;
 
 use axum::{routing::get, Router};
