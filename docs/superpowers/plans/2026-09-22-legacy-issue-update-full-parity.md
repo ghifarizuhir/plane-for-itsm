@@ -24,7 +24,7 @@
 
 ## Verified parity gap (source of this plan)
 
-Rust today (`work_item.rs:95-109`, `1660-1726`): `PatchIssue` has only `name`, `description_html`, `description`(→`description_json`), `priority`; one `UPDATE ... COALESCE` writes those 4 columns; no bridges, no activities, no side-effects. Web sends far more through this exact endpoint:
+Rust today (`work_item.rs:95-109`, `1789-1859`): `PatchIssue` has only `name`, `description_html`, `description`(→`description_json`), `priority`; one `UPDATE ... COALESCE` writes those 4 columns; no bridges, no activities, no side-effects. Web sends far more through this exact endpoint:
 
 | Web field                                   | Call site                                                                                                                                                                                                                 | Rust today                      |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
@@ -120,8 +120,8 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 
 - Create: `crates/api/src/routes/issue_update.rs`
 - Modify: `crates/api/src/routes/mod.rs` (add `pub mod issue_update;` next to `pub mod issue_write;`)
-- Modify: `crates/api/src/main.rs:1193-1197` (`routes::work_item::patch_issue` → `routes::issue_update::patch_issue`)
-- Modify: `crates/api/src/routes/work_item.rs` (delete `PatchIssue` at 95-109, `validate_issue_patch` at 144-156, `patch_issue` at 1658-1726, and the unit test `patch_miss_string_is_issue_not_found_not_missing` at 2006-2011)
+- Modify: `crates/api/src/main.rs:1197` and `:1274` (both `/issues/:pk/` and `/work-items/:pk/` route the same handler → `routes::issue_update::patch_issue`)
+- Modify: `crates/api/src/routes/work_item.rs` (delete `PatchIssue` at 95-109, `validate_issue_patch` at 144-156, `ISSUE_PATCH_MISS_MSG` at 1787, `patch_issue` at 1789-1859, and the unit test `patch_miss_string_is_issue_not_found_not_missing` at 2186-2191)
 - Modify: `crates/api/src/routes/issue_common.rs`
 - Modify: `crates/api/src/routes/issue_write.rs`
 - Modify: `crates/api/tests/issue_test.rs:2` (import `resolve_effective_state` from `issue_common` after the move)
@@ -936,7 +936,7 @@ pub mod issue_version_write;
 
 (`issue_version_write` lands in Task 5; add only `issue_update` in this task.)
 
-Update `crates/api/src/main.rs:1193-1197` to `.patch(routes::issue_update::patch_issue)`.
+Update both `crates/api/src/main.rs:1197` and `:1274` to `.patch(routes::issue_update::patch_issue)`.
 
 Delete from `crates/api/src/routes/work_item.rs`: the `PatchIssue` struct, `validate_issue_patch`, the `ISSUE_PATCH_MISS_MSG` const, the whole `patch_issue` function, and the `patch_miss_string_is_issue_not_found_not_missing` unit test.
 
