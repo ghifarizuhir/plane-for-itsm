@@ -1782,7 +1782,11 @@ pub(crate) struct ActivityCtx {
 
 /// One `verb`/`field` activity row for the update flow. `created_by_id` and
 /// `updated_by_id` stay NULL (Django `bulk_create` skips `save()`);
-/// `attachments` is `'{}'` (ArrayField default).
+/// `attachments` is `'{}'` (ArrayField default). Timestamps use
+/// `clock_timestamp()` (per-statement) instead of `now()` (transaction
+/// start) so batch rows get distinct, insertion-ordered `created_at` like
+/// Django's per-instance defaults — `merge_last_description_activity` and
+/// the activity feed depend on that ordering.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn insert_activity_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -1800,7 +1804,7 @@ pub(crate) async fn insert_activity_row(
          issue_id, project_id, workspace_id, actor_id, created_by_id, updated_by_id, \
          old_identifier, new_identifier, epoch, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '{}'::varchar[], $6, $7, $8, $9, NULL, NULL, \
-         $10, $11, $12, now(), now())",
+         $10, $11, $12, clock_timestamp(), clock_timestamp())",
     )
     .bind(verb)
     .bind(field)
@@ -1843,7 +1847,7 @@ async fn parent_label(
     let Some(id) = id else { return Ok(String::new()) };
     let label: Option<String> = sqlx::query_scalar(
         "SELECT p.identifier || '-' || i.sequence_id FROM issues i \
-         JOIN projects p ON p.id = i.project_id WHERE i.id = $1",
+         JOIN projects p ON p.id = i.project_id WHERE i.id = $1 AND i.deleted_at IS NULL",
     )
     .bind(id)
     .fetch_optional(&mut **tx)
@@ -1851,17 +1855,23 @@ async fn parent_label(
     Ok(label.unwrap_or_default())
 }
 
-async fn state_name(
+/// `(id, name)` when the state exists under Django's `State.objects`
+/// (`StateManager`: soft-deleted + triage excluded); identifiers are only
+/// written when the row exists (`issue_activities_task.py:205-236`).
+async fn state_info(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     id: Option<Uuid>,
     project_id: Uuid,
-) -> Result<Option<String>, sqlx::Error> {
+) -> Result<Option<(Uuid, String)>, sqlx::Error> {
     let Some(id) = id else { return Ok(None) };
-    sqlx::query_scalar("SELECT name FROM states WHERE id = $1 AND project_id = $2")
-        .bind(id)
-        .bind(project_id)
-        .fetch_optional(&mut **tx)
-        .await
+    sqlx::query_as(
+        "SELECT id, name FROM states WHERE id = $1 AND project_id = $2 \
+         AND deleted_at IS NULL AND \"group\" != 'triage'",
+    )
+    .bind(id)
+    .bind(project_id)
+    .fetch_optional(&mut **tx)
+    .await
 }
 
 async fn live_label_ids(
@@ -1881,10 +1891,15 @@ async fn live_assignee_ids(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     issue_id: Uuid,
 ) -> Result<Vec<Uuid>, sqlx::Error> {
+    // Exact `IssueDetailSerializer` annotation parity (`base.py:645-656`):
+    // `assignees__member_project__is_active=True` is NOT project-scoped in
+    // Django (a member active in ANY project qualifies), and joins use the
+    // base manager (no `deleted_at` predicate) — `DISTINCT` mirrors
+    // `ArrayAgg(distinct=True)`.
     sqlx::query_scalar(
-        "SELECT ia.assignee_id FROM issue_assignees ia \
-         JOIN project_members pm ON pm.project_id = ia.project_id AND pm.member_id = ia.assignee_id \
-         WHERE ia.issue_id = $1 AND ia.deleted_at IS NULL AND pm.is_active = true AND pm.deleted_at IS NULL",
+        "SELECT DISTINCT ia.assignee_id FROM issue_assignees ia \
+         JOIN project_members pm ON pm.member_id = ia.assignee_id AND pm.is_active = true \
+         WHERE ia.issue_id = $1 AND ia.deleted_at IS NULL",
     )
     .bind(issue_id)
     .fetch_all(&mut **tx)
@@ -1937,7 +1952,7 @@ async fn merge_last_description_activity(
     .await?;
     if let Some((id, Some(field), Some(last_actor))) = last {
         if field == "description" && last_actor == actor {
-            sqlx::query("UPDATE issue_activities SET created_at = now() WHERE id = $1")
+            sqlx::query("UPDATE issue_activities SET created_at = clock_timestamp() WHERE id = $1")
                 .bind(id)
                 .execute(&mut **tx)
                 .await?;
@@ -2027,18 +2042,18 @@ async fn write_update_activities(
     }
     if let Some(requested) = body.state_id {
         if requested != current.state_id {
-            let old = state_name(tx, current.state_id, ctx.project_id).await?;
-            let new = state_name(tx, requested, ctx.project_id).await?;
+            let old = state_info(tx, current.state_id, ctx.project_id).await?;
+            let new = state_info(tx, requested, ctx.project_id).await?;
             insert_activity_row(
                 tx,
                 ctx,
                 "updated",
                 "state",
                 "updated the state to",
-                old.as_deref(),
-                new.as_deref(),
-                current.state_id,
-                requested,
+                old.as_ref().map(|(_, name)| name.as_str()),
+                new.as_ref().map(|(_, name)| name.as_str()),
+                old.as_ref().map(|(id, _)| *id),
+                new.as_ref().map(|(id, _)| *id),
             )
             .await?;
         }
