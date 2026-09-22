@@ -417,6 +417,120 @@ async fn insert_modules(
     Ok(map)
 }
 
+async fn insert_issues(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+    states: &std::collections::HashMap<i64, Uuid>,
+    labels: &std::collections::HashMap<i64, Uuid>,
+    cycles: &std::collections::HashMap<i64, Uuid>,
+    modules: &std::collections::HashMap<i64, Uuid>,
+) -> Result<(), anyhow::Error> {
+    for issue in parse_seed::<IssueSeed>(ISSUES_JSON) {
+        let state_id = states
+            .get(&issue.state_id)
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("seed: unknown state_id {}", issue.state_id))?;
+        let (issue_id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO issues (id, name, description_html, description_json, \
+             description_stripped, priority, start_date, target_date, sequence_id, sort_order, \
+             completed_at, is_draft, estimate_point_id, parent_id, type_id, state_id, project_id, \
+             workspace_id, created_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, '{}', $3, COALESCE($4, 'none'), NULL, NULL, $5, \
+             $6, NULL, false, NULL, NULL, NULL, $7, $8, $9, $10, now(), now()) RETURNING id",
+        )
+        .bind(&issue.name)
+        .bind(&issue.description_html)
+        .bind(issue.description_stripped.as_deref())
+        .bind(issue.priority.as_deref())
+        .bind(issue.sequence_id)
+        .bind(issue.sort_order)
+        .bind(state_id)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(bot_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, \
+             created_by_id, deleted, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, now(), now())",
+        )
+        .bind(issue.sequence_id)
+        .bind(issue_id)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(bot_id)
+        .execute(&mut **tx)
+        .await?;
+        crate::routes::issue_activity_write::insert_created_activity(
+            tx,
+            issue_id,
+            project_id,
+            workspace_id,
+            bot_id,
+            Utc::now().timestamp_millis() as f64 / 1000.0,
+        )
+        .await?;
+        for seed_label in &issue.labels {
+            let label_id = labels
+                .get(seed_label)
+                .copied()
+                .ok_or_else(|| anyhow::anyhow!("seed: unknown label id {seed_label}"))?;
+            sqlx::query(
+                "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, \
+                 created_by_id, updated_by_id, created_at, updated_at) \
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $5, now(), now())",
+            )
+            .bind(issue_id)
+            .bind(label_id)
+            .bind(project_id)
+            .bind(workspace_id)
+            .bind(bot_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+        if let Some(seed_cycle) = issue.cycle_id {
+            let cycle_id = cycles
+                .get(&seed_cycle)
+                .copied()
+                .ok_or_else(|| anyhow::anyhow!("seed: unknown cycle id {seed_cycle}"))?;
+            sqlx::query(
+                "INSERT INTO cycle_issues (id, cycle_id, issue_id, project_id, workspace_id, \
+                 created_by_id, updated_by_id, created_at, updated_at) \
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $5, now(), now())",
+            )
+            .bind(cycle_id)
+            .bind(issue_id)
+            .bind(project_id)
+            .bind(workspace_id)
+            .bind(bot_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+        for seed_module in &issue.module_ids {
+            let module_id = modules
+                .get(seed_module)
+                .copied()
+                .ok_or_else(|| anyhow::anyhow!("seed: unknown module id {seed_module}"))?;
+            sqlx::query(
+                "INSERT INTO module_issues (id, module_id, issue_id, project_id, workspace_id, \
+                 created_by_id, updated_by_id, created_at, updated_at) \
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $5, now(), now())",
+            )
+            .bind(module_id)
+            .bind(issue_id)
+            .bind(project_id)
+            .bind(workspace_id)
+            .bind(bot_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
