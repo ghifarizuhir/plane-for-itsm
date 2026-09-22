@@ -24,6 +24,7 @@ use super::issue_common::{
     is_workspace_admin, parse_date, project_gate_allows, replace_bridges, resolve_issue_state,
     PRIORITIES,
 };
+use super::issue_version_write::record_description_version;
 use super::work_item::ws_active_member;
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
@@ -250,8 +251,6 @@ pub struct CurrentIssue {
     pub parent_id: Option<Uuid>,
     pub start_date: Option<chrono::NaiveDate>,
     pub target_date: Option<chrono::NaiveDate>,
-    pub sort_order: f64,
-    pub point: Option<i32>,
     pub estimate_point_id: Option<Uuid>,
     pub created_by_id: Option<Uuid>,
 }
@@ -702,7 +701,7 @@ pub async fn patch_issue(
     // false`): `has_changed("state_id")` compares against it.
     let current: Option<CurrentIssue> = sqlx::query_as(
         "SELECT i.name, i.description_html, i.description_json, i.priority, i.state_id, i.parent_id, \
-         i.start_date, i.target_date, i.sort_order, i.point, i.estimate_point_id, i.created_by_id \
+         i.start_date, i.target_date, i.estimate_point_id, i.created_by_id \
          FROM issues i LEFT JOIN states s ON s.id = i.state_id \
          WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
          AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
@@ -936,6 +935,29 @@ pub async fn patch_issue(
             &assignee_ids_current,
         )
         .await?;
+        // `issue_description_version_task.delay` (`base.py:700-707`).
+        let stored_html = sanitized_html
+            .as_deref()
+            .unwrap_or(&current.description_html);
+        if sanitized_html.is_some() && stored_html != current.description_html {
+            let description_json = body
+                .description
+                .clone()
+                .flatten()
+                .unwrap_or_else(|| current.description_json.clone());
+            record_description_version(
+                &mut tx,
+                pk,
+                project_id,
+                workspace_id,
+                auth.0,
+                current.created_by_id,
+                Some(auth.0),
+                stored_html,
+                &description_json,
+            )
+            .await?;
+        }
     }
     // --- Bridge writes ---
     // Django `IssueCreateSerializer.update` (`serializers/issue.py:276-320`):

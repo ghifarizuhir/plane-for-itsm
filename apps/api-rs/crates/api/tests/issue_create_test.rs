@@ -240,6 +240,11 @@ impl Scratch {
             .execute(pool)
             .await
             .ok();
+        sqlx::query("DELETE FROM issue_description_versions WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM issues WHERE project_id = $1")
             .bind(self.project_id)
             .execute(pool)
@@ -428,6 +433,7 @@ async fn purge(pool: &PgPool) {
                 "DELETE FROM issue_labels WHERE project_id = $1",
                 "DELETE FROM issue_activities WHERE project_id = $1",
                 "DELETE FROM issue_subscribers WHERE project_id = $1",
+                "DELETE FROM issue_description_versions WHERE project_id = $1",
                 "DELETE FROM labels WHERE project_id = $1",
                 "DELETE FROM issues WHERE project_id = $1",
                 "DELETE FROM intakes WHERE project_id = $1",
@@ -1435,4 +1441,45 @@ async fn create_response_has_26_key_list_shape() {
     assert!(payload["deleted_at"].is_null());
 
     scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn create_records_initial_description_version() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateIssue {
+            name: "versioned create".to_string(),
+            description_html: Some("<p>born</p>".to_string()),
+            ..base_body("unused", scratch.state_id)
+        }),
+    )
+    .await
+    .expect("create must return a response");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id: Uuid = body["id"].as_str().unwrap().parse().unwrap();
+
+    let rows: Vec<(String, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT description_html, owned_by_id, updated_by_id FROM issue_description_versions WHERE issue_id = $1",
+    )
+    .bind(issue_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, "<p>born</p>");
+    assert_eq!(rows[0].1, Some(scratch.user_id));
+    assert_eq!(rows[0].2, None, "create leaves updated_by NULL");
+
+    sqlx::query("DELETE FROM issue_description_versions WHERE issue_id = $1")
+        .bind(issue_id)
+        .execute(&pool)
+        .await
+        .ok();
+    scratch.cleanup(&pool).await;
 }

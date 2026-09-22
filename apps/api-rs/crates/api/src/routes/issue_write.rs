@@ -325,6 +325,20 @@ pub async fn create(
         .await?;
     }
     insert_subscribers(&mut tx, out.id, project_id, workspace_id, &assignees).await?;
+    // Django create also records the initial description version
+    // (`base.py:483-488`, `is_creating=True`).
+    super::issue_version_write::record_description_version(
+        &mut tx,
+        out.id,
+        project_id,
+        workspace_id,
+        auth.0,
+        Some(auth.0),
+        None,
+        description_html,
+        &json!({}),
+    )
+    .await?;
     tx.commit().await?;
     match super::issue_query::fetch_issue_row(&st.pool, project_id, out.id).await? {
         Some(row) => Ok((

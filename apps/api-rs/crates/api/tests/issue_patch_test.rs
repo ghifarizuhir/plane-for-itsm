@@ -1641,3 +1641,104 @@ async fn patch_assignee_diff_uses_unscoped_project_memberships() {
 
     scratch.cleanup(&pool).await;
 }
+
+type VersionRow = (Uuid, String, Uuid, Option<Uuid>);
+
+async fn versions(pool: &PgPool, issue_id: Uuid) -> Vec<VersionRow> {
+    sqlx::query_as(
+        "SELECT id, description_html, owned_by_id, created_by_id FROM issue_description_versions \
+         WHERE issue_id = $1 ORDER BY last_saved_at",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+    .expect("version rows")
+}
+
+#[tokio::test]
+async fn patch_records_description_versions_with_merge_window() {
+    let st = state().await;
+    let pool = pool().await;
+    let mut scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "versions").await;
+    // The create path records the initial snapshot (Task 5 create wiring).
+    let baseline = versions(&pool, issue_id).await.len();
+    assert_eq!(baseline, 1);
+
+    // Non-description update → no version.
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"priority": "high"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(versions(&pool, issue_id).await.len(), baseline);
+
+    // Same actor within 600 s → MERGES into the create row (Django
+    // `should_update_existing_version`).
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>v1</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows = versions(&pool, issue_id).await;
+    assert_eq!(rows.len(), baseline, "same owner + <600s merges");
+    assert_eq!(rows.last().unwrap().1, "<p>v1</p>");
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"description_html": "<p>v2</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows2 = versions(&pool, issue_id).await;
+    assert_eq!(rows2.len(), baseline);
+    assert_eq!(rows2.last().unwrap().1, "<p>v2</p>");
+
+    // Another actor → a new row (created_by = issue creator).
+    let issue_creator: Uuid = sqlx::query_scalar("SELECT created_by_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let other = scratch.add_actor(&pool, Some(15), Some(15)).await;
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        other,
+        issue_id,
+        patch(json!({"description_html": "<p>v3</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let rows3 = versions(&pool, issue_id).await;
+    assert_eq!(rows3.len(), baseline + 1);
+    let row = rows3.last().unwrap();
+    assert_eq!(row.1, "<p>v3</p>");
+    assert_eq!(row.2, other);
+    assert_eq!(row.3, Some(issue_creator));
+
+    // Same value → no version (Django compares old vs new html).
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        other,
+        issue_id,
+        patch(json!({"description_html": "<p>v3</p>"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(versions(&pool, issue_id).await.len(), baseline + 1);
+
+    scratch.cleanup(&pool).await;
+}
