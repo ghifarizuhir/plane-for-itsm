@@ -286,6 +286,137 @@ async fn insert_project_members_and_props(
     Ok(())
 }
 
+fn slugify(name: &str) -> String {
+    name.to_lowercase().replace(' ', "-")
+}
+
+async fn insert_states(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<std::collections::HashMap<i64, Uuid>, sqlx::Error> {
+    let mut map = std::collections::HashMap::new();
+    for s in parse_seed::<StateSeed>(STATES_JSON) {
+        let (id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO states (id, name, description, color, slug, created_by_id, project_id, \
+             workspace_id, sequence, \"group\", \"default\", is_triage, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, '', $2, $3, $4, $5, $6, $7, $8, $9, false, now(), now()) \
+             RETURNING id",
+        )
+        .bind(&s.name)
+        .bind(&s.color)
+        .bind(slugify(&s.name))
+        .bind(bot_id)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(s.sequence)
+        .bind(&s.group)
+        .bind(s.is_default)
+        .fetch_one(&mut **tx)
+        .await?;
+        map.insert(s.id, id);
+    }
+    Ok(map)
+}
+
+async fn insert_labels(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<std::collections::HashMap<i64, Uuid>, sqlx::Error> {
+    let mut map = std::collections::HashMap::new();
+    for l in parse_seed::<LabelSeed>(LABELS_JSON) {
+        let (id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO labels (id, name, color, description, project_id, workspace_id, parent_id, \
+             sort_order, created_by_id, updated_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, '', $3, $4, NULL, $5, $6, $6, now(), now()) \
+             RETURNING id",
+        )
+        .bind(&l.name)
+        .bind(&l.color)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(l.sort_order)
+        .bind(bot_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        map.insert(l.id, id);
+    }
+    Ok(map)
+}
+
+async fn insert_cycles(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<std::collections::HashMap<i64, Uuid>, sqlx::Error> {
+    let now = Utc::now();
+    let mut map = std::collections::HashMap::new();
+    let mut last_end: Option<DateTime<Utc>> = None;
+    for c in parse_seed::<CycleSeed>(CYCLES_JSON) {
+        let (start, end) = cycle_dates(&c.cycle_type, last_end, now);
+        last_end = Some(end);
+        let (id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO cycles (id, name, description, project_id, workspace_id, owned_by_id, \
+             created_by_id, timezone, version, view_props, logo_props, progress_snapshot, \
+             sort_order, start_date, end_date, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, '', $2, $3, $4, $4, $5, 1, '{}', '{}', '{}', $6, $7, \
+             $8, now(), now()) RETURNING id",
+        )
+        .bind(&c.name)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(bot_id)
+        .bind(&c.timezone)
+        .bind(c.sort_order)
+        .bind(start)
+        .bind(end)
+        .fetch_one(&mut **tx)
+        .await?;
+        map.insert(c.id, id);
+    }
+    Ok(map)
+}
+
+async fn insert_modules(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Uuid,
+    bot_id: Uuid,
+) -> Result<std::collections::HashMap<i64, Uuid>, sqlx::Error> {
+    let now = Utc::now();
+    let mut map = std::collections::HashMap::new();
+    for (index, m) in parse_seed::<ModuleSeed>(MODULES_JSON)
+        .into_iter()
+        .enumerate()
+    {
+        let (start, target) = module_dates(index as i64, now);
+        let (id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO modules (id, name, description, status, lead_id, project_id, workspace_id, \
+             created_by_id, updated_by_id, view_props, logo_props, sort_order, start_date, \
+             target_date, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, NULL, $4, $5, $6, $6, '{}', '{}', $7, $8, $9, \
+             now(), now()) RETURNING id",
+        )
+        .bind(&m.name)
+        .bind(&m.description)
+        .bind(&m.status)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(bot_id)
+        .bind(m.sort_order)
+        .bind(start)
+        .bind(target)
+        .fetch_one(&mut **tx)
+        .await?;
+        map.insert(m.id, id);
+    }
+    Ok(map)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
