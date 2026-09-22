@@ -1548,3 +1548,96 @@ async fn patch_estimate_activity_field_uses_estimate_type() {
 
     scratch.cleanup(&pool).await;
 }
+
+async fn insert_other_project(pool: &PgPool, workspace_id: Uuid) -> Uuid {
+    let id = Uuid::new_v4();
+    let identifier = format!("ITSQ{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
+    sqlx::query(
+        "INSERT INTO projects (id, created_at, updated_at, name, description, network, identifier, \
+         workspace_id, cycle_view, module_view, issue_views_view, page_view, intake_view, archive_in, \
+         close_in, logo_props, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features, timezone) \
+         VALUES ($1, now(), now(), 'IT Seq Other', '', 2, $2, $3, false, false, false, false, false, \
+         30, 30, '{}'::jsonb, false, false, false, 'UTC')",
+    )
+    .bind(id)
+    .bind(identifier)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch other project");
+    id
+}
+
+/// Django's assignee annotation (`base.py:645-656`) is not project-scoped and
+/// does not filter `project_members.deleted_at` (related lookups don't apply
+/// manager filtering). Either mistake silently drops removal rows from the diff.
+#[tokio::test]
+async fn patch_assignee_diff_uses_unscoped_project_memberships() {
+    let st = state().await;
+    let pool = pool().await;
+    let mut scratch = Scratch::new(&pool).await;
+    let issue_id = create_issue(&st, &scratch, "assignee-scope").await;
+    let other_project_member = scratch.add_actor(&pool, Some(15), Some(15)).await;
+    let soft_deleted_member = scratch.add_actor(&pool, Some(15), Some(15)).await;
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": [other_project_member, soft_deleted_member]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // (a) active in a second project, inactive here: Django still counts them.
+    sqlx::query(
+        "UPDATE project_members SET is_active = false WHERE project_id = $1 AND member_id = $2",
+    )
+    .bind(scratch.project_id)
+    .bind(other_project_member)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let other_project = insert_other_project(&pool, scratch.workspace_id).await;
+    insert_project_member(
+        &pool,
+        other_project_member,
+        other_project,
+        scratch.workspace_id,
+        15,
+    )
+    .await;
+
+    // (b) soft-deleted membership row with `is_active` still true: Django's join
+    // does not apply the SoftDeletionManager filter.
+    sqlx::query(
+        "UPDATE project_members SET deleted_at = now() WHERE project_id = $1 AND member_id = $2",
+    )
+    .bind(scratch.project_id)
+    .bind(soft_deleted_member)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, _) = patch_issue_req(
+        &st,
+        &scratch,
+        scratch.user_id,
+        issue_id,
+        patch(json!({"assignee_ids": []})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let rows = activities(&pool, issue_id).await;
+    for member in [other_project_member, soft_deleted_member] {
+        assert!(
+            rows.iter()
+                .any(|r| r.2 == "removed assignee " && r.5 == Some(member)),
+            "member {member} must produce a removal row: {rows:?}"
+        );
+    }
+
+    scratch.cleanup(&pool).await;
+}
