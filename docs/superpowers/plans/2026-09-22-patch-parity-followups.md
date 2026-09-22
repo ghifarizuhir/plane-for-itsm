@@ -328,6 +328,7 @@ async fn draft_conversion_writes_description_stripped() {
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), draft_id)),
         Some(Json(ConvertBody {
+            name: Some("converted-probe".to_string()),
             description_html: Some("<p>converted <b>body</b></p>".to_string()),
             ..Default::default()
         })),
@@ -415,6 +416,8 @@ to
 ///   mirrored from `DraftIssue.save` / `Issue.save` (see handlers).
 ```
 
+**Plus (from the Task 2 code-quality review):** `crates/api/src/routes/issue_write.rs` legacy create must stop normalizing an explicit `description_html: ""` to `<p></p>` — Django's `Issue.save` (`db/models/issue.py:196-206`) stores `""` with `description_stripped = NULL` (DRF maps `blank=True` → `allow_blank=True`), while omitting the field uses the model default `<p></p>` (stripped `""`). Use `body.description_html.as_deref().unwrap_or("<p></p>")`, add `create_with_explicit_empty_html_stores_empty_html_and_null_stripped`, and keep the omitted-html assertion (`create_defaults_description_and_priority_when_absent`). Also: the second conversion case (`description_html: Some("")` → stored `""`/stripped `None`), a `// $16 = description_stripped, bound last.` comment above the promotion INSERT, the ordering test asserting the fixture state's sequence exceeds the probe's, and accurate guard-comment citations in `notification.rs` (`IssueSubscriber.objects`/`IssueAssignee.objects`; mark-all-read `base.py:269-273`).
+
 `crates/api/src/routes/draft.rs::resolve_default_state` — both queries change their ORDER BY and the doc comment gains the ordering note:
 
 ```rust
@@ -461,7 +464,7 @@ async fn resolve_default_state(
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_create_test -- --test-threads=1
 ```
 
-Expected: all pass (30 tests), no leftovers (`scratch.cleanup` now removes drafts).
+Expected: all pass (32 tests: 31 + the legacy-create empty-html test), no leftovers (`scratch.cleanup` now removes drafts).
 
 - [ ] **Step 5: Format, lint, commit**
 
@@ -666,10 +669,13 @@ In `crates/api/src/routes/intake.rs::patch_issue`, in BOTH issue-write branches 
 and after the whole `if !narrowed { ... } else { ... }` block, before the intake-level write:
 
 ```rust
-    // Intake PATCH version parity (`views/intake/base.py:447-456`). Django's
-    // `is_description_update` reads the TOP-LEVEL `description_html` while the
-    // web nests it under `issue`, so `skip_activity` never suppresses this on
-    // the intake path — mirrored here.
+    // Intake PATCH version parity (`views/intake/base.py:447-456`). Django
+    // suppresses it only for the migration-client case
+    // (`skip_activity and is_description_update`, base.py:337,437), where
+    // `is_description_update` probes the TOP-LEVEL `description_html`; the
+    // web nests it under `issue`, so the probe is None and the version is
+    // written. Mirrored here: Rust's intake body drops top-level keys, so
+    // that migration shape has no counterpart on this path.
     if let Some(new_html) = issue.and_then(|i| i.description_html.clone()) {
         if new_html != pre.0 {
             let new_json = issue
@@ -702,7 +708,7 @@ DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --tes
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test intake_test -- --test-threads=1
 ```
 
-Expected: create 30 passed, patch 18 passed, intake unit tests pass.
+Expected: create 33 passed (32 + the new intake version test), patch 18 passed, intake unit tests pass.
 
 - [ ] **Step 6: Format, lint, commit**
 
