@@ -229,7 +229,7 @@ pub async fn list(
 /// name/slug validators; 201 full row + `total_members` + `role=20`;
 /// slug conflict → 409 `{"slug": "The workspace with the slug already
 /// exists"}`. Creator becomes ADMIN member (`company_role` passthrough);
-/// `workspace_seed` celery skipped.
+/// `workspace_seed` dijalankan sinkron setelah commit (crate::seed).
 pub async fn create(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -326,6 +326,11 @@ pub async fn create(
     if tx.commit().await.is_err() {
         tracing::warn!("ws-create: commit failed");
         return Err(common::errors::AppError(anyhow::anyhow!("internal error")));
+    }
+    // Demo seed (parity `workspace_seed_task.py`), sinkron setelah commit:
+    // kegagalan seed tidak menggagalkan create — hanya di-log.
+    if let Err(e) = crate::seed::seed_workspace(&st.pool, ws_id).await {
+        tracing::error!(error = %e, "ws-create: workspace seed failed");
     }
     match fetch_ws_full(&st.pool, slug, owner).await? {
         Some(row) => Ok((StatusCode::CREATED, Json(ws_full_json(&row)))),

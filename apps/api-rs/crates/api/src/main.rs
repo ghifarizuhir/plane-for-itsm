@@ -3,6 +3,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod middleware;
 mod routes;
+mod seed;
 mod state;
 
 use axum::{
