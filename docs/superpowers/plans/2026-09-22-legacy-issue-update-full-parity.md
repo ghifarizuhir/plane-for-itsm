@@ -86,8 +86,8 @@ Activity rows: `verb='updated'`, `attachments='{}'`, `actor_id=actor`, `created_
 
 1. **Strict 400** for invalid assignee/label/state/parent/estimate/type ids (create-slice decision, not Django's silent filter).
 2. **Malformed UUID/type in the body → 422** from the Axum `Json` extractor (create-slice precedent). Django 400s. Not changed in this slice.
-3. **`assignee_ids: null` / `label_ids: null` → 400** (`ListField` has no `allow_null`, Django-exact); `[]` clears. The web only ever sends arrays.
-4. **Bridges soft-delete** (`replace_bridges`: `deleted_at = now()`) unlike Django's hard `QuerySet.delete()`; bridge `updated_by_id` is the actor, Django copies the issue's old `updated_by_id`. Already the v1/create behavior.
+3. **`assignee_ids: null` / `label_ids: null` → 400** (`ListField` has no `allow_null`, Django-exact); `[]` clears. Null/empty _elements_ inside the array are skipped by the lax deserializer (Django 400s them) — documented laxness, the web never sends them.
+4. **Bridges soft-delete** (`replace_bridges`) — this MATCHES Django: `IssueAssignee`/`IssueLabel` use `SoftDeletionQuerySet.delete(soft=True)` (`db/mixins.py:56-63`), so `.filter(issue=...).delete()` sets `deleted_at` too. The real divergence is audit fields: new rows carry `created_by_id = updated_by_id = actor`, while Django copies the issue's `created_by_id` and old `updated_by_id` (`serializers/issue.py:283-284`). Already the v1/create behavior.
 5. **`description` maps to `description_json`** (existing struct behavior; web sends only `description_html`). Django's own key `description_json` is not accepted.
 6. **Estimate clear writes no estimate activity**: Django's `track_estimate_points` raises `AttributeError` on `new_estimate is None`, the task's try/except swallows it and the whole activity batch is lost. Rust writes every other activity and skips the estimate row (saner, documented).
 7. **`closed_to`**, `archived_at`, `is_draft`, `description_stripped`, `description_binary`, `sequence_id`, `external_source`, `external_id` are out of scope: web never sends them through this endpoint (archive/draft/intake have their own endpoints); `description_stripped` is derived server-side, not client-writable.
@@ -896,7 +896,7 @@ cd /home/ghifari/plane-for-itsm/apps/api-rs
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_patch_test -- --test-threads=1
 ```
 
-Expected: `3 passed`. Then confirm the create suite still compiles/passes:
+Expected: `4 passed` (3 validation/authz tests + the gate-order test). Then confirm the create suite still compiles/passes:
 
 ```bash
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_create_test -- --test-threads=1
@@ -1365,7 +1365,7 @@ cd /home/ghifari/plane-for-itsm/apps/api-rs
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_patch_test -- --test-threads=1
 ```
 
-Expected: `6 passed`.
+Expected: `11 passed`.
 
 - [ ] **Step 5: Format, lint, commit**
 
@@ -1511,7 +1511,7 @@ Add `replace_bridges` to the `issue_common` import list. (Task 4 moves the live-
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_patch_test -- --test-threads=1
 ```
 
-Expected: `7 passed`.
+Expected: `12 passed` (11 from Tasks 1-2 plus this test).
 
 - [ ] **Step 5: Format, lint, commit**
 
@@ -2205,7 +2205,7 @@ Wire it in `patch_issue` **before** the bridge block added in Task 3 (the diff m
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_patch_test -- --test-threads=1
 ```
 
-Expected: `10 passed`.
+Expected: `15 passed` (12 + 3).
 
 - [ ] **Step 6: Format, lint, commit**
 
@@ -2514,7 +2514,7 @@ DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --tes
 DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test issue_create_test -- --test-threads=1
 ```
 
-Expected: `11 passed` in the patch file, all create tests pass, including `create_records_initial_description_version`.
+Expected: `16 passed` in the patch file plus the new create test (`create_records_initial_description_version`), all create tests passing.
 
 - [ ] **Step 6: Format, lint, commit**
 
