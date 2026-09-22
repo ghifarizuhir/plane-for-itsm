@@ -597,6 +597,18 @@ async fn intake_create_allocates_distinct_sequences_and_records_counter_rows() {
         ids[0].1, ids[1].1,
         "consecutive creates must not reuse a sequence"
     );
+    let (stripped, completed): (Option<String>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT description_stripped, completed_at FROM issues WHERE id = $1")
+            .bind(ids[0].0)
+            .fetch_one(&st.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        stripped.as_deref(),
+        Some(""),
+        "default html → stripped \"\""
+    );
+    assert_eq!(completed, None, "triage state is not completed");
     for (issue_id, sequence) in ids {
         assert_eq!(
             sequence_rows(&st.pool, issue_id).await,
@@ -1549,6 +1561,51 @@ async fn create_writes_stripped_and_completed_at() {
             .await
             .unwrap();
     assert_eq!(completed, None);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn insert_issue_handles_null_state_and_empty_html() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let mut tx = pool.begin().await.unwrap();
+    let out = api::routes::issue_write::insert_issue(
+        &mut tx,
+        api::routes::issue_write::NewIssue {
+            slug: &scratch.slug,
+            project_id: scratch.project_id,
+            state_id: None,
+            name: "null-state",
+            description_html: "",
+            priority: "none",
+            start_date: None,
+            target_date: None,
+            parent_id: None,
+            type_id: None,
+            estimate_point_id: None,
+            created_by: scratch.user_id,
+        },
+    )
+    .await
+    .expect("insert_issue");
+    tx.commit().await.unwrap();
+
+    let (html, stripped, completed): (
+        String,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as(
+        "SELECT description_html, description_stripped, completed_at FROM issues WHERE id = $1",
+    )
+    .bind(out.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(html, "", "empty html stored as-is");
+    assert_eq!(stripped, None, "empty html → NULL stripped");
+    assert_eq!(completed, None, "NULL state → no completed_at");
 
     scratch.cleanup(&pool).await;
 }

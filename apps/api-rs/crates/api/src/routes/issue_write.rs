@@ -198,6 +198,7 @@ pub async fn insert_issue(
 
     // `Issue.save` create branch (`db/models/issue.py:200-205`): empty html
     // stores NULL, anything else stores the tag-stripped text.
+    // Duplicated by the PATCH path (`issue_update.rs:786-791`) — keep in sync.
     let description_stripped: Option<String> = if issue.description_html.is_empty() {
         None
     } else {
