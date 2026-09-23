@@ -257,7 +257,7 @@ mod tool_roundtrip {
     use rig::tool::{Tool, ToolContext, ToolExecutionError};
     use serde_json::{json, Value};
 
-    #[derive(serde::Deserialize, schemars::JsonSchema)]
+    #[derive(serde::Deserialize, serde::Serialize, schemars::JsonSchema)]
     struct EchoArgs {
         text: String,
     }
