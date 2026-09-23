@@ -19,20 +19,28 @@ pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
      ORDER BY name LIMIT 50";
 
 pub const COUNT_SQL: &str = "SELECT count(*)::int8 FROM issues i \
-     JOIN projects p ON p.id = i.project_id \
-     LEFT JOIN states s ON s.id = i.state_id \
-     WHERE i.workspace_id = $1 AND i.deleted_at IS NULL \
+     JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
+       AND p.deleted_at IS NULL AND p.archived_at IS NULL \
+     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+       AND s.deleted_at IS NULL \
+     WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
+     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
      AND ($2::text IS NULL OR p.identifier ILIKE $2 OR p.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR s.\"group\" = $3) \
      AND ($4::text IS NULL OR i.priority = $4) \
      AND ($5::bool OR i.archived_at IS NULL)";
 
-pub const SEARCH_SQL: &str = "SELECT p.identifier || '-' || i.sequence_id AS identifier, \
+pub const SEARCH_SQL: &str = "SELECT p.identifier AS project, \
+     p.identifier || '-' || i.sequence_id AS identifier, \
      i.name, COALESCE(s.name, '') AS state, i.priority \
      FROM issues i \
-     JOIN projects p ON p.id = i.project_id \
-     LEFT JOIN states s ON s.id = i.state_id \
-     WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.archived_at IS NULL \
+     JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
+       AND p.deleted_at IS NULL AND p.archived_at IS NULL \
+     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+       AND s.deleted_at IS NULL \
+     WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
+     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
+     AND i.archived_at IS NULL \
      AND ($2::text IS NULL OR i.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR p.identifier ILIKE $3 OR p.name ILIKE '%' || $3 || '%') \
      AND ($4::text IS NULL OR s.\"group\" = $4) \
@@ -110,14 +118,20 @@ pub fn count_json(
     .to_string()
 }
 
-pub fn search_json(rows: &[(String, String, String, String)]) -> String {
+pub fn search_json(rows: &[(String, String, String, String, String)]) -> String {
     let items: Vec<Value> = rows
         .iter()
-        .map(|(identifier, name, state, priority)| {
-            json!({"identifier": identifier, "name": name, "state": state, "priority": priority})
+        .map(|(project, identifier, name, state, priority)| {
+            json!({
+                "project": project,
+                "identifier": identifier,
+                "name": name,
+                "state": state,
+                "priority": priority
+            })
         })
         .collect();
-    json!({"count": items.len(), "items": items}).to_string()
+    json!({"returned": items.len(), "items": items}).to_string()
 }
 
 #[cfg(test)]
@@ -185,6 +199,7 @@ mod tests {
             })
         );
         let search = search_json(&[(
+            "LTS".to_string(),
             "LTS-12".to_string(),
             "Fix pump".to_string(),
             "In Progress".to_string(),
@@ -192,7 +207,8 @@ mod tests {
         )]);
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&search).unwrap(),
-            json!({"count": 1, "items": [{
+            json!({"returned": 1, "items": [{
+                "project": "LTS",
                 "identifier": "LTS-12",
                 "name": "Fix pump",
                 "state": "In Progress",
