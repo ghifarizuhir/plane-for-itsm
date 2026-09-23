@@ -64,6 +64,7 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
   const memberDetails = searchedMemberIds
     ?.map((memberId) => getWorkspaceMemberDetails(memberId))
     .slice()
+    // oxlint-disable-next-line unicorn/no-array-sort
     .sort((a, b) => {
       if (a?.is_active && !b?.is_active) return -1;
       if (!a?.is_active && b?.is_active) return 1;
