@@ -26,6 +26,12 @@ describe("resolveWorkItemLayout", () => {
     ).toBe(EIssueLayoutTypes.KANBAN);
   });
 
+  it("falls back from grouped kanban without sub-grouping on mobile", () => {
+    expect(
+      resolveWorkItemLayout({ layout: EIssueLayoutTypes.KANBAN, group_by: "state", sub_group_by: null }, true)
+    ).toBe(EIssueLayoutTypes.LIST);
+  });
+
   it("falls back from kanban sub-grouped without a group by on mobile", () => {
     expect(
       resolveWorkItemLayout({ layout: EIssueLayoutTypes.KANBAN, group_by: null, sub_group_by: "priority" }, true)

@@ -19,7 +19,7 @@ const SPREADSHEET = "spreadsheet" as EIssueLayoutTypes;
  * The fetched data shape must match what the list renders, so the fallback is only
  * applied for layouts whose data the list can render correctly:
  * - calendar keeps its dedicated mobile agenda and date-windowed data.
- * - kanban only falls back when it is not sub-grouped (sub-grouped data is nested).
+ * - kanban falls back unless it is both grouped and sub-grouped (only then is the data nested).
  * - spreadsheet and gantt fetch flat data, which the list renders ungrouped.
  *
  * The persisted value is never written back, so widening the viewport restores the
@@ -36,6 +36,8 @@ export const resolveWorkItemLayout = (
   if (layout === GANTT || layout === SPREADSHEET) return LIST;
   return layout;
 };
+
+// Layout-agnostic data-shape helpers: used by the list renderer on all viewports, not viewport-gated.
 
 /**
  * Flat responses (spreadsheet/gantt fetches, ungrouped lists) store their ids under
