@@ -134,6 +134,13 @@ pub fn extract_content(v: &Value) -> String {
         .to_string()
 }
 
+/// Django parity: `/ai-assistant/` returns the raw text plus a copy with
+/// newlines mapped to `<br/>`. Shared with the agent route so both chat modes
+/// render identically.
+pub(crate) fn response_html(text: &str) -> String {
+    text.replace('\n', "<br/>")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LlmError {
     RateLimited,
@@ -231,10 +238,10 @@ pub async fn workspace_ai_assistant(
     let prompt = body.get("prompt").and_then(Value::as_str).unwrap_or("");
     match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, prompt).await {
         Ok(text) => {
-            let response_html = text.replace('\n', "<br/>");
+            let html = response_html(&text);
             Ok((
                 StatusCode::OK,
-                Json(json!({"response": text, "response_html": response_html})),
+                Json(json!({"response": text, "response_html": html})),
             ))
         }
         Err(LlmError::RateLimited) => Ok((
@@ -284,6 +291,13 @@ mod tests {
             extract_content(&json!({"choices": [{"message": {"content": null}}]})),
             ""
         );
+    }
+
+    #[test]
+    fn response_html_maps_newlines_only() {
+        assert_eq!(response_html("a\nb"), "a<br/>b");
+        assert_eq!(response_html("plain"), "plain");
+        assert_eq!(response_html(""), "");
     }
 
     #[test]
