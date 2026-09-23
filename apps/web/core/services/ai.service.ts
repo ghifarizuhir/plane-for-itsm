@@ -21,6 +21,12 @@ export type TTaskPayload = {
   text_input: string;
 };
 
+export type TAgentTaskResponse = {
+  response: string;
+  response_html?: string;
+  tool_calls?: { name: string; arguments: unknown }[];
+};
+
 export class AIService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -28,6 +34,14 @@ export class AIService extends APIService {
 
   async createGptTask(workspaceSlug: string, data: { prompt: string; task: string }): Promise<any> {
     return this.post(`/api/workspaces/${workspaceSlug}/ai-assistant/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
+      });
+  }
+
+  async createAgentTask(workspaceSlug: string, data: { prompt: string; task: string }): Promise<TAgentTaskResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/ai-agent/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response;
