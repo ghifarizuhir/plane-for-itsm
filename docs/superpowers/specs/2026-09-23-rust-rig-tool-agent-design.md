@@ -83,11 +83,11 @@ Rig sehingga kegagalan DB/validasi jadi tool error yang terbaca model (bukan
 `Arc<Mutex<Vec<ToolCallTrace>>>`; trace di-push dari dalam `call()` (tidak
 bergantung API hook Rig).
 
-| Tool                | Args                                                               | Output                                                           |
-| ------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `list_projects`     | –                                                                  | `{"items":[{"identifier","name"}]}` (maks 50, non-archived)      |
-| `count_work_items`  | `project?`, `state_group?`, `priority?`, `include_archived?=false` | `{"count":N,"filters":{...}}`                                    |
-| `search_work_items` | `project?`, `state_group?`, `priority?`, `query?`, `limit?=10`     | `{"items":[{"identifier","name","state","priority","project"}]}` |
+| Tool                | Args                                                               | Output                                                                        |
+| ------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `list_projects`     | –                                                                  | `{"items":[{"identifier","name"}]}` (maks 50, non-archived)                   |
+| `count_work_items`  | `project?`, `state_group?`, `priority?`, `include_archived?=false` | `{"count":N,"filters":{...}}`                                                 |
+| `search_work_items` | `project?`, `state_group?`, `priority?`, `query?`, `limit?=10`     | `{"returned":N,"items":[{"project","identifier","name","state","priority"}]}` |
 
 Aturan:
 
@@ -98,6 +98,9 @@ Aturan:
   ILIKE) dan `LEFT JOIN states` (filter `states."group"`, ambil `states.name`).
   `deleted_at IS NULL` selalu; `archived_at IS NULL` kecuali
   `include_archived=true`. Semua nilai dari model di-bind sebagai parameter.
+- **Visibilitas:** selain `deleted_at IS NULL`, hasil juga mengecualikan project
+  yang soft-deleted/archived, state terhapus, `is_draft = true`, dan item triage
+  (`states."group" = 'triage'`) — mengikuti himpunan visibilitas Django.
 - **Allowlist:** `state_group` ∈ backlog/unstarted/started/completed/cancelled,
   `priority` ∈ urgent/high/medium/low/none → invalid = tool error.
 - **Batas:** `limit` di-clamp 1–25 (default 10); `list_projects` LIMIT 50.
