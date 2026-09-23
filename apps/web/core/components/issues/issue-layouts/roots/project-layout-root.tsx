@@ -54,7 +54,7 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   const isMobileViewport = useMobileViewport();
   // derived values
   const workItemFilters = projectId ? issuesFilter?.getIssueFilters(projectId) : undefined;
-  const activeLayout = resolveWorkItemLayout(workItemFilters?.displayFilters?.layout, isMobileViewport);
+  const activeLayout = resolveWorkItemLayout(workItemFilters?.displayFilters, isMobileViewport);
 
   useSWR(
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,

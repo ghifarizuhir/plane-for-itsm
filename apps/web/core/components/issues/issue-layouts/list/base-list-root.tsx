@@ -21,10 +21,8 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
-import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 // components
 import { IssueLayoutHOC } from "../issue-layout-HOC";
-import { flattenGroupedIssueIds } from "../mobile-layout";
 import { List } from "./default";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
@@ -90,13 +88,8 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
 
-  const isMobileViewport = useMobileViewport();
-  const persistedLayout = displayFilters?.layout;
-  const isMobileLayoutFallback = isMobileViewport && !!persistedLayout && persistedLayout !== EIssueLayoutTypes.LIST;
-  const renderedGroupBy = isMobileLayoutFallback ? null : group_by;
-  const renderedGroupedIssueIds = isMobileLayoutFallback
-    ? { [ALL_ISSUES]: flattenGroupedIssueIds(groupedIssueIds ?? {}) }
-    : (groupedIssueIds ?? {});
+  const isFlatIssueData = groupedIssueIds?.[ALL_ISSUES] !== undefined;
+  const renderedGroupBy = isFlatIssueData ? null : group_by;
 
   const isAnyInitLoading = issues?.loader ? Object.values(issues.loader).some((l) => l === "init-loader") : false;
 
@@ -199,7 +192,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
           orderBy={orderBy}
           updateIssue={updateIssue}
           quickActions={renderQuickActions}
-          groupedIssueIds={renderedGroupedIssueIds}
+          groupedIssueIds={groupedIssueIds ?? {}}
           loadMoreIssues={loadMoreIssues}
           showEmptyGroup={showEmptyGroup}
           quickAddCallback={quickAddIssue}

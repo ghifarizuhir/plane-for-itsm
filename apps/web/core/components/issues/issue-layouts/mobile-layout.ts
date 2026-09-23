@@ -4,35 +4,34 @@
  * See the LICENSE file for details.
  */
 
-import type { EIssueLayoutTypes, TGroupedIssues } from "@plane/types";
+import type { EIssueLayoutTypes, IIssueDisplayFilterOptions } from "@plane/types";
 
-const MOBILE_WORK_ITEM_LAYOUT = "list" as EIssueLayoutTypes;
+const LIST = "list" as EIssueLayoutTypes;
+const KANBAN = "kanban" as EIssueLayoutTypes;
+const CALENDAR = "calendar" as EIssueLayoutTypes;
+const GANTT = "gantt_chart" as EIssueLayoutTypes;
+const SPREADSHEET = "spreadsheet" as EIssueLayoutTypes;
 
 /**
- * Render-only fallback for the work item layout.
+ * Render-only fallback for the work item layout on mobile viewports.
  *
- * On a mobile viewport a persisted desktop-only layout (kanban/calendar/gantt/spreadsheet)
- * renders as list. The persisted value is never written back, so widening the viewport
- * restores the user's chosen layout.
+ * The fetched data shape must match what the list renders, so the fallback is only
+ * applied for layouts whose data the list can render correctly:
+ * - calendar keeps its dedicated mobile agenda and date-windowed data.
+ * - kanban only falls back when it is not sub-grouped (sub-grouped data is nested).
+ * - spreadsheet and gantt fetch flat data, which the list renders ungrouped.
+ *
+ * The persisted value is never written back, so widening the viewport restores the
+ * user's chosen layout.
  */
 export const resolveWorkItemLayout = (
-  layout: EIssueLayoutTypes | undefined,
+  displayFilters: IIssueDisplayFilterOptions | undefined,
   isMobileViewport: boolean
 ): EIssueLayoutTypes | undefined => {
+  const layout = displayFilters?.layout as EIssueLayoutTypes | undefined;
   if (!isMobileViewport || !layout) return layout;
-  return layout === MOBILE_WORK_ITEM_LAYOUT ? layout : MOBILE_WORK_ITEM_LAYOUT;
+  if (layout === CALENDAR) return CALENDAR;
+  if (layout === KANBAN) return displayFilters?.sub_group_by ? KANBAN : LIST;
+  if (layout === GANTT || layout === SPREADSHEET) return LIST;
+  return layout;
 };
-
-/**
- * Flattens any grouped or sub-grouped issue map into a single ordered list of issue ids.
- *
- * The mobile list fallback can receive data shaped for a different layout (flat for
- * spreadsheet/gantt/calendar, grouped for kanban, nested for kanban with sub-grouping),
- * so the list renders from the flattened ids instead of mismatched group keys.
- */
-export const flattenGroupedIssueIds = (groupedIssueIds: TGroupedIssues): string[] =>
-  Object.values(groupedIssueIds).flatMap((value) => {
-    if (Array.isArray(value)) return value;
-    const subGrouped = value as unknown as TGroupedIssues;
-    return Object.values(subGrouped).flatMap((subValue) => (Array.isArray(subValue) ? subValue : []));
-  });
