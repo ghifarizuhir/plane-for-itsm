@@ -33,17 +33,19 @@ dengan jalur klasik sebagai fallback manual.
   `task: Option<String>`. Bila ada, prompt efektif yang dikirim ke model adalah
   `task + "\n" + prompt` — persis pola Django `GptAssistantView._get_response`.
   Preamble agent tetap didepan prompt efektif; tools dan `max_turns` tidak berubah.
-- Response tambah field `response_html`, diturunkan dari `response` dengan fungsi
-  escape + pemetaan `\n`→`<br/>` yang sudah ada di `routes/ai.rs`
-  (dipakai `/ai-assistant/` — reuse, bukan duplikasi logika).
+- Response tambah field `response_html`, diturunkan dari `response` dengan
+  pemetaan `\n`→`<br/>` yang persis sama dengan `/ai-assistant/`
+  (`routes/ai.rs`), diekstrak jadi helper bersama — reuse, bukan duplikasi
+  logika, dan tanpa escaping baru (perilaku render harus identik dengan mode
+  klasik).
 - Tidak ada perubahan pada: gate ADMIN/MEMBER, rate-limit 429 per host+workspace,
   pemetaan error 400/429/500, maupun kontrak `/ai-assistant/`.
 - Kompatibel mundur: kedua field baru opsional/derivatif; klien lama yang hanya
   kirim `{prompt}` tetap berfungsi.
 - Test: perluas `crates/api/tests/ai_agent_test.rs` — (a) `task` terlipat ke
-  prompt yang diterima upstream fake; (b) `response_html` terisi dengan escaping
-  yang benar. Tanpa entri `parity-inventory.json` baru (route sudah ada; perluasan
-  aditif tidak mengubah status parity).
+  prompt yang diterima upstream fake; (b) `response_html` terisi dengan pemetaan
+  newline yang benar. Tanpa entri `parity-inventory.json` baru (route sudah ada;
+  perluasan aditif tidak mengubah status parity).
 
 ### 2. FE service + store
 
