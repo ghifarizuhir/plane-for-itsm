@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
-import { EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // types
 import type { EIssuesStoreType, GroupByColumnTypes, TGroupedIssues, TIssueKanbanFilters } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
@@ -21,8 +21,10 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 // components
 import { IssueLayoutHOC } from "../issue-layout-HOC";
+import { flattenGroupedIssueIds } from "../mobile-layout";
 import { List } from "./default";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
@@ -88,6 +90,14 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
 
+  const isMobileViewport = useMobileViewport();
+  const persistedLayout = displayFilters?.layout;
+  const isMobileLayoutFallback = isMobileViewport && !!persistedLayout && persistedLayout !== EIssueLayoutTypes.LIST;
+  const renderedGroupBy = isMobileLayoutFallback ? null : group_by;
+  const renderedGroupedIssueIds = isMobileLayoutFallback
+    ? { [ALL_ISSUES]: flattenGroupedIssueIds(groupedIssueIds ?? {}) }
+    : (groupedIssueIds ?? {});
+
   const isAnyInitLoading = issues?.loader ? Object.values(issues.loader).some((l) => l === "init-loader") : false;
 
   const hasHydratedIssues =
@@ -114,6 +124,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
     }
     fetchIssues("init-loader", { canGroup: true, perPageCount: group_by ? 50 : 100 }, viewId);
     lastFetchedRef.current = { viewId, groupBy: group_by, storeType };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchIssues, storeType, group_by, viewId, hasHydratedIssues]);
   // auth
   const isEditingAllowed = allowPermissions(
@@ -123,9 +134,11 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const { enableInlineEditing, enableQuickAdd, enableIssueCreation } = issues?.viewFlags || {};
 
   const canEditProperties = useCallback(
-    (projectId: string | undefined) => {
+    (projectIdToCheck: string | undefined) => {
       const isEditingAllowedBasedOnProject =
-        canEditPropertiesBasedOnProject && projectId ? canEditPropertiesBasedOnProject(projectId) : isEditingAllowed;
+        canEditPropertiesBasedOnProject && projectIdToCheck
+          ? canEditPropertiesBasedOnProject(projectIdToCheck)
+          : isEditingAllowed;
 
       return !!enableInlineEditing && isEditingAllowedBasedOnProject;
     },
@@ -162,14 +175,14 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const handleCollapsedGroups = useCallback(
     (value: string) => {
       if (workspaceSlug) {
-        let collapsedGroups = issuesFilter?.issueFilters?.kanbanFilters?.group_by || [];
-        if (collapsedGroups.includes(value)) {
-          collapsedGroups = collapsedGroups.filter((_value) => _value != value);
+        let nextCollapsedGroups = issuesFilter?.issueFilters?.kanbanFilters?.group_by || [];
+        if (nextCollapsedGroups.includes(value)) {
+          nextCollapsedGroups = nextCollapsedGroups.filter((_value) => _value != value);
         } else {
-          collapsedGroups.push(value);
+          nextCollapsedGroups.push(value);
         }
         updateFilters(projectId?.toString() ?? "", EIssueFilterType.KANBAN_FILTERS, {
-          group_by: collapsedGroups,
+          group_by: nextCollapsedGroups,
         } as TIssueKanbanFilters);
       }
     },
@@ -182,11 +195,11 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
         <List
           issuesMap={issueMap}
           displayProperties={displayProperties}
-          group_by={group_by}
+          group_by={renderedGroupBy}
           orderBy={orderBy}
           updateIssue={updateIssue}
           quickActions={renderQuickActions}
-          groupedIssueIds={groupedIssueIds ?? {}}
+          groupedIssueIds={renderedGroupedIssueIds}
           loadMoreIssues={loadMoreIssues}
           showEmptyGroup={showEmptyGroup}
           quickAddCallback={quickAddIssue}

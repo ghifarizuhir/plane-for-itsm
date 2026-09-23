@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { EIssueLayoutTypes } from "@plane/types";
+import type { EIssueLayoutTypes, TGroupedIssues } from "@plane/types";
 
 const MOBILE_WORK_ITEM_LAYOUT = "list" as EIssueLayoutTypes;
 
@@ -22,3 +22,17 @@ export const resolveWorkItemLayout = (
   if (!isMobileViewport || !layout) return layout;
   return layout === MOBILE_WORK_ITEM_LAYOUT ? layout : MOBILE_WORK_ITEM_LAYOUT;
 };
+
+/**
+ * Flattens any grouped or sub-grouped issue map into a single ordered list of issue ids.
+ *
+ * The mobile list fallback can receive data shaped for a different layout (flat for
+ * spreadsheet/gantt/calendar, grouped for kanban, nested for kanban with sub-grouping),
+ * so the list renders from the flattened ids instead of mismatched group keys.
+ */
+export const flattenGroupedIssueIds = (groupedIssueIds: TGroupedIssues): string[] =>
+  Object.values(groupedIssueIds).flatMap((value) => {
+    if (Array.isArray(value)) return value;
+    const subGrouped = value as unknown as TGroupedIssues;
+    return Object.values(subGrouped).flatMap((subValue) => (Array.isArray(subValue) ? subValue : []));
+  });
