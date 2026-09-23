@@ -19,6 +19,8 @@ use serde_json::Value;
 
 use crate::routes::ai::LlmError;
 
+pub mod tools;
+
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolCallTrace {
