@@ -83,7 +83,6 @@ Create `apps/api-rs/crates/api/tests/ai_agent_test.rs`:
 //! no-tool answer, tool round-trip, 429, 500, malformed JSON. No DB, no env.
 
 use axum::{http::StatusCode, routing::post, Json, Router};
-use api::routes::ai::LlmError;
 use api::routes::ai_agent::run_agent;
 use rig::tool::server::ToolServer;
 use serde_json::{json, Value};
@@ -240,12 +239,13 @@ git commit -m "feat(api-rs): rig dependency and no-tool ai-agent runner"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `apps/api-rs/crates/api/tests/ai_agent_test.rs`:
+Append to `apps/api-rs/crates/api/tests/ai_agent_test.rs` (and remove the now-unused outer `use api::routes::ai::LlmError;` line if present — the nested module imports `LlmError` itself):
 
 ```rust
 mod tool_roundtrip {
     use std::sync::{Arc, Mutex};
 
+    use api::routes::ai::LlmError;
     use api::routes::ai_agent::{new_trace, run_agent, ToolCallTrace, ToolTrace};
     use axum::{
         extract::State,
@@ -383,14 +383,14 @@ mod tool_roundtrip {
     async fn upstream_429_maps_to_rate_limited() {
         let base = super::spawn_fixed(429, json!({"error": {"message": "slow down"}})).await;
         let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
-        assert_eq!(out, Err(api::routes::ai::LlmError::RateLimited));
+        assert_eq!(out, Err(LlmError::RateLimited));
     }
 
     #[tokio::test]
     async fn upstream_500_maps_to_upstream() {
         let base = super::spawn_fixed(500, json!({"error": "boom"})).await;
         let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
-        assert_eq!(out, Err(api::routes::ai::LlmError::Upstream));
+        assert_eq!(out, Err(LlmError::Upstream));
     }
 
     #[tokio::test]
@@ -410,7 +410,7 @@ mod tool_roundtrip {
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let base = format!("http://{addr}/v1");
         let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
-        assert_eq!(out, Err(api::routes::ai::LlmError::Upstream));
+        assert_eq!(out, Err(LlmError::Upstream));
     }
 }
 ```
