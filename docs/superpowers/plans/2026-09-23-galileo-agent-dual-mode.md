@@ -38,7 +38,7 @@ No `parity-inventory.json` change, no migrations, no changes to `/ai-assistant/`
 - Modify: `apps/api-rs/crates/api/src/routes/ai.rs`
 - Test: same file (`mod tests` at the bottom)
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 In `apps/api-rs/crates/api/src/routes/ai.rs`, inside `mod tests`, add this test directly after `extract_content_handles_missing_and_empty`:
 
@@ -51,12 +51,12 @@ In `apps/api-rs/crates/api/src/routes/ai.rs`, inside `mod tests`, add this test 
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p api --lib response_html_maps_newlines_only 2>&1 | tail -20`
 Expected: FAIL to compile — `cannot find function 'response_html' in this scope`.
 
-- [ ] **Step 3: Implement the helper and use it in the handler**
+- [x] **Step 3: Implement the helper and use it in the handler**
 
 In the same file, add the helper directly after `extract_content`:
 
@@ -95,12 +95,12 @@ New:
         }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cargo test -p api --lib response_html_maps_newlines_only 2>&1 | tail -20`
 Expected: PASS (1 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/api/src/routes/ai.rs
@@ -116,7 +116,7 @@ git commit -m "refactor(api-rs): extract shared response_html helper"
 - Modify: `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`
 - Test: `apps/api-rs/crates/api/tests/ai_agent_test.rs`
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 In `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`, inside `mod tests`, add after `prompt_from_body_rules`:
 
@@ -128,12 +128,12 @@ In `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`, inside `mod tests`, add 
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p api --lib effective_prompt_folds_task_like_django 2>&1 | tail -20`
 Expected: FAIL to compile — `cannot find function 'effective_prompt' in this scope`.
 
-- [ ] **Step 3: Implement `effective_prompt`, change `run_agent`, wire the handler**
+- [x] **Step 3: Implement `effective_prompt`, change `run_agent`, wire the handler**
 
 In `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`:
 
@@ -235,7 +235,7 @@ New:
         ),
 ```
 
-- [ ] **Step 4: Update existing integration call sites and add the fake-upstream test**
+- [x] **Step 4: Update existing integration call sites and add the fake-upstream test**
 
 In `apps/api-rs/crates/api/tests/ai_agent_test.rs`:
 
@@ -358,7 +358,7 @@ let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").
 let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cargo test -p api --lib effective_prompt_folds_task_like_django 2>&1 | tail -20`
 Expected: PASS (1 passed).
@@ -366,7 +366,7 @@ Expected: PASS (1 passed).
 Run: `cargo test -p api --test ai_agent_test 2>&1 | tail -20`
 Expected: PASS (6 passed: 1 no-tool, 1 roundtrip, 1 fold, 429, 500, malformed).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api-rs/crates/api/src/routes/ai_agent/mod.rs apps/api-rs/crates/api/tests/ai_agent_test.rs
@@ -381,7 +381,7 @@ git commit -m "feat(api-rs): fold optional task into ai-agent prompt"
 
 - Modify: `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`
 
-- [ ] **Step 1: Write the failing unit test**
+- [x] **Step 1: Write the failing unit test**
 
 In `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`, inside `mod tests`, add after `effective_prompt_folds_task_like_django`:
 
@@ -395,12 +395,12 @@ In `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`, inside `mod tests`, add 
     }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cargo test -p api --lib success_body_maps_newlines_and_keeps_tool_calls 2>&1 | tail -20`
 Expected: FAIL to compile — `cannot find function 'success_body' in this scope`.
 
-- [ ] **Step 3: Implement `success_body` and use it in the handler**
+- [x] **Step 3: Implement `success_body` and use it in the handler**
 
 In the same file, add after `run_agent`:
 
@@ -455,7 +455,7 @@ New:
         }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p api --lib success_body_maps_newlines_and_keeps_tool_calls 2>&1 | tail -20`
 Expected: PASS (1 passed).
@@ -463,7 +463,7 @@ Expected: PASS (1 passed).
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
 Expected: PASS (4 unit tests: `prompt_from_body_rules`, `record_appends_and_serializes`, `effective_prompt_folds_task_like_django`, `success_body_maps_newlines_and_keeps_tool_calls`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/api/src/routes/ai_agent/mod.rs
@@ -478,7 +478,7 @@ git commit -m "feat(api-rs): return response_html from ai-agent"
 
 - Modify: `apps/web/core/services/ai.service.ts`
 
-- [ ] **Step 1: Add the method and response type**
+- [x] **Step 1: Add the method and response type**
 
 In `apps/web/core/services/ai.service.ts`, add the type above the class:
 
@@ -505,12 +505,12 @@ Add the method directly after `createGptTask`:
   }
 ```
 
-- [ ] **Step 2: Verify types**
+- [x] **Step 2: Verify types**
 
 Run: `pnpm --filter=web check:types 2>&1 | tail -20`
 Expected: no new errors from `ai.service.ts` (the store still compiles; it does not use the method yet).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/core/services/ai.service.ts
@@ -526,7 +526,7 @@ git commit -m "feat(web): add ai-agent service method"
 - Modify: `apps/web/core/store/ai-assistant.store.ts`
 - Test: `apps/web/core/store/ai-assistant.store.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `apps/web/core/store/ai-assistant.store.test.ts`, replace the service helper:
 
@@ -656,12 +656,12 @@ it("agent mode maps errors to error bubbles and retries in the same mode", async
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm --filter=web test 2>&1 | tail -30`
 Expected: the five new tests FAIL (`setMode is not a function` / `mode` undefined / `createAgentTask is not a function`); the pre-existing tests still pass.
 
-- [ ] **Step 3: Implement the store changes**
+- [x] **Step 3: Implement the store changes**
 
 In `apps/web/core/store/ai-assistant.store.ts`:
 
@@ -891,12 +891,12 @@ New:
 
 Note: `clearPersistedAiConversations` is intentionally left untouched — mode is a UI preference, not conversation data, and the spec does not clear it on sign-out (YAGNI).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm --filter=web test 2>&1 | tail -30`
 Expected: all tests pass, including the 12 pre-existing store tests and the 5 new ones.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/store/ai-assistant.store.ts apps/web/core/store/ai-assistant.store.test.ts
@@ -916,7 +916,7 @@ git commit -m "feat(web): persist assistant mode and route sends per mode"
 
 Security amendment (approved 2026-09-23): model output can echo DB-sourced project/work-item names and is injected via `dangerouslySetInnerHTML`. Both chat modes now render allowlist-sanitized HTML; the backend `response_html` helper stays parity-exact.
 
-- [ ] **Step 1: Add the sanitizer dependency**
+- [x] **Step 1: Add the sanitizer dependency**
 
 In `apps/web/package.json`, add to `dependencies` (keep the existing ordering style):
 
@@ -932,7 +932,7 @@ and to `devDependencies`:
 
 Then run `pnpm install` from the repo root. Expected: install completes and `sanitize-html` resolves for `apps/web` (it is already in the workspace lockfile via `@plane/utils`).
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 In `apps/web/core/lib/ai-context.test.ts`, extend the import from `./ai-context` to include `sanitizeAssistantHtml`, then add:
 
@@ -951,12 +951,12 @@ describe("sanitizeAssistantHtml", () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm --filter=web test 2>&1 | tail -30`
 Expected: FAIL — `sanitizeAssistantHtml` is not exported / not a function.
 
-- [ ] **Step 4: Implement the helper**
+- [x] **Step 4: Implement the helper**
 
 In `apps/web/core/lib/ai-context.ts`, add the import at the top:
 
@@ -988,6 +988,13 @@ const ASSISTANT_ALLOWED_TAGS = [
   "h4",
   "hr",
   "a",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "th",
+  "td",
 ];
 
 /** Allowlist-sanitize model output before it is injected as HTML. */
@@ -995,15 +1002,19 @@ export const sanitizeAssistantHtml = (html: string): string =>
   sanitizeHtml(html, {
     allowedTags: ASSISTANT_ALLOWED_TAGS,
     allowedAttributes: { a: ["href", "target", "rel"] },
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
+    },
+    allowProtocolRelative: false,
   });
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm --filter=web test 2>&1 | tail -30`
 Expected: PASS — all existing tests plus the 2 new ones. If `sanitize-html` normalizes self-closing tags differently than the expected strings, adjust only the cosmetic assertions (`<br />` spelling) and keep the security assertions (`""` for script/img, no `javascript:` in the anchor) exactly as written; report any adjustment.
 
-- [ ] **Step 6: Apply at the render sink**
+- [x] **Step 6: Apply at the render sink**
 
 In `apps/web/core/components/ai/assistant-sidebar/root.tsx`, change the type-only import:
 
@@ -1033,7 +1044,7 @@ New:
 <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
 ```
 
-- [ ] **Step 7: Verify types and commit**
+- [x] **Step 7: Verify types and commit**
 
 Run: `pnpm --filter=web check:types 2>&1 | tail -20`
 Expected: no errors.
@@ -1051,7 +1062,7 @@ git commit -m "fix(web): sanitize assistant HTML before rendering"
 
 - Modify: `apps/web/core/components/ai/assistant-sidebar/root.tsx`
 
-- [ ] **Step 1: Add the mode options and hook fields**
+- [x] **Step 1: Add the mode options and hook fields**
 
 In `apps/web/core/components/ai/assistant-sidebar/root.tsx`, add after `SUGGESTIONS`:
 
@@ -1098,7 +1109,7 @@ const {
 } = useAiAssistant();
 ```
 
-- [ ] **Step 2: Render the segmented control in the header**
+- [x] **Step 2: Render the segmented control in the header**
 
 Replace the header's left group in `apps/web/core/components/ai/assistant-sidebar/root.tsx` — the `<div className="flex items-center gap-2.5">` block containing the status orb, the `Galileo` title, and the conditional `thinking` span (read the file for its exact current formatting; the pre-commit formatter may have reordered classes) — with:
 
@@ -1134,7 +1145,7 @@ Replace the header's left group in `apps/web/core/components/ai/assistant-sideba
 
 No other UI changes: empty state, suggestions, context strip, and message rendering stay as they are; `tool_calls` are deliberately not rendered.
 
-- [ ] **Step 3: Verify types, format, lint**
+- [x] **Step 3: Verify types, format, lint**
 
 Run: `pnpm --filter=web check:types 2>&1 | tail -20`
 Expected: no errors.
@@ -1145,7 +1156,7 @@ Expected: no diffs. If it reports diffs, run `pnpm --filter=web fix:format` and 
 Run: `pnpm --filter=web check:lint 2>&1 | tail -20`
 Expected: passes (`--max-warnings=11957` is the pre-existing baseline).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/core/components/ai/assistant-sidebar/root.tsx
@@ -1158,7 +1169,7 @@ git commit -m "feat(web): add classic/agent mode toggle to Galileo header"
 
 **Files:** none (verification only; commit only if fixes are needed)
 
-- [ ] **Step 1: Backend formatting and lint on touched files**
+- [x] **Step 1: Backend formatting and lint on touched files**
 
 The repo has pre-existing rustfmt drift; do not run `cargo fmt --all`. Format only the agent files, and keep the `ai.rs` edit hand-formatted to match its surroundings:
 
@@ -1172,12 +1183,12 @@ cargo clippy -p api --all-targets 2>&1 | tail -20
 
 Expected: no clippy findings in `ai_agent` / `ai.rs` files (pre-existing warnings elsewhere are out of scope).
 
-- [ ] **Step 2: Full backend suite (serial)**
+- [x] **Step 2: Full backend suite (serial)**
 
 Run: `cargo test -p api -- --test-threads=1 2>&1 | tail -20`
 Expected: all tests pass (1141 pre-existing + the new ones; the serial flag avoids the pre-existing `issue_create_test` purge flake).
 
-- [ ] **Step 3: Full web checks**
+- [x] **Step 3: Full web checks**
 
 ```bash
 pnpm --filter=web test 2>&1 | tail -20
@@ -1188,7 +1199,7 @@ pnpm --filter=web check:lint 2>&1 | tail -20
 
 Expected: all pass.
 
-- [ ] **Step 4: Rebuild and restart the deployed services**
+- [x] **Step 4: Rebuild and restart the deployed services**
 
 Per `AGENTS.md`, prod serves the static web build, so a rebuild is required for the toggle to appear on the tunnel. Only one server may hold port 3000 (prod is the default).
 
@@ -1199,7 +1210,7 @@ systemctl --user restart plane-web-prod.service
 docker compose build api && docker compose up -d api
 ```
 
-- [ ] **Step 5: Live smoke — API contract**
+- [x] **Step 5: Live smoke — API contract**
 
 Preconditions: `LLM_API_KEY` + `LLM_MODEL` configured (admin AI form or env), `LLM_BASE_URL=https://openrouter.ai/api/v1` for this deployment, and a model that supports tool calling. Use a workspace slug where the token user is ADMIN or MEMBER.
 
@@ -1226,7 +1237,7 @@ curl -sS -X POST "http://localhost:8000/api/workspaces/$SLUG/ai-assistant/" \
 
 Expected: all three return 200; the first shows a non-empty `tool_calls` for a data question and a non-empty `response_html`; the second and third report `true`.
 
-- [ ] **Step 6: Live smoke — UI (browser on the tunnel)**
+- [x] **Step 6: Live smoke — UI (browser on the tunnel)**
 
 1. Open a work item page with the Galileo sidebar open. The header shows `Classic | Agent` with `Classic` selected.
 2. Ask a work-item question in Classic (e.g. "Summarize this work item") — answer renders as before.
@@ -1235,7 +1246,7 @@ Expected: all three return 200; the first shows a non-empty `tool_calls` for a d
 5. Error path: in Agent mode with an invalid `LLM_API_KEY`, send a message — an error bubble appears with a Retry button; Retry re-issues the agent request in Agent mode. Restore the key afterwards.
 6. Reload the page: the last selected mode is restored for the workspace.
 
-- [ ] **Step 7: Commit any fixes**
+- [x] **Step 7: Commit any fixes**
 
 ```bash
 git add <only the files you fixed>
@@ -1255,3 +1266,4 @@ git commit -m "chore(web,api-rs): dual-mode smoke follow-ups"
 ## Security amendment log
 
 - 2026-09-23 (after Task 3 review): assistant HTML (both modes) is sanitized with a `sanitize-html` allowlist at the sidebar render sink. Reason: agent answers can echo DB-sourced names; the render sink used `dangerouslySetInnerHTML`. The backend helper remains parity-exact; sanitization lives in the FE (Task 6).
+- 2026-09-23 (after Task 6 review): the allowlist was widened with `table/thead/tbody/tfoot/tr/th/td` (no attributes on them) to keep tabular model output from silently flattening, and links were hardened — only `href` is accepted, `target="_blank" rel="noopener noreferrer"` is forced via `transformTags`, and `allowProtocolRelative: false`. Reason: the reviewer found `rel="opener"` passthrough (reverse tabnabbing) and table flattening. The `<a>` test expectations include the forced attributes.
