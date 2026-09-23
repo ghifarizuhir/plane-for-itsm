@@ -146,9 +146,10 @@ uuid = { workspace = true }
 
 pub mod agent;
 pub mod llm;
-pub mod schedule;
 pub mod tools;
 ```
+
+(Task 3 menambahkan `pub mod schedule;`.)
 
 - [ ] **Step 4: Pindahkan config LLM ke `ai/src/llm.rs`**
 
@@ -243,11 +244,13 @@ pub use ai::agent::{
     effective_prompt, new_trace, pending_action, prompt_from_body, record, run_agent,
     ToolCallTrace, ToolTrace, AGENT_TIMEOUT, MAX_TURNS, PREAMBLE,
 };
-pub use ai::tools::{workspace_tools, CreateSchedule, CreateScheduleArgs};
+pub use ai::tools::workspace_tools;
 pub mod tools {
     pub use ai::tools::*;
 }
 ```
+
+(Task 4 menambahkan `CreateSchedule`/`CreateScheduleArgs` ke re-export.)
 
 - Handler memakai `ai::llm::{host_of, resolve_llm_config, LlmError, response_html}` dan `ai::agent::{...}`; hapus import `crate::routes::ai::{host_of, resolve_llm_config, task_from_body, LlmError}` (kecuali `task_from_body` — pindahkan pemakaiannya ke `ai::agent::prompt_from_body` hanya untuk prompt; `task` parsing tetap dari `routes::ai::task_from_body`).
 
@@ -466,6 +469,8 @@ Run: `cd apps/api-rs && cargo test -p ai schedule 2>&1 | tail -5`
 Expected: FAIL — `ScheduleProposal` belum ada.
 
 - [ ] **Step 3: Implementasi `schedule.rs`**
+
+Tambahkan `pub mod schedule;` di `apps/api-rs/crates/ai/src/lib.rs`, lalu buat `crates/ai/src/schedule.rs`:
 
 ```rust
 //! Preset schedules: validation, defaults, and next-occurrence math.
@@ -820,7 +825,7 @@ impl Tool for CreateSchedule {
 }
 ```
 
-Tambahkan import `use crate::schedule::ScheduleProposal;` dan di `workspace_tools` tambahkan `.tool(CreateSchedule { trace: trace.clone() })` sebelum `.run()`. Ubah `pending_action` di `agent.rs` memakai `tools::CREATE_SCHEDULE_NAME`.
+Tambahkan import `use crate::schedule::ScheduleProposal;` dan di `workspace_tools` tambahkan `.tool(CreateSchedule { trace: trace.clone() })` sebelum `.run()`. Ubah `pending_action` di `agent.rs` memakai `tools::CREATE_SCHEDULE_NAME`. Tambahkan `CreateSchedule, CreateScheduleArgs` ke re-export di `crates/api/src/routes/ai_agent/mod.rs` (baris `pub use ai::tools::workspace_tools;`).
 
 - [ ] **Step 4: Perbarui preamble**
 
