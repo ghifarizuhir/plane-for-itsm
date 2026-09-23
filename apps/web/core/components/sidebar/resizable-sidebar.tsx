@@ -146,11 +146,15 @@ export function ResizableSidebar({
   useEffect(() => {
     if (!isMobile || isCollapsed) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") toggleCollapsed();
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (isAnySidebarDropdownOpen) return;
+      toggleCollapsed();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMobile, isCollapsed, toggleCollapsed]);
+  }, [isMobile, isCollapsed, isAnySidebarDropdownOpen, toggleCollapsed]);
 
   useEffect(() => {
     if (!isAnySidebarDropdownOpen && isCollapsed && isHoveringTrigger) {
@@ -188,11 +192,14 @@ export function ResizableSidebar({
 
   return (
     <>
-      {/* Mobile drawer backdrop */}
+      {/* Mobile drawer backdrop. `data-prevent-outside-click` keeps the outside-click
+          detectors (mounted twice, once per sidebar instance) from double-toggling and
+          cancelling out, so this element owns the close deterministically. */}
       {isMobile && !isCollapsed && (
         <button
           type="button"
           aria-label="Close sidebar"
+          data-prevent-outside-click
           className="fixed inset-0 z-[19] cursor-default bg-black/20"
           onClick={() => toggleCollapsed()}
         />
