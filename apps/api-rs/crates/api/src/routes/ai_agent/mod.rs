@@ -138,6 +138,16 @@ pub async fn run_agent(
         .map_err(map_prompt_error)
 }
 
+/// 200 response body: raw text, newline-mapped HTML for the chat bubble, and
+/// the recorded tool calls.
+pub fn success_body(text: &str, tool_calls: Vec<Value>) -> Value {
+    json!({
+        "response": text,
+        "response_html": crate::routes::ai::response_html(text),
+        "tool_calls": tool_calls,
+    })
+}
+
 /// `POST /api/workspaces/:slug/ai-agent/`.
 ///
 /// Gate: workspace ADMIN/MEMBER. Errors mirror `/ai-assistant/` messages so
@@ -203,10 +213,7 @@ pub async fn workspace_ai_agent(
                         .collect()
                 })
                 .unwrap_or_default();
-            Ok((
-                StatusCode::OK,
-                Json(json!({"response": text, "tool_calls": tool_calls})),
-            ))
+            Ok((StatusCode::OK, Json(success_body(&text, tool_calls))))
         }
         Err(LlmError::RateLimited) => Ok((
             StatusCode::TOO_MANY_REQUESTS,
@@ -237,6 +244,14 @@ mod tests {
     fn effective_prompt_folds_task_like_django() {
         assert_eq!(effective_prompt(Some("do it"), "text"), "do it\ntext");
         assert_eq!(effective_prompt(None, "text"), "text");
+    }
+
+    #[test]
+    fn success_body_maps_newlines_and_keeps_tool_calls() {
+        let body = success_body("line1\nline2", vec![json!({"name": "list_projects"})]);
+        assert_eq!(body["response"], json!("line1\nline2"));
+        assert_eq!(body["response_html"], json!("line1<br/>line2"));
+        assert_eq!(body["tool_calls"][0]["name"], json!("list_projects"));
     }
 
     #[test]
