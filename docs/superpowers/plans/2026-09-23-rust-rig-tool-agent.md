@@ -1062,7 +1062,7 @@ mod tests {
 - [ ] **Step 2: Run the tests to verify they pass**
 
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
-Expected: 11 passed (`prompt_from_body`/`record` landed in Tasks 1–2, so these are regression tests; the handler itself is compile-verified in Step 6 and exercised by the live smoke in Task 6).
+Expected: 12 passed (`prompt_from_body`/`record` landed in Tasks 1–2, so these are regression tests; the handler itself is compile-verified in Step 6 and exercised by the live smoke in Task 6).
 
 - [ ] **Step 3: Make `host_of` reusable**
 
@@ -1256,7 +1256,7 @@ Also add these two assertions inside `tool_metadata_is_exposed`:
 ```
 
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
-Expected: 10 passed. (This test needs no DB: validation fails before the lazy pool is ever used.)
+Expected: 12 passed under the `--lib routes::ai_agent` filter (10 in the tools module). (This test needs no DB: validation fails before the lazy pool is ever used.)
 
 - [ ] **Step 2: Format and lint**
 
