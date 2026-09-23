@@ -1232,19 +1232,24 @@ Expected: 9 passed. (This test needs no DB: validation fails before the lazy poo
 
 - [ ] **Step 2: Format and lint**
 
-Run:
+Format only the files this feature touched — the repo has pre-existing rustfmt drift repo-wide, and `cargo fmt --all` would create a huge unrelated diff:
 
 ```bash
-cargo fmt --all
+rustfmt --edition 2021 \
+  apps/api-rs/crates/api/src/routes/ai_agent/mod.rs \
+  apps/api-rs/crates/api/src/routes/ai_agent/tools.rs \
+  apps/api-rs/crates/api/tests/ai_agent_test.rs \
+  apps/api-rs/crates/api/src/routes/ai.rs
+
 cargo clippy -p api --all-targets 2>&1 | tail -20
 ```
 
-Expected: no clippy errors. Fix any lint findings in `ai_agent/mod.rs` / `ai_agent/tools.rs` / `ai_test`-style tests, then re-run.
+Expected: no clippy findings in `ai_agent` files (pre-existing warnings elsewhere are out of scope). Fix any findings in the feature files, then re-run.
 
 - [ ] **Step 3: Full suite**
 
-Run: `cargo test -p api 2>&1 | tail -20`
-Expected: all tests pass.
+Run: `cargo test -p api -- --test-threads=1 2>&1 | tail -20`
+Expected: all tests pass. Use serial execution: the default parallel run has a pre-existing flake (`issue_create_test`'s `purge()` deletes `itseq-%` workspaces other tests are using), reproducible on a clean tree without this feature's changes.
 
 - [ ] **Step 4: Live smoke (manual, needs a configured deployment)**
 
@@ -1277,8 +1282,10 @@ If the model answers without calling tools, check that `LLM_MODEL` supports func
 - [ ] **Step 5: Commit any fixes**
 
 ```bash
-git add -A apps/api-rs
-git commit -m "chore(api-rs): ai-agent formatting and lint fixes"
+git add apps/api-rs/crates/api/src/routes/ai_agent apps/api-rs/crates/api/tests/ai_agent_test.rs
+git commit -m "chore(api-rs): ai-agent tests and formatting follow-ups"
 ```
+
+Stage only feature files — do not sweep unrelated formatting churn into this commit.
 
 (Rollback for the whole feature: revert the five feature commits and rebuild; no DB state is created by this route.)
