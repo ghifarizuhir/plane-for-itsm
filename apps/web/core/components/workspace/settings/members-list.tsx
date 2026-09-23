@@ -64,7 +64,7 @@ export const WorkspaceMembersList = observer(function WorkspaceMembersList(props
   const memberDetails = searchedMemberIds
     ?.map((memberId) => getWorkspaceMemberDetails(memberId))
     .slice()
-    .toSorted((a, b) => {
+    .sort((a, b) => {
       if (a?.is_active && !b?.is_active) return -1;
       if (!a?.is_active && b?.is_active) return 1;
       return 0;
