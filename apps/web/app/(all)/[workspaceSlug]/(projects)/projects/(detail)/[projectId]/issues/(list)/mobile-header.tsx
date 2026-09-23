@@ -20,6 +20,7 @@ import {
   FiltersDropdown,
   MobileLayoutSelection,
 } from "@/components/issues/issue-layouts/filters";
+import { WorkItemFiltersToggle } from "@/components/work-item-filters/filters-toggle";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
@@ -69,10 +70,7 @@ export const ProjectIssuesMobileHeader = observer(function ProjectIssuesMobileHe
         projectDetails={currentProjectDetails ?? undefined}
       />
       <div className="z-[13] flex justify-evenly border-b border-subtle bg-surface-1 py-2 md:hidden">
-        <MobileLayoutSelection
-          layouts={[EIssueLayoutTypes.LIST, EIssueLayoutTypes.KANBAN, EIssueLayoutTypes.CALENDAR]}
-          onChange={handleLayoutChange}
-        />
+        <MobileLayoutSelection layouts={[EIssueLayoutTypes.LIST]} onChange={handleLayoutChange} />
         <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
           <FiltersDropdown
             title={t("common.display")}
@@ -96,6 +94,10 @@ export const ProjectIssuesMobileHeader = observer(function ProjectIssuesMobileHe
               moduleViewDisabled={!currentProjectDetails?.module_view}
             />
           </FiltersDropdown>
+        </div>
+
+        <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
+          <WorkItemFiltersToggle entityType={EIssuesStoreType.PROJECT} entityId={projectId ?? ""} />
         </div>
 
         <button
