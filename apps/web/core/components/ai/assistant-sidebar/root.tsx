@@ -27,6 +27,11 @@ const SUGGESTIONS = [
   "Suggest resolution steps for this work item",
 ];
 
+const MODES = [
+  { value: "classic", label: "Classic", hint: "Single model call grounded in the work item on screen" },
+  { value: "agent", label: "Agent", hint: "Looks up projects and work items in this workspace" },
+] as const;
+
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // router
   const { workspaceSlug, workItem } = useParams<{ workspaceSlug: string; workItem?: string }>();
@@ -38,9 +43,11 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   const {
     messages,
     isGenerating,
+    mode,
     activeIssueContext,
     hasActiveIssue,
     setWorkspace,
+    setMode,
     setActiveIssueContext,
     sendMessage,
     retryLast,
@@ -122,6 +129,28 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 )}
               />
               <span className="text-sm font-semibold text-primary">Galileo</span>
+              <div
+                role="group"
+                aria-label="Assistant mode"
+                className="flex items-center rounded-md border border-subtle bg-layer-1 p-0.5"
+              >
+                {MODES.map(({ value, label, hint }) => (
+                  <Tooltip key={value} label={hint} side="bottom">
+                    <button
+                      type="button"
+                      aria-pressed={mode === value}
+                      disabled={isGenerating}
+                      onClick={() => setMode(value)}
+                      className={cn(
+                        "rounded-[5px] px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50",
+                        mode === value ? "bg-accent-primary text-on-color" : "text-secondary hover:text-primary"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  </Tooltip>
+                ))}
+              </div>
               {isGenerating && (
                 <span className="font-mono tracking-widest text-[10px] text-tertiary uppercase">thinking</span>
               )}
