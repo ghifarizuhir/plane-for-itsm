@@ -1180,11 +1180,57 @@ git commit -m "feat(api-rs): ai-agent route and workspace-scoped handler"
 
 ---
 
-### Task 6: Formatting, lint, live smoke
+### Task 6: Formatting, lint, follow-up tests, live smoke
 
-**Files:** none new (format/lint fixes only, if any).
+**Files:**
 
-- [ ] **Step 1: Format and lint**
+- Modify: `apps/api-rs/crates/api/src/routes/ai_agent/tools.rs` (quality follow-ups only)
+
+- [ ] **Step 1: Quality follow-ups from Task 4 review**
+
+Add to the test module in `apps/api-rs/crates/api/src/routes/ai_agent/tools.rs`:
+
+```rust
+    #[tokio::test]
+    async fn invalid_allowlist_values_surface_before_any_query() {
+        let tool = CountWorkItems {
+            pool: lazy_pool(),
+            workspace_id: Uuid::nil(),
+            trace: super::super::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CountWorkItemsArgs {
+                    project: None,
+                    state_group: Some("nope".to_string()),
+                    priority: None,
+                    include_archived: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "state_group must be one of: backlog, unstarted, started, completed, cancelled"
+        );
+        let recorded = tool.trace.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].name, "count_work_items");
+    }
+```
+
+Also add these two assertions inside `tool_metadata_is_exposed`:
+
+```rust
+        assert_eq!(CountWorkItems::NAME, "count_work_items");
+        assert_eq!(SearchWorkItems::NAME, "search_work_items");
+```
+
+Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
+Expected: 9 passed. (This test needs no DB: validation fails before the lazy pool is ever used.)
+
+- [ ] **Step 2: Format and lint**
 
 Run:
 
@@ -1195,12 +1241,12 @@ cargo clippy -p api --all-targets 2>&1 | tail -20
 
 Expected: no clippy errors. Fix any lint findings in `ai_agent/mod.rs` / `ai_agent/tools.rs` / `ai_test`-style tests, then re-run.
 
-- [ ] **Step 2: Full suite**
+- [ ] **Step 3: Full suite**
 
 Run: `cargo test -p api 2>&1 | tail -20`
 Expected: all tests pass.
 
-- [ ] **Step 3: Live smoke (manual, needs a configured deployment)**
+- [ ] **Step 4: Live smoke (manual, needs a configured deployment)**
 
 Preconditions: `LLM_API_KEY` + `LLM_MODEL` set via the admin AI form or env, `LLM_BASE_URL` env set if not OpenAI (this deployment: `https://openrouter.ai/api/v1`), and the model supports tool calling.
 
@@ -1228,7 +1274,7 @@ curl -sS -X POST "http://localhost:8000/api/workspaces/$SLUG/ai-agent/" \
 
 If the model answers without calling tools, check that `LLM_MODEL` supports function calling and re-read `tool_calls` in the response. If the provider rejects `list_projects` (empty `properties` schema), fall back to adding an optional `query: Option<String>` arg to `ListProjectsArgs` and its SQL (documented fallback; do not change other tools).
 
-- [ ] **Step 4: Commit any fixes**
+- [ ] **Step 5: Commit any fixes**
 
 ```bash
 git add -A apps/api-rs
