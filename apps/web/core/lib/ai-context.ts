@@ -58,6 +58,13 @@ const ASSISTANT_ALLOWED_TAGS = [
   "h4",
   "hr",
   "a",
+  "table",
+  "thead",
+  "tbody",
+  "tfoot",
+  "tr",
+  "th",
+  "td",
 ];
 
 /** Allowlist-sanitize model output before it is injected as HTML. */
@@ -65,6 +72,10 @@ export const sanitizeAssistantHtml = (html: string): string =>
   sanitizeHtml(html, {
     allowedTags: ASSISTANT_ALLOWED_TAGS,
     allowedAttributes: { a: ["href", "target", "rel"] },
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
+    },
+    allowProtocolRelative: false,
   });
 
 const buildContextBlock = (context: TAiIssueContext | undefined): string => {

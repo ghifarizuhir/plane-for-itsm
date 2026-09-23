@@ -32,7 +32,22 @@ describe("sanitizeAssistantHtml", () => {
   it("strips scripts, event handlers, and unsafe URLs", () => {
     expect(sanitizeAssistantHtml("<script>alert(1)</script>")).toBe("");
     expect(sanitizeAssistantHtml('<img src=x onerror="alert(1)">')).toBe("");
-    expect(sanitizeAssistantHtml('<a href="javascript:alert(1)">x</a>')).toBe("<a>x</a>");
+    expect(sanitizeAssistantHtml('<a href="javascript:alert(1)">x</a>')).toBe(
+      '<a target="_blank" rel="noopener noreferrer">x</a>'
+    );
+  });
+
+  it("forces safe link attributes and preserves tables", () => {
+    expect(sanitizeAssistantHtml('<a href="https://example.com" target="_self" rel="opener">x</a>')).toBe(
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer">x</a>'
+    );
+    expect(sanitizeAssistantHtml('<a href="//evil.example">x</a>')).toBe(
+      '<a target="_blank" rel="noopener noreferrer">x</a>'
+    );
+    expect(sanitizeAssistantHtml('<p onclick="x()" style="color:red">hi</p>')).toBe("<p>hi</p>");
+    expect(sanitizeAssistantHtml("<table><tr><td>a</td><td>b</td></tr></table>")).toBe(
+      "<table><tr><td>a</td><td>b</td></tr></table>"
+    );
   });
 });
 
