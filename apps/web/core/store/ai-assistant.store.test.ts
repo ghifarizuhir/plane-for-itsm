@@ -346,4 +346,51 @@ describe("AIAssistantStore", () => {
     expect((passing.createAgentTask as any).mock.calls).toHaveLength(1);
     expect((passing.createGptTask as any).mock.calls).toHaveLength(0);
   });
+
+  it("drops stale responses after a mode switch", async () => {
+    let resolvePending!: (value: unknown) => void;
+    const service = makeService(
+      () =>
+        new Promise((resolve) => {
+          resolvePending = resolve;
+        })
+    );
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+
+    const pending = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+
+    store.setMode("agent");
+    resolvePending({ response: "ok", response_html: "late answer" });
+    await pending;
+
+    expect(store.messages).toHaveLength(0);
+    expect(store.isGenerating).toBe(false);
+  });
+
+  it("drops stale responses after a mode switch away and back", async () => {
+    let resolvePending!: (value: unknown) => void;
+    const service = makeService(
+      () =>
+        new Promise((resolve) => {
+          resolvePending = resolve;
+        })
+    );
+    const store = new AIAssistantStore(service);
+    store.setWorkspace("acme");
+
+    const pending = store.sendMessage("q1");
+    await flush();
+    expect(store.isGenerating).toBe(true);
+
+    store.setMode("agent");
+    store.setMode("classic");
+    resolvePending({ response: "ok", response_html: "late answer" });
+    await pending;
+
+    expect(store.messages).toHaveLength(0);
+    expect(store.isGenerating).toBe(false);
+  });
 });

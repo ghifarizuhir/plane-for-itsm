@@ -55,6 +55,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   activeIssueContext: TAiIssueContext | undefined = undefined;
 
   private workspaceSlug: string | undefined = undefined;
+  private requestSeq = 0;
 
   constructor(private aiService: TAiService = new AIService()) {
     makeObservable(this, {
@@ -80,6 +81,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (workspaceSlug !== this.workspaceSlug) {
       this.activeIssueContext = undefined;
       this.isGenerating = false;
+      this.requestSeq += 1;
     }
     this.workspaceSlug = workspaceSlug;
     this.messages = this.restore();
@@ -88,6 +90,7 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   setMode = (mode: TAiAssistantMode) => {
     if (mode === this.mode) return;
+    this.requestSeq += 1;
     this.isGenerating = false;
     this.mode = mode;
     this.persistMode();
@@ -177,6 +180,7 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   private async request(question: string, slug: string) {
     const mode = this.mode;
+    const seq = ++this.requestSeq;
     this.isGenerating = true;
     try {
       const payload = {
@@ -187,7 +191,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         mode === "agent"
           ? await this.aiService.createAgentTask(slug, payload)
           : await this.aiService.createGptTask(slug, payload);
-      if (this.workspaceSlug !== slug || this.mode !== mode) return;
+      if (seq !== this.requestSeq) return;
       const assistantMessage: TAiMessage = {
         id: uuidv4(),
         role: "assistant",
@@ -199,7 +203,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } catch (err: any) {
-      if (this.workspaceSlug !== slug || this.mode !== mode) return;
+      if (seq !== this.requestSeq) return;
       const errorContent =
         err?.status === 429
           ? err?.data?.error || "Rate limit exceeded."
@@ -211,7 +215,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } finally {
-      if (this.workspaceSlug === slug && this.mode === mode) {
+      if (seq === this.requestSeq) {
         runInAction(() => {
           this.isGenerating = false;
         });
