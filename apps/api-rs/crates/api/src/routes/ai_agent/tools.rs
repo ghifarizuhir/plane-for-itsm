@@ -134,6 +134,201 @@ pub fn search_json(rows: &[(String, String, String, String, String)]) -> String 
     json!({"returned": items.len(), "items": items}).to_string()
 }
 
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
+pub struct ListProjectsArgs {}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct CountWorkItemsArgs {
+    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    pub project: Option<String>,
+    /// One of: backlog, unstarted, started, completed, cancelled.
+    pub state_group: Option<String>,
+    /// One of: urgent, high, medium, low, none.
+    pub priority: Option<String>,
+    /// Include archived work items. Defaults to false.
+    pub include_archived: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct SearchWorkItemsArgs {
+    /// Case-insensitive substring to match against work item names.
+    pub query: Option<String>,
+    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    pub project: Option<String>,
+    /// One of: backlog, unstarted, started, completed, cancelled.
+    pub state_group: Option<String>,
+    /// One of: urgent, high, medium, low, none.
+    pub priority: Option<String>,
+    /// Maximum rows to return, 1-25 (default 10).
+    pub limit: Option<i64>,
+}
+
+fn db_error(error: sqlx::Error) -> ToolExecutionError {
+    tracing::warn!(error = %error, "ai-agent: tool query failed");
+    ToolExecutionError::from_error(error)
+}
+
+fn schema_of<T: JsonSchema>() -> Value {
+    serde_json::to_value(schemars::schema_for!(T))
+        .unwrap_or_else(|_| json!({"type": "object", "properties": {}}))
+}
+
+pub struct ListProjects {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for ListProjects {
+    const NAME: &'static str = "list_projects";
+    type Args = ListProjectsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "List up to 50 non-archived projects in the current workspace with identifier and name."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ListProjectsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let rows: Vec<(String, String)> = sqlx::query_as(PROJECTS_SQL)
+            .bind(self.workspace_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(projects_json(&rows))
+    }
+}
+
+pub struct CountWorkItems {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for CountWorkItems {
+    const NAME: &'static str = "count_work_items";
+    type Args = CountWorkItemsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Count non-deleted, non-draft work items in the current workspace, excluding triage items and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CountWorkItemsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let project = optional_text(args.project.as_deref());
+        let state_group = state_group_arg(args.state_group.as_deref())?;
+        let priority = priority_arg(args.priority.as_deref())?;
+        let include_archived = args.include_archived.unwrap_or(false);
+        let count: i64 = sqlx::query_scalar(COUNT_SQL)
+            .bind(self.workspace_id)
+            .bind(&project)
+            .bind(&state_group)
+            .bind(&priority)
+            .bind(include_archived)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(count_json(
+            count,
+            project.as_deref(),
+            state_group.as_deref(),
+            priority.as_deref(),
+            include_archived,
+        ))
+    }
+}
+
+pub struct SearchWorkItems {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for SearchWorkItems {
+    const NAME: &'static str = "search_work_items";
+    type Args = SearchWorkItemsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Search non-archived, non-draft work items in the current workspace by name substring, optionally filtered by project, state group, and priority. Excludes triage items and issues in deleted or archived projects. `returned` is the number of rows returned (at most limit), not the total match count. Returns project, identifier, name, state, and priority.".to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<SearchWorkItemsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let query = optional_text(args.query.as_deref());
+        let project = optional_text(args.project.as_deref());
+        let state_group = state_group_arg(args.state_group.as_deref())?;
+        let priority = priority_arg(args.priority.as_deref())?;
+        let limit = clamp_limit(args.limit);
+        let rows: Vec<(String, String, String, String, String)> = sqlx::query_as(SEARCH_SQL)
+            .bind(self.workspace_id)
+            .bind(&query)
+            .bind(&project)
+            .bind(&state_group)
+            .bind(&priority)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(search_json(&rows))
+    }
+}
+
+/// Build the production tool server: three read-only tools scoped to one
+/// workspace, all sharing the caller's trace handle.
+pub fn workspace_tools(
+    pool: PgPool,
+    workspace_id: Uuid,
+    trace: ToolTrace,
+) -> rig::tool::server::ToolServerHandle {
+    rig::tool::server::ToolServer::new()
+        .tool(ListProjects {
+            pool: pool.clone(),
+            workspace_id,
+            trace: trace.clone(),
+        })
+        .tool(CountWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            trace: trace.clone(),
+        })
+        .tool(SearchWorkItems {
+            pool,
+            workspace_id,
+            trace,
+        })
+        .run()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +410,39 @@ mod tests {
                 "priority": "urgent"
             }]})
         );
+    }
+
+    fn lazy_pool() -> PgPool {
+        sqlx::PgPool::connect_lazy("postgres://user:pass@127.0.0.1:1/plane").expect("lazy pool")
+    }
+
+    #[tokio::test]
+    async fn tool_metadata_is_exposed() {
+        let pool = lazy_pool();
+        let trace = super::super::new_trace();
+
+        let list = ListProjects { pool: pool.clone(), workspace_id: Uuid::nil(), trace: trace.clone() };
+        assert_eq!(ListProjects::NAME, "list_projects");
+        assert!(!list.description().is_empty());
+        assert_eq!(list.parameters()["type"], json!("object"));
+
+        let count = CountWorkItems { pool: pool.clone(), workspace_id: Uuid::nil(), trace: trace.clone() };
+        let count_params = count.parameters();
+        assert!(count_params["properties"]["project"].is_object());
+        assert!(count_params["properties"]["state_group"].is_object());
+        assert!(count_params["properties"]["priority"].is_object());
+        assert!(count_params["properties"]["include_archived"].is_object());
+
+        let search = SearchWorkItems { pool, workspace_id: Uuid::nil(), trace };
+        let search_params = search.parameters();
+        assert!(search_params["properties"]["query"].is_object());
+        assert!(search_params["properties"]["limit"].is_object());
+        assert!(search_params["properties"]["project"].is_object());
+        assert!(!search.description().is_empty());
+    }
+
+    #[tokio::test]
+    async fn workspace_tools_builds_a_server_handle() {
+        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), super::super::new_trace());
     }
 }
