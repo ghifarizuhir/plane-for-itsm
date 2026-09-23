@@ -10,14 +10,18 @@ import { AIService } from "@/services/ai.service";
 import { AI_ASSISTANT_TASK, buildAiPrompt } from "@/lib/ai-context";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 
-type TAiService = Pick<AIService, "createGptTask">;
+export type TAiAssistantMode = "classic" | "agent";
+
+type TAiService = Pick<AIService, "createGptTask" | "createAgentTask">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
   isGenerating: boolean;
+  mode: TAiAssistantMode;
   activeIssueContext: TAiIssueContext | undefined;
   hasActiveIssue: boolean;
   setWorkspace: (workspaceSlug: string | undefined) => void;
+  setMode: (mode: TAiAssistantMode) => void;
   setActiveIssueContext: (context: TAiIssueContext | undefined) => void;
   sendMessage: (question: string) => Promise<void>;
   retryLast: () => Promise<void>;
@@ -40,9 +44,14 @@ export const clearPersistedAiConversations = () => {
 
 const storageKey = (workspaceSlug: string | undefined) => `${AI_ASSISTANT_STORAGE_PREFIX}${workspaceSlug ?? "unknown"}`;
 
+export const AI_ASSISTANT_MODE_PREFIX = "ai_assistant_mode_";
+const modeStorageKey = (workspaceSlug: string | undefined) =>
+  `${AI_ASSISTANT_MODE_PREFIX}${workspaceSlug ?? "unknown"}`;
+
 export class AIAssistantStore implements IAIAssistantStore {
   messages: TAiMessage[] = [];
   isGenerating = false;
+  mode: TAiAssistantMode = "classic";
   activeIssueContext: TAiIssueContext | undefined = undefined;
 
   private workspaceSlug: string | undefined = undefined;
@@ -51,9 +60,11 @@ export class AIAssistantStore implements IAIAssistantStore {
     makeObservable(this, {
       messages: observable.deep,
       isGenerating: observable.ref,
+      mode: observable.ref,
       activeIssueContext: observable.ref,
       hasActiveIssue: computed,
       setWorkspace: action,
+      setMode: action,
       setActiveIssueContext: action,
       sendMessage: action,
       retryLast: action,
@@ -72,6 +83,15 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
     this.workspaceSlug = workspaceSlug;
     this.messages = this.restore();
+    this.mode = this.restoreMode();
+  };
+
+  setMode = (mode: TAiAssistantMode) => {
+    if (mode === this.mode) return;
+    this.isGenerating = false;
+    this.mode = mode;
+    this.persistMode();
+    this.clearConversation();
   };
 
   setActiveIssueContext = (context: TAiIssueContext | undefined) => {
@@ -137,18 +157,41 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   }
 
+  private restoreMode(): TAiAssistantMode {
+    if (!this.workspaceSlug) return "classic";
+    try {
+      return localStorage.getItem(modeStorageKey(this.workspaceSlug)) === "agent" ? "agent" : "classic";
+    } catch {
+      return "classic";
+    }
+  }
+
+  private persistMode() {
+    if (!this.workspaceSlug) return;
+    try {
+      localStorage.setItem(modeStorageKey(this.workspaceSlug), this.mode);
+    } catch {
+      // storage unavailable — persistence is best-effort
+    }
+  }
+
   private async request(question: string, slug: string) {
+    const mode = this.mode;
     this.isGenerating = true;
     try {
-      const res = await this.aiService.createGptTask(slug, {
+      const payload = {
         task: AI_ASSISTANT_TASK,
         prompt: buildAiPrompt(this.activeIssueContext, this.messages.slice(0, -1), question),
-      });
-      if (this.workspaceSlug !== slug) return;
+      };
+      const res =
+        mode === "agent"
+          ? await this.aiService.createAgentTask(slug, payload)
+          : await this.aiService.createGptTask(slug, payload);
+      if (this.workspaceSlug !== slug || this.mode !== mode) return;
       const assistantMessage: TAiMessage = {
         id: uuidv4(),
         role: "assistant",
-        content: res.response_html ?? "",
+        content: mode === "agent" ? (res.response_html ?? res.response ?? "") : (res.response_html ?? ""),
         isError: false,
       };
       runInAction(() => {
@@ -156,7 +199,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } catch (err: any) {
-      if (this.workspaceSlug !== slug) return;
+      if (this.workspaceSlug !== slug || this.mode !== mode) return;
       const errorContent =
         err?.status === 429
           ? err?.data?.error || "Rate limit exceeded."
@@ -168,7 +211,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         this.persist();
       });
     } finally {
-      if (this.workspaceSlug === slug) {
+      if (this.workspaceSlug === slug && this.mode === mode) {
         runInAction(() => {
           this.isGenerating = false;
         });
