@@ -1758,10 +1758,11 @@ async fn main() {
             "/api/workspaces/:slug/ai-assistant/",
             post(routes::ai::workspace_ai_assistant),
         )
-        // Prototype (no Django counterpart, not consumed by the web app):
-        // POST 200 `{response, tool_calls}` from a Rig tool-calling agent
-        // over workspace-scoped read-only tools. Same gate and error shapes
-        // as `/ai-assistant/`; 400 config-missing / `Prompt is required`.
+        // Rust-only (no Django counterpart; consumed by the web app's Galileo
+        // sidebar): POST 200 `{response, response_html, tool_calls}` from a Rig
+        // tool-calling agent over workspace-scoped read-only tools. Same gate
+        // and error shapes as `/ai-assistant/`; 400 config-missing / `Prompt is
+        // required`.
         .route(
             "/api/workspaces/:slug/ai-agent/",
             post(routes::ai_agent::workspace_ai_agent),
