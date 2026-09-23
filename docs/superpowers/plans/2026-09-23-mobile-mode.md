@@ -960,7 +960,7 @@ pnpm turbo run check:lint --filter=web
 pnpm turbo run test --filter=web
 ```
 
-Expected: all PASS. `test` runs the full `apps/web` vitest suite (existing tests plus the 8 new ones).
+Expected: all PASS. `test` runs the full `apps/web` vitest suite — 41 tests (19 baseline + 22 new: 7 viewport/subscription, 15 layout resolution/shape).
 
 - [ ] **Step 2: Run the app for manual QA**
 
@@ -988,8 +988,15 @@ Check each item at 375px width:
    6d. **Workspace views** (`/workspace-views/all-issues`) at 375px render their layout without a blank page (the workspace root intentionally has no mobile list fallback).
 7. Filters toggle in the mobile header shows the filter row; conditions can be added/removed and the row does not overflow horizontally.
 8. Comments: sticky comment box sits above the home indicator; typing, submitting, and uploading an attachment work; the attachment preview and the editor full-screen image modal (already fluid: `fixed inset-0 size-full` in `packages/editor/src/extensions/custom-image/components/toolbar/full-screen/modal.tsx`) render without horizontal overflow.
-9. Editor on a touch device shows the touch behavior (image block / toolbar) — real device check.
+9. Editor on a touch device shows the touch behavior (image block / toolbar) — real device check. Watchlist (these dormant paths activate for the first time on web; confirm each is still workable):
+   - inserting an image no longer auto-opens the file picker (requires a second tap on the uploader box);
+   - link editing/unlinking via the floating popup is hidden on touch — confirm the toolbar link flow still covers add/remove;
+   - the `:` emoji shortcode is disabled on touch — confirm the toolbar picker still inserts emoji;
+   - the image toolbar's download/open actions are hidden on touch — confirm the toolbar is reachable by tap.
 10. Rotation to landscape does not break the layout.
+11. Safe-area padding: on an iPhone, inspect the computed `padding-bottom` of the sticky comment box — it must be non-zero. If it is zero, the prerendered viewport meta (`app/root.tsx:64`) is overriding the `viewport-fit=cover` meta added during hydration (`app/(all)/layout.tsx:13`); harden by adding `viewport-fit=cover` to `root.tsx:64` or removing the hardcoded tag (follow-up if needed).
+12. Check the list quick-add row (`list-group.tsx:335`, `sticky bottom-0`) and the top nav at 320px with the AI assistant toggle enabled — both can crowd the bottom/right edge.
+13. Sidebar: tapping the backdrop closes the drawer deterministically; Escape does not close the drawer while a sidebar dropdown or text input is focused (narrow desktop window too).
 
 - [ ] **Step 4: Desktop regression checklist (1440 / 1280 / 1024px)**
 
