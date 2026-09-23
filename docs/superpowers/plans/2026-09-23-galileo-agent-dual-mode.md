@@ -1100,19 +1100,7 @@ const {
 
 - [ ] **Step 2: Render the segmented control in the header**
 
-Replace the header's left group:
-
-Old:
-
-```tsx
-<div className="flex items-center gap-2.5">
-  <span className={cn("size-2 rounded-full", isGenerating ? "ai-status-orb bg-accent-primary" : "bg-accent-primary")} />
-  <span className="text-sm font-semibold text-primary">Galileo</span>
-  {isGenerating && <span className="font-mono text-[10px] uppercase tracking-widest text-tertiary">thinking</span>}
-</div>
-```
-
-New:
+Replace the header's left group in `apps/web/core/components/ai/assistant-sidebar/root.tsx` — the `<div className="flex items-center gap-2.5">` block containing the status orb, the `Galileo` title, and the conditional `thinking` span (read the file for its exact current formatting; the pre-commit formatter may have reordered classes) — with:
 
 ```tsx
 <div className="flex items-center gap-2.5">
