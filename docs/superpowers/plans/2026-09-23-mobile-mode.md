@@ -422,7 +422,7 @@ with:
 <MobileLayoutSelection layouts={[EIssueLayoutTypes.LIST]} onChange={handleLayoutChange} />
 ```
 
-Note (post-review): the selector stays list-only. Calendar and sub-grouped kanban intentionally keep their own layouts on mobile (calendar has a dedicated mobile agenda; sub-grouped kanban data is nested), so offering them here would persist a layout the resolver then overrides. Those users reach their layout from a desktop session; the selector's active icon is not rendered in this header anyway.
+Note (post-review): the selector stays list-only. Calendar and sub-grouped kanban intentionally keep their own layouts on mobile (calendar has a dedicated mobile agenda; sub-grouped kanban data is nested), so they are out of the mobile selector's scope for now: those users reach their layout from a desktop session, and the selector's active icon is not rendered in this header anyway.
 
 - [ ] **Step 3: Add the filters cell**
 
