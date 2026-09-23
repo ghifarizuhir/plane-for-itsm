@@ -213,8 +213,8 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                     />
                   </div>
                 ) : (
-                  <div className="vertical-scrollbar flex h-full w-full flex-col overflow-auto md:flex-row">
-                    <div className="relative h-full w-full space-y-6 overflow-auto p-4 py-5">
+                  <div className="vertical-scrollbar block h-full w-full overflow-auto md:flex md:flex-row">
+                    <div className="relative h-auto w-full space-y-6 overflow-auto p-4 py-5 md:h-full">
                       <div className="space-y-3">
                         <PeekOverviewIssueDetails
                           editorRef={editorRef}
@@ -247,7 +247,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                       </div>
                     </div>
                     <div
-                      className={`vertical-scrollbar scrollbar-sm h-full w-full flex-shrink-0 overflow-hidden border-subtle p-4 py-5 md:!w-[400px] md:border-l ${
+                      className={`vertical-scrollbar scrollbar-sm h-auto w-full flex-shrink-0 overflow-hidden border-subtle p-4 py-5 md:h-full md:!w-[400px] md:border-l ${
                         is_archived ? "pointer-events-none" : ""
                       }`}
                     >
