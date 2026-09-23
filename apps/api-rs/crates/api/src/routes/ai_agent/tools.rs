@@ -337,7 +337,10 @@ mod tests {
     #[test]
     fn sql_constants_are_workspace_scoped() {
         for sql in [PROJECTS_SQL, COUNT_SQL, SEARCH_SQL] {
-            assert!(sql.contains("workspace_id = $1"), "missing workspace scope: {sql}");
+            assert!(
+                sql.contains("workspace_id = $1"),
+                "missing workspace scope: {sql}"
+            );
         }
     }
 
@@ -345,7 +348,10 @@ mod tests {
     fn state_group_allowlist() {
         assert_eq!(state_group_arg(None).unwrap(), None);
         assert_eq!(state_group_arg(Some("  ")).unwrap(), None);
-        assert_eq!(state_group_arg(Some("Started")).unwrap(), Some("started".to_string()));
+        assert_eq!(
+            state_group_arg(Some("Started")).unwrap(),
+            Some("started".to_string())
+        );
         let err = state_group_arg(Some("nope")).unwrap_err();
         assert!(err.to_string().contains("backlog"));
     }
@@ -353,7 +359,10 @@ mod tests {
     #[test]
     fn priority_allowlist() {
         assert_eq!(priority_arg(None).unwrap(), None);
-        assert_eq!(priority_arg(Some("URGENT")).unwrap(), Some("urgent".to_string()));
+        assert_eq!(
+            priority_arg(Some("URGENT")).unwrap(),
+            Some("urgent".to_string())
+        );
         let err = priority_arg(Some("p0")).unwrap_err();
         assert!(err.to_string().contains("urgent"));
     }
@@ -421,19 +430,33 @@ mod tests {
         let pool = lazy_pool();
         let trace = super::super::new_trace();
 
-        let list = ListProjects { pool: pool.clone(), workspace_id: Uuid::nil(), trace: trace.clone() };
+        let list = ListProjects {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
         assert_eq!(ListProjects::NAME, "list_projects");
         assert!(!list.description().is_empty());
         assert_eq!(list.parameters()["type"], json!("object"));
 
-        let count = CountWorkItems { pool: pool.clone(), workspace_id: Uuid::nil(), trace: trace.clone() };
+        let count = CountWorkItems {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(CountWorkItems::NAME, "count_work_items");
         let count_params = count.parameters();
         assert!(count_params["properties"]["project"].is_object());
         assert!(count_params["properties"]["state_group"].is_object());
         assert!(count_params["properties"]["priority"].is_object());
         assert!(count_params["properties"]["include_archived"].is_object());
 
-        let search = SearchWorkItems { pool, workspace_id: Uuid::nil(), trace };
+        let search = SearchWorkItems {
+            pool,
+            workspace_id: Uuid::nil(),
+            trace,
+        };
+        assert_eq!(SearchWorkItems::NAME, "search_work_items");
         let search_params = search.parameters();
         assert!(search_params["properties"]["query"].is_object());
         assert!(search_params["properties"]["limit"].is_object());
@@ -444,5 +467,33 @@ mod tests {
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle() {
         let _handle = workspace_tools(lazy_pool(), Uuid::nil(), super::super::new_trace());
+    }
+
+    #[tokio::test]
+    async fn invalid_allowlist_values_surface_before_any_query() {
+        let tool = CountWorkItems {
+            pool: lazy_pool(),
+            workspace_id: Uuid::nil(),
+            trace: super::super::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CountWorkItemsArgs {
+                    project: None,
+                    state_group: Some("nope".to_string()),
+                    priority: None,
+                    include_archived: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "state_group must be one of: backlog, unstarted, started, completed, cancelled"
+        );
+        let recorded = tool.trace.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].name, "count_work_items");
     }
 }

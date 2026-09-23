@@ -1,8 +1,8 @@
 //! Fake OpenAI-compatible upstream for `routes::ai_agent::run_agent`:
 //! no-tool answer, tool round-trip, 429, 500, malformed JSON. No DB, no env.
 
-use axum::{http::StatusCode, routing::post, Json, Router};
 use api::routes::ai_agent::run_agent;
+use axum::{http::StatusCode, routing::post, Json, Router};
 use rig::tool::server::ToolServer;
 use serde_json::{json, Value};
 
@@ -28,9 +28,12 @@ async fn spawn_fixed(status: u16, body: Value) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, Router::new().route("/v1/chat/completions", post(handler)))
-            .await
-            .unwrap();
+        axum::serve(
+            listener,
+            Router::new().route("/v1/chat/completions", post(handler)),
+        )
+        .await
+        .unwrap();
     });
     format!("http://{addr}/v1")
 }
@@ -47,12 +50,7 @@ mod tool_roundtrip {
 
     use api::routes::ai::LlmError;
     use api::routes::ai_agent::{new_trace, run_agent, ToolCallTrace, ToolTrace};
-    use axum::{
-        extract::State,
-        http::StatusCode,
-        routing::post,
-        Json, Router,
-    };
+    use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
     use rig::tool::server::ToolServer;
     use rig::tool::{Tool, ToolContext, ToolExecutionError};
     use serde_json::{json, Value};
@@ -101,7 +99,10 @@ mod tool_roundtrip {
 
     type Shared = Arc<Upstream>;
 
-    async fn handler(State(state): State<Shared>, Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
+    async fn handler(
+        State(state): State<Shared>,
+        Json(body): Json<Value>,
+    ) -> (StatusCode, Json<Value>) {
         let n = {
             let mut calls = state.calls.lock().unwrap();
             let n = *calls;
@@ -159,9 +160,17 @@ mod tool_roundtrip {
     async fn tool_call_roundtrip_records_trace_and_returns_final_text() {
         let (base, upstream) = spawn_roundtrip().await;
         let trace = new_trace();
-        let tool = FakeEcho { trace: trace.clone() };
-        let out = run_agent(&base, "key", "model", ToolServer::new().tool(tool).run(), "say hi")
-            .await;
+        let tool = FakeEcho {
+            trace: trace.clone(),
+        };
+        let out = run_agent(
+            &base,
+            "key",
+            "model",
+            ToolServer::new().tool(tool).run(),
+            "say hi",
+        )
+        .await;
         assert_eq!(out, Ok("final answer".to_string()));
 
         let recorded = trace.lock().unwrap().clone();
@@ -170,7 +179,11 @@ mod tool_roundtrip {
         assert_eq!(recorded[0].arguments["text"], json!("hi"));
 
         let bodies = upstream.bodies.lock().unwrap();
-        assert_eq!(bodies.len(), 2, "tool loop must issue a second upstream call");
+        assert_eq!(
+            bodies.len(),
+            2,
+            "tool loop must issue a second upstream call"
+        );
         let messages = bodies[1]["messages"].as_array().unwrap();
         let tool_msg = messages
             .iter()

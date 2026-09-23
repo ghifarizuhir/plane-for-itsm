@@ -69,7 +69,9 @@ pub const MAX_TURNS: usize = 6;
 
 /// Django-style lax parsing like `routes/ai.rs::task_from_body`.
 pub fn prompt_from_body(body: &Value) -> Option<&str> {
-    body.get("prompt").and_then(Value::as_str).filter(|s| !s.is_empty())
+    body.get("prompt")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
 }
 
 fn map_prompt_error(error: PromptError) -> LlmError {
