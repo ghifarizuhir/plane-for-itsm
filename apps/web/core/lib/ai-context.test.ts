@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AI_ASSISTANT_TASK, buildAiPrompt, stripHtml } from "./ai-context";
-import type { TAiIssueContext, TAiMessage } from "./ai-context";
+import { AI_ASSISTANT_TASK, buildAiPrompt, sanitizeAssistantHtml, stripHtml } from "./ai-context";
+import type { TAiIssueContext } from "./ai-context";
 
 describe("stripHtml", () => {
   it("removes tags and collapses whitespace", () => {
@@ -20,6 +20,19 @@ describe("stripHtml", () => {
 describe("AI_ASSISTANT_TASK", () => {
   it("is a non-empty instruction", () => {
     expect(AI_ASSISTANT_TASK.length).toBeGreaterThan(20);
+  });
+});
+
+describe("sanitizeAssistantHtml", () => {
+  it("keeps formatting tags", () => {
+    expect(sanitizeAssistantHtml("<b>bold</b><br/>line")).toBe("<b>bold</b><br />line");
+    expect(sanitizeAssistantHtml("<ul><li>one</li></ul>")).toBe("<ul><li>one</li></ul>");
+  });
+
+  it("strips scripts, event handlers, and unsafe URLs", () => {
+    expect(sanitizeAssistantHtml("<script>alert(1)</script>")).toBe("");
+    expect(sanitizeAssistantHtml('<img src=x onerror="alert(1)">')).toBe("");
+    expect(sanitizeAssistantHtml('<a href="javascript:alert(1)">x</a>')).toBe("<a>x</a>");
   });
 });
 

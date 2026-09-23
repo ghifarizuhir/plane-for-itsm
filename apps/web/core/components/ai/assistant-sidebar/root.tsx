@@ -19,7 +19,7 @@ import { useInstance } from "@/hooks/store/use-instance";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // lib
-import type { TAiIssueContext } from "@/lib/ai-context";
+import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
 
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
@@ -46,7 +46,11 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     retryLast,
     clearConversation,
   } = useAiAssistant();
-  const { peekIssue, fetchIssueWithIdentifier, issue: { getIssueById } } = useIssueDetail();
+  const {
+    peekIssue,
+    fetchIssueWithIdentifier,
+    issue: { getIssueById },
+  } = useIssueDetail();
   const { getStateById } = useProjectState();
   // local state
   const [question, setQuestion] = useState("");
@@ -63,12 +67,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
   const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
   const shouldFetchRouteIssue =
-    isOpen &&
-    !!config?.has_llm_configured &&
-    !!rawWorkspaceSlug &&
-    !peekedIssue &&
-    !!projectIdentifier &&
-    !!sequenceId;
+    isOpen && !!config?.has_llm_configured && !!rawWorkspaceSlug && !peekedIssue && !!projectIdentifier && !!sequenceId;
   const { data: routeIssueMeta } = useSWR<TIssue>(
     shouldFetchRouteIssue ? `ISSUE_DETAIL_${rawWorkspaceSlug}_${projectIdentifier}_${sequenceId}` : null,
     () => fetchIssueWithIdentifier(rawWorkspaceSlug!.toString(), projectIdentifier, sequenceId)
@@ -86,6 +85,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
         }
       : undefined;
     setActiveIssueContext(context);
+    // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
   }, [issue?.id, issue?.name, issue?.description_html, issue?.priority, stateName, setActiveIssueContext]);
 
   // keep newest message visible
@@ -123,7 +123,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               />
               <span className="text-sm font-semibold text-primary">Galileo</span>
               {isGenerating && (
-                <span className="font-mono text-[10px] uppercase tracking-widest text-tertiary">thinking</span>
+                <span className="font-mono tracking-widest text-[10px] text-tertiary uppercase">thinking</span>
               )}
             </div>
             <div className="flex items-center gap-1">
@@ -149,7 +149,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
           </div>
           {/* context strip */}
           <div className="flex items-center gap-2 border-b border-subtle px-4 py-2">
-            <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-tertiary">ctx</span>
+            <span className="font-mono tracking-widest shrink-0 text-[10px] text-tertiary uppercase">ctx</span>
             {hasActiveIssue && activeIssueContext ? (
               <>
                 {stateName && (
@@ -158,12 +158,12 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                     {stateName}
                   </span>
                 )}
-                <span className="truncate text-xs text-secondary" title={activeIssueContext.name}>
+                <span className="text-xs truncate text-secondary" title={activeIssueContext.name}>
                   {activeIssueContext.name}
                 </span>
               </>
             ) : (
-              <span className="truncate text-xs text-tertiary">No work item in view — general answers</span>
+              <span className="text-xs truncate text-tertiary">No work item in view — general answers</span>
             )}
           </div>
           {/* messages */}
@@ -173,8 +173,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 <span className="flex size-11 items-center justify-center rounded-2xl border border-subtle bg-layer-1">
                   <AiStar1Outline className="size-5 text-accent-primary" />
                 </span>
-                <p className="mt-3 text-sm font-medium text-primary">Ask about this work item</p>
-                <p className="mt-1 text-xs leading-relaxed text-tertiary">
+                <p className="text-sm mt-3 font-medium text-primary">Ask about this work item</p>
+                <p className="text-xs mt-1 leading-relaxed text-tertiary">
                   Summaries, descriptions, comment drafts — grounded in the work item on screen.
                 </p>
                 <div className="mt-4 flex flex-col gap-1.5 self-stretch">
@@ -183,7 +183,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                       key={suggestion}
                       type="button"
                       onClick={() => handleSend(suggestion)}
-                      className="rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-xs text-secondary transition-colors hover:border-accent-primary hover:text-primary"
+                      className="text-xs hover:border-accent-primary rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
                     >
                       {suggestion}
                     </button>
@@ -203,14 +203,14 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 <div
                   className={cn("max-w-[88%] rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
                     "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
-                    "rounded-bl-sm border border-subtle border-l-2 border-l-accent-primary bg-layer-1 text-primary":
+                    "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
                       message.role === "assistant" && !message.isError,
-                    "rounded-bl-sm border border-danger-primary text-danger-primary":
+                    "border-danger-primary rounded-bl-sm border text-danger-primary":
                       message.role === "assistant" && message.isError,
                   })}
                 >
                   {message.role === "assistant" && !message.isError ? (
-                    <div dangerouslySetInnerHTML={{ __html: message.content }} />
+                    <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
                   ) : (
                     <p className="whitespace-pre-wrap">{message.content}</p>
                   )}
@@ -228,7 +228,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               <button
                 type="button"
                 onClick={() => void retryLast()}
-                className="flex items-center gap-1 text-xs text-accent-primary"
+                className="text-xs flex items-center gap-1 text-accent-primary"
               >
                 <RefreshOutline className="size-3.5" /> Retry
               </button>
@@ -236,7 +236,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
           </div>
           {/* composer */}
           <div className="border-t border-subtle p-3">
-            <div className="rounded-xl border border-subtle bg-layer-1 transition-colors focus-within:border-accent-primary">
+            <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
               <textarea
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
@@ -248,10 +248,10 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 }}
                 placeholder="Ask AI anything…"
                 rows={2}
-                className="w-full resize-none bg-transparent px-3 pt-2.5 text-sm text-primary outline-none placeholder:text-tertiary"
+                className="text-sm w-full resize-none bg-transparent px-3 pt-2.5 text-primary outline-none placeholder:text-tertiary"
               />
               <div className="flex items-center justify-between px-2 pb-2">
-                <span className="pl-1 font-mono text-[10px] uppercase tracking-widest text-tertiary">
+                <span className="font-mono tracking-widest pl-1 text-[10px] text-tertiary uppercase">
                   {hasActiveIssue ? "grounded" : "general"}
                 </span>
                 <button

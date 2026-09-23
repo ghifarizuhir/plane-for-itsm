@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import sanitizeHtml from "sanitize-html";
+
 export type TAiIssueContext = {
   name: string;
   descriptionHtml: string;
@@ -34,6 +36,36 @@ export const stripHtml = (html: string): string =>
     .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+const ASSISTANT_ALLOWED_TAGS = [
+  "b",
+  "strong",
+  "i",
+  "em",
+  "u",
+  "s",
+  "br",
+  "p",
+  "ul",
+  "ol",
+  "li",
+  "code",
+  "pre",
+  "blockquote",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "hr",
+  "a",
+];
+
+/** Allowlist-sanitize model output before it is injected as HTML. */
+export const sanitizeAssistantHtml = (html: string): string =>
+  sanitizeHtml(html, {
+    allowedTags: ASSISTANT_ALLOWED_TAGS,
+    allowedAttributes: { a: ["href", "target", "rel"] },
+  });
 
 const buildContextBlock = (context: TAiIssueContext | undefined): string => {
   if (!context) return "No active work item context. Answer from general knowledge.";

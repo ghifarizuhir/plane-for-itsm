@@ -1172,6 +1172,9 @@ importers:
       recharts:
         specifier: 'catalog:'
         version: 2.15.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      sanitize-html:
+        specifier: 'catalog:'
+        version: 2.17.7
       serve:
         specifier: 'catalog:'
         version: 14.2.5
@@ -1224,6 +1227,9 @@ importers:
       '@types/react-dom':
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
+      '@types/sanitize-html':
+        specifier: 'catalog:'
+        version: 2.16.0
       '@webgpu/types':
         specifier: 'catalog:'
         version: 0.1.72
