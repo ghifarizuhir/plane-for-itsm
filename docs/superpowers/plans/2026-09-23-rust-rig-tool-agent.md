@@ -1327,3 +1327,7 @@ git commit -m "chore(api-rs): ai-agent tests and formatting follow-ups"
 Stage only feature files — do not sweep unrelated formatting churn into this commit.
 
 (Rollback for the whole feature: revert the five feature commits and rebuild; no DB state is created by this route.)
+
+---
+
+**Post-review note (2026-09-23):** the final code includes two review-driven amendments folded back into the steps above — inner `JOIN states` so deleted/missing states are excluded (with `sql_joins_visible_states_and_excludes_triage`), a static `OnceLock` HTTP client, and a 180s total `AGENT_TIMEOUT` around `run_agent`. Final expected counts: `routes::ai_agent::tools` = 10 tests, `routes::ai_agent` = 12 tests.
