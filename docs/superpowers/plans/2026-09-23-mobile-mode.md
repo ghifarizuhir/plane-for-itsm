@@ -478,10 +478,10 @@ Replace line 216:
                   <div className="vertical-scrollbar flex h-full w-full overflow-auto">
 ```
 
-with:
+with (post-review: `block` + natural heights on mobile — a `flex-col` with two `h-full` children collapsed the primary column to zero height; verified in headless Chrome):
 
 ```tsx
-                  <div className="vertical-scrollbar flex h-full w-full flex-col overflow-auto md:flex-row">
+                  <div className="vertical-scrollbar block h-full w-full overflow-auto md:flex md:flex-row">
 ```
 
 - [ ] **Step 3: Make the secondary column fluid on mobile**
@@ -495,13 +495,15 @@ Replace the class string on line 250:
 with:
 
 ```tsx
-                      className={`vertical-scrollbar scrollbar-sm h-full w-full flex-shrink-0 overflow-hidden border-subtle p-4 py-5 md:!w-[400px] md:border-l ${
+                      className={`vertical-scrollbar scrollbar-sm h-auto w-full flex-shrink-0 overflow-hidden border-subtle p-4 py-5 md:h-full md:!w-[400px] md:border-l ${
 ```
+
+Also change the first column on line 217 from `relative h-full w-full space-y-6 overflow-auto p-4 py-5` to `relative h-auto w-full space-y-6 overflow-auto p-4 py-5 md:h-full` so it keeps its natural height while stacked.
 
 - [ ] **Step 4: Verify types**
 
 Run: `pnpm turbo run check:types --filter=web`
-Expected: PASS.
+Expected: PASS except the known pre-existing `members-list.tsx:66` errors.
 
 - [ ] **Step 5: Commit**
 
@@ -1021,6 +1023,8 @@ Code review of the first Task 3 implementation found two real defects in a naive
 4. **Lint edits in `base-list-root.tsx`** were required to pass the `lint-staged` pre-commit hook (`oxlint --deny-warnings`): two local renames (`projectIdToCheck`, `nextCollapsedGroups`) and one `eslint-disable-next-line react-hooks/exhaustive-deps` matching an existing convention in the same file. All three are behavior-preserving.
 
 Task 3 landed as commits `32ef49065`, `4ecee7b1a`, `3658c6d06`, `085c8ae46`, `7f755165d`, `221e3a316`.
+
+Task 5 landed as `da8e663f6` + `47433bbb5` (the first stacking attempt collapsed the primary column at phone width; the verified fix uses `block` + natural heights on mobile with `md:flex`/`md:h-full` restoring desktop).
 
 ---
 
