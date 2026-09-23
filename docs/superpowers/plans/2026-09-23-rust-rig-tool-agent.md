@@ -144,6 +144,7 @@ Create `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`:
 //! Rig 0.42 uses reqwest 0.13, the repo uses reqwest 0.12 — always pass
 //! `rig::http_client::ReqwestClient`, never `reqwest::Client`.
 
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use rig::completion::PromptError;
@@ -166,6 +167,9 @@ a tool returns no results, say so. Answer concisely in the user's language.";
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
 
+/// Total wall-clock budget for one request: all model calls plus tool time.
+pub const AGENT_TIMEOUT: Duration = Duration::from_secs(180);
+
 /// Django-style lax parsing like `routes/ai.rs::task_from_body`.
 pub fn prompt_from_body(body: &Value) -> Option<&str> {
     body.get("prompt").and_then(Value::as_str).filter(|s| !s.is_empty())
@@ -173,10 +177,22 @@ pub fn prompt_from_body(body: &Value) -> Option<&str> {
 
 fn map_prompt_error(error: PromptError) -> LlmError {
     if error.provider_response_status().map(|s| s.as_u16()) == Some(429) {
+        tracing::warn!("ai-agent: upstream rate limited");
         return LlmError::RateLimited;
     }
     tracing::warn!(error = %error, "ai-agent: upstream failed");
     LlmError::Upstream
+}
+
+/// Shared HTTP client for all ai-agent requests (keeps connection pooling).
+fn http_client() -> &'static rig::http_client::ReqwestClient {
+    static HTTP: OnceLock<rig::http_client::ReqwestClient> = OnceLock::new();
+    HTTP.get_or_init(|| {
+        rig::http_client::ReqwestClient::builder()
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("ai-agent http client")
+    })
 }
 
 /// Build the Rig client and run one agent prompt. Split from the handler so
@@ -188,17 +204,10 @@ pub async fn run_agent(
     tool_server: ToolServerHandle,
     prompt: &str,
 ) -> Result<String, LlmError> {
-    let http = rig::http_client::ReqwestClient::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-        .map_err(|e| {
-            tracing::warn!(error = %e, "ai-agent: http client build failed");
-            LlmError::Upstream
-        })?;
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
         .base_url(base_url)
-        .http_client(http)
+        .http_client(http_client().clone())
         .build()
         .map_err(|e| {
             tracing::warn!(error = %e, "ai-agent: llm client build failed");
@@ -495,6 +504,16 @@ mod tests {
     }
 
     #[test]
+    fn sql_joins_visible_states_and_excludes_triage() {
+        for sql in [COUNT_SQL, SEARCH_SQL] {
+            assert!(sql.contains("JOIN states s ON s.id = i.state_id"));
+            assert!(sql.contains("s.deleted_at IS NULL"));
+            assert!(sql.contains("s.\"group\" <> 'triage'"));
+            assert!(!sql.contains("LEFT JOIN"));
+        }
+    }
+
+    #[test]
     fn state_group_allowlist() {
         assert_eq!(state_group_arg(None).unwrap(), None);
         assert_eq!(state_group_arg(Some("  ")).unwrap(), None);
@@ -600,10 +619,10 @@ pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
 pub const COUNT_SQL: &str = "SELECT count(*)::int8 FROM issues i \
      JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
        AND p.deleted_at IS NULL AND p.archived_at IS NULL \
-     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+     JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
        AND s.deleted_at IS NULL \
      WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
-     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
+     AND s.\"group\" <> 'triage' \
      AND ($2::text IS NULL OR p.identifier ILIKE $2 OR p.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR s.\"group\" = $3) \
      AND ($4::text IS NULL OR i.priority = $4) \
@@ -615,10 +634,10 @@ pub const SEARCH_SQL: &str = "SELECT p.identifier AS project, \
      FROM issues i \
      JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
        AND p.deleted_at IS NULL AND p.archived_at IS NULL \
-     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+     JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
        AND s.deleted_at IS NULL \
      WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
-     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
+     AND s.\"group\" <> 'triage' \
      AND i.archived_at IS NULL \
      AND ($2::text IS NULL OR i.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR p.identifier ILIKE $3 OR p.name ILIKE '%' || $3 || '%') \
@@ -719,7 +738,7 @@ Note: `Tool`, `ToolContext`, `ToolExecutionError`, `record`, and `ToolTrace` are
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p api --lib routes::ai_agent::tools 2>&1 | tail -20`
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -795,7 +814,7 @@ pub struct ListProjectsArgs {}
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CountWorkItemsArgs {
-    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    /// Project identifier (case-insensitive exact, e.g. "LTS") or project name (case-insensitive substring).
     pub project: Option<String>,
     /// One of: backlog, unstarted, started, completed, cancelled.
     pub state_group: Option<String>,
@@ -809,7 +828,7 @@ pub struct CountWorkItemsArgs {
 pub struct SearchWorkItemsArgs {
     /// Case-insensitive substring to match against work item names.
     pub query: Option<String>,
-    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    /// Project identifier (case-insensitive exact, e.g. "LTS") or project name (case-insensitive substring).
     pub project: Option<String>,
     /// One of: backlog, unstarted, started, completed, cancelled.
     pub state_group: Option<String>,
@@ -877,7 +896,7 @@ impl Tool for CountWorkItems {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Count non-deleted, non-draft work items in the current workspace, excluding triage items and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
+        "Count non-deleted, non-draft work items in the current workspace, excluding triage items, issues with a missing or deleted state, and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -926,7 +945,7 @@ impl Tool for SearchWorkItems {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Search non-archived, non-draft work items in the current workspace by name substring, optionally filtered by project, state group, and priority. Excludes triage items and issues in deleted or archived projects. `returned` is the number of rows returned (at most limit), not the total match count. Returns project, identifier, name, state, and priority.".to_string()
+        "Search non-archived, non-draft work items in the current workspace by name substring, optionally filtered by project, state group, and priority. Excludes triage items, issues with a missing or deleted state, and issues in deleted or archived projects. `returned` is the number of rows returned (at most limit), not the total match count. Returns project, identifier, name, state, and priority.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -990,7 +1009,7 @@ Also remove the now-unneeded `use std::sync::{Arc, Mutex};` and `use super::{rec
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
-Expected: 8 passed, no warnings.
+Expected: 9 passed, no warnings.
 
 - [ ] **Step 5: Commit**
 
@@ -1043,7 +1062,7 @@ mod tests {
 - [ ] **Step 2: Run the tests to verify they pass**
 
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
-Expected: 10 passed (`prompt_from_body`/`record` landed in Tasks 1–2, so these are regression tests; the handler itself is compile-verified in Step 6 and exercised by the live smoke in Task 6).
+Expected: 11 passed (`prompt_from_body`/`record` landed in Tasks 1–2, so these are regression tests; the handler itself is compile-verified in Step 6 and exercised by the live smoke in Task 6).
 
 - [ ] **Step 3: Make `host_of` reusable**
 
@@ -1103,7 +1122,16 @@ pub async fn workspace_ai_agent(
     };
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
-    match run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt).await {
+    let agent_result = tokio::time::timeout(
+        AGENT_TIMEOUT,
+        run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        tracing::warn!("ai-agent: request timed out");
+        Err(LlmError::Upstream)
+    });
+    match agent_result {
         Ok(text) => {
             let tool_calls: Vec<Value> = trace
                 .lock()
@@ -1228,7 +1256,7 @@ Also add these two assertions inside `tool_metadata_is_exposed`:
 ```
 
 Run: `cargo test -p api --lib routes::ai_agent 2>&1 | tail -20`
-Expected: 9 passed. (This test needs no DB: validation fails before the lazy pool is ever used.)
+Expected: 10 passed. (This test needs no DB: validation fails before the lazy pool is ever used.)
 
 - [ ] **Step 2: Format and lint**
 
@@ -1274,6 +1302,17 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
 curl -sS -X POST "http://localhost:8000/api/workspaces/$SLUG/ai-agent/" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{}' | jq                                                     # expect 400 Prompt is required
+
+# non-member token (workspace GUEST / project-only member): expect 403
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST \
+  "http://localhost:8000/api/workspaces/$SLUG/ai-agent/" \
+  -H "Authorization: Bearer $NON_MEMBER_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"prompt":"x"}'                                              # expect 403
+
+# AI not configured (run before setting LLM_API_KEY, or temporarily clear it):
+curl -sS -X POST "http://localhost:8000/api/workspaces/$SLUG/ai-agent/" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"prompt":"x"}' | jq                                         # expect 400 AI is not configured for this workspace.
 ```
 
 If the model answers without calling tools, check that `LLM_MODEL` supports function calling and re-read `tool_calls` in the response. If the provider rejects `list_projects` (empty `properties` schema), fall back to adding an optional `query: Option<String>` arg to `ListProjectsArgs` and its SQL (documented fallback; do not change other tools).

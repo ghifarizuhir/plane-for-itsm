@@ -67,11 +67,14 @@ Urutan: auth → gate role → resolve `workspace_id` → resolusi config → va
 4. `routes::ai::resolve_llm_config(&pool)` (fungsi existing, publik): bila
    `api_key` atau `model` kosong → 400.
 5. Body `Json<Value>`: `prompt` harus string non-empty → 400.
-6. Build `openai::CompletionsClient` (api_key + base_url dari config, HTTP
-   client reqwest dengan timeout 60 detik), `ToolSet` berisi tiga tool (pool
-   clone + `workspace_id` + trace handle), lalu `run_agent(...)`.
-7. Sukses → 200 dengan `response` + `tool_calls`; error → mapping tabel di atas
-   dengan `tracing::warn` (status upstream + potongan body; **tanpa API key**).
+6. Build `openai::CompletionsClient` (api_key + base_url dari config) dengan
+   `rig::http_client::ReqwestClient` statis (`OnceLock`, timeout 60 detik per
+   panggilan); `ToolServerHandle` berisi tiga tool (pool clone + `workspace_id`
+   - trace handle), lalu `run_agent(...)`.
+7. `run_agent` dibungkus timeout total `AGENT_TIMEOUT` = 180 detik (seluruh
+   turn + tool); timeout → 500 generik. Sukses → 200 dengan `response` +
+   `tool_calls`; error → mapping tabel di atas dengan `tracing::warn` (termasuk
+   429; **tanpa API key**).
 
 ## Tools (`routes/ai_agent/tools.rs`)
 
@@ -95,12 +98,13 @@ Aturan:
   punya parameter workspace.
 - **SQL statis + filter opsional nullable** (`$n::text IS NULL OR ...`) — tanpa
   dynamic SQL; join `projects` (filter `project` cocok `identifier` atau `name`
-  ILIKE) dan `LEFT JOIN states` (filter `states."group"`, ambil `states.name`).
+  ILIKE) dan `JOIN states` (filter `states."group"`, ambil `states.name`).
   `deleted_at IS NULL` selalu; `archived_at IS NULL` kecuali
   `include_archived=true`. Semua nilai dari model di-bind sebagai parameter.
 - **Visibilitas:** selain `deleted_at IS NULL`, hasil juga mengecualikan project
-  yang soft-deleted/archived, state terhapus, `is_draft = true`, dan item triage
-  (`states."group" = 'triage'`) — mengikuti himpunan visibilitas Django.
+  yang soft-deleted/archived, state terhapus atau tidak ada (mengikuti
+  `state__deleted_at__isnull=True` pada list Django; baris tanpa state ikut
+  gugur), `is_draft = true`, dan item triage (`states."group" <> 'triage'`).
 - **Allowlist:** `state_group` ∈ backlog/unstarted/started/completed/cancelled,
   `priority` ∈ urgent/high/medium/low/none → invalid = tool error.
 - **Batas:** `limit` di-clamp 1–25 (default 10); `list_projects` LIMIT 50.
@@ -116,24 +120,30 @@ Skema yang dirujuk (`migrations/0001_initial.sql`): `issues:1490` (`workspace_id
 
 ```rust
 pub struct ToolCallTrace { pub name: String, pub arguments: serde_json::Value }
+pub type ToolTrace = Arc<Mutex<Vec<ToolCallTrace>>>;
 
 pub async fn run_agent(
-    client: &openai::CompletionsClient,
+    base_url: &str,
+    api_key: &str,
     model: &str,
-    preamble: &str,
-    tools: ToolSet,                       // produksi: 3 tool DB; test: tool palsu
+    tool_server: ToolServerHandle,   // produksi: 3 tool DB; test: tool palsu
     prompt: &str,
-    trace: Arc<Mutex<Vec<ToolCallTrace>>>,
 ) -> Result<String, routes::ai::LlmError>
 ```
 
-- Batas turn agent dinaikkan ke 6 memakai API turn-limit Rig pada versi yang
-  di-pin; bila tidak tersedia, pakai default Rig dan catat di kode.
+- Trace dimiliki tool (bukan parameter runner): tiap tool memegang clone
+  `ToolTrace` dan mencatat dari dalam `call()`; handler membangun
+  `ToolServerHandle` lewat `tools::workspace_tools(...)`.
+- Client HTTP dibagikan via `OnceLock` (`rig::http_client::ReqwestClient`,
+  timeout 60 detik per panggilan; Rig 0.42 memakai reqwest 0.13).
+- Batas turn agent = 6 via `AgentBuilder::default_max_turns(6)` (default Rig 1
+  akan mematikan loop tool); total request dibatasi `AGENT_TIMEOUT` 180 detik di
+  handler.
 - Preamble: asisten workspace read-only; wajib memakai tool untuk pertanyaan
   faktual soal project/work item; dilarang mengarang identifier; sebut kosong
   bila tool tidak menemukan apa pun; jawab ringkas dalam bahasa user.
 - Error Rig dipetakan: status HTTP 429 (via helper inspeksi provider response
-  Rig) → `LlmError::RateLimited`; sisanya → `LlmError::Upstream`.
+  Rig) → `LlmError::RateLimited` (di-log); sisanya → `LlmError::Upstream`.
 
 ## Dependency
 
