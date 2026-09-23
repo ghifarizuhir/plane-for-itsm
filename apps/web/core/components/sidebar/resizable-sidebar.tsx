@@ -7,8 +7,8 @@
 import type { Dispatch, ReactElement, SetStateAction } from "react";
 import React, { useCallback, useEffect, useState, useRef } from "react";
 // helpers
-import { usePlatformOS } from "@plane/hooks";
 import { cn } from "@plane/utils";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 
 interface ResizableSidebarProps {
   showPeek?: boolean;
@@ -57,7 +57,7 @@ export function ResizableSidebar({
   const initialWidthRef = useRef<number>(0);
   const initialMouseXRef = useRef<number>(0);
   // hooks
-  const { isMobile } = usePlatformOS();
+  const isMobile = useMobileViewport();
   // handlers
   const setShowPeek = useCallback(
     (value: boolean) => {
@@ -142,16 +142,28 @@ export function ResizableSidebar({
     []
   );
 
+  // Close the sidebar drawer with Escape on mobile viewports
+  useEffect(() => {
+    if (!isMobile || isCollapsed) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") toggleCollapsed();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isMobile, isCollapsed, toggleCollapsed]);
+
   useEffect(() => {
     if (!isAnySidebarDropdownOpen && isCollapsed && isHoveringTrigger) {
       handlePeekLeave();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAnySidebarDropdownOpen]);
 
   useEffect(() => {
     if (!isAnyExtendedSidebarExpanded && isCollapsed && isHoveringTrigger) {
       handlePeekLeave();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAnyExtendedSidebarExpanded]);
 
   // Reset peek when sidebar is expanded
@@ -176,6 +188,15 @@ export function ResizableSidebar({
 
   return (
     <>
+      {/* Mobile drawer backdrop */}
+      {isMobile && !isCollapsed && (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          className="fixed inset-0 z-[19] cursor-default bg-black/20"
+          onClick={() => toggleCollapsed()}
+        />
+      )}
       {/* Main Sidebar */}
       <div
         id="main-sidebar"
@@ -263,7 +284,7 @@ export function ResizableSidebar({
       </div>
 
       {/* Extended Sidebar */}
-      {extendedSidebar && extendedSidebar}
+      {extendedSidebar}
     </>
   );
 }
