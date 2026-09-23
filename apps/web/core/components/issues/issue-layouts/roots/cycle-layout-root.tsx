@@ -21,12 +21,14 @@ import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CycleCalendarLayout } from "../calendar/roots/cycle-root";
 import { BaseGanttRoot } from "../gantt";
 import { CycleKanBanLayout } from "../kanban/roots/cycle-root";
 import { CycleListLayout } from "../list/roots/cycle-root";
+import { resolveWorkItemLayout } from "../mobile-layout";
 import { CycleSpreadsheetLayout } from "../spreadsheet/roots/cycle-root";
 
 function CycleIssueLayout(props: {
@@ -58,11 +60,12 @@ export const CycleLayoutRoot = observer(function CycleLayoutRoot() {
   // store hooks
   const { issuesFilter } = useIssues(EIssuesStoreType.CYCLE);
   const { getCycleById } = useCycle();
+  const isMobileViewport = useMobileViewport();
   // state
   const [transferIssuesModal, setTransferIssuesModal] = useState(false);
   // derived values
   const workItemFilters = cycleId ? issuesFilter?.getIssueFilters(cycleId) : undefined;
-  const activeLayout = workItemFilters?.displayFilters?.layout;
+  const activeLayout = resolveWorkItemLayout(workItemFilters?.displayFilters?.layout, isMobileViewport);
 
   useSWR(
     workspaceSlug && projectId && cycleId ? `CYCLE_ISSUES_${workspaceSlug}_${projectId}_${cycleId}` : null,

@@ -17,12 +17,14 @@ import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/f
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { ModuleCalendarLayout } from "../calendar/roots/module-root";
 import { BaseGanttRoot } from "../gantt";
 import { ModuleKanBanLayout } from "../kanban/roots/module-root";
 import { ModuleListLayout } from "../list/roots/module-root";
+import { resolveWorkItemLayout } from "../mobile-layout";
 import { ModuleSpreadsheetLayout } from "../spreadsheet/roots/module-root";
 
 function ModuleIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined; moduleId: string }) {
@@ -50,9 +52,10 @@ export const ModuleLayoutRoot = observer(function ModuleLayoutRoot() {
   const moduleId = routerModuleId ? routerModuleId.toString() : undefined;
   // hooks
   const { issuesFilter } = useIssues(EIssuesStoreType.MODULE);
+  const isMobileViewport = useMobileViewport();
   // derived values
   const workItemFilters = moduleId ? issuesFilter?.getIssueFilters(moduleId) : undefined;
-  const activeLayout = workItemFilters?.displayFilters?.layout || undefined;
+  const activeLayout = resolveWorkItemLayout(workItemFilters?.displayFilters?.layout, isMobileViewport);
 
   useSWR(
     workspaceSlug && projectId && moduleId

@@ -24,7 +24,10 @@ import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-properties";
+// local imports
+import { resolveWorkItemLayout } from "../mobile-layout";
 
 type Props = {
   isDefaultView: boolean;
@@ -47,10 +50,14 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
     issues: { clear, groupedIssueIds, fetchIssues, fetchNextIssues },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { fetchAllGlobalViews, getViewDetailsById } = useGlobalView();
+  const isMobileViewport = useMobileViewport();
   // Derived values
   const viewDetails = globalViewId ? getViewDetailsById(globalViewId) : undefined;
   const workItemFilters = globalViewId ? filters?.[globalViewId] : undefined;
-  const activeLayout: EIssueLayoutTypes | undefined = workItemFilters?.displayFilters?.layout;
+  const activeLayout: EIssueLayoutTypes | undefined = resolveWorkItemLayout(
+    workItemFilters?.displayFilters?.layout,
+    isMobileViewport
+  );
   // Determine initial work item filters based on view type and availability
   const initialWorkItemFilters = useMemo(() => {
     if (!globalViewId) return undefined;
