@@ -22,7 +22,10 @@
 | Modify | `apps/web/core/services/ai.service.ts`                   | `createAgentTask` + response type                                            |
 | Modify | `apps/web/core/store/ai-assistant.store.ts`              | `mode` state/persistence, `setMode`, per-mode request branch                 |
 | Modify | `apps/web/core/store/ai-assistant.store.test.ts`         | Mode + agent-branch store tests                                              |
-| Modify | `apps/web/core/components/ai/assistant-sidebar/root.tsx` | Header segmented control                                                     |
+| Modify | `apps/web/package.json`                                  | Add `sanitize-html` + types via catalog                                      |
+| Modify | `apps/web/core/lib/ai-context.ts`                        | `sanitizeAssistantHtml` allowlist helper                                     |
+| Modify | `apps/web/core/lib/ai-context.test.ts`                   | Sanitizer unit tests                                                         |
+| Modify | `apps/web/core/components/ai/assistant-sidebar/root.tsx` | Sanitize render sink + header segmented control                              |
 
 No `parity-inventory.json` change, no migrations, no changes to `/ai-assistant/` behavior (only an internal refactor), no changes to editor/popover GPT flows.
 
@@ -902,7 +905,147 @@ git commit -m "feat(web): persist assistant mode and route sends per mode"
 
 ---
 
-### Task 6: Header segmented control
+### Task 6: Sanitize assistant HTML at the render sink
+
+**Files:**
+
+- Modify: `apps/web/package.json`
+- Modify: `apps/web/core/lib/ai-context.ts`
+- Test: `apps/web/core/lib/ai-context.test.ts`
+- Modify: `apps/web/core/components/ai/assistant-sidebar/root.tsx`
+
+Security amendment (approved 2026-09-23): model output can echo DB-sourced project/work-item names and is injected via `dangerouslySetInnerHTML`. Both chat modes now render allowlist-sanitized HTML; the backend `response_html` helper stays parity-exact.
+
+- [ ] **Step 1: Add the sanitizer dependency**
+
+In `apps/web/package.json`, add to `dependencies` (keep the existing ordering style):
+
+```json
+    "sanitize-html": "catalog:",
+```
+
+and to `devDependencies`:
+
+```json
+    "@types/sanitize-html": "catalog:",
+```
+
+Then run `pnpm install` from the repo root. Expected: install completes and `sanitize-html` resolves for `apps/web` (it is already in the workspace lockfile via `@plane/utils`).
+
+- [ ] **Step 2: Write the failing tests**
+
+In `apps/web/core/lib/ai-context.test.ts`, extend the import from `./ai-context` to include `sanitizeAssistantHtml`, then add:
+
+```ts
+describe("sanitizeAssistantHtml", () => {
+  it("keeps formatting tags", () => {
+    expect(sanitizeAssistantHtml("<b>bold</b><br/>line")).toBe("<b>bold</b><br />line");
+    expect(sanitizeAssistantHtml("<ul><li>one</li></ul>")).toBe("<ul><li>one</li></ul>");
+  });
+
+  it("strips scripts, event handlers, and unsafe URLs", () => {
+    expect(sanitizeAssistantHtml("<script>alert(1)</script>")).toBe("");
+    expect(sanitizeAssistantHtml('<img src=x onerror="alert(1)">')).toBe("");
+    expect(sanitizeAssistantHtml('<a href="javascript:alert(1)">x</a>')).toBe("<a>x</a>");
+  });
+});
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `pnpm --filter=web test 2>&1 | tail -30`
+Expected: FAIL — `sanitizeAssistantHtml` is not exported / not a function.
+
+- [ ] **Step 4: Implement the helper**
+
+In `apps/web/core/lib/ai-context.ts`, add the import at the top:
+
+```ts
+import sanitizeHtml from "sanitize-html";
+```
+
+and after `stripHtml`:
+
+```ts
+const ASSISTANT_ALLOWED_TAGS = [
+  "b",
+  "strong",
+  "i",
+  "em",
+  "u",
+  "s",
+  "br",
+  "p",
+  "ul",
+  "ol",
+  "li",
+  "code",
+  "pre",
+  "blockquote",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "hr",
+  "a",
+];
+
+/** Allowlist-sanitize model output before it is injected as HTML. */
+export const sanitizeAssistantHtml = (html: string): string =>
+  sanitizeHtml(html, {
+    allowedTags: ASSISTANT_ALLOWED_TAGS,
+    allowedAttributes: { a: ["href", "target", "rel"] },
+  });
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `pnpm --filter=web test 2>&1 | tail -30`
+Expected: PASS — all existing tests plus the 2 new ones. If `sanitize-html` normalizes self-closing tags differently than the expected strings, adjust only the cosmetic assertions (`<br />` spelling) and keep the security assertions (`""` for script/img, no `javascript:` in the anchor) exactly as written; report any adjustment.
+
+- [ ] **Step 6: Apply at the render sink**
+
+In `apps/web/core/components/ai/assistant-sidebar/root.tsx`, change the type-only import:
+
+Old:
+
+```tsx
+import type { TAiIssueContext } from "@/lib/ai-context";
+```
+
+New:
+
+```tsx
+import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
+```
+
+Then change the assistant message render:
+
+Old:
+
+```tsx
+<div dangerouslySetInnerHTML={{ __html: message.content }} />
+```
+
+New:
+
+```tsx
+<div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
+```
+
+- [ ] **Step 7: Verify types and commit**
+
+Run: `pnpm --filter=web check:types 2>&1 | tail -20`
+Expected: no errors.
+
+```bash
+git add apps/web/package.json apps/web/core/lib/ai-context.ts apps/web/core/lib/ai-context.test.ts apps/web/core/components/ai/assistant-sidebar/root.tsx pnpm-lock.yaml
+git commit -m "fix(web): sanitize assistant HTML before rendering"
+```
+
+---
+
+### Task 7: Header segmented control
 
 **Files:**
 
@@ -1023,7 +1166,7 @@ git commit -m "feat(web): add classic/agent mode toggle to Galileo header"
 
 ---
 
-### Task 7: Full verification and live smoke
+### Task 8: Full verification and live smoke
 
 **Files:** none (verification only; commit only if fixes are needed)
 
@@ -1115,6 +1258,12 @@ git commit -m "chore(web,api-rs): dual-mode smoke follow-ups"
 
 ## Rollback
 
-- FE: revert the three web commits; the sidebar returns to classic-only behavior (the mode key in localStorage is inert without the store code).
+- FE: revert the web commits; the sidebar returns to classic-only behavior (the mode key in localStorage is inert without the store code).
 - API: revert the three api-rs commits; `/ai-assistant/` behavior is unchanged by design, and `/ai-agent/` returns to the pre-task/response_html contract.
 - No DB state is created by any of these changes.
+
+---
+
+## Security amendment log
+
+- 2026-09-23 (after Task 3 review): assistant HTML (both modes) is sanitized with a `sanitize-html` allowlist at the sidebar render sink. Reason: agent answers can echo DB-sourced names; the render sink used `dangerouslySetInnerHTML`. The backend helper remains parity-exact; sanitization lives in the FE (Task 6).

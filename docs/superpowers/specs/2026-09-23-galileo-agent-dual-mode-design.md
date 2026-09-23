@@ -79,8 +79,13 @@ dengan jalur klasik sebagai fallback manual.
   Klasik seperti sekarang.
 - Selected state segmented control adalah indikator mode; tidak ada label mode
   tambahan. Copy empty-state, suggestions, dan strip konteks tidak berubah.
-- Pesan agent dirender seperti pesan klasik (`dangerouslySetInnerHTML` dari
-  `response_html ?? response`); `tool_calls` diabaikan.
+- Pesan asisten (kedua mode) dirender dengan `dangerouslySetInnerHTML` dari
+  `response_html ?? response` setelah disanitasi allowlist `sanitize-html`
+  (b/strong/i/em/u/s/br/p/ul/ol/li/code/pre/blockquote/h1–h4/hr/a) di render sink
+  sidebar; `tool_calls` diabaikan. Amendment keamanan disetujui user 2026-09-23:
+  output model dapat memuat nama project/work item dari DB, jadi tidak boleh
+  dipercaya sebagai HTML mentah. Helper backend `response_html` tetap
+  parity-exact dengan `/ai-assistant/`.
 
 ### 4. Error handling, data flow, verifikasi
 
