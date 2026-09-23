@@ -1024,10 +1024,10 @@ Code review of the first Task 3 implementation found two real defects in a naive
    - `kanban` → kept only when both `group_by` and `sub_group_by` are set (nested data); otherwise → `list`.
    - `spreadsheet` / `gantt_chart` → `list` (flat fetch).
    - `list` / `undefined` / desktop → unchanged.
-     The five project-level roots pass `workItemFilters?.displayFilters`.
+     Four of the five project-level roots pass `workItemFilters?.displayFilters` — the all-issue/workspace root is excluded (see #2).
 2. **`all-issue-layout-root.tsx` is excluded from the fallback** (commit `4ecee7b1a`): workspace/global views have no workspace list root downstream (`WorkspaceActiveLayout` only renders spreadsheet), so forcing list produced a blank page. Workspace views keep their layout on mobile until a workspace list root exists (follow-up).
 3. **Render rule by data shape** (not viewport): `base-list-root.tsx` renders `group_by={resolveRenderedGroupBy(groupedIssueIds, group_by)}` — flat data (`ALL_ISSUES` key present) renders ungrouped, grouped data renders grouped by the persisted key. This keeps pagination cursors and per-group counts consistent and avoids duplicate ids. Helpers live in `mobile-layout.ts` (`isFlatGroupedIssueData`, `resolveRenderedGroupBy`) with unit tests.
-4. **Lint edits in `base-list-root.tsx`** were required to pass the `lint-staged` pre-commit hook (`oxlint --deny-warnings`): two local renames (`projectIdToCheck`, `nextCollapsedGroups`) and one `eslint-disable-next-line react-hooks/exhaustive-deps` matching an existing convention in the same file. All three are behavior-preserving.
+4. **Lint edits were required** to pass the `lint-staged` pre-commit hook (`oxlint --deny-warnings`) on touched files that carried pre-existing warnings. All are behavior-preserving and follow existing repo conventions: two local renames + one `eslint-disable-next-line react-hooks/exhaustive-deps` in `list/base-list-root.tsx`; two `exhaustive-deps` suppressions in `sidebar/resizable-sidebar.tsx`; one `jsx_a11y/no-static-element-interactions` suppression in `comments/comment-create.tsx`; one `promise/always-return` suppression in `power-k/config/miscellaneous-commands.ts`; and a hoist + parameter rename of the pure `isMutableRefObject` guard in `editor/lite-text/editor.tsx`.
 
 Task 3 landed as commits `32ef49065`, `4ecee7b1a`, `3658c6d06`, `085c8ae46`, `7f755165d`, `221e3a316`.
 
