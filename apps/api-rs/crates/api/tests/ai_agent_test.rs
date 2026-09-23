@@ -101,7 +101,15 @@ async fn task_folds_into_upstream_user_message() {
 #[tokio::test]
 async fn prompt_without_tools_returns_content() {
     let base = spawn_fixed(200, chat_response("final answer")).await;
-    let out = run_agent(&base, "key", "gpt-4o-mini", ToolServer::new().run(), None, "hi").await;
+    let out = run_agent(
+        &base,
+        "key",
+        "gpt-4o-mini",
+        ToolServer::new().run(),
+        None,
+        "hi",
+    )
+    .await;
     assert_eq!(out, Ok("final answer".to_string()));
 }
 
