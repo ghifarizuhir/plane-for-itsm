@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane constants
-import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // types
 import type { EIssuesStoreType, GroupByColumnTypes, TGroupedIssues, TIssueKanbanFilters } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
@@ -23,6 +23,7 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // components
 import { IssueLayoutHOC } from "../issue-layout-HOC";
+import { resolveRenderedGroupBy } from "../mobile-layout";
 import { List } from "./default";
 // types
 import type { IQuickActionProps, TRenderQuickActions } from "./list-view-types";
@@ -88,8 +89,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
 
   const groupedIssueIds = issues?.groupedIssueIds as TGroupedIssues | undefined;
 
-  const isFlatIssueData = groupedIssueIds?.[ALL_ISSUES] !== undefined;
-  const renderedGroupBy = isFlatIssueData ? null : group_by;
+  const renderedGroupBy = resolveRenderedGroupBy(groupedIssueIds, group_by);
 
   const isAnyInitLoading = issues?.loader ? Object.values(issues.loader).some((l) => l === "init-loader") : false;
 
