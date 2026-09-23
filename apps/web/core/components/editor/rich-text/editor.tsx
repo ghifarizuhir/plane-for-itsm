@@ -16,6 +16,7 @@ import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
 import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
+import { useTouchPointer } from "@/hooks/use-mobile-viewport";
 // plane web hooks
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 
@@ -49,11 +50,15 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     workspaceSlug,
     workspaceId,
     projectId,
+    isTouchDevice: isTouchDeviceProp,
     disabledExtensions: additionalDisabledExtensions = [],
     ...rest
   } = props;
   // store hooks
   const { getUserDetails } = useMember();
+  const isTouchPointer = useTouchPointer();
+  // derived values
+  const isTouchDevice = isTouchDeviceProp ?? isTouchPointer;
   // editor flaggings
   const { richText: richTextEditorExtensions } = useEditorFlagging({
     workspaceSlug,
@@ -76,6 +81,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
       ref={ref}
       disabledExtensions={[...richTextEditorExtensions.disabled, ...(additionalDisabledExtensions ?? [])]}
       editable={editable}
+      isTouchDevice={isTouchDevice}
       flaggedExtensions={richTextEditorExtensions.flagged}
       fileHandler={getEditorFileHandlers({
         projectId,

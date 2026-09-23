@@ -20,6 +20,7 @@ import { IssueCommentToolbar } from "@/components/editor/lite-text/toolbar";
 import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
+import { useTouchPointer } from "@/hooks/use-mobile-viewport";
 // plane web hooks
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
 // plane web service
@@ -56,6 +57,10 @@ type LiteTextEditorWrapperProps = MakeOptional<
       }
   );
 
+function isMutableRefObject<T>(forwardedRef: React.ForwardedRef<T>): forwardedRef is React.MutableRefObject<T | null> {
+  return !!forwardedRef && typeof forwardedRef === "object" && "current" in forwardedRef;
+}
+
 export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   props: LiteTextEditorWrapperProps,
   ref: React.ForwardedRef<EditorRefApi>
@@ -79,6 +84,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
     placeholder = t("issue.comments.placeholder"),
     disabledExtensions: additionalDisabledExtensions = [],
     editorClassName = "",
+    isTouchDevice: isTouchDeviceProp,
     showPlaceholderOnEmpty = true,
     submitButtonText = "common.comment",
     ...rest
@@ -95,11 +101,14 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   });
   // store hooks
   const { getUserDetails } = useMember();
+  const isTouchPointer = useTouchPointer();
   // parse content
   const { getEditorMetaData } = useParseEditorContent({
     projectId,
     workspaceSlug,
   });
+  // derived values
+  const isTouchDevice = isTouchDeviceProp ?? isTouchPointer;
   // use editor mention
   const { fetchMentions } = useEditorMention({
     searchEntity: async (payload) =>
@@ -111,9 +120,6 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
-  function isMutableRefObject<T>(ref: React.ForwardedRef<T>): ref is React.MutableRefObject<T | null> {
-    return !!ref && typeof ref === "object" && "current" in ref;
-  }
   // derived values
   const isEmpty = isCommentEmpty(props.initialValue);
 
@@ -137,6 +143,7 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             ref={ref}
             disabledExtensions={[...liteTextEditorExtensions.disabled, ...additionalDisabledExtensions]}
             editable={editable}
+            isTouchDevice={isTouchDevice}
             flaggedExtensions={liteTextEditorExtensions.flagged}
             fileHandler={getEditorFileHandlers({
               projectId,
