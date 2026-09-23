@@ -15,6 +15,7 @@ import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { usePowerK } from "@/hooks/store/use-power-k";
+import { getIsMobileViewport } from "@/hooks/use-mobile-viewport";
 
 export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
   // store hooks
@@ -26,6 +27,7 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
   const copyCurrentPageUrlToClipboard = useCallback(() => {
     const url = new URL(window.location.href);
     copyTextToClipboard(url.href)
+      // oxlint-disable-next-line promise/always-return
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
@@ -84,7 +86,7 @@ export const usePowerKMiscellaneousCommands = (): TPowerKCommandConfig[] => {
       action: focusTopNavSearch,
       modifierShortcut: "cmd+f",
       isEnabled: () => true,
-      isVisible: () => true,
+      isVisible: () => !getIsMobileViewport(),
       closeOnSelect: true,
     },
   ];
