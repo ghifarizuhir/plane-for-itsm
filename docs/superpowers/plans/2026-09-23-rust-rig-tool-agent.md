@@ -747,8 +747,8 @@ Append inside the existing `#[cfg(test)] mod tests` in `tools.rs`:
         sqlx::PgPool::connect_lazy("postgres://user:pass@127.0.0.1:1/plane").expect("lazy pool")
     }
 
-    #[test]
-    fn tool_metadata_is_exposed() {
+    #[tokio::test]
+    async fn tool_metadata_is_exposed() {
         let pool = lazy_pool();
         let trace = super::super::new_trace();
 
@@ -772,13 +772,13 @@ Append inside the existing `#[cfg(test)] mod tests` in `tools.rs`:
         assert!(!search.description().is_empty());
     }
 
-    #[test]
-    fn workspace_tools_builds_a_server_handle() {
+    #[tokio::test]
+    async fn workspace_tools_builds_a_server_handle() {
         let _handle = workspace_tools(lazy_pool(), Uuid::nil(), super::super::new_trace());
     }
 ```
 
-Add `use uuid::Uuid;` inside the test module if not already in scope via `use super::*;` (it is, because the parent imports `Uuid`).
+Add `use uuid::Uuid;` inside the test module if not already in scope via `use super::*;` (it is, because the parent imports `Uuid`). The two tests must be `#[tokio::test]` async: `sqlx::PgPool::connect_lazy` panics with "this functionality requires a Tokio context" under a plain `#[test]`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
