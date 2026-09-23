@@ -8,6 +8,7 @@
 //! Rig 0.42 uses reqwest 0.13, the repo uses reqwest 0.12 — always pass
 //! `rig::http_client::ReqwestClient`, never `reqwest::Client`.
 
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -67,6 +68,9 @@ a tool returns no results, say so. Answer concisely in the user's language.";
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
 
+/// Total wall-clock budget for one request: all model calls plus tool time.
+pub const AGENT_TIMEOUT: Duration = Duration::from_secs(180);
+
 /// Django-style lax parsing like `routes/ai.rs::task_from_body`.
 pub fn prompt_from_body(body: &Value) -> Option<&str> {
     body.get("prompt")
@@ -76,10 +80,22 @@ pub fn prompt_from_body(body: &Value) -> Option<&str> {
 
 fn map_prompt_error(error: PromptError) -> LlmError {
     if error.provider_response_status().map(|s| s.as_u16()) == Some(429) {
+        tracing::warn!("ai-agent: upstream rate limited");
         return LlmError::RateLimited;
     }
     tracing::warn!(error = %error, "ai-agent: upstream failed");
     LlmError::Upstream
+}
+
+/// Shared HTTP client for all ai-agent requests (keeps connection pooling).
+fn http_client() -> &'static rig::http_client::ReqwestClient {
+    static HTTP: OnceLock<rig::http_client::ReqwestClient> = OnceLock::new();
+    HTTP.get_or_init(|| {
+        rig::http_client::ReqwestClient::builder()
+            .timeout(Duration::from_secs(60))
+            .build()
+            .expect("ai-agent http client")
+    })
 }
 
 /// Build the Rig client and run one agent prompt. Split from the handler so
@@ -91,17 +107,10 @@ pub async fn run_agent(
     tool_server: ToolServerHandle,
     prompt: &str,
 ) -> Result<String, LlmError> {
-    let http = rig::http_client::ReqwestClient::builder()
-        .timeout(Duration::from_secs(60))
-        .build()
-        .map_err(|e| {
-            tracing::warn!(error = %e, "ai-agent: http client build failed");
-            LlmError::Upstream
-        })?;
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
         .base_url(base_url)
-        .http_client(http)
+        .http_client(http_client().clone())
         .build()
         .map_err(|e| {
             tracing::warn!(error = %e, "ai-agent: llm client build failed");
@@ -153,7 +162,16 @@ pub async fn workspace_ai_agent(
     };
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
-    match run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt).await {
+    let agent_result = tokio::time::timeout(
+        AGENT_TIMEOUT,
+        run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt),
+    )
+    .await
+    .unwrap_or_else(|_| {
+        tracing::warn!("ai-agent: request timed out");
+        Err(LlmError::Upstream)
+    });
+    match agent_result {
         Ok(text) => {
             let tool_calls: Vec<Value> = trace
                 .lock()

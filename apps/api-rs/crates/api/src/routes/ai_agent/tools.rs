@@ -21,10 +21,10 @@ pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
 pub const COUNT_SQL: &str = "SELECT count(*)::int8 FROM issues i \
      JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
        AND p.deleted_at IS NULL AND p.archived_at IS NULL \
-     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+     JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
        AND s.deleted_at IS NULL \
      WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
-     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
+     AND s.\"group\" <> 'triage' \
      AND ($2::text IS NULL OR p.identifier ILIKE $2 OR p.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR s.\"group\" = $3) \
      AND ($4::text IS NULL OR i.priority = $4) \
@@ -36,10 +36,10 @@ pub const SEARCH_SQL: &str = "SELECT p.identifier AS project, \
      FROM issues i \
      JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 \
        AND p.deleted_at IS NULL AND p.archived_at IS NULL \
-     LEFT JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
+     JOIN states s ON s.id = i.state_id AND s.workspace_id = $1 \
        AND s.deleted_at IS NULL \
      WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
-     AND (s.\"group\" IS NULL OR s.\"group\" <> 'triage') \
+     AND s.\"group\" <> 'triage' \
      AND i.archived_at IS NULL \
      AND ($2::text IS NULL OR i.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR p.identifier ILIKE $3 OR p.name ILIKE '%' || $3 || '%') \
@@ -139,7 +139,7 @@ pub struct ListProjectsArgs {}
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CountWorkItemsArgs {
-    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    /// Project identifier (case-insensitive exact, e.g. "LTS") or project name (case-insensitive substring).
     pub project: Option<String>,
     /// One of: backlog, unstarted, started, completed, cancelled.
     pub state_group: Option<String>,
@@ -153,7 +153,7 @@ pub struct CountWorkItemsArgs {
 pub struct SearchWorkItemsArgs {
     /// Case-insensitive substring to match against work item names.
     pub query: Option<String>,
-    /// Project identifier (e.g. "LTS") or project name, case-insensitive substring.
+    /// Project identifier (case-insensitive exact, e.g. "LTS") or project name (case-insensitive substring).
     pub project: Option<String>,
     /// One of: backlog, unstarted, started, completed, cancelled.
     pub state_group: Option<String>,
@@ -222,7 +222,7 @@ impl Tool for CountWorkItems {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Count non-deleted, non-draft work items in the current workspace, excluding triage items and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
+        "Count non-deleted, non-draft work items in the current workspace, excluding triage items, issues with a missing or deleted state, and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -271,7 +271,7 @@ impl Tool for SearchWorkItems {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Search non-archived, non-draft work items in the current workspace by name substring, optionally filtered by project, state group, and priority. Excludes triage items and issues in deleted or archived projects. `returned` is the number of rows returned (at most limit), not the total match count. Returns project, identifier, name, state, and priority.".to_string()
+        "Search non-archived, non-draft work items in the current workspace by name substring, optionally filtered by project, state group, and priority. Excludes triage items, issues with a missing or deleted state, and issues in deleted or archived projects. `returned` is the number of rows returned (at most limit), not the total match count. Returns project, identifier, name, state, and priority.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -341,6 +341,16 @@ mod tests {
                 sql.contains("workspace_id = $1"),
                 "missing workspace scope: {sql}"
             );
+        }
+    }
+
+    #[test]
+    fn sql_joins_visible_states_and_excludes_triage() {
+        for sql in [COUNT_SQL, SEARCH_SQL] {
+            assert!(sql.contains("JOIN states s ON s.id = i.state_id"));
+            assert!(sql.contains("s.deleted_at IS NULL"));
+            assert!(sql.contains("s.\"group\" <> 'triage'"));
+            assert!(!sql.contains("LEFT JOIN"));
         }
     }
 
