@@ -1,8 +1,10 @@
 //! Fake OpenAI-compatible upstream for `routes::ai_agent::run_agent`:
 //! no-tool answer, tool round-trip, 429, 500, malformed JSON. No DB, no env.
 
+use std::sync::{Arc, Mutex};
+
 use api::routes::ai_agent::run_agent;
-use axum::{http::StatusCode, routing::post, Json, Router};
+use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use rig::tool::server::ToolServer;
 use serde_json::{json, Value};
 
@@ -38,10 +40,68 @@ async fn spawn_fixed(status: u16, body: Value) -> String {
     format!("http://{addr}/v1")
 }
 
+#[derive(Default)]
+struct Capturing {
+    bodies: Mutex<Vec<Value>>,
+}
+
+async fn spawn_capturing() -> (String, Arc<Capturing>) {
+    async fn handler(
+        State(state): State<Arc<Capturing>>,
+        Json(body): Json<Value>,
+    ) -> (StatusCode, Json<Value>) {
+        state.bodies.lock().unwrap().push(body);
+        (
+            StatusCode::OK,
+            Json(json!({
+                "id": "chatcmpl-2",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "test",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "final answer"},
+                    "finish_reason": "stop"
+                }]
+            })),
+        )
+    }
+    let state: Arc<Capturing> = Arc::new(Capturing::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = Router::new()
+        .route("/v1/chat/completions", post(handler))
+        .with_state(state.clone());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}/v1"), state)
+}
+
+#[tokio::test]
+async fn task_folds_into_upstream_user_message() {
+    let (base, upstream) = spawn_capturing().await;
+    let out = run_agent(
+        &base,
+        "key",
+        "model",
+        ToolServer::new().run(),
+        Some("be terse"),
+        "hi",
+    )
+    .await;
+    assert_eq!(out, Ok("final answer".to_string()));
+    let bodies = upstream.bodies.lock().unwrap();
+    let messages = bodies[0]["messages"].as_array().unwrap();
+    let user = messages
+        .iter()
+        .find(|m| m["role"] == json!("user"))
+        .expect("upstream call must carry a user message");
+    assert_eq!(user["content"], json!("be terse\nhi"));
+}
+
 #[tokio::test]
 async fn prompt_without_tools_returns_content() {
     let base = spawn_fixed(200, chat_response("final answer")).await;
-    let out = run_agent(&base, "key", "gpt-4o-mini", ToolServer::new().run(), "hi").await;
+    let out = run_agent(&base, "key", "gpt-4o-mini", ToolServer::new().run(), None, "hi").await;
     assert_eq!(out, Ok("final answer".to_string()));
 }
 
@@ -168,6 +228,7 @@ mod tool_roundtrip {
             "key",
             "model",
             ToolServer::new().tool(tool).run(),
+            None,
             "say hi",
         )
         .await;
@@ -195,14 +256,14 @@ mod tool_roundtrip {
     #[tokio::test]
     async fn upstream_429_maps_to_rate_limited() {
         let base = super::spawn_fixed(429, json!({"error": {"message": "slow down"}})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
         assert_eq!(out, Err(LlmError::RateLimited));
     }
 
     #[tokio::test]
     async fn upstream_500_maps_to_upstream() {
         let base = super::spawn_fixed(500, json!({"error": "boom"})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 
@@ -222,7 +283,7 @@ mod tool_roundtrip {
         );
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let base = format!("http://{addr}/v1");
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 }

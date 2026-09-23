@@ -24,7 +24,7 @@ use rig::tool::server::ToolServerHandle;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::routes::ai::{host_of, resolve_llm_config, LlmError};
+use crate::routes::ai::{host_of, resolve_llm_config, task_from_body, LlmError};
 use crate::routes::module::guard_am;
 use crate::routes::project::{deny, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
@@ -78,6 +78,15 @@ pub fn prompt_from_body(body: &Value) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
+/// Effective user message: Django parity concatenates `task + "\n" + prompt`
+/// (`routes/ai.rs::build_body`); an absent task leaves the prompt as-is.
+pub fn effective_prompt(task: Option<&str>, prompt: &str) -> String {
+    match task {
+        Some(task) => format!("{task}\n{prompt}"),
+        None => prompt.to_string(),
+    }
+}
+
 fn map_prompt_error(error: PromptError) -> LlmError {
     if error.provider_response_status().map(|s| s.as_u16()) == Some(429) {
         tracing::warn!("ai-agent: upstream rate limited");
@@ -105,6 +114,7 @@ pub async fn run_agent(
     api_key: &str,
     model: &str,
     tool_server: ToolServerHandle,
+    task: Option<&str>,
     prompt: &str,
 ) -> Result<String, LlmError> {
     let client = openai::CompletionsClient::builder()
@@ -122,7 +132,10 @@ pub async fn run_agent(
         .tool_server_handle(tool_server)
         .default_max_turns(MAX_TURNS)
         .build();
-    agent.prompt(prompt).await.map_err(map_prompt_error)
+    agent
+        .prompt(effective_prompt(task, prompt))
+        .await
+        .map_err(map_prompt_error)
 }
 
 /// `POST /api/workspaces/:slug/ai-agent/`.
@@ -160,11 +173,19 @@ pub async fn workspace_ai_agent(
             Json(json!({"error": "Prompt is required"})),
         ));
     };
+    let task = task_from_body(&body);
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
     let agent_result = tokio::time::timeout(
         AGENT_TIMEOUT,
-        run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt),
+        run_agent(
+            &cfg.base_url,
+            &cfg.api_key,
+            &cfg.model,
+            tool_server,
+            task,
+            prompt,
+        ),
     )
     .await
     .unwrap_or_else(|_| {
@@ -210,6 +231,12 @@ mod tests {
         assert_eq!(prompt_from_body(&json!({"prompt": ""})), None);
         assert_eq!(prompt_from_body(&json!({"prompt": 5})), None);
         assert_eq!(prompt_from_body(&json!({"prompt": null})), None);
+    }
+
+    #[test]
+    fn effective_prompt_folds_task_like_django() {
+        assert_eq!(effective_prompt(Some("do it"), "text"), "do it\ntext");
+        assert_eq!(effective_prompt(None, "text"), "text");
     }
 
     #[test]
