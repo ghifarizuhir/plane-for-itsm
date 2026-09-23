@@ -8,6 +8,7 @@
 //! Rig 0.42 uses reqwest 0.13, the repo uses reqwest 0.12 — always pass
 //! `rig::http_client::ReqwestClient`, never `reqwest::Client`.
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rig::completion::PromptError;
@@ -17,6 +18,34 @@ use rig::tool::server::ToolServerHandle;
 use serde_json::Value;
 
 use crate::routes::ai::LlmError;
+
+/// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolCallTrace {
+    pub name: String,
+    pub arguments: Value,
+}
+
+/// Shared trace handle; each tool owns a clone and records from `Tool::call`.
+pub type ToolTrace = Arc<Mutex<Vec<ToolCallTrace>>>;
+
+pub fn new_trace() -> ToolTrace {
+    Arc::new(Mutex::new(Vec::new()))
+}
+
+/// Best-effort trace push: a poisoned lock or unserializable args never break
+/// a tool call.
+pub fn record(trace: &ToolTrace, name: &str, arguments: &impl serde::Serialize) {
+    let Ok(arguments) = serde_json::to_value(arguments) else {
+        return;
+    };
+    if let Ok(mut recorded) = trace.lock() {
+        recorded.push(ToolCallTrace {
+            name: name.to_string(),
+            arguments,
+        });
+    }
+}
 
 // Handler-only imports (axum, Value, Uuid, resolve_llm_config, guard_am,
 // deny, ws_role, AuthUser, AppState) are added in Task 5 when the handler
