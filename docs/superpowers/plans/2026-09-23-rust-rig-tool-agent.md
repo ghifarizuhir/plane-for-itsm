@@ -1331,3 +1331,11 @@ Stage only feature files — do not sweep unrelated formatting churn into this c
 ---
 
 **Post-review note (2026-09-23):** the final code includes two review-driven amendments folded back into the steps above — inner `JOIN states` so deleted/missing states are excluded (with `sql_joins_visible_states_and_excludes_triage`), a static `OnceLock` HTTP client, and a 180s total `AGENT_TIMEOUT` around `run_agent`. Final expected counts: `routes::ai_agent::tools` = 10 tests, `routes::ai_agent` = 12 tests.
+
+---
+
+**Live smoke (2026-09-23):** endpoint di-deploy (`docker compose build api && docker compose up -d api`, image `plane-api-rs:local`) dan diverifikasi live:
+
+- `{"prompt":"Berapa banyak work item urgent di workspace ini?"}` → 200, agent memanggil `count_work_items{priority:urgent}` dan menjawab 0 dalam bahasa user.
+- `{"prompt":"Sebutkan semua project ... ringkasan jumlah work item-nya"}` → 200, 13 tool calls (`list_projects` + `count_work_items` per project per state group), tabel markdown CMS 0 / PREPAID 2 backlog.
+- Tanpa token (+Origin) → 401; tanpa Origin → 403 (middleware, sama seperti ai-assistant); body `{}` → 400; slug salah → 403; AI terkonfigurasi (tanpa error 400 unconfigured).
