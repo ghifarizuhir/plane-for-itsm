@@ -12,6 +12,7 @@ import { AppRailRoot } from "@/components/navigation";
 import { useAppRailVisibility } from "@/lib/app-rail";
 import { TopNavigationRoot } from "@/components/navigation/top-navigation-root";
 import { AiAssistantSidebar } from "@/components/ai/assistant-sidebar/root";
+import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 
 export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper({
   children,
@@ -20,18 +21,22 @@ export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper
 }) {
   // Use the context to determine if app rail should render
   const { shouldRenderAppRail } = useAppRailVisibility();
+  // hooks
+  const isMobileViewport = useMobileViewport();
+  // derived values
+  const showAppRail = shouldRenderAppRail && !isMobileViewport;
 
   return (
     <div className="relative flex size-full flex-col overflow-hidden bg-canvas transition-all duration-300 ease-in-out">
       <TopNavigationRoot />
       <div className="relative flex size-full overflow-hidden">
         {/* Conditionally render AppRailRoot based on context */}
-        {shouldRenderAppRail && <AppRailRoot />}
+        {showAppRail && <AppRailRoot />}
         <div
           className={cn(
             "relative size-full min-w-0 flex-grow overflow-hidden pr-2 pb-2 pl-2 transition-all duration-300 ease-in-out",
             {
-              "pl-0!": shouldRenderAppRail,
+              "pl-0!": showAppRail,
             }
           )}
         >
