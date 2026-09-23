@@ -1238,8 +1238,7 @@ Format only the files this feature touched — the repo has pre-existing rustfmt
 rustfmt --edition 2021 \
   apps/api-rs/crates/api/src/routes/ai_agent/mod.rs \
   apps/api-rs/crates/api/src/routes/ai_agent/tools.rs \
-  apps/api-rs/crates/api/tests/ai_agent_test.rs \
-  apps/api-rs/crates/api/src/routes/ai.rs
+  apps/api-rs/crates/api/tests/ai_agent_test.rs
 
 cargo clippy -p api --all-targets 2>&1 | tail -20
 ```
