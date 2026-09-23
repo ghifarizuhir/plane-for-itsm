@@ -11,13 +11,22 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use rig::completion::PromptError;
 use rig::prelude::*;
 use rig::providers::openai;
 use rig::tool::server::ToolServerHandle;
-use serde_json::Value;
+use serde_json::{json, Value};
+use uuid::Uuid;
 
-use crate::routes::ai::LlmError;
+use crate::routes::ai::{host_of, resolve_llm_config, LlmError};
+use crate::routes::module::guard_am;
+use crate::routes::project::{deny, ws_role};
+use crate::{middleware::auth::AuthUser, state::AppState};
 
 pub mod tools;
 
@@ -48,10 +57,6 @@ pub fn record(trace: &ToolTrace, name: &str, arguments: &impl serde::Serialize) 
         });
     }
 }
-
-// Handler-only imports (axum, Value, Uuid, resolve_llm_config, guard_am,
-// deny, ws_role, AuthUser, AppState) are added in Task 5 when the handler
-// lands — keeping this task warning-free.
 
 pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
 Answer factual questions about projects and work items by calling the provided \
@@ -107,4 +112,93 @@ pub async fn run_agent(
         .default_max_turns(MAX_TURNS)
         .build();
     agent.prompt(prompt).await.map_err(map_prompt_error)
+}
+
+/// `POST /api/workspaces/:slug/ai-agent/`.
+///
+/// Gate: workspace ADMIN/MEMBER. Errors mirror `/ai-assistant/` messages so
+/// operators see a consistent surface.
+pub async fn workspace_ai_agent(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let workspace_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
+    let Some(workspace_id) = workspace_id else {
+        return Ok(deny());
+    };
+    let cfg = resolve_llm_config(&st.pool).await;
+    if cfg.api_key.is_empty() || cfg.model.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "AI is not configured for this workspace."})),
+        ));
+    }
+    let Some(prompt) = prompt_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Prompt is required"})),
+        ));
+    };
+    let trace = new_trace();
+    let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
+    match run_agent(&cfg.base_url, &cfg.api_key, &cfg.model, tool_server, prompt).await {
+        Ok(text) => {
+            let tool_calls: Vec<Value> = trace
+                .lock()
+                .map(|recorded| {
+                    recorded
+                        .iter()
+                        .map(|call| json!({"name": call.name, "arguments": call.arguments}))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok((
+                StatusCode::OK,
+                Json(json!({"response": text, "tool_calls": tool_calls})),
+            ))
+        }
+        Err(LlmError::RateLimited) => Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
+        )),
+        Err(LlmError::Upstream) => Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "An internal error has occurred."})),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn prompt_from_body_rules() {
+        assert_eq!(prompt_from_body(&json!({"prompt": "hi"})), Some("hi"));
+        assert_eq!(prompt_from_body(&json!({})), None);
+        assert_eq!(prompt_from_body(&json!({"prompt": ""})), None);
+        assert_eq!(prompt_from_body(&json!({"prompt": 5})), None);
+        assert_eq!(prompt_from_body(&json!({"prompt": null})), None);
+    }
+
+    #[test]
+    fn record_appends_and_serializes() {
+        let trace = new_trace();
+        record(&trace, "search_work_items", &json!({"query": "pump"}));
+        let recorded = trace.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].name, "search_work_items");
+        assert_eq!(recorded[0].arguments["query"], json!("pump"));
+    }
 }

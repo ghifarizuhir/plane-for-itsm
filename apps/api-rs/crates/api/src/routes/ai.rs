@@ -195,7 +195,7 @@ pub fn task_from_body(body: &Value) -> Option<&str> {
 }
 
 /// `host` for the 429 body, e.g. `api.openai.com`.
-fn host_of(base_url: &str) -> String {
+pub(crate) fn host_of(base_url: &str) -> String {
     base_url
         .trim_start_matches("https://")
         .trim_start_matches("http://")
