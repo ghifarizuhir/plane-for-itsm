@@ -17,18 +17,19 @@ const getMatches = (query: string): boolean => {
 export const getIsMobileViewport = (): boolean => getMatches(MOBILE_VIEWPORT_QUERY);
 export const getIsTouchPointer = (): boolean => getMatches(TOUCH_POINTER_QUERY);
 
+export const subscribeToMediaQuery = (query: string, onChange: () => void): (() => void) => {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+  const mediaQueryList = window.matchMedia(query);
+  mediaQueryList.addEventListener("change", onChange);
+  return () => mediaQueryList.removeEventListener("change", onChange);
+};
+
+const getServerSnapshot = () => false;
+
 export const useMediaQuery = (query: string): boolean => {
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
-      const mediaQueryList = window.matchMedia(query);
-      mediaQueryList.addEventListener("change", onStoreChange);
-      return () => mediaQueryList.removeEventListener("change", onStoreChange);
-    },
-    [query]
-  );
+  const subscribe = useCallback((onStoreChange: () => void) => subscribeToMediaQuery(query, onStoreChange), [query]);
   const getSnapshot = useCallback(() => getMatches(query), [query]);
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 };
 
 export const useMobileViewport = (): boolean => useMediaQuery(MOBILE_VIEWPORT_QUERY);
