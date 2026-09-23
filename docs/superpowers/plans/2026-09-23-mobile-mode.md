@@ -4,7 +4,7 @@
 
 **Goal:** Make the web app usable on phones (`<768px`) for viewing/updating work items, comments/attachments, and navigation/search — without regressing desktop.
 
-**Architecture:** Add a viewport-based media-query hook pair (`useMobileViewport`, `useTouchPointer`) and a pure render-only layout resolver. All mobile layout behavior is gated on the viewport; UA-based interaction gating (`usePlatformOS`) is left untouched. On mobile the work-item layout is always List; a persisted desktop layout (kanban/calendar/gantt/spreadsheet) falls back to list in render only and is never written back to the store.
+**Architecture:** Add a viewport-based media-query hook pair (`useMobileViewport`, `useTouchPointer`) and a pure render-only layout resolver. All mobile layout behavior is gated on the viewport; UA-based interaction gating (`usePlatformOS`) is left untouched. The mobile fallback is **data-shape aware** (see the amendments section at the end): spreadsheet/gantt fall back to list, kanban falls back unless it is both grouped and sub-grouped, calendar keeps its dedicated mobile agenda, and the list renders ungrouped when the fetched data is flat. The persisted layout is never written back to the store.
 
 **Tech Stack:** React 19, React Router 7 (client-only, `ssr: false`), MobX, Tailwind CSS 4.1.17, Vitest (node env), TypeScript strict.
 
@@ -421,6 +421,8 @@ with:
 ```tsx
 <MobileLayoutSelection layouts={[EIssueLayoutTypes.LIST]} onChange={handleLayoutChange} />
 ```
+
+Note (post-review): the selector stays list-only. Calendar and sub-grouped kanban intentionally keep their own layouts on mobile (calendar has a dedicated mobile agenda; sub-grouped kanban data is nested), so offering them here would persist a layout the resolver then overrides. Those users reach their layout from a desktop session; the selector's active icon is not rendered in this header anyway.
 
 - [ ] **Step 3: Add the filters cell**
 
@@ -978,6 +980,10 @@ Check each item at 375px width:
 4. Workspace menu opens without horizontal overflow.
 5. Issues list renders; layout selector shows List only; clicking a row opens the peek full-width; status/assignee/priority can be changed; close control works.
 6. With a desktop-persisted layout (e.g. set Spreadsheet on desktop, then reload at 375px) the list renders and the desktop preference survives (reload at 1440px shows Spreadsheet again).
+   6a. Persisted **spreadsheet or gantt with a non-null group-by** (repro: set Kanban, pick Group by → State, switch to Spreadsheet, reload at 375px): the list shows rows (no empty group headers), and scrolling to the bottom loads more items without repeated identical issue requests.
+   6b. Persisted **calendar** at 375px shows the calendar's mobile agenda (not a blank or broken view).
+   6c. Persisted **kanban with a sub-group** at 375px keeps the kanban view (nested data must not render as an empty list).
+   6d. **Workspace views** (`/workspace-views/all-issues`) at 375px render their layout without a blank page (the workspace root intentionally has no mobile list fallback).
 7. Filters toggle in the mobile header shows the filter row; conditions can be added/removed and the row does not overflow horizontally.
 8. Comments: sticky comment box sits above the home indicator; typing, submitting, and uploading an attachment work; the attachment preview and the editor full-screen image modal (already fluid: `fixed inset-0 size-full` in `packages/editor/src/extensions/custom-image/components/toolbar/full-screen/modal.tsx`) render without horizontal overflow.
 9. Editor on a touch device shows the touch behavior (image block / toolbar) — real device check.
@@ -1000,9 +1006,27 @@ Record pass/fail per checklist item. If any item fails, fix and re-run the relev
 
 ---
 
+## Post-Review Amendments (2026-09-23, after Tasks 1-3 execution)
+
+Code review of the first Task 3 implementation found two real defects in a naive "force list on mobile" fallback: fetched data shape is derived from the persisted layout, so a forced list could receive flat data while grouping by a non-null key (empty groups), date-windowed calendar data, or nested sub-grouped data — plus flattening introduced pagination churn and duplicate ids for many-to-many group-bys. The shipped strategy is data-shape aware:
+
+1. **Resolver signature changed** to `resolveWorkItemLayout(displayFilters, isMobileViewport)` and its rules are:
+   - `calendar` → kept (dedicated mobile agenda, date-windowed data).
+   - `kanban` → kept only when both `group_by` and `sub_group_by` are set (nested data); otherwise → `list`.
+   - `spreadsheet` / `gantt_chart` → `list` (flat fetch).
+   - `list` / `undefined` / desktop → unchanged.
+     The five project-level roots pass `workItemFilters?.displayFilters`.
+2. **`all-issue-layout-root.tsx` is excluded from the fallback** (commit `4ecee7b1a`): workspace/global views have no workspace list root downstream (`WorkspaceActiveLayout` only renders spreadsheet), so forcing list produced a blank page. Workspace views keep their layout on mobile until a workspace list root exists (follow-up).
+3. **Render rule by data shape** (not viewport): `base-list-root.tsx` renders `group_by={resolveRenderedGroupBy(groupedIssueIds, group_by)}` — flat data (`ALL_ISSUES` key present) renders ungrouped, grouped data renders grouped by the persisted key. This keeps pagination cursors and per-group counts consistent and avoids duplicate ids. Helpers live in `mobile-layout.ts` (`isFlatGroupedIssueData`, `resolveRenderedGroupBy`) with unit tests.
+4. **Lint edits in `base-list-root.tsx`** were required to pass the `lint-staged` pre-commit hook (`oxlint --deny-warnings`): two local renames (`projectIdToCheck`, `nextCollapsedGroups`) and one `eslint-disable-next-line react-hooks/exhaustive-deps` matching an existing convention in the same file. All three are behavior-preserving.
+
+Task 3 landed as commits `32ef49065`, `4ecee7b1a`, `3658c6d06`, `085c8ae46`, `7f755165d`, `221e3a316`.
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** all spec sections map to tasks — viewport/UA rule (Tasks 1, 7-9, 11), render-only fallback (Tasks 2-3), mobile nav shell (Tasks 7-9), work items (Tasks 3-6), comments/attachments (Tasks 10-11), filters/search (Tasks 4, 6, 9), desktop guardrails (all tasks, verified in Task 12 Step 4), testing (Tasks 1-2, 12).
-- **Known spec deviation:** the app-rail/backdrop gating uses `useMobileViewport` and the repo's `md:` convention rather than `max-md:` variants — recorded in the header refinements.
+- **Known spec deviations:** (a) the app-rail/backdrop gating uses `useMobileViewport` and the repo's `md:` convention rather than `max-md:` variants; (b) the mobile layout fallback is data-shape aware rather than "always list" — see Post-Review Amendments.
 - **Spec item with no code change:** "attachment/image previews fluid at phone width" — verified during planning that there is no fixed-width preview panel (`apps/web/core/components/issues/attachment/*` has none; the editor image modal is `fixed inset-0 size-full`). Covered by Task 12 Step 3 item 8 instead.
-- **Type consistency:** `resolveWorkItemLayout(layout, isMobileViewport)` and `useMobileViewport()`/`useTouchPointer()` names are identical across Tasks 1-3, 7-9, 11.
+- **Type consistency:** `resolveWorkItemLayout(displayFilters, isMobileViewport)` and `useMobileViewport()`/`useTouchPointer()` names are identical across Tasks 3-11. Tasks 1-2 text shows the original resolver signature; the amendments section supersedes it.

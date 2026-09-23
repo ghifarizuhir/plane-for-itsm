@@ -19,7 +19,7 @@ Everything else (create work item, settings/admin, services/intake, pages, board
 1. **Approach A1** — polish the existing partial responsive behavior; no separate mobile shell, no route restructure.
 2. **Breakpoint** — `md` (768px). Mobile means viewport `<768px`, matching the existing sidebar auto-collapse logic (`sidebar-wrapper.tsx:38-47`).
 3. **Viewport vs UA rule** — layout and visibility decisions use **viewport** (new `matchMedia` hook); hover/drag/tooltip interaction gating keeps using **UA** (`usePlatformOS`, unchanged across ~126 files).
-4. **Work-item layout on mobile = List only.** A persisted desktop layout (kanban/calendar/gantt/spreadsheet) falls back to list **render-only** and is never written back to the store.
+4. **Work-item layout on mobile = List only.** A persisted desktop layout (kanban/calendar/gantt/spreadsheet) falls back to list **render-only** and is never written back to the store. _(Amended during implementation: the fallback is data-shape aware — see Amendments below.)_
 5. **Peek overview stays the mobile work-item detail surface** — side-peek is already `w-full` at phone width (`view.tsx:126`); only padding and the fixed-width secondary column need work.
 6. **No PWA/offline work** — manifests and apple meta already exist (`app/root.tsx:44-72`); the service worker stays unregistered.
 7. **Desktop safety first** — every new behavior is gated by `max-md:` or the viewport hook; desktop class strings are left untouched where possible; a desktop regression checklist is part of QA.
@@ -148,3 +148,16 @@ Shared helper (e.g. `resolveWorkItemLayout(layout, isMobileViewport)` in `core/c
 - Tablet-specific layout.
 - Native mobile app.
 - New e2e or visual-regression test infrastructure.
+
+## Amendments (2026-09-23, during implementation)
+
+Code review of the first implementation found that a blanket "force list" fallback cannot be correct on its own: the API response shape is derived from the persisted layout, so a forced list could receive flat data while grouping by a non-null key (empty groups), date-windowed calendar data, or nested sub-grouped data. The shipped behavior is data-shape aware:
+
+- `spreadsheet` / `gantt_chart` fall back to list (their fetch is flat).
+- `kanban` falls back unless it is both grouped and sub-grouped (only then is the data nested).
+- `calendar` keeps its layout — it already has a dedicated mobile agenda, and its data is date-windowed.
+- The list renders ungrouped when the fetched data is flat (`ALL_ISSUES` key present) and grouped by the persisted key otherwise, keeping pagination cursors consistent.
+- Workspace/global views (`/workspace-views/*`) are excluded from the fallback: there is no workspace list root, so forcing list rendered a blank page. They keep their layout on mobile until a workspace list root exists (follow-up).
+- All of this remains render-only: the persisted layout is never written back.
+
+Implementation commits: `32ef49065`, `4ecee7b1a`, `3658c6d06`, `085c8ae46`, `7f755165d`, `221e3a316`.
