@@ -31,6 +31,8 @@ reqwest = { workspace = true }
 lettre = { workspace = true }
 aes = { workspace = true }
 regex = { workspace = true }
+rig = { workspace = true }
+schemars = { workspace = true }
 zxcvbn = "3"
 rand = "0.9"
 chrono-tz = "0.10.4"
