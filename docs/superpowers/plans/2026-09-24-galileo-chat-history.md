@@ -763,7 +763,7 @@ pub(crate) async fn recent_messages(
 }
 
 /// Insert one message and return the stored row. Takes a connection so the
-/// caller can run it inside a transaction (`&mut *tx`) or on a pooled
+/// caller can run it inside a transaction (`&mut tx`) or on a pooled
 /// connection (`&mut conn`).
 pub(crate) async fn insert_message(
     conn: &mut sqlx::PgConnection,
@@ -910,7 +910,7 @@ pub async fn create(
     .bind(auth.0)
     .bind(&body.mode)
     .bind(&title)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut tx)
     .await?;
     sqlx::query(
         "DELETE FROM ai_conversations WHERE id IN ( \
@@ -920,7 +920,7 @@ pub async fn create(
     .bind(workspace_id)
     .bind(auth.0)
     .bind(MAX_CONVERSATIONS_PER_USER)
-    .execute(&mut *tx)
+    .execute(&mut tx)
     .await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(conversation_json(&row))))
@@ -1764,8 +1764,16 @@ async fn agent_turn_persists_both_messages_and_builds_context_from_history() {
     assert_eq!(body["assistant_message"]["content"], json!("agent answer"));
 
     // The upstream saw the composed prompt: context + newest 8 + question.
+    // Rig sends the agent preamble as messages[0], so find the user message
+    // by role instead of by index.
     let sent = bodies.lock().unwrap().clone();
-    let content = sent[0]["messages"][0]["content"].as_str().unwrap();
+    let content = sent[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == json!("user"))
+        .and_then(|message| message["content"].as_str())
+        .unwrap();
     assert!(content.contains("Work item context:"));
     assert!(content.contains("seed-2"), "oldest two of ten are dropped");
     assert!(!content.contains("seed-0"));
@@ -1991,7 +1999,7 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
             // Assistant message + prune + updated_at in ONE transaction.
             let mut tx = st.pool.begin().await?;
             let assistant_message = insert_message(
-                &mut *tx,
+                &mut tx,
                 conversation_id,
                 "assistant",
                 &text,
@@ -1999,7 +2007,7 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 &metadata,
             )
             .await?;
-            let conversation = finish_turn(&mut *tx, conversation_id, &title).await?;
+            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
             tx.commit().await?;
             Ok((
                 StatusCode::OK,
@@ -2020,7 +2028,7 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
             };
             if let Ok(mut tx) = st.pool.begin().await {
                 let _ = insert_message(
-                    &mut *tx,
+                    &mut tx,
                     conversation_id,
                     "assistant",
                     &message,
@@ -2028,7 +2036,7 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                     &json!({ "is_error": true }),
                 )
                 .await;
-                let _ = finish_turn(&mut *tx, conversation_id, &title).await;
+                let _ = finish_turn(&mut tx, conversation_id, &title).await;
                 let _ = tx.commit().await;
             }
             match error {
@@ -2050,7 +2058,7 @@ Tambahkan helper di modul yang sama:
 ```rust
 /// 200 body: the existing chat fields plus the persisted rows so the FE can
 /// reconcile its optimistic bubble and refresh the conversation list.
-pub fn chat_success_body(
+pub(crate) fn chat_success_body(
     text: &str,
     tool_calls: Vec<Value>,
     action: Option<Value>,
@@ -2441,7 +2449,7 @@ Ganti isi `workspace_ai_assistant`.
             // Assistant message + prune + updated_at in ONE transaction.
             let mut tx = st.pool.begin().await?;
             let assistant_message = insert_message(
-                &mut *tx,
+                &mut tx,
                 conversation_id,
                 "assistant",
                 &text,
@@ -2449,7 +2457,7 @@ Ganti isi `workspace_ai_assistant`.
                 &json!({ "is_error": false }),
             )
             .await?;
-            let conversation = finish_turn(&mut *tx, conversation_id, &title).await?;
+            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
             tx.commit().await?;
             Ok((
                 StatusCode::OK,
@@ -2470,7 +2478,7 @@ Ganti isi `workspace_ai_assistant`.
             };
             if let Ok(mut tx) = st.pool.begin().await {
                 let _ = insert_message(
-                    &mut *tx,
+                    &mut tx,
                     conversation_id,
                     "assistant",
                     &message,
@@ -2478,7 +2486,7 @@ Ganti isi `workspace_ai_assistant`.
                     &json!({ "is_error": true }),
                 )
                 .await;
-                let _ = finish_turn(&mut *tx, conversation_id, &title).await;
+                let _ = finish_turn(&mut tx, conversation_id, &title).await;
                 let _ = tx.commit().await;
             }
             match error {
