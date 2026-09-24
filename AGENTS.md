@@ -22,6 +22,16 @@ Only ONE server may occupy port 3000. Default is **prod** (`plane-web-prod.servi
 - To code locally instead: `systemctl --user stop plane-web-prod.service && systemctl --user start plane-web.service` (dev needs `VITE_API_BASE_URL=http://192.168.1.11:8000` in `apps/web/.env`, otherwise login loops on SameSite=Lax cross-site cookies). Never enable both services at once.
 - Do NOT expose Vite dev via Cloudflare Tunnel without a cache-bypass rule: edge-cached `node_modules/.vite/deps/*` mixes optimizer generations (`?v=` mismatch) and crashes React (`resolveDispatcher() is null`). Do NOT delete `apps/web/node_modules/.vite` to "fix" it — that resets the optimizer and makes it worse.
 
+## Live Server (port 3100)
+
+Server kolaborasi realtime Pages (Hocuspocus/Yjs) untuk editor dokumen.
+
+- Service: `plane-live.service` (`systemctl --user status plane-live`), unit di `systemd/user/plane-live.service`.
+- Env: `apps/live/.env` (API_BASE_URL ke api-rs, REDIS_URL ke container plane-redis, LIVE_SERVER_SECRET_KEY).
+- Setelah mengubah kode `apps/live`: `pnpm --filter=live build && systemctl --user restart plane-live.service`.
+- Verifikasi: `curl http://localhost:3100/live/health/` (cold start ~8 detik).
+- `VITE_LIVE_BASE_URL` di-bake saat build web dan harus URL yang bisa dijangkau browser. Untuk LAN pakai `http://<LAN-IP>:3100` (IP host bisa berubah); untuk tunnel butuh ingress (mis. `live.terraline.space` → `http://localhost:3100` di dashboard Cloudflare) + rebuild dengan URL https, karena halaman https tidak boleh connect `ws://` (mixed content).
+
 ## Code Style
 
 - **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
