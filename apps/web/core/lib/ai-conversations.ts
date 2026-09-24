@@ -34,6 +34,9 @@ export type TAiStoredMessage = {
   created_at: string;
 };
 
+/** Keys the `PATCH .../messages/:id/` endpoint accepts (server allowlist). */
+export type TAiMessageMetadataPatch = Pick<TAiMessageMetadata, "schedule_decision" | "created_schedule_id">;
+
 /** Map a server-stored message onto the chat bubble model. */
 export const toAiMessage = (stored: TAiStoredMessage): TAiMessage => ({
   id: stored.id,

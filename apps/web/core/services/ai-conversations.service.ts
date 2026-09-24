@@ -9,7 +9,7 @@ import { APIService } from "@/services/api.service";
 import type {
   TAiConversation,
   TAiConversationMode,
-  TAiMessageMetadata,
+  TAiMessageMetadataPatch,
   TAiStoredMessage,
 } from "@/lib/ai-conversations";
 
@@ -70,7 +70,7 @@ export class AiConversationsService extends APIService {
     workspaceSlug: string,
     conversationId: string,
     messageId: string,
-    metadata: TAiMessageMetadata
+    metadata: TAiMessageMetadataPatch
   ): Promise<TAiStoredMessage> {
     return this.patch(`/api/workspaces/${workspaceSlug}/ai-conversations/${conversationId}/messages/${messageId}/`, {
       metadata,
