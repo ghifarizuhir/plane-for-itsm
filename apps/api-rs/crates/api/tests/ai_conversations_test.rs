@@ -859,6 +859,75 @@ async fn classic_turn_persists_and_requires_conversation_id() {
 }
 
 #[tokio::test]
+async fn ai_complete_is_stateless_and_persists_nothing() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    // Missing task → 400.
+    let (status, _) = api::routes::ai::workspace_ai_complete(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"prompt": "Pump fails"})),
+    )
+    .await
+    .expect("missing task");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (base_url, bodies) = crate::support::spawn_recording_upstream("editor answer").await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+
+    let (status, Json(body)) = api::routes::ai::workspace_ai_complete(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "Generate a proper description for this work item.",
+            "prompt": "Pump fails",
+        })),
+    )
+    .await
+    .expect("ai-complete");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["response"], json!("editor answer"));
+    assert_eq!(body["response_html"], json!("editor answer"));
+
+    // Old parity: task and prompt are folded, nothing else is added.
+    let sent = bodies.lock().unwrap().clone();
+    let content = sent[0]["messages"][0]["content"].as_str().unwrap();
+    assert!(content.contains("Generate a proper description for this work item."));
+    assert!(content.contains("Pump fails"));
+    assert!(!content.contains("Conversation so far:"));
+
+    // Stateless: nothing is stored.
+    let conversations: i64 =
+        sqlx::query_scalar("SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1")
+            .bind(scratch.workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(conversations, 0);
+    let messages: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_messages WHERE conversation_id IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(messages, 0);
+
+    std::env::remove_var("SKIP_ENV_VAR");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::remove_var("LLM_BASE_URL");
+    std::env::remove_var("LLM_MODEL");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn classic_turn_prunes_messages_beyond_two_hundred() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;

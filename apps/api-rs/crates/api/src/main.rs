@@ -1758,6 +1758,12 @@ async fn main() {
             "/api/workspaces/:slug/ai-assistant/",
             post(routes::ai::workspace_ai_assistant),
         )
+        // Rust-only: one-shot stateless completion for editor surfaces
+        // (auto-generate description). No conversation, nothing persisted.
+        .route(
+            "/api/workspaces/:slug/ai-complete/",
+            post(routes::ai::workspace_ai_complete),
+        )
         // Rust-only (no Django counterpart; consumed by the web app's Galileo
         // sidebar): POST 200 `{response, response_html, tool_calls}` from a Rig
         // tool-calling agent over workspace-scoped read-only tools. Same gate

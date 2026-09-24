@@ -261,6 +261,52 @@ pub async fn workspace_ai_assistant(
     }
 }
 
+/// `POST /api/workspaces/:slug/ai-complete/` — one-shot stateless completion
+/// for editor surfaces (no conversation, nothing persisted). Gate and error
+/// shapes mirror `/ai-assistant/`.
+pub async fn workspace_ai_complete(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let cfg = resolve_llm_config(&st.pool).await;
+    if cfg.api_key.is_empty() || cfg.model.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "AI is not configured for this workspace."})),
+        ));
+    }
+    let Some(task) = task_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Task is required"})),
+        ));
+    };
+    let prompt = body.get("prompt").and_then(Value::as_str).unwrap_or("");
+    match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, prompt).await {
+        Ok(text) => {
+            let html = response_html(&text);
+            Ok((
+                StatusCode::OK,
+                Json(json!({"response": text, "response_html": html})),
+            ))
+        }
+        Err(LlmError::RateLimited) => Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
+        )),
+        Err(LlmError::Upstream) => Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "An internal error has occurred."})),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
