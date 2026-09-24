@@ -1775,6 +1775,14 @@ async fn main() {
             "/api/workspaces/:slug/ai-conversations/",
             get(routes::ai_conversations::list).post(routes::ai_conversations::create),
         )
+        // Rust-only: conversation detail + rename + hard delete (cascade
+        // messages). Owner-only.
+        .route(
+            "/api/workspaces/:slug/ai-conversations/:conversation_id/",
+            get(routes::ai_conversations::detail)
+                .patch(routes::ai_conversations::patch)
+                .delete(routes::ai_conversations::destroy),
+        )
         // Rust-only (no Django counterpart; consumed by the web app's
         // Scheduler page): GET list + POST confirm-created proposal.
         // Idempotent per `(workspace_id, proposal_key)`; gate WORKSPACE

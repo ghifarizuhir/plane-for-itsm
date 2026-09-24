@@ -274,6 +274,77 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(conversation_json(&row))))
 }
 
+pub async fn detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, conversation_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let Some(row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await? else {
+        return Ok(missing());
+    };
+    Ok((StatusCode::OK, Json(conversation_json(&row))))
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, conversation_id)): Path<(String, Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let Some(_row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    let title = body
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if title.is_empty() || title.chars().count() > RENAME_MAX_CHARS {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("title must be 1-{RENAME_MAX_CHARS} characters")})),
+        ));
+    }
+    let row: ConversationRow = sqlx::query_as(
+        "UPDATE ai_conversations SET title = $2, updated_at = now() WHERE id = $1 \
+         RETURNING id, mode, title, created_at, updated_at",
+    )
+    .bind(conversation_id)
+    .bind(title)
+    .fetch_one(&st.pool)
+    .await?;
+    Ok((StatusCode::OK, Json(conversation_json(&row))))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, conversation_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let Some(_row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    sqlx::query("DELETE FROM ai_conversations WHERE id = $1")
+        .bind(conversation_id)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

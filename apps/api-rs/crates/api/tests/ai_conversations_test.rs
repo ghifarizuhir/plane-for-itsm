@@ -346,3 +346,165 @@ async fn invalid_mode_is_rejected() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn detail_rename_delete_are_owner_scoped_and_validated() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let other = scratch.add_actor(&pool, 20).await;
+
+    let (_, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic"})),
+    )
+    .await
+    .expect("create");
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // Foreign user sees nothing: detail, rename and delete are all 404.
+    let (status, _) = ai_conversations::detail(
+        State(st.clone()),
+        AuthUser(other),
+        Path((scratch.slug.clone(), id)),
+    )
+    .await
+    .expect("foreign detail");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(other),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": "hijack"})),
+    )
+    .await
+    .expect("foreign rename");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::destroy(
+        State(st.clone()),
+        AuthUser(other),
+        Path((scratch.slug.clone(), id)),
+    )
+    .await
+    .expect("foreign delete");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Owner can rename (trimmed) and read it back.
+    let (status, Json(renamed)) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": "  My chat  "})),
+    )
+    .await
+    .expect("rename");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(renamed["title"], json!("My chat"));
+    let (_, Json(detail)) = ai_conversations::detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(detail["title"], json!("My chat"));
+
+    // Blank and over-long titles are rejected.
+    let (status, _) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": "   "})),
+    )
+    .await
+    .expect("blank title");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let long_title = "x".repeat(121);
+    let (status, _) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": long_title})),
+    )
+    .await
+    .expect("long title");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Unknown id → 404.
+    let (status, _) = ai_conversations::detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), Uuid::new_v4())),
+    )
+    .await
+    .expect("missing detail");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Owner delete removes the row.
+    let (status, _) = ai_conversations::destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+    )
+    .await
+    .expect("delete");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM ai_conversations WHERE id = $1")
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, 0);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn deleting_a_conversation_cascades_its_messages() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    let (_, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "agent"})),
+    )
+    .await
+    .expect("create");
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    // Seed one message with raw SQL: `insert_message` is `pub(crate)` and not
+    // visible from this integration-test crate.
+    sqlx::query(
+        "INSERT INTO ai_messages (id, conversation_id, role, content, metadata, created_at) \
+         VALUES ($1, $2, 'user', 'hi', '{}'::jsonb, now())",
+    )
+    .bind(Uuid::new_v4())
+    .bind(id)
+    .execute(&pool)
+    .await
+    .expect("seed message");
+
+    let (status, _) = ai_conversations::destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+    )
+    .await
+    .expect("delete");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai_messages WHERE conversation_id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 0);
+
+    scratch.purge(&pool).await;
+}
