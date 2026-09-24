@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AIAssistantStore, clearPersistedAiConversations } from "./ai-assistant.store";
+import { AIAssistantStore, AI_ASSISTANT_ACTIVE_PREFIX, clearPersistedAiConversations } from "./ai-assistant.store";
 import type { TAiIssueContext } from "@/lib/ai-context";
 import type { TAiConversation, TAiStoredMessage } from "@/lib/ai-conversations";
 
@@ -820,6 +820,261 @@ describe("AIAssistantStore", () => {
     await flush();
 
     expect(store.messages.map((m) => m.content)).not.toContain("late answer");
+    expect(store.isGenerating).toBe(false);
+  });
+});
+
+describe("race hardening", () => {
+  it("newChat during a list load keeps the chat empty after the list resolves", async () => {
+    let resolveList!: (value: TAiConversation[]) => void;
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(
+          () =>
+            new Promise<TAiConversation[]>((resolve) => {
+              resolveList = resolve;
+            })
+        ),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    store.newChat();
+
+    resolveList([conversation("c-classic", "classic")]);
+    await flush();
+
+    expect(store.conversations.map((c) => c.id)).toEqual(["c-classic"]);
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.messages).toEqual([]);
+    expect(services.conversations.listMessages).not.toHaveBeenCalled();
+  });
+
+  it("keeps an in-flight turn when the conversation list resolves late", async () => {
+    let resolveList!: (value: TAiConversation[]) => void;
+    let resolveChat!: (value: unknown) => void;
+    const services = makeServices({
+      ai: {
+        createGptTask: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              resolveChat = resolve;
+            })
+        ),
+      },
+      conversations: {
+        list: vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise<TAiConversation[]>((resolve) => {
+                resolveList = resolve;
+              })
+          )
+          .mockResolvedValue([]),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    const sending = store.sendMessage("early question");
+    await flush();
+    expect(store.messages.map((m) => m.content)).toEqual(["early question"]);
+
+    resolveList([]);
+    await flush();
+
+    expect(services.conversations.list).toHaveBeenCalledTimes(2);
+    expect(store.messages.map((m) => m.content)).toEqual(["early question"]);
+    expect(store.activeConversationId).toBe("c-new-classic");
+
+    resolveChat(chatResponse("c-new-classic", "early question", "late answer"));
+    await sending;
+
+    expect(store.messages.map((m) => m.content)).toEqual(["early question", "late answer"]);
+    expect(store.isGenerating).toBe(false);
+  });
+
+  it("dedupes conversation creation across two rapid sends", async () => {
+    let resolveCreate!: (value: TAiConversation) => void;
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => []),
+        create: vi.fn(
+          () =>
+            new Promise<TAiConversation>((resolve) => {
+              resolveCreate = resolve;
+            })
+        ),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    const first = store.sendMessage("first question");
+    const second = store.sendMessage("second question");
+    await flush();
+    expect(services.conversations.create).toHaveBeenCalledTimes(1);
+
+    resolveCreate(conversation("c-one", "classic"));
+    await Promise.all([first, second]);
+    await flush();
+
+    expect(services.conversations.create).toHaveBeenCalledTimes(1);
+    expect(services.ai.createGptTask).toHaveBeenCalledTimes(1);
+    expect(store.messages.filter((m) => m.role === "user")).toHaveLength(1);
+    expect(store.messages.map((m) => m.content)).toEqual(["first question", "classic ok"]);
+  });
+
+  it("keeps the turn when a send starts before the conversation list resolves", async () => {
+    let resolveList!: (value: TAiConversation[]) => void;
+    let resolveCreate!: (value: TAiConversation) => void;
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(
+          () =>
+            new Promise<TAiConversation[]>((resolve) => {
+              resolveList = resolve;
+            })
+        ),
+        create: vi.fn(
+          () =>
+            new Promise<TAiConversation>((resolve) => {
+              resolveCreate = resolve;
+            })
+        ),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    const sending = store.sendMessage("early question");
+    await flush();
+    expect(services.conversations.create).toHaveBeenCalledTimes(1);
+
+    resolveList([]);
+    await flush();
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.conversations).toEqual([]);
+
+    resolveCreate(conversation("c-new-classic", "classic"));
+    await sending;
+    await flush();
+
+    expect(store.activeConversationId).toBe("c-new-classic");
+    expect(store.messages.map((m) => m.content)).toEqual(["early question", "classic ok"]);
+  });
+
+  it("persists a proposal decision to the original conversation after a thread switch", async () => {
+    let resolveSchedule!: (value: { id: string }) => void;
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async (_slug: string, data: any) => ({
+          ...chatResponse(data.conversation_id, data.prompt, "proposal ready"),
+          pending_action: { kind: "create_schedule", proposal: scheduleProposal },
+        })),
+      },
+      schedules: {
+        create: vi.fn(
+          () =>
+            new Promise<{ id: string }>((resolve) => {
+              resolveSchedule = resolve;
+            })
+        ),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    await store.sendMessage("buat jadwal");
+    const message = store.messages.find((m) => m.scheduleProposal)!;
+
+    const confirming = store.confirmScheduleProposal(message.id);
+    await flush();
+    await store.openConversation("c-classic");
+    resolveSchedule({ id: "s1" });
+    await confirming;
+
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
+      "acme",
+      "c-agent",
+      message.id,
+      expect.objectContaining({ schedule_decision: "created", created_schedule_id: "s1" })
+    );
+  });
+
+  it("shows an error bubble when conversation creation fails", async () => {
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async () => {
+          throw Object.assign(new Error("boom"), { status: 500 });
+        }),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("hello");
+
+    expect(store.isGenerating).toBe(false);
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].isError).toBe(true);
+  });
+
+  it("resets to a new chat when opening a conversation fails with a non-404 error", async () => {
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => [conversation("c-classic", "classic")]),
+        listMessages: vi.fn(async () => {
+          throw Object.assign(new Error("boom"), { status: 500 });
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.messages).toEqual([]);
+    expect(store.conversations.map((c) => c.id)).toEqual(["c-classic"]);
+  });
+
+  it("keeps the active conversation key when clearing persisted legacy messages", () => {
+    localStorage.setItem("ai_assistant_messages_acme", "[]");
+    localStorage.setItem(`${AI_ASSISTANT_ACTIVE_PREFIX}acme_classic`, "c-classic");
+
+    clearPersistedAiConversations();
+
+    expect(localStorage.getItem("ai_assistant_messages_acme")).toBeNull();
+    expect(localStorage.getItem(`${AI_ASSISTANT_ACTIVE_PREFIX}acme_classic`)).toBe("c-classic");
+  });
+
+  it("resets to a new chat when the chat response is a 404", async () => {
+    const services = makeServices({
+      ai: {
+        createGptTask: vi.fn(async () => {
+          throw Object.assign(new Error("gone"), { status: 404 });
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("hello");
+
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].isError).toBe(true);
     expect(store.isGenerating).toBe(false);
   });
 });

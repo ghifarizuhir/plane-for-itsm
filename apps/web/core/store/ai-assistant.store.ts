@@ -54,7 +54,7 @@ export const clearPersistedAiConversations = () => {
     const keys: string[] = [];
     for (let index = 0; index < localStorage.length; index++) {
       const key = localStorage.key(index);
-      if (key?.startsWith(AI_ASSISTANT_STORAGE_PREFIX) || key?.startsWith(AI_ASSISTANT_ACTIVE_PREFIX)) {
+      if (key?.startsWith(AI_ASSISTANT_STORAGE_PREFIX)) {
         keys.push(key);
       }
     }
@@ -85,6 +85,10 @@ export class AIAssistantStore implements IAIAssistantStore {
   private workspaceSlug: string | undefined = undefined;
   private requestSeq = 0;
   private listSeq = 0;
+  private interactionSeq = 0;
+  private listVersion = 0;
+  private turnGuard = false;
+  private ensurePromise?: Promise<string | undefined>;
 
   constructor(
     private aiService: TAiService = new AIService(),
@@ -125,6 +129,9 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.isGenerating = false;
       this.requestSeq += 1;
       this.listSeq += 1;
+      this.interactionSeq += 1;
+      this.turnGuard = false;
+      this.ensurePromise = undefined;
       this.conversations = [];
       this.activeConversationId = undefined;
       this.messages = [];
@@ -141,25 +148,36 @@ export class AIAssistantStore implements IAIAssistantStore {
     const slug = this.workspaceSlug;
     if (!slug) return;
     const seq = ++this.listSeq;
+    const version = this.listVersion;
+    const interaction = this.interactionSeq;
     this.conversationsLoading = true;
     try {
       const conversations = await this.conversationsService.list(slug);
       if (seq !== this.listSeq) return;
+      if (version !== this.listVersion) {
+        void this.loadConversations();
+        return;
+      }
       runInAction(() => {
         this.conversations = conversations;
-        this.conversationsLoading = false;
       });
-      await this.openLastForMode();
+      if (interaction === this.interactionSeq && this.activeConversationId === undefined && !this.turnGuard) {
+        await this.openLastForMode();
+      }
     } catch {
-      if (seq !== this.listSeq) return;
-      runInAction(() => {
-        this.conversationsLoading = false;
-      });
+      // fetch failures leave the previous list in place — loading is reset below
+    } finally {
+      if (seq === this.listSeq) {
+        runInAction(() => {
+          this.conversationsLoading = false;
+        });
+      }
     }
   };
 
   setMode = (mode: TAiAssistantMode) => {
     if (mode === this.mode) return;
+    this.interactionSeq += 1;
     this.requestSeq += 1;
     this.isGenerating = false;
     this.mode = mode;
@@ -171,30 +189,43 @@ export class AIAssistantStore implements IAIAssistantStore {
     const slug = this.workspaceSlug;
     const conversation = this.conversations.find((candidate) => candidate.id === conversationId);
     if (!slug || !conversation) return;
+    this.interactionSeq += 1;
     const seq = ++this.requestSeq;
     this.isGenerating = false;
-    this.activeConversationId = conversationId;
-    this.mode = conversation.mode;
+    runInAction(() => {
+      this.activeConversationId = conversationId;
+      this.mode = conversation.mode;
+      this.messages = [];
+    });
     this.persistMode();
-    this.persistActiveId();
     try {
       const messages = await this.conversationsService.listMessages(slug, conversationId);
       if (seq !== this.requestSeq) return;
       runInAction(() => {
         this.messages = messages.map(toAiMessage);
       });
+      this.persistActiveId();
     } catch (error: any) {
       if (seq !== this.requestSeq) return;
       if (error?.status === 404) {
+        this.touchList();
         runInAction(() => {
           this.conversations = this.conversations.filter((candidate) => candidate.id !== conversationId);
+          this.activeConversationId = undefined;
+          this.messages = [];
         });
-        this.newChat();
+        this.clearActiveId();
+        return;
       }
+      runInAction(() => {
+        this.activeConversationId = undefined;
+        this.messages = [];
+      });
     }
   };
 
   newChat = () => {
+    this.interactionSeq += 1;
     this.requestSeq += 1;
     this.isGenerating = false;
     runInAction(() => {
@@ -210,6 +241,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (!slug || !trimmed) return;
     const updated = await this.conversationsService.update(slug, conversationId, trimmed);
     runInAction(() => {
+      this.touchList();
       this.conversations = this.conversations.map((candidate) =>
         candidate.id === conversationId ? updated : candidate
       );
@@ -221,6 +253,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (!slug) return;
     await this.conversationsService.remove(slug, conversationId);
     runInAction(() => {
+      this.touchList();
       this.conversations = this.conversations.filter((candidate) => candidate.id !== conversationId);
     });
     if (this.activeConversationId === conversationId) this.newChat();
@@ -234,47 +267,70 @@ export class AIAssistantStore implements IAIAssistantStore {
 
   sendMessage = async (question: string) => {
     const trimmed = question.trim();
-    if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
-    if (isScheduleCommand(trimmed) && this.mode !== "agent") {
-      this.setMode("agent");
-      await this.openLastForMode();
-    }
-    const slug = this.workspaceSlug;
-    const conversationId = await this.ensureConversation();
-    if (!conversationId) return;
-    const tempId = uuidv4();
+    if (!trimmed || this.isGenerating || this.turnGuard || !this.workspaceSlug) return;
+    this.turnGuard = true;
     runInAction(() => {
-      this.messages.push({ id: tempId, role: "user", content: trimmed });
+      this.isGenerating = true;
     });
-    await this.request(trimmed, slug, conversationId, tempId);
+    try {
+      this.interactionSeq += 1;
+      if (isScheduleCommand(trimmed) && this.mode !== "agent") {
+        this.setMode("agent");
+        await this.openLastForMode();
+      }
+      const slug = this.workspaceSlug;
+      const conversationId = await this.ensureConversation();
+      if (!conversationId) return;
+      const tempId = uuidv4();
+      runInAction(() => {
+        this.messages.push({ id: tempId, role: "user", content: trimmed });
+      });
+      await this.request(trimmed, slug, conversationId, tempId);
+    } finally {
+      this.turnGuard = false;
+      runInAction(() => {
+        this.isGenerating = false;
+      });
+    }
   };
 
   retryLast = async () => {
-    if (this.isGenerating || !this.workspaceSlug) return;
-    let lastUserQuestion: string | undefined;
-    for (let index = this.messages.length - 1; index >= 0; index--) {
+    if (this.isGenerating || this.turnGuard || !this.workspaceSlug) return;
+    if (!this.messages[this.messages.length - 1]?.isError) return;
+    let lastUserIndex = -1;
+    for (let index = this.messages.length - 2; index >= 0; index--) {
       if (this.messages[index].role === "user") {
-        lastUserQuestion = this.messages[index].content;
+        lastUserIndex = index;
         break;
       }
     }
-    if (!lastUserQuestion) return;
-    if (!this.messages[this.messages.length - 1]?.isError) return;
+    if (lastUserIndex < 0) return;
+    const lastUserQuestion = this.messages[lastUserIndex].content;
+    const optimisticId = this.messages[lastUserIndex].id;
+    this.turnGuard = true;
     runInAction(() => {
-      this.messages.pop();
+      this.isGenerating = true;
     });
-    const slug = this.workspaceSlug;
-    const conversationId = await this.ensureConversation();
-    if (!conversationId) return;
-    const tempId = uuidv4();
-    runInAction(() => {
-      this.messages.push({ id: tempId, role: "user", content: lastUserQuestion! });
-    });
-    await this.request(lastUserQuestion, slug, conversationId, tempId);
+    try {
+      this.interactionSeq += 1;
+      runInAction(() => {
+        this.messages.pop();
+      });
+      const slug = this.workspaceSlug;
+      const conversationId = await this.ensureConversation();
+      if (!conversationId) return;
+      await this.request(lastUserQuestion, slug, conversationId, optimisticId);
+    } finally {
+      this.turnGuard = false;
+      runInAction(() => {
+        this.isGenerating = false;
+      });
+    }
   };
 
   confirmScheduleProposal = async (messageId: string) => {
     const slug = this.workspaceSlug;
+    const conversationId = this.activeConversationId;
     const message = this.messages.find((candidate) => candidate.id === messageId);
     if (!slug || !message?.scheduleProposal || !message.scheduleProposalKey) return;
     if (message.scheduleDecision !== "pending") return;
@@ -284,19 +340,20 @@ export class AIAssistantStore implements IAIAssistantStore {
       message.scheduleDecision = "created";
       message.createdScheduleId = created.id;
     });
-    await this.persistDecision(message, {
+    await this.persistDecision(conversationId, message, {
       schedule_decision: "created",
       created_schedule_id: created.id,
     });
   };
 
   resolveScheduleProposal = (messageId: string, decision: "cancelled") => {
+    const conversationId = this.activeConversationId;
     const message = this.messages.find((candidate) => candidate.id === messageId);
     if (!message || message.scheduleDecision !== "pending") return;
     runInAction(() => {
       message.scheduleDecision = decision;
     });
-    void this.persistDecision(message, { schedule_decision: decision });
+    void this.persistDecision(conversationId, message, { schedule_decision: decision });
   };
 
   private ensureConversation = async (): Promise<string | undefined> => {
@@ -304,21 +361,47 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (!slug) return undefined;
     const active = this.conversations.find((candidate) => candidate.id === this.activeConversationId);
     if (active && active.mode === this.mode) return active.id;
-    const created = await this.conversationsService.create(slug, this.mode);
-    runInAction(() => {
-      this.conversations = [created, ...this.conversations];
-      this.activeConversationId = created.id;
+    if (this.ensurePromise) return this.ensurePromise;
+    const pending = this.createConversation(slug).finally(() => {
+      if (this.ensurePromise === pending) this.ensurePromise = undefined;
     });
-    this.persistActiveId();
-    return created.id;
+    this.ensurePromise = pending;
+    return pending;
+  };
+
+  private createConversation = async (slug: string): Promise<string | undefined> => {
+    try {
+      const created = await this.conversationsService.create(slug, this.mode);
+      runInAction(() => {
+        this.touchList();
+        this.conversations = [created, ...this.conversations];
+        this.activeConversationId = created.id;
+      });
+      this.persistActiveId();
+      return created.id;
+    } catch (error: any) {
+      runInAction(() => {
+        this.messages.push({
+          id: uuidv4(),
+          role: "assistant",
+          content: error?.data?.error || "Could not start a conversation. Please try again.",
+          isError: true,
+        });
+      });
+      return undefined;
+    }
+  };
+
+  private touchList = () => {
+    this.listVersion += 1;
   };
 
   private persistDecision = async (
+    conversationId: string | undefined,
     message: TAiMessage,
     metadata: { schedule_decision: "created" | "cancelled"; created_schedule_id?: string }
   ) => {
     const slug = this.workspaceSlug;
-    const conversationId = this.activeConversationId;
     if (!slug || !conversationId) return;
     try {
       await this.conversationsService.updateMessageMetadata(slug, conversationId, message.id, metadata);
@@ -361,6 +444,7 @@ export class AIAssistantStore implements IAIAssistantStore {
           this.messages.push(userMessage);
         }
         this.messages.push(assistantMessage);
+        this.touchList();
         this.conversations = [
           res.conversation,
           ...this.conversations.filter((candidate) => candidate.id !== res.conversation.id),
@@ -368,6 +452,14 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
     } catch (err: any) {
       if (seq !== this.requestSeq) return;
+      if (err?.status === 404) {
+        const errorContent = err?.data?.error || "This conversation was deleted. Starting a new chat.";
+        this.newChat();
+        runInAction(() => {
+          this.messages.push({ id: uuidv4(), role: "assistant", content: errorContent, isError: true });
+        });
+        return;
+      }
       const errorContent =
         err?.status === 429
           ? err?.data?.error || "Rate limit exceeded."
