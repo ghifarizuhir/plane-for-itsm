@@ -277,3 +277,68 @@ async fn create_enforces_twenty_schedule_limit() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn replay_at_capacity_returns_existing_schedule() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let mut first_key = None;
+    for index in 0..20 {
+        let key = Uuid::new_v4();
+        if index == 0 {
+            first_key = Some(key);
+        }
+        let (status, _) = ai_schedule::create(
+            State(state.clone()),
+            AuthUser(scratch.user_id),
+            Path(scratch.slug.clone()),
+            Json(json!({
+                "name": format!("Daily {index}"),
+                "prompt": "Report",
+                "frequency": "daily",
+                "proposal_key": key,
+            })),
+        )
+        .await
+        .expect("create ok");
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    // Replaying an existing key at 20/20 must return the original schedule.
+    let (status, Json(replay)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "replayed",
+            "prompt": "Report",
+            "frequency": "daily",
+            "proposal_key": first_key.unwrap(),
+        })),
+    )
+    .await
+    .expect("replay handled");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replay["already_exists"], json!(true));
+
+    // A brand-new key at 20/20 still hits the cap.
+    let (status, Json(err)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "One too many",
+            "prompt": "Report",
+            "frequency": "daily",
+            "proposal_key": Uuid::new_v4(),
+        })),
+    )
+    .await
+    .expect("cap handled");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(err["error"].as_str().unwrap().contains("20"));
+
+    scratch.purge(&pool).await;
+}

@@ -104,7 +104,7 @@ pub async fn list(
                             WHERE schedule_id = s.id ORDER BY created_at DESC LIMIT 1) r ON true \
          WHERE s.workspace_id = (SELECT id FROM workspaces WHERE slug = $1) \
            AND s.deleted_at IS NULL \
-         ORDER BY s.created_at DESC",
+         ORDER BY s.created_at DESC, s.id",
     )
     .bind(&slug)
     .fetch_all(&st.pool)
@@ -155,6 +155,20 @@ pub async fn create(
         }
     };
 
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM ai_schedules WHERE workspace_id = $1 AND proposal_key = $2 AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(body.proposal_key)
+    .fetch_optional(&st.pool)
+    .await?;
+    if let Some(existing) = existing {
+        return Ok((
+            StatusCode::OK,
+            Json(json!({"id": existing, "already_exists": true})),
+        ));
+    }
+
     let count: i64 = sqlx::query_scalar(
         "SELECT count(*)::int8 FROM ai_schedules WHERE workspace_id = $1 AND deleted_at IS NULL",
     )
@@ -197,17 +211,22 @@ pub async fn create(
     match inserted {
         Some(id) => Ok((StatusCode::CREATED, Json(json!({"id": id})))),
         None => {
-            let existing: Uuid = sqlx::query_scalar(
+            let existing: Option<Uuid> = sqlx::query_scalar(
                 "SELECT id FROM ai_schedules WHERE workspace_id = $1 AND proposal_key = $2 AND deleted_at IS NULL",
             )
             .bind(workspace_id)
             .bind(body.proposal_key)
-            .fetch_one(&st.pool)
+            .fetch_optional(&st.pool)
             .await?;
-            Ok((
-                StatusCode::OK,
-                Json(json!({"id": existing, "already_exists": true})),
-            ))
+            match existing {
+                Some(existing) => Ok((
+                    StatusCode::OK,
+                    Json(json!({"id": existing, "already_exists": true})),
+                )),
+                None => Err(common::errors::AppError(anyhow::anyhow!(
+                    "schedule insert conflicted but no row was found"
+                ))),
+            }
         }
     }
 }
