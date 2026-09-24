@@ -614,8 +614,10 @@ check fe-archpages-404 404 "$BASE/api/workspaces/$WS/projects/$PID/archived-page
 check fe-bulksub-404 404 -X POST -d '{}' "$BASE/api/workspaces/$WS/projects/$PID/bulk-subscribe-issues/"
 
 echo "== ai =="
-# Route harus dilayani Rust (bukan 404/405). Status bergantung konfigurasi
-# stack: 400 tanpa key, 200/500/429 bila key ada.
+# Route harus dilayani Rust (bukan 404/405). Body di bawah tanpa
+# conversation_id kini 400 "conversation_id is required" (diterima smoke,
+# bukan 404/405). Status lain bergantung konfigurasi stack: 400 tanpa key,
+# 200/500/429 bila key ada dan conversation_id valid.
 AICODE=$(curl "${H[@]}" -o /tmp/smoke_body -w '%{http_code}' -X POST -d '{"task":"say hi","prompt":"hi"}' "$BASE/api/workspaces/$WS/ai-assistant/")
 if [ "$AICODE" = "404" ] || [ "$AICODE" = "405" ]; then
   FAIL=$((FAIL+1)); FAILED="$FAILED ai-assistant($AICODE)"; echo "FAIL ai-assistant route missing -> $AICODE"

@@ -132,22 +132,26 @@ keputusan kartu proposal.
 
 `POST /ai-agent/` dan `POST /ai-assistant/` berubah:
 
-- Body: `{task?, prompt, conversation_id}` — `conversation_id` **wajib**.
+- Body: `{task?, prompt, context, conversation_id}` — `prompt` adalah teks mentah
+  user, `context` membawa blok work item + timezone; history prompt dibangun
+  ulang server-side dari DB. `conversation_id` **wajib**.
 - Percakapan tidak ada / bukan milik user / workspace beda → 404.
 - `conversation.mode` tidak cocok dengan endpoint (`agent` vs `classic`) → 400.
 - Alur satu request:
   1. Load percakapan + validasi.
-  2. `INSERT` pesan user (`content = prompt`).
+  2. `INSERT` pesan user (`content = prompt`) — di-commit sebelum panggilan LLM
+     (koneksi pool dilepas lebih dulu).
   3. Bila percakapan belum punya pesan sebelumnya → isi `title` otomatis:
      satu baris, trim, potong 60 char; `updated_at = now()`.
   4. Load **8 pesan terakhir sebelum pesan user baru** (urut `created_at, id`),
      format `User:` / `Assistant:` memakai `content` (bukan html) — menggantikan
      `buildAiPrompt` di FE, limit tetap 8.
   5. Jalankan agen seperti sekarang (`run_agent` / `chat_completion`).
-  6. `INSERT` pesan assistant: `content` = teks jawaban, `content_html` =
-     `response_html`, `metadata` = proposal (bila `pending_action.kind ==
-"create_schedule"`) + `schedule_proposal_key` (uuid baru) +
-     `schedule_decision = "pending"`, atau `is_error = true` bila agen gagal.
+  6. `INSERT` pesan assistant bersama langkah 7–8 dalam **satu transaksi**:
+     `content` = teks jawaban, `content_html` = `response_html`, `metadata` =
+     proposal (bila `pending_action.kind == "create_schedule"`) +
+     `schedule_proposal_key` (uuid baru) + `schedule_decision = "pending"`,
+     atau `is_error = true` bila agen gagal.
   7. Prune pesan >200 per percakapan (hapus `created_at, id` terkecil).
   8. `updated_at` percakapan = `now()`.
 - Respons: `{response, response_html, tool_calls, pending_action, conversation,
@@ -187,7 +191,7 @@ user_message, assistant_message}` — FE memakai baris server untuk mengganti
 - Header: ikon history + tombol New chat, di samping toggle mode yang ada.
 - Komponen baru `conversation-history-panel.tsx`: daftar item (judul, badge
   mode, waktu relatif, item aktif ditandai), aksi rename (inline/dialog) dan
-  hapus (dialog konfirmasi), empty state, loading skeleton.
+  hapus (konfirmasi inline dua langkah), empty state, loading skeleton.
 - `schedule-proposal-card.tsx` tidak berubah tampilannya; sumber data kini
   metadata pesan server. Pending tetap bisa dikonfirmasi dari history.
 - Mapping server message → `TAiMessage`: `metadata.is_error` → `isError`,
@@ -235,7 +239,7 @@ user_message, assistant_message}` — FE memakai baris server untuk mengganti
 - Load daftar + buka percakapan terakhir per mode; ganti mode tidak menghapus
   pesan; new chat; optimistic replace; pembersihan key lama saat load;
   reset saat 404.
-- Komponen panel: render item + badge, dialog rename/hapus memanggil service.
+- Panel diuji lewat smoke manual (repo tanpa infrastruktur test komponen).
 
 **Smoke manual (tunnel):** buat percakapan → kirim pesan → reload (masih ada) →
 rename → hapus; konfirmasi proposal dari percakapan lama; history mode Classic;

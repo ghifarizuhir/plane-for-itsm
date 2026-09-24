@@ -2944,8 +2944,200 @@
           "fe_pages": [],
           "batch_task": "AI-1",
           "out_scope": false,
-          "notes": "DECISION AI-1 (deviation_accepted, ADR 2026-09-21-ai-assistant-rust.md): WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212) parity status/body (400 config/task byte-exact, 500 generik, 200 {response,response_html}); deltas: OpenAI-compatible via LLM_BASE_URL env (LLM_PROVIDER + allowlist model dropped), upstream 429 -> 429 Rate limit exceeded for <host>, prompt hilang/non-string -> '', task non-string -> 400, body JSON invalid -> 400 axum. Gate WORKSPACE ADMIN/MEMBER verbatim (permissions/base.py:44-51,81-84). has_llm_configured kini DB-aware.",
+          "notes": "DECISION AI-1 (deviation_accepted, ADR 2026-09-21-ai-assistant-rust.md): WorkspaceGPTIntegrationEndpoint.post (views/external/base.py:184-212) parity status/body (400 config/task byte-exact, 500 generik, 200 {response,response_html}); deltas: OpenAI-compatible via LLM_BASE_URL env (LLM_PROVIDER + allowlist model dropped), upstream 429 -> 429 Rate limit exceeded for <host>, prompt hilang/non-string -> '', task non-string -> 400, body JSON invalid -> 400 axum. Gate WORKSPACE ADMIN/MEMBER verbatim (permissions/base.py:44-51,81-84). has_llm_configured kini DB-aware. Chat history (2026-09-24): conversation_id kini WAJIB -> 400 {error:'conversation_id is required'} bila hilang/invalid, mode mismatch -> 400; server membangun prompt model dari 8 pesan history tersimpan + context (bukan lagi buildAiPrompt FE); sukses 200 menambah {conversation,user_message,assistant_message}; error 400/404/429/500 (404 untuk percakapan asing/hilang).",
           "adr": "docs/superpowers/decisions/2026-09-21-ai-assistant-rust.md"
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/ai-complete/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai::workspace_ai_complete",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai.service.ts",
+              "method": "completeTask"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "Rust-only one-shot stateless completion untuk editor (auto-generate description); tidak ada percakapan dan tidak menulis DB. Body {task,prompt}: 400 config AI belum di-set/task hilang, 200 {response,response_html}, 429/500 mirror /ai-assistant/. Gate WORKSPACE ADMIN/MEMBER."
+        }
+      ]
+    },
+    "ai_agent": {
+      "rust_module": "routes/ai_agent/mod.rs",
+      "endpoints": [
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/ai-agent/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_agent::workspace_ai_agent",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai.service.ts",
+              "method": "createAgentTask"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "Rust-only (tanpa padanan Django). POST 200 {response,response_html,tool_calls,pending_action,conversation,user_message,assistant_message} dari Rig tool-calling agent atas tool read-only workspace. Body {task?,prompt,context,conversation_id}: conversation_id WAJIB -> 400 {error:'conversation_id is required'}; percakapan asing/hilang -> 404; mode mismatch -> 400; config/task -> 400. Prompt model dibangun server dari 8 pesan history tersimpan + context (blok work item/timezone); user+assistant dipersist (assistant is_error saat agen gagal); upstream 429/500 passthrough. Gate WORKSPACE ADMIN/MEMBER."
+        }
+      ]
+    },
+    "ai_conversations": {
+      "rust_module": "routes/ai_conversations.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/ai-conversations/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_conversations::list/create",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "list"
+            },
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "create"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "Rust-only Galileo chat history. GET 200 {conversations:[{id,mode,title,created_at,updated_at}]} maks 50 terbaru urut updated_at DESC,id DESC; POST {mode,title?} 201 conversation (mode classic|agent else 400, title trim maks 120); create memangkas percakapan >50 per (workspace,user) dalam transaksi. Owner-only + gate WORKSPACE ADMIN/MEMBER."
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/ai-conversations/:conversation_id/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_conversations::detail/patch/destroy",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "remove"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "GET 200 conversation; PATCH {title} trim 1-120 char -> 200 conversation + updated_at (di luar rentang -> 400); DELETE 204 hard delete cascade pesan. Owner-only: user/workspace lain atau baris hilang -> 404."
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/ai-conversations/:conversation_id/messages/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_conversations::messages",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "listMessages"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "GET 200 {messages:[{id,conversation_id,role,content,content_html,metadata,created_at}]} urut created_at,id naik. Owner-only -> 404."
+        },
+        {
+          "methods": ["PATCH"],
+          "path": "/api/workspaces/:slug/ai-conversations/:conversation_id/messages/:message_id/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_conversations::patch_message",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-conversations.service.ts",
+              "method": "updateMessageMetadata"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "Galileo chat history",
+          "out_scope": false,
+          "notes": "PATCH {metadata} merge allowlist schedule_decision (created|cancelled) + created_schedule_id (uuid); key/value di luar allowlist atau patch kosong -> 400; 200 message. Owner-only -> 404."
+        }
+      ]
+    },
+    "ai_schedule": {
+      "rust_module": "routes/ai_schedule.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/ai-schedules/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_schedule::list/create",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "list"
+            },
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "create"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "AI scheduler",
+          "out_scope": false,
+          "notes": "Rust-only Scheduler. GET 200 array schedule + last run; POST 201 {id} atau 200 {id,already_exists:true} idempoten per (workspace_id,proposal_key,deleted_at IS NULL); validasi preset -> 400, cap per workspace -> 400. Gate WORKSPACE ADMIN/MEMBER."
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/ai-schedules/:schedule_id/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_schedule::detail/patch/destroy",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "retrieve"
+            },
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "update"
+            },
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "remove"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "AI scheduler",
+          "out_scope": false,
+          "notes": "GET 200 schedule + 20 run terbaru; PATCH {enabled} 200 {id,enabled} (resume recompute next_run_at, non-bool -> 400); DELETE 204 soft delete (proposal_key bebas dipakai ulang). Read ADMIN/MEMBER; mutasi creator-or-workspace-admin."
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/ai-schedules/:schedule_id/run/",
+          "django_source": "N/A (Rust-only AI feature, no Django parity)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::ai_schedule::run_now",
+          "fe_evidence": [
+            {
+              "service": "apps/web/core/services/ai-schedules.service.ts",
+              "method": "runNow"
+            }
+          ],
+          "fe_pages": [],
+          "batch_task": "AI scheduler",
+          "out_scope": false,
+          "notes": "POST 201 {run_id} queue manual run async via ai.schedule.run; creator-or-workspace-admin."
         }
       ]
     },
