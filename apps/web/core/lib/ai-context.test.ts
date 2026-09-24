@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AI_ASSISTANT_TASK, buildAiPrompt, sanitizeAssistantHtml, stripHtml } from "./ai-context";
+import { AI_ASSISTANT_TASK, buildAiContext, sanitizeAssistantHtml, stripHtml } from "./ai-context";
 import type { TAiIssueContext } from "./ai-context";
 
 describe("stripHtml", () => {
@@ -51,7 +51,7 @@ describe("sanitizeAssistantHtml", () => {
   });
 });
 
-describe("buildAiPrompt", () => {
+describe("buildAiContext", () => {
   const context: TAiIssueContext = {
     name: "Login fails with SSO",
     descriptionHtml: "<p>User cannot log in via SSO.</p>",
@@ -59,52 +59,23 @@ describe("buildAiPrompt", () => {
     priority: "high",
   };
 
-  it("includes issue context, history, and the question", () => {
-    const history = [
-      { id: "1", role: "user" as const, content: "What causes this?" },
-      { id: "2", role: "assistant" as const, content: "Probably token refresh." },
-    ];
-    const result = buildAiPrompt(context, history, "Summarize the root cause");
+  it("includes issue context and timezone but not history", () => {
+    const result = buildAiContext(context, "Asia/Jakarta");
     expect(result).toContain("Work item context:");
     expect(result).toContain("Work item: Login fails with SSO");
-    expect(result).toContain("Description: User cannot log in via SSO.");
     expect(result).toContain("State: In Progress");
-    expect(result).toContain("Priority: high");
-    expect(result).toContain("User: What causes this?");
-    expect(result).toContain("Assistant: Probably token refresh.");
-    expect(result).toContain("User's new question: Summarize the root cause");
+    expect(result).toContain("User timezone: Asia/Jakarta");
+    expect(result).not.toContain("Conversation so far:");
   });
 
   it("omits context block fields that are missing", () => {
-    const result = buildAiPrompt({ name: "X", descriptionHtml: "" }, [], "hello");
+    const result = buildAiContext({ name: "X", descriptionHtml: "" });
     expect(result).not.toContain("Description:");
     expect(result).not.toContain("State:");
-    expect(result).not.toContain("Priority:");
-    expect(result).toContain("(empty)");
+    expect(result).not.toContain("User timezone:");
   });
 
-  it("uses no-context block when context is undefined", () => {
-    const result = buildAiPrompt(undefined, [], "hello");
-    expect(result).toContain("No active work item context");
-  });
-
-  it("includes the user timezone only when provided", () => {
-    const withTz = buildAiPrompt(undefined, [], "hello", "Asia/Jakarta");
-    expect(withTz).toContain("User timezone: Asia/Jakarta");
-    const withoutTz = buildAiPrompt(undefined, [], "hello");
-    expect(withoutTz).not.toContain("User timezone:");
-  });
-
-  it("truncates history to the last 8 messages", () => {
-    const history = Array.from({ length: 12 }, (_, i) => ({
-      id: String(i),
-      role: "user" as const,
-      content: `msg-${i}`,
-    }));
-    const result = buildAiPrompt(undefined, history, "final question");
-    expect(result).not.toContain("msg-0\n");
-    expect(result).not.toContain("User: msg-3");
-    expect(result).toContain("User: msg-4");
-    expect(result).toContain("User: msg-11");
+  it("falls back to general knowledge without an active issue", () => {
+    expect(buildAiContext(undefined)).toBe("No active work item context. Answer from general knowledge.");
   });
 });

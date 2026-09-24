@@ -23,12 +23,11 @@ export type TAiMessage = {
   scheduleProposalKey?: string;
   scheduleDecision?: "pending" | "created" | "cancelled";
   createdScheduleId?: string;
+  createdAt?: string;
 };
 
 export const AI_ASSISTANT_TASK =
   "You are an ITSM work-item assistant. Answer using the work item context below. Be concise, use bullet points. If generating text (description/comment), output the text only.";
-
-const HISTORY_MESSAGE_LIMIT = 8;
 
 export const stripHtml = (html: string): string =>
   html
@@ -93,16 +92,7 @@ const buildContextBlock = (context: TAiIssueContext | undefined): string => {
   return `Work item context:\n${parts.join("\n")}`;
 };
 
-export const buildAiPrompt = (
-  context: TAiIssueContext | undefined,
-  history: TAiMessage[],
-  question: string,
-  userTimezone?: string
-): string => {
-  const historyBlock = history
-    .slice(-HISTORY_MESSAGE_LIMIT)
-    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
-    .join("\n");
+export const buildAiContext = (context: TAiIssueContext | undefined, userTimezone?: string): string => {
   const timezoneBlock = userTimezone ? `\nUser timezone: ${userTimezone}` : "";
-  return `${buildContextBlock(context)}${timezoneBlock}\n\nConversation so far:\n${historyBlock || "(empty)"}\n\nUser's new question: ${question}`;
+  return `${buildContextBlock(context)}${timezoneBlock}`;
 };
