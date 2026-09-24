@@ -33,6 +33,17 @@ Server kolaborasi realtime Pages (Hocuspocus/Yjs) untuk editor dokumen.
 - Verifikasi: `curl http://localhost:3100/live/health/` (cold start ~8 detik).
 - `VITE_LIVE_BASE_URL` di-bake saat build web dan harus URL yang bisa dijangkau browser. Untuk LAN pakai `http://<LAN-IP>:3100` (IP host bisa berubah); untuk tunnel butuh ingress (mis. `live.terraline.space` → `http://localhost:3100` di dashboard Cloudflare) + rebuild dengan URL https, karena halaman https tidak boleh connect `ws://` (mixed content).
 
+## Backend rebuild (api-rs, Docker)
+
+Stack backend berjalan dikelola `docker-compose-local.yml` (via systemd `plane-backend.service`), BUKAN `docker-compose.yml` root — keduanya memakai project `plane-for-itsm`, jadi jangan `docker compose up` dari dua file berbeda saat stack sedang jalan: service dengan nama sama akan saling recreate. Data aman (volume project-scoped `plane-for-itsm_pgdata`/`redisdata`/`uploads`), hanya nama container yang berpindah (`api-rs` ⇄ `plane-for-itsm-api-1`).
+
+- Rebuild setelah mengubah `apps/api-rs`:
+  `docker compose -f docker-compose-local.yml up -d --build api worker beat-worker`
+- Build Rust memakai LTO (`-C lto -C codegen-units=1`): tahap link bisa 10+ menit TANPA output sama sekali — bukan hang, jangan abort. Jalankan detached ke file log lalu poll, jangan pipe ke `tail`/buffer (terlihat seperti menggantung).
+- Verifikasi setelah rebuild: `curl http://localhost:8000/health` → 200, lalu restart live (ia memegang koneksi Redis yang ikut ter-recreate):
+  `systemctl --user restart plane-live.service && curl http://localhost:3100/live/health/`
+- Jika `plane-backend.service` berstatus failed: `systemctl --user reset-failed plane-backend.service`.
+
 ## Code Style
 
 - **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
