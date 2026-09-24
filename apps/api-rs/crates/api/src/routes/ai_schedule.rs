@@ -51,7 +51,7 @@ pub struct CreateScheduleBody {
 }
 
 #[derive(sqlx::FromRow)]
-pub(crate) struct ScheduleRow {
+struct ScheduleRow {
     id: Uuid,
     workspace_id: Uuid,
     created_by_id: Uuid,
@@ -73,6 +73,7 @@ struct RunRow {
     id: Uuid,
     status: String,
     trigger: String,
+    prompt: String,
     response: Option<String>,
     response_html: Option<String>,
     error: Option<String>,
@@ -87,6 +88,7 @@ fn run_json(row: &RunRow) -> Value {
         "id": row.id,
         "status": row.status,
         "trigger": row.trigger,
+        "prompt": row.prompt,
         "response": row.response,
         "response_html": row.response_html,
         "error": row.error,
@@ -123,7 +125,7 @@ fn schedule_list_json(row: &ScheduleRow, last_run: Option<&RunRow>) -> Value {
 
 /// Load one non-deleted schedule by workspace slug + id, scoped to the
 /// workspace (unknown slug or schedule → `None`).
-pub(crate) async fn load_schedule(
+async fn load_schedule(
     pool: &PgPool,
     slug: &str,
     schedule_id: Uuid,
@@ -133,7 +135,7 @@ pub(crate) async fn load_schedule(
                 s.time_of_day, s.day_of_week, s.day_of_month, s.timezone, s.enabled, \
                 s.next_run_at, s.created_at \
          FROM ai_schedules s \
-         JOIN workspaces w ON w.id = s.workspace_id AND w.slug = $1 \
+         JOIN workspaces w ON w.id = s.workspace_id AND w.slug = $1 AND w.deleted_at IS NULL \
          WHERE s.id = $2 AND s.deleted_at IS NULL",
     )
     .bind(slug)
@@ -143,7 +145,7 @@ pub(crate) async fn load_schedule(
 }
 
 /// Existing schedules are managed by their creator or a workspace admin.
-pub(crate) fn can_manage(created_by_id: Uuid, user_id: Uuid, ws_role: Option<i16>) -> bool {
+fn can_manage(created_by_id: Uuid, user_id: Uuid, ws_role: Option<i16>) -> bool {
     created_by_id == user_id || ws_role == Some(20)
 }
 
@@ -173,7 +175,7 @@ pub async fn list(
         Vec::new()
     } else {
         sqlx::query_as(
-            "SELECT DISTINCT ON (schedule_id) schedule_id, id, status, trigger, response, \
+            "SELECT DISTINCT ON (schedule_id) schedule_id, id, status, trigger, prompt, response, \
                     response_html, error, created_at, started_at, finished_at \
              FROM ai_schedule_runs WHERE schedule_id = ANY($1) \
              ORDER BY schedule_id, created_at DESC, id",
@@ -321,9 +323,10 @@ pub async fn detail(
         return Ok(missing());
     };
     let runs: Vec<RunRow> = sqlx::query_as(
-        "SELECT schedule_id, id, status, trigger, response, response_html, error, created_at, \
-                started_at, finished_at \
-         FROM ai_schedule_runs WHERE schedule_id = $1 ORDER BY created_at DESC LIMIT 20",
+        "SELECT schedule_id, id, status, trigger, prompt, response, response_html, error, \
+                created_at, started_at, finished_at \
+         FROM ai_schedule_runs WHERE schedule_id = $1 \
+         ORDER BY created_at DESC, id DESC LIMIT 20",
     )
     .bind(schedule_id)
     .fetch_all(&st.pool)
@@ -444,6 +447,17 @@ pub async fn run_now(
     .execute(&st.pool)
     .await?;
     let mut redis = st.redis_client().await?;
-    common::stream::push_job(&mut redis, "ai.schedule.run", json!({"run_id": run_id})).await?;
+    if let Err(error) =
+        common::stream::push_job(&mut redis, "ai.schedule.run", json!({"run_id": run_id})).await
+    {
+        tracing::error!(run_id=%run_id, error=%error, "ai.schedule.run: push failed");
+        let _ = sqlx::query(
+            "UPDATE ai_schedule_runs SET status = 'failed', error = 'could not queue run', finished_at = now() WHERE id = $1",
+        )
+        .bind(run_id)
+        .execute(&st.pool)
+        .await;
+        return Err(common::errors::AppError::internal());
+    }
     Ok((StatusCode::CREATED, Json(json!({"run_id": run_id}))))
 }

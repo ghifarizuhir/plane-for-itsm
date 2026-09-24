@@ -555,6 +555,99 @@ async fn create_enforces_twenty_schedule_limit() {
 }
 
 #[tokio::test]
+async fn detail_and_list_handle_schedules_without_runs() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(detail)) = ai_schedule::detail(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("detail ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["runs"], json!([]));
+
+    let (_, Json(list)) = ai_schedule::list(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+    )
+    .await
+    .unwrap();
+    let rows = list.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["last_status"], json!(null));
+    assert_eq!(rows[0]["last_run_at"], json!(null));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn mutations_reject_non_creators_and_validate_payloads() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let member = scratch.add_actor(&pool, 15).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // non-creator cannot run now
+    let (status, _) = ai_schedule::run_now(
+        State(state.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("run-now handled");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // non-boolean enabled -> 400
+    let (status, Json(err)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": "yes"})),
+    )
+    .await
+    .expect("patch handled");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(err["error"].as_str().unwrap().contains("boolean"));
+
+    // unknown id -> 404
+    let (status, _) = ai_schedule::destroy(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), Uuid::new_v4())),
+    )
+    .await
+    .expect("destroy handled");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn replay_at_capacity_returns_existing_schedule() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;
