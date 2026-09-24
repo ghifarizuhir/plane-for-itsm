@@ -5,6 +5,7 @@
  */
 
 import sanitizeHtml from "sanitize-html";
+import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 
 export type TAiIssueContext = {
   name: string;
@@ -18,6 +19,10 @@ export type TAiMessage = {
   role: "user" | "assistant";
   content: string;
   isError?: boolean;
+  scheduleProposal?: TAiScheduleProposal;
+  scheduleProposalKey?: string;
+  scheduleDecision?: "pending" | "created" | "cancelled";
+  createdScheduleId?: string;
 };
 
 export const AI_ASSISTANT_TASK =
@@ -91,11 +96,13 @@ const buildContextBlock = (context: TAiIssueContext | undefined): string => {
 export const buildAiPrompt = (
   context: TAiIssueContext | undefined,
   history: TAiMessage[],
-  question: string
+  question: string,
+  userTimezone?: string
 ): string => {
   const historyBlock = history
     .slice(-HISTORY_MESSAGE_LIMIT)
     .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
     .join("\n");
-  return `${buildContextBlock(context)}\n\nConversation so far:\n${historyBlock || "(empty)"}\n\nUser's new question: ${question}`;
+  const timezoneBlock = userTimezone ? `\nUser timezone: ${userTimezone}` : "";
+  return `${buildContextBlock(context)}${timezoneBlock}\n\nConversation so far:\n${historyBlock || "(empty)"}\n\nUser's new question: ${question}`;
 };

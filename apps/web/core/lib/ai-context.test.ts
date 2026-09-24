@@ -88,6 +88,13 @@ describe("buildAiPrompt", () => {
     expect(result).toContain("No active work item context");
   });
 
+  it("includes the user timezone only when provided", () => {
+    const withTz = buildAiPrompt(undefined, [], "hello", "Asia/Jakarta");
+    expect(withTz).toContain("User timezone: Asia/Jakarta");
+    const withoutTz = buildAiPrompt(undefined, [], "hello");
+    expect(withoutTz).not.toContain("User timezone:");
+  });
+
   it("truncates history to the last 8 messages", () => {
     const history = Array.from({ length: 12 }, (_, i) => ({
       id: String(i),

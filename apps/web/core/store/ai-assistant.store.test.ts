@@ -35,6 +35,10 @@ const makeService = (
   createAgentTask: vi.fn(agentImpl) as unknown as TCreateAgentTask,
 });
 
+const makeSchedulesService = () => ({
+  create: vi.fn(async () => ({ id: "s1" })),
+});
+
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 const CONTEXT: TAiIssueContext = {
@@ -368,6 +372,93 @@ describe("AIAssistantStore", () => {
 
     expect(store.messages).toHaveLength(0);
     expect(store.isGenerating).toBe(false);
+  });
+
+  it("auto-switches to agent mode for /schedule commands", async () => {
+    const service = makeService();
+    const store = new AIAssistantStore(service as never, makeSchedulesService() as never);
+    store.setWorkspace("acme");
+    await store.sendMessage("/schedule daily overdue report");
+    expect(store.mode).toBe("agent");
+    expect(service.createAgentTask).toHaveBeenCalled();
+  });
+
+  it("records pending_action metadata and confirms a proposal", async () => {
+    const service = makeService(undefined, async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: {
+          name: "Daily",
+          prompt: "Report",
+          frequency: "daily",
+          time: "09:00",
+          timezone: "UTC",
+        },
+      },
+    }));
+    const schedules = makeSchedulesService();
+    const store = new AIAssistantStore(service as never, schedules as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("buat jadwal harian");
+    const message = store.messages[store.messages.length - 1];
+    expect(message.scheduleProposal?.name).toBe("Daily");
+    expect(message.scheduleDecision).toBe("pending");
+    expect(message.scheduleProposalKey).toBeTruthy();
+
+    await store.confirmScheduleProposal(message.id);
+    expect(schedules.create).toHaveBeenCalledWith(
+      "acme",
+      expect.objectContaining({ name: "Daily" }),
+      message.scheduleProposalKey
+    );
+    expect(store.messages[store.messages.length - 1].scheduleDecision).toBe("created");
+    expect(store.messages[store.messages.length - 1].createdScheduleId).toBe("s1");
+  });
+
+  it("keeps the proposal pending when confirm fails", async () => {
+    const service = makeService(undefined, async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: { name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" },
+      },
+    }));
+    const schedules = {
+      create: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    };
+    const store = new AIAssistantStore(service as never, schedules as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("buat jadwal harian");
+    const message = store.messages[store.messages.length - 1];
+    await expect(store.confirmScheduleProposal(message.id)).rejects.toThrow("boom");
+    expect(store.messages[store.messages.length - 1].scheduleDecision).toBe("pending");
+  });
+
+  it("cancels a proposal without calling the service", async () => {
+    const service = makeService(undefined, async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: { name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" },
+      },
+    }));
+    const schedules = makeSchedulesService();
+    const store = new AIAssistantStore(service as never, schedules as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("buat jadwal harian");
+    const message = store.messages[store.messages.length - 1];
+    store.resolveScheduleProposal(message.id, "cancelled");
+    expect(schedules.create).not.toHaveBeenCalled();
+    expect(store.messages[store.messages.length - 1].scheduleDecision).toBe("cancelled");
   });
 
   it("drops stale responses after a mode switch away and back", async () => {

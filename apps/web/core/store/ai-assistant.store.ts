@@ -7,12 +7,15 @@
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { v4 as uuidv4 } from "uuid";
 import { AIService } from "@/services/ai.service";
+import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AI_ASSISTANT_TASK, buildAiPrompt } from "@/lib/ai-context";
+import { isScheduleCommand } from "@/lib/ai-schedule";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 
 export type TAiAssistantMode = "classic" | "agent";
 
 type TAiService = Pick<AIService, "createGptTask" | "createAgentTask">;
+type TAiSchedulesService = Pick<AiSchedulesService, "create">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -26,6 +29,8 @@ export interface IAIAssistantStore {
   sendMessage: (question: string) => Promise<void>;
   retryLast: () => Promise<void>;
   clearConversation: () => void;
+  confirmScheduleProposal: (messageId: string) => Promise<void>;
+  resolveScheduleProposal: (messageId: string, decision: "created" | "cancelled") => void;
 }
 
 export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
@@ -57,7 +62,10 @@ export class AIAssistantStore implements IAIAssistantStore {
   private workspaceSlug: string | undefined = undefined;
   private requestSeq = 0;
 
-  constructor(private aiService: TAiService = new AIService()) {
+  constructor(
+    private aiService: TAiService = new AIService(),
+    private schedulesService: TAiSchedulesService = new AiSchedulesService()
+  ) {
     makeObservable(this, {
       messages: observable.deep,
       isGenerating: observable.ref,
@@ -70,6 +78,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       sendMessage: action,
       retryLast: action,
       clearConversation: action,
+      confirmScheduleProposal: action,
+      resolveScheduleProposal: action,
     });
   }
 
@@ -106,6 +116,9 @@ export class AIAssistantStore implements IAIAssistantStore {
   sendMessage = async (question: string) => {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || !this.workspaceSlug) return;
+    if (isScheduleCommand(trimmed) && this.mode !== "agent") {
+      this.setMode("agent");
+    }
     const slug = this.workspaceSlug;
     const userMessage: TAiMessage = { id: uuidv4(), role: "user", content: trimmed };
     runInAction(() => {
@@ -137,6 +150,30 @@ export class AIAssistantStore implements IAIAssistantStore {
   clearConversation = () => {
     runInAction(() => {
       this.messages = [];
+      this.persist();
+    });
+  };
+
+  confirmScheduleProposal = async (messageId: string) => {
+    if (!this.workspaceSlug) return;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    if (!message?.scheduleProposal || !message.scheduleProposalKey) return;
+    const created = await this.schedulesService.create(
+      this.workspaceSlug,
+      message.scheduleProposal,
+      message.scheduleProposalKey
+    );
+    runInAction(() => {
+      message.scheduleDecision = "created";
+      message.createdScheduleId = created?.id;
+      this.persist();
+    });
+  };
+
+  resolveScheduleProposal = (messageId: string, decision: "created" | "cancelled") => {
+    runInAction(() => {
+      const message = this.messages.find((candidate) => candidate.id === messageId);
+      if (message) message.scheduleDecision = decision;
       this.persist();
     });
   };
@@ -183,9 +220,10 @@ export class AIAssistantStore implements IAIAssistantStore {
     const seq = ++this.requestSeq;
     this.isGenerating = true;
     try {
+      const userTimezone = mode === "agent" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
       const payload = {
         task: AI_ASSISTANT_TASK,
-        prompt: buildAiPrompt(this.activeIssueContext, this.messages.slice(0, -1), question),
+        prompt: buildAiPrompt(this.activeIssueContext, this.messages.slice(0, -1), question, userTimezone),
       };
       const res =
         mode === "agent"
@@ -198,6 +236,11 @@ export class AIAssistantStore implements IAIAssistantStore {
         content: mode === "agent" ? (res.response_html ?? res.response ?? "") : (res.response_html ?? ""),
         isError: false,
       };
+      if (mode === "agent" && res.pending_action?.kind === "create_schedule") {
+        assistantMessage.scheduleProposal = res.pending_action.proposal;
+        assistantMessage.scheduleProposalKey = uuidv4();
+        assistantMessage.scheduleDecision = "pending";
+      }
       runInAction(() => {
         this.messages.push(assistantMessage);
         this.persist();

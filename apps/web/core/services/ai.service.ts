@@ -10,6 +10,7 @@ import type { AI_EDITOR_TASKS } from "@plane/constants";
 // services
 import { APIService } from "@/services/api.service";
 // types
+import type { TAiAgentPendingAction } from "@/lib/ai-schedule";
 // FIXME:
 // import { IGptResponse } from "@plane/types";
 // helpers
@@ -25,6 +26,7 @@ export type TAgentTaskResponse = {
   response: string;
   response_html?: string;
   tool_calls?: { name: string; arguments: unknown }[];
+  pending_action?: TAiAgentPendingAction | null;
 };
 
 export class AIService extends APIService {
