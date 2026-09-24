@@ -1077,4 +1077,85 @@ describe("race hardening", () => {
     expect(store.messages[0].isError).toBe(true);
     expect(store.isGenerating).toBe(false);
   });
+
+  it("retryLast does not duplicate the user bubble", async () => {
+    const services = makeServices({
+      ai: {
+        createGptTask: vi
+          .fn()
+          .mockRejectedValueOnce(Object.assign(new Error("fail"), { status: 500 }))
+          .mockResolvedValueOnce(chatResponse("c-classic", "please retry", "fixed")),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("please retry");
+    expect(store.messages.at(-1)?.isError).toBe(true);
+
+    await store.retryLast();
+
+    expect(store.messages.filter((m) => m.role === "user" && m.content === "please retry")).toHaveLength(1);
+    expect(store.messages.map((m) => m.content)).toEqual(["old question", "old answer", "please retry", "fixed"]);
+  });
+
+  it("switching workspace mid-turn keeps guards isolated", async () => {
+    let resolveChat!: (value: unknown) => void;
+    const createResolvers: Array<(value: TAiConversation) => void> = [];
+    const services = makeServices({
+      ai: {
+        createGptTask: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              resolveChat = resolve;
+            })
+        ),
+      },
+      conversations: {
+        list: vi.fn(async () => []),
+        create: vi.fn(
+          () =>
+            new Promise<TAiConversation>((resolve) => {
+              createResolvers.push(resolve);
+            })
+        ),
+        listMessages: vi.fn(async () => []),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("alpha");
+    const first = store.sendMessage("alpha question");
+    await flush();
+    expect(createResolvers).toHaveLength(1);
+
+    store.setWorkspace("beta");
+    const second = store.sendMessage("beta question");
+    await flush();
+    expect(createResolvers).toHaveLength(2);
+    expect(store.isGenerating).toBe(true);
+
+    createResolvers[0](conversation("c-alpha", "classic"));
+    await first;
+    await flush();
+
+    expect(store.isGenerating).toBe(true);
+    expect(store.activeConversationId).toBeUndefined();
+    expect(store.conversations.some((c) => c.id === "c-alpha")).toBe(false);
+    expect(store.messages.map((m) => m.content)).not.toContain("alpha question");
+
+    await store.sendMessage("interloper");
+    expect(createResolvers).toHaveLength(2);
+
+    createResolvers[1](conversation("c-beta", "classic"));
+    await flush();
+    resolveChat(chatResponse("c-beta", "beta question", "classic ok"));
+    await second;
+    await flush();
+
+    expect(store.isGenerating).toBe(false);
+    expect(store.activeConversationId).toBe("c-beta");
+    expect(store.messages.map((m) => m.content)).toEqual(["beta question", "classic ok"]);
+    expect(store.conversations.some((c) => c.id === "c-alpha")).toBe(false);
+  });
 });

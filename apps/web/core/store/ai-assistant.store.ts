@@ -88,6 +88,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   private interactionSeq = 0;
   private listVersion = 0;
   private turnGuard = false;
+  private turnSeq = 0;
   private ensurePromise?: Promise<string | undefined>;
 
   constructor(
@@ -269,6 +270,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || this.turnGuard || !this.workspaceSlug) return;
     this.turnGuard = true;
+    const turn = ++this.turnSeq;
     runInAction(() => {
       this.isGenerating = true;
     });
@@ -287,10 +289,12 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
       await this.request(trimmed, slug, conversationId, tempId);
     } finally {
-      this.turnGuard = false;
-      runInAction(() => {
-        this.isGenerating = false;
-      });
+      if (turn === this.turnSeq) {
+        this.turnGuard = false;
+        runInAction(() => {
+          this.isGenerating = false;
+        });
+      }
     }
   };
 
@@ -308,6 +312,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     const lastUserQuestion = this.messages[lastUserIndex].content;
     const optimisticId = this.messages[lastUserIndex].id;
     this.turnGuard = true;
+    const turn = ++this.turnSeq;
     runInAction(() => {
       this.isGenerating = true;
     });
@@ -321,10 +326,12 @@ export class AIAssistantStore implements IAIAssistantStore {
       if (!conversationId) return;
       await this.request(lastUserQuestion, slug, conversationId, optimisticId);
     } finally {
-      this.turnGuard = false;
-      runInAction(() => {
-        this.isGenerating = false;
-      });
+      if (turn === this.turnSeq) {
+        this.turnGuard = false;
+        runInAction(() => {
+          this.isGenerating = false;
+        });
+      }
     }
   };
 
@@ -372,6 +379,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   private createConversation = async (slug: string): Promise<string | undefined> => {
     try {
       const created = await this.conversationsService.create(slug, this.mode);
+      if (slug !== this.workspaceSlug) return undefined;
       runInAction(() => {
         this.touchList();
         this.conversations = [created, ...this.conversations];
@@ -380,6 +388,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.persistActiveId();
       return created.id;
     } catch (error: any) {
+      if (slug !== this.workspaceSlug) return undefined;
       runInAction(() => {
         this.messages.push({
           id: uuidv4(),
