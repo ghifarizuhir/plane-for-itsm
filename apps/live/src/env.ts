@@ -15,6 +15,9 @@ const envSchema = z.object({
   HOSTNAME: z.string().optional(),
   PORT: z.string().default("3000"),
   API_BASE_URL: z.string().url("API_BASE_URL must be a valid URL"),
+  // Web app origin, sent as the `Origin` header on API mutations so the
+  // backend's origin/CSRF middleware accepts server-to-server calls.
+  WEB_BASE_URL: z.string().url("WEB_BASE_URL must be a valid URL").optional(),
   // CORS configuration
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   // Live running location

@@ -9,6 +9,11 @@ import { create } from "axios";
 import { env } from "@/env";
 import { AppError } from "@/lib/errors";
 
+export const buildDefaultHeaders = (webBaseUrl?: string): Record<string, string> => {
+  const origin = webBaseUrl?.trim();
+  return origin ? { Origin: origin } : {};
+};
+
 export abstract class APIService {
   protected baseURL: string;
   private axiosInstance: AxiosInstance;
@@ -20,6 +25,7 @@ export abstract class APIService {
       baseURL: this.baseURL,
       withCredentials: true,
       timeout: 20000,
+      headers: { common: buildDefaultHeaders(env.WEB_BASE_URL) },
     });
     this.setupInterceptors();
   }
