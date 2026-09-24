@@ -4060,6 +4060,13 @@ git commit -m "feat(web): send chat turns through stored conversations"
   await pertama, dan membersihkannya di `finally`. `ensureConversation`
   meng-dedupe create in-flight lewat `ensurePromise`; kegagalan create →
   `undefined` + error bubble, bukan rejection tak tertangani.
+- `private turnSeq = 0;` — tiap giliran mengambil `const turn = ++this.turnSeq`
+  dan hanya membersihkan `turnGuard`/`isGenerating` di `finally` bila
+  `turn === this.turnSeq` (giliran workspace lama tidak boleh melepas guard
+  giliran baru).
+- `ensureConversation` memeriksa ulang `slug === this.workspaceSlug` setelah
+  await create; bila workspace berganti, hasil create dibuang (`undefined`)
+  dan tidak menulis state/list/key.
 - `retryLast` memakai ulang bubble user terakhir sebagai `optimisticId`
   (tidak menambah bubble user kedua).
 - `openConversation`: set `messages = []` saat mulai, `persistActiveId()` setelah
@@ -4084,6 +4091,9 @@ git commit -m "feat(web): send chat turns through stored conversations"
 7. Kegagalan `listMessages` non-404 → reset ke chat baru tanpa error tak tertangani.
 8. `clearPersistedAiConversations()` mempertahankan key id aktif.
 9. Respons chat 404 → state kembali ke chat baru + error bubble.
+10. `retryLast` tidak menggandakan bubble user (pakai ulang bubble terakhir).
+11. Ganti workspace saat giliran berjalan: respons lama tidak melepas guard
+    giliran baru dan percakapan lama tidak bocor ke workspace baru.
 
 ---
 
