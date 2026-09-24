@@ -433,15 +433,49 @@ async fn detail_rename_delete_are_owner_scoped_and_validated() {
     .expect("long title");
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    // Unknown id → 404.
+    // Unknown id → 404 for every verb (detail, rename, delete).
+    let unknown = Uuid::new_v4();
     let (status, _) = ai_conversations::detail(
         State(st.clone()),
         AuthUser(scratch.user_id),
-        Path((scratch.slug.clone(), Uuid::new_v4())),
+        Path((scratch.slug.clone(), unknown)),
     )
     .await
     .expect("missing detail");
     assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), unknown)),
+        Json(json!({"title": "ghost"})),
+    )
+    .await
+    .expect("missing rename");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), unknown)),
+    )
+    .await
+    .expect("missing delete");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // 120 chars is allowed (boundary) and the rename bumps `updated_at`.
+    let boundary = "x".repeat(120);
+    let (status, Json(boundary_row)) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": boundary})),
+    )
+    .await
+    .expect("boundary rename");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(boundary_row["title"].as_str().unwrap().chars().count(), 120);
+    assert!(
+        boundary_row["updated_at"].as_str().unwrap() >= created["updated_at"].as_str().unwrap()
+    );
 
     // Owner delete removes the row.
     let (status, _) = ai_conversations::destroy(

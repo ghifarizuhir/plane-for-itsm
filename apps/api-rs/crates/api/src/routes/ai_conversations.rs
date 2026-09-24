@@ -314,15 +314,23 @@ pub async fn patch(
             Json(json!({"error": format!("title must be 1-{RENAME_MAX_CHARS} characters")})),
         ));
     }
-    let row: ConversationRow = sqlx::query_as(
-        "UPDATE ai_conversations SET title = $2, updated_at = now() WHERE id = $1 \
+    // Owner-scoped UPDATE + fetch_optional: if the row is deleted between the
+    // load above and this statement (other tab / 50-cap prune), answer 404
+    // instead of a 500 from `fetch_one`.
+    let row: Option<ConversationRow> = sqlx::query_as(
+        "UPDATE ai_conversations SET title = $2, updated_at = now() \
+         WHERE id = $1 AND created_by_id = $3 \
          RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(conversation_id)
     .bind(title)
-    .fetch_one(&st.pool)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(conversation_json(&row))))
+    match row {
+        Some(row) => Ok((StatusCode::OK, Json(conversation_json(&row)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn destroy(
@@ -338,10 +346,14 @@ pub async fn destroy(
     else {
         return Ok(missing());
     };
-    sqlx::query("DELETE FROM ai_conversations WHERE id = $1")
+    let deleted = sqlx::query("DELETE FROM ai_conversations WHERE id = $1 AND created_by_id = $2")
         .bind(conversation_id)
+        .bind(auth.0)
         .execute(&st.pool)
         .await?;
+    if deleted.rows_affected() == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
