@@ -12,6 +12,7 @@ use rig::tool::server::ToolServerHandle;
 use serde_json::Value;
 
 use crate::llm::LlmError;
+use crate::tools::CREATE_SCHEDULE_NAME;
 
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +46,11 @@ pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
 Answer factual questions about projects and work items by calling the provided \
 tools; never invent project identifiers, work item identifiers, counts, or \
 states. All tools are read-only and scoped to the user's current workspace. If \
-a tool returns no results, say so. Answer concisely in the user's language.";
+a tool returns no results, say so. Answer concisely in the user's language. \
+When the user's message starts with /schedule they want a recurring scheduled \
+task: gather anything unclear first (what to run and how often), then call \
+create_schedule once with the final details. The schedule is only created after \
+the user confirms the proposal card, so never say it is already created.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -127,7 +132,7 @@ pub fn pending_action(trace: &ToolTrace) -> Option<Value> {
     recorded
         .iter()
         .rev()
-        .find(|call| call.name == "create_schedule")
+        .find(|call| call.name == CREATE_SCHEDULE_NAME)
         .map(|call| {
             serde_json::json!({
                 "kind": "create_schedule",

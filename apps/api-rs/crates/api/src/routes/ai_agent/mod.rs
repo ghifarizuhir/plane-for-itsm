@@ -26,7 +26,7 @@ pub use ai::agent::{
     effective_prompt, new_trace, pending_action, prompt_from_body, record, run_agent,
     ToolCallTrace, ToolTrace, AGENT_TIMEOUT, MAX_TURNS, PREAMBLE,
 };
-pub use ai::tools::workspace_tools;
+pub use ai::tools::{workspace_tools, CreateSchedule, CreateScheduleArgs};
 
 pub mod tools {
     pub use ai::tools::*;

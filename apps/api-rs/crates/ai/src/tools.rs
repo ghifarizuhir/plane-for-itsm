@@ -1,4 +1,5 @@
-//! Read-only, workspace-scoped tools for the Rig agent.
+//! Workspace-scoped tools for the Rig agent: three read-only queries plus the
+//! `create_schedule` proposal tool.
 //!
 //! Every query filters `workspace_id = $1` captured from the authenticated
 //! handler; the model never chooses the workspace. Filters are optional
@@ -13,6 +14,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::agent::{record, ToolTrace};
+use crate::schedule::ScheduleProposal;
 
 pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
      WHERE workspace_id = $1 AND deleted_at IS NULL AND archived_at IS NULL \
@@ -303,8 +305,74 @@ impl Tool for SearchWorkItems {
     }
 }
 
-/// Build the production tool server: three read-only tools scoped to one
-/// workspace, all sharing the caller's trace handle.
+pub const CREATE_SCHEDULE_NAME: &str = "create_schedule";
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct CreateScheduleArgs {
+    /// Short human-readable schedule name, e.g. "Daily overdue report".
+    pub name: String,
+    /// The exact instruction the agent will run on every fire.
+    pub prompt: String,
+    /// One of: hourly, daily, weekly, monthly.
+    pub frequency: String,
+    /// Time of day "HH:MM" (24h). For hourly only the minutes are used. Defaults to 09:00.
+    pub time: Option<String>,
+    /// For weekly schedules: 1 = Monday … 7 = Sunday.
+    pub day_of_week: Option<i16>,
+    /// For monthly schedules: day of month, 1-31. Short months clamp to the last day.
+    pub day_of_month: Option<i16>,
+    /// IANA timezone, e.g. "Asia/Jakarta". Defaults to UTC when unknown.
+    pub timezone: Option<String>,
+}
+
+/// Validate raw tool args into a normalized proposal (defaults applied).
+pub fn proposal_from_args(
+    args: CreateScheduleArgs,
+) -> Result<ScheduleProposal, ToolExecutionError> {
+    ScheduleProposal::new(
+        &args.name,
+        &args.prompt,
+        &args.frequency,
+        args.time.as_deref(),
+        args.day_of_week,
+        args.day_of_month,
+        args.timezone.as_deref(),
+    )
+    .map_err(ToolExecutionError::invalid_args)
+}
+
+pub struct CreateSchedule {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateSchedule {
+    const NAME: &'static str = CREATE_SCHEDULE_NAME;
+    type Args = CreateScheduleArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose a recurring scheduled task for this workspace. Call this only after you know what to run and how often; the user must confirm the proposal in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateScheduleArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).unwrap_or_default())
+    }
+}
+
+/// Build the production tool server: three read-only tools plus the
+/// `create_schedule` proposal tool, all scoped to one workspace and sharing the
+/// caller's trace handle.
 pub fn workspace_tools(
     pool: PgPool,
     workspace_id: Uuid,
@@ -324,7 +392,10 @@ pub fn workspace_tools(
         .tool(SearchWorkItems {
             pool,
             workspace_id,
-            trace,
+            trace: trace.clone(),
+        })
+        .tool(CreateSchedule {
+            trace: trace.clone(),
         })
         .run()
 }
@@ -505,5 +576,67 @@ mod tests {
         let recorded = tool.trace.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].name, "count_work_items");
+    }
+
+    #[test]
+    fn create_schedule_proposal_normalizes_defaults() {
+        let proposal = proposal_from_args(CreateScheduleArgs {
+            name: " Daily overdue ".to_string(),
+            prompt: " List overdue items ".to_string(),
+            frequency: "weekly".to_string(),
+            time: None,
+            day_of_week: Some(1),
+            day_of_month: None,
+            timezone: Some("Asia/Jakarta".to_string()),
+        })
+        .expect("valid args");
+        assert_eq!(proposal.name, "Daily overdue");
+        assert_eq!(proposal.prompt, "List overdue items");
+        assert_eq!(proposal.time, "09:00");
+        assert_eq!(proposal.timezone, "Asia/Jakarta");
+        assert_eq!(proposal.day_of_week, Some(1));
+    }
+
+    #[test]
+    fn create_schedule_proposal_rejects_bad_args() {
+        let err = proposal_from_args(CreateScheduleArgs {
+            name: "x".to_string(),
+            prompt: "y".to_string(),
+            frequency: "sometimes".to_string(),
+            time: None,
+            day_of_week: None,
+            day_of_month: None,
+            timezone: None,
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("frequency"));
+    }
+
+    #[tokio::test]
+    async fn create_schedule_tool_records_proposal() {
+        let trace = crate::agent::new_trace();
+        let tool = CreateSchedule {
+            trace: trace.clone(),
+        };
+        let out = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CreateScheduleArgs {
+                    name: "Daily".to_string(),
+                    prompt: "Report".to_string(),
+                    frequency: "daily".to_string(),
+                    time: Some("08:00".to_string()),
+                    day_of_week: None,
+                    day_of_month: None,
+                    timezone: Some("UTC".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(out.contains("\"frequency\":\"daily\""));
+        let recorded = trace.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].name, "create_schedule");
+        assert_eq!(recorded[0].arguments["time"], json!("08:00"));
     }
 }
