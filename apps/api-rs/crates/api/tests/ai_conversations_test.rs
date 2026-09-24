@@ -613,6 +613,63 @@ async fn messages_are_listed_oldest_first_and_metadata_patch_is_allowlisted() {
     .expect("bad key");
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
+    // Every other rejection branch: non-object, empty, bad decision, bad uuid.
+    for bad in [
+        json!({"metadata": "x"}),
+        json!({"metadata": {}}),
+        json!({"metadata": {"schedule_decision": "pending"}}),
+        json!({"metadata": {"created_schedule_id": "not-a-uuid"}}),
+    ] {
+        let (status, _) = ai_conversations::patch_message(
+            State(st.clone()),
+            AuthUser(scratch.user_id),
+            Path((scratch.slug.clone(), conversation_id, assistant_message_id)),
+            Json(bad.clone()),
+        )
+        .await
+        .expect("bad patch");
+        assert_eq!(status, StatusCode::BAD_REQUEST, "payload: {bad}");
+    }
+
+    // A message from another conversation of the same owner → 404 (the
+    // `conversation_id = $2` predicate must scope the update).
+    let (_, Json(other_conversation)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "agent"})),
+    )
+    .await
+    .expect("second conversation");
+    let other_conversation_id =
+        Uuid::parse_str(other_conversation["id"].as_str().unwrap()).unwrap();
+    let (status, _) = ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((
+            scratch.slug.clone(),
+            other_conversation_id,
+            assistant_message_id,
+        )),
+        Json(json!({"metadata": {"schedule_decision": "cancelled"}})),
+    )
+    .await
+    .expect("cross-conversation patch");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Rejections never partially applied: metadata is still pending.
+    let (_, Json(still)) = ai_conversations::messages(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id)),
+    )
+    .await
+    .expect("messages again");
+    assert_eq!(
+        still["messages"][1]["metadata"]["schedule_decision"],
+        json!("pending")
+    );
+
     // A valid decision merges into the existing metadata.
     let schedule_id = Uuid::new_v4();
     let (status, Json(updated)) = ai_conversations::patch_message(
