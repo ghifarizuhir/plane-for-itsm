@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod llm;
+pub mod schedule;
 pub mod tools;
 
 pub use llm::{host_of, resolve_llm_config, response_html, LlmConfig, LlmError};
