@@ -819,6 +819,17 @@ pub(crate) async fn finish_turn(
     Ok(row)
 }
 
+/// True when a write failed because the conversation disappeared mid-turn
+/// (row deleted between load and write, or an insert hit the FK): callers map
+/// this to a 404 instead of a 500.
+pub(crate) fn conversation_gone(error: &sqlx::Error) -> bool {
+    match error {
+        sqlx::Error::RowNotFound => true,
+        sqlx::Error::Database(db) => db.code().as_deref() == Some("23503"),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1779,6 +1790,11 @@ async fn agent_turn_persists_both_messages_and_builds_context_from_history() {
     assert!(!content.contains("seed-0"));
     assert!(!content.contains("seed-1"));
     assert!(content.contains("User's new question: how many items?"));
+    assert_eq!(
+        content.matches("how many items?").count(),
+        1,
+        "history is loaded before the user insert, so the question appears once"
+    );
 
     // DB: user + assistant rows persisted, conversation title filled.
     let stored: Vec<(String, String)> = sqlx::query_as(
@@ -1881,6 +1897,62 @@ async fn agent_failure_stores_an_error_message() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn agent_proposal_metadata_is_persisted_and_returned() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    // Reuse the existing tool-call fake from `mod tool_roundtrip` (add the
+    // `schedule_roundtrip_url()` helper there — see below).
+    let base_url = tool_roundtrip::schedule_roundtrip_url().await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "/schedule daily report",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["pending_action"]["kind"], json!("create_schedule"));
+
+    let metadata = &body["assistant_message"]["metadata"];
+    assert_eq!(metadata["is_error"], json!(false));
+    assert_eq!(metadata["schedule_decision"], json!("pending"));
+    assert_eq!(metadata["schedule_proposal"]["frequency"], json!("daily"));
+    assert!(metadata["schedule_proposal_key"].as_str().is_some());
+
+    let stored: Value = sqlx::query_scalar(
+        "SELECT metadata FROM ai_messages WHERE conversation_id = $1 AND role = 'assistant'",
+    )
+    .bind(conversation_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored["schedule_decision"], json!("pending"));
+    assert_eq!(stored["schedule_proposal"]["name"], json!("Daily"));
+
+    scratch.purge(&pool).await;
+}
+```
+
+Tambahkan helper berikut di dalam `mod tool_roundtrip` yang sudah ada di `ai_agent_test.rs` (jangan mengubah test lama di dalamnya):
+
+```rust
+    /// URL only — for DB-backed tests that don't need the upstream handle.
+    pub(super) async fn schedule_roundtrip_url() -> String {
+        spawn_schedule_roundtrip().await.0
+    }
 ```
 
 Catatan: test-test ini mengubah env LLM → wajib `--test-threads=1`; tambahkan komentar itu di header file.
@@ -1896,8 +1968,8 @@ Ubah `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`. Tambah import:
 
 ```rust
 use crate::routes::ai_conversations::{
-    finish_turn, insert_message, load_owned_conversation, message_json, recent_messages,
-    title_from, ConversationRow, MessageRow,
+    conversation_gone, finish_turn, insert_message, load_owned_conversation, message_json,
+    recent_messages, title_from, ConversationRow, MessageRow,
 };
 use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
 ```
@@ -1996,19 +2068,29 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
                 metadata["schedule_decision"] = json!("pending");
             }
-            // Assistant message + prune + updated_at in ONE transaction.
-            let mut tx = st.pool.begin().await?;
-            let assistant_message = insert_message(
-                &mut tx,
-                conversation_id,
-                "assistant",
-                &text,
-                Some(&crate::routes::ai::response_html(&text)),
-                &metadata,
-            )
-            .await?;
-            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
-            tx.commit().await?;
+            // Assistant message + prune + updated_at in ONE transaction. A
+            // conversation deleted mid-turn (row gone / FK violation) → 404.
+            let turn = async {
+                let mut tx = st.pool.begin().await?;
+                let assistant_message = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &text,
+                    Some(&crate::routes::ai::response_html(&text)),
+                    &metadata,
+                )
+                .await?;
+                let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>((assistant_message, conversation))
+            }
+            .await;
+            let (assistant_message, conversation) = match turn {
+                Ok(ok) => ok,
+                Err(error) if conversation_gone(&error) => return Ok(missing()),
+                Err(error) => return Err(error.into()),
+            };
             Ok((
                 StatusCode::OK,
                 Json(chat_success_body(
@@ -2027,7 +2109,7 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 LlmError::Upstream => "An internal error has occurred.".to_string(),
             };
             if let Ok(mut tx) = st.pool.begin().await {
-                let _ = insert_message(
+                if let Err(error) = insert_message(
                     &mut tx,
                     conversation_id,
                     "assistant",
@@ -2035,8 +2117,20 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                     None,
                     &json!({ "is_error": true }),
                 )
-                .await;
-                let _ = finish_turn(&mut tx, conversation_id, &title).await;
+                .await
+                {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to persist error turn"
+                    );
+                } else if let Err(error) = finish_turn(&mut tx, conversation_id, &title).await {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to finish error turn"
+                    );
+                }
                 let _ = tx.commit().await;
             }
             match error {
@@ -2376,7 +2470,8 @@ Ubah `apps/api-rs/crates/api/src/routes/ai.rs`. Tambah import:
 ```rust
 use crate::routes::ai_agent::chat_success_body;
 use crate::routes::ai_conversations::{
-    finish_turn, insert_message, load_owned_conversation, recent_messages, title_from,
+    conversation_gone, finish_turn, insert_message, load_owned_conversation, recent_messages,
+    title_from,
 };
 use crate::routes::project::missing;
 use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
@@ -2446,19 +2541,29 @@ Ganti isi `workspace_ai_assistant`.
     match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, &model_prompt).await {
         Ok(text) => {
             let html = response_html(&text);
-            // Assistant message + prune + updated_at in ONE transaction.
-            let mut tx = st.pool.begin().await?;
-            let assistant_message = insert_message(
-                &mut tx,
-                conversation_id,
-                "assistant",
-                &text,
-                Some(&html),
-                &json!({ "is_error": false }),
-            )
-            .await?;
-            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
-            tx.commit().await?;
+            // Assistant message + prune + updated_at in ONE transaction. A
+            // conversation deleted mid-turn (row gone / FK violation) → 404.
+            let turn = async {
+                let mut tx = st.pool.begin().await?;
+                let assistant_message = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &text,
+                    Some(&html),
+                    &json!({ "is_error": false }),
+                )
+                .await?;
+                let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>((assistant_message, conversation))
+            }
+            .await;
+            let (assistant_message, conversation) = match turn {
+                Ok(ok) => ok,
+                Err(error) if conversation_gone(&error) => return Ok(missing()),
+                Err(error) => return Err(error.into()),
+            };
             Ok((
                 StatusCode::OK,
                 Json(chat_success_body(
@@ -2477,7 +2582,7 @@ Ganti isi `workspace_ai_assistant`.
                 LlmError::Upstream => "An internal error has occurred.".to_string(),
             };
             if let Ok(mut tx) = st.pool.begin().await {
-                let _ = insert_message(
+                if let Err(error) = insert_message(
                     &mut tx,
                     conversation_id,
                     "assistant",
@@ -2485,8 +2590,20 @@ Ganti isi `workspace_ai_assistant`.
                     None,
                     &json!({ "is_error": true }),
                 )
-                .await;
-                let _ = finish_turn(&mut tx, conversation_id, &title).await;
+                .await
+                {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to persist error turn"
+                    );
+                } else if let Err(error) = finish_turn(&mut tx, conversation_id, &title).await {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to finish error turn"
+                    );
+                }
                 let _ = tx.commit().await;
             }
             match error {
