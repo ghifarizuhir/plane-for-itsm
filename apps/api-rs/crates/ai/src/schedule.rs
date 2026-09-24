@@ -2,7 +2,8 @@
 //!
 //! Presets: hourly / daily / weekly / monthly, plus "HH:MM" time and an IANA
 //! timezone. Monthly clamps to the last day of short months; nonexistent local
-//! times (DST spring-forward) move forward to the next valid wall time.
+//! times (DST spring-forward) move forward to the next valid wall time. Hourly
+//! uses only the minutes of `time`; the hour part is ignored.
 
 use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDate, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
@@ -29,6 +30,9 @@ fn parse_time(time: &str) -> Result<(u32, u32), String> {
         .split_once(':')
         .ok_or_else(|| "time must be HH:MM".to_string())?;
     if h.len() != 2 || m.len() != 2 {
+        return Err("time must be HH:MM".to_string());
+    }
+    if !h.bytes().all(|b| b.is_ascii_digit()) || !m.bytes().all(|b| b.is_ascii_digit()) {
         return Err("time must be HH:MM".to_string());
     }
     let hour: u32 = h.parse().map_err(|_| "time must be HH:MM".to_string())?;
@@ -74,7 +78,8 @@ impl ScheduleProposal {
             .filter(|s| !s.is_empty())
             .unwrap_or(fallback)
             .to_string();
-        parse_time(&time)?;
+        let (hour, minute) = parse_time(&time)?;
+        let time = format!("{hour:02}:{minute:02}");
         match frequency.as_str() {
             "weekly" if !matches!(day_of_week, Some(1..=7)) => {
                 return Err("day_of_week must be 1 (Monday) to 7 (Sunday)".to_string());
@@ -117,6 +122,7 @@ impl ScheduleProposal {
             "weekly" => next_weekly(local, self.day_of_week.unwrap_or(1) as u32, hour, minute),
             _ => next_monthly(local, self.day_of_month.unwrap_or(1) as u32, hour, minute),
         };
+        debug_assert!(candidate > local, "next_occurrence must be strictly future");
         candidate.with_timezone(&Utc)
     }
 }
@@ -139,23 +145,19 @@ fn local_at(tz: Tz, mut date: NaiveDate, mut hour: u32, minute: u32) -> DateTime
 }
 
 fn next_hourly(from: DateTime<Tz>, minute: u32) -> DateTime<Tz> {
-    let mut candidate = local_at(from.timezone(), from.date_naive(), from.hour(), minute);
+    let tz = from.timezone();
+    let mut candidate = local_at(tz, from.date_naive(), from.hour(), minute);
+    // Ambiguous or repeated local times (DST fall-back) can resolve at or
+    // before `from`; advance absolute time until the result is future.
+    let mut guard = 0;
+    while candidate <= from && guard < 4 {
+        let bumped = (candidate + Duration::hours(1)).with_timezone(&tz);
+        candidate = local_at(tz, bumped.date_naive(), bumped.hour(), minute);
+        guard += 1;
+    }
     if candidate <= from {
-        let bumped = from + Duration::hours(1);
-        candidate = local_at(
-            bumped.timezone(),
-            bumped.date_naive(),
-            bumped.hour(),
-            minute,
-        );
-        if candidate <= from {
-            candidate = local_at(
-                bumped.timezone(),
-                bumped.date_naive(),
-                bumped.hour() + 1,
-                minute,
-            );
-        }
+        // Pathological tz data: never return a past instant.
+        candidate = from + Duration::hours(1);
     }
     candidate
 }
@@ -336,6 +338,65 @@ mod tests {
         assert_eq!(
             p.next_occurrence(from),
             Utc.with_ymd_and_hms(2026, 3, 8, 7, 30, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn hourly_fall_back_stays_future_troll() {
+        // Antarctica/Troll ends DST on 2026-10-25, repeating local wall times
+        // around the transition; the result must never be in the past.
+        let p = proposal("hourly", "00:30", None, None, "Antarctica/Troll");
+        let from = Utc.with_ymd_and_hms(2026, 10, 25, 0, 31, 0).unwrap();
+        let next = p.next_occurrence(from);
+        assert!(next > from, "next occurrence {next} must be after {from}");
+        assert!(
+            next <= from + Duration::hours(2),
+            "next occurrence {next} unexpectedly far after {from}"
+        );
+    }
+
+    #[test]
+    fn hourly_fall_back_stays_future_new_york() {
+        // America/New_York falls back on 2026-11-01: local 01:30 occurs twice.
+        let p = proposal("hourly", "01:30", None, None, "America/New_York");
+        let from = Utc.with_ymd_and_hms(2026, 11, 1, 5, 45, 0).unwrap();
+        let next = p.next_occurrence(from);
+        assert!(next > from, "next occurrence {next} must be after {from}");
+        assert!(
+            next <= from + Duration::hours(2),
+            "next occurrence {next} unexpectedly far after {from}"
+        );
+    }
+
+    #[test]
+    fn rejects_non_canonical_time() {
+        assert!(
+            ScheduleProposal::new("n", "p", "daily", Some("+9:+9"), None, None, Some("UTC"))
+                .is_err()
+        );
+        assert!(
+            ScheduleProposal::new("n", "p", "daily", Some("+09:+09"), None, None, Some("UTC"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn monthly_rolls_over_year_and_handles_leap() {
+        let p = proposal("monthly", "09:00", None, Some(31), "UTC");
+        let from = Utc.with_ymd_and_hms(2026, 12, 31, 10, 0, 0).unwrap();
+        assert_eq!(
+            p.next_occurrence(from),
+            Utc.with_ymd_and_hms(2027, 1, 31, 9, 0, 0).unwrap()
+        );
+        let from = Utc.with_ymd_and_hms(2027, 1, 31, 10, 0, 0).unwrap();
+        assert_eq!(
+            p.next_occurrence(from),
+            Utc.with_ymd_and_hms(2027, 2, 28, 9, 0, 0).unwrap()
+        );
+        let from = Utc.with_ymd_and_hms(2028, 1, 31, 10, 0, 0).unwrap();
+        assert_eq!(
+            p.next_occurrence(from),
+            Utc.with_ymd_and_hms(2028, 2, 29, 9, 0, 0).unwrap()
         );
     }
 }
