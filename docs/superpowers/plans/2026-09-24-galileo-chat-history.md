@@ -3030,6 +3030,9 @@ export type TAiStoredMessage = {
   created_at: string;
 };
 
+/** Keys the `PATCH .../messages/:id/` endpoint accepts (server allowlist). */
+export type TAiMessageMetadataPatch = Pick<TAiMessageMetadata, "schedule_decision" | "created_schedule_id">;
+
 /** Map a server-stored message onto the chat bubble model. */
 export const toAiMessage = (stored: TAiStoredMessage): TAiMessage => ({
   id: stored.id,
@@ -3096,7 +3099,7 @@ import { APIService } from "@/services/api.service";
 import type {
   TAiConversation,
   TAiConversationMode,
-  TAiMessageMetadata,
+  TAiMessageMetadataPatch,
   TAiStoredMessage,
 } from "@/lib/ai-conversations";
 
@@ -3157,7 +3160,7 @@ export class AiConversationsService extends APIService {
     workspaceSlug: string,
     conversationId: string,
     messageId: string,
-    metadata: TAiMessageMetadata
+    metadata: TAiMessageMetadataPatch
   ): Promise<TAiStoredMessage> {
     return this.patch(`/api/workspaces/${workspaceSlug}/ai-conversations/${conversationId}/messages/${messageId}/`, {
       metadata,
@@ -3221,7 +3224,8 @@ Ganti dua method:
 - [ ] **Step 3: Typecheck (masih gagal di store — catat error yang tersisa hanya di store)**
 
 Run: `pnpm --filter=web check:types`
-Expected: error hanya di `ai-assistant.store.ts` (payload lama) dan test store; service baru bersih.
+Expected: error di `ai-assistant.store.ts` (payload lama) DAN dua pemanggil `createGptTask` lama
+(`gpt-assistant-popover.tsx`, `description-editor.tsx`) yang diperbaiki Task 9b; file service baru bersih.
 
 - [ ] **Step 4: Commit**
 
@@ -3272,7 +3276,7 @@ dan method (setelah `createAgentTask`):
 
 - [ ] **Step 3: Ganti pemanggil di `gpt-assistant-popover.tsx`**
 
-Semua pemanggilan `aiService.createGptTask(...)` → `aiService.completeTask(...)` dengan argumen yang sama; hapus cast `any` pada respons bila tidak lagi diperlukan.
+Semua pemanggilan `aiService.createGptTask(...)` → `aiService.completeTask(...)` dengan argumen yang sama; hapus cast `any` pada respons bila tidak lagi diperlukan. Karena `response_html` kini `string | undefined`, ubah `setResponse(res.response_html)` menjadi `setResponse(res.response_html ?? res.response)`.
 
 - [ ] **Step 4: Verifikasi**
 
@@ -3286,7 +3290,7 @@ Expected: hanya `core/store/ai-assistant.store.ts`, `core/store/ai-assistant.sto
 pnpm --filter=web check:types
 ```
 
-Expected: error hanya di `core/store/ai-assistant.store*` (Task 10–11 memperbaikinya); tidak ada error di dua file editor.
+Expected: error hanya di `core/store/ai-assistant.store*` — plus apa pun yang berasal dari `buildAiPrompt` yang sudah dihapus (Task 10–11 memperbaikinya); TIDAK ada error di dua file editor.
 
 - [ ] **Step 5: Commit**
 
