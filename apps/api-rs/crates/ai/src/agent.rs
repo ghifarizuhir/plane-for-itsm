@@ -76,6 +76,49 @@ pub fn effective_prompt(task: Option<&str>, prompt: &str) -> String {
     }
 }
 
+/// How many stored messages are folded back into the model prompt.
+pub const HISTORY_MESSAGE_LIMIT: usize = 8;
+
+/// One stored conversation message used to rebuild model context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Compose the model prompt from the FE-supplied context block, the stored
+/// conversation (newest `HISTORY_MESSAGE_LIMIT`, oldest first) and the new
+/// question. Mirrors the old FE `buildAiPrompt` output.
+pub fn history_prompt(context: &str, history: &[HistoryMessage], question: &str) -> String {
+    let history_block = history
+        .iter()
+        .rev()
+        .take(HISTORY_MESSAGE_LIMIT)
+        .rev()
+        .map(|message| {
+            let role = if message.role == "user" {
+                "User"
+            } else {
+                "Assistant"
+            };
+            format!("{role}: {}", message.content)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let history_block = if history_block.is_empty() {
+        "(empty)".to_string()
+    } else {
+        history_block
+    };
+    let context = context.trim();
+    let prefix = if context.is_empty() {
+        String::new()
+    } else {
+        format!("{context}\n\n")
+    };
+    format!("{prefix}Conversation so far:\n{history_block}\n\nUser's new question: {question}")
+}
+
 fn map_prompt_error(error: PromptError) -> LlmError {
     if error.provider_response_status().map(|s| s.as_u16()) == Some(429) {
         tracing::warn!("ai-agent: upstream rate limited");
