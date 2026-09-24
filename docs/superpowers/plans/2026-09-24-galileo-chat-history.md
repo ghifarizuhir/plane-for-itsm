@@ -4067,6 +4067,13 @@ git commit -m "feat(web): send chat turns through stored conversations"
 - `ensureConversation` memeriksa ulang `slug === this.workspaceSlug` setelah
   await create; bila workspace berganti, hasil create dibuang (`undefined`)
   dan tidak menulis state/list/key.
+- `ensureConversation` juga menangkap `interactionSeq` sebelum create; bila
+  user berpindah thread (`openConversation`/`newChat`) saat create berjalan,
+  percakapan hasil create tetap dimasukkan ke list (tidak jadi yatim) TAPI
+  `activeConversationId` tidak diubah dan turn dibatalkan (`undefined`),
+  sehingga jawaban tidak pernah muncul di thread yang salah.
+- Panel history men-disable tombol item saat `isGenerating` supaya user tidak
+  bisa berpindah thread di tengah giliran.
 - `retryLast` memakai ulang bubble user terakhir sebagai `optimisticId`
   (tidak menambah bubble user kedua).
 - `openConversation`: set `messages = []` saat mulai, `persistActiveId()` setelah
@@ -4094,6 +4101,10 @@ git commit -m "feat(web): send chat turns through stored conversations"
 10. `retryLast` tidak menggandakan bubble user (pakai ulang bubble terakhir).
 11. Ganti workspace saat giliran berjalan: respons lama tidak melepas guard
     giliran baru dan percakapan lama tidak bocor ke workspace baru.
+12. Pindah thread saat create percakapan berjalan: turn dibatalkan tanpa
+    bubble, active tetap thread yang dipilih, tidak ada chat yang dikirim.
+13. `confirmScheduleProposal` meneruskan `scheduleProposalKey` dari metadata
+    server ke `schedulesService.create` (assert argumen).
 
 ---
 
@@ -4362,6 +4373,8 @@ git commit -m "feat(web): add in-sidebar conversation history panel"
 4. **Guard tanggal**: `updated_at` invalid → tampilkan `"—"`, jangan
    `formatDistanceToNow` langsung. Tambah `title={conversation.title}` pada
    judul yang ter-truncate.
+   - Tombol item history `disabled={isGenerating}` (mode toggle sudah disable;
+     item list juga harus) supaya tidak ada pindah thread di tengah giliran.
 5. **A11y header**: tombol history pakai `aria-label="Chat history"` +
    `aria-expanded={historyOpen}` (bukan `aria-pressed`); tombol New chat juga
    menutup panel (`setHistoryOpen(false)`).

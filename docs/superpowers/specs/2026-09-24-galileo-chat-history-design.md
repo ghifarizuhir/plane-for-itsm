@@ -212,7 +212,11 @@ user_message, assistant_message}` — FE memakai baris server untuk mengganti
   mengembalikan jadwal yang sama.
 - Dua tab pada percakapan sama: pesan interleave urut insert, rename
   last-write-wins; tanpa locking. Percakapan dihapus di tab lain → 404 → FE
-  reset ke chat baru + toast.
+  reset ke chat baru (panel menampilkan error inline untuk kegagalan hapus;
+  perilaku toast global masih follow-up).
+- Panel history men-disable item saat giliran berjalan, dan `Retry` setelah
+  error **mengirim ulang pertanyaan** — server mencatat pasangan user/assistant
+  error lalu pasangan baru (duplikasi user row disengaja untuk v1, bukan bug).
 - `content_html` disimpan apa adanya (konsisten `ai_schedule_runs`) dan tetap
   disanitasi saat render oleh `sanitizeAssistantHtml`; metadata hanya ditulis
   server + PATCH allowlist.
