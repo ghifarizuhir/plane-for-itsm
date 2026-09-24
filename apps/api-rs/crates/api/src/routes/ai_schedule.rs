@@ -435,6 +435,10 @@ pub async fn run_now(
     if !can_manage(row.created_by_id, auth.0, role) {
         return Ok(deny());
     }
+    let mut redis = st.redis_client().await.map_err(|error| {
+        tracing::error!(error=%error, "ai.schedule.run: redis connection failed");
+        common::errors::AppError::internal()
+    })?;
     let run_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at) \
@@ -446,7 +450,6 @@ pub async fn run_now(
     .bind(&row.prompt)
     .execute(&st.pool)
     .await?;
-    let mut redis = st.redis_client().await?;
     if let Err(error) =
         common::stream::push_job(&mut redis, "ai.schedule.run", json!({"run_id": run_id})).await
     {
