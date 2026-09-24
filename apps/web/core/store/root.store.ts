@@ -72,6 +72,8 @@ import type { IThemeStore } from "./theme.store";
 import { ThemeStore } from "./theme.store";
 import type { IAIAssistantStore } from "./ai-assistant.store";
 import { AIAssistantStore, clearPersistedAiConversations } from "./ai-assistant.store";
+import type { IAiSchedulesStore } from "./ai-schedules.store";
+import { AiSchedulesStore } from "./ai-schedules.store";
 import type { IUserStore } from "./user";
 import { UserStore } from "./user";
 import type { IWorkspaceRootStore } from "./workspace";
@@ -112,6 +114,7 @@ export class CoreRootStore {
   powerK: IPowerKStore;
   timelineStore: ITimelineStore;
   aiAssistant: IAIAssistantStore;
+  aiSchedules: IAiSchedulesStore;
 
   constructor() {
     this.router = new RouterStore();
@@ -147,6 +150,7 @@ export class CoreRootStore {
     this.powerK = new PowerKStore();
     this.timelineStore = new TimeLineStore(this);
     this.aiAssistant = new AIAssistantStore();
+    this.aiSchedules = new AiSchedulesStore();
   }
 
   resetOnSignOut() {
@@ -185,6 +189,7 @@ export class CoreRootStore {
     this.timelineStore = new TimeLineStore(this);
     clearPersistedAiConversations();
     this.aiAssistant = new AIAssistantStore();
+    this.aiSchedules = new AiSchedulesStore();
   }
 }
 

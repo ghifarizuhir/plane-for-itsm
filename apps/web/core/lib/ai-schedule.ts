@@ -42,13 +42,8 @@ export type TAiAgentPendingAction = {
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-/** True when the message starts with the `/schedule` slash command. */
-export const isScheduleCommand = (text: string): boolean => {
-  const trimmed = text.trimStart();
-  if (!trimmed.startsWith("/schedule")) return false;
-  const rest = trimmed.slice("/schedule".length);
-  return rest === "" || /^\s/.test(rest);
-};
+/** True when the message starts with the `/schedule` slash command (case-insensitive). */
+export const isScheduleCommand = (text: string): boolean => /^\/schedule(?:\s|$)/i.test(text.trimStart());
 
 export const humanizeSchedule = (
   proposal: Pick<TAiScheduleProposal, "frequency" | "time" | "day_of_week" | "day_of_month" | "timezone">
@@ -63,5 +58,7 @@ export const humanizeSchedule = (
       return `Every ${WEEKDAYS[(proposal.day_of_week ?? 1) - 1] ?? "Monday"} at ${proposal.time} · ${zone}`;
     case "monthly":
       return `Every month on day ${proposal.day_of_month ?? 1} at ${proposal.time} · ${zone}`;
+    default:
+      return "—";
   }
 };
