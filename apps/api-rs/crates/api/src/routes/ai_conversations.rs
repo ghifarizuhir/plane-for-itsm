@@ -35,8 +35,6 @@ pub struct CreateConversationBody {
 #[derive(sqlx::FromRow)]
 pub(crate) struct ConversationRow {
     pub id: Uuid,
-    pub workspace_id: Uuid,
-    pub created_by_id: Uuid,
     pub mode: String,
     pub title: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -95,7 +93,7 @@ pub(crate) async fn load_owned_conversation(
     user_id: Uuid,
 ) -> Result<Option<ConversationRow>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT c.id, c.workspace_id, c.created_by_id, c.mode, c.title, c.created_at, c.updated_at \
+        "SELECT c.id, c.mode, c.title, c.created_at, c.updated_at \
          FROM ai_conversations c \
          JOIN workspaces w ON w.id = c.workspace_id AND w.slug = $1 AND w.deleted_at IS NULL \
          WHERE c.id = $2 AND c.created_by_id = $3",
@@ -126,9 +124,11 @@ pub(crate) async fn recent_messages(
     Ok(rows)
 }
 
-/// Insert one message and return the stored row.
+/// Insert one message and return the stored row. Takes a connection so the
+/// caller can run it inside a transaction (`&mut *tx`) or on a pooled
+/// connection (`&mut conn`).
 pub(crate) async fn insert_message(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     conversation_id: Uuid,
     role: &str,
     content: &str,
@@ -146,27 +146,28 @@ pub(crate) async fn insert_message(
     .bind(content)
     .bind(content_html)
     .bind(metadata)
-    .fetch_one(pool)
+    .fetch_one(conn)
     .await
 }
 
 /// Close one chat turn: fill the auto-title when empty, bump `updated_at`,
-/// and prune messages beyond the per-conversation cap — all in one tx.
+/// and prune messages beyond the per-conversation cap. Runs on the caller's
+/// connection/transaction — the success path wraps this together with the
+/// assistant `insert_message` in one transaction.
 pub(crate) async fn finish_turn(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     conversation_id: Uuid,
     title: &str,
 ) -> Result<ConversationRow, sqlx::Error> {
-    let mut tx = pool.begin().await?;
     let row: ConversationRow = sqlx::query_as(
         "UPDATE ai_conversations SET \
          title = CASE WHEN title = '' THEN $2 ELSE title END, updated_at = now() \
          WHERE id = $1 \
-         RETURNING id, workspace_id, created_by_id, mode, title, created_at, updated_at",
+         RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(conversation_id)
     .bind(title)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
     sqlx::query(
         "DELETE FROM ai_messages WHERE id IN ( \
@@ -175,27 +176,9 @@ pub(crate) async fn finish_turn(
     )
     .bind(conversation_id)
     .bind(MAX_MESSAGES_PER_CONVERSATION)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
-    tx.commit().await?;
     Ok(row)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn title_from_collapses_whitespace_and_truncates() {
-        assert_eq!(
-            title_from("  buat laporan overdue  "),
-            "buat laporan overdue"
-        );
-        assert_eq!(title_from("first line\nsecond line"), "first line");
-        assert_eq!(title_from("   \n\n  "), "");
-        let long = "a".repeat(80);
-        assert_eq!(title_from(&long).chars().count(), TITLE_MAX_CHARS);
-    }
 }
 
 pub async fn list(
@@ -211,7 +194,7 @@ pub async fn list(
         return Ok((StatusCode::OK, Json(json!({"conversations": []}))));
     };
     let rows: Vec<ConversationRow> = sqlx::query_as(
-        "SELECT id, workspace_id, created_by_id, mode, title, created_at, updated_at \
+        "SELECT id, mode, title, created_at, updated_at \
          FROM ai_conversations WHERE workspace_id = $1 AND created_by_id = $2 \
          ORDER BY updated_at DESC, id DESC LIMIT $3",
     )
@@ -268,7 +251,7 @@ pub async fn create(
     let row: ConversationRow = sqlx::query_as(
         "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at) \
          VALUES ($1, $2, $3, $4, $5, now(), now()) \
-         RETURNING id, workspace_id, created_by_id, mode, title, created_at, updated_at",
+         RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(Uuid::new_v4())
     .bind(workspace_id)
@@ -289,4 +272,21 @@ pub async fn create(
     .await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(conversation_json(&row))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_from_collapses_whitespace_and_truncates() {
+        assert_eq!(
+            title_from("  buat laporan overdue  "),
+            "buat laporan overdue"
+        );
+        assert_eq!(title_from("first line\nsecond line"), "first line");
+        assert_eq!(title_from("   \n\n  "), "");
+        let long = "a".repeat(80);
+        assert_eq!(title_from(&long).chars().count(), TITLE_MAX_CHARS);
+    }
 }

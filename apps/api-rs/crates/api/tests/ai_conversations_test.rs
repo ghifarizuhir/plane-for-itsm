@@ -7,7 +7,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -221,11 +221,109 @@ async fn creating_more_than_fifty_conversations_prunes_the_oldest() {
     .expect("list");
     let conversations = list["conversations"].as_array().unwrap();
     assert_eq!(conversations.len(), 50);
-    // Newest (empty title) stays; the very oldest is gone.
+    // Newest (empty title) stays.
     assert_eq!(conversations[0]["title"], json!(""));
-    assert!(conversations
-        .iter()
-        .all(|row| row["title"] != json!("old-0")));
+
+    // Assert the DB itself, not just the LIMIT-50 list: the prune must have
+    // deleted the two oldest rows.
+    let stored: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1 AND created_by_id = $2",
+    )
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, 50);
+    let oldest: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1 AND title = 'old-0'",
+    )
+    .bind(scratch.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(oldest, 0);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn pruning_is_scoped_to_the_owner() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let other = scratch.add_actor(&pool, 20).await;
+
+    // 51 conversations for the owner + 1 for the other member.
+    for index in 0..51 {
+        sqlx::query(
+            "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at)              VALUES ($1, $2, $3, 'classic', $4, now() - make_interval(secs => $5), now() - make_interval(secs => $5))",
+        )
+        .bind(Uuid::new_v4())
+        .bind(scratch.workspace_id)
+        .bind(scratch.user_id)
+        .bind(format!("mine-{index}"))
+        .bind(5000 - index)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at)          VALUES ($1, $2, $3, 'classic', 'theirs', now() - interval '10 seconds', now() - interval '10 seconds')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(scratch.workspace_id)
+    .bind(other)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, _) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic"})),
+    )
+    .await
+    .expect("create");
+    assert_eq!(status, StatusCode::CREATED);
+
+    let mine: i64 =
+        sqlx::query_scalar("SELECT count(*)::int8 FROM ai_conversations WHERE created_by_id = $1")
+            .bind(scratch.user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let theirs: i64 =
+        sqlx::query_scalar("SELECT count(*)::int8 FROM ai_conversations WHERE created_by_id = $1")
+            .bind(other)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(mine, 50);
+    assert_eq!(theirs, 1, "another member's conversations are untouched");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn create_trims_and_truncates_the_optional_title() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    let long_title = format!("  {}  ", "x".repeat(150));
+    let (status, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic", "title": long_title})),
+    )
+    .await
+    .expect("create");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["title"].as_str().unwrap().chars().count(), 120);
+    assert!(!created["title"].as_str().unwrap().starts_with(' '));
 
     scratch.purge(&pool).await;
 }
