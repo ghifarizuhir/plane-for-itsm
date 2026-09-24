@@ -542,3 +542,130 @@ async fn deleting_a_conversation_cascades_its_messages() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn messages_are_listed_oldest_first_and_metadata_patch_is_allowlisted() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let other = scratch.add_actor(&pool, 20).await;
+
+    let (_, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "agent"})),
+    )
+    .await
+    .expect("create");
+    let conversation_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    // Seed with raw SQL: the `insert_message` helper is `pub(crate)`.
+    let user_message_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai_messages (id, conversation_id, role, content, metadata, created_at) \
+         VALUES ($1, $2, 'user', 'buat laporan', '{}'::jsonb, now() - interval '2 seconds')",
+    )
+    .bind(user_message_id)
+    .bind(conversation_id)
+    .execute(&pool)
+    .await
+    .expect("user message");
+    let assistant_message_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai_messages (id, conversation_id, role, content, content_html, metadata, created_at) \
+         VALUES ($1, $2, 'assistant', 'siap', 'siap', $3::jsonb, now() - interval '1 second')",
+    )
+    .bind(assistant_message_id)
+    .bind(conversation_id)
+    .bind(json!({
+        "schedule_proposal": {"name": "Laporan", "frequency": "weekly"},
+        "schedule_proposal_key": Uuid::new_v4(),
+        "schedule_decision": "pending",
+    }))
+    .execute(&pool)
+    .await
+    .expect("assistant message");
+
+    let (status, Json(list)) = ai_conversations::messages(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id)),
+    )
+    .await
+    .expect("messages");
+    assert_eq!(status, StatusCode::OK);
+    let messages = list["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0]["id"], json!(user_message_id));
+    assert_eq!(
+        messages[1]["metadata"]["schedule_decision"],
+        json!("pending")
+    );
+
+    // Unknown keys are rejected.
+    let (status, _) = ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, assistant_message_id)),
+        Json(json!({"metadata": {"prompt": "hack"}})),
+    )
+    .await
+    .expect("bad key");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // A valid decision merges into the existing metadata.
+    let schedule_id = Uuid::new_v4();
+    let (status, Json(updated)) = ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, assistant_message_id)),
+        Json(json!({"metadata": {
+            "schedule_decision": "created",
+            "created_schedule_id": schedule_id,
+        }})),
+    )
+    .await
+    .expect("patch metadata");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["metadata"]["schedule_decision"], json!("created"));
+    assert_eq!(
+        updated["metadata"]["created_schedule_id"],
+        json!(schedule_id)
+    );
+    assert_eq!(
+        updated["metadata"]["schedule_proposal"]["name"],
+        json!("Laporan")
+    );
+
+    // Foreign user cannot read or patch.
+    let (status, _) = ai_conversations::messages(
+        State(st.clone()),
+        AuthUser(other),
+        Path((scratch.slug.clone(), conversation_id)),
+    )
+    .await
+    .expect("foreign messages");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(other),
+        Path((scratch.slug.clone(), conversation_id, assistant_message_id)),
+        Json(json!({"metadata": {"schedule_decision": "cancelled"}})),
+    )
+    .await
+    .expect("foreign patch");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Unknown message id inside an owned conversation → 404.
+    let (status, _) = ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, Uuid::new_v4())),
+        Json(json!({"metadata": {"schedule_decision": "cancelled"}})),
+    )
+    .await
+    .expect("missing message");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
+}

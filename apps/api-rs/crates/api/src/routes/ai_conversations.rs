@@ -357,6 +357,115 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
+pub async fn messages(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, conversation_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let Some(_row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    let rows: Vec<MessageRow> = sqlx::query_as(
+        "SELECT id, conversation_id, role, content, content_html, metadata, created_at \
+         FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at, id",
+    )
+    .bind(conversation_id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "messages": rows.iter().map(message_json).collect::<Vec<_>>(),
+        })),
+    ))
+}
+
+/// `PATCH .../messages/:message_id/` — merge an allowlisted metadata patch
+/// (`schedule_decision`, `created_schedule_id`) written by the FE when the
+/// user resolves a schedule proposal card.
+pub async fn patch_message(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, conversation_id, message_id)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let Some(_row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    let Some(patch) = body.get("metadata").and_then(Value::as_object) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "metadata must be an object"})),
+        ));
+    };
+    let mut clean = serde_json::Map::new();
+    for (key, value) in patch {
+        match key.as_str() {
+            "schedule_decision" => match value.as_str() {
+                Some("created") | Some("cancelled") => {
+                    clean.insert(key.clone(), value.clone());
+                }
+                _ => {
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(
+                            json!({"error": "schedule_decision must be 'created' or 'cancelled'"}),
+                        ),
+                    ));
+                }
+            },
+            "created_schedule_id" => match value.as_str().and_then(|raw| Uuid::parse_str(raw).ok())
+            {
+                Some(id) => {
+                    clean.insert(key.clone(), json!(id));
+                }
+                None => {
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": "created_schedule_id must be a uuid"})),
+                    ));
+                }
+            },
+            _ => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("metadata key not allowed: {key}")})),
+                ));
+            }
+        }
+    }
+    if clean.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "metadata patch is empty"})),
+        ));
+    }
+    let row: Option<MessageRow> = sqlx::query_as(
+        "UPDATE ai_messages SET metadata = metadata || $3::jsonb \
+         WHERE id = $1 AND conversation_id = $2 \
+         RETURNING id, conversation_id, role, content, content_html, metadata, created_at",
+    )
+    .bind(message_id)
+    .bind(conversation_id)
+    .bind(Value::Object(clean))
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(row) => Ok((StatusCode::OK, Json(message_json(&row)))),
+        None => Ok(missing()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

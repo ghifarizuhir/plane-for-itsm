@@ -1783,6 +1783,16 @@ async fn main() {
                 .patch(routes::ai_conversations::patch)
                 .delete(routes::ai_conversations::destroy),
         )
+        // Rust-only: stored messages of a conversation + allowlisted metadata
+        // patch for schedule-proposal decisions. Owner-only.
+        .route(
+            "/api/workspaces/:slug/ai-conversations/:conversation_id/messages/",
+            get(routes::ai_conversations::messages),
+        )
+        .route(
+            "/api/workspaces/:slug/ai-conversations/:conversation_id/messages/:message_id/",
+            patch(routes::ai_conversations::patch_message),
+        )
         // Rust-only (no Django counterpart; consumed by the web app's
         // Scheduler page): GET list + POST confirm-created proposal.
         // Idempotent per `(workspace_id, proposal_key)`; gate WORKSPACE
