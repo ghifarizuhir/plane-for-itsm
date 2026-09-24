@@ -2374,10 +2374,22 @@ pub async fn desc_patch(
         }
     };
     let des_json: Option<Value> = body.get("description_json").cloned();
+    // Django `Page.save()` recomputes `description_stripped` from the stored
+    // `description_html` on every save (`db/models/page.py:70-77`): empty or
+    // tag-only html → NULL (this fork normalizes Django's `""` to NULL; the
+    // column is never serialized), otherwise `strip_tags(html)`. Recompute
+    // only when the patch carries html — otherwise the source is unchanged.
+    let stripped: Option<String> = html
+        .as_ref()
+        .map(|h| strip_tags_text(h))
+        .filter(|s| !s.is_empty());
+    let html_provided = html.is_some();
     sqlx::query(
         "UPDATE pages p SET description_binary = COALESCE($1, description_binary), \
          description_html = COALESCE($2, description_html), \
-         description_json = COALESCE($3, description_json), updated_at = now() \
+         description_json = COALESCE($3, description_json), \
+         description_stripped = CASE WHEN $7 THEN $8 ELSE description_stripped END, \
+         updated_at = now() \
          FROM workspaces w, project_pages pp \
          WHERE p.id = $4 AND p.workspace_id = w.id AND w.slug = $5 \
          AND pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $6 \
@@ -2389,6 +2401,8 @@ pub async fn desc_patch(
     .bind(page_id)
     .bind(&slug)
     .bind(pid)
+    .bind(html_provided)
+    .bind(&stripped)
     .execute(&st.pool)
     .await?;
     desc_err(StatusCode::OK, json!({"message": DESC_UPDATED_MSG}))
