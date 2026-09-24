@@ -1261,7 +1261,15 @@ pub async fn tick(pool: &PgPool, redis: &mut ConnectionManager) -> anyhow::Resul
             .fetch_one(&mut *tx)
             .await?;
         let Ok(proposal) = schedule.proposal(&prompt) else {
+            // DB constraints make this unreachable; stay defensive and move the
+            // schedule forward so a bad row can never wedge the tick loop.
             tracing::warn!(schedule_id=%schedule.id, "ai.schedule.tick: invalid preset, skipping");
+            sqlx::query(
+                "UPDATE ai_schedules SET next_run_at = now() + interval '1 hour', updated_at = now() WHERE id = $1",
+            )
+            .bind(schedule.id)
+            .execute(&mut *tx)
+            .await?;
             continue;
         };
         let next = proposal.next_occurrence(Utc::now());
@@ -1794,7 +1802,7 @@ pub async fn create(
          time_of_day, day_of_week, day_of_month, timezone, enabled, next_run_at, proposal_key, \
          created_at, updated_at) \
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, now(), now()) \
-         ON CONFLICT (proposal_key) DO NOTHING RETURNING id",
+         ON CONFLICT (workspace_id, proposal_key) WHERE deleted_at IS NULL DO NOTHING RETURNING id",
     )
     .bind(id)
     .bind(workspace_id)
@@ -1814,11 +1822,13 @@ pub async fn create(
     match inserted {
         Some(id) => Ok((StatusCode::CREATED, Json(json!({"id": id})))),
         None => {
-            let existing: Uuid =
-                sqlx::query_scalar("SELECT id FROM ai_schedules WHERE proposal_key = $1")
-                    .bind(body.proposal_key)
-                    .fetch_one(&st.pool)
-                    .await?;
+            let existing: Uuid = sqlx::query_scalar(
+                "SELECT id FROM ai_schedules WHERE workspace_id = $1 AND proposal_key = $2 AND deleted_at IS NULL",
+            )
+            .bind(workspace_id)
+            .bind(body.proposal_key)
+            .fetch_one(&st.pool)
+            .await?;
             Ok((StatusCode::OK, Json(json!({"id": existing, "already_exists": true}))))
         }
     }

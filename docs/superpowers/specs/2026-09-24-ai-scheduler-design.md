@@ -79,7 +79,12 @@ Mengikuti konvensi `0003_services.sql`: tabel plural, UUID di-generate aplikasi,
 - `timezone varchar(64)` IANA (default dari timezone browser user)
 - `enabled boolean NOT NULL DEFAULT true`
 - `next_run_at timestamptz NOT NULL`
-- `proposal_key uuid UNIQUE` (idempotensi konfirmasi)
+- `proposal_key uuid NOT NULL` dengan unique index parsial
+  `(workspace_id, proposal_key) WHERE deleted_at IS NULL` (idempotensi
+  konfirmasi per workspace; key tidak terpakai selamanya setelah soft delete).
+- CHECK konsistensi preset: `weekly` wajib `day_of_week`, `monthly` wajib
+  `day_of_month`, dan `time_of_day` harus `HH:MM` valid — supaya baris yang
+  tidak bisa dijalankan tidak mungkin ada (tick tidak pernah macet).
 - `created_at/updated_at/deleted_at timestamptz`
 - Index parsial `(next_run_at) WHERE enabled AND deleted_at IS NULL`
 
