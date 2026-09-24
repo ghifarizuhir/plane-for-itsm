@@ -2706,6 +2706,178 @@ git commit -m "feat(api): persist classic chat turns with server-built context"
 
 ---
 
+---
+
+### Task 7b: Endpoint stateless `/ai-complete/` untuk permukaan editor
+
+**Files:**
+
+- Modify: `apps/api-rs/crates/api/src/routes/ai.rs`
+- Modify: `apps/api-rs/crates/api/src/main.rs`
+- Modify: `apps/api-rs/crates/api/tests/ai_conversations_test.rs`
+
+**Latar:** `apps/web/core/components/issues/issue-modal/components/description-editor.tsx` ("Auto-generate description") dan `apps/web/core/components/core/modals/gpt-assistant-popover.tsx` memakai `createGptTask` satu arah tanpa konsep percakapan. Karena endpoint chat kini wajib `conversation_id`, keduanya dipindah ke endpoint stateless khusus supaya kontrak chat tetap satu jalur dan history tidak tercemar.
+
+- [ ] **Step 1: Tulis test yang gagal**
+
+Tambahkan di `apps/api-rs/crates/api/tests/ai_conversations_test.rs`:
+
+```rust
+#[tokio::test]
+async fn ai_complete_is_stateless_and_persists_nothing() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    // Missing task → 400.
+    let (status, _) = api::routes::ai::workspace_ai_complete(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"prompt": "Pump fails"})),
+    )
+    .await
+    .expect("missing task");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (base_url, bodies) = crate::support::spawn_recording_upstream("editor answer").await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+
+    let (status, Json(body)) = api::routes::ai::workspace_ai_complete(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "Generate a proper description for this work item.",
+            "prompt": "Pump fails",
+        })),
+    )
+    .await
+    .expect("ai-complete");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["response"], json!("editor answer"));
+    assert_eq!(body["response_html"], json!("editor answer"));
+
+    // Old parity: task and prompt are folded, nothing else is added.
+    let sent = bodies.lock().unwrap().clone();
+    let content = sent[0]["messages"][0]["content"].as_str().unwrap();
+    assert!(content.contains("Generate a proper description for this work item."));
+    assert!(content.contains("Pump fails"));
+    assert!(!content.contains("Conversation so far:"));
+
+    // Stateless: nothing is stored.
+    let conversations: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1",
+    )
+    .bind(scratch.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(conversations, 0);
+    let messages: i64 =
+        sqlx::query_scalar("SELECT count(*)::int8 FROM ai_messages WHERE conversation_id IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(messages, 0);
+
+    std::env::remove_var("SKIP_ENV_VAR");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::remove_var("LLM_BASE_URL");
+    std::env::remove_var("LLM_MODEL");
+
+    scratch.purge(&pool).await;
+}
+```
+
+- [ ] **Step 2: Jalankan, pastikan gagal**
+
+Run (di `apps/api-rs`): `cargo test -p api --test ai_conversations_test -- --test-threads=1`
+Expected: FAIL — `workspace_ai_complete` belum ada.
+
+- [ ] **Step 3: Implementasi handler**
+
+Tambahkan di `apps/api-rs/crates/api/src/routes/ai.rs` (setelah `workspace_ai_assistant`):
+
+```rust
+/// `POST /api/workspaces/:slug/ai-complete/` — one-shot stateless completion
+/// for editor surfaces (no conversation, nothing persisted). Gate and error
+/// shapes mirror `/ai-assistant/`.
+pub async fn workspace_ai_complete(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let role = ws_role(&st.pool, auth.0, &slug).await?;
+    if guard_am(role).is_err() {
+        return Ok(deny());
+    }
+    let cfg = resolve_llm_config(&st.pool).await;
+    if cfg.api_key.is_empty() || cfg.model.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "AI is not configured for this workspace."})),
+        ));
+    }
+    let Some(task) = task_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Task is required"})),
+        ));
+    };
+    let prompt = body.get("prompt").and_then(Value::as_str).unwrap_or("");
+    match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, prompt).await {
+        Ok(text) => {
+            let html = response_html(&text);
+            Ok((
+                StatusCode::OK,
+                Json(json!({"response": text, "response_html": html})),
+            ))
+        }
+        Err(LlmError::RateLimited) => Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
+        )),
+        Err(LlmError::Upstream) => Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "An internal error has occurred."})),
+        )),
+    }
+}
+```
+
+- [ ] **Step 4: Daftarkan route**
+
+`main.rs`, setelah route `ai-assistant`:
+
+```rust
+        // Rust-only: one-shot stateless completion for editor surfaces
+        // (auto-generate description). No conversation, nothing persisted.
+        .route(
+            "/api/workspaces/:slug/ai-complete/",
+            post(routes::ai::workspace_ai_complete),
+        )
+```
+
+- [ ] **Step 5: Jalankan test, pastikan lulus**
+
+Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
+Expected: `11 passed` (10 + 1 baru).
+
+- [ ] **Step 6: Format + commit**
+
+```bash
+rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
+git add apps/api-rs/crates/api/src/routes/ai.rs apps/api-rs/crates/api/src/main.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
+git commit -m "feat(api): add stateless ai-complete endpoint for editors"
+```
+
+---
+
 ### Task 8: FE lib — tipe percakapan + `buildAiContext`
 
 **Files:**
@@ -3056,6 +3228,71 @@ Expected: error hanya di `ai-assistant.store.ts` (payload lama) dan test store; 
 ```bash
 git add apps/web/core/services/ai-conversations.service.ts apps/web/core/services/ai.service.ts
 git commit -m "feat(web): add conversation service and stateful chat payload"
+```
+
+---
+
+---
+
+### Task 9b: FE — permukaan editor pindah ke `completeTask`
+
+**Files:**
+
+- Modify: `apps/web/core/services/ai.service.ts`
+- Modify: `apps/web/core/components/core/modals/gpt-assistant-popover.tsx`
+- Modify: `apps/web/core/components/issues/issue-modal/components/description-editor.tsx`
+
+**Latar:** dua permukaan editor memanggil `createGptTask` (chat, kini wajib `conversation_id`). Setelah Task 7b ada `/ai-complete/`; keduanya pindah ke sana supaya tidak membuat percakapan untuk task editor satu arah.
+
+- [ ] **Step 1: Tambah `completeTask` di `ai.service.ts`**
+
+```ts
+export type TCompleteTaskResponse = {
+  response: string;
+  response_html?: string;
+};
+```
+
+dan method (setelah `createAgentTask`):
+
+```ts
+  async completeTask(workspaceSlug: string, data: { task: string; prompt: string }): Promise<TCompleteTaskResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/ai-complete/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
+      });
+  }
+```
+
+- [ ] **Step 2: Ganti pemanggil di `description-editor.tsx`**
+
+`aiService.createGptTask(workspaceSlug.toString(), { prompt: issueName, task: "Generate a proper description for this work item." })`
+→ `aiService.completeTask(workspaceSlug.toString(), { ... })` (argumen sama). `res.response` / `res.response_html` tetap; `response_html` kini bertipe `string | undefined`, jadi pakai `res.response_html ?? res.response` bila TS mengeluh di `handleAiAssistance(...)`.
+
+- [ ] **Step 3: Ganti pemanggil di `gpt-assistant-popover.tsx`**
+
+Semua pemanggilan `aiService.createGptTask(...)` → `aiService.completeTask(...)` dengan argumen yang sama; hapus cast `any` pada respons bila tidak lagi diperlukan.
+
+- [ ] **Step 4: Verifikasi**
+
+```bash
+rg -n "createGptTask" apps/web --glob '!node_modules'
+```
+
+Expected: hanya `core/store/ai-assistant.store.ts`, `core/store/ai-assistant.store.test.ts`, dan `core/services/ai.service.ts` (definisi).
+
+```bash
+pnpm --filter=web check:types
+```
+
+Expected: error hanya di `core/store/ai-assistant.store*` (Task 10–11 memperbaikinya); tidak ada error di dua file editor.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/core/services/ai.service.ts apps/web/core/components/core/modals/gpt-assistant-popover.tsx apps/web/core/components/issues/issue-modal/components/description-editor.tsx
+git commit -m "feat(web): route editor AI generation through stateless endpoint"
 ```
 
 ---
@@ -4035,7 +4272,7 @@ git commit -m "feat(web): add in-sidebar conversation history panel"
 
 - Modify: `docs/superpowers/specs/2026-09-24-galileo-chat-history-design.md`
 - Modify: `apps/api-rs/scripts/smoke.sh` (komentar)
-- Modify: `parity-inventory.json` (entri `/ai-assistant/` + `/ai-agent/`: `conversation_id` kini wajib dan respons menambah `conversation`/`user_message`/`assistant_message`; catat endpoint `/ai-conversations/` baru)
+- Modify: `parity-inventory.json` (entri `/ai-assistant/` + `/ai-agent/`: `conversation_id` kini wajib dan respons menambah `conversation`/`user_message`/`assistant_message`; catat endpoint baru `/ai-conversations/` dan `/ai-complete/`)
 
 - [ ] **Step 1: Sinkronkan spec dengan implementasi**
 
