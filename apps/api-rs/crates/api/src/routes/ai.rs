@@ -167,10 +167,15 @@ pub async fn workspace_ai_assistant(
     let model_prompt = history_prompt(context, &history, prompt);
     let title = title_from(prompt);
     // Insert the user message on a pooled connection, then release it before
-    // the LLM call so the pool is not held.
+    // the LLM call so the pool is not held. A conversation that vanished since
+    // the load still answers 404, not 500.
     let mut conn = st.pool.acquire().await?;
     let user_message =
-        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+        match insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await {
+            Ok(message) => message,
+            Err(error) if conversation_gone(&error) => return Ok(missing()),
+            Err(error) => return Err(error.into()),
+        };
     drop(conn);
     match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, &model_prompt).await {
         Ok(text) => {
