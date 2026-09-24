@@ -312,6 +312,16 @@ describe("AIAssistantStore", () => {
     expect((service.createGptTask as any).mock.calls).toHaveLength(0);
   });
 
+  it("passes the browser timezone to agent prompts", async () => {
+    const service = makeService();
+    const store = new AIAssistantStore(service as never, { create: vi.fn() } as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("hello");
+    const call = (service.createAgentTask as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+    expect(JSON.stringify(call)).toContain("User timezone:");
+  });
+
   it("agent mode falls back to response when response_html is missing", async () => {
     const service = makeService(undefined, async () => ({ response: "plain text" }));
     const store = new AIAssistantStore(service);
@@ -381,6 +391,24 @@ describe("AIAssistantStore", () => {
     await store.sendMessage("/schedule daily overdue report");
     expect(store.mode).toBe("agent");
     expect(service.createAgentTask).toHaveBeenCalled();
+    expect(service.createGptTask).not.toHaveBeenCalled();
+    expect(store.messages.some((m) => m.role === "user" && m.content.includes("/schedule"))).toBe(true);
+  });
+
+  it("ignores pending_action in classic mode", async () => {
+    const service = makeService(async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: { name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" },
+      },
+    }));
+    const store = new AIAssistantStore(service as never, { create: vi.fn() } as never);
+    store.setWorkspace("acme");
+    await store.sendMessage("hello");
+    const message = store.messages[store.messages.length - 1];
+    expect(message.scheduleProposal).toBeUndefined();
   });
 
   it("records pending_action metadata and confirms a proposal", async () => {

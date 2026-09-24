@@ -20,6 +20,8 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // lib
 import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
+// components
+import { ScheduleProposalCard } from "./schedule-proposal-card";
 
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
@@ -52,6 +54,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     sendMessage,
     retryLast,
     clearConversation,
+    confirmScheduleProposal,
+    resolveScheduleProposal,
   } = useAiAssistant();
   const {
     peekIssue,
@@ -230,18 +234,34 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 })}
               >
                 <div
-                  className={cn("max-w-[88%] rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
-                    "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
-                    "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
-                      message.role === "assistant" && !message.isError,
-                    "border-danger-primary rounded-bl-sm border text-danger-primary":
-                      message.role === "assistant" && message.isError,
+                  className={cn("flex max-w-[88%] flex-col", {
+                    "items-end": message.role === "user",
+                    "items-start": message.role === "assistant",
                   })}
                 >
-                  {message.role === "assistant" && !message.isError ? (
-                    <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  <div
+                    className={cn("rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
+                      "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
+                      "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
+                        message.role === "assistant" && !message.isError,
+                      "border-danger-primary rounded-bl-sm border text-danger-primary":
+                        message.role === "assistant" && message.isError,
+                    })}
+                  >
+                    {message.role === "assistant" && !message.isError ? (
+                      <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{message.content}</p>
+                    )}
+                  </div>
+                  {message.role === "assistant" && message.scheduleProposal && (
+                    <ScheduleProposalCard
+                      proposal={message.scheduleProposal}
+                      decision={message.scheduleDecision}
+                      createdScheduleId={message.createdScheduleId}
+                      onConfirm={() => confirmScheduleProposal(message.id)}
+                      onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
+                    />
                   )}
                 </div>
               </div>
@@ -266,6 +286,15 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
           {/* composer */}
           <div className="border-t border-subtle p-3">
             <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
+              {question.trimStart().startsWith("/") && !isGenerating && (
+                <button
+                  type="button"
+                  onClick={() => setQuestion("/schedule ")}
+                  className="text-xs w-full border-b border-subtle px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
+                >
+                  /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
+                </button>
+              )}
               <textarea
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}

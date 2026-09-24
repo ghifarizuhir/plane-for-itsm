@@ -158,14 +158,16 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (!this.workspaceSlug) return;
     const message = this.messages.find((candidate) => candidate.id === messageId);
     if (!message?.scheduleProposal || !message.scheduleProposalKey) return;
+    if (message.scheduleDecision !== "pending") return;
     const created = await this.schedulesService.create(
       this.workspaceSlug,
       message.scheduleProposal,
       message.scheduleProposalKey
     );
+    if (!created?.id) return;
     runInAction(() => {
       message.scheduleDecision = "created";
-      message.createdScheduleId = created?.id;
+      message.createdScheduleId = created.id;
       this.persist();
     });
   };
