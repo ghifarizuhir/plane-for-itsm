@@ -28,6 +28,7 @@ Server kolaborasi realtime Pages (Hocuspocus/Yjs) untuk editor dokumen.
 
 - Service: `plane-live.service` (`systemctl --user status plane-live`), unit di `systemd/user/plane-live.service`.
 - Env: `apps/live/.env` (API_BASE_URL ke api-rs, REDIS_URL ke container plane-redis, LIVE_SERVER_SECRET_KEY).
+- `WEB_BASE_URL` di env live dikirim sebagai header `Origin` pada mutasi API (PATCH/POST) agar lolos origin-check api-rs; nilainya harus ada di `CORS_ALLOWED_ORIGINS` (`apps/api/.env`).
 - Setelah mengubah kode `apps/live`: `pnpm --filter=live build && systemctl --user restart plane-live.service`.
 - Verifikasi: `curl http://localhost:3100/live/health/` (cold start ~8 detik).
 - `VITE_LIVE_BASE_URL` di-bake saat build web dan harus URL yang bisa dijangkau browser. Untuk LAN pakai `http://<LAN-IP>:3100` (IP host bisa berubah); untuk tunnel butuh ingress (mis. `live.terraline.space` → `http://localhost:3100` di dashboard Cloudflare) + rebuild dengan URL https, karena halaman https tidak boleh connect `ws://` (mixed content).
