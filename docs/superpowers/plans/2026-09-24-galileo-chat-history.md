@@ -3311,6 +3311,12 @@ git commit -m "feat(web): route editor AI generation through stateless endpoint"
 
 ### Task 10: Store — daftar percakapan, buka/new/rename/delete, ganti mode
 
+> **Catatan eksekusi:** Task 10 dan Task 11 menyentuh file yang sama
+> (`ai-assistant.store.ts`) dan tidak bisa setengah kompilasi (import
+> `buildAiPrompt` sudah dihapus di Task 8). Jalankan keduanya dalam satu sesi
+> implementer; commit boleh dua kali dengan pemeriksaan bila memungkinkan,
+> atau satu commit gabungan bila tidak.
+
 **Files:**
 
 - Modify: `apps/web/core/store/ai-assistant.store.ts`
