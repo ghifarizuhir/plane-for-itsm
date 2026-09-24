@@ -17,9 +17,14 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::routes::ai::task_from_body;
+use crate::routes::ai_conversations::{
+    finish_turn, insert_message, load_owned_conversation, message_json, recent_messages,
+    title_from, ConversationRow, MessageRow,
+};
 use crate::routes::module::guard_am;
-use crate::routes::project::{deny, ws_role};
+use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
+use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
 use ai::llm::{host_of, resolve_llm_config, LlmError};
 
 pub use ai::agent::{new_trace, pending_action, prompt_from_body, run_agent, AGENT_TIMEOUT};
@@ -48,6 +53,23 @@ pub fn success_body(text: &str, tool_calls: Vec<Value>, action: Option<Value>) -
     })
 }
 
+/// 200 body: the existing chat fields plus the persisted rows so the FE can
+/// reconcile its optimistic bubble and refresh the conversation list.
+pub(crate) fn chat_success_body(
+    text: &str,
+    tool_calls: Vec<Value>,
+    action: Option<Value>,
+    conversation: &ConversationRow,
+    user_message: &MessageRow,
+    assistant_message: &MessageRow,
+) -> Value {
+    let mut body = success_body(text, tool_calls, action);
+    body["conversation"] = crate::routes::ai_conversations::conversation_json(conversation);
+    body["user_message"] = message_json(user_message);
+    body["assistant_message"] = message_json(assistant_message);
+    body
+}
+
 /// `POST /api/workspaces/:slug/ai-agent/`.
 ///
 /// Gate: workspace ADMIN/MEMBER. Errors mirror `/ai-assistant/` messages so
@@ -70,6 +92,34 @@ pub async fn workspace_ai_agent(
     let Some(workspace_id) = workspace_id else {
         return Ok(deny());
     };
+    let Some(prompt) = prompt_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Prompt is required"})),
+        ));
+    };
+    let Some(conversation_id) = body
+        .get("conversation_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+    else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "conversation_id is required"})),
+        ));
+    };
+    let Some(conversation) =
+        load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    if conversation.mode != "agent" {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "conversation mode does not match this endpoint"})),
+        ));
+    }
+    // Dipindah dari atas fungsi (lihat catatan urutan validasi di atas).
     let cfg = resolve_llm_config(&st.pool).await;
     if cfg.api_key.is_empty() || cfg.model.is_empty() {
         return Ok((
@@ -77,13 +127,25 @@ pub async fn workspace_ai_agent(
             Json(json!({"error": "AI is not configured for this workspace."})),
         ));
     }
-    let Some(prompt) = prompt_from_body(&body) else {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Prompt is required"})),
-        ));
-    };
     let task = task_from_body(&body);
+    let context = body.get("context").and_then(Value::as_str).unwrap_or("");
+    let history_rows =
+        recent_messages(&st.pool, conversation_id, HISTORY_MESSAGE_LIMIT as i64).await?;
+    let history: Vec<HistoryMessage> = history_rows
+        .iter()
+        .map(|row| HistoryMessage {
+            role: row.role.clone(),
+            content: row.content.clone(),
+        })
+        .collect();
+    let model_prompt = history_prompt(context, &history, prompt);
+    let title = title_from(prompt);
+    // Insert the user message on a pooled connection, then release it before
+    // the (up to 180s) LLM call so the pool is not held.
+    let mut conn = st.pool.acquire().await?;
+    let user_message =
+        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+    drop(conn);
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
     let agent_result = tokio::time::timeout(
@@ -94,7 +156,7 @@ pub async fn workspace_ai_agent(
             &cfg.model,
             tool_server,
             task,
-            prompt,
+            &model_prompt,
         ),
     )
     .await
@@ -114,19 +176,68 @@ pub async fn workspace_ai_agent(
                 })
                 .unwrap_or_default();
             let action = pending_action(&trace);
+            let mut metadata = json!({ "is_error": false });
+            if let Some(action) = action.as_ref() {
+                metadata["schedule_proposal"] = action["proposal"].clone();
+                metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
+                metadata["schedule_decision"] = json!("pending");
+            }
+            // Assistant message + prune + updated_at in ONE transaction.
+            let mut tx = st.pool.begin().await?;
+            let assistant_message = insert_message(
+                &mut tx,
+                conversation_id,
+                "assistant",
+                &text,
+                Some(&crate::routes::ai::response_html(&text)),
+                &metadata,
+            )
+            .await?;
+            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
+            tx.commit().await?;
             Ok((
                 StatusCode::OK,
-                Json(success_body(&text, tool_calls, action)),
+                Json(chat_success_body(
+                    &text,
+                    tool_calls,
+                    action,
+                    &conversation,
+                    &user_message,
+                    &assistant_message,
+                )),
             ))
         }
-        Err(LlmError::RateLimited) => Ok((
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
-        )),
-        Err(LlmError::Upstream) => Ok((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "An internal error has occurred."})),
-        )),
+        Err(error) => {
+            let message = match error {
+                LlmError::RateLimited => {
+                    format!("Rate limit exceeded for {}", host_of(&cfg.base_url))
+                }
+                LlmError::Upstream => "An internal error has occurred.".to_string(),
+            };
+            if let Ok(mut tx) = st.pool.begin().await {
+                let _ = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &message,
+                    None,
+                    &json!({ "is_error": true }),
+                )
+                .await;
+                let _ = finish_turn(&mut tx, conversation_id, &title).await;
+                let _ = tx.commit().await;
+            }
+            match error {
+                LlmError::RateLimited => Ok((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": message})),
+                )),
+                LlmError::Upstream => Ok((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": message})),
+                )),
+            }
+        }
     }
 }
 
