@@ -1,4 +1,4 @@
-use redis::{aio::ConnectionManager, AsyncCommands};
+use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue};
 use serde_json::Value;
 
 pub const STREAM: &str = "plane:jobs";
@@ -26,7 +26,11 @@ pub async fn push_job(
     payload: Value,
 ) -> anyhow::Result<String> {
     let id: String = mgr
-        .xadd(STREAM, "*", &[("job", job), ("payload", &payload.to_string())])
+        .xadd(
+            STREAM,
+            "*",
+            &[("job", job), ("payload", &payload.to_string())],
+        )
         .await?;
     Ok(id)
 }
@@ -53,4 +57,62 @@ pub async fn read_jobs(
 pub async fn ack_job(mgr: &mut ConnectionManager, id: &str) -> anyhow::Result<()> {
     let _: i32 = mgr.xack(STREAM, GROUP, &[id]).await?;
     Ok(())
+}
+
+/// Read one stream entry by id and parse its `job` + JSON `payload` fields.
+pub async fn job_by_id(
+    mgr: &mut ConnectionManager,
+    id: &str,
+) -> anyhow::Result<Option<(String, Value)>> {
+    let reply: redis::streams::StreamRangeReply = mgr.xrange(STREAM, id, id).await?;
+    let Some(entry) = reply.ids.into_iter().next() else {
+        return Ok(None);
+    };
+    let fields: Vec<(String, String)> = entry
+        .map
+        .into_iter()
+        .map(|(key, value)| (key, String::from_redis_value(&value).unwrap_or_default()))
+        .collect();
+    Ok(parse_entry(&fields))
+}
+
+/// Pure parser for a stream entry's fields.
+pub fn parse_entry(fields: &[(String, String)]) -> Option<(String, Value)> {
+    let get = |name: &str| {
+        fields
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    };
+    let job = get("job")?.to_string();
+    let payload = serde_json::from_str(get("payload")?).ok()?;
+    Some((job, payload))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_entry_reads_job_and_payload() {
+        let fields = vec![
+            ("job".to_string(), "ai.schedule.run".to_string()),
+            ("payload".to_string(), r#"{"run_id":"abc"}"#.to_string()),
+        ];
+        let (job, payload) = parse_entry(&fields).expect("parsed");
+        assert_eq!(job, "ai.schedule.run");
+        assert_eq!(payload, json!({"run_id": "abc"}));
+    }
+
+    #[test]
+    fn parse_entry_rejects_missing_or_bad_fields() {
+        assert!(parse_entry(&[]).is_none());
+        assert!(parse_entry(&[("job".to_string(), "x".to_string())]).is_none());
+        assert!(parse_entry(&[
+            ("job".to_string(), "x".to_string()),
+            ("payload".to_string(), "not-json".to_string())
+        ])
+        .is_none());
+    }
 }
