@@ -4340,6 +4340,36 @@ git commit -m "feat(web): add in-sidebar conversation history panel"
 
 ---
 
+### Task 12b: Hardening panel history (hasil review Task 12)
+
+1. **Mutasi rename/hapus tidak boleh gagal senyap**:
+   - `renameConversation(id, title): Promise<boolean>` — `try/catch` di store;
+     gagal → state lokal tidak berubah, return `false`.
+   - `deleteConversation(id): Promise<boolean>` — 404 dari server dianggap
+     sukses (hapus lokal, return `true`); kegagalan lain → state tidak berubah,
+     return `false`.
+   - Panel: rename gagal → input tetap terbuka + pesan error inline kecil
+     (`text-danger-primary`); hapus gagal → mode konfirmasi tetap terbuka +
+     pesan error inline.
+2. **Keyboard/touch**:
+   - Baris: `group-focus-within:opacity-100` pada aksi (bukan hanya
+     `group-hover`).
+   - Input rename: `autoFocus`, `Enter` = simpan, `Escape` = batal.
+   - Tombol konfirmasi hapus difokuskan saat mode konfirmasi aktif (ref).
+3. **Auto-scroll**: efek `scrollRef` di `root.tsx` menambah `historyOpen` ke
+   dependency supaya list yang baru di-mount setelah panel ditutup langsung
+   di-scroll ke bawah.
+4. **Guard tanggal**: `updated_at` invalid → tampilkan `"—"`, jangan
+   `formatDistanceToNow` langsung. Tambah `title={conversation.title}` pada
+   judul yang ter-truncate.
+5. **A11y header**: tombol history pakai `aria-label="Chat history"` +
+   `aria-expanded={historyOpen}` (bukan `aria-pressed`); tombol New chat juga
+   menutup panel (`setHistoryOpen(false)`).
+6. **Test store baru (3)**: rename gagal mempertahankan judul lama; delete 404
+   menghapus lokal; delete 500 mempertahankan baris.
+
+---
+
 ### Task 13: Sinkronisasi dokumen + smoke script
 
 **Files:**
