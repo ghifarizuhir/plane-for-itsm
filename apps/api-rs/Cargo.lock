@@ -44,6 +44,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "common",
+ "rig",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "aligned"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -102,6 +119,7 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "aes",
+ "ai",
  "anyhow",
  "async-trait",
  "axum",
@@ -1017,10 +1035,12 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "anyhow",
  "axum",
  "base64 0.22.1",
  "chrono",
+ "hmac",
  "jsonwebtoken",
  "pbkdf2",
  "redis",
@@ -8320,7 +8340,9 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 name = "worker"
 version = "0.1.0"
 dependencies = [
+ "ai",
  "anyhow",
+ "chrono",
  "common",
  "redis",
  "serde",
@@ -8330,6 +8352,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

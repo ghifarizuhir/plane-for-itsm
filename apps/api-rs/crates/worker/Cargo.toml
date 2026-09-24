@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ai = { path = "../ai" }
 common = { path = "../common" }
 tokio = { workspace = true }
 redis = { workspace = true }
@@ -14,3 +15,5 @@ anyhow = { workspace = true }
 tikv-jemallocator = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }

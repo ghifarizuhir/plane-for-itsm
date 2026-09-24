@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/common", "crates/api", "crates/worker", "crates/beat"]
+members = ["crates/common", "crates/ai", "crates/api", "crates/worker", "crates/beat"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -19,6 +19,7 @@ validator = { version = "0.18", features = ["derive"] }
 jsonwebtoken = "9"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10.4"
 async-trait = "0.1"
 pbkdf2 = { version = "0.12" }
 sha2 = "0.10"

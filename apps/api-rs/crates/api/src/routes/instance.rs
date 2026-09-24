@@ -1,8 +1,8 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
 
-use crate::routes::ai::resolve_llm_config;
 use crate::state::AppState;
+use ai::resolve_llm_config;
 
 /// Mirrors `apps/api/plane/license/api/views/instance.py:InstanceEndpoint.get`
 /// (AllowAny, GET only). PATCH stays on Django — the router registers only

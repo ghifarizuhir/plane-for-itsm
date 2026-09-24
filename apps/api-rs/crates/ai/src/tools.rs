@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::{record, ToolTrace};
+use crate::agent::{record, ToolTrace};
 
 pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
      WHERE workspace_id = $1 AND deleted_at IS NULL AND archived_at IS NULL \
@@ -438,7 +438,7 @@ mod tests {
     #[tokio::test]
     async fn tool_metadata_is_exposed() {
         let pool = lazy_pool();
-        let trace = super::super::new_trace();
+        let trace = crate::agent::new_trace();
 
         let list = ListProjects {
             pool: pool.clone(),
@@ -476,7 +476,7 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle() {
-        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), super::super::new_trace());
+        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), crate::agent::new_trace());
     }
 
     #[tokio::test]
@@ -484,7 +484,7 @@ mod tests {
         let tool = CountWorkItems {
             pool: lazy_pool(),
             workspace_id: Uuid::nil(),
-            trace: super::super::new_trace(),
+            trace: crate::agent::new_trace(),
         };
         let error = tool
             .call(
