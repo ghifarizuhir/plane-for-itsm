@@ -70,7 +70,7 @@ Spec: `docs/superpowers/specs/2026-09-24-ai-scheduler-design.md`.
 - Modify: `apps/api-rs/crates/api/Cargo.toml`, `crates/api/src/routes/ai.rs`, `crates/api/src/routes/ai_agent/mod.rs`, `crates/api/src/routes/instance_admin.rs`
 - Modify: `apps/api-rs/crates/worker/Cargo.toml`
 
-- [ ] **Step 1: Catat baseline test**
+- [x] **Step 1: Catat baseline test**
 
 Run:
 
@@ -80,7 +80,7 @@ cd apps/api-rs && cargo test -p api -- --test-threads=1 2>&1 | tail -5
 
 Expected: 0 failed (tests yang akan dipindah masih ikut dihitung di `-p api`). Catat jumlahnya.
 
-- [ ] **Step 2: Pindahkan helper Fernet/env ke `common`**
+- [x] **Step 2: Pindahkan helper Fernet/env ke `common`**
 
 Buat `apps/api-rs/crates/common/src/crypto.rs` dengan memindahkan **verbatim** dari `crates/api/src/routes/instance_admin.rs`: `derive_fernet_key` (baris ~1223), `fernet_secret` (~1231), `decrypt_data` (~1353), `skip_env_vars` (~1545). Ubah visibilitas: `pub fn derive_fernet_key`, `pub fn fernet_secret`, `pub fn decrypt_data`, `pub fn skip_env_vars`. Tambahkan header modul:
 
@@ -107,7 +107,7 @@ Di `instance_admin.rs` ganti definisi keempat fungsi itu dengan re-export (kode 
 pub use common::crypto::{decrypt_data, derive_fernet_key, fernet_secret, skip_env_vars};
 ```
 
-- [ ] **Step 3: Buat crate `crates/ai`**
+- [x] **Step 3: Buat crate `crates/ai`**
 
 `apps/api-rs/Cargo.toml`: tambahkan `"crates/ai"` ke `members`, dan ke `[workspace.dependencies]` tambahkan:
 
@@ -151,7 +151,7 @@ pub mod tools;
 
 (Task 3 menambahkan `pub mod schedule;`.)
 
-- [ ] **Step 4: Pindahkan config LLM ke `ai/src/llm.rs`**
+- [x] **Step 4: Pindahkan config LLM ke `ai/src/llm.rs`**
 
 Pindahkan **verbatim** dari `crates/api/src/routes/ai.rs` ke `ai/src/llm.rs`: `DEFAULT_BASE_URL`, `DEFAULT_MODEL`, `LlmConfig` + impl `Debug`, `llm_config_from_rows`, `llm_config_from_env`, `resolve_llm_config`, `LlmError`, `response_html`, `host_of`. Jadikan semuanya `pub`. Header + import:
 
@@ -169,7 +169,7 @@ use common::crypto::{decrypt_data, fernet_secret, skip_env_vars};
 pub use llm::{host_of, resolve_llm_config, response_html, LlmConfig, LlmError};
 ```
 
-- [ ] **Step 5: Pindahkan runtime agen ke `ai/src/agent.rs`**
+- [x] **Step 5: Pindahkan runtime agen ke `ai/src/agent.rs`**
 
 Pindahkan **verbatim** dari `crates/api/src/routes/ai_agent/mod.rs` (sisakan handler `workspace_ai_agent` di api): `PREAMBLE`, `MAX_TURNS`, `AGENT_TIMEOUT`, `ToolCallTrace`, `ToolTrace`, `new_trace`, `record`, `prompt_from_body`, `effective_prompt`, `map_prompt_error`, `http_client`, `run_agent`. Jadikan pub yang diperlukan lintas crate. Ubah head import menjadi:
 
@@ -209,7 +209,7 @@ pub fn pending_action(trace: &ToolTrace) -> Option<Value> {
 
 (Task 4 akan mengganti literal `"create_schedule"` dengan konstanta `tools::CREATE_SCHEDULE_NAME`.)
 
-- [ ] **Step 6: Pindahkan tools ke `ai/src/tools.rs`**
+- [x] **Step 6: Pindahkan tools ke `ai/src/tools.rs`**
 
 ```bash
 git mv apps/api-rs/crates/api/src/routes/ai_agent/tools.rs apps/api-rs/crates/ai/src/tools.rs
@@ -217,7 +217,7 @@ git mv apps/api-rs/crates/api/src/routes/ai_agent/tools.rs apps/api-rs/crates/ai
 
 Di file pindahan: ganti `use super::{record, ToolTrace};` → `use crate::agent::{record, ToolTrace};`. `record` harus `pub` di `agent.rs`. `CREATE_SCHEDULE_NAME` belum ada (dibuat di Task 4); sementara itu ganti referensi di `pending_action` dengan literal `"create_schedule"` dan di Task 4 ubah ke konstanta. Pastikan `use sqlx::PgPool` dll tetap.
 
-- [ ] **Step 7: Perbarui `crates/api` agar memakai crate `ai`**
+- [x] **Step 7: Perbarui `crates/api` agar memakai crate `ai`**
 
 `crates/api/Cargo.toml` tambahkan `ai = { path = "../ai" }` (urut alfabet dengan `common`).
 
@@ -264,7 +264,7 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 ```
 
-- [ ] **Step 8: Format + verifikasi move-only**
+- [x] **Step 8: Format + verifikasi move-only**
 
 Run:
 
@@ -278,7 +278,7 @@ cargo build -p worker 2>&1 | tail -3
 
 Expected: semua hijau, 0 failed. Test tools kini jalan di `-p ai`. Tidak ada perubahan perilaku endpoint.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/api-rs/Cargo.toml apps/api-rs/crates/ai apps/api-rs/crates/common apps/api-rs/crates/api apps/api-rs/crates/worker/Cargo.toml
@@ -293,7 +293,7 @@ git commit -m "refactor(api-rs): extract shared agent runtime into crates/ai"
 
 - Create: `apps/api-rs/migrations/0006_ai_schedules.sql`
 
-- [ ] **Step 1: Tulis migrasi**
+- [x] **Step 1: Tulis migrasi**
 
 ```sql
 -- AI scheduler: recurring agent runs created from the /schedule chat flow.
@@ -359,7 +359,7 @@ Catatan review: `ai_schedules_proposal_key_idx` di atas kemudian diperbaiki oleh
 plus CHECK konsistensi preset dan index sweep `ai_schedule_runs_stuck_idx`). File 0006 tidak diubah.
 Handler create (Task 10) memakai target konflik dan fallback yang sudah diskop ke workspace.
 
-- [ ] **Step 2: Terapkan migrasi ke DB dev**
+- [x] **Step 2: Terapkan migrasi ke DB dev**
 
 Run:
 
@@ -370,7 +370,7 @@ docker compose exec plane-db psql -U plane -d plane -c "\d ai_schedules" | head 
 
 Expected: tabel `ai_schedules` dan `ai_schedule_runs` ada (migrasi dijalankan saat boot api/worker). Jika `plane-db` bukan nama service di lingkungan ini, gunakan container DB yang dipakai stack Rust.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/api-rs/migrations/0006_ai_schedules.sql
@@ -385,7 +385,7 @@ git commit -m "feat(api-rs): add ai_schedules migration"
 
 - Create: `apps/api-rs/crates/ai/src/schedule.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Di `crates/ai/src/schedule.rs` (bagian `#[cfg(test)]`):
 
@@ -468,12 +468,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal compile**
+- [x] **Step 2: Jalankan test — harus gagal compile**
 
 Run: `cd apps/api-rs && cargo test -p ai schedule 2>&1 | tail -5`
 Expected: FAIL — `ScheduleProposal` belum ada.
 
-- [ ] **Step 3: Implementasi `schedule.rs`**
+- [x] **Step 3: Implementasi `schedule.rs`**
 
 Tambahkan `pub mod schedule;` di `apps/api-rs/crates/ai/src/lib.rs`, lalu buat `crates/ai/src/schedule.rs`:
 
@@ -667,12 +667,12 @@ fn next_monthly(from: DateTime<Tz>, day_of_month: u32, hour: u32, minute: u32) -
 }
 ```
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p ai schedule 2>&1 | tail -8`
 Expected: PASS (8 test).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/ai/src/schedule.rs
@@ -688,7 +688,7 @@ git commit -m "feat(api-rs): add schedule presets and next-occurrence math"
 - Modify: `apps/api-rs/crates/ai/src/tools.rs`
 - Modify: `apps/api-rs/crates/ai/src/agent.rs` (preamble)
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Tambahkan di `crates/ai/src/tools.rs` modul tests:
 
@@ -756,12 +756,12 @@ async fn create_schedule_tool_records_proposal() {
 }
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p ai create_schedule 2>&1 | tail -5`
 Expected: FAIL — `CreateScheduleArgs` belum ada.
 
-- [ ] **Step 3: Implementasi tool**
+- [x] **Step 3: Implementasi tool**
 
 Di `crates/ai/src/tools.rs` tambahkan (dekat tool lain) + daftarkan di `workspace_tools`:
 
@@ -832,7 +832,7 @@ impl Tool for CreateSchedule {
 
 Tambahkan import `use crate::schedule::ScheduleProposal;` dan di `workspace_tools` tambahkan `.tool(CreateSchedule { trace: trace.clone() })` sebelum `.run()`. Ubah `pending_action` di `agent.rs` memakai `tools::CREATE_SCHEDULE_NAME`. Tambahkan `CreateSchedule, CreateScheduleArgs` ke re-export di `crates/api/src/routes/ai_agent/mod.rs` (baris `pub use ai::tools::workspace_tools;`).
 
-- [ ] **Step 4: Perbarui preamble**
+- [x] **Step 4: Perbarui preamble**
 
 Di `crates/ai/src/agent.rs`, ganti `PREAMBLE` menjadi:
 
@@ -848,12 +848,12 @@ create_schedule once with the final details. The schedule is only created after 
 the user confirms the proposal card, so never say it is already created.";
 ```
 
-- [ ] **Step 5: Jalankan test**
+- [x] **Step 5: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p ai 2>&1 | tail -5`
 Expected: PASS (test baru + lama).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api-rs/crates/ai/src/tools.rs apps/api-rs/crates/ai/src/agent.rs
@@ -870,7 +870,7 @@ git commit -m "feat(api-rs): add create_schedule proposal tool"
 - Modify: `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_agent_test.rs`
 
-- [ ] **Step 1: Tulis test yang gagal (crate ai)**
+- [x] **Step 1: Tulis test yang gagal (crate ai)**
 
 Tambahkan di `apps/api-rs/crates/ai/tests/agent_pending_action.rs`:
 
@@ -920,12 +920,12 @@ fn pending_action_is_none_without_proposal() {
 
 Catat: `record` memerlukan `args: &impl Serialize` — untuk `json!({})` gunakan `record(&trace, "list_projects", &serde_json::Value::Null)` bila perlu.
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p ai pending_action 2>&1 | tail -5`
 Expected: FAIL — `pending_action` belum pub/belum ada.
 
-- [ ] **Step 3: Implementasi + plumb ke handler**
+- [x] **Step 3: Implementasi + plumb ke handler**
 
 `agent.rs`: pastikan `pub fn pending_action` ada dan `pub` (Task 4 Step 3).
 
@@ -944,16 +944,16 @@ fn success_body(text: &str, tool_calls: &[ToolCallTrace], action: Option<Value>)
 
 Di handler, panggil `success_body(&text, &trace.lock().unwrap().clone(), pending_action(&trace))` — sesuaikan dengan struktur handler saat ini (jika `success_body` masih dua argumen, tambah argumen ketiga).
 
-- [ ] **Step 4: Tambah test integrasi endpoint (fake upstream)**
+- [x] **Step 4: Tambah test integrasi endpoint (fake upstream)**
 
 Di `apps/api-rs/crates/api/tests/ai_agent_test.rs`, tambahkan test baru di modul `tool_roundtrip` (memakai `spawn_roundtrip` yang sudah ada) yang memanggil `run_agent` dengan `tool_roundtrip` fake yang mengembalikan tool call `create_schedule`, lalu assert `pending_action(&trace)["proposal"]["frequency"] == json!("daily")`. Gunakan `ai::tools::CreateSchedule` sebagai tool.
 
-- [ ] **Step 5: Jalankan test**
+- [x] **Step 5: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p ai 2>&1 | tail -4 && cargo test -p api ai_agent 2>&1 | tail -4`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api-rs/crates/ai apps/api-rs/crates/api/src/routes/ai_agent/mod.rs apps/api-rs/crates/api/tests/ai_agent_test.rs
@@ -968,7 +968,7 @@ git commit -m "feat(api-rs): surface create_schedule proposal as pending_action"
 
 - Modify: `apps/api-rs/crates/common/src/stream.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Di `crates/common/src/stream.rs` tambahkan:
 
@@ -1004,12 +1004,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p common parse_entry 2>&1 | tail -5`
 Expected: FAIL — belum ada.
 
-- [ ] **Step 3: Implementasi**
+- [x] **Step 3: Implementasi**
 
 Tambahkan di `crates/common/src/stream.rs`:
 
@@ -1047,12 +1047,12 @@ pub fn parse_entry(fields: &[(String, String)]) -> Option<(String, Value)> {
 
 Tambahkan import yang diperlukan (`redis::FromRedisValue`, `serde_json::Value` sudah ada).
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p common parse_entry 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/common/src/stream.rs
@@ -1069,7 +1069,7 @@ git commit -m "feat(api-rs): read stream job payloads by id"
 - Modify: `apps/api-rs/crates/worker/src/handlers/mod.rs`
 - Test: `apps/api-rs/crates/worker/tests/ai_schedule_test.rs`
 
-- [ ] **Step 1: Tulis test DB yang gagal**
+- [x] **Step 1: Tulis test DB yang gagal**
 
 `apps/api-rs/crates/worker/tests/ai_schedule_test.rs`:
 
@@ -1190,12 +1190,12 @@ pub mod handlers;
 
 dan sesuaikan `src/main.rs` memakai `mod` yang sama bila ada duplikasi (ubah `mod consumer; mod handlers;` menjadi `use worker::{consumer, handlers};`).
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p worker tick_claims -- --test-threads=1 2>&1 | tail -5`
 Expected: FAIL — modul `ai_schedule` belum ada.
 
-- [ ] **Step 3: Implementasi `tick`**
+- [x] **Step 3: Implementasi `tick`**
 
 `crates/worker/src/handlers/ai_schedule.rs`:
 
@@ -1312,12 +1312,12 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
 
 `crates/worker/src/handlers/mod.rs` tambahkan `pub mod ai_schedule;`.
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p worker tick_claims -- --test-threads=1 2>&1 | tail -5`
 Expected: PASS (butuh DB + Redis lokal; kalau tidak tersedia, jalankan dengan env compose).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/worker
@@ -1333,7 +1333,7 @@ git commit -m "feat(api-rs): claim due AI schedules in the worker"
 - Modify: `apps/api-rs/crates/worker/src/handlers/ai_schedule.rs`
 - Modify: `apps/api-rs/crates/worker/tests/ai_schedule_test.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Tambahkan di `crates/worker/tests/ai_schedule_test.rs`:
 
@@ -1382,12 +1382,12 @@ async fn run_marks_failed_when_llm_is_not_configured() {
 
 Catatan implementer: test di atas memanipulasi env proses; jalankan test worker dengan `--test-threads=1` agar tidak balapan.
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p worker run_marks_failed -- --test-threads=1 2>&1 | tail -5`
 Expected: FAIL — `run` masih stub (status tetap `queued`).
 
-- [ ] **Step 3: Implementasi `run`**
+- [x] **Step 3: Implementasi `run`**
 
 Ganti stub `run` di `crates/worker/src/handlers/ai_schedule.rs`:
 
@@ -1491,12 +1491,12 @@ async fn finish_failed(pool: &PgPool, run_id: Uuid, message: &str) -> anyhow::Re
 
 Catatan: `ai::agent::ToolCallTrace` harus `Serialize` (turuni `Serialize` di `agent.rs` bila belum; sebelumnya hanya `Debug, Clone, PartialEq`). Tambahkan `serde::Serialize` pada derive `ToolCallTrace`.
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p worker -- --test-threads=1 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/worker
@@ -1512,7 +1512,7 @@ git commit -m "feat(api-rs): execute scheduled agent runs in the worker"
 - Modify: `apps/api-rs/crates/worker/src/handlers/mod.rs`
 - Modify: `apps/api-rs/crates/beat/src/main.rs`
 
-- [ ] **Step 1: Ganti stub `handle_by_id`**
+- [x] **Step 1: Ganti stub `handle_by_id`**
 
 `crates/worker/src/handlers/mod.rs`:
 
@@ -1543,7 +1543,7 @@ pub async fn handle_by_id(
 }
 ```
 
-- [ ] **Step 2: Tambahkan job beat**
+- [x] **Step 2: Tambahkan job beat**
 
 Di `crates/beat/src/main.rs`, tambahkan blok sebelum `sched.start()`:
 
@@ -1563,7 +1563,7 @@ Di `crates/beat/src/main.rs`, tambahkan blok sebelum `sched.start()`:
     }
 ```
 
-- [ ] **Step 3: Test parser dispatch (unit)**
+- [x] **Step 3: Test parser dispatch (unit)**
 
 Tambahkan di `crates/worker/src/handlers/mod.rs`:
 
@@ -1581,7 +1581,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4: Build + test**
+- [x] **Step 4: Build + test**
 
 Run:
 
@@ -1593,7 +1593,7 @@ cargo test -p worker -- --test-threads=1 2>&1 | tail -4
 
 Expected: build sukses; test worker PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/worker/src/handlers/mod.rs apps/api-rs/crates/beat/src/main.rs
@@ -1611,7 +1611,7 @@ git commit -m "feat(api-rs): dispatch AI schedule jobs via beat tick"
 - Modify: `apps/api-rs/crates/api/src/main.rs`
 - Test: `apps/api-rs/crates/api/tests/ai_schedule_test.rs`
 
-- [ ] **Step 1: Tulis seed harness + test list/create yang gagal**
+- [x] **Step 1: Tulis seed harness + test list/create yang gagal**
 
 `crates/api/tests/ai_schedule_test.rs` — salin helper `insert_user` + seed workspace dari `issue_create_test.rs` (baris 53-133) ke file baru, lalu tambahkan test:
 
@@ -1669,12 +1669,12 @@ async fn create_rejects_guests_and_bad_payloads() {
 
 Catatan implementer: `Scratch` di sini adalah salinan sederhana dari `issue_create_test.rs` (workspace + owner + `purge`); jangan mengubah file test lama. Peran workspace: ADMIN=20, MEMBER=15, GUEST=5.
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `cd apps/api-rs && cargo test -p api --test ai_schedule_test -- --test-threads=1 2>&1 | tail -5`
 Expected: FAIL — modul route belum ada.
 
-- [ ] **Step 3: Implementasi handler list + create**
+- [x] **Step 3: Implementasi handler list + create**
 
 `crates/api/src/routes/ai_schedule.rs`:
 
@@ -1849,12 +1849,12 @@ Daftarkan modul di `routes/mod.rs` (`pub mod ai_schedule;`) dan route di `main.r
         )
 ```
 
-- [ ] **Step 4: Jalankan test**
+- [x] **Step 4: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p api --test ai_schedule_test -- --test-threads=1 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/api/src/routes/ai_schedule.rs apps/api-rs/crates/api/src/routes/mod.rs apps/api-rs/crates/api/src/main.rs apps/api-rs/crates/api/tests/ai_schedule_test.rs
@@ -1883,7 +1883,7 @@ Catatan polish yang dibawa dari review Task 10 (wajib dikerjakan di task ini):
 - Modify: `apps/api-rs/crates/api/src/main.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_schedule_test.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Tambahkan:
 
@@ -1901,7 +1901,7 @@ async fn detail_patch_delete_and_run_now_follow_creator_or_admin() {
 
 Implementer menulis assert lengkap memakai helper seed yang sama (owner = pembuat; actor member dengan role 15 lewat `insert_workspace_member`).
 
-- [ ] **Step 2: Implementasi handler**
+- [x] **Step 2: Implementasi handler**
 
 Tambahkan `ScheduleRow` (`#[derive(sqlx::FromRow)]` berisi id, created_by_id, prompt, frequency, time_of_day, day_of_week, day_of_month, timezone, enabled, deleted_at) + helper `load_schedule(pool, slug, id) -> Option<ScheduleRow>` dengan filter workspace + `deleted_at IS NULL`.
 
@@ -1925,12 +1925,12 @@ Registrasi route:
         )
 ```
 
-- [ ] **Step 3: Jalankan test**
+- [x] **Step 3: Jalankan test**
 
 Run: `cd apps/api-rs && cargo test -p api --test ai_schedule_test -- --test-threads=1 2>&1 | tail -5`
 Expected: PASS.
 
-- [ ] **Step 4: Full suite + clippy**
+- [x] **Step 4: Full suite + clippy**
 
 Run:
 
@@ -1942,7 +1942,7 @@ cargo clippy -p api -p worker -p beat -p ai --all-targets 2>&1 | rg -i "warning|
 
 Expected: 0 failed; clippy tanpa temuan baru.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api-rs/crates/api
@@ -1959,7 +1959,7 @@ git commit -m "feat(api-rs): add AI schedule detail, patch, delete and run-now"
 - Create: `apps/web/core/lib/ai-schedule.ts`
 - Test: `apps/web/core/lib/ai-schedule.test.ts`
 
-- [ ] **Step 1: Tulis test helper yang gagal**
+- [x] **Step 1: Tulis test helper yang gagal**
 
 `apps/web/core/lib/ai-schedule.test.ts`:
 
@@ -1993,12 +1993,12 @@ describe("humanizeSchedule", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `pnpm --filter=web test 2>&1 | tail -8`
 Expected: FAIL — modul `./ai-schedule` belum ada.
 
-- [ ] **Step 3: Implementasi helper + service**
+- [x] **Step 3: Implementasi helper + service**
 
 `apps/web/core/lib/ai-schedule.ts`:
 
@@ -2129,7 +2129,7 @@ export class AiSchedulesService extends APIService {
 }
 ```
 
-- [ ] **Step 4: Jalankan test + typecheck**
+- [x] **Step 4: Jalankan test + typecheck**
 
 Run:
 
@@ -2140,7 +2140,7 @@ pnpm --filter=web check:types 2>&1 | tail -5
 
 Expected: PASS; typecheck hijau.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/lib/ai-schedule.ts apps/web/core/lib/ai-schedule.test.ts apps/web/core/services/ai-schedules.service.ts
@@ -2158,7 +2158,7 @@ git commit -m "feat(web): add AI schedule types, helpers and service"
 - Create: `apps/web/core/hooks/store/use-ai-schedules.ts`
 - Modify: `apps/web/core/store/root.store.ts`
 
-- [ ] **Step 1: Tulis test store yang gagal**
+- [x] **Step 1: Tulis test store yang gagal**
 
 `apps/web/core/store/ai-schedules.store.test.ts`:
 
@@ -2200,12 +2200,12 @@ describe("AiSchedulesStore", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `pnpm --filter=web test 2>&1 | tail -6`
 Expected: FAIL — store belum ada.
 
-- [ ] **Step 3: Implementasi store + hook + registrasi**
+- [x] **Step 3: Implementasi store + hook + registrasi**
 
 `apps/web/core/store/ai-schedules.store.ts`: pola mengikuti `ai-assistant.store.ts` (constructor menerima service, `makeObservable`, `runInAction`), dengan state `schedules: TAiSchedule[]`, `loader`, `error`, aksi `fetchSchedules(slug)`, `toggleSchedule(slug,id,enabled)` (optimistic + refetch ringan), `deleteSchedule`, `runNow`, dan `fetchRuns(slug,id)` yang menyimpan `runsBySchedule[id]`.
 
@@ -2221,7 +2221,7 @@ export const useAiSchedules = (): AiSchedulesStore => {
 
 `root.store.ts`: daftarkan `aiSchedules = new AiSchedulesStore();` + import tipe, sama seperti `aiAssistant`.
 
-- [ ] **Step 4: Jalankan test + typecheck**
+- [x] **Step 4: Jalankan test + typecheck**
 
 Run:
 
@@ -2232,7 +2232,7 @@ pnpm --filter=web check:types 2>&1 | tail -5
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/store/ai-schedules.store.ts apps/web/core/store/ai-schedules.store.test.ts apps/web/core/store/root.store.ts apps/web/core/hooks/store/use-ai-schedules.ts
@@ -2250,7 +2250,7 @@ git commit -m "feat(web): add AI schedules store"
 - Modify: `apps/web/core/store/ai-assistant.store.test.ts`
 - Modify: `apps/web/core/lib/ai-context.test.ts`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Di `ai-context.test.ts` tambahkan test `buildAiPrompt` memuat `User timezone: Asia/Jakarta` hanya saat argumen ke-4 diberikan, dan tidak muncul tanpa argumen.
 
@@ -2299,12 +2299,12 @@ it("records pending_action metadata and confirms a proposal", async () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan test — harus gagal**
+- [x] **Step 2: Jalankan test — harus gagal**
 
 Run: `pnpm --filter=web test 2>&1 | tail -6`
 Expected: FAIL.
 
-- [ ] **Step 3: Implementasi**
+- [x] **Step 3: Implementasi**
 
 - `ai-context.ts`: `TAiMessage` tambah `scheduleProposal?: TAiScheduleProposal; scheduleProposalKey?: string; scheduleDecision?: "pending" | "created" | "cancelled"; createdScheduleId?: string;`. `buildAiPrompt` tambah parameter opsional `userTimezone?: string` yang menyisipkan baris `User timezone: <tz>` setelah context block (hanya bila diberikan).
 - `ai-assistant.store.ts`:
@@ -2316,7 +2316,7 @@ Expected: FAIL.
   - `resolveScheduleProposal(messageId, decision)`: untuk Cancel.
 - Update `AIService`/`AISchedulesService` types di test helper: `makeSchedulesService` mengembalikan `{ create: vi.fn(async () => ({ id: "s1" })) }`.
 
-- [ ] **Step 4: Jalankan test + typecheck**
+- [x] **Step 4: Jalankan test + typecheck**
 
 Run:
 
@@ -2327,7 +2327,7 @@ pnpm --filter=web check:types 2>&1 | tail -5
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/lib/ai-context.ts apps/web/core/lib/ai-context.test.ts apps/web/core/store/ai-assistant.store.ts apps/web/core/store/ai-assistant.store.test.ts apps/web/core/services/ai.service.ts
@@ -2343,7 +2343,7 @@ git commit -m "feat(web): create schedules from the chat agent"
 - Create: `apps/web/core/components/ai/assistant-sidebar/schedule-proposal-card.tsx`
 - Modify: `apps/web/core/components/ai/assistant-sidebar/root.tsx`
 
-- [ ] **Step 1: Buat komponen kartu**
+- [x] **Step 1: Buat komponen kartu**
 
 `schedule-proposal-card.tsx` (ringkas):
 
@@ -2411,7 +2411,7 @@ export const ScheduleProposalCard = observer(function ScheduleProposalCard({
 
 Catatan implementer: cek nama komponen/varian Button yang benar di `@plane/propel/button` (pola yang ada di repo) dan sesuaikan.
 
-- [ ] **Step 2: Integrasikan di sidebar**
+- [x] **Step 2: Integrasikan di sidebar**
 
 `root.tsx`:
 
@@ -2455,7 +2455,7 @@ if (isScheduleCommand(value) && mode !== "agent") setMode("agent");
 }
 ```
 
-- [ ] **Step 3: Verifikasi**
+- [x] **Step 3: Verifikasi**
 
 Run:
 
@@ -2466,7 +2466,7 @@ pnpm --filter=web check:lint 2>&1 | tail -3
 
 Expected: hijau (warning boleh asal tidak bertambah signifikan).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/core/components/ai/assistant-sidebar
@@ -2489,7 +2489,7 @@ git commit -m "feat(web): add /schedule hint and proposal confirmation card"
 - Modify: `apps/web/core/components/workspace/sidebar/sidebar-item.tsx`
 - Modify: `packages/i18n/src/locales/en/navigation.json`
 
-- [ ] **Step 1: Route + nav**
+- [x] **Step 1: Route + nav**
 
 - `apps/web/app/routes/core.ts`: di dalam children layout `(projects)` (dekat entri stickies, ~baris 99-101) tambahkan:
 
@@ -2522,7 +2522,7 @@ dan tambahkan ke `WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS`.
 
 - `packages/i18n/src/locales/en/navigation.json`: di objek `sidebar`, tambahkan `"ai_scheduler": "Scheduler"`.
 
-- [ ] **Step 2: Halaman + komponen**
+- [x] **Step 2: Halaman + komponen**
 
 `page.tsx`:
 
@@ -2550,7 +2550,7 @@ export default function WorkspaceSchedulerPage() {
 
 Catatan implementer: cari `userId`/role lewat hook store workspace yang sudah ada (mis. `useUser` + `useMember`/`useWorkspaceMember`), lalu sesuaikan.
 
-- [ ] **Step 3: Verifikasi**
+- [x] **Step 3: Verifikasi**
 
 Run:
 
@@ -2562,7 +2562,7 @@ pnpm --filter=web test 2>&1 | tail -3
 
 Expected: hijau.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/app packages/constants/src/workspace.ts apps/web/core/components/ai-scheduler apps/web/core/components/workspace/sidebar packages/i18n/src/locales/en/navigation.json
@@ -2575,7 +2575,7 @@ git commit -m "feat(web): add workspace Scheduler page"
 
 **Files:** —
 
-- [ ] **Step 1: Backend full suite + clippy**
+- [x] **Step 1: Backend full suite + clippy**
 
 Run:
 
@@ -2588,7 +2588,7 @@ cargo clippy -p api -p worker -p beat -p ai -p common --all-targets 2>&1 | rg -i
 
 Expected: 0 failed; tidak ada temuan clippy baru.
 
-- [ ] **Step 2: FE checks**
+- [x] **Step 2: FE checks**
 
 Run:
 
@@ -2601,7 +2601,7 @@ pnpm check:lint 2>&1 | tail -3
 
 Expected: hijau.
 
-- [ ] **Step 3: Rebuild + restart**
+- [x] **Step 3: Rebuild + restart**
 
 Run:
 
@@ -2614,7 +2614,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/health
 
 Expected: `200`; container `api-rs`, `worker-rs`, `beat-rs` memakai image baru.
 
-- [ ] **Step 4: Smoke live**
+- [x] **Step 4: Smoke live**
 
 1. Buka sidebar Galileo di tunnel, aktifkan mode Agent, ketik `/schedule buat laporan overdue tiap Senin jam 9`.
 2. Pastikan kartu proposal muncul dengan jadwal "Every Monday at 09:00 · <timezone>"; klik Confirm.
@@ -2624,7 +2624,7 @@ Expected: `200`; container `api-rs`, `worker-rs`, `beat-rs` memakai image baru.
 6. Pause → `next_run_at` tidak berubah saat resume dihitung ulang; Delete → hilang dari daftar.
 7. Regresi: mode Classic masih menjawab seperti sebelumnya; `/ai-assistant/` & `/ai-agent/` klien lama tidak berubah.
 
-- [ ] **Step 5: Commit sisa**
+- [x] **Step 5: Commit sisa**
 
 ```bash
 git status --short
@@ -2648,3 +2648,16 @@ git commit -m "chore: finalize AI scheduler"
 - `sqlx` tipe `jsonb` untuk `tool_calls`: gunakan `serde_json::Value` bind (fitur `json` sudah aktif di workspace).
 - `StreamId.map` bertipe `HashMap<String, redis::Value>` — konversi memakai `String::from_redis_value`.
 - Test worker yang mengubah env (`SKIP_ENV_VAR`, `LLM_API_KEY`) harus dijalankan `--test-threads=1`.
+
+## Catatan penutup (setelah eksekusi)
+
+- `push_job` memakai `xadd_maxlen(STREAM, StreamMaxlen::Approx(10000), "*", ...)`;
+  bentuk `"MAXLEN ~ 10000 *"` sebagai id ditolak redis-rs 0.26.
+- Sweep final: `running` >15 menit berdasarkan `started_at`, `queued` >6 jam
+  berdasarkan `created_at` (dokumentasi spec disinkronkan).
+- Worker ACK tetap at-most-once (tanpa retry otomatis); lihat spec bagian
+  Risiko dan mitigasi.
+- `createdScheduleId` masih dicatat di store chat (persist) walau kartu tidak
+  lagi memakainya; kandidat pembersihan di follow-up.
+- Dockerfile `apps/api-rs/Dockerfile.rs` menambah `crates/ai` di stage
+  planner/chef-cook (ditemukan saat Task 17).
