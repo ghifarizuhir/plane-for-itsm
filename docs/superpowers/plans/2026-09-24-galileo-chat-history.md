@@ -2777,11 +2777,15 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
     .await
     .unwrap();
     assert_eq!(conversations, 0);
-    let messages: i64 =
-        sqlx::query_scalar("SELECT count(*)::int8 FROM ai_messages WHERE conversation_id IS NOT NULL")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let messages: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_messages m \
+         JOIN ai_conversations c ON c.id = m.conversation_id \
+         WHERE c.workspace_id = $1",
+    )
+    .bind(scratch.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(messages, 0);
 
     std::env::remove_var("SKIP_ENV_VAR");
