@@ -15,7 +15,7 @@ const viteEnv = Object.keys(process.env)
   }, {});
 
 const allowedHosts = [
-  "app.terraline.space",
+  "dashboard.terraline.space",
   ".terraline.space",
   ".trycloudflare.com",
   ...(process.env.VITE_ALLOWED_HOSTS?.split(",")

@@ -1265,7 +1265,7 @@ mod tests {
     async fn sign_out_trusted_origin_wins_over_app_base_url() {
         std::env::set_var(
             "CORS_ALLOWED_ORIGINS",
-            "https://app.terraline.space,http://192.168.1.11:3000",
+            "https://dashboard.terraline.space,http://192.168.1.11:3000",
         );
         let mut cfg = test_config("id", "secret");
         cfg.app_base_url = "http://192.168.1.11:3000".into();
@@ -1273,14 +1273,14 @@ mod tests {
         let req = Request::builder()
             .method("POST")
             .uri("/auth/sign-out/")
-            .header("origin", "https://app.terraline.space")
+            .header("origin", "https://dashboard.terraline.space")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::FOUND);
         assert_eq!(
             location_of(&resp),
-            "https://app.terraline.space",
+            "https://dashboard.terraline.space",
             "trusted Origin must override APP_BASE_URL"
         );
     }
@@ -1289,7 +1289,7 @@ mod tests {
     /// Mencegah open-redirect via header Origin palsu.
     #[tokio::test]
     async fn sign_out_untrusted_origin_falls_back_to_app_base_url() {
-        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://app.terraline.space");
+        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://dashboard.terraline.space");
         let mut cfg = test_config("id", "secret");
         cfg.app_base_url = "http://192.168.1.11:3000".into();
         let app = sign_out_router(test_state(cfg));
@@ -1307,7 +1307,7 @@ mod tests {
     /// Tanpa Origin → perilaku lama: APP_BASE_URL menang atas FRONTEND_URL.
     #[tokio::test]
     async fn sign_out_no_origin_uses_app_base_url() {
-        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://app.terraline.space");
+        std::env::set_var("CORS_ALLOWED_ORIGINS", "https://dashboard.terraline.space");
         let mut cfg = test_config("id", "secret");
         cfg.app_base_url = "http://192.168.1.11:3000".into();
         let app = sign_out_router(test_state(cfg));

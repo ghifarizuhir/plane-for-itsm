@@ -18,7 +18,7 @@ const viteEnv = Object.keys(process.env)
 const basePath = joinUrlPath(process.env.VITE_SPACE_BASE_PATH ?? "", "/") ?? "/";
 
 const allowedHosts = [
-  "app.terraline.space",
+  "dashboard.terraline.space",
   ".terraline.space",
   ".trycloudflare.com",
   ...(process.env.VITE_ALLOWED_HOSTS?.split(",")

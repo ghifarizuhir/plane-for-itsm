@@ -94,7 +94,7 @@ export const meta: Route.MetaFunction = () => [
     content:
       "Open-source IT service management platform to run services, handle requests, and track delivery work in one place",
   },
-  { property: "og:url", content: "https://app.terraline.space/" },
+  { property: "og:url", content: "https://dashboard.terraline.space/" },
   { property: "og:image", content: ogImage },
   { property: "og:image:width", content: "1200" },
   { property: "og:image:height", content: "630" },
