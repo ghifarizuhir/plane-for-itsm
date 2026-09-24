@@ -10,6 +10,7 @@ import type { AI_EDITOR_TASKS } from "@plane/constants";
 // services
 import { APIService } from "@/services/api.service";
 // types
+import type { TAiConversation, TAiStoredMessage } from "@/lib/ai-conversations";
 import type { TAiAgentPendingAction } from "@/lib/ai-schedule";
 // FIXME:
 // import { IGptResponse } from "@plane/types";
@@ -22,19 +23,31 @@ export type TTaskPayload = {
   text_input: string;
 };
 
-export type TAgentTaskResponse = {
+export type TChatPayload = {
+  task: string;
+  prompt: string;
+  context: string;
+  conversation_id: string;
+};
+
+export type TChatResponse = {
   response: string;
   response_html?: string;
   tool_calls?: { name: string; arguments: unknown }[];
   pending_action?: TAiAgentPendingAction | null;
+  conversation: TAiConversation;
+  user_message: TAiStoredMessage;
+  assistant_message: TAiStoredMessage;
 };
+
+export type TAgentTaskResponse = TChatResponse;
 
 export class AIService extends APIService {
   constructor() {
     super(API_BASE_URL);
   }
 
-  async createGptTask(workspaceSlug: string, data: { prompt: string; task: string }): Promise<any> {
+  async createGptTask(workspaceSlug: string, data: TChatPayload): Promise<TChatResponse> {
     return this.post(`/api/workspaces/${workspaceSlug}/ai-assistant/`, data)
       .then((response) => response?.data)
       .catch((error) => {
@@ -42,7 +55,7 @@ export class AIService extends APIService {
       });
   }
 
-  async createAgentTask(workspaceSlug: string, data: { prompt: string; task: string }): Promise<TAgentTaskResponse> {
+  async createAgentTask(workspaceSlug: string, data: TChatPayload): Promise<TChatResponse> {
     return this.post(`/api/workspaces/${workspaceSlug}/ai-agent/`, data)
       .then((response) => response?.data)
       .catch((error) => {
