@@ -14,6 +14,8 @@ export interface IAiSchedulesStore {
   schedules: TAiSchedule[];
   runsBySchedule: Record<string, TAiScheduleRun[]>;
   loader: boolean;
+  error: string | null;
+  setWorkspace: (workspaceSlug: string) => void;
   fetchSchedules: (workspaceSlug: string) => Promise<void>;
   fetchRuns: (workspaceSlug: string, scheduleId: string) => Promise<void>;
   toggleSchedule: (workspaceSlug: string, scheduleId: string, enabled: boolean) => Promise<void>;
@@ -25,12 +27,18 @@ export class AiSchedulesStore implements IAiSchedulesStore {
   schedules: TAiSchedule[] = [];
   runsBySchedule: Record<string, TAiScheduleRun[]> = {};
   loader = false;
+  error: string | null = null;
+
+  private workspaceSlug: string | undefined = undefined;
+  private requestSeq = 0;
 
   constructor(private service: TAiSchedulesService = new AiSchedulesService()) {
     makeObservable(this, {
       schedules: observable.deep,
       runsBySchedule: observable.deep,
       loader: observable.ref,
+      error: observable.ref,
+      setWorkspace: action,
       fetchSchedules: action,
       fetchRuns: action,
       toggleSchedule: action,
@@ -39,17 +47,36 @@ export class AiSchedulesStore implements IAiSchedulesStore {
     });
   }
 
+  setWorkspace = (workspaceSlug: string) => {
+    if (workspaceSlug !== this.workspaceSlug) {
+      this.requestSeq += 1;
+      this.workspaceSlug = workspaceSlug;
+    }
+  };
+
   fetchSchedules = async (workspaceSlug: string) => {
+    const seq = ++this.requestSeq;
     this.loader = true;
     try {
       const schedules = await this.service.list(workspaceSlug);
+      if (seq !== this.requestSeq || workspaceSlug !== this.workspaceSlug) return;
       runInAction(() => {
         this.schedules = schedules ?? [];
+        this.error = null;
       });
+    } catch (err) {
+      if (seq === this.requestSeq) {
+        runInAction(() => {
+          this.error = "Could not load schedules.";
+        });
+      }
+      throw err;
     } finally {
-      runInAction(() => {
-        this.loader = false;
-      });
+      if (seq === this.requestSeq) {
+        runInAction(() => {
+          this.loader = false;
+        });
+      }
     }
   };
 
@@ -67,17 +94,28 @@ export class AiSchedulesStore implements IAiSchedulesStore {
         schedule.id === scheduleId ? { ...schedule, enabled } : schedule
       );
     });
+    try {
+      await this.fetchSchedules(workspaceSlug);
+    } catch {
+      // keep the optimistic local state; the next poll will retry
+    }
   };
 
   deleteSchedule = async (workspaceSlug: string, scheduleId: string) => {
     await this.service.remove(workspaceSlug, scheduleId);
     runInAction(() => {
       this.schedules = this.schedules.filter((schedule) => schedule.id !== scheduleId);
+      delete this.runsBySchedule[scheduleId];
     });
   };
 
   runNow = async (workspaceSlug: string, scheduleId: string) => {
     await this.service.runNow(workspaceSlug, scheduleId);
-    await this.fetchRuns(workspaceSlug, scheduleId);
+    try {
+      await this.fetchRuns(workspaceSlug, scheduleId);
+      await this.fetchSchedules(workspaceSlug);
+    } catch {
+      // the run was queued; a refresh failure must not look like a run failure
+    }
   };
 }
