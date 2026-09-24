@@ -42,6 +42,11 @@ export type TChatResponse = {
 
 export type TAgentTaskResponse = TChatResponse;
 
+export type TCompleteTaskResponse = {
+  response: string;
+  response_html?: string;
+};
+
 export class AIService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -57,6 +62,14 @@ export class AIService extends APIService {
 
   async createAgentTask(workspaceSlug: string, data: TChatPayload): Promise<TChatResponse> {
     return this.post(`/api/workspaces/${workspaceSlug}/ai-agent/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response;
+      });
+  }
+
+  async completeTask(workspaceSlug: string, data: { task: string; prompt: string }): Promise<TCompleteTaskResponse> {
+    return this.post(`/api/workspaces/${workspaceSlug}/ai-complete/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response;

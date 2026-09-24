@@ -120,19 +120,21 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
     setIAmFeelingLucky(true);
 
     aiService
-      .createGptTask(workspaceSlug.toString(), {
+      .completeTask(workspaceSlug.toString(), {
         prompt: issueName,
         task: "Generate a proper description for this work item.",
       })
       .then((res) => {
-        if (res.response === "")
+        if (res.response === "") {
           setToast({
             type: TOAST_TYPE.ERROR,
             title: "Error!",
             message:
               "Work item title isn't informative enough to generate the description. Please try with a different title.",
           });
-        else handleAiAssistance(res.response_html);
+          return;
+        }
+        return handleAiAssistance(res.response_html ?? res.response);
       })
       .catch((err) => {
         const error = err?.data?.error;
@@ -222,7 +224,7 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
                     return asset_id;
                   } catch (error) {
                     console.log("Error in uploading issue asset:", error);
-                    throw new Error("Asset upload failed. Please try again later.");
+                    throw new Error("Asset upload failed. Please try again later.", { cause: error });
                   }
                 }}
                 duplicateFile={async (assetId: string) => {

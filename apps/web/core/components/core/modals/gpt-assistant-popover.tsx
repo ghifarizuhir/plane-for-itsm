@@ -104,12 +104,12 @@ export function GptAssistantPopover(props: Props) {
 
   const callAIService = async (formData: FormData) => {
     try {
-      const res = await aiService.createGptTask(workspaceSlug.toString(), {
+      const res = await aiService.completeTask(workspaceSlug.toString(), {
         prompt: prompt || "",
         task: formData.task,
       });
 
-      setResponse(res.response_html);
+      setResponse(res.response_html ?? res.response);
       setFocus("task");
 
       setInvalidResponse(res.response === "");
