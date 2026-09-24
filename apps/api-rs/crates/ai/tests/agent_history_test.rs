@@ -33,6 +33,10 @@ fn labels_roles_and_marks_empty_history() {
     let prompt = history_prompt("ctx", &[], "hi");
     assert!(prompt.contains("Conversation so far:\n(empty)"));
     assert!(prompt.contains("User's new question: hi"));
+    assert_eq!(
+        prompt,
+        "ctx\n\nConversation so far:\n(empty)\n\nUser's new question: hi"
+    );
 
     let prompt = history_prompt(
         "ctx",
