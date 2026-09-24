@@ -37,7 +37,7 @@ export function ScheduleProposalCard({ proposal, decision, onConfirm, onCancel }
 
   if (decision === "created") {
     return (
-      <p role="status" className="text-xs mt-1.5 text-tertiary">
+      <p role="status" className="mt-2 text-12 text-tertiary">
         Schedule created.{" "}
         {rawWorkspaceSlug && (
           <Link href={`/${rawWorkspaceSlug}/scheduler/`} className="text-accent-primary hover:underline">
@@ -49,7 +49,7 @@ export function ScheduleProposalCard({ proposal, decision, onConfirm, onCancel }
   }
   if (decision === "cancelled") {
     return (
-      <p role="status" className="text-xs mt-1.5 text-tertiary">
+      <p role="status" className="mt-2 text-12 text-tertiary">
         Schedule cancelled.
       </p>
     );
@@ -58,10 +58,10 @@ export function ScheduleProposalCard({ proposal, decision, onConfirm, onCancel }
 
   return (
     <div role="group" aria-label="Schedule proposal" className="mt-2 rounded-lg border border-subtle bg-layer-1 p-3">
-      <p className="text-xs font-semibold break-words text-primary">{proposal.name}</p>
-      <p className="text-xs mt-0.5 text-secondary">{humanizeSchedule(proposal)}</p>
-      <p className="text-xs mt-1 line-clamp-3 text-tertiary">{proposal.prompt}</p>
-      {error && <p className="text-xs mt-1 text-danger-primary">{error}</p>}
+      <p className="text-12 font-semibold break-words text-primary">{proposal.name}</p>
+      <p className="mt-0.5 text-12 text-secondary">{humanizeSchedule(proposal)}</p>
+      <p className="mt-1 line-clamp-3 text-12 text-tertiary">{proposal.prompt}</p>
+      {error && <p className="mt-1 text-12 text-danger-primary">{error}</p>}
       <div className="mt-2 flex gap-2">
         <Button size="sm" variant="primary" loading={submitting} onClick={() => void confirm()}>
           Confirm

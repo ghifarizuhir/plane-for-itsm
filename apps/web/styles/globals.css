@@ -200,6 +200,125 @@
   will-change: transform, opacity;
 }
 
+/* Compact typography for sanitized AI answer HTML (Galileo).
+ * Model output is allowlisted (p, ul, h1–h4, pre, code, blockquote, table, …)
+ * and injected with dangerouslySetInnerHTML, so without this it falls back to
+ * browser defaults: h1 at 2em, a 1em block margin on every paragraph, and no
+ * list markers or code/table chrome. Sized for the 13px rail the panel renders
+ * at, and scoped so it never leaks into app-owned markup. */
+.ai-prose {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.ai-prose > * {
+  margin: 0;
+}
+
+.ai-prose > * + * {
+  margin-top: 0.6rem;
+}
+
+.ai-prose :is(h1, h2, h3, h4) {
+  font-size: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-color-primary);
+}
+
+.ai-prose :is(h1, h2) {
+  letter-spacing: -0.01em;
+}
+
+.ai-prose :is(ul, ol) {
+  padding-left: 1.1rem;
+}
+
+.ai-prose ul {
+  list-style: disc;
+}
+
+.ai-prose ol {
+  list-style: decimal;
+}
+
+.ai-prose li + li,
+.ai-prose li > :is(ul, ol) {
+  margin-top: 0.25rem;
+}
+
+.ai-prose li::marker {
+  color: var(--text-color-tertiary);
+}
+
+.ai-prose code {
+  font-family: var(--font-code);
+  font-size: 0.92em;
+  color: var(--text-color-secondary);
+  background: var(--background-color-layer-2);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 4px;
+  padding: 0.05rem 0.25rem;
+}
+
+.ai-prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--background-color-layer-2);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: 6px;
+  padding: 0.5rem 0.625rem;
+}
+
+.ai-prose pre code {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+}
+
+.ai-prose blockquote {
+  border-left: 2px solid var(--border-color-strong);
+  padding-left: 0.625rem;
+  color: var(--text-color-secondary);
+}
+
+.ai-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border-color-subtle);
+  margin-block: 0.75rem;
+}
+
+.ai-prose a {
+  color: var(--text-color-accent-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.ai-prose a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.ai-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ai-prose :is(th, td) {
+  border: 1px solid var(--border-color-subtle);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+
+.ai-prose th {
+  background: var(--background-color-layer-2);
+  font-weight: 600;
+}
+
 /* AI assistant rail entrance + status */
 @keyframes aiRise {
   from {

@@ -74,23 +74,12 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-subtle px-4 py-2.5">
-        <span className="text-sm font-semibold text-primary">Chat history</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close history"
-          className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
-        >
-          <CloseOutline className="size-4" />
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto p-2">
         {conversationsLoading && conversations.length === 0 && (
-          <p className="text-xs px-2 py-4 text-tertiary">Loading conversations…</p>
+          <p className="px-2 py-4 text-12 text-tertiary">Loading conversations…</p>
         )}
         {!conversationsLoading && conversations.length === 0 && (
-          <p className="text-xs px-2 py-4 text-tertiary">No conversations yet.</p>
+          <p className="px-2 py-4 text-12 text-tertiary">No conversations yet.</p>
         )}
         {conversations.map((conversation) => (
           <div
@@ -118,7 +107,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                     // oxlint-disable-next-line eslint-plugin-jsx-a11y/no-autofocus
                     autoFocus
                     aria-label="Conversation title"
-                    className="text-xs min-w-0 flex-1 rounded border border-subtle bg-transparent px-1.5 py-1 text-primary outline-none"
+                    className="min-w-0 flex-1 rounded border border-subtle bg-transparent px-1.5 py-1 text-12 text-primary outline-none"
                   />
                   <button
                     type="button"
@@ -148,10 +137,10 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                     }}
                     className="min-w-0 flex-1 text-left disabled:opacity-50"
                   >
-                    <span className="text-xs block truncate text-primary" title={conversation.title}>
+                    <span className="block truncate text-12 text-primary" title={conversation.title}>
                       {conversation.title || "New conversation"}
                     </span>
-                    <span className="block text-[10px] text-tertiary">
+                    <span className="block text-10 text-tertiary">
                       {conversation.mode === "agent" ? "Agent" : "Classic"} · {formatUpdatedAt(conversation.updated_at)}
                     </span>
                   </button>
@@ -163,7 +152,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                         disabled={isGenerating}
                         aria-label="Confirm delete"
                         onClick={() => void handleDelete(conversation.id)}
-                        className="text-[10px] text-danger-primary disabled:opacity-50"
+                        className="text-10 text-danger-primary disabled:opacity-50"
                       >
                         Delete?
                       </button>
@@ -209,10 +198,10 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
               )}
             </div>
             {renamingId === conversation.id && renameErrorId === conversation.id && (
-              <p className="mt-1 text-[10px] text-danger-primary">Could not rename. Try again.</p>
+              <p className="mt-1 text-10 text-danger-primary">Could not rename. Try again.</p>
             )}
             {confirmingDeleteId === conversation.id && deleteErrorId === conversation.id && (
-              <p className="mt-1 text-[10px] text-danger-primary">Could not delete. Try again.</p>
+              <p className="mt-1 text-10 text-danger-primary">Could not delete. Try again.</p>
             )}
           </div>
         ))}

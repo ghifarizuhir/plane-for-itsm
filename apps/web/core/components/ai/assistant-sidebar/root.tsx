@@ -10,6 +10,7 @@ import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
   AiStar1Outline,
+  ChevronLeftOutline,
   CloseOutline,
   HistoryOutline,
   NewChatOutline,
@@ -130,61 +131,73 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col overflow-hidden bg-surface-1 transition-[width] duration-300 ease-in-out",
-        isOpen ? "mr-2 mb-2 w-[24rem] max-w-[85vw] rounded-xl border border-subtle" : "w-0 border-0"
+        "relative flex shrink-0 flex-col overflow-hidden bg-surface-1 transition-[width] duration-300 ease-in-out",
+        isOpen ? "mr-2 mb-2 w-[24rem] max-w-[85vw] rounded-lg border border-subtle" : "w-0 border-0"
       )}
       aria-hidden={!isOpen}
     >
       {isOpen && (
         <div className="flex h-full w-[24rem] max-w-[85vw] flex-col">
           {/* header */}
-          <div className="flex items-center justify-between border-b border-subtle px-4 py-2.5">
-            <div className="flex items-center gap-2.5">
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  isGenerating ? "ai-status-orb bg-accent-primary" : "bg-accent-primary"
-                )}
-              />
-              <span className="text-sm font-semibold text-primary">Galileo</span>
-              <div
-                role="group"
-                aria-label="Assistant mode"
-                className="flex items-center rounded-md border border-subtle bg-layer-1 p-0.5"
-              >
-                {MODES.map(({ value, label, hint }) => (
-                  <Tooltip key={value} label={hint} side="bottom">
-                    <button
-                      type="button"
-                      aria-pressed={mode === value}
-                      disabled={isGenerating}
-                      onClick={() => setMode(value)}
-                      className={cn(
-                        "rounded-[5px] px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50",
-                        mode === value ? "bg-accent-primary text-on-color" : "text-secondary hover:text-primary"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  </Tooltip>
-                ))}
-              </div>
-              {isGenerating && (
-                <span className="font-mono tracking-widest text-[10px] text-tertiary uppercase">thinking</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <Tooltip label="Chat history" side="bottom">
+          <div className="flex h-11 items-center justify-between gap-3 border-b border-subtle px-4">
+            {historyOpen ? (
+              <div className="flex min-w-0 items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setHistoryOpen(!historyOpen)}
-                  aria-label="Chat history"
-                  aria-expanded={historyOpen}
-                  className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
+                  onClick={() => setHistoryOpen(false)}
+                  aria-label="Back to conversation"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
                 >
-                  <HistoryOutline className="size-4" />
+                  <ChevronLeftOutline className="size-4" />
                 </button>
-              </Tooltip>
+                <span className="text-13 font-semibold text-primary">Chat history</span>
+              </div>
+            ) : (
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span
+                  className={cn("size-2 shrink-0 rounded-full bg-accent-primary", isGenerating && "ai-status-orb")}
+                />
+                <span className="shrink-0 text-13 font-semibold text-primary">Galileo</span>
+                <div
+                  role="group"
+                  aria-label="Assistant mode"
+                  className="flex items-center rounded-md border border-subtle bg-layer-1 p-0.5"
+                >
+                  {MODES.map(({ value, label, hint }) => (
+                    <Tooltip key={value} label={hint} side="bottom">
+                      <button
+                        type="button"
+                        aria-pressed={mode === value}
+                        disabled={isGenerating}
+                        onClick={() => setMode(value)}
+                        className={cn(
+                          "rounded-[5px] px-2 py-0.5 text-11 font-medium transition-colors disabled:opacity-50",
+                          mode === value ? "bg-accent-primary text-on-color" : "text-secondary hover:text-primary"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    </Tooltip>
+                  ))}
+                </div>
+                {isGenerating && (
+                  <span className="font-mono tracking-widest text-10 text-tertiary uppercase">thinking</span>
+                )}
+              </div>
+            )}
+            <div className="flex shrink-0 items-center gap-1">
+              {!historyOpen && (
+                <Tooltip label="Chat history" side="bottom">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen(true)}
+                    aria-label="Chat history"
+                    className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
+                  >
+                    <HistoryOutline className="size-4" />
+                  </button>
+                </Tooltip>
+              )}
               <Tooltip label="New conversation" side="bottom">
                 <button
                   type="button"
@@ -214,33 +227,42 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
             <>
               {/* context strip */}
               <div className="flex items-center gap-2 border-b border-subtle px-4 py-2">
-                <span className="font-mono tracking-widest shrink-0 text-[10px] text-tertiary uppercase">ctx</span>
+                <span className="font-mono shrink-0 text-10 font-medium tracking-wide text-tertiary">Context</span>
                 {hasActiveIssue && activeIssueContext ? (
                   <>
                     {stateName && (
-                      <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-[11px] text-secondary">
+                      <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-11 text-secondary">
                         <span className="size-1.5 rounded-full bg-accent-primary" />
                         {stateName}
                       </span>
                     )}
-                    <span className="text-xs truncate text-secondary" title={activeIssueContext.name}>
+                    <span className="truncate text-12 text-secondary" title={activeIssueContext.name}>
                       {activeIssueContext.name}
                     </span>
                   </>
                 ) : (
-                  <span className="text-xs truncate text-tertiary">No work item in view — general answers</span>
+                  <span className="truncate text-12 text-tertiary">No work item in view — general answers</span>
                 )}
               </div>
               {/* messages */}
-              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+              <div
+                ref={scrollRef}
+                role="log"
+                aria-label="Galileo conversation"
+                className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+              >
                 {messages.length === 0 && !isGenerating && (
-                  <div className="ai-rise flex flex-col items-center px-2 pt-8 text-center">
-                    <span className="flex size-11 items-center justify-center rounded-2xl border border-subtle bg-layer-1">
-                      <AiStar1Outline className="size-5 text-accent-primary" />
+                  <div className="ai-rise flex flex-col items-center px-2 pt-6 text-center">
+                    <span className="flex size-10 items-center justify-center rounded-lg border border-subtle bg-layer-1">
+                      <AiStar1Outline className="size-4.5 text-accent-primary" />
                     </span>
-                    <p className="text-sm mt-3 font-medium text-primary">Ask about this work item</p>
-                    <p className="text-xs mt-1 leading-relaxed text-tertiary">
-                      Summaries, descriptions, comment drafts — grounded in the work item on screen.
+                    <p className="mt-3 text-13 font-medium text-primary">
+                      {hasActiveIssue ? "Ask about this work item" : "Ask Galileo anything"}
+                    </p>
+                    <p className="mt-1 text-12 leading-relaxed text-tertiary">
+                      {hasActiveIssue
+                        ? "Summaries, descriptions, comment drafts — grounded in the work item on screen."
+                        : "Summaries, drafts, or any question — open a work item to ground answers in it."}
                     </p>
                     <div className="mt-4 flex flex-col gap-1.5 self-stretch">
                       {SUGGESTIONS.map((suggestion) => (
@@ -248,7 +270,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                           key={suggestion}
                           type="button"
                           onClick={() => handleSend(suggestion)}
-                          className="text-xs hover:border-accent-primary rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
+                          className="hover:border-accent-primary rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
                         >
                           {suggestion}
                         </button>
@@ -265,58 +287,65 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                       "justify-start": message.role === "assistant",
                     })}
                   >
-                    <div
-                      className={cn("flex max-w-[88%] flex-col", {
-                        "items-end": message.role === "user",
-                        "items-start": message.role === "assistant",
-                      })}
-                    >
-                      <div
-                        className={cn("rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
-                          "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
-                          "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
-                            message.role === "assistant" && !message.isError,
-                          "border-danger-primary rounded-bl-sm border text-danger-primary":
-                            message.role === "assistant" && message.isError,
-                        })}
-                      >
-                        {message.role === "assistant" && !message.isError ? (
-                          <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
-                        ) : (
-                          <p className="whitespace-pre-wrap">{message.content}</p>
-                        )}
+                    {message.role === "user" ? (
+                      <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-primary px-3.5 py-2 text-13 leading-relaxed whitespace-pre-wrap text-on-color">
+                        {message.content}
                       </div>
-                      {message.role === "assistant" && message.scheduleProposal && (
-                        <ScheduleProposalCard
-                          proposal={message.scheduleProposal}
-                          decision={message.scheduleDecision}
-                          onConfirm={() => confirmScheduleProposal(message.id)}
-                          onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
-                        />
-                      )}
-                    </div>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 gap-2.5">
+                        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-subtle bg-layer-1">
+                          <AiStar1Outline className="size-3.5 text-accent-primary" />
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col items-start">
+                          {message.isError ? (
+                            <div className="rounded-lg border border-danger-strong/50 bg-danger-subtle px-3 py-2 text-13 leading-relaxed whitespace-pre-wrap text-danger-primary">
+                              {message.content}
+                            </div>
+                          ) : (
+                            <div
+                              className="ai-prose w-full text-13 text-primary"
+                              dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }}
+                            />
+                          )}
+                          {message.scheduleProposal && (
+                            <ScheduleProposalCard
+                              proposal={message.scheduleProposal}
+                              decision={message.scheduleDecision}
+                              onConfirm={() => confirmScheduleProposal(message.id)}
+                              onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {isGenerating && (
-                  <div className="flex items-center gap-1.5 px-1 py-1" aria-label="Generating response">
-                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
-                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
-                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                  <div className="ai-rise flex gap-2.5" role="status">
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-subtle bg-layer-1">
+                      <AiStar1Outline className="size-3.5 text-accent-primary" />
+                    </span>
+                    <span className="flex items-center gap-1.5 py-1.5" aria-hidden="true">
+                      <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                      <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                      <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                    </span>
+                    <span className="sr-only">Galileo is generating a response</span>
                   </div>
                 )}
                 {!isGenerating && messages[messages.length - 1]?.isError && (
                   <button
                     type="button"
                     onClick={() => void retryLast()}
-                    className="text-xs flex items-center gap-1 text-accent-primary"
+                    className="flex items-center gap-1 text-12 text-accent-primary transition-opacity hover:opacity-80"
                   >
                     <RefreshOutline className="size-3.5" /> Retry
                   </button>
                 )}
               </div>
               {/* composer */}
-              <div className="border-t border-subtle p-3">
-                <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
+              <div className="border-t border-subtle px-4 pt-2.5 pb-3">
+                <div className="focus-within:border-accent-primary rounded-lg border border-subtle bg-layer-1 transition-colors">
                   {showScheduleHint && !isGenerating && (
                     <button
                       type="button"
@@ -324,7 +353,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                         setQuestion("/schedule ");
                         composerRef.current?.focus();
                       }}
-                      className="text-xs w-full border-b border-subtle px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
+                      className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
                     >
                       /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
                     </button>
@@ -339,27 +368,27 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                         handleSend();
                       }
                     }}
-                    placeholder="Ask AI anything…"
+                    placeholder="Ask Galileo anything…"
                     rows={2}
-                    className="text-sm w-full resize-none bg-transparent px-3 pt-2.5 text-primary outline-none placeholder:text-tertiary"
+                    className="w-full resize-none bg-transparent px-3.5 pt-2.5 pb-1 text-13 text-primary outline-none placeholder:text-tertiary"
                   />
-                  <div className="flex items-center justify-between px-2 pb-2">
-                    <span className="font-mono tracking-widest pl-1 text-[10px] text-tertiary uppercase">
-                      {hasActiveIssue ? "grounded" : "general"}
+                  <div className="flex items-center gap-3 px-3.5 pb-2">
+                    <span className="hidden text-10 text-tertiary sm:inline">
+                      Enter to send · Shift+Enter for a new line
                     </span>
                     <button
                       type="button"
                       onClick={() => handleSend()}
                       disabled={!question.trim() || isGenerating}
                       aria-label="Send message"
-                      className="flex size-8 items-center justify-center rounded-full bg-accent-primary text-on-color transition-opacity hover:opacity-90 disabled:opacity-40"
+                      className="ml-auto flex size-7 items-center justify-center rounded-full bg-accent-primary text-on-color transition-opacity hover:opacity-90 disabled:opacity-40"
                     >
-                      <SendOutline className="size-4" />
+                      <SendOutline className="size-3.5" />
                     </button>
                   </div>
                 </div>
-                <p className="mt-2 px-1 text-[11px] leading-snug text-tertiary">
-                  By using this feature, you consent to sharing the message with a 3rd party service.
+                <p className="mt-2 text-center text-11 leading-snug text-tertiary">
+                  Messages are sent to a 3rd party AI service.
                 </p>
               </div>
             </>

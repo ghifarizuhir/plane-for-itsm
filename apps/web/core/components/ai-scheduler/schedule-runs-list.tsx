@@ -45,7 +45,7 @@ export function ScheduleRunsList({ runs }: Props) {
             </div>
             {run.status === "success" && run.response_html && (
               <div
-                className="text-xs mt-1.5 leading-relaxed break-words text-secondary [&_pre]:overflow-x-auto"
+                className="ai-prose mt-1.5 text-12 break-words text-secondary"
                 dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(run.response_html) }}
               />
             )}
