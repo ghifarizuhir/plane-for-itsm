@@ -126,13 +126,15 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
             Created by {creator?.member?.display_name ?? "a workspace member"}
           </p>
         </div>
-        <Switch
-          size="sm"
-          checked={schedule.enabled}
-          onCheckedChange={(checked) => void handleToggle(checked)}
-          disabled={!canManage || toggling}
-          aria-label={schedule.enabled ? "Pause schedule" : "Resume schedule"}
-        />
+        {canManage && (
+          <Switch
+            size="sm"
+            checked={schedule.enabled}
+            onCheckedChange={(checked) => void handleToggle(checked)}
+            disabled={toggling}
+            aria-label={schedule.enabled ? "Pause schedule" : "Resume schedule"}
+          />
+        )}
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {canManage && (
@@ -156,7 +158,7 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
         handleSubmit={() => void handleDelete()}
         isSubmitting={deleting}
         title="Delete schedule"
-        content={`"${schedule.name}" will stop running and its run history will be removed.`}
+        content={`"${schedule.name}" will stop running and be hidden. Existing runs are kept.`}
         primaryButtonText={{ loading: "Deleting", default: "Delete" }}
       />
     </div>

@@ -22,11 +22,15 @@ use crate::routes::project::{deny, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
 use ai::llm::{host_of, resolve_llm_config, LlmError};
 
-pub use ai::agent::{
-    effective_prompt, new_trace, pending_action, prompt_from_body, record, run_agent,
-    ToolCallTrace, ToolTrace, AGENT_TIMEOUT, MAX_TURNS, PREAMBLE,
-};
-pub use ai::tools::workspace_tools;
+pub use ai::agent::{new_trace, pending_action, prompt_from_body, run_agent, AGENT_TIMEOUT};
+
+// Used by the unit tests below only.
+#[cfg(test)]
+pub use ai::agent::{effective_prompt, record};
+// Used by `crates/api/tests/ai_agent_test.rs`; the bin target sees them as
+// unused, so the lint is allowed there.
+#[allow(unused_imports)]
+pub use ai::agent::{ToolCallTrace, ToolTrace};
 
 pub mod tools {
     pub use ai::tools::*;

@@ -1,4 +1,4 @@
-use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue};
+use redis::{aio::ConnectionManager, streams::StreamMaxlen, AsyncCommands, FromRedisValue};
 use serde_json::Value;
 
 pub const STREAM: &str = "plane:jobs";
@@ -25,9 +25,12 @@ pub async fn push_job(
     job: &str,
     payload: Value,
 ) -> anyhow::Result<String> {
+    // `MAXLEN ~ 10000` keeps the stream bounded; acked entries are never read
+    // again and in-flight backlog is far below this bound.
     let id: String = mgr
-        .xadd(
+        .xadd_maxlen(
             STREAM,
+            StreamMaxlen::Approx(10000),
             "*",
             &[("job", job), ("payload", &payload.to_string())],
         )

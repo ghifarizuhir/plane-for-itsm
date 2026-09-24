@@ -262,7 +262,6 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                     <ScheduleProposalCard
                       proposal={message.scheduleProposal}
                       decision={message.scheduleDecision}
-                      createdScheduleId={message.createdScheduleId}
                       onConfirm={() => confirmScheduleProposal(message.id)}
                       onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
                     />

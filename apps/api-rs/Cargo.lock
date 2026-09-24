@@ -8342,6 +8342,7 @@ version = "0.1.0"
 dependencies = [
  "ai",
  "anyhow",
+ "axum",
  "chrono",
  "common",
  "redis",

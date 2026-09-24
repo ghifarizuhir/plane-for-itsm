@@ -199,7 +199,9 @@ pun (tercatat sebagai pembuat); mengubah/menghapus/menjalankan jadwal yang
 ### 7. Error handling & guardrail
 
 - Maksimum 20 jadwal non-deleted/workspace; interval minimum per jam (preset).
-- Run timeout 180 dtk (timeout agen yang ada); sweep stuck >15 menit → failed.
+- Run timeout 180 dtk (timeout agen yang ada); sweep: `running` stuck >15 menit
+  (`started_at`) → failed "did not finish"; `queued` stuck >6 jam (`created_at`)
+  → failed "never started (worker backlog atau job hilang)".
 - Tidak ada double-run satu jadwal: klaim memajukan `next_run_at` secara atomik.
   Run yang masih jalan saat jadwal berikutnya jatuh tempo akan ter-antre dan
   berjalan setelahnya (diterima v1).
@@ -248,9 +250,10 @@ pun (tercatat sebagai pembuat); mengubah/menghapus/menjalankan jadwal yang
   memajukan `next_run_at` dalam satu UPDATE.
 - **Prompt terjadwal dijalankan tanpa pengawasan** → tools tetap read-only dan
   workspace-scoped; tidak ada kemampuan tulis sampai ada tool tulis lain.
-- **Stream `plane:jobs` tidak pernah di-trim** (tick menambah 1 entri/menit) →
-  follow-up terpisah: `XADD ... MAXLEN ~ 10000` di `common::stream::push_job`
-  atau XTRIM berkala; sebelum itu, pantau panjang stream saat smoke.
+- **Stream `plane:jobs` tumbuh tanpa batas** (tick menambah 1 entri/menit) →
+  dibatasi `XADD ... MAXLEN ~ 10000` di `common::stream::push_job`; entri yang
+  sudah di-ACK tidak pernah dibaca lagi dan backlog in-flight jauh di bawah
+  batas tersebut.
 - **Worker ACK tanpa retry (at-most-once)** → run yang gagal karena error
   transien akan ditandai `failed` oleh sweep, bukan dijalankan ulang; diterima
   v1 (retry otomatis out of scope).

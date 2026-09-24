@@ -13,7 +13,6 @@ import { humanizeSchedule, type TAiScheduleProposal } from "@/lib/ai-schedule";
 type Props = {
   proposal: TAiScheduleProposal;
   decision?: "pending" | "created" | "cancelled";
-  createdScheduleId?: string;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 };
