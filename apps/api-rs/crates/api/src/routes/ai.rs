@@ -19,9 +19,16 @@ pub use ai::llm::{
     LlmConfig, LlmError, DEFAULT_BASE_URL, DEFAULT_MODEL,
 };
 
+use crate::routes::ai_agent::chat_success_body;
+use crate::routes::ai_conversations::{
+    conversation_gone, finish_turn, insert_message, load_owned_conversation, recent_messages,
+    title_from,
+};
 use crate::routes::module::guard_am;
-use crate::routes::project::{deny, ws_role};
+use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
+use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
+use uuid::Uuid;
 
 /// `{base_url}/chat/completions` with exactly one joining slash.
 pub fn chat_url(base_url: &str) -> String {
@@ -112,6 +119,33 @@ pub async fn workspace_ai_assistant(
     if guard_am(role).is_err() {
         return Ok(deny());
     }
+    let Some(task) = task_from_body(&body) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Task is required"})),
+        ));
+    };
+    let Some(conversation_id) = body
+        .get("conversation_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+    else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "conversation_id is required"})),
+        ));
+    };
+    let Some(conversation) =
+        load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await?
+    else {
+        return Ok(missing());
+    };
+    if conversation.mode != "classic" {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "conversation mode does not match this endpoint"})),
+        ));
+    }
     let cfg = resolve_llm_config(&st.pool).await;
     if cfg.api_key.is_empty() || cfg.model.is_empty() {
         return Ok((
@@ -119,29 +153,106 @@ pub async fn workspace_ai_assistant(
             Json(json!({"error": "AI is not configured for this workspace."})),
         ));
     }
-    let Some(task) = task_from_body(&body) else {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Task is required"})),
-        ));
-    };
     let prompt = body.get("prompt").and_then(Value::as_str).unwrap_or("");
-    match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, prompt).await {
+    let context = body.get("context").and_then(Value::as_str).unwrap_or("");
+    let history_rows =
+        recent_messages(&st.pool, conversation_id, HISTORY_MESSAGE_LIMIT as i64).await?;
+    let history: Vec<HistoryMessage> = history_rows
+        .iter()
+        .map(|row| HistoryMessage {
+            role: row.role.clone(),
+            content: row.content.clone(),
+        })
+        .collect();
+    let model_prompt = history_prompt(context, &history, prompt);
+    let title = title_from(prompt);
+    // Insert the user message on a pooled connection, then release it before
+    // the LLM call so the pool is not held.
+    let mut conn = st.pool.acquire().await?;
+    let user_message =
+        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+    drop(conn);
+    match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, &model_prompt).await {
         Ok(text) => {
             let html = response_html(&text);
+            // Assistant message + prune + updated_at in ONE transaction. A
+            // conversation deleted mid-turn (row gone / FK violation) → 404.
+            let turn = async {
+                let mut tx = st.pool.begin().await?;
+                let assistant_message = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &text,
+                    Some(&html),
+                    &json!({ "is_error": false }),
+                )
+                .await?;
+                let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>((assistant_message, conversation))
+            }
+            .await;
+            let (assistant_message, conversation) = match turn {
+                Ok(ok) => ok,
+                Err(error) if conversation_gone(&error) => return Ok(missing()),
+                Err(error) => return Err(error.into()),
+            };
             Ok((
                 StatusCode::OK,
-                Json(json!({"response": text, "response_html": html})),
+                Json(chat_success_body(
+                    &text,
+                    Vec::new(),
+                    None,
+                    &conversation,
+                    &user_message,
+                    &assistant_message,
+                )),
             ))
         }
-        Err(LlmError::RateLimited) => Ok((
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({"error": format!("Rate limit exceeded for {}", host_of(&cfg.base_url))})),
-        )),
-        Err(LlmError::Upstream) => Ok((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "An internal error has occurred."})),
-        )),
+        Err(error) => {
+            let message = match error {
+                LlmError::RateLimited => {
+                    format!("Rate limit exceeded for {}", host_of(&cfg.base_url))
+                }
+                LlmError::Upstream => "An internal error has occurred.".to_string(),
+            };
+            if let Ok(mut tx) = st.pool.begin().await {
+                if let Err(error) = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &message,
+                    None,
+                    &json!({ "is_error": true }),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to persist error turn"
+                    );
+                } else if let Err(error) = finish_turn(&mut tx, conversation_id, &title).await {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to finish error turn"
+                    );
+                }
+                let _ = tx.commit().await;
+            }
+            match error {
+                LlmError::RateLimited => Ok((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": message})),
+                )),
+                LlmError::Upstream => Ok((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": message})),
+                )),
+            }
+        }
     }
 }
 

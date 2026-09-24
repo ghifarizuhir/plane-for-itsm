@@ -1,5 +1,8 @@
 //! DB-backed tests for the Galileo conversation endpoints.
 
+#[path = "support/mod.rs"]
+mod support;
+
 use api::middleware::auth::AuthUser;
 use api::routes::ai_conversations;
 use api::state::AppState;
@@ -723,6 +726,158 @@ async fn messages_are_listed_oldest_first_and_metadata_patch_is_allowlisted() {
     .await
     .expect("missing message");
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn classic_turn_persists_and_requires_conversation_id() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    // Without conversation_id → 400.
+    let (status, _) = api::routes::ai::workspace_ai_assistant(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"task": "say hi", "prompt": "hi"})),
+    )
+    .await
+    .expect("missing conversation");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Fake upstream (recording) for the happy path.
+    let (base_url, bodies) = crate::support::spawn_recording_upstream("classic answer").await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+
+    let (_, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic"})),
+    )
+    .await
+    .expect("create");
+    let conversation_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(body)) = api::routes::ai::workspace_ai_assistant(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "say hi",
+            "prompt": "hello classic",
+            "context": "No active work item context.",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("classic call");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["response"], json!("classic answer"));
+    assert_eq!(body["conversation"]["mode"], json!("classic"));
+    assert_eq!(body["user_message"]["content"], json!("hello classic"));
+    assert_eq!(
+        body["assistant_message"]["content"],
+        json!("classic answer")
+    );
+
+    let sent = bodies.lock().unwrap().clone();
+    let content = sent[0]["messages"][0]["content"].as_str().unwrap();
+    assert!(content.contains("say hi"));
+    assert!(content.contains("User's new question: hello classic"));
+
+    std::env::remove_var("SKIP_ENV_VAR");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::remove_var("LLM_BASE_URL");
+    std::env::remove_var("LLM_MODEL");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn classic_turn_prunes_messages_beyond_two_hundred() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let (base_url, _bodies) = crate::support::spawn_recording_upstream("classic answer").await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+
+    let (_, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic"})),
+    )
+    .await
+    .expect("create");
+    let conversation_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // 205 stored messages + the new turn (user + assistant) = 207 → prune to 200.
+    for index in 0..205 {
+        sqlx::query(
+            "INSERT INTO ai_messages (id, conversation_id, role, content, metadata, created_at) \
+             VALUES ($1, $2, 'user', $3, '{}'::jsonb, now() - make_interval(secs => $4))",
+        )
+        .bind(Uuid::new_v4())
+        .bind(conversation_id)
+        .bind(format!("seed-{index}"))
+        .bind(1000 - index)
+        .execute(&pool)
+        .await
+        .expect("seed");
+    }
+
+    let (status, _) = api::routes::ai::workspace_ai_assistant(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "say hi",
+            "prompt": "the newest question",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("classic call");
+    assert_eq!(status, StatusCode::OK);
+
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai_messages WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 200, "retention keeps the newest 200 messages");
+    let oldest: Option<String> = sqlx::query_scalar(
+        "SELECT content FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at, id LIMIT 1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_ne!(oldest.as_deref(), Some("seed-0"));
+    let newest: Option<String> = sqlx::query_scalar(
+        "SELECT content FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(conversation_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(newest.as_deref(), Some("classic answer"));
+
+    std::env::remove_var("SKIP_ENV_VAR");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::remove_var("LLM_BASE_URL");
+    std::env::remove_var("LLM_MODEL");
 
     scratch.purge(&pool).await;
 }

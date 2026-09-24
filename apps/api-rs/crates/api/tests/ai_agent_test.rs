@@ -6,6 +6,9 @@
 //! MUST run with `--test-threads=1`:
 //! `cargo test -p api --test ai_agent_test -- --test-threads=1`.
 
+#[path = "support/mod.rs"]
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use api::middleware::auth::AuthUser;
@@ -533,49 +536,6 @@ impl Scratch {
     }
 }
 
-/// Fake OpenAI-compatible upstream that records every request body.
-async fn spawn_recording_upstream() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Value>>>) {
-    use axum::{routing::post, Json, Router};
-    let bodies: std::sync::Arc<std::sync::Mutex<Vec<Value>>> =
-        std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    let recorder = bodies.clone();
-    async fn handler(
-        axum::extract::State(recorder): axum::extract::State<
-            std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
-        >,
-        Json(body): Json<Value>,
-    ) -> (axum::http::StatusCode, Json<Value>) {
-        recorder.lock().unwrap().push(body);
-        (
-            axum::http::StatusCode::OK,
-            Json(json!({
-                "id": "chatcmpl-test",
-                "object": "chat.completion",
-                "created": 0,
-                "model": "test",
-                "choices": [{
-                    "index": 0,
-                    "message": {"role": "assistant", "content": "agent answer"},
-                    "finish_reason": "stop"
-                }]
-            })),
-        )
-    }
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(
-            listener,
-            Router::new()
-                .route("/v1/chat/completions", post(handler))
-                .with_state(recorder),
-        )
-        .await
-        .unwrap();
-    });
-    (format!("http://{addr}/v1"), bodies)
-}
-
 fn set_llm_env(base_url: &str) {
     std::env::set_var("SKIP_ENV_VAR", "0");
     std::env::set_var("LLM_API_KEY", "test-key");
@@ -626,7 +586,7 @@ async fn agent_turn_persists_both_messages_and_builds_context_from_history() {
         .expect("seed");
     }
 
-    let (base_url, bodies) = spawn_recording_upstream().await;
+    let (base_url, bodies) = support::spawn_recording_upstream("agent answer").await;
     set_llm_env(&base_url);
     let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
         State(st.clone()),
