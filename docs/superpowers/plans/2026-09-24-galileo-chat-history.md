@@ -4037,6 +4037,56 @@ git commit -m "feat(web): send chat turns through stored conversations"
 
 ---
 
+### Task 10b: Hardening race store (hasil review Task 10–11)
+
+> Ditambahkan setelah review kualitas menemukan 2 race Critical + beberapa
+> Important. Semua butir di bawah WAJIB ada di `ai-assistant.store.ts` sebelum
+> Task 12; test baru menyertainya.
+
+**Mekanisme:**
+
+- `private interactionSeq = 0;` — dinaikkan oleh `newChat`, `openConversation`,
+  `setMode`, dan di awal `sendMessage`/`retryLast`. `loadConversations`
+  menangkap nilainya sebelum fetch dan hanya memanggil `openLastForMode()`
+  bila masih sama (plus `activeConversationId === undefined` dan `!turnGuard`).
+- `private listVersion = 0;` + `private touchList()` — dinaikkan setiap mutasi
+  list lokal (create di `ensureConversation`, rename, delete, update conversation
+  dari respons chat). `loadConversations` menangkap versi sebelum fetch; jika
+  berubah saat fetch, ia **refetch** (`void this.loadConversations()`) alih-alih
+  menimpa list.
+- `conversationsLoading` selalu di-reset di `finally` selama `listSeq` cocok.
+- `private turnGuard = false;` + `private ensurePromise?: Promise<string | undefined>;`
+  — `sendMessage`/`retryLast` set `turnGuard` dan `isGenerating = true` SEBELUM
+  await pertama, dan membersihkannya di `finally`. `ensureConversation`
+  meng-dedupe create in-flight lewat `ensurePromise`; kegagalan create →
+  `undefined` + error bubble, bukan rejection tak tertangani.
+- `retryLast` memakai ulang bubble user terakhir sebagai `optimisticId`
+  (tidak menambah bubble user kedua).
+- `openConversation`: set `messages = []` saat mulai, `persistActiveId()` setelah
+  sukses; kegagalan 404 → buang dari list + reset; kegagalan lain → reset
+  active/messages tanpa membuang list.
+- `confirmScheduleProposal` menangkap `activeConversationId` SEBELUM await
+  schedule; `persistDecision(conversationId, ...)` memakai nilai itu.
+- `request` catch: `err?.status === 404` → `newChat()` + error bubble
+  "conversation was deleted" (server error text bila ada).
+- `clearPersistedAiConversations` hanya menghapus prefix legacy
+  `ai_assistant_messages_` (dipanggil tiap boot); id aktif sengaja bertahan
+  lintas reload. Sign-out tetap mengosongkan state in-memory via root store.
+
+**Test tambahan wajib:**
+
+1. newChat saat list masih loading tidak membuka percakapan lagi.
+2. List resolve telat tidak menghapus bubble giliran yang sedang berjalan.
+3. Dua `sendMessage` beruntun hanya membuat SATU percakapan (create dedupe).
+4. Kirim sebelum list resolve tetap menampilkan giliran.
+5. Keputusan proposal di-PATCH ke percakapan asal walau user pindah thread.
+6. Kegagalan create percakapan → error bubble (bukan unhandled rejection).
+7. Kegagalan `listMessages` non-404 → reset ke chat baru tanpa error tak tertangani.
+8. `clearPersistedAiConversations()` mempertahankan key id aktif.
+9. Respons chat 404 → state kembali ke chat baru + error bubble.
+
+---
+
 ### Task 12: UI — tombol history + panel daftar percakapan
 
 **Files:**
