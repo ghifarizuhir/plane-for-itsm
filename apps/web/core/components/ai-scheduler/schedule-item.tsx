@@ -11,14 +11,16 @@ import { useParams } from "next/navigation";
 import { Switch } from "@makeplane/propel/components/switch";
 import { Badge } from "@plane/propel/badge";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EUserWorkspaceRoles } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // hooks
 import { useAiSchedules } from "@/hooks/store/use-ai-schedules";
+import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 // lib
-import { humanizeSchedule, type TAiSchedule, type TAiScheduleRun } from "@/lib/ai-schedule";
+import { humanizeSchedule, scheduleStatusLabel, type TAiSchedule, type TAiScheduleRun } from "@/lib/ai-schedule";
 // local imports
 import { ScheduleRunsList } from "./schedule-runs-list";
 
@@ -39,6 +41,9 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
   const slug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
   // store hooks
   const { toggleSchedule, deleteSchedule, runNow, fetchRuns, runsBySchedule } = useAiSchedules();
+  const {
+    workspace: { getWorkspaceMemberDetails },
+  } = useMember();
   const { data: currentUser } = useUser();
   const { getWorkspaceRoleByWorkspaceSlug } = useUserPermissions();
   // local state
@@ -46,15 +51,29 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [running, setRunning] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   const role = slug ? getWorkspaceRoleByWorkspaceSlug(slug) : undefined;
   const canManage = currentUser?.id === schedule.created_by_id || role === EUserWorkspaceRoles.ADMIN;
   const runs = runsBySchedule[schedule.id] ?? schedule.runs ?? [];
+  const creator = getWorkspaceMemberDetails(schedule.created_by_id);
 
   const handleToggleExpanded = () => {
     const next = !expanded;
     setExpanded(next);
     if (next && slug) void fetchRuns(slug, schedule.id).catch(() => {});
+  };
+
+  const handleToggle = async (checked: boolean) => {
+    if (!slug || toggling) return;
+    setToggling(true);
+    try {
+      await toggleSchedule(slug, schedule.id, checked);
+    } catch {
+      setToast({ type: TOAST_TYPE.ERROR, title: "Could not update the schedule" });
+    } finally {
+      setToggling(false);
+    }
   };
 
   const handleRunNow = async () => {
@@ -63,7 +82,7 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
     try {
       await runNow(slug, schedule.id);
     } catch {
-      // the run was not queued; the next poll refreshes the list
+      setToast({ type: TOAST_TYPE.ERROR, title: "Could not queue the run" });
     } finally {
       setRunning(false);
     }
@@ -76,7 +95,7 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
       await deleteSchedule(slug, schedule.id);
       setDeleteOpen(false);
     } catch {
-      // keep the dialog open so the user can retry
+      setToast({ type: TOAST_TYPE.ERROR, title: "Could not delete the schedule" });
     } finally {
       setDeleting(false);
     }
@@ -90,23 +109,28 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
             <p className="text-sm font-medium break-words text-primary">{schedule.name}</p>
             {schedule.last_status && (
               <Badge variant={LAST_STATUS_BADGE_VARIANTS[schedule.last_status]} size="sm">
-                {schedule.last_status}
+                {scheduleStatusLabel(schedule.last_status)}
               </Badge>
             )}
-            {!schedule.enabled && <span className="text-xs text-tertiary">Paused</span>}
           </div>
           <p className="text-xs mt-0.5 text-secondary">{humanizeSchedule(schedule)}</p>
+          <p className="text-xs line-clamp-1 text-tertiary">{schedule.prompt}</p>
+          {schedule.enabled ? (
+            <p className="text-xs mt-0.5 text-tertiary">
+              Next run: {renderFormattedDate(schedule.next_run_at)} at {renderFormattedTime(schedule.next_run_at)}
+            </p>
+          ) : (
+            <span className="text-xs text-tertiary">Paused</span>
+          )}
           <p className="text-xs mt-0.5 text-tertiary">
-            Next run: {renderFormattedDate(schedule.next_run_at)} at {renderFormattedTime(schedule.next_run_at)}
+            Created by {creator?.member?.display_name ?? "a workspace member"}
           </p>
         </div>
         <Switch
           size="sm"
           checked={schedule.enabled}
-          onCheckedChange={(checked) => {
-            if (slug) void toggleSchedule(slug, schedule.id, checked).catch(() => {});
-          }}
-          disabled={!canManage}
+          onCheckedChange={(checked) => void handleToggle(checked)}
+          disabled={!canManage || toggling}
           aria-label={schedule.enabled ? "Pause schedule" : "Resume schedule"}
         />
       </div>

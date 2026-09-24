@@ -51,12 +51,19 @@ export class AiSchedulesStore implements IAiSchedulesStore {
     if (workspaceSlug !== this.workspaceSlug) {
       this.requestSeq += 1;
       this.workspaceSlug = workspaceSlug;
+      this.schedules = [];
+      this.runsBySchedule = {};
+      this.error = null;
+      this.loader = false;
     }
   };
 
   fetchSchedules = async (workspaceSlug: string) => {
     const seq = ++this.requestSeq;
-    this.loader = true;
+    runInAction(() => {
+      this.loader = true;
+      this.error = null;
+    });
     try {
       const schedules = await this.service.list(workspaceSlug);
       if (seq !== this.requestSeq || workspaceSlug !== this.workspaceSlug) return;
@@ -106,16 +113,13 @@ export class AiSchedulesStore implements IAiSchedulesStore {
     runInAction(() => {
       this.schedules = this.schedules.filter((schedule) => schedule.id !== scheduleId);
       delete this.runsBySchedule[scheduleId];
+      this.requestSeq += 1;
+      this.loader = false;
     });
   };
 
   runNow = async (workspaceSlug: string, scheduleId: string) => {
     await this.service.runNow(workspaceSlug, scheduleId);
-    try {
-      await this.fetchRuns(workspaceSlug, scheduleId);
-      await this.fetchSchedules(workspaceSlug);
-    } catch {
-      // the run was queued; a refresh failure must not look like a run failure
-    }
+    await Promise.allSettled([this.fetchRuns(workspaceSlug, scheduleId), this.fetchSchedules(workspaceSlug)]);
   };
 }

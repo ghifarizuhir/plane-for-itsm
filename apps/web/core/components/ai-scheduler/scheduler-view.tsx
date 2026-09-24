@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
@@ -19,35 +19,43 @@ export const SchedulerView = observer(function SchedulerView() {
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const slug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
   // store hooks
-  const { schedules, loader, error, setWorkspace, fetchSchedules } = useAiSchedules();
+  const { schedules, runsBySchedule, loader, error, setWorkspace, fetchSchedules, fetchRuns } = useAiSchedules();
+
+  const expandedRunsRef = useRef(runsBySchedule);
+  useEffect(() => {
+    expandedRunsRef.current = runsBySchedule;
+  }, [runsBySchedule]);
+
+  const refreshSchedules = useCallback(() => {
+    if (!slug) return;
+    void fetchSchedules(slug).catch(() => {});
+    for (const scheduleId of Object.keys(expandedRunsRef.current)) void fetchRuns(slug, scheduleId).catch(() => {});
+  }, [slug, fetchSchedules, fetchRuns]);
 
   useEffect(() => {
     if (!slug) return;
     setWorkspace(slug);
-    void fetchSchedules(slug).catch(() => {});
-    const interval = window.setInterval(() => void fetchSchedules(slug).catch(() => {}), 30_000);
+    refreshSchedules();
+    const interval = window.setInterval(refreshSchedules, 30_000);
     return () => window.clearInterval(interval);
-  }, [slug, setWorkspace, fetchSchedules]);
+  }, [slug, setWorkspace, refreshSchedules]);
 
-  const refresh = () => {
-    if (!slug) return;
-    void fetchSchedules(slug).catch(() => {});
-  };
+  const showErrorState = !!error && schedules.length === 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-3 px-4 py-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-primary">AI Scheduler</h2>
-        <Button size="sm" variant="secondary" loading={loader} onClick={refresh}>
+        <Button size="sm" variant="secondary" loading={loader} onClick={refreshSchedules}>
           Refresh
         </Button>
       </div>
       {loader && schedules.length === 0 ? (
         <p className="text-sm text-tertiary">Loading schedules…</p>
-      ) : error ? (
+      ) : showErrorState ? (
         <div className="flex flex-col items-start gap-2">
           <p className="text-sm text-danger-primary">{error}</p>
-          <Button size="sm" variant="secondary" onClick={refresh}>
+          <Button size="sm" variant="secondary" onClick={refreshSchedules}>
             Retry
           </Button>
         </div>
@@ -57,6 +65,7 @@ export const SchedulerView = observer(function SchedulerView() {
         </p>
       ) : (
         <div className="space-y-3">
+          {error && <p className="text-xs text-danger-primary">Couldn't refresh — retrying automatically.</p>}
           {schedules.map((schedule) => (
             <ScheduleItem key={schedule.id} schedule={schedule} />
           ))}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { humanizeSchedule, isScheduleCommand } from "./ai-schedule";
+import { humanizeSchedule, isScheduleCommand, runDurationInSeconds, scheduleStatusLabel } from "./ai-schedule";
 
 describe("isScheduleCommand", () => {
   it("matches only leading /schedule commands", () => {
@@ -44,5 +44,47 @@ describe("humanizeSchedule", () => {
 
   it("renders an em dash for an unknown frequency", () => {
     expect(humanizeSchedule({ frequency: "yearly" as never, time: "09:00", timezone: "UTC" })).toBe("—");
+  });
+});
+
+describe("scheduleStatusLabel", () => {
+  it("maps each run status to a display label", () => {
+    expect(scheduleStatusLabel("queued")).toBe("Queued");
+    expect(scheduleStatusLabel("running")).toBe("Running");
+    expect(scheduleStatusLabel("success")).toBe("Success");
+    expect(scheduleStatusLabel("failed")).toBe("Failed");
+  });
+
+  it("returns null for missing statuses", () => {
+    expect(scheduleStatusLabel(null)).toBeNull();
+    expect(scheduleStatusLabel(undefined)).toBeNull();
+  });
+});
+
+describe("runDurationInSeconds", () => {
+  it("computes the rounded duration in seconds", () => {
+    expect(runDurationInSeconds({ started_at: "2024-01-01T00:00:00Z", finished_at: "2024-01-01T00:00:05.400Z" })).toBe(
+      5
+    );
+    expect(
+      runDurationInSeconds({ started_at: "2024-01-01T00:00:00.000Z", finished_at: "2024-01-01T00:00:00.400Z" })
+    ).toBe(0);
+  });
+
+  it("returns null when a timestamp is missing", () => {
+    expect(runDurationInSeconds({})).toBeNull();
+    expect(runDurationInSeconds({ started_at: "2024-01-01T00:00:00Z", finished_at: null })).toBeNull();
+    expect(runDurationInSeconds({ started_at: null, finished_at: "2024-01-01T00:00:05Z" })).toBeNull();
+  });
+
+  it("returns null for malformed timestamps", () => {
+    expect(runDurationInSeconds({ started_at: "nope", finished_at: "2024-01-01T00:00:05Z" })).toBeNull();
+    expect(runDurationInSeconds({ started_at: "2024-01-01T00:00:00Z", finished_at: "also-nope" })).toBeNull();
+  });
+
+  it("returns null for negative durations", () => {
+    expect(
+      runDurationInSeconds({ started_at: "2024-01-01T00:00:05Z", finished_at: "2024-01-01T00:00:00Z" })
+    ).toBeNull();
   });
 });

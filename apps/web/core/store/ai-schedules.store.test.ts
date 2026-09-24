@@ -104,4 +104,85 @@ describe("AiSchedulesStore", () => {
     const store = new AiSchedulesStore(service as never);
     await expect(store.fetchRuns("acme", "s1")).rejects.toThrow("boom");
   });
+
+  it("a failed poll keeps the loaded list", async () => {
+    const service = makeService();
+    const store = new AiSchedulesStore(service as never);
+    store.setWorkspace("acme");
+    await store.fetchSchedules("acme");
+    service.list = vi.fn(async () => {
+      throw new Error("boom");
+    }) as never;
+    await expect(store.fetchSchedules("acme")).rejects.toThrow("boom");
+    expect(store.schedules).toHaveLength(1);
+    expect(store.error).toBe("Could not load schedules.");
+  });
+
+  it("clears the error when a new fetch starts", async () => {
+    const service = makeService();
+    service.list = vi.fn(async () => {
+      throw new Error("boom");
+    }) as never;
+    const store = new AiSchedulesStore(service as never);
+    store.setWorkspace("acme");
+    await expect(store.fetchSchedules("acme")).rejects.toThrow("boom");
+    expect(store.error).toBe("Could not load schedules.");
+    service.list = vi.fn(() => new Promise(() => {})) as never;
+    void store.fetchSchedules("acme");
+    expect(store.error).toBeNull();
+  });
+
+  it("setWorkspace clears state when the slug changes", async () => {
+    const service = makeService();
+    const store = new AiSchedulesStore(service as never);
+    store.setWorkspace("acme");
+    await store.fetchSchedules("acme");
+    store.runsBySchedule["s1"] = [{ id: "r1" } as never];
+    store.setWorkspace("other");
+    expect(store.schedules).toEqual([]);
+    expect(store.runsBySchedule).toEqual({});
+    expect(store.error).toBeNull();
+    expect(store.loader).toBe(false);
+  });
+
+  it("setWorkspace keeps state for the same slug", async () => {
+    const service = makeService();
+    const store = new AiSchedulesStore(service as never);
+    store.setWorkspace("acme");
+    await store.fetchSchedules("acme");
+    store.setWorkspace("acme");
+    expect(store.schedules).toHaveLength(1);
+  });
+
+  it("delete invalidates an in-flight list response", async () => {
+    const service = makeService();
+    let resolveList!: (value: unknown) => void;
+    service.list = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveList = resolve;
+        })
+    ) as never;
+    const store = new AiSchedulesStore(service as never);
+    store.setWorkspace("acme");
+    const pending = store.fetchSchedules("acme");
+    store.schedules = [{ id: "s1", enabled: true } as never];
+    await store.deleteSchedule("acme", "s1");
+    resolveList([{ id: "s1" }, { id: "s2" }]);
+    await pending;
+    expect(store.schedules).toEqual([]);
+    expect(store.loader).toBe(false);
+  });
+
+  it("runNow resolves even when the refresh fails", async () => {
+    const service = makeService();
+    service.retrieve = vi.fn(async () => {
+      throw new Error("boom");
+    }) as never;
+    service.list = vi.fn(async () => {
+      throw new Error("boom");
+    }) as never;
+    const store = new AiSchedulesStore(service as never);
+    await expect(store.runNow("acme", "s1")).resolves.toBeUndefined();
+  });
 });

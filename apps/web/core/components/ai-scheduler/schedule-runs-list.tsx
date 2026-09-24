@@ -9,7 +9,7 @@ import { Badge } from "@plane/propel/badge";
 import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // lib
 import { sanitizeAssistantHtml } from "@/lib/ai-context";
-import type { TAiScheduleRun } from "@/lib/ai-schedule";
+import { runDurationInSeconds, scheduleStatusLabel, type TAiScheduleRun } from "@/lib/ai-schedule";
 
 type Props = {
   runs: TAiScheduleRun[];
@@ -20,12 +20,6 @@ const STATUS_BADGE_VARIANTS: Record<TAiScheduleRun["status"], "success" | "dange
   failed: "danger",
   queued: "brand",
   running: "brand",
-};
-
-const runDurationInSeconds = (run: TAiScheduleRun): number | null => {
-  if (!run.started_at || !run.finished_at) return null;
-  const seconds = Math.round((Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000);
-  return Number.isFinite(seconds) ? seconds : null;
 };
 
 export function ScheduleRunsList({ runs }: Props) {
@@ -41,7 +35,7 @@ export function ScheduleRunsList({ runs }: Props) {
           <li key={run.id} className="rounded-md border border-subtle bg-layer-2 p-2">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={STATUS_BADGE_VARIANTS[run.status]} size="sm">
-                {run.status}
+                {scheduleStatusLabel(run.status) ?? run.status}
               </Badge>
               <span className="text-xs text-secondary">{run.trigger === "manual" ? "Manual" : "Scheduled"}</span>
               <span className="text-xs text-tertiary">
@@ -51,7 +45,7 @@ export function ScheduleRunsList({ runs }: Props) {
             </div>
             {run.status === "success" && run.response_html && (
               <div
-                className="text-xs mt-1.5 leading-relaxed text-secondary"
+                className="text-xs mt-1.5 leading-relaxed break-words text-secondary [&_pre]:overflow-x-auto"
                 dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(run.response_html) }}
               />
             )}

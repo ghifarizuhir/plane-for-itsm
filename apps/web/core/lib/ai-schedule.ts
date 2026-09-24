@@ -51,6 +51,35 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 /** True when the message starts with the `/schedule` slash command (case-insensitive). */
 export const isScheduleCommand = (text: string): boolean => /^\/schedule(?:\s|$)/i.test(text.trimStart());
 
+export const scheduleStatusLabel = (
+  status: "queued" | "running" | "success" | "failed" | null | undefined
+): string | null => {
+  switch (status) {
+    case "queued":
+      return "Queued";
+    case "running":
+      return "Running";
+    case "success":
+      return "Success";
+    case "failed":
+      return "Failed";
+    default:
+      return null;
+  }
+};
+
+export const runDurationInSeconds = (run: {
+  started_at?: string | null;
+  finished_at?: string | null;
+}): number | null => {
+  if (!run.started_at || !run.finished_at) return null;
+  const started = Date.parse(run.started_at);
+  const finished = Date.parse(run.finished_at);
+  if (!Number.isFinite(started) || !Number.isFinite(finished)) return null;
+  const seconds = Math.round((finished - started) / 1000);
+  return seconds >= 0 ? seconds : null;
+};
+
 export const humanizeSchedule = (
   proposal: Pick<TAiScheduleProposal, "frequency" | "time" | "day_of_week" | "day_of_month" | "timezone">
 ): string => {
