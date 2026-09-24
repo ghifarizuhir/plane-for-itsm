@@ -248,3 +248,9 @@ pun (tercatat sebagai pembuat); mengubah/menghapus/menjalankan jadwal yang
   memajukan `next_run_at` dalam satu UPDATE.
 - **Prompt terjadwal dijalankan tanpa pengawasan** → tools tetap read-only dan
   workspace-scoped; tidak ada kemampuan tulis sampai ada tool tulis lain.
+- **Stream `plane:jobs` tidak pernah di-trim** (tick menambah 1 entri/menit) →
+  follow-up terpisah: `XADD ... MAXLEN ~ 10000` di `common::stream::push_job`
+  atau XTRIM berkala; sebelum itu, pantau panjang stream saat smoke.
+- **Worker ACK tanpa retry (at-most-once)** → run yang gagal karena error
+  transien akan ditandai `failed` oleh sweep, bukan dijalankan ulang; diterima
+  v1 (retry otomatis out of scope).
