@@ -2027,10 +2027,15 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
     let model_prompt = history_prompt(context, &history, prompt);
     let title = title_from(prompt);
     // Insert the user message on a pooled connection, then release it before
-    // the (up to 180s) LLM call so the pool is not held.
+    // the (up to 180s) LLM call so the pool is not held. A conversation that
+    // vanished since the load still answers 404, not 500.
     let mut conn = st.pool.acquire().await?;
     let user_message =
-        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+        match insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await {
+            Ok(message) => message,
+            Err(error) if conversation_gone(&error) => return Ok(missing()),
+            Err(error) => return Err(error.into()),
+        };
     drop(conn);
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
@@ -2214,8 +2219,9 @@ async fn classic_turn_persists_and_requires_conversation_id() {
     .expect("missing conversation");
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    // Fake upstream (recording) for the happy path.
-    let (base_url, bodies) = crate::support::spawn_recording_upstream().await;
+    // Fake upstream (recording) for the happy path. These tests mutate the
+    // process env, so the file must run with `--test-threads=1`.
+    let (base_url, bodies) = crate::support::spawn_recording_upstream("classic answer").await;
     std::env::set_var("SKIP_ENV_VAR", "0");
     std::env::set_var("LLM_API_KEY", "test-key");
     std::env::set_var("LLM_BASE_URL", &base_url);
@@ -2230,6 +2236,46 @@ async fn classic_turn_persists_and_requires_conversation_id() {
     .await
     .expect("create");
     let conversation_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // Mode mismatch → 400 (classic endpoint must not write agent threads).
+    let (_, Json(agent_conversation)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "agent"})),
+    )
+    .await
+    .expect("agent conversation");
+    let agent_conversation_id = Uuid::parse_str(agent_conversation["id"].as_str().unwrap()).unwrap();
+    let (status, _) = api::routes::ai::workspace_ai_assistant(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "say hi",
+            "prompt": "hi",
+            "conversation_id": agent_conversation_id,
+        })),
+    )
+    .await
+    .expect("mode mismatch");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Foreign user → 404.
+    let other = scratch.add_actor(&pool, 20).await;
+    let (status, _) = api::routes::ai::workspace_ai_assistant(
+        State(st.clone()),
+        AuthUser(other),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "say hi",
+            "prompt": "hi",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("foreign conversation");
+    assert_eq!(status, StatusCode::NOT_FOUND);
 
     let (status, Json(body)) = api::routes::ai::workspace_ai_assistant(
         State(st.clone()),
@@ -2247,8 +2293,22 @@ async fn classic_turn_persists_and_requires_conversation_id() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["response"], json!("classic answer"));
     assert_eq!(body["conversation"]["mode"], json!("classic"));
+    assert_eq!(body["conversation"]["title"], json!("hello classic"));
     assert_eq!(body["user_message"]["content"], json!("hello classic"));
     assert_eq!(body["assistant_message"]["content"], json!("classic answer"));
+
+    // DB rows persisted exactly once per side.
+    let stored: Vec<(String, String)> = sqlx::query_as(
+        "SELECT role, content FROM ai_messages WHERE conversation_id = $1 \
+         ORDER BY created_at, id",
+    )
+    .bind(conversation_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0], ("user".to_string(), "hello classic".to_string()));
+    assert_eq!(stored[1], ("assistant".to_string(), "classic answer".to_string()));
 
     let sent = bodies.lock().unwrap().clone();
     let content = sent[0]["messages"][0]["content"].as_str().unwrap();
@@ -2329,7 +2389,11 @@ async fn classic_turn_prunes_messages_beyond_two_hundred() {
     .fetch_optional(&pool)
     .await
     .unwrap();
-    assert_ne!(oldest.as_deref(), Some("seed-0"));
+    assert_eq!(
+        oldest.as_deref(),
+        Some("seed-7"),
+        "205 seeds + 2 new rows pruned to 200 removes seed-0..seed-6"
+    );
     let newest: Option<String> = sqlx::query_scalar(
         "SELECT content FROM ai_messages WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1",
     )
@@ -2533,10 +2597,15 @@ Ganti isi `workspace_ai_assistant`.
     let model_prompt = history_prompt(context, &history, prompt);
     let title = title_from(prompt);
     // Insert the user message on a pooled connection, then release it before
-    // the LLM call so the pool is not held.
+    // the LLM call so the pool is not held. A conversation that vanished since
+    // the load still answers 404, not 500.
     let mut conn = st.pool.acquire().await?;
     let user_message =
-        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+        match insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await {
+            Ok(message) => message,
+            Err(error) if conversation_gone(&error) => return Ok(missing()),
+            Err(error) => return Err(error.into()),
+        };
     drop(conn);
     match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, &model_prompt).await {
         Ok(text) => {
@@ -3966,6 +4035,7 @@ git commit -m "feat(web): add in-sidebar conversation history panel"
 
 - Modify: `docs/superpowers/specs/2026-09-24-galileo-chat-history-design.md`
 - Modify: `apps/api-rs/scripts/smoke.sh` (komentar)
+- Modify: `parity-inventory.json` (entri `/ai-assistant/` + `/ai-agent/`: `conversation_id` kini wajib dan respons menambah `conversation`/`user_message`/`assistant_message`; catat endpoint `/ai-conversations/` baru)
 
 - [ ] **Step 1: Sinkronkan spec dengan implementasi**
 
