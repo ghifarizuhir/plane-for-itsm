@@ -1,5 +1,9 @@
-//! DB-backed tests for the schedule tick handler. Gated on DATABASE_URL and
-//! REDIS_URL (defaults target the local compose stack).
+//! DB-backed tests for the schedule tick handler.
+//!
+//! Requires Postgres (DATABASE_URL, default `postgres://plane:plane@localhost:5432/plane`)
+//! and Redis (REDIS_URL, default `redis://127.0.0.1:6379`) — the local compose
+//! stack. A live worker may race the pushed job once deployed, and the shared
+//! database is mutated by other tests, so run with `--test-threads=1`.
 
 use chrono::Utc;
 use sqlx::PgPool;
@@ -77,7 +81,12 @@ async fn tick_claims_due_schedules_and_queues_runs() {
         &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
     )
     .await;
-    let pushed = ai_schedule::tick(&pool, &mut redis).await.expect("tick");
+    let first = ai_schedule::tick(&pool, &mut redis)
+        .await
+        .expect("first tick");
+    let second = ai_schedule::tick(&pool, &mut redis)
+        .await
+        .expect("second tick");
 
     let next: chrono::DateTime<Utc> =
         sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
@@ -89,15 +98,29 @@ async fn tick_claims_due_schedules_and_queues_runs() {
         next > Utc::now(),
         "next_run_at must advance into the future"
     );
-    assert_eq!(pushed.len(), 1, "one run queued");
-    let (status, trigger): (String, String) =
-        sqlx::query_as("SELECT status, trigger FROM ai_schedule_runs WHERE id = $1")
-            .bind(pushed[0])
-            .fetch_one(&pool)
+
+    let runs: Vec<(Uuid, String, String)> =
+        sqlx::query_as("SELECT id, status, trigger FROM ai_schedule_runs WHERE schedule_id = $1")
+            .bind(schedule_id)
+            .fetch_all(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "queued");
-    assert_eq!(trigger, "scheduled");
+    assert_eq!(
+        runs.len(),
+        1,
+        "exactly one run for this schedule across two ticks"
+    );
+    assert_eq!(runs[0].2, "scheduled");
+    assert!(first.contains(&runs[0].0), "first tick queued the run");
+    assert!(
+        !second.contains(&runs[0].0),
+        "second tick must not re-claim"
+    );
+    assert!(
+        matches!(runs[0].1.as_str(), "queued" | "running" | "success"),
+        "unexpected run status {}",
+        runs[0].1
+    );
 
     // cleanup
     sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
@@ -106,11 +129,6 @@ async fn tick_claims_due_schedules_and_queues_runs() {
         .await
         .unwrap();
     sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
-        .bind(workspace_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("DELETE FROM workspace_members WHERE workspace_id = $1")
         .bind(workspace_id)
         .execute(&pool)
         .await
