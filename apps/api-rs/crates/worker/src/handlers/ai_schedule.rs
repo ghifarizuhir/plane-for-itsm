@@ -156,28 +156,41 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
     let config = ai::resolve_llm_config(pool).await;
     if config.api_key.trim().is_empty() {
         finish_failed(pool, run.id, "AI is not configured for this instance").await?;
+        prune_runs(pool, run.schedule_id).await?;
         return Ok(());
     }
 
     let trace = ai::agent::new_trace();
     let handle = ai::tools::workspace_tools(pool.clone(), run.workspace_id, trace.clone());
-    let result = ai::agent::run_agent(
-        &config.base_url,
-        &config.api_key,
-        &config.model,
-        handle,
-        None,
-        &run.prompt,
+    let started = std::time::Instant::now();
+    let result = tokio::time::timeout(
+        ai::agent::AGENT_TIMEOUT,
+        ai::agent::run_agent(
+            &config.base_url,
+            &config.api_key,
+            &config.model,
+            handle,
+            None,
+            &run.prompt,
+        ),
     )
     .await;
+    let result = match result {
+        Ok(result) => result,
+        Err(_) => {
+            finish_failed(pool, run.id, "run exceeded the 180 second agent timeout").await?;
+            prune_runs(pool, run.schedule_id).await?;
+            return Ok(());
+        }
+    };
 
     match result {
         Ok(text) => {
             let calls = trace.lock().map(|c| c.clone()).unwrap_or_default();
             let tool_calls: Option<Value> = serde_json::to_value(&calls).ok();
-            sqlx::query(
+            let updated = sqlx::query(
                 "UPDATE ai_schedule_runs SET status = 'success', response = $2, response_html = $3, \
-                 tool_calls = $4, finished_at = now() WHERE id = $1",
+                 tool_calls = $4, finished_at = now() WHERE id = $1 AND status = 'running'",
             )
             .bind(run.id)
             .bind(&text)
@@ -185,6 +198,20 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
             .bind(tool_calls)
             .execute(pool)
             .await?;
+            if updated.rows_affected() == 0 {
+                tracing::warn!(
+                    run_id=%run.id,
+                    "ai.schedule.run: run no longer running, success not recorded"
+                );
+            } else {
+                tracing::info!(
+                    run_id=%run.id,
+                    schedule_id=%run.schedule_id,
+                    workspace_id=%run.workspace_id,
+                    duration_ms=%started.elapsed().as_millis(),
+                    "ai.schedule.run finished"
+                );
+            }
         }
         Err(error) => {
             let message = match error {
@@ -195,11 +222,21 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
         }
     }
 
+    prune_runs(pool, run.schedule_id).await?;
+    Ok(())
+}
+
+/// Keep the newest 20 terminal runs per schedule; queued/running runs are
+/// never pruned.
+pub async fn prune_runs(pool: &PgPool, schedule_id: Uuid) -> anyhow::Result<()> {
     sqlx::query(
-        "DELETE FROM ai_schedule_runs WHERE schedule_id = $1 AND id NOT IN ( \
-         SELECT id FROM ai_schedule_runs WHERE schedule_id = $1 ORDER BY created_at DESC LIMIT 20)",
+        "DELETE FROM ai_schedule_runs WHERE schedule_id = $1 \
+         AND status NOT IN ('queued','running') \
+         AND id NOT IN ( \
+           SELECT id FROM ai_schedule_runs WHERE schedule_id = $1 \
+           ORDER BY created_at DESC, id DESC LIMIT 20)",
     )
-    .bind(run.schedule_id)
+    .bind(schedule_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -207,12 +244,19 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
 
 async fn finish_failed(pool: &PgPool, run_id: Uuid, message: &str) -> anyhow::Result<()> {
     let truncated: String = message.chars().take(500).collect();
-    sqlx::query(
-        "UPDATE ai_schedule_runs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1",
+    let updated = sqlx::query(
+        "UPDATE ai_schedule_runs SET status = 'failed', error = $2, finished_at = now() \
+         WHERE id = $1 AND status = 'running'",
     )
     .bind(run_id)
     .bind(truncated)
     .execute(pool)
     .await?;
+    if updated.rows_affected() == 0 {
+        tracing::warn!(
+            run_id=%run_id,
+            "ai.schedule.run: run no longer running, failure not recorded"
+        );
+    }
     Ok(())
 }

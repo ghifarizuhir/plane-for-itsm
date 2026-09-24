@@ -226,3 +226,82 @@ async fn run_marks_failed_when_llm_is_not_configured() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn prune_keeps_newest_twenty_terminal_runs() {
+    let pool = pool().await;
+    let slug = format!("aisp-{}", Uuid::new_v4().simple());
+    let workspace_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let schedule_id = Uuid::new_v4();
+    insert_user(&pool, user_id, &slug).await;
+    sqlx::query(
+        "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, background_color) \
+         VALUES ($1, 'AI Prune', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+    )
+    .bind(workspace_id).bind(&slug).bind(user_id).execute(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, frequency, time_of_day, \
+         timezone, enabled, next_run_at, proposal_key, created_at, updated_at) \
+         VALUES ($1, $2, $3, 'Daily', 'Summarize', 'daily', '09:00', 'UTC', true, now(), $4, now(), now())",
+    )
+    .bind(schedule_id).bind(workspace_id).bind(user_id).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+
+    // 22 terminal runs, oldest first, plus one queued run that must survive.
+    for index in 0..22 {
+        sqlx::query(
+            "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at, finished_at) \
+             VALUES ($1, $2, $3, 'success', 'scheduled', 'Summarize', now() - make_interval(secs => $4), now())",
+        )
+        .bind(Uuid::new_v4()).bind(schedule_id).bind(workspace_id).bind(1000 - index)
+        .execute(&pool).await.unwrap();
+    }
+    let queued_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at) \
+         VALUES ($1, $2, $3, 'queued', 'scheduled', 'Summarize', now() - interval '1 day')",
+    )
+    .bind(queued_id).bind(schedule_id).bind(workspace_id).execute(&pool).await.unwrap();
+
+    ai_schedule::prune_runs(&pool, schedule_id)
+        .await
+        .expect("prune");
+
+    let terminal: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai_schedule_runs WHERE schedule_id = $1 AND status = 'success'",
+    )
+    .bind(schedule_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(terminal, 20, "newest 20 terminal runs retained");
+    let queued_survived: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM ai_schedule_runs WHERE id = $1)")
+            .bind(queued_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(queued_survived, "queued runs are never pruned");
+
+    // cleanup
+    sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
