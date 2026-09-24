@@ -283,7 +283,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -497,11 +497,111 @@ async fn creating_more_than_fifty_conversations_prunes_the_oldest() {
     .expect("list");
     let conversations = list["conversations"].as_array().unwrap();
     assert_eq!(conversations.len(), 50);
-    // Newest (empty title) stays; the very oldest is gone.
+    // Newest (empty title) stays.
     assert_eq!(conversations[0]["title"], json!(""));
-    assert!(conversations
-        .iter()
-        .all(|row| row["title"] != json!("old-0")));
+
+    // Assert the DB itself, not just the LIMIT-50 list: the prune must have
+    // deleted the two oldest rows.
+    let stored: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1 AND created_by_id = $2",
+    )
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, 50);
+    let oldest: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE workspace_id = $1 AND title = 'old-0'",
+    )
+    .bind(scratch.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(oldest, 0);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn pruning_is_scoped_to_the_owner() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let other = scratch.add_actor(&pool, 20).await;
+
+    // 51 conversations for the owner + 1 for the other member.
+    for index in 0..51 {
+        sqlx::query(
+            "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at)              VALUES ($1, $2, $3, 'classic', $4, now() - make_interval(secs => $5), now() - make_interval(secs => $5))",
+        )
+        .bind(Uuid::new_v4())
+        .bind(scratch.workspace_id)
+        .bind(scratch.user_id)
+        .bind(format!("mine-{index}"))
+        .bind(5000 - index)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at)          VALUES ($1, $2, $3, 'classic', 'theirs', now() - interval '10 seconds', now() - interval '10 seconds')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(scratch.workspace_id)
+    .bind(other)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, _) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic"})),
+    )
+    .await
+    .expect("create");
+    assert_eq!(status, StatusCode::CREATED);
+
+    let mine: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE created_by_id = $1",
+    )
+    .bind(scratch.user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let theirs: i64 = sqlx::query_scalar(
+        "SELECT count(*)::int8 FROM ai_conversations WHERE created_by_id = $1",
+    )
+    .bind(other)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mine, 50);
+    assert_eq!(theirs, 1, "another member's conversations are untouched");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn create_trims_and_truncates_the_optional_title() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    let long_title = format!("  {}  ", "x".repeat(150));
+    let (status, Json(created)) = ai_conversations::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({"mode": "classic", "title": long_title})),
+    )
+    .await
+    .expect("create");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["title"].as_str().unwrap().chars().count(), 120);
+    assert!(!created["title"].as_str().unwrap().starts_with(' '));
 
     scratch.purge(&pool).await;
 }
@@ -573,8 +673,6 @@ pub struct CreateConversationBody {
 #[derive(sqlx::FromRow)]
 pub(crate) struct ConversationRow {
     pub id: Uuid,
-    pub workspace_id: Uuid,
-    pub created_by_id: Uuid,
     pub mode: String,
     pub title: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -633,7 +731,7 @@ pub(crate) async fn load_owned_conversation(
     user_id: Uuid,
 ) -> Result<Option<ConversationRow>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT c.id, c.workspace_id, c.created_by_id, c.mode, c.title, c.created_at, c.updated_at \
+        "SELECT c.id, c.mode, c.title, c.created_at, c.updated_at \
          FROM ai_conversations c \
          JOIN workspaces w ON w.id = c.workspace_id AND w.slug = $1 AND w.deleted_at IS NULL \
          WHERE c.id = $2 AND c.created_by_id = $3",
@@ -664,9 +762,11 @@ pub(crate) async fn recent_messages(
     Ok(rows)
 }
 
-/// Insert one message and return the stored row.
+/// Insert one message and return the stored row. Takes a connection so the
+/// caller can run it inside a transaction (`&mut *tx`) or on a pooled
+/// connection (`&mut conn`).
 pub(crate) async fn insert_message(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     conversation_id: Uuid,
     role: &str,
     content: &str,
@@ -684,27 +784,28 @@ pub(crate) async fn insert_message(
     .bind(content)
     .bind(content_html)
     .bind(metadata)
-    .fetch_one(pool)
+    .fetch_one(conn)
     .await
 }
 
 /// Close one chat turn: fill the auto-title when empty, bump `updated_at`,
-/// and prune messages beyond the per-conversation cap — all in one tx.
+/// and prune messages beyond the per-conversation cap. Runs on the caller's
+/// connection/transaction — the success path wraps this together with the
+/// assistant `insert_message` in one transaction.
 pub(crate) async fn finish_turn(
-    pool: &PgPool,
+    conn: &mut sqlx::PgConnection,
     conversation_id: Uuid,
     title: &str,
 ) -> Result<ConversationRow, sqlx::Error> {
-    let mut tx = pool.begin().await?;
     let row: ConversationRow = sqlx::query_as(
         "UPDATE ai_conversations SET \
          title = CASE WHEN title = '' THEN $2 ELSE title END, updated_at = now() \
          WHERE id = $1 \
-         RETURNING id, workspace_id, created_by_id, mode, title, created_at, updated_at",
+         RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(conversation_id)
     .bind(title)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
     sqlx::query(
         "DELETE FROM ai_messages WHERE id IN ( \
@@ -713,9 +814,8 @@ pub(crate) async fn finish_turn(
     )
     .bind(conversation_id)
     .bind(MAX_MESSAGES_PER_CONVERSATION)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
-    tx.commit().await?;
     Ok(row)
 }
 
@@ -746,7 +846,7 @@ pub async fn list(
         return Ok((StatusCode::OK, Json(json!({"conversations": []}))));
     };
     let rows: Vec<ConversationRow> = sqlx::query_as(
-        "SELECT id, workspace_id, created_by_id, mode, title, created_at, updated_at \
+        "SELECT id, mode, title, created_at, updated_at \
          FROM ai_conversations WHERE workspace_id = $1 AND created_by_id = $2 \
          ORDER BY updated_at DESC, id DESC LIMIT $3",
     )
@@ -803,7 +903,7 @@ pub async fn create(
     let row: ConversationRow = sqlx::query_as(
         "INSERT INTO ai_conversations (id, workspace_id, created_by_id, mode, title, created_at, updated_at) \
          VALUES ($1, $2, $3, $4, $5, now(), now()) \
-         RETURNING id, workspace_id, created_by_id, mode, title, created_at, updated_at",
+         RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(Uuid::new_v4())
     .bind(workspace_id)
@@ -853,7 +953,7 @@ Catatan: `detail`, `patch`, `destroy`, `messages`, `patch_message` ditambahkan d
 - [ ] **Step 5: Jalankan test, pastikan lulus**
 
 Run (di `apps/api-rs`): `cargo test -p api --test ai_conversations_test -- --test-threads=1`
-Expected: `3 passed`.
+Expected: `5 passed` (integration tests; +1 unit test in `-p api --lib ai_conversations`).
 
 - [ ] **Step 6: Format + commit**
 
@@ -1089,7 +1189,7 @@ pub async fn patch(
     }
     let row: ConversationRow = sqlx::query_as(
         "UPDATE ai_conversations SET title = $2, updated_at = now() WHERE id = $1 \
-         RETURNING id, workspace_id, created_by_id, mode, title, created_at, updated_at",
+         RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(conversation_id)
     .bind(title)
@@ -1136,7 +1236,7 @@ pub async fn destroy(
 - [ ] **Step 5: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
-Expected: `5 passed`.
+Expected: `7 passed`.
 
 - [ ] **Step 6: Format + commit**
 
@@ -1415,7 +1515,7 @@ Pastikan `patch` ada di import `axum::routing` yang sudah dipakai `main.rs` (sud
 - [ ] **Step 5: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
-Expected: `6 passed`.
+Expected: `8 passed`.
 
 - [ ] **Step 6: Format + commit**
 
@@ -1745,8 +1845,12 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
         .collect();
     let model_prompt = history_prompt(context, &history, prompt);
     let title = title_from(prompt);
+    // Insert the user message on a pooled connection, then release it before
+    // the (up to 180s) LLM call so the pool is not held.
+    let mut conn = st.pool.acquire().await?;
     let user_message =
-        insert_message(&st.pool, conversation_id, "user", prompt, None, &json!({})).await?;
+        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+    drop(conn);
     let trace = new_trace();
     let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
     let agent_result = tokio::time::timeout(
@@ -1783,8 +1887,10 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
                 metadata["schedule_decision"] = json!("pending");
             }
+            // Assistant message + prune + updated_at in ONE transaction.
+            let mut tx = st.pool.begin().await?;
             let assistant_message = insert_message(
-                &st.pool,
+                &mut *tx,
                 conversation_id,
                 "assistant",
                 &text,
@@ -1792,7 +1898,8 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 &metadata,
             )
             .await?;
-            let conversation = finish_turn(&st.pool, conversation_id, &title).await?;
+            let conversation = finish_turn(&mut *tx, conversation_id, &title).await?;
+            tx.commit().await?;
             Ok((
                 StatusCode::OK,
                 Json(chat_success_body(
@@ -1810,16 +1917,19 @@ Ganti isi `workspace_ai_agent` mulai dari validasi prompt.
                 LlmError::RateLimited => format!("Rate limit exceeded for {}", host_of(&cfg.base_url)),
                 LlmError::Upstream => "An internal error has occurred.".to_string(),
             };
-            let _ = insert_message(
-                &st.pool,
-                conversation_id,
-                "assistant",
-                &message,
-                None,
-                &json!({ "is_error": true }),
-            )
-            .await;
-            let _ = finish_turn(&st.pool, conversation_id, &title).await;
+            if let Ok(mut tx) = st.pool.begin().await {
+                let _ = insert_message(
+                    &mut *tx,
+                    conversation_id,
+                    "assistant",
+                    &message,
+                    None,
+                    &json!({ "is_error": true }),
+                )
+                .await;
+                let _ = finish_turn(&mut *tx, conversation_id, &title).await;
+                let _ = tx.commit().await;
+            }
             match error {
                 LlmError::RateLimited => Ok((
                     StatusCode::TOO_MANY_REQUESTS,
@@ -2218,13 +2328,19 @@ Ganti isi `workspace_ai_assistant`.
         .collect();
     let model_prompt = history_prompt(context, &history, prompt);
     let title = title_from(prompt);
+    // Insert the user message on a pooled connection, then release it before
+    // the LLM call so the pool is not held.
+    let mut conn = st.pool.acquire().await?;
     let user_message =
-        insert_message(&st.pool, conversation_id, "user", prompt, None, &json!({})).await?;
+        insert_message(&mut conn, conversation_id, "user", prompt, None, &json!({})).await?;
+    drop(conn);
     match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, task, &model_prompt).await {
         Ok(text) => {
             let html = response_html(&text);
+            // Assistant message + prune + updated_at in ONE transaction.
+            let mut tx = st.pool.begin().await?;
             let assistant_message = insert_message(
-                &st.pool,
+                &mut *tx,
                 conversation_id,
                 "assistant",
                 &text,
@@ -2232,7 +2348,8 @@ Ganti isi `workspace_ai_assistant`.
                 &json!({ "is_error": false }),
             )
             .await?;
-            let conversation = finish_turn(&st.pool, conversation_id, &title).await?;
+            let conversation = finish_turn(&mut *tx, conversation_id, &title).await?;
+            tx.commit().await?;
             Ok((
                 StatusCode::OK,
                 Json(chat_success_body(
@@ -2250,16 +2367,19 @@ Ganti isi `workspace_ai_assistant`.
                 LlmError::RateLimited => format!("Rate limit exceeded for {}", host_of(&cfg.base_url)),
                 LlmError::Upstream => "An internal error has occurred.".to_string(),
             };
-            let _ = insert_message(
-                &st.pool,
-                conversation_id,
-                "assistant",
-                &message,
-                None,
-                &json!({ "is_error": true }),
-            )
-            .await;
-            let _ = finish_turn(&st.pool, conversation_id, &title).await;
+            if let Ok(mut tx) = st.pool.begin().await {
+                let _ = insert_message(
+                    &mut *tx,
+                    conversation_id,
+                    "assistant",
+                    &message,
+                    None,
+                    &json!({ "is_error": true }),
+                )
+                .await;
+                let _ = finish_turn(&mut *tx, conversation_id, &title).await;
+                let _ = tx.commit().await;
+            }
             match error {
                 LlmError::RateLimited => Ok((
                     StatusCode::TOO_MANY_REQUESTS,
