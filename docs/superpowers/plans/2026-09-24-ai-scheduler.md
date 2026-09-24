@@ -354,6 +354,11 @@ CREATE INDEX IF NOT EXISTS ai_schedule_runs_schedule_idx
     ON public.ai_schedule_runs (schedule_id, created_at DESC);
 ```
 
+Catatan review: `ai_schedules_proposal_key_idx` di atas kemudian diperbaiki oleh migrasi
+`0007_ai_schedule_review_fixes.sql` (unique per `(workspace_id, proposal_key) WHERE deleted_at IS NULL`,
+plus CHECK konsistensi preset dan index sweep `ai_schedule_runs_stuck_idx`). File 0006 tidak diubah.
+Handler create (Task 10) memakai target konflik dan fallback yang sudah diskop ke workspace.
+
 - [ ] **Step 2: Terapkan migrasi ke DB dev**
 
 Run:
