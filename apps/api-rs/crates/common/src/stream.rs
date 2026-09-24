@@ -60,6 +60,9 @@ pub async fn ack_job(mgr: &mut ConnectionManager, id: &str) -> anyhow::Result<()
 }
 
 /// Read one stream entry by id and parse its `job` + JSON `payload` fields.
+/// `Ok(None)` means no entry with that exact id exists; a found-but-malformed
+/// entry is an error. Callers must pass the full id (e.g. from `XREADGROUP`);
+/// partial millisecond ids would make `XRANGE` match the first entry of that ms.
 pub async fn job_by_id(
     mgr: &mut ConnectionManager,
     id: &str,
@@ -68,12 +71,18 @@ pub async fn job_by_id(
     let Some(entry) = reply.ids.into_iter().next() else {
         return Ok(None);
     };
+    if entry.id != id {
+        return Ok(None);
+    }
     let fields: Vec<(String, String)> = entry
         .map
         .into_iter()
         .map(|(key, value)| (key, String::from_redis_value(&value).unwrap_or_default()))
         .collect();
-    Ok(parse_entry(&fields))
+    match parse_entry(&fields) {
+        Some(parsed) => Ok(Some(parsed)),
+        None => anyhow::bail!("malformed stream entry {id}"),
+    }
 }
 
 /// Pure parser for a stream entry's fields.

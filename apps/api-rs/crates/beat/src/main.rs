@@ -21,17 +21,16 @@ async fn main() {
     {
         let mut r = redis.clone();
         sched
-            .add(tokio_cron_scheduler::Job::new_async("0 */5 * * * *", move |_, _| {
-                let mut rr = r.clone();
-                Box::pin(async move {
-                    let _ = common::stream::push_job(
-                        &mut rr,
-                        "email.notification",
-                        json!({}),
-                    )
-                    .await;
+            .add(
+                tokio_cron_scheduler::Job::new_async("0 */5 * * * *", move |_, _| {
+                    let mut rr = r.clone();
+                    Box::pin(async move {
+                        let _ = common::stream::push_job(&mut rr, "email.notification", json!({}))
+                            .await;
+                    })
                 })
-            }).unwrap())
+                .unwrap(),
+            )
             .await
             .unwrap();
     }
@@ -39,12 +38,16 @@ async fn main() {
     {
         let mut r = redis.clone();
         sched
-            .add(tokio_cron_scheduler::Job::new_async("0 0 0 * * *", move |_, _| {
-                let mut rr = r.clone();
-                Box::pin(async move {
-                    let _ = common::stream::push_job(&mut rr, "cleanup.hard_delete", json!({})).await;
+            .add(
+                tokio_cron_scheduler::Job::new_async("0 0 0 * * *", move |_, _| {
+                    let mut rr = r.clone();
+                    Box::pin(async move {
+                        let _ = common::stream::push_job(&mut rr, "cleanup.hard_delete", json!({}))
+                            .await;
+                    })
                 })
-            }).unwrap())
+                .unwrap(),
+            )
             .await
             .unwrap();
     }
@@ -52,12 +55,15 @@ async fn main() {
     {
         let mut r = redis.clone();
         sched
-            .add(tokio_cron_scheduler::Job::new_async("0 0 1 * * *", move |_, _| {
-                let mut rr = r.clone();
-                Box::pin(async move {
-                    let _ = common::stream::push_job(&mut rr, "issue.archive", json!({})).await;
+            .add(
+                tokio_cron_scheduler::Job::new_async("0 0 1 * * *", move |_, _| {
+                    let mut rr = r.clone();
+                    Box::pin(async move {
+                        let _ = common::stream::push_job(&mut rr, "issue.archive", json!({})).await;
+                    })
                 })
-            }).unwrap())
+                .unwrap(),
+            )
             .await
             .unwrap();
     }
@@ -76,13 +82,34 @@ async fn main() {
         let mut r = redis.clone();
         let job = job.to_string();
         sched
-            .add(tokio_cron_scheduler::Job::new_async(cron, move |_, _| {
-                let mut rr = r.clone();
-                let j = job.clone();
-                Box::pin(async move {
-                    let _ = common::stream::push_job(&mut rr, &j, json!({})).await;
+            .add(
+                tokio_cron_scheduler::Job::new_async(cron, move |_, _| {
+                    let mut rr = r.clone();
+                    let j = job.clone();
+                    Box::pin(async move {
+                        let _ = common::stream::push_job(&mut rr, &j, json!({})).await;
+                    })
                 })
-            }).unwrap())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    // Every minute: AI schedule tick — the worker claims due DB schedules.
+    {
+        let mut r = redis.clone();
+        sched
+            .add(
+                tokio_cron_scheduler::Job::new_async("0 * * * * *", move |_, _| {
+                    let mut rr = r.clone();
+                    Box::pin(async move {
+                        let _ =
+                            common::stream::push_job(&mut rr, "ai.schedule.tick", json!({})).await;
+                    })
+                })
+                .unwrap(),
+            )
             .await
             .unwrap();
     }
