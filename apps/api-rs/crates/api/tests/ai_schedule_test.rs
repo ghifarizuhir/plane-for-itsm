@@ -7,7 +7,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -30,6 +30,17 @@ async fn state(pool: &PgPool) -> AppState {
         redis: redis::Client::open("redis://127.0.0.1:6379").expect("redis client"),
         config: AppConfig::from_env(),
     }
+}
+
+fn create_body(proposal_key: Uuid) -> Value {
+    json!({
+        "name": "Daily report",
+        "prompt": "Summarize overdue work items",
+        "frequency": "daily",
+        "time": "09:00",
+        "timezone": "UTC",
+        "proposal_key": proposal_key,
+    })
 }
 
 struct Scratch {
@@ -231,6 +242,271 @@ async fn create_rejects_guests_and_bad_payloads() {
     .expect("bad payload handled");
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(err["error"].as_str().unwrap().contains("frequency"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn detail_returns_schedule_with_runs() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let member = scratch.add_actor(&pool, 15).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, response, response_html, created_at, finished_at) \
+         VALUES ($1, $2, $3, 'success', 'scheduled', 'Summarize overdue work items', 'done', 'done', now(), now())",
+    )
+    .bind(Uuid::new_v4())
+    .bind(schedule_id)
+    .bind(scratch.workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // members can read detail
+    let (status, Json(detail)) = ai_schedule::detail(
+        State(state.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("detail ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["id"], json!(schedule_id));
+    assert_eq!(detail["frequency"], json!("daily"));
+    let runs = detail["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0]["status"], json!("success"));
+    assert_eq!(runs[0]["trigger"], json!("scheduled"));
+    assert_eq!(runs[0]["response_html"], json!("done"));
+
+    // unknown id -> 404
+    let (status, _) = ai_schedule::detail(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), Uuid::new_v4())),
+    )
+    .await
+    .expect("missing handled");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_delete_and_run_now_follow_creator_or_admin() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let member = scratch.add_actor(&pool, 15).await;
+    let admin = scratch.add_actor(&pool, 20).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // non-creator member cannot pause
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": false})),
+    )
+    .await
+    .expect("patch handled");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // creator can pause, then resume recomputes next_run_at
+    let (status, Json(patched)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": false})),
+    )
+    .await
+    .expect("pause ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(patched["enabled"], json!(false));
+
+    let (status, Json(resumed)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": true})),
+    )
+    .await
+    .expect("resume ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(resumed["enabled"], json!(true));
+    let next: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        next > chrono::Utc::now(),
+        "resume must recompute a future next_run_at"
+    );
+
+    // workspace admin (not creator) can also manage
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(admin),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": false})),
+    )
+    .await
+    .expect("admin patch ok");
+    assert_eq!(status, StatusCode::OK);
+
+    // non-creator member cannot delete
+    let (status, _) = ai_schedule::destroy(
+        State(state.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("delete handled");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // run now as creator queues a manual run
+    let (status, Json(run)) = ai_schedule::run_now(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("run now ok");
+    assert_eq!(status, StatusCode::CREATED);
+    let run_id = Uuid::parse_str(run["run_id"].as_str().unwrap()).unwrap();
+    let (status_db, trigger): (String, String) =
+        sqlx::query_as("SELECT status, trigger FROM ai_schedule_runs WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status_db, "queued");
+    assert_eq!(trigger, "manual");
+
+    // creator deletes -> soft delete; detail and list no longer show it
+    let (status, _) = ai_schedule::destroy(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("delete ok");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = ai_schedule::detail(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("detail after delete");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn soft_delete_frees_proposal_key_and_list_isolates_workspaces() {
+    let pool = pool().await;
+    let first = Scratch::new(&pool).await;
+    let second = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let key = Uuid::new_v4();
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(first.user_id),
+        Path(first.slug.clone()),
+        Json(create_body(key)),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // same key in another workspace is a distinct schedule
+    let (status, Json(other)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(second.user_id),
+        Path(second.slug.clone()),
+        Json(create_body(key)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::CREATED);
+    assert_ne!(other["id"], created["id"]);
+
+    // soft delete the first, then reuse its key in the same workspace
+    let (status, _) = ai_schedule::destroy(
+        State(state.clone()),
+        AuthUser(first.user_id),
+        Path((first.slug.clone(), schedule_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, Json(recreated)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(first.user_id),
+        Path(first.slug.clone()),
+        Json(create_body(key)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::CREATED);
+    assert_ne!(recreated["id"], created["id"]);
+
+    // list isolation
+    let (_, Json(list)) = ai_schedule::list(
+        State(state.clone()),
+        AuthUser(first.user_id),
+        Path(first.slug.clone()),
+    )
+    .await
+    .unwrap();
+    let rows = list.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], recreated["id"]);
+
+    first.purge(&pool).await;
+    second.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn list_rejects_guests() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let guest = scratch.add_actor(&pool, 5).await;
+
+    let (status, _) = ai_schedule::list(
+        State(state.clone()),
+        AuthUser(guest),
+        Path(scratch.slug.clone()),
+    )
+    .await
+    .expect("guest handled");
+    assert_eq!(status, StatusCode::FORBIDDEN);
 
     scratch.purge(&pool).await;
 }

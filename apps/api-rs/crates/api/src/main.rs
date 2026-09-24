@@ -1775,6 +1775,19 @@ async fn main() {
             "/api/workspaces/:slug/ai-schedules/",
             get(routes::ai_schedule::list).post(routes::ai_schedule::create),
         )
+        // Rust-only: detail (last 20 runs) + pause/resume + soft delete.
+        // Reads ADMIN/MEMBER; mutations creator-or-workspace-admin.
+        .route(
+            "/api/workspaces/:slug/ai-schedules/:schedule_id/",
+            get(routes::ai_schedule::detail)
+                .patch(routes::ai_schedule::patch)
+                .delete(routes::ai_schedule::destroy),
+        )
+        // Rust-only: queue a manual run (async via `ai.schedule.run`).
+        .route(
+            "/api/workspaces/:slug/ai-schedules/:schedule_id/run/",
+            post(routes::ai_schedule::run_now),
+        )
         // Parity with `UserLastProjectWithWorkspaceEndpoint`
         // (`views/workspace/user.py:68-95`): GET 200 (null shape when no
         // workspace). GET-only. IsAuthenticated only.

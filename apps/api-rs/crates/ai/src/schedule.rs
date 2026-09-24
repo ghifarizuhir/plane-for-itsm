@@ -97,6 +97,16 @@ impl ScheduleProposal {
         timezone
             .parse::<Tz>()
             .map_err(|_| format!("unknown IANA timezone: {timezone}"))?;
+        let day_of_week = if frequency == "weekly" {
+            day_of_week
+        } else {
+            None
+        };
+        let day_of_month = if frequency == "monthly" {
+            day_of_month
+        } else {
+            None
+        };
         Ok(Self {
             name,
             prompt,
@@ -270,6 +280,16 @@ mod tests {
         assert_eq!(p.timezone, "UTC");
         let h = ScheduleProposal::new("n", "p", "hourly", None, None, None, None).unwrap();
         assert_eq!(h.time, "00:00");
+    }
+
+    #[test]
+    fn irrelevant_day_fields_are_normalized() {
+        let daily = proposal("daily", "09:00", Some(3), Some(5), "UTC");
+        assert_eq!(daily.day_of_week, None);
+        assert_eq!(daily.day_of_month, None);
+        let monthly = proposal("monthly", "09:00", None, Some(15), "UTC");
+        assert_eq!(monthly.day_of_week, None);
+        assert_eq!(monthly.day_of_month, Some(15));
     }
 
     #[test]
