@@ -1767,6 +1767,14 @@ async fn main() {
             "/api/workspaces/:slug/ai-agent/",
             post(routes::ai_agent::workspace_ai_agent),
         )
+        // Rust-only (no Django counterpart; consumed by the web app's Galileo
+        // sidebar): Galileo chat history. List/create conversations; owner-only
+        // reads and mutations (404 for foreign rows). Gate WORKSPACE
+        // ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/ai-conversations/",
+            get(routes::ai_conversations::list).post(routes::ai_conversations::create),
+        )
         // Rust-only (no Django counterpart; consumed by the web app's
         // Scheduler page): GET list + POST confirm-created proposal.
         // Idempotent per `(workspace_id, proposal_key)`; gate WORKSPACE
