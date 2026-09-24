@@ -15,7 +15,7 @@ use crate::llm::LlmError;
 use crate::tools::CREATE_SCHEDULE_NAME;
 
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct ToolCallTrace {
     pub name: String,
     pub arguments: Value,

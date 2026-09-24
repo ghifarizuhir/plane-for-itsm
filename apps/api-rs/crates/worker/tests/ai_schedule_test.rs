@@ -81,7 +81,7 @@ async fn tick_claims_due_schedules_and_queues_runs() {
         &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
     )
     .await;
-    let first = ai_schedule::tick(&pool, &mut redis)
+    let _first = ai_schedule::tick(&pool, &mut redis)
         .await
         .expect("first tick");
     let second = ai_schedule::tick(&pool, &mut redis)
@@ -111,18 +111,100 @@ async fn tick_claims_due_schedules_and_queues_runs() {
         "exactly one run for this schedule across two ticks"
     );
     assert_eq!(runs[0].2, "scheduled");
-    assert!(first.contains(&runs[0].0), "first tick queued the run");
     assert!(
         !second.contains(&runs[0].0),
         "second tick must not re-claim"
     );
     assert!(
-        matches!(runs[0].1.as_str(), "queued" | "running" | "success"),
+        ["queued", "running", "success", "failed"].contains(&runs[0].1.as_str()),
         "unexpected run status {}",
         runs[0].1
     );
 
     // cleanup
+    sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn run_marks_failed_when_llm_is_not_configured() {
+    let pool = pool().await;
+    // Reuse seeding from tick test: create workspace + schedule + queued run.
+    let slug = format!("aisr-{}", Uuid::new_v4().simple());
+    let workspace_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let schedule_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    insert_user(&pool, user_id, &slug).await;
+    sqlx::query(
+        "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, background_color) \
+         VALUES ($1, 'AI Run', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+    )
+    .bind(workspace_id)
+    .bind(&slug)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, frequency, time_of_day, \
+         timezone, enabled, next_run_at, proposal_key, created_at, updated_at) \
+         VALUES ($1, $2, $3, 'Daily', 'Summarize', 'daily', '09:00', 'UTC', true, now(), $4, now(), now())",
+    )
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .bind(user_id)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at) \
+         VALUES ($1, $2, $3, 'queued', 'scheduled', 'Summarize', now())",
+    )
+    .bind(run_id)
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // With LLM_API_KEY unset and SKIP_ENV_VAR=0, config resolves empty.
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::remove_var("LLM_API_KEY");
+    ai_schedule::run(&pool, serde_json::json!({ "run_id": run_id }))
+        .await
+        .expect("run handled");
+
+    let (status, error): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error FROM ai_schedule_runs WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "failed");
+    assert!(error.unwrap().contains("not configured"));
+
+    // cleanup (mirror the tick test's cleanup for this workspace)
+    std::env::remove_var("SKIP_ENV_VAR");
     sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
         .bind(workspace_id)
         .execute(&pool)

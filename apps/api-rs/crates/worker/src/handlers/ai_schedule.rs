@@ -121,8 +121,98 @@ pub async fn tick(pool: &PgPool, redis: &mut ConnectionManager) -> anyhow::Resul
     Ok(queued)
 }
 
-/// Execute a queued run (implemented in Task 8).
+#[derive(sqlx::FromRow)]
+struct RunRow {
+    id: Uuid,
+    schedule_id: Uuid,
+    workspace_id: Uuid,
+    prompt: String,
+}
+
+/// Execute one queued run; records success/failure and prunes old runs.
 pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
-    let _ = (pool, payload);
+    let Some(run_id) = payload
+        .get("run_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+    else {
+        tracing::warn!(payload=%payload, "ai.schedule.run: missing run_id");
+        return Ok(());
+    };
+
+    let claimed: Option<RunRow> = sqlx::query_as(
+        "UPDATE ai_schedule_runs SET status = 'running', started_at = now() \
+         WHERE id = $1 AND status = 'queued' \
+         RETURNING id, schedule_id, workspace_id, prompt",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(run) = claimed else {
+        tracing::warn!(run_id=%run_id, "ai.schedule.run: run already claimed or swept");
+        return Ok(());
+    };
+
+    let config = ai::resolve_llm_config(pool).await;
+    if config.api_key.trim().is_empty() {
+        finish_failed(pool, run.id, "AI is not configured for this instance").await?;
+        return Ok(());
+    }
+
+    let trace = ai::agent::new_trace();
+    let handle = ai::tools::workspace_tools(pool.clone(), run.workspace_id, trace.clone());
+    let result = ai::agent::run_agent(
+        &config.base_url,
+        &config.api_key,
+        &config.model,
+        handle,
+        None,
+        &run.prompt,
+    )
+    .await;
+
+    match result {
+        Ok(text) => {
+            let calls = trace.lock().map(|c| c.clone()).unwrap_or_default();
+            let tool_calls: Option<Value> = serde_json::to_value(&calls).ok();
+            sqlx::query(
+                "UPDATE ai_schedule_runs SET status = 'success', response = $2, response_html = $3, \
+                 tool_calls = $4, finished_at = now() WHERE id = $1",
+            )
+            .bind(run.id)
+            .bind(&text)
+            .bind(ai::response_html(&text))
+            .bind(tool_calls)
+            .execute(pool)
+            .await?;
+        }
+        Err(error) => {
+            let message = match error {
+                ai::LlmError::RateLimited => "rate limited by the model provider".to_string(),
+                ai::LlmError::Upstream => "model provider request failed".to_string(),
+            };
+            finish_failed(pool, run.id, &message).await?;
+        }
+    }
+
+    sqlx::query(
+        "DELETE FROM ai_schedule_runs WHERE schedule_id = $1 AND id NOT IN ( \
+         SELECT id FROM ai_schedule_runs WHERE schedule_id = $1 ORDER BY created_at DESC LIMIT 20)",
+    )
+    .bind(run.schedule_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn finish_failed(pool: &PgPool, run_id: Uuid, message: &str) -> anyhow::Result<()> {
+    let truncated: String = message.chars().take(500).collect();
+    sqlx::query(
+        "UPDATE ai_schedule_runs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1",
+    )
+    .bind(run_id)
+    .bind(truncated)
+    .execute(pool)
+    .await?;
     Ok(())
 }
