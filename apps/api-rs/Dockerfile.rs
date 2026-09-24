@@ -17,25 +17,27 @@ RUN rustup show
 FROM chef AS planner
 # HANYA manifest: recipe.json hanya berubah bila dependensi berubah.
 COPY Cargo.toml Cargo.lock* rust-toolchain.toml ./
+COPY crates/ai/Cargo.toml crates/ai/Cargo.toml
 COPY crates/api/Cargo.toml crates/api/Cargo.toml
 COPY crates/beat/Cargo.toml crates/beat/Cargo.toml
 COPY crates/common/Cargo.toml crates/common/Cargo.toml
 COPY crates/worker/Cargo.toml crates/worker/Cargo.toml
 # cargo metadata butuh minimal satu file target per member (isi diabaikan).
-RUN mkdir -p crates/api/src crates/beat/src crates/common/src crates/worker/src \
- && touch crates/api/src/lib.rs crates/api/src/main.rs crates/beat/src/main.rs crates/common/src/lib.rs crates/worker/src/main.rs
+RUN mkdir -p crates/ai/src crates/api/src crates/beat/src crates/common/src crates/worker/src \
+ && touch crates/ai/src/lib.rs crates/api/src/lib.rs crates/api/src/main.rs crates/beat/src/main.rs crates/common/src/lib.rs crates/worker/src/main.rs
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS chef-cook
 COPY --from=planner /build/recipe.json recipe.json
 # HANYA manifest (bukan source): perubahan .rs tidak boleh invalidate layer ini.
 COPY Cargo.toml Cargo.lock* rust-toolchain.toml ./
+COPY crates/ai/Cargo.toml crates/ai/Cargo.toml
 COPY crates/api/Cargo.toml crates/api/Cargo.toml
 COPY crates/beat/Cargo.toml crates/beat/Cargo.toml
 COPY crates/common/Cargo.toml crates/common/Cargo.toml
 COPY crates/worker/Cargo.toml crates/worker/Cargo.toml
-RUN mkdir -p crates/api/src crates/beat/src crates/common/src crates/worker/src \
- && touch crates/api/src/lib.rs crates/api/src/main.rs crates/beat/src/main.rs crates/common/src/lib.rs crates/worker/src/main.rs
+RUN mkdir -p crates/ai/src crates/api/src crates/beat/src crates/common/src crates/worker/src \
+ && touch crates/ai/src/lib.rs crates/api/src/lib.rs crates/api/src/main.rs crates/beat/src/main.rs crates/common/src/lib.rs crates/worker/src/main.rs
 # Knob LTO/codegen (lihat builder di bawah): HARUS identik di cook & build
 # agar fingerprint deps sama. Default = prod, identik dengan
 # [profile.release] di Cargo.toml.
