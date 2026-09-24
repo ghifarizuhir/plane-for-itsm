@@ -299,6 +299,11 @@ mod tool_roundtrip {
         (format!("http://{addr}/v1"), state)
     }
 
+    /// URL only — for DB-backed tests that don't need the upstream handle.
+    pub(super) async fn schedule_roundtrip_url() -> String {
+        spawn_schedule_roundtrip().await.0
+    }
+
     #[tokio::test]
     async fn tool_call_roundtrip_records_trace_and_returns_final_text() {
         let (base, upstream) = spawn_roundtrip().await;
@@ -647,22 +652,26 @@ async fn agent_turn_persists_both_messages_and_builds_context_from_history() {
     assert_eq!(body["assistant_message"]["content"], json!("agent answer"));
 
     // The upstream saw the composed prompt: context + newest 8 + question.
+    // Rig sends the agent preamble as messages[0], so find the user message
+    // by role instead of by index.
     let sent = bodies.lock().unwrap().clone();
-    // Rig sends the agent preamble as `messages[0]` (system), so locate the
-    // composed prompt by role like `task_folds_into_upstream_user_message`.
     let content = sent[0]["messages"]
         .as_array()
         .unwrap()
         .iter()
         .find(|message| message["role"] == json!("user"))
-        .expect("upstream call must carry the composed user message")["content"]
-        .as_str()
+        .and_then(|message| message["content"].as_str())
         .unwrap();
     assert!(content.contains("Work item context:"));
     assert!(content.contains("seed-2"), "oldest two of ten are dropped");
     assert!(!content.contains("seed-0"));
     assert!(!content.contains("seed-1"));
     assert!(content.contains("User's new question: how many items?"));
+    assert_eq!(
+        content.matches("how many items?").count(),
+        1,
+        "history is loaded before the user insert, so the question appears once"
+    );
 
     // DB: user + assistant rows persisted, conversation title filled.
     let stored: Vec<(String, String)> = sqlx::query_as(
@@ -762,6 +771,53 @@ async fn agent_failure_stores_an_error_message() {
     assert_eq!(stored[0].0, "user");
     assert_eq!(stored[1].0, "assistant");
     assert_eq!(stored[1].1["is_error"], json!(true));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn agent_proposal_metadata_is_persisted_and_returned() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    // Reuse the existing tool-call fake from `mod tool_roundtrip` (add the
+    // `schedule_roundtrip_url()` helper there — see below).
+    let base_url = tool_roundtrip::schedule_roundtrip_url().await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "/schedule daily report",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["pending_action"]["kind"], json!("create_schedule"));
+
+    let metadata = &body["assistant_message"]["metadata"];
+    assert_eq!(metadata["is_error"], json!(false));
+    assert_eq!(metadata["schedule_decision"], json!("pending"));
+    assert_eq!(metadata["schedule_proposal"]["frequency"], json!("daily"));
+    assert!(metadata["schedule_proposal_key"].as_str().is_some());
+
+    let stored: Value = sqlx::query_scalar(
+        "SELECT metadata FROM ai_messages WHERE conversation_id = $1 AND role = 'assistant'",
+    )
+    .bind(conversation_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored["schedule_decision"], json!("pending"));
+    assert_eq!(stored["schedule_proposal"]["name"], json!("Daily"));
 
     scratch.purge(&pool).await;
 }

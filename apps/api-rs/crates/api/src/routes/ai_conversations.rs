@@ -181,6 +181,17 @@ pub(crate) async fn finish_turn(
     Ok(row)
 }
 
+/// True when a write failed because the conversation disappeared mid-turn
+/// (row deleted between load and write, or an insert hit the FK): callers map
+/// this to a 404 instead of a 500.
+pub(crate) fn conversation_gone(error: &sqlx::Error) -> bool {
+    match error {
+        sqlx::Error::RowNotFound => true,
+        sqlx::Error::Database(db) => db.code().as_deref() == Some("23503"),
+        _ => false,
+    }
+}
+
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,

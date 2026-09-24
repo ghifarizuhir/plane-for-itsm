@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use crate::routes::ai::task_from_body;
 use crate::routes::ai_conversations::{
-    finish_turn, insert_message, load_owned_conversation, message_json, recent_messages,
-    title_from, ConversationRow, MessageRow,
+    conversation_gone, finish_turn, insert_message, load_owned_conversation, message_json,
+    recent_messages, title_from, ConversationRow, MessageRow,
 };
 use crate::routes::module::guard_am;
 use crate::routes::project::{deny, missing, ws_role};
@@ -182,19 +182,29 @@ pub async fn workspace_ai_agent(
                 metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
                 metadata["schedule_decision"] = json!("pending");
             }
-            // Assistant message + prune + updated_at in ONE transaction.
-            let mut tx = st.pool.begin().await?;
-            let assistant_message = insert_message(
-                &mut tx,
-                conversation_id,
-                "assistant",
-                &text,
-                Some(&crate::routes::ai::response_html(&text)),
-                &metadata,
-            )
-            .await?;
-            let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
-            tx.commit().await?;
+            // Assistant message + prune + updated_at in ONE transaction. A
+            // conversation deleted mid-turn (row gone / FK violation) → 404.
+            let turn = async {
+                let mut tx = st.pool.begin().await?;
+                let assistant_message = insert_message(
+                    &mut tx,
+                    conversation_id,
+                    "assistant",
+                    &text,
+                    Some(&crate::routes::ai::response_html(&text)),
+                    &metadata,
+                )
+                .await?;
+                let conversation = finish_turn(&mut tx, conversation_id, &title).await?;
+                tx.commit().await?;
+                Ok::<_, sqlx::Error>((assistant_message, conversation))
+            }
+            .await;
+            let (assistant_message, conversation) = match turn {
+                Ok(ok) => ok,
+                Err(error) if conversation_gone(&error) => return Ok(missing()),
+                Err(error) => return Err(error.into()),
+            };
             Ok((
                 StatusCode::OK,
                 Json(chat_success_body(
@@ -215,7 +225,7 @@ pub async fn workspace_ai_agent(
                 LlmError::Upstream => "An internal error has occurred.".to_string(),
             };
             if let Ok(mut tx) = st.pool.begin().await {
-                let _ = insert_message(
+                if let Err(error) = insert_message(
                     &mut tx,
                     conversation_id,
                     "assistant",
@@ -223,8 +233,20 @@ pub async fn workspace_ai_agent(
                     None,
                     &json!({ "is_error": true }),
                 )
-                .await;
-                let _ = finish_turn(&mut tx, conversation_id, &title).await;
+                .await
+                {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to persist error turn"
+                    );
+                } else if let Err(error) = finish_turn(&mut tx, conversation_id, &title).await {
+                    tracing::warn!(
+                        error=%error,
+                        conversation_id=%conversation_id,
+                        "failed to finish error turn"
+                    );
+                }
                 let _ = tx.commit().await;
             }
             match error {
