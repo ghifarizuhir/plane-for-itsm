@@ -45,12 +45,14 @@ pub fn record(trace: &ToolTrace, name: &str, arguments: &impl serde::Serialize) 
 pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
 Answer factual questions about projects and work items by calling the provided \
 tools; never invent project identifiers, work item identifiers, counts, or \
-states. All tools are read-only and scoped to the user's current workspace. If \
-a tool returns no results, say so. Answer concisely in the user's language. \
-When the user's message starts with /schedule they want a recurring scheduled \
-task: gather anything unclear first (what to run and how often), then call \
-create_schedule once with the final details. The schedule is only created after \
-the user confirms the proposal card, so never say it is already created.";
+states. All tools are scoped to the user's current workspace and read-only, \
+except create_schedule, which only proposes a schedule and never saves \
+anything. If a tool returns no results, say so. Answer concisely in the \
+user's language. When the user's message starts with /schedule they want a \
+recurring scheduled task: gather anything unclear first (what to run and how \
+often), then call create_schedule once with the final details. The schedule is \
+only created after the user confirms the proposal card, so never say it is \
+already created.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;

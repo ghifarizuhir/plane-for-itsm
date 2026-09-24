@@ -309,19 +309,19 @@ pub const CREATE_SCHEDULE_NAME: &str = "create_schedule";
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CreateScheduleArgs {
-    /// Short human-readable schedule name, e.g. "Daily overdue report".
+    /// Short human-readable schedule name (1-120 characters), e.g. "Daily overdue report".
     pub name: String,
-    /// The exact instruction the agent will run on every fire.
+    /// The exact instruction the agent will run on every fire (1-2000 characters).
     pub prompt: String,
     /// One of: hourly, daily, weekly, monthly.
     pub frequency: String,
-    /// Time of day "HH:MM" (24h). For hourly only the minutes are used. Defaults to 09:00.
+    /// Time of day "HH:MM" (24h). For hourly only the minutes are used. Defaults to 09:00 (00:00 for hourly).
     pub time: Option<String>,
     /// For weekly schedules: 1 = Monday … 7 = Sunday.
     pub day_of_week: Option<i16>,
     /// For monthly schedules: day of month, 1-31. Short months clamp to the last day.
     pub day_of_month: Option<i16>,
-    /// IANA timezone, e.g. "Asia/Jakarta". Defaults to UTC when unknown.
+    /// IANA timezone, e.g. "Asia/Jakarta". Defaults to UTC when omitted; unknown zones are rejected.
     pub timezone: Option<String>,
 }
 
@@ -352,7 +352,7 @@ impl Tool for CreateSchedule {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Propose a recurring scheduled task for this workspace. Call this only after you know what to run and how often; the user must confirm the proposal in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
+        "Propose a recurring scheduled task for this workspace. Only call this when the user explicitly asks for a recurring or scheduled task (for example a message starting with /schedule), and only after you know what to run and how often. The user must confirm the proposal in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -366,7 +366,7 @@ impl Tool for CreateSchedule {
     ) -> Result<Self::Output, Self::Error> {
         let proposal = proposal_from_args(args)?;
         record(&self.trace, Self::NAME, &proposal);
-        Ok(serde_json::to_string(&proposal).unwrap_or_default())
+        Ok(serde_json::to_string(&proposal).expect("ScheduleProposal serializes"))
     }
 }
 
@@ -633,10 +633,76 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(out.contains("\"frequency\":\"daily\""));
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("proposal json");
+        assert_eq!(parsed["frequency"], json!("daily"));
+        assert_eq!(parsed["time"], json!("08:00"));
         let recorded = trace.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].name, "create_schedule");
         assert_eq!(recorded[0].arguments["time"], json!("08:00"));
+    }
+
+    #[test]
+    fn create_schedule_proposal_hourly_default_and_rejections() {
+        let hourly = proposal_from_args(CreateScheduleArgs {
+            name: "Hourly".to_string(),
+            prompt: "Check".to_string(),
+            frequency: "hourly".to_string(),
+            time: None,
+            day_of_week: None,
+            day_of_month: None,
+            timezone: None,
+        })
+        .expect("valid args");
+        assert_eq!(hourly.time, "00:00");
+        assert_eq!(hourly.timezone, "UTC");
+
+        let bad_tz = proposal_from_args(CreateScheduleArgs {
+            name: "x".to_string(),
+            prompt: "y".to_string(),
+            frequency: "daily".to_string(),
+            time: None,
+            day_of_week: None,
+            day_of_month: None,
+            timezone: Some("Mars/Olympus".to_string()),
+        });
+        assert!(bad_tz.is_err());
+
+        let monthly_without_day = proposal_from_args(CreateScheduleArgs {
+            name: "x".to_string(),
+            prompt: "y".to_string(),
+            frequency: "monthly".to_string(),
+            time: None,
+            day_of_week: None,
+            day_of_month: None,
+            timezone: None,
+        });
+        assert!(monthly_without_day.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejected_create_schedule_is_not_traced() {
+        let trace = crate::agent::new_trace();
+        let tool = CreateSchedule {
+            trace: trace.clone(),
+        };
+        let error = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CreateScheduleArgs {
+                    name: "x".to_string(),
+                    prompt: "y".to_string(),
+                    frequency: "sometimes".to_string(),
+                    time: None,
+                    day_of_week: None,
+                    day_of_month: None,
+                    timezone: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("frequency"));
+        assert!(trace.lock().unwrap().is_empty());
+        assert!(crate::agent::pending_action(&trace).is_none());
     }
 }
