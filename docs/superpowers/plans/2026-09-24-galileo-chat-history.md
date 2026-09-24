@@ -4118,7 +4118,7 @@ git commit -m "feat(web): send chat turns through stored conversations"
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { formatDistanceToNow } from "date-fns";
-import { CheckIcon, CloseIcon, DeleteIcon, PencilIcon } from "@makeplane/propel/icons";
+import { CheckDoneOutline, CloseOutline, DeleteOutline, EditOutline } from "@makeplane/propel/icons";
 import { cn } from "@plane/utils";
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 
@@ -4149,7 +4149,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
           aria-label="Close history"
           className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
         >
-          <CloseIcon className="size-4" />
+          <CloseOutline className="size-4" />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -4183,7 +4183,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                   }}
                   className="text-secondary hover:text-primary"
                 >
-                  <CheckIcon className="size-3.5" />
+                  <CheckDoneOutline className="size-3.5" />
                 </button>
                 <button
                   type="button"
@@ -4191,7 +4191,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                   onClick={() => setRenamingId(null)}
                   className="text-secondary hover:text-primary"
                 >
-                  <CloseIcon className="size-3.5" />
+                  <CloseOutline className="size-3.5" />
                 </button>
               </>
             ) : (
@@ -4231,7 +4231,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                       onClick={() => setConfirmingDeleteId(null)}
                       className="text-secondary hover:text-primary"
                     >
-                      <CloseIcon className="size-3.5" />
+                      <CloseOutline className="size-3.5" />
                     </button>
                   </>
                 ) : (
@@ -4245,7 +4245,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                       }}
                       className="text-secondary hover:text-primary"
                     >
-                      <PencilIcon className="size-3.5" />
+                      <EditOutline className="size-3.5" />
                     </button>
                     <button
                       type="button"
@@ -4253,7 +4253,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                       onClick={() => setConfirmingDeleteId(conversation.id)}
                       className="text-secondary hover:text-danger-primary"
                     >
-                      <DeleteIcon className="size-3.5" />
+                      <DeleteOutline className="size-3.5" />
                     </button>
                   </span>
                 )}
@@ -4267,13 +4267,9 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
 });
 ```
 
-Catatan: sebelum menulis, verifikasi nama ikon yang tersedia:
-
-```bash
-rg -o "CheckIcon|CloseIcon|DeleteIcon|PencilIcon|HistoryOutline|NewChatOutline" node_modules/.pnpm/@makeplane+propel@0.3.0*/node_modules/@makeplane/propel/dist/icons/index.d.ts | sort -u
-```
-
-Jika ada nama yang tidak tersedia, pakai ikon terdekat dari daftar itu (mis. `CheckOutline`, `CloseOutline`, `DeleteOutline`, `PencilOutline`).
+Catatan: ikon yang tersedia di `@makeplane/propel` (sudah diverifikasi):
+`CheckDoneOutline`, `CloseOutline`, `DeleteOutline`, `EditOutline`,
+`HistoryOutline`, `NewChatOutline`.
 
 - [ ] **Step 2: Wire di `root.tsx`**
 
