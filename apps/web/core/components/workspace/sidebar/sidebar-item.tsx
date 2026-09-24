@@ -54,6 +54,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
     "your_work",
     "stickies",
     "drafts",
+    "ai_scheduler",
     ...(additionalStaticItems || []),
   ];
   const slug = workspaceSlug?.toString() || "";

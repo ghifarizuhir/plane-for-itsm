@@ -114,7 +114,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
 
   if (!config?.has_llm_configured) return null;
 
-  const trimmedQuestion = question.trimStart();
+  const trimmedQuestion = question.trimStart().toLowerCase();
   const showScheduleHint = trimmedQuestion.startsWith("/") && !trimmedQuestion.startsWith("/schedule");
 
   return (
