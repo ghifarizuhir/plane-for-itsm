@@ -41,8 +41,8 @@ export interface IAIAssistantStore {
   loadConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<void>;
   newChat: () => void;
-  renameConversation: (conversationId: string, title: string) => Promise<void>;
-  deleteConversation: (conversationId: string) => Promise<void>;
+  renameConversation: (conversationId: string, title: string) => Promise<boolean>;
+  deleteConversation: (conversationId: string) => Promise<boolean>;
   sendMessage: (question: string) => Promise<void>;
   retryLast: () => Promise<void>;
   confirmScheduleProposal: (messageId: string) => Promise<void>;
@@ -241,28 +241,38 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.clearActiveId();
   };
 
-  renameConversation = async (conversationId: string, title: string) => {
+  renameConversation = async (conversationId: string, title: string): Promise<boolean> => {
     const slug = this.workspaceSlug;
     const trimmed = title.trim();
-    if (!slug || !trimmed) return;
-    const updated = await this.conversationsService.update(slug, conversationId, trimmed);
-    runInAction(() => {
-      this.touchList();
-      this.conversations = this.conversations.map((candidate) =>
-        candidate.id === conversationId ? updated : candidate
-      );
-    });
+    if (!slug || !trimmed) return false;
+    try {
+      const updated = await this.conversationsService.update(slug, conversationId, trimmed);
+      runInAction(() => {
+        this.touchList();
+        this.conversations = this.conversations.map((candidate) =>
+          candidate.id === conversationId ? updated : candidate
+        );
+      });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
-  deleteConversation = async (conversationId: string) => {
+  deleteConversation = async (conversationId: string): Promise<boolean> => {
     const slug = this.workspaceSlug;
-    if (!slug) return;
-    await this.conversationsService.remove(slug, conversationId);
+    if (!slug) return false;
+    try {
+      await this.conversationsService.remove(slug, conversationId);
+    } catch (error: any) {
+      if (error?.status !== 404) return false;
+    }
     runInAction(() => {
       this.touchList();
       this.conversations = this.conversations.filter((candidate) => candidate.id !== conversationId);
     });
     if (this.activeConversationId === conversationId) this.newChat();
+    return true;
   };
 
   setHistoryOpen = (open: boolean) => {

@@ -150,6 +150,38 @@ describe("conversation history", () => {
     expect(store.activeConversationId).toBeUndefined();
   });
 
+  it("keeps the previous title when rename fails", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    services.conversations.update.mockRejectedValueOnce(Object.assign(new Error("x"), { status: 500 }));
+    await expect(store.renameConversation("c-classic", "Renamed")).resolves.toBe(false);
+    expect(store.conversations.find((c) => c.id === "c-classic")?.title).toBe("conv c-classic");
+  });
+
+  it("removes the row locally when delete returns 404", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    services.conversations.remove.mockRejectedValueOnce(Object.assign(new Error("x"), { status: 404 }));
+    await expect(store.deleteConversation("c-classic")).resolves.toBe(true);
+    expect(store.conversations.find((c) => c.id === "c-classic")).toBeUndefined();
+    expect(store.activeConversationId).toBeUndefined();
+  });
+
+  it("keeps the row when delete fails with a non-404 error", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    services.conversations.remove.mockRejectedValueOnce(Object.assign(new Error("x"), { status: 500 }));
+    await expect(store.deleteConversation("c-classic")).resolves.toBe(false);
+    expect(store.conversations.find((c) => c.id === "c-classic")).toBeDefined();
+    expect(store.activeConversationId).toBe("c-classic");
+  });
+
   it("a 404 while opening a conversation resets to a new chat", async () => {
     const services = makeServices({
       conversations: {

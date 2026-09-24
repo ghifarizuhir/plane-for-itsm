@@ -113,7 +113,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // keep newest message visible
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages.length, isGenerating]);
+  }, [messages.length, isGenerating, historyOpen]);
 
   const handleSend = (preset?: string) => {
     const value = (preset ?? question).trim();
@@ -178,7 +178,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                 <button
                   type="button"
                   onClick={() => setHistoryOpen(!historyOpen)}
-                  aria-pressed={historyOpen}
+                  aria-label="Chat history"
+                  aria-expanded={historyOpen}
                   className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
                 >
                   <HistoryOutline className="size-4" />
@@ -187,7 +188,10 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               <Tooltip label="New conversation" side="bottom">
                 <button
                   type="button"
-                  onClick={newChat}
+                  onClick={() => {
+                    setHistoryOpen(false);
+                    newChat();
+                  }}
                   className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
                 >
                   <NewChatOutline className="size-4" />
