@@ -2984,7 +2984,7 @@
           "fe_pages": [],
           "batch_task": "Galileo chat history",
           "out_scope": false,
-          "notes": "Rust-only (tanpa padanan Django). POST 200 {response,response_html,tool_calls,pending_action,conversation,user_message,assistant_message} dari Rig tool-calling agent atas tool read-only workspace. Body {task?,prompt,context,conversation_id}: conversation_id WAJIB -> 400 {error:'conversation_id is required'}; percakapan asing/hilang -> 404; mode mismatch -> 400; config/task -> 400. Prompt model dibangun server dari 8 pesan history tersimpan + context (blok work item/timezone); user+assistant dipersist (assistant is_error saat agen gagal); upstream 429/500 passthrough. Gate WORKSPACE ADMIN/MEMBER."
+          "notes": "Rust-only (tanpa padanan Django). POST 200 {response,response_html,tool_calls,pending_action,conversation,user_message,assistant_message} dari Rig tool-calling agent atas tool read-only workspace. Body {task?,prompt,context,conversation_id}: conversation_id WAJIB -> 400 {error:'conversation_id is required'}; percakapan asing/hilang -> 404; mode mismatch -> 400; prompt/config -> 400. Prompt model dibangun server dari 8 pesan history tersimpan + context (blok work item/timezone); user+assistant dipersist (assistant is_error saat agen gagal); upstream 429/500 passthrough. Gate WORKSPACE ADMIN/MEMBER."
         }
       ]
     },
@@ -3052,7 +3052,7 @@
           "fe_pages": [],
           "batch_task": "Galileo chat history",
           "out_scope": false,
-          "notes": "GET 200 {messages:[{id,conversation_id,role,content,content_html,metadata,created_at}]} urut created_at,id naik. Owner-only -> 404."
+          "notes": "GET 200 {messages:[{id,role,content,content_html,metadata,created_at}]} urut created_at,id naik. Owner-only -> 404."
         },
         {
           "methods": ["PATCH"],
