@@ -2729,8 +2729,15 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
     let scratch = Scratch::new(&pool).await;
     let st = state(&pool).await;
 
-    // Missing task → 400.
-    let (status, _) = api::routes::ai::workspace_ai_complete(
+    let (base_url, bodies) = crate::support::spawn_recording_upstream("editor answer").await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+
+    // Missing task → 400 from the task guard (env di-set dulu supaya tidak
+    // jatuh ke cabang "AI is not configured"). Tidak ada panggilan upstream.
+    let (status, Json(error)) = api::routes::ai::workspace_ai_complete(
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path(scratch.slug.clone()),
@@ -2739,12 +2746,8 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
     .await
     .expect("missing task");
     assert_eq!(status, StatusCode::BAD_REQUEST);
-
-    let (base_url, bodies) = crate::support::spawn_recording_upstream("editor answer").await;
-    std::env::set_var("SKIP_ENV_VAR", "0");
-    std::env::set_var("LLM_API_KEY", "test-key");
-    std::env::set_var("LLM_BASE_URL", &base_url);
-    std::env::set_var("LLM_MODEL", "test-model");
+    assert_eq!(error["error"], json!("Task is required"));
+    assert!(bodies.lock().unwrap().is_empty());
 
     let (status, Json(body)) = api::routes::ai::workspace_ai_complete(
         State(st.clone()),
@@ -2761,12 +2764,12 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
     assert_eq!(body["response"], json!("editor answer"));
     assert_eq!(body["response_html"], json!("editor answer"));
 
-    // Old parity: task and prompt are folded, nothing else is added.
+    // Old parity: task and prompt are folded, nothing else is added, and the
+    // upstream is called exactly once.
     let sent = bodies.lock().unwrap().clone();
+    assert_eq!(sent.len(), 1);
     let content = sent[0]["messages"][0]["content"].as_str().unwrap();
-    assert!(content.contains("Generate a proper description for this work item."));
-    assert!(content.contains("Pump fails"));
-    assert!(!content.contains("Conversation so far:"));
+    assert_eq!(content, "Generate a proper description for this work item.\nPump fails");
 
     // Stateless: nothing is stored.
     let conversations: i64 = sqlx::query_scalar(
@@ -2808,8 +2811,9 @@ Tambahkan di `apps/api-rs/crates/api/src/routes/ai.rs` (setelah `workspace_ai_as
 
 ```rust
 /// `POST /api/workspaces/:slug/ai-complete/` — one-shot stateless completion
-/// for editor surfaces (no conversation, nothing persisted). Gate and error
-/// shapes mirror `/ai-assistant/`.
+/// for editor surfaces (no conversation, nothing persisted). Error shapes
+/// mirror `/ai-assistant/`; gate order follows the old stateless endpoint
+/// (permission → config → task).
 pub async fn workspace_ai_complete(
     State(st): State<AppState>,
     auth: AuthUser,
