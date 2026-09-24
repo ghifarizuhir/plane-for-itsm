@@ -305,3 +305,75 @@ async fn prune_keeps_newest_twenty_terminal_runs() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn job_by_id_rejects_partial_ids_and_malformed_entries() {
+    let mut redis = common::redis::create_redis(
+        &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+    )
+    .await;
+    // Add a well-formed and a malformed entry with explicit ids.
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let good_id = format!("{ms}-1");
+    let bad_id = format!("{ms}-2");
+    let _: String = redis::cmd("XADD")
+        .arg(common::stream::STREAM)
+        .arg(&good_id)
+        .arg("job")
+        .arg("ai.schedule.tick")
+        .arg("payload")
+        .arg("{}")
+        .query_async(&mut redis)
+        .await
+        .unwrap();
+    let _: String = redis::cmd("XADD")
+        .arg(common::stream::STREAM)
+        .arg(&bad_id)
+        .arg("job")
+        .arg("ai.schedule.tick")
+        .query_async(&mut redis)
+        .await
+        .unwrap();
+
+    // Partial millisecond id must not resolve to the first entry of that ms.
+    let partial = common::stream::job_by_id(&mut redis, &ms.to_string())
+        .await
+        .unwrap();
+    assert!(partial.is_none(), "partial ids must not resolve");
+
+    // Exact id resolves.
+    let exact = common::stream::job_by_id(&mut redis, &good_id)
+        .await
+        .unwrap();
+    assert!(exact.is_some());
+
+    // Found-but-malformed is an error, not a silent skip.
+    let malformed = common::stream::job_by_id(&mut redis, &bad_id).await;
+    assert!(malformed.is_err(), "malformed entries must error");
+}
+
+#[tokio::test]
+async fn handle_by_id_skips_disabled_jobs() {
+    let pool = pool().await;
+    let mut redis = common::redis::create_redis(
+        &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+    )
+    .await;
+    let id: String = redis::cmd("XADD")
+        .arg(common::stream::STREAM)
+        .arg("*")
+        .arg("job")
+        .arg("email.notification")
+        .arg("payload")
+        .arg("{}")
+        .query_async(&mut redis)
+        .await
+        .unwrap();
+
+    worker::handlers::handle_by_id(&pool, &mut redis, &id)
+        .await
+        .expect("disabled jobs are skipped without error");
+}

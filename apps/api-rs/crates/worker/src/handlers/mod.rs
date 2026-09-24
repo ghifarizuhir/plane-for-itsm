@@ -70,7 +70,10 @@ pub async fn handle_by_id(
             Ok(())
         }
         "ai.schedule.run" => ai_schedule::run(pool, payload).await,
-        _ => Ok(()),
+        _ => {
+            tracing::error!(job=%job, id=%id, "enabled job has no dispatch arm");
+            Ok(())
+        }
     }
 }
 

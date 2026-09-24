@@ -28,6 +28,9 @@ async fn main() {
             if let Err(e) = handlers::handle_by_id(&pool, &mut redis, &id).await {
                 tracing::error!(id=%id, error=%e, "handle failed");
             }
+            // At-most-once by design: ack even when the handler errors, so a
+            // transient failure drops the job (no auto-retry). Stuck schedule
+            // runs are reconciled by the tick sweep instead.
             if let Err(e) = consumer::ack(&mut redis, &id).await {
                 tracing::warn!(id=%id, error=%e, "ack failed");
             }

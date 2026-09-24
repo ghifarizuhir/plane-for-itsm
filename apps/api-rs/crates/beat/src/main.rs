@@ -19,7 +19,7 @@ async fn main() {
 
     // Every 5 min email stack — mirrors plane/celery.py:47 crontab(minute="*/5")
     {
-        let mut r = redis.clone();
+        let r = redis.clone();
         sched
             .add(
                 tokio_cron_scheduler::Job::new_async("0 */5 * * * *", move |_, _| {
@@ -36,7 +36,7 @@ async fn main() {
     }
     // Daily 00:00 hard_delete — mirrors plane/celery.py:57
     {
-        let mut r = redis.clone();
+        let r = redis.clone();
         sched
             .add(
                 tokio_cron_scheduler::Job::new_async("0 0 0 * * *", move |_, _| {
@@ -53,7 +53,7 @@ async fn main() {
     }
     // 01:00 archive — mirrors plane/celery.py:61
     {
-        let mut r = redis.clone();
+        let r = redis.clone();
         sched
             .add(
                 tokio_cron_scheduler::Job::new_async("0 0 1 * * *", move |_, _| {
@@ -79,7 +79,7 @@ async fn main() {
         ("0 0 1 * * *", "export.delete_old_s3"), // 01:30 placeholder
         ("0 0 2 * * *", "file_asset.delete_unuploaded"),
     ] {
-        let mut r = redis.clone();
+        let r = redis.clone();
         let job = job.to_string();
         sched
             .add(
@@ -98,7 +98,7 @@ async fn main() {
 
     // Every minute: AI schedule tick — the worker claims due DB schedules.
     {
-        let mut r = redis.clone();
+        let r = redis.clone();
         sched
             .add(
                 tokio_cron_scheduler::Job::new_async("0 * * * * *", move |_, _| {
