@@ -1767,6 +1767,14 @@ async fn main() {
             "/api/workspaces/:slug/ai-agent/",
             post(routes::ai_agent::workspace_ai_agent),
         )
+        // Rust-only (no Django counterpart; consumed by the web app's
+        // Scheduler page): GET list + POST confirm-created proposal.
+        // Idempotent per `(workspace_id, proposal_key)`; gate WORKSPACE
+        // ADMIN/MEMBER.
+        .route(
+            "/api/workspaces/:slug/ai-schedules/",
+            get(routes::ai_schedule::list).post(routes::ai_schedule::create),
+        )
         // Parity with `UserLastProjectWithWorkspaceEndpoint`
         // (`views/workspace/user.py:68-95`): GET 200 (null shape when no
         // workspace). GET-only. IsAuthenticated only.
