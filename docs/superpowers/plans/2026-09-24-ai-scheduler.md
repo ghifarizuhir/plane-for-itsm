@@ -1865,6 +1865,18 @@ git commit -m "feat(api-rs): add AI schedule list and create endpoints"
 
 ### Task 11: Endpoint detail, pause/resume, delete, run-now
 
+Catatan polish yang dibawa dari review Task 10 (wajib dikerjakan di task ini):
+
+- Helper bersama di `ai_schedule.rs`: `load_schedule(pool, workspace_id, id) -> Option<ScheduleRow>`
+  dan `can_manage(created_by_id, user_id, ws_role) -> bool`, dipakai semua handler mutasi.
+- `list` memakai `workspace_id_for_slug` (bukan subquery inline) dan run-JSON builder yang sama
+  dengan `detail`.
+- `ScheduleProposal::new` (crates/ai) menormalkan field hari yang tidak relevan:
+  `frequency != "weekly"` → `day_of_week = None`; `frequency != "monthly"` → `day_of_month = None`
+  (tambah unit test di `schedule.rs`).
+- Test tambahan: guest `list` → 403, isolasi antar workspace, soft-delete membebaskan
+  `proposal_key`, detail tanpa run → `last_status`/runs kosong, patch/delete/run-now authz.
+
 **Files:**
 
 - Modify: `apps/api-rs/crates/api/src/routes/ai_schedule.rs`
