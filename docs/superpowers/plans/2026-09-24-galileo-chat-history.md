@@ -65,7 +65,7 @@
 
 - Create: `apps/api-rs/migrations/0008_ai_conversations.sql`
 
-- [ ] **Step 1: Tulis migrasi**
+- [x] **Step 1: Tulis migrasi**
 
 ```sql
 -- Galileo chat history: multi-session conversations for the AI assistant.
@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS ai_messages_conversation_idx
     ON public.ai_messages (conversation_id, created_at, id);
 ```
 
-- [ ] **Step 2: Terapkan ke DB dev lokal (agar test integrasi bisa jalan sebelum image dibangun)**
+- [x] **Step 2: Terapkan ke DB dev lokal (agar test integrasi bisa jalan sebelum image dibangun)**
 
 Run:
 
@@ -112,7 +112,7 @@ docker exec -i plane-db psql -U plane -d plane -v ON_ERROR_STOP=1 < apps/api-rs/
 
 Expected: `CREATE TABLE` dua kali + `CREATE INDEX` dua kali, tanpa error.
 
-- [ ] **Step 3: Verifikasi struktur**
+- [x] **Step 3: Verifikasi struktur**
 
 Run:
 
@@ -122,7 +122,7 @@ docker exec plane-db psql -U plane -d plane -c "\d ai_conversations" && docker e
 
 Expected: kolom + constraint + index sesuai (mode CHECK, role CHECK, index `ai_conversations_owner_idx`, `ai_messages_conversation_idx`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/api-rs/migrations/0008_ai_conversations.sql
@@ -138,7 +138,7 @@ git commit -m "feat(api-rs): add ai_conversations and ai_messages tables"
 - Modify: `apps/api-rs/crates/ai/src/agent.rs`
 - Test: unit test di `apps/api-rs/crates/ai/src/agent.rs` (mod `tests` bila belum ada, atau `crates/ai/tests/agent_history_test.rs`)
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Buat `apps/api-rs/crates/ai/tests/agent_history_test.rs`:
 
@@ -195,12 +195,12 @@ fn blank_context_is_omitted() {
 }
 ```
 
-- [ ] **Step 2: Jalankan test, pastikan gagal**
+- [x] **Step 2: Jalankan test, pastikan gagal**
 
 Run (di `apps/api-rs`): `cargo test -p ai --test agent_history_test`
 Expected: FAIL — `cannot find function history_prompt` / `HistoryMessage`.
 
-- [ ] **Step 3: Implementasi minimal di `crates/ai/src/agent.rs`**
+- [x] **Step 3: Implementasi minimal di `crates/ai/src/agent.rs`**
 
 Tambahkan setelah `effective_prompt`:
 
@@ -245,12 +245,12 @@ pub fn history_prompt(context: &str, history: &[HistoryMessage], question: &str)
 }
 ```
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p ai --test agent_history_test`
 Expected: `3 passed`.
 
-- [ ] **Step 5: Format + commit**
+- [x] **Step 5: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/ai/src/agent.rs apps/api-rs/crates/ai/tests/agent_history_test.rs
@@ -269,7 +269,7 @@ git commit -m "feat(ai): build model prompt from stored conversation history"
 - Modify: `apps/api-rs/crates/api/src/main.rs` (route list/create)
 - Create: `apps/api-rs/crates/api/tests/ai_conversations_test.rs`
 
-- [ ] **Step 1: Tulis test integrasi yang gagal**
+- [x] **Step 1: Tulis test integrasi yang gagal**
 
 Buat `apps/api-rs/crates/api/tests/ai_conversations_test.rs` (harness meniru `ai_schedule_test.rs`; salin helper `database_url`, `pool`, `state`, `insert_user`, dan `Scratch` dari file itu, ganti prefix slug menjadi `aich-` dan tambah `purge` untuk tabel baru):
 
@@ -626,12 +626,12 @@ async fn invalid_mode_is_rejected() {
 }
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run (di `apps/api-rs`): `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: FAIL — module `ai_conversations` belum ada.
 
-- [ ] **Step 3: Implementasi modul (bagian list + create + helper bersama)**
+- [x] **Step 3: Implementasi modul (bagian list + create + helper bersama)**
 
 Buat `apps/api-rs/crates/api/src/routes/ai_conversations.rs`:
 
@@ -938,7 +938,7 @@ pub async fn create(
 }
 ```
 
-- [ ] **Step 4: Daftarkan modul + route**
+- [x] **Step 4: Daftarkan modul + route**
 
 `apps/api-rs/crates/api/src/routes/mod.rs` — tambah setelah `pub mod ai_agent;`:
 
@@ -961,12 +961,12 @@ pub mod ai_conversations;
 
 Catatan: `detail`, `patch`, `destroy`, `messages`, `patch_message` ditambahkan di Task 4–5; untuk sekarang cukup list+create.
 
-- [ ] **Step 5: Jalankan test, pastikan lulus**
+- [x] **Step 5: Jalankan test, pastikan lulus**
 
 Run (di `apps/api-rs`): `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: `5 passed` (integration tests; +1 unit test in `-p api --lib ai_conversations`).
 
-- [ ] **Step 6: Format + commit**
+- [x] **Step 6: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai_conversations.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
@@ -984,7 +984,7 @@ git commit -m "feat(api): add conversation list and create endpoints"
 - Modify: `apps/api-rs/crates/api/src/main.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_conversations_test.rs`
 
-- [ ] **Step 1: Perluas test (tambahkan di akhir file test)**
+- [x] **Step 1: Perluas test (tambahkan di akhir file test)**
 
 ```rust
 #[tokio::test]
@@ -1181,12 +1181,12 @@ async fn deleting_a_conversation_cascades_its_messages() {
 }
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: FAIL — `ai_conversations::detail` / `patch` / `destroy` belum ada.
 
-- [ ] **Step 3: Implementasi handler**
+- [x] **Step 3: Implementasi handler**
 
 Tambahkan di `ai_conversations.rs`:
 
@@ -1273,7 +1273,7 @@ pub async fn destroy(
 }
 ```
 
-- [ ] **Step 4: Daftarkan route**
+- [x] **Step 4: Daftarkan route**
 
 `main.rs`, setelah route list/create dari Task 3:
 
@@ -1288,12 +1288,12 @@ pub async fn destroy(
         )
 ```
 
-- [ ] **Step 5: Jalankan test, pastikan lulus**
+- [x] **Step 5: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: `7 passed`.
 
-- [ ] **Step 6: Format + commit**
+- [x] **Step 6: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai_conversations.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
@@ -1311,7 +1311,7 @@ git commit -m "feat(api): add conversation detail, rename and delete"
 - Modify: `apps/api-rs/crates/api/src/main.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_conversations_test.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 ```rust
 #[tokio::test]
@@ -1490,12 +1490,12 @@ async fn messages_are_listed_oldest_first_and_metadata_patch_is_allowlisted() {
 }
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: FAIL — `ai_conversations::messages` / `patch_message` belum ada.
 
-- [ ] **Step 3: Implementasi handler**
+- [x] **Step 3: Implementasi handler**
 
 Tambahkan di `ai_conversations.rs`:
 
@@ -1605,7 +1605,7 @@ pub async fn patch_message(
 }
 ```
 
-- [ ] **Step 4: Daftarkan route**
+- [x] **Step 4: Daftarkan route**
 
 `main.rs`, setelah route detail:
 
@@ -1624,12 +1624,12 @@ pub async fn patch_message(
 
 Pastikan `patch` ada di import `axum::routing` yang sudah dipakai `main.rs` (sudah ada untuk route lain).
 
-- [ ] **Step 5: Jalankan test, pastikan lulus**
+- [x] **Step 5: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: `8 passed`.
 
-- [ ] **Step 6: Format + commit**
+- [x] **Step 6: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai_conversations.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
@@ -1646,7 +1646,7 @@ git commit -m "feat(api): add conversation messages and metadata patch"
 - Modify: `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_agent_test.rs`
 
-- [ ] **Step 1: Tulis test integrasi yang gagal**
+- [x] **Step 1: Tulis test integrasi yang gagal**
 
 Tambahkan di `apps/api-rs/crates/api/tests/ai_agent_test.rs` (file ini saat ini tanpa DB; tambahkan harness DB di bawah, meniru `ai_conversations_test.rs` — salin `database_url`, `pool`, `state`, `insert_user`, `Scratch` dengan prefix slug `aia-`; `purge` menghapus `ai_conversations` + workspace + users):
 
@@ -1957,12 +1957,12 @@ Tambahkan helper berikut di dalam `mod tool_roundtrip` yang sudah ada di `ai_age
 
 Catatan: test-test ini mengubah env LLM → wajib `--test-threads=1`; tambahkan komentar itu di header file.
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `cargo test -p api --test ai_agent_test -- --test-threads=1`
 Expected: FAIL — handler belum menerima `conversation_id` dan respons belum punya `conversation`/`user_message`/`assistant_message`.
 
-- [ ] **Step 3: Implementasi handler agent**
+- [x] **Step 3: Implementasi handler agent**
 
 Ubah `apps/api-rs/crates/api/src/routes/ai_agent/mod.rs`. Tambah import:
 
@@ -2175,12 +2175,12 @@ pub(crate) fn chat_success_body(
 
 Tambahkan `missing` ke import dari `crate::routes::project` (sekarang hanya `deny, ws_role`).
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_agent_test -- --test-threads=1`
 Expected: semua lulus (test lama `prompt_from_body_rules`, `effective_prompt_folds_task_like_django`, `success_body_*`, `record_appends_and_serializes` + 3 test baru).
 
-- [ ] **Step 5: Format + commit**
+- [x] **Step 5: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai_agent/mod.rs apps/api-rs/crates/api/tests/ai_agent_test.rs
@@ -2197,7 +2197,7 @@ git commit -m "feat(api): persist agent chat turns with server-built context"
 - Modify: `apps/api-rs/crates/api/src/routes/ai.rs`
 - Modify: `apps/api-rs/crates/api/tests/ai_conversations_test.rs` (tambah test classic) atau `apps/api-rs/crates/api/tests/ai_test.rs`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Tambahkan di `apps/api-rs/crates/api/tests/ai_conversations_test.rs` (harness sudah ada di file ini):
 
@@ -2522,12 +2522,12 @@ pub async fn spawn_recording_upstream(
 
 Pemanggil: test agent → `support::spawn_recording_upstream("agent answer")`; test classic → `support::spawn_recording_upstream("classic answer")`. Hapus salinan lokal helper di `ai_agent_test.rs` (Task 6) dan ganti pemanggilannya ke `support::…`.
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: FAIL — `workspace_ai_assistant` belum menerima `conversation_id`.
 
-- [ ] **Step 3: Implementasi handler classic**
+- [x] **Step 3: Implementasi handler classic**
 
 Ubah `apps/api-rs/crates/api/src/routes/ai.rs`. Tambah import:
 
@@ -2691,12 +2691,12 @@ Ganti isi `workspace_ai_assistant`.
 
 Catatan: `uuid::Uuid` perlu ditambah sebagai dependency `api` (sudah dipakai di crate ini — cek `Cargo.toml`; kalau sudah ada, cukup `use uuid::Uuid;`).
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1 && cargo test -p api --test ai_agent_test -- --test-threads=1 && cargo test -p api --test ai_test`
 Expected: semua lulus.
 
-- [ ] **Step 5: Format + commit**
+- [x] **Step 5: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs apps/api-rs/crates/api/tests/support/mod.rs apps/api-rs/crates/api/tests/ai_agent_test.rs
@@ -2718,7 +2718,7 @@ git commit -m "feat(api): persist classic chat turns with server-built context"
 
 **Latar:** `apps/web/core/components/issues/issue-modal/components/description-editor.tsx` ("Auto-generate description") dan `apps/web/core/components/core/modals/gpt-assistant-popover.tsx` memakai `createGptTask` satu arah tanpa konsep percakapan. Karena endpoint chat kini wajib `conversation_id`, keduanya dipindah ke endpoint stateless khusus supaya kontrak chat tetap satu jalur dan history tidak tercemar.
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Tambahkan di `apps/api-rs/crates/api/tests/ai_conversations_test.rs`:
 
@@ -2800,12 +2800,12 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
 }
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run (di `apps/api-rs`): `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: FAIL — `workspace_ai_complete` belum ada.
 
-- [ ] **Step 3: Implementasi handler**
+- [x] **Step 3: Implementasi handler**
 
 Tambahkan di `apps/api-rs/crates/api/src/routes/ai.rs` (setelah `workspace_ai_assistant`):
 
@@ -2858,7 +2858,7 @@ pub async fn workspace_ai_complete(
 }
 ```
 
-- [ ] **Step 4: Daftarkan route**
+- [x] **Step 4: Daftarkan route**
 
 `main.rs`, setelah route `ai-assistant`:
 
@@ -2871,12 +2871,12 @@ pub async fn workspace_ai_complete(
         )
 ```
 
-- [ ] **Step 5: Jalankan test, pastikan lulus**
+- [x] **Step 5: Jalankan test, pastikan lulus**
 
 Run: `cargo test -p api --test ai_conversations_test -- --test-threads=1`
 Expected: `11 passed` (10 + 1 baru).
 
-- [ ] **Step 6: Format + commit**
+- [x] **Step 6: Format + commit**
 
 ```bash
 rustfmt --edition 2021 apps/api-rs/crates/api/src/routes/ai.rs apps/api-rs/crates/api/tests/ai_conversations_test.rs
@@ -2895,7 +2895,7 @@ git commit -m "feat(api): add stateless ai-complete endpoint for editors"
 - Modify: `apps/web/core/lib/ai-context.ts`
 - Modify: `apps/web/core/lib/ai-context.test.ts`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 `apps/web/core/lib/ai-conversations.test.ts`:
 
@@ -2992,12 +2992,12 @@ describe("buildAiContext", () => {
 
 Perbarui juga import di file itu: `buildAiContext` menggantikan `buildAiPrompt`.
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `pnpm --filter=web test -- ai-conversations ai-context`
 Expected: FAIL — modul `./ai-conversations` belum ada; `buildAiContext` belum ada.
 
-- [ ] **Step 3: Implementasi**
+- [x] **Step 3: Implementasi**
 
 `apps/web/core/lib/ai-conversations.ts`:
 
@@ -3066,16 +3066,16 @@ export const buildAiContext = (context: TAiIssueContext | undefined, userTimezon
 
 Pada `TAiMessage`, tambah `createdAt?: string;`.
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `pnpm --filter=web test -- ai-conversations ai-context`
 Expected: semua lulus.
 
-- [ ] **Step 5: Typecheck (buildAiPrompt dihapus → pastikan tidak ada pemakai lain)**
+- [x] **Step 5: Typecheck (buildAiPrompt dihapus → pastikan tidak ada pemakai lain)**
 
 Run: `rg -n "buildAiPrompt" apps/web --glob '!node_modules'` → hanya boleh kosong setelah store diperbarui (Task 10). Untuk sekarang boleh masih ada pemakai di store; typecheck baru hijau setelah Task 10.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/core/lib/ai-conversations.ts apps/web/core/lib/ai-conversations.test.ts apps/web/core/lib/ai-context.ts apps/web/core/lib/ai-context.test.ts
@@ -3091,7 +3091,7 @@ git commit -m "feat(web): add conversation types and context-only prompt helper"
 - Create: `apps/web/core/services/ai-conversations.service.ts`
 - Modify: `apps/web/core/services/ai.service.ts`
 
-- [ ] **Step 1: Implementasi service percakapan**
+- [x] **Step 1: Implementasi service percakapan**
 
 `apps/web/core/services/ai-conversations.service.ts`:
 
@@ -3181,7 +3181,7 @@ export class AiConversationsService extends APIService {
 }
 ```
 
-- [ ] **Step 2: Ubah payload + tipe respons chat**
+- [x] **Step 2: Ubah payload + tipe respons chat**
 
 `apps/web/core/services/ai.service.ts`:
 
@@ -3229,13 +3229,13 @@ Ganti dua method:
   }
 ```
 
-- [ ] **Step 3: Typecheck (masih gagal di store — catat error yang tersisa hanya di store)**
+- [x] **Step 3: Typecheck (masih gagal di store — catat error yang tersisa hanya di store)**
 
 Run: `pnpm --filter=web check:types`
 Expected: error di `ai-assistant.store.ts` (payload lama) DAN dua pemanggil `createGptTask` lama
 (`gpt-assistant-popover.tsx`, `description-editor.tsx`) yang diperbaiki Task 9b; file service baru bersih.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/core/services/ai-conversations.service.ts apps/web/core/services/ai.service.ts
@@ -3256,7 +3256,7 @@ git commit -m "feat(web): add conversation service and stateful chat payload"
 
 **Latar:** dua permukaan editor memanggil `createGptTask` (chat, kini wajib `conversation_id`). Setelah Task 7b ada `/ai-complete/`; keduanya pindah ke sana supaya tidak membuat percakapan untuk task editor satu arah.
 
-- [ ] **Step 1: Tambah `completeTask` di `ai.service.ts`**
+- [x] **Step 1: Tambah `completeTask` di `ai.service.ts`**
 
 ```ts
 export type TCompleteTaskResponse = {
@@ -3277,16 +3277,16 @@ dan method (setelah `createAgentTask`):
   }
 ```
 
-- [ ] **Step 2: Ganti pemanggil di `description-editor.tsx`**
+- [x] **Step 2: Ganti pemanggil di `description-editor.tsx`**
 
 `aiService.createGptTask(workspaceSlug.toString(), { prompt: issueName, task: "Generate a proper description for this work item." })`
 → `aiService.completeTask(workspaceSlug.toString(), { ... })` (argumen sama). `res.response` / `res.response_html` tetap; `response_html` kini bertipe `string | undefined`, jadi pakai `res.response_html ?? res.response` bila TS mengeluh di `handleAiAssistance(...)`.
 
-- [ ] **Step 3: Ganti pemanggil di `gpt-assistant-popover.tsx`**
+- [x] **Step 3: Ganti pemanggil di `gpt-assistant-popover.tsx`**
 
 Semua pemanggilan `aiService.createGptTask(...)` → `aiService.completeTask(...)` dengan argumen yang sama; hapus cast `any` pada respons bila tidak lagi diperlukan. Karena `response_html` kini `string | undefined`, ubah `setResponse(res.response_html)` menjadi `setResponse(res.response_html ?? res.response)`.
 
-- [ ] **Step 4: Verifikasi**
+- [x] **Step 4: Verifikasi**
 
 ```bash
 rg -n "createGptTask" apps/web --glob '!node_modules'
@@ -3300,7 +3300,7 @@ pnpm --filter=web check:types
 
 Expected: error hanya di `core/store/ai-assistant.store*` — plus apa pun yang berasal dari `buildAiPrompt` yang sudah dihapus (Task 10–11 memperbaikinya); TIDAK ada error di dua file editor.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/services/ai.service.ts apps/web/core/components/core/modals/gpt-assistant-popover.tsx apps/web/core/components/issues/issue-modal/components/description-editor.tsx
@@ -3322,7 +3322,7 @@ git commit -m "feat(web): route editor AI generation through stateless endpoint"
 - Modify: `apps/web/core/store/ai-assistant.store.ts`
 - Modify: `apps/web/core/store/ai-assistant.store.test.ts`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 Ganti helper service di `ai-assistant.store.test.ts` (blok `makeService`/`makeSchedulesService`) dan tambahkan suite baru. Contoh lengkap helper:
 
@@ -3467,12 +3467,12 @@ describe("conversation history", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `pnpm --filter=web test -- ai-assistant.store`
 Expected: FAIL — API store baru belum ada.
 
-- [ ] **Step 3: Implementasi store (bagian state + daftar + navigasi)**
+- [x] **Step 3: Implementasi store (bagian state + daftar + navigasi)**
 
 Ubah `apps/web/core/store/ai-assistant.store.ts`:
 
@@ -3693,7 +3693,7 @@ Hapus `restore()`/`persist()`/`clearConversation()` (diganti `newChat`); hapus i
 
 `interface IAIAssistantStore` juga diperbarui: tambah `conversations`, `activeConversationId`, `conversationsLoading`, `newChat`, `openConversation`, `renameConversation`, `deleteConversation`, `loadConversations`; hapus `clearConversation`.
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `pnpm --filter=web test -- ai-assistant.store`
 Expected: semua lulus.
@@ -3706,7 +3706,7 @@ Expected: semua lulus.
 - Test mode persistence (`ai_assistant_mode_<slug>`) tetap dipertahankan.
 - Test error mapping 429/400 tetap dipertahankan, tetapi perhatikan pesan 400 kini memakai `err?.data?.error` bila ada (samakan ekspektasi).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/store/ai-assistant.store.ts apps/web/core/store/ai-assistant.store.test.ts
@@ -3722,7 +3722,7 @@ git commit -m "feat(web): store conversations and switch threads per mode"
 - Modify: `apps/web/core/store/ai-assistant.store.ts`
 - Modify: `apps/web/core/store/ai-assistant.store.test.ts`
 
-- [ ] **Step 1: Tulis test yang gagal**
+- [x] **Step 1: Tulis test yang gagal**
 
 ```ts
 describe("stateful send flow", () => {
@@ -3855,12 +3855,12 @@ describe("stateful send flow", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `pnpm --filter=web test -- ai-assistant.store`
 Expected: FAIL — payload masih `buildAiPrompt`, `request` belum stateful.
 
-- [ ] **Step 3: Implementasi**
+- [x] **Step 3: Implementasi**
 
 Ganti `sendMessage`, `request`, `confirmScheduleProposal`, `resolveScheduleProposal`:
 
@@ -4018,17 +4018,17 @@ Ganti `sendMessage`, `request`, `confirmScheduleProposal`, `resolveSchedulePropo
 
 Import baru: `buildAiContext` (ganti `buildAiPrompt`), `toAiMessage`, tipe `TAiMessage`.
 
-- [ ] **Step 4: Jalankan test, pastikan lulus**
+- [x] **Step 4: Jalankan test, pastikan lulus**
 
 Run: `pnpm --filter=web test -- ai-assistant.store`
 Expected: semua lulus (suite lama yang masih relevan diadaptasi; suite "restores persisted messages" sudah diganti di Task 10).
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `pnpm --filter=web check:types`
 Expected: exit 0. Jika masih ada pemakai `clearConversation` (root.tsx), itu diperbaiki di Task 12 — sementara ini boleh gagal hanya di `root.tsx`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/core/store/ai-assistant.store.ts apps/web/core/store/ai-assistant.store.test.ts
@@ -4104,7 +4104,7 @@ git commit -m "feat(web): send chat turns through stored conversations"
 - Create: `apps/web/core/components/ai/assistant-sidebar/conversation-history-panel.tsx`
 - Modify: `apps/web/core/components/ai/assistant-sidebar/root.tsx`
 
-- [ ] **Step 1: Buat panel**
+- [x] **Step 1: Buat panel**
 
 `conversation-history-panel.tsx`:
 
@@ -4271,7 +4271,7 @@ Catatan: ikon yang tersedia di `@makeplane/propel` (sudah diverifikasi):
 `CheckDoneOutline`, `CloseOutline`, `DeleteOutline`, `EditOutline`,
 `HistoryOutline`, `NewChatOutline`.
 
-- [ ] **Step 2: Wire di `root.tsx`**
+- [x] **Step 2: Wire di `root.tsx`**
 
 - Import: `HistoryOutline` dari `@makeplane/propel/icons`, dan `ConversationHistoryPanel`.
 - Tambah state panel di store (pengecualian kecil dari Task 10) — di `ai-assistant.store.ts`:
@@ -4321,17 +4321,17 @@ tambahkan `historyOpen: observable.ref` dan `setHistoryOpen: action` ke `makeObs
 
 Susun ulang JSX sehingga context strip + messages + composer dibungkus fragment `<>…</>` dan panel dirender sebagai alternatifnya (keduanya di dalam `<div className="flex h-full w-[24rem] max-w-[85vw] flex-col">`).
 
-- [ ] **Step 3: Typecheck + build**
+- [x] **Step 3: Typecheck + build**
 
 Run: `pnpm --filter=web check:types && pnpm --filter=web build`
 Expected: exit 0 keduanya; `rg -n "clearConversation" apps/web/core` kosong.
 
-- [ ] **Step 4: Test FE penuh**
+- [x] **Step 4: Test FE penuh**
 
 Run: `pnpm --filter=web test`
 Expected: semua lulus (≥ 85 test; jumlah bertambah karena suite percakapan).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/core/components/ai/assistant-sidebar/conversation-history-panel.tsx apps/web/core/components/ai/assistant-sidebar/root.tsx apps/web/core/store/ai-assistant.store.ts
@@ -4378,7 +4378,7 @@ git commit -m "feat(web): add in-sidebar conversation history panel"
 - Modify: `apps/api-rs/scripts/smoke.sh` (komentar)
 - Modify: `parity-inventory.json` (entri `/ai-assistant/` + `/ai-agent/`: `conversation_id` kini wajib dan respons menambah `conversation`/`user_message`/`assistant_message`; catat endpoint baru `/ai-conversations/` dan `/ai-complete/`)
 
-- [ ] **Step 1: Sinkronkan spec dengan implementasi**
+- [x] **Step 1: Sinkronkan spec dengan implementasi**
 
 Ubah di spec:
 
@@ -4387,7 +4387,7 @@ Ubah di spec:
 3. Bagian 4 UI: "hapus (dialog konfirmasi)" → "hapus (konfirmasi inline dua langkah)".
 4. Bagian 3 body chat: sebutkan field `context` (blok work item + timezone) dan `prompt` = teks mentah user.
 
-- [ ] **Step 2: Update komentar smoke**
+- [x] **Step 2: Update komentar smoke**
 
 `apps/api-rs/scripts/smoke.sh` baris sekitar 617: tambahkan komentar bahwa body tanpa `conversation_id` kini 400 (`conversation_id is required`) dan itu diterima smoke (bukan 404/405):
 
@@ -4397,7 +4397,7 @@ Ubah di spec:
 # bila key ada dan conversation_id valid.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-24-galileo-chat-history-design.md apps/api-rs/scripts/smoke.sh
@@ -4410,18 +4410,18 @@ git commit -m "docs: sync chat history spec with implementation"
 
 **Files:** tidak ada perubahan kode.
 
-- [ ] **Step 1: Backend suite penuh (sekuensial, timeout besar)**
+- [x] **Step 1: Backend suite penuh (sekuensial, timeout besar)**
 
 Run (di `apps/api-rs`): `cargo test -p api -- --test-threads=1`
 Expected: semua binary hijau (baseline 1141 + test baru), 0 failed.
 
-- [ ] **Step 2: Crate lain**
+- [x] **Step 2: Crate lain**
 
 Run: `cargo test -p ai -p worker -- --test-threads=1 && cargo test -p common`
 (`-p common` butuh `DATABASE_URL=postgres://plane:plane@localhost:5432/plane`.)
 Expected: hijau.
 
-- [ ] **Step 3: Clippy + format**
+- [x] **Step 3: Clippy + format**
 
 Run:
 
@@ -4433,12 +4433,12 @@ pnpm check:lint
 
 Expected: tanpa `^error`; format/lint exit 0.
 
-- [ ] **Step 4: FE penuh**
+- [x] **Step 4: FE penuh**
 
 Run: `pnpm --filter=web test && pnpm --filter=web check:types && pnpm --filter=web build`
 Expected: hijau semua.
 
-- [ ] **Step 5: Rebuild image API + restart stack**
+- [x] **Step 5: Rebuild image API + restart stack**
 
 Run:
 
@@ -4455,7 +4455,7 @@ Expected: image baru; 3 container Up; `health=200`; migrasi teratas `8 | ai conv
 
 Catatan: build release penuh bisa >30 menit di mesin 8 core; flag `RELEASE_LTO=false RELEASE_CGU=16` adalah jalur dev yang dipakai stack lokal ini (lihat riwayat fitur Scheduler).
 
-- [ ] **Step 6: Rebuild web prod + restart**
+- [x] **Step 6: Rebuild web prod + restart**
 
 Run:
 
@@ -4468,7 +4468,7 @@ curl -s -o /dev/null -w 'index=%{http_code}\n' http://localhost:3000/
 
 Expected: `index=200`.
 
-- [ ] **Step 7: Smoke API cepat (butuh TOKEN user)**
+- [x] **Step 7: Smoke API cepat (butuh TOKEN user)**
 
 Run (ganti `$TOKEN` dan `$WS`):
 
@@ -4479,7 +4479,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/
 
 Expected: 201 + conversation JSON. Lalu kirim chat dengan `conversation_id` hasil di atas dan pastikan 200 + `user_message`/`assistant_message`.
 
-- [ ] **Step 8: Smoke browser (user)**
+- [x] **Step 8: Smoke browser (user)**
 
 Checklist manual:
 
@@ -4491,7 +4491,7 @@ Checklist manual:
 6. Buka tab kedua, kirim pesan di percakapan yang sama → pesan dari kedua tab tampil setelah reload.
 7. Sign-out lalu sign-in → history server tetap ada.
 
-- [ ] **Step 9: Commit sisa (bila ada) + laporan**
+- [x] **Step 9: Commit sisa (bila ada) + laporan**
 
 ```bash
 git status --short
