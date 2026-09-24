@@ -1062,15 +1062,47 @@ async fn detail_rename_delete_are_owner_scoped_and_validated() {
     .expect("long title");
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
-    // Unknown id → 404.
+    // Unknown id → 404 for every verb (detail, rename, delete).
+    let unknown = Uuid::new_v4();
     let (status, _) = ai_conversations::detail(
         State(st.clone()),
         AuthUser(scratch.user_id),
-        Path((scratch.slug.clone(), Uuid::new_v4())),
+        Path((scratch.slug.clone(), unknown)),
     )
     .await
     .expect("missing detail");
     assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), unknown)),
+        Json(json!({"title": "ghost"})),
+    )
+    .await
+    .expect("missing rename");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = ai_conversations::destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), unknown)),
+    )
+    .await
+    .expect("missing delete");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // 120 chars is allowed (boundary) and the rename bumps `updated_at`.
+    let boundary = "x".repeat(120);
+    let (status, Json(boundary_row)) = ai_conversations::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), id)),
+        Json(json!({"title": boundary})),
+    )
+    .await
+    .expect("boundary rename");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(boundary_row["title"].as_str().unwrap().chars().count(), 120);
+    assert!(boundary_row["updated_at"].as_str().unwrap() >= created["updated_at"].as_str().unwrap());
 
     // Owner delete removes the row.
     let (status, _) = ai_conversations::destroy(
@@ -1187,15 +1219,23 @@ pub async fn patch(
             Json(json!({"error": format!("title must be 1-{RENAME_MAX_CHARS} characters")})),
         ));
     }
-    let row: ConversationRow = sqlx::query_as(
-        "UPDATE ai_conversations SET title = $2, updated_at = now() WHERE id = $1 \
+    // Owner-scoped UPDATE + fetch_optional: if the row is deleted between the
+    // load above and this statement (other tab / 50-cap prune), answer 404
+    // instead of a 500 from `fetch_one`.
+    let row: Option<ConversationRow> = sqlx::query_as(
+        "UPDATE ai_conversations SET title = $2, updated_at = now() \
+         WHERE id = $1 AND created_by_id = $3 \
          RETURNING id, mode, title, created_at, updated_at",
     )
     .bind(conversation_id)
     .bind(title)
-    .fetch_one(&st.pool)
+    .bind(auth.0)
+    .fetch_optional(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(conversation_json(&row))))
+    match row {
+        Some(row) => Ok((StatusCode::OK, Json(conversation_json(&row)))),
+        None => Ok(missing()),
+    }
 }
 
 pub async fn destroy(
@@ -1210,10 +1250,14 @@ pub async fn destroy(
     let Some(_row) = load_owned_conversation(&st.pool, &slug, conversation_id, auth.0).await? else {
         return Ok(missing());
     };
-    sqlx::query("DELETE FROM ai_conversations WHERE id = $1")
+    let deleted = sqlx::query("DELETE FROM ai_conversations WHERE id = $1 AND created_by_id = $2")
         .bind(conversation_id)
+        .bind(auth.0)
         .execute(&st.pool)
         .await?;
+    if deleted.rows_affected() == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 ```
