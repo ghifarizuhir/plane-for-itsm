@@ -295,7 +295,12 @@ describe("stateful send flow", () => {
     expect(message?.scheduleProposalKey).toBeTruthy();
 
     await store.confirmScheduleProposal(message!.id);
-    expect(services.schedules.create).toHaveBeenCalled();
+    expect(services.schedules.create).toHaveBeenCalledWith(
+      "acme",
+      message!.scheduleProposal,
+      message!.scheduleProposalKey
+    );
+    expect((services.schedules.create as any).mock.calls[0][2]).toBe(message!.scheduleProposalKey);
     expect(message!.scheduleDecision).toBe("created");
     expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
       "acme",
@@ -959,6 +964,45 @@ describe("race hardening", () => {
     expect(services.ai.createGptTask).toHaveBeenCalledTimes(1);
     expect(store.messages.filter((m) => m.role === "user")).toHaveLength(1);
     expect(store.messages.map((m) => m.content)).toEqual(["first question", "classic ok"]);
+  });
+
+  it("does not send a turn when the user switches threads during conversation creation", async () => {
+    let resolveCreate!: (value: TAiConversation) => void;
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => [conversation("c-old", "classic"), conversation("c-agent", "agent")]),
+        create: vi.fn(
+          () =>
+            new Promise<TAiConversation>((resolve) => {
+              resolveCreate = resolve;
+            })
+        ),
+        listMessages: vi.fn(async () => [
+          storedMessage("srv-1", "user", "old question"),
+          storedMessage("srv-2", "assistant", "old answer"),
+        ]),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    expect(store.activeConversationId).toBe("c-old");
+
+    store.newChat();
+    const sending = store.sendMessage("new question");
+    await flush();
+    expect(services.conversations.create).toHaveBeenCalledTimes(1);
+
+    const opening = store.openConversation("c-old");
+    resolveCreate(conversation("c-new", "classic"));
+    await Promise.all([sending, opening]);
+    await flush();
+
+    expect(store.activeConversationId).toBe("c-old");
+    expect(store.messages.map((m) => m.content)).toEqual(["old question", "old answer"]);
+    expect(services.ai.createGptTask).not.toHaveBeenCalled();
+    expect(services.ai.createAgentTask).not.toHaveBeenCalled();
+    expect(store.conversations.some((c) => c.id === "c-new")).toBe(true);
   });
 
   it("keeps the turn when a send starts before the conversation list resolves", async () => {

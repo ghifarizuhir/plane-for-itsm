@@ -26,6 +26,7 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
     conversations,
     conversationsLoading,
     activeConversationId,
+    isGenerating,
     openConversation,
     renameConversation,
     deleteConversation,
@@ -140,11 +141,12 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                 <>
                   <button
                     type="button"
+                    disabled={isGenerating}
                     onClick={() => {
                       void openConversation(conversation.id);
                       onClose();
                     }}
-                    className="min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 text-left disabled:opacity-50"
                   >
                     <span className="text-xs block truncate text-primary" title={conversation.title}>
                       {conversation.title || "New conversation"}
@@ -158,9 +160,10 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                       <button
                         type="button"
                         ref={confirmDeleteRef}
+                        disabled={isGenerating}
                         aria-label="Confirm delete"
                         onClick={() => void handleDelete(conversation.id)}
-                        className="text-[10px] text-danger-primary"
+                        className="text-[10px] text-danger-primary disabled:opacity-50"
                       >
                         Delete?
                       </button>
@@ -177,24 +180,26 @@ export const ConversationHistoryPanel = observer(function ConversationHistoryPan
                     <span className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                       <button
                         type="button"
+                        disabled={isGenerating}
                         aria-label="Rename conversation"
                         onClick={() => {
                           setRenamingId(conversation.id);
                           setRenameValue(conversation.title);
                           setRenameErrorId(null);
                         }}
-                        className="text-secondary hover:text-primary"
+                        className="text-secondary hover:text-primary disabled:opacity-50"
                       >
                         <EditOutline className="size-3.5" />
                       </button>
                       <button
                         type="button"
+                        disabled={isGenerating}
                         aria-label="Delete conversation"
                         onClick={() => {
                           setConfirmingDeleteId(conversation.id);
                           setDeleteErrorId(null);
                         }}
-                        className="text-secondary hover:text-danger-primary"
+                        className="text-secondary hover:text-danger-primary disabled:opacity-50"
                       >
                         <DeleteOutline className="size-3.5" />
                       </button>

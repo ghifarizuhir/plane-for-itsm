@@ -1,6 +1,7 @@
 //! `POST /api/workspaces/:slug/ai-agent/` — Rig tool-calling agent prototype.
 //!
-//! Demo-only surface: no Django counterpart and not consumed by the web app.
+//! Demo-only surface: no Django counterpart, consumed by the web app's agent
+//! mode (`createAgentTask`).
 //! Runs an OpenAI-compatible chat-completions agent (Rig
 //! `openai::CompletionsClient`) over typed, workspace-scoped read-only tools.
 //! The `/ai-assistant/` parity contract is untouched.

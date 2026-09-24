@@ -388,17 +388,25 @@ export class AIAssistantStore implements IAIAssistantStore {
     const active = this.conversations.find((candidate) => candidate.id === this.activeConversationId);
     if (active && active.mode === this.mode) return active.id;
     if (this.ensurePromise) return this.ensurePromise;
-    const pending = this.createConversation(slug).finally(() => {
+    const interaction = this.interactionSeq;
+    const pending = this.createConversation(slug, interaction).finally(() => {
       if (this.ensurePromise === pending) this.ensurePromise = undefined;
     });
     this.ensurePromise = pending;
     return pending;
   };
 
-  private createConversation = async (slug: string): Promise<string | undefined> => {
+  private createConversation = async (slug: string, interaction: number): Promise<string | undefined> => {
     try {
       const created = await this.conversationsService.create(slug, this.mode);
       if (slug !== this.workspaceSlug) return undefined;
+      if (interaction !== this.interactionSeq) {
+        runInAction(() => {
+          this.touchList();
+          this.conversations = [created, ...this.conversations];
+        });
+        return undefined;
+      }
       runInAction(() => {
         this.touchList();
         this.conversations = [created, ...this.conversations];
