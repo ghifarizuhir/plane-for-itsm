@@ -224,6 +224,66 @@ mod tool_roundtrip {
         (format!("http://{addr}/v1"), state)
     }
 
+    async fn schedule_handler(
+        State(state): State<Shared>,
+        Json(body): Json<Value>,
+    ) -> (StatusCode, Json<Value>) {
+        let n = {
+            let mut calls = state.calls.lock().unwrap();
+            let n = *calls;
+            *calls += 1;
+            n
+        };
+        state.bodies.lock().unwrap().push(body);
+        if n == 0 {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "id": "1", "object": "chat.completion", "created": 0, "model": "test",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": null,
+                            "tool_calls": [{
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_schedule",
+                                    "arguments": "{\"name\":\"Daily\",\"prompt\":\"Report\",\"frequency\":\"daily\",\"time\":\"09:00\",\"timezone\":\"UTC\"}"
+                                }
+                            }]
+                        },
+                        "finish_reason": "tool_calls"
+                    }]
+                })),
+            )
+        } else {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "id": "2", "object": "chat.completion", "created": 0, "model": "test",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "final answer"},
+                        "finish_reason": "stop"
+                    }]
+                })),
+            )
+        }
+    }
+
+    async fn spawn_schedule_roundtrip() -> (String, Shared) {
+        let state: Shared = Arc::new(Upstream::default());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = Router::new()
+            .route("/v1/chat/completions", post(schedule_handler))
+            .with_state(state.clone());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (format!("http://{addr}/v1"), state)
+    }
+
     #[tokio::test]
     async fn tool_call_roundtrip_records_trace_and_returns_final_text() {
         let (base, upstream) = spawn_roundtrip().await;
@@ -259,6 +319,37 @@ mod tool_roundtrip {
             .find(|m| m["role"] == json!("tool"))
             .expect("second call must carry the tool result message");
         assert_eq!(tool_msg["content"], json!("echo:hi"));
+    }
+
+    #[tokio::test]
+    async fn create_schedule_roundtrip_surfaces_pending_action() {
+        let (base, upstream) = spawn_schedule_roundtrip().await;
+        let trace = new_trace();
+        let tool = ai::tools::CreateSchedule {
+            trace: trace.clone(),
+        };
+        let out = run_agent(
+            &base,
+            "key",
+            "model",
+            ToolServer::new().tool(tool).run(),
+            None,
+            "/schedule daily report",
+        )
+        .await;
+        assert_eq!(out, Ok("final answer".to_string()));
+
+        let action = api::routes::ai_agent::pending_action(&trace).expect("proposal");
+        assert_eq!(action["kind"], json!("create_schedule"));
+        assert_eq!(action["proposal"]["frequency"], json!("daily"));
+        assert_eq!(action["proposal"]["time"], json!("09:00"));
+
+        let bodies = upstream.bodies.lock().unwrap();
+        assert_eq!(
+            bodies.len(),
+            2,
+            "tool loop must issue a second upstream call"
+        );
     }
 
     #[tokio::test]

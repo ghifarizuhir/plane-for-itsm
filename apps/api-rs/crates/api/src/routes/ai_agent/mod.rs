@@ -32,13 +32,15 @@ pub mod tools {
     pub use ai::tools::*;
 }
 
-/// 200 response body: raw text, newline-mapped HTML for the chat bubble, and
-/// the recorded tool calls.
-pub fn success_body(text: &str, tool_calls: Vec<Value>) -> Value {
+/// 200 response body: raw text, newline-mapped HTML for the chat bubble, the
+/// recorded tool calls, and the last `create_schedule` proposal (if any) for
+/// the FE confirmation card.
+pub fn success_body(text: &str, tool_calls: Vec<Value>, action: Option<Value>) -> Value {
     json!({
         "response": text,
         "response_html": crate::routes::ai::response_html(text),
         "tool_calls": tool_calls,
+        "pending_action": action,
     })
 }
 
@@ -107,7 +109,11 @@ pub async fn workspace_ai_agent(
                         .collect()
                 })
                 .unwrap_or_default();
-            Ok((StatusCode::OK, Json(success_body(&text, tool_calls))))
+            let action = pending_action(&trace);
+            Ok((
+                StatusCode::OK,
+                Json(success_body(&text, tool_calls, action)),
+            ))
         }
         Err(LlmError::RateLimited) => Ok((
             StatusCode::TOO_MANY_REQUESTS,
@@ -142,10 +148,18 @@ mod tests {
 
     #[test]
     fn success_body_maps_newlines_and_keeps_tool_calls() {
-        let body = success_body("line1\nline2", vec![json!({"name": "list_projects"})]);
+        let body = success_body("line1\nline2", vec![json!({"name": "list_projects"})], None);
         assert_eq!(body["response"], json!("line1\nline2"));
         assert_eq!(body["response_html"], json!("line1<br/>line2"));
         assert_eq!(body["tool_calls"][0]["name"], json!("list_projects"));
+        assert_eq!(body["pending_action"], json!(null));
+    }
+
+    #[test]
+    fn success_body_carries_pending_action() {
+        let action = json!({"kind": "create_schedule", "proposal": {"frequency": "daily"}});
+        let body = success_body("done", vec![], Some(action.clone()));
+        assert_eq!(body["pending_action"], action);
     }
 
     #[test]
