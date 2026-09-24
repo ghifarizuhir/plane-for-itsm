@@ -18,7 +18,7 @@ type Props = {
   onCancel: () => void;
 };
 
-export function ScheduleProposalCard({ proposal, decision = "pending", onConfirm, onCancel }: Props) {
+export function ScheduleProposalCard({ proposal, decision, onConfirm, onCancel }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
@@ -38,7 +38,7 @@ export function ScheduleProposalCard({ proposal, decision = "pending", onConfirm
 
   if (decision === "created") {
     return (
-      <p className="text-xs mt-1.5 text-tertiary">
+      <p role="status" className="text-xs mt-1.5 text-tertiary">
         Schedule created.{" "}
         {rawWorkspaceSlug && (
           <Link href={`/${rawWorkspaceSlug}/scheduler/`} className="text-accent-primary hover:underline">
@@ -49,12 +49,17 @@ export function ScheduleProposalCard({ proposal, decision = "pending", onConfirm
     );
   }
   if (decision === "cancelled") {
-    return <p className="text-xs mt-1.5 text-tertiary">Schedule cancelled.</p>;
+    return (
+      <p role="status" className="text-xs mt-1.5 text-tertiary">
+        Schedule cancelled.
+      </p>
+    );
   }
+  if (decision !== "pending") return null;
 
   return (
-    <div className="mt-2 rounded-lg border border-subtle bg-layer-1 p-3">
-      <p className="text-xs font-semibold text-primary">{proposal.name}</p>
+    <div role="group" aria-label="Schedule proposal" className="mt-2 rounded-lg border border-subtle bg-layer-1 p-3">
+      <p className="text-xs font-semibold break-words text-primary">{proposal.name}</p>
       <p className="text-xs mt-0.5 text-secondary">{humanizeSchedule(proposal)}</p>
       <p className="text-xs mt-1 line-clamp-3 text-tertiary">{proposal.prompt}</p>
       {error && <p className="text-xs mt-1 text-danger-primary">{error}</p>}

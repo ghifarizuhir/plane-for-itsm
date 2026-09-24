@@ -489,6 +489,46 @@ describe("AIAssistantStore", () => {
     expect(store.messages[store.messages.length - 1].scheduleDecision).toBe("cancelled");
   });
 
+  it("does not confirm a cancelled proposal", async () => {
+    const service = makeService(undefined, async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: { name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" },
+      },
+    }));
+    const schedules = { create: vi.fn(async () => ({ id: "s1" })) };
+    const store = new AIAssistantStore(service as never, schedules as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("hello");
+    const message = store.messages[store.messages.length - 1];
+    store.resolveScheduleProposal(message.id, "cancelled");
+    await store.confirmScheduleProposal(message.id);
+    expect(schedules.create).not.toHaveBeenCalled();
+    expect(message.scheduleDecision).toBe("cancelled");
+  });
+
+  it("rejects a malformed create response and keeps the proposal pending", async () => {
+    const service = makeService(undefined, async () => ({
+      response: "ok",
+      response_html: "ok",
+      pending_action: {
+        kind: "create_schedule",
+        proposal: { name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" },
+      },
+    }));
+    const schedules = { create: vi.fn(async () => ({})) };
+    const store = new AIAssistantStore(service as never, schedules as never);
+    store.setWorkspace("acme");
+    store.setMode("agent");
+    await store.sendMessage("hello");
+    const message = store.messages[store.messages.length - 1];
+    await expect(store.confirmScheduleProposal(message.id)).rejects.toThrow("no id");
+    expect(message.scheduleDecision).toBe("pending");
+  });
+
   it("drops stale responses after a mode switch away and back", async () => {
     let resolvePending!: (value: unknown) => void;
     const service = makeService(

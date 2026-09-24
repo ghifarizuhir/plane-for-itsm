@@ -66,6 +66,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // local state
   const [question, setQuestion] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   const isOpen = aiSidebarCollapsed === false;
 
@@ -112,6 +113,9 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   };
 
   if (!config?.has_llm_configured) return null;
+
+  const trimmedQuestion = question.trimStart();
+  const showScheduleHint = trimmedQuestion.startsWith("/") && !trimmedQuestion.startsWith("/schedule");
 
   return (
     <aside
@@ -286,16 +290,20 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
           {/* composer */}
           <div className="border-t border-subtle p-3">
             <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
-              {question.trimStart().startsWith("/") && !isGenerating && (
+              {showScheduleHint && !isGenerating && (
                 <button
                   type="button"
-                  onClick={() => setQuestion("/schedule ")}
+                  onClick={() => {
+                    setQuestion("/schedule ");
+                    composerRef.current?.focus();
+                  }}
                   className="text-xs w-full border-b border-subtle px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
                 >
                   /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
                 </button>
               )}
               <textarea
+                ref={composerRef}
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={(event) => {

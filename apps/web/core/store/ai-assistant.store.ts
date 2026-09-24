@@ -30,7 +30,7 @@ export interface IAIAssistantStore {
   retryLast: () => Promise<void>;
   clearConversation: () => void;
   confirmScheduleProposal: (messageId: string) => Promise<void>;
-  resolveScheduleProposal: (messageId: string, decision: "created" | "cancelled") => void;
+  resolveScheduleProposal: (messageId: string, decision: "cancelled") => void;
 }
 
 export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
@@ -164,7 +164,9 @@ export class AIAssistantStore implements IAIAssistantStore {
       message.scheduleProposal,
       message.scheduleProposalKey
     );
-    if (!created?.id) return;
+    if (!created?.id) {
+      throw new Error("Schedule creation returned no id");
+    }
     runInAction(() => {
       message.scheduleDecision = "created";
       message.createdScheduleId = created.id;
@@ -172,10 +174,10 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
   };
 
-  resolveScheduleProposal = (messageId: string, decision: "created" | "cancelled") => {
+  resolveScheduleProposal = (messageId: string, decision: "cancelled") => {
     runInAction(() => {
       const message = this.messages.find((candidate) => candidate.id === messageId);
-      if (message) message.scheduleDecision = decision;
+      if (message && message.scheduleDecision === "pending") message.scheduleDecision = decision;
       this.persist();
     });
   };
