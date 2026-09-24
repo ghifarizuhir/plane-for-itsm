@@ -262,8 +262,9 @@ pub async fn workspace_ai_assistant(
 }
 
 /// `POST /api/workspaces/:slug/ai-complete/` — one-shot stateless completion
-/// for editor surfaces (no conversation, nothing persisted). Gate and error
-/// shapes mirror `/ai-assistant/`.
+/// for editor surfaces (no conversation, nothing persisted). Error shapes
+/// mirror `/ai-assistant/`; gate order follows the old stateless endpoint
+/// (permission → config → task).
 pub async fn workspace_ai_complete(
     State(st): State<AppState>,
     auth: AuthUser,
