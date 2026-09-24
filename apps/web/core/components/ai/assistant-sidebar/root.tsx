@@ -8,7 +8,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
-import { AiStar1Outline, CloseOutline, NewChatOutline, RefreshOutline, SendOutline } from "@makeplane/propel/icons";
+import {
+  AiStar1Outline,
+  CloseOutline,
+  HistoryOutline,
+  NewChatOutline,
+  RefreshOutline,
+  SendOutline,
+} from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { cn } from "@plane/utils";
 import type { TIssue } from "@plane/types";
@@ -21,6 +28,7 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 // lib
 import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
 // components
+import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
 
 const SUGGESTIONS = [
@@ -53,7 +61,9 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     setActiveIssueContext,
     sendMessage,
     retryLast,
-    clearConversation,
+    newChat,
+    historyOpen,
+    setHistoryOpen,
     confirmScheduleProposal,
     resolveScheduleProposal,
   } = useAiAssistant();
@@ -164,10 +174,20 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               )}
             </div>
             <div className="flex items-center gap-1">
+              <Tooltip label="Chat history" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen(!historyOpen)}
+                  aria-pressed={historyOpen}
+                  className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
+                >
+                  <HistoryOutline className="size-4" />
+                </button>
+              </Tooltip>
               <Tooltip label="New conversation" side="bottom">
                 <button
                   type="button"
-                  onClick={clearConversation}
+                  onClick={newChat}
                   className="flex size-7 items-center justify-center rounded-md text-secondary transition-colors hover:bg-layer-1-hover hover:text-primary"
                 >
                   <NewChatOutline className="size-4" />
@@ -184,156 +204,162 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               </Tooltip>
             </div>
           </div>
-          {/* context strip */}
-          <div className="flex items-center gap-2 border-b border-subtle px-4 py-2">
-            <span className="font-mono tracking-widest shrink-0 text-[10px] text-tertiary uppercase">ctx</span>
-            {hasActiveIssue && activeIssueContext ? (
-              <>
-                {stateName && (
-                  <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-[11px] text-secondary">
-                    <span className="size-1.5 rounded-full bg-accent-primary" />
-                    {stateName}
-                  </span>
+          {historyOpen ? (
+            <ConversationHistoryPanel onClose={() => setHistoryOpen(false)} />
+          ) : (
+            <>
+              {/* context strip */}
+              <div className="flex items-center gap-2 border-b border-subtle px-4 py-2">
+                <span className="font-mono tracking-widest shrink-0 text-[10px] text-tertiary uppercase">ctx</span>
+                {hasActiveIssue && activeIssueContext ? (
+                  <>
+                    {stateName && (
+                      <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-[11px] text-secondary">
+                        <span className="size-1.5 rounded-full bg-accent-primary" />
+                        {stateName}
+                      </span>
+                    )}
+                    <span className="text-xs truncate text-secondary" title={activeIssueContext.name}>
+                      {activeIssueContext.name}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs truncate text-tertiary">No work item in view — general answers</span>
                 )}
-                <span className="text-xs truncate text-secondary" title={activeIssueContext.name}>
-                  {activeIssueContext.name}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs truncate text-tertiary">No work item in view — general answers</span>
-            )}
-          </div>
-          {/* messages */}
-          <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {messages.length === 0 && !isGenerating && (
-              <div className="ai-rise flex flex-col items-center px-2 pt-8 text-center">
-                <span className="flex size-11 items-center justify-center rounded-2xl border border-subtle bg-layer-1">
-                  <AiStar1Outline className="size-5 text-accent-primary" />
-                </span>
-                <p className="text-sm mt-3 font-medium text-primary">Ask about this work item</p>
-                <p className="text-xs mt-1 leading-relaxed text-tertiary">
-                  Summaries, descriptions, comment drafts — grounded in the work item on screen.
-                </p>
-                <div className="mt-4 flex flex-col gap-1.5 self-stretch">
-                  {SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => handleSend(suggestion)}
-                      className="text-xs hover:border-accent-primary rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
               </div>
-            )}
-            {messages.map((message, index) => (
-              <div
-                key={message.id}
-                style={{ animationDelay: `${Math.min(index, 5) * 45}ms` }}
-                className={cn("ai-rise flex", {
-                  "justify-end": message.role === "user",
-                  "justify-start": message.role === "assistant",
-                })}
-              >
-                <div
-                  className={cn("flex max-w-[88%] flex-col", {
-                    "items-end": message.role === "user",
-                    "items-start": message.role === "assistant",
-                  })}
-                >
+              {/* messages */}
+              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                {messages.length === 0 && !isGenerating && (
+                  <div className="ai-rise flex flex-col items-center px-2 pt-8 text-center">
+                    <span className="flex size-11 items-center justify-center rounded-2xl border border-subtle bg-layer-1">
+                      <AiStar1Outline className="size-5 text-accent-primary" />
+                    </span>
+                    <p className="text-sm mt-3 font-medium text-primary">Ask about this work item</p>
+                    <p className="text-xs mt-1 leading-relaxed text-tertiary">
+                      Summaries, descriptions, comment drafts — grounded in the work item on screen.
+                    </p>
+                    <div className="mt-4 flex flex-col gap-1.5 self-stretch">
+                      {SUGGESTIONS.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => handleSend(suggestion)}
+                          className="text-xs hover:border-accent-primary rounded-lg border border-subtle bg-layer-1 px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {messages.map((message, index) => (
                   <div
-                    className={cn("rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
-                      "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
-                      "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
-                        message.role === "assistant" && !message.isError,
-                      "border-danger-primary rounded-bl-sm border text-danger-primary":
-                        message.role === "assistant" && message.isError,
+                    key={message.id}
+                    style={{ animationDelay: `${Math.min(index, 5) * 45}ms` }}
+                    className={cn("ai-rise flex", {
+                      "justify-end": message.role === "user",
+                      "justify-start": message.role === "assistant",
                     })}
                   >
-                    {message.role === "assistant" && !message.isError ? (
-                      <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
-                    ) : (
-                      <p className="whitespace-pre-wrap">{message.content}</p>
-                    )}
+                    <div
+                      className={cn("flex max-w-[88%] flex-col", {
+                        "items-end": message.role === "user",
+                        "items-start": message.role === "assistant",
+                      })}
+                    >
+                      <div
+                        className={cn("rounded-xl px-3 py-2 text-[13px] leading-relaxed", {
+                          "rounded-br-sm bg-accent-primary text-on-color": message.role === "user",
+                          "border-l-accent-primary rounded-bl-sm border border-l-2 border-subtle bg-layer-1 text-primary":
+                            message.role === "assistant" && !message.isError,
+                          "border-danger-primary rounded-bl-sm border text-danger-primary":
+                            message.role === "assistant" && message.isError,
+                        })}
+                      >
+                        {message.role === "assistant" && !message.isError ? (
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeAssistantHtml(message.content) }} />
+                        ) : (
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        )}
+                      </div>
+                      {message.role === "assistant" && message.scheduleProposal && (
+                        <ScheduleProposalCard
+                          proposal={message.scheduleProposal}
+                          decision={message.scheduleDecision}
+                          onConfirm={() => confirmScheduleProposal(message.id)}
+                          onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
+                        />
+                      )}
+                    </div>
                   </div>
-                  {message.role === "assistant" && message.scheduleProposal && (
-                    <ScheduleProposalCard
-                      proposal={message.scheduleProposal}
-                      decision={message.scheduleDecision}
-                      onConfirm={() => confirmScheduleProposal(message.id)}
-                      onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
-                    />
+                ))}
+                {isGenerating && (
+                  <div className="flex items-center gap-1.5 px-1 py-1" aria-label="Generating response">
+                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                    <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
+                  </div>
+                )}
+                {!isGenerating && messages[messages.length - 1]?.isError && (
+                  <button
+                    type="button"
+                    onClick={() => void retryLast()}
+                    className="text-xs flex items-center gap-1 text-accent-primary"
+                  >
+                    <RefreshOutline className="size-3.5" /> Retry
+                  </button>
+                )}
+              </div>
+              {/* composer */}
+              <div className="border-t border-subtle p-3">
+                <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
+                  {showScheduleHint && !isGenerating && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestion("/schedule ");
+                        composerRef.current?.focus();
+                      }}
+                      className="text-xs w-full border-b border-subtle px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
+                    >
+                      /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
+                    </button>
                   )}
+                  <textarea
+                    ref={composerRef}
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    placeholder="Ask AI anything…"
+                    rows={2}
+                    className="text-sm w-full resize-none bg-transparent px-3 pt-2.5 text-primary outline-none placeholder:text-tertiary"
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <span className="font-mono tracking-widest pl-1 text-[10px] text-tertiary uppercase">
+                      {hasActiveIssue ? "grounded" : "general"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSend()}
+                      disabled={!question.trim() || isGenerating}
+                      aria-label="Send message"
+                      className="flex size-8 items-center justify-center rounded-full bg-accent-primary text-on-color transition-opacity hover:opacity-90 disabled:opacity-40"
+                    >
+                      <SendOutline className="size-4" />
+                    </button>
+                  </div>
                 </div>
+                <p className="mt-2 px-1 text-[11px] leading-snug text-tertiary">
+                  By using this feature, you consent to sharing the message with a 3rd party service.
+                </p>
               </div>
-            ))}
-            {isGenerating && (
-              <div className="flex items-center gap-1.5 px-1 py-1" aria-label="Generating response">
-                <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
-                <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
-                <span className="ai-typing-dot size-1.5 rounded-full bg-accent-primary" />
-              </div>
-            )}
-            {!isGenerating && messages[messages.length - 1]?.isError && (
-              <button
-                type="button"
-                onClick={() => void retryLast()}
-                className="text-xs flex items-center gap-1 text-accent-primary"
-              >
-                <RefreshOutline className="size-3.5" /> Retry
-              </button>
-            )}
-          </div>
-          {/* composer */}
-          <div className="border-t border-subtle p-3">
-            <div className="focus-within:border-accent-primary rounded-xl border border-subtle bg-layer-1 transition-colors">
-              {showScheduleHint && !isGenerating && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuestion("/schedule ");
-                    composerRef.current?.focus();
-                  }}
-                  className="text-xs w-full border-b border-subtle px-3 py-2 text-left text-secondary transition-colors hover:text-primary"
-                >
-                  /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
-                </button>
-              )}
-              <textarea
-                ref={composerRef}
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="Ask AI anything…"
-                rows={2}
-                className="text-sm w-full resize-none bg-transparent px-3 pt-2.5 text-primary outline-none placeholder:text-tertiary"
-              />
-              <div className="flex items-center justify-between px-2 pb-2">
-                <span className="font-mono tracking-widest pl-1 text-[10px] text-tertiary uppercase">
-                  {hasActiveIssue ? "grounded" : "general"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  disabled={!question.trim() || isGenerating}
-                  aria-label="Send message"
-                  className="flex size-8 items-center justify-center rounded-full bg-accent-primary text-on-color transition-opacity hover:opacity-90 disabled:opacity-40"
-                >
-                  <SendOutline className="size-4" />
-                </button>
-              </div>
-            </div>
-            <p className="mt-2 px-1 text-[11px] leading-snug text-tertiary">
-              By using this feature, you consent to sharing the message with a 3rd party service.
-            </p>
-          </div>
+            </>
+          )}
         </div>
       )}
     </aside>

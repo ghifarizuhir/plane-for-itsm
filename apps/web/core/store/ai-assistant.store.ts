@@ -33,7 +33,9 @@ export interface IAIAssistantStore {
   conversations: TAiConversation[];
   activeConversationId: string | undefined;
   conversationsLoading: boolean;
+  historyOpen: boolean;
   setWorkspace: (workspaceSlug: string | undefined) => void;
+  setHistoryOpen: (open: boolean) => void;
   setMode: (mode: TAiAssistantMode) => void;
   setActiveIssueContext: (context: TAiIssueContext | undefined) => void;
   loadConversations: () => Promise<void>;
@@ -81,6 +83,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   conversations: TAiConversation[] = [];
   activeConversationId: string | undefined = undefined;
   conversationsLoading = false;
+  historyOpen = false;
 
   private workspaceSlug: string | undefined = undefined;
   private requestSeq = 0;
@@ -104,8 +107,10 @@ export class AIAssistantStore implements IAIAssistantStore {
       conversations: observable.deep,
       activeConversationId: observable.ref,
       conversationsLoading: observable.ref,
+      historyOpen: observable.ref,
       hasActiveIssue: computed,
       setWorkspace: action,
+      setHistoryOpen: action,
       setMode: action,
       setActiveIssueContext: action,
       loadConversations: action,
@@ -258,6 +263,10 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.conversations = this.conversations.filter((candidate) => candidate.id !== conversationId);
     });
     if (this.activeConversationId === conversationId) this.newChat();
+  };
+
+  setHistoryOpen = (open: boolean) => {
+    this.historyOpen = open;
   };
 
   setActiveIssueContext = (context: TAiIssueContext | undefined) => {
