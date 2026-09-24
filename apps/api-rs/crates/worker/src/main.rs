@@ -1,8 +1,7 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-mod consumer;
-mod handlers;
+use worker::{consumer, handlers};
 
 #[tokio::main]
 async fn main() {

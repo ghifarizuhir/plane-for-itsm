@@ -1,3 +1,4 @@
+pub mod ai_schedule;
 pub mod cleanup;
 pub mod email;
 pub mod export;
