@@ -1229,6 +1229,23 @@ pub(crate) async fn materialize_workflow_for_project(
     .execute(&mut *tx)
     .await?;
 
+    // Urutan wajib: clear default → bersihkan mirror superseded/orphan →
+    // revive+update → insert. Cleanup harus sebelum insert agar nama state
+    // yang sama dari workflow lama tidak menabrak partial unique.
+    sqlx::query(
+        "UPDATE states s SET deleted_at = now(), updated_at = now() \
+         WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
+         AND s.workflow_state_id IS NOT NULL \
+         AND NOT EXISTS (SELECT 1 FROM workflow_states ws \
+                         WHERE ws.id = s.workflow_state_id AND ws.deleted_at IS NULL \
+                           AND ws.workflow_id = $3)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(workflow_id)
+    .execute(&mut *tx)
+    .await?;
+
     let updated = sqlx::query(
         "UPDATE states s SET name = ws.name, description = ws.description, color = ws.color, \
          slug = ws.slug, sequence = ws.sequence, \"group\" = ws.\"group\", \"default\" = ws.is_default, \
@@ -1259,18 +1276,6 @@ pub(crate) async fn materialize_workflow_for_project(
     .execute(&mut *tx)
     .await?
     .rows_affected();
-
-    sqlx::query(
-        "UPDATE states s SET deleted_at = now(), updated_at = now() \
-         WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-         AND s.workflow_state_id IS NOT NULL \
-         AND NOT EXISTS (SELECT 1 FROM workflow_states ws \
-                         WHERE ws.id = s.workflow_state_id AND ws.deleted_at IS NULL)",
-    )
-    .bind(project_id)
-    .bind(type_id)
-    .execute(&mut *tx)
-    .await?;
 
     tx.commit().await?;
     Ok(updated + inserted)
@@ -2432,6 +2437,8 @@ Di `apps/api-rs/crates/api/src/routes/v1/work_item_type.rs`:
 ```
 
 sesuai nomor bind berikutnya, dan bind `body.workflow` di posisi yang sama.
+
+Catatan policy (dari review B2): menetapkan `workflow_id = NULL` pada type yang masih enabled di project (punya `project_issue_types` hidup) harus ditolak `400` dengan pesan `Cannot unassign a workflow while the type is enabled in projects`; mirror lama tidak boleh ditinggalkan hidup. `COALESCE` di update v1 sudah memblokir null eksplisit, tetapi guard ini wajib untuk jalur lain (Django/admin/direct DB) dan harus diuji di B6.
 
 - [ ] **Step 2: Materialize saat import (+ guard shared workflow)**
 
