@@ -79,10 +79,11 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
   };
 
   return (
-    <div className="flex max-w-3xl flex-col gap-3">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-13 font-medium text-secondary">{t("service.tabs.work_items")}</h4>
         <Button
-          variant="primary"
+          variant="secondary"
           size="sm"
           onClick={() => setIsPickerOpen(true)}
           disabled={!slug || !pid || !workspaceId}
