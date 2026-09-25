@@ -843,7 +843,8 @@ pub async fn import_to_project(
            JOIN issue_types t ON t.id = pit.issue_type_id \
            WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
              AND t.id <> ALL($2) AND t.workflow_id IS NOT NULL \
-             AND t.workflow_id IN (SELECT workflow_id FROM issue_types WHERE id = ANY($2) AND workflow_id IS NOT NULL))",
+             AND t.workflow_id IN (SELECT workflow_id FROM issue_types WHERE id = ANY($2) \
+               AND deleted_at IS NULL AND workflow_id IS NOT NULL))",
     )
     .bind(project_id)
     .bind(&ids)
