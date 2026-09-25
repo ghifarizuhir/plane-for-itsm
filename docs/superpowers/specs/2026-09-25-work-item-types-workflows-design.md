@@ -137,6 +137,7 @@ Data migration membuat untuk semua workspace existing; jalur pembuatan workspace
 
 - Warna default mengikuti palet state yang ada; admin bebas mengubah.
 - "Closed" untuk Change langsung `completed` (tidak ada state Resolved terpisah).
+- Ownership marker: row seed memakai `external_source = "plane-default-itsm"` + `external_id` deterministik (`workflow:{type}`, `issue-type:{type}`, `workflow-state:{type}:{state}`) supaya rerun idempotent; row tanpa marker tidak pernah diadopsi/diubah oleh seed (Django `0124` dan api-rs `seed.rs` wajib memakai kontrak yang sama).
 
 ### Materialization (`State` mirror)
 

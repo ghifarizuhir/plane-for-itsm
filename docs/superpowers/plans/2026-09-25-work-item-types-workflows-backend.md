@@ -3061,54 +3061,156 @@ fn group_color(group: &str) -> &'static str {
     }
 }
 
+/// Marker ownership contract — SAMA dengan migrasi Django
+/// `0124_seed_default_workflows` (`SEED_EXTERNAL_SOURCE = "plane-default-itsm"`).
+/// external_id deterministik: `workflow:{type}`, `issue-type:{type}`,
+/// `workflow-state:{type}:{state}` (semua pakai `slugify`).
+/// Rerun tidak boleh menduplikasi; row tanpa marker tidak boleh diadopsi.
+const SEED_EXTERNAL_SOURCE: &str = "plane-default-itsm";
+
+async fn seed_workflow_id(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    bot_id: Uuid,
+    type_name: &str,
+    workflow_name: &str,
+) -> Result<Uuid, sqlx::Error> {
+    let external_id = format!("workflow:{}", slugify(type_name));
+    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM workflows WHERE workspace_id = $1 AND external_source = $2 \
+         AND external_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    {
+        return Ok(id);
+    }
+    let (id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO workflows (id, name, description, is_active, workspace_id, external_source, \
+         external_id, created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', true, $2, $3, $4, $5, $5, now(), now()) RETURNING id",
+    )
+    .bind(workflow_name)
+    .bind(workspace_id)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .bind(bot_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(id)
+}
+
+async fn seed_issue_type_id(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    bot_id: Uuid,
+    workflow_id: Uuid,
+    type_name: &str,
+) -> Result<Uuid, sqlx::Error> {
+    let external_id = format!("issue-type:{}", slugify(type_name));
+    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM issue_types WHERE workspace_id = $1 AND external_source = $2 \
+         AND external_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    {
+        return Ok(id);
+    }
+    let (id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, external_source, external_id, created_by_id, updated_by_id, \
+         created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $5, $6, $6, now(), now()) \
+         RETURNING id",
+    )
+    .bind(type_name)
+    .bind(workflow_id)
+    .bind(workspace_id)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .bind(bot_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_workflow_state_id(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workflow_id: Uuid,
+    bot_id: Uuid,
+    type_name: &str,
+    name: &str,
+    group: &str,
+    sequence: f64,
+    is_default: bool,
+) -> Result<Uuid, sqlx::Error> {
+    let external_id = format!("workflow-state:{}:{}", slugify(type_name), slugify(name));
+    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM workflow_states WHERE workflow_id = $1 AND external_source = $2 \
+         AND external_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    {
+        return Ok(id);
+    }
+    let (id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
+         \"group\", is_default, external_source, external_id, created_by_id, updated_by_id, \
+         created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $10, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(name)
+    .bind(group_color(group))
+    .bind(slugify(name))
+    .bind(sequence)
+    .bind(group)
+    .bind(is_default)
+    .bind(SEED_EXTERNAL_SOURCE)
+    .bind(&external_id)
+    .bind(bot_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(id)
+}
+
 /// Seed workflow + type default workspace (parity migrasi Django
 /// `0124_seed_default_workflows`). Tidak mengaktifkan type di project mana pun.
+/// Idempotent lewat marker: aman dipanggil ulang dalam retry handler.
 async fn insert_workflows(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
     bot_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     for (type_name, workflow_name, states, transitions) in WORKFLOW_SEEDS {
-        let (workflow_id,): (Uuid,) = sqlx::query_as(
-            "INSERT INTO workflows (id, name, description, is_active, workspace_id, created_by_id, \
-             updated_by_id, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, '', true, $2, $3, $3, now(), now()) RETURNING id",
-        )
-        .bind(workflow_name)
-        .bind(workspace_id)
-        .bind(bot_id)
-        .fetch_one(&mut **tx)
-        .await?;
-
-        sqlx::query(
-            "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
-             level, workflow_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $4, now(), now())",
-        )
-        .bind(type_name)
-        .bind(workflow_id)
-        .bind(workspace_id)
-        .bind(bot_id)
-        .execute(&mut **tx)
-        .await?;
+        let workflow_id = seed_workflow_id(tx, workspace_id, bot_id, type_name, workflow_name).await?;
+        let _type_id = seed_issue_type_id(tx, workspace_id, bot_id, workflow_id, type_name).await?;
 
         let mut state_ids = std::collections::HashMap::new();
         for (index, (name, group, is_default)) in states.iter().enumerate() {
-            let (state_id,): (Uuid,) = sqlx::query_as(
-                "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
-                 \"group\", is_default, created_by_id, updated_by_id, created_at, updated_at) \
-                 VALUES (gen_random_uuid(), $1, $2, '', $3, $4, $5, $6, $7, $8, $8, now(), now()) \
-                 RETURNING id",
+            let state_id = seed_workflow_state_id(
+                tx,
+                workflow_id,
+                bot_id,
+                type_name,
+                name,
+                group,
+                ((index as f64) + 1.0) * 15000.0,
+                *is_default,
             )
-            .bind(workflow_id)
-            .bind(name)
-            .bind(group_color(group))
-            .bind(slugify(name))
-            .bind(((index as f64) + 1.0) * 15000.0)
-            .bind(group)
-            .bind(is_default)
-            .bind(bot_id)
-            .fetch_one(&mut **tx)
             .await?;
             state_ids.insert(*name, state_id);
         }
@@ -3117,11 +3219,12 @@ async fn insert_workflows(
             sqlx::query(
                 "INSERT INTO workflow_transitions (id, workflow_id, from_state_id, to_state_id, \
                  created_by_id, updated_by_id, created_at, updated_at) \
-                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now())",
+                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now()) \
+                 ON CONFLICT DO NOTHING",
             )
             .bind(workflow_id)
-            .bind(state_ids[from_name])
-            .bind(state_ids[to_name])
+            .bind(state_ids[*from_name])
+            .bind(state_ids[*to_name])
             .bind(bot_id)
             .execute(&mut **tx)
             .await?;
@@ -3131,9 +3234,9 @@ async fn insert_workflows(
 }
 ```
 
-Panggil `insert_workflows(&mut tx, workspace_id, bot_id).await?;` di `seed_workspace` setelah project/state/label/issue seed (di dalam transaksi yang sama, sebelum `tx.commit()`).
+Catatan: `slugify` harus tersedia di `seed.rs` (sudah dipakai `insert_states`). `state_ids[*from_name]` karena `HashMap<&str, Uuid>`.
 
-Catatan: `state_ids[from_name]` — `HashMap<&str, Uuid>`; indeks dengan `&str` butuh `*from_name`. Gunakan `state_ids[*from_name]` / `state_ids[*to_name]`. Pastikan `slugify` sudah diimpor di `seed.rs` (sudah dipakai `insert_states`).
+Tambahkan juga assertion marker di test: `SELECT COUNT(*) FROM workflows WHERE workspace_id = $1 AND external_source = 'plane-default-itsm'` = 4 (idem issue_types/workflow_states), dan panggil `insert_workflows`/handler seed dua kali (atau `seed_workspace` pada workspace yang sama) untuk membuktikan tidak ada duplikat.
 
 - [ ] **Step 4: Jalankan test untuk memastikan lulus**
 
