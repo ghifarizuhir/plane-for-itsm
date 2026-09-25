@@ -3738,7 +3738,7 @@ Expected: FAIL — patch saat ini mengizinkan pindah state.
 
 - [ ] **Step 3: Implementasi**
 
-Di `issue_update.rs`, tepat setelah blok yang menghitung `new_state_id` dan `state_changed` (sekitar baris 748-771), sisipkan:
+Di `issue_update.rs`, ganti blok yang menghitung `new_state_id` dan `state_changed` (sekitar baris 748-771) dengan:
 
 ```rust
     let type_changed = match body.type_id {
@@ -3751,9 +3751,19 @@ Di `issue_update.rs`, tepat setelah blok yang menghitung `new_state_id` dan `sta
         Some(None) => None,
         None => current.type_id,
     };
-    let new_state_id = if type_changed {
+    // Default resolution WAJIB memakai effective_type_id, termasuk saat state
+    // di-clear atau issue belum punya state — jangan pakai None (temuan review C2).
+    let mut new_state_id = match body.state_id {
+        Some(Some(id)) => Some(id),
+        Some(None) => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+        None => match current.state_id {
+            Some(id) => Some(id),
+            None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+        },
+    };
+    if type_changed {
         // Ganti type: state wajib milik type baru; tanpa cek transisi.
-        match body.state_id {
+        new_state_id = match body.state_id {
             Some(Some(explicit)) => {
                 let (ok,): (bool,) = sqlx::query_as(
                     "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
@@ -3769,13 +3779,9 @@ Di `issue_update.rs`, tepat setelah blok yang menghitung `new_state_id` dan `sta
                 }
                 Some(explicit)
             }
-            _ => {
-                resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?
-            }
-        }
-    } else {
-        new_state_id
-    };
+            _ => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+        };
+    }
     let state_changed = new_state_id != current.state_id;
     if state_changed && !type_changed {
         if let (Some(current_state), Some(target_state)) = (current.state_id, new_state_id) {
@@ -3795,7 +3801,7 @@ Di `issue_update.rs`, tepat setelah blok yang menghitung `new_state_id` dan `sta
     }
 ```
 
-Perhatikan: `new_state_id` yang lama dideklarasikan `let new_state_id = ...`; ganti deklarasi itu (jangan mendeklarasikan dua kali) — jadikan blok di atas sebagai pengganti, dan pastikan `new_state_group` dihitung setelah `state_changed` final.
+Perhatikan: deklarasi `new_state_id` lama diganti seluruhnya (jangan mendeklarasikan dua kali), dan pastikan `new_state_group` dihitung setelah `state_changed` final.
 
 Verifikasi `CurrentIssue` (struct snapshot di file yang sama) sudah memuat `state_id` dan `type_id`; jika belum, tambahkan field `type_id: Option<Uuid>` dan sertakan di query snapshot (SELECT ... `type_id`).
 
@@ -3831,7 +3837,14 @@ git commit -m "feat(api-rs): enforce state transitions on issue patch"
 **Files:**
 
 - Modify: `apps/api-rs/crates/api/src/routes/issue_write.rs`
+- Modify: `apps/api-rs/crates/api/src/routes/draft.rs` (reconcile type pada draft→issue convert)
 - Modify: `apps/api-rs/crates/api/tests/workflow_transition_test.rs`
+
+Catatan amandemen (temuan review C2): `create_draft_to_issue` saat ini me-resolve default dari `d.type_id` tetapi meng-bind `b.type_id` ke row issue, sehingga bisa terjadi mismatch type/state (issue type NULL + state typed, atau type U + state type T). Wajib diselesaikan di task ini:
+
+- Hitung satu `effective_type = b.type_id.or(d.type_id)` (atau tolak mismatch dengan 400, pilih salah satu dan dokumentasikan).
+- Pakai `effective_type` untuk resolve default state DAN untuk nilai `type_id` yang di-bind ke INSERT issue.
+- Tambahkan test: draft bertipe X + body tanpa type → issue memakai type X dan state default X; body type Y berbeda dari draft X → salah satu: 400 mismatch, atau issue type Y + state default Y (sesuai pilihan implementasi) — jangan sampai type/state beda sumber.
 
 - [ ] **Step 1: Tulis test DB yang gagal**
 
@@ -3938,28 +3951,15 @@ Tambahkan test yang memanggil handler update v1 (nama sesuai hasil Step 1) untuk
 Di handler `create` v1:
 
 - Validasi state vs type: tambahkan `AND type_id IS NOT DISTINCT FROM $3` pada query state di `validate_write` (baris ~721-727), bind `body.type_id`.
-- Default: sebelum `resolve_effective_state(body.state, default_state, first_state)`, jika `body.type_id` ada, ambil typed default dulu:
+- Default: JANGAN menulis query typed inline (temuan review C2 — ini akan jadi query typed keempat dan bisa drift). Ganti seluruh blok default lama (`default_state`/`first_state` + `resolve_effective_state`) dengan satu panggilan resolver bersama:
 
 ```rust
-    let typed_state: Option<uuid::Uuid> = match body.type_id {
-        Some(type_id) => {
-            sqlx::query_scalar(
-                "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
-                 WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-                   AND t.deleted_at IS NULL AND t.is_epic = false \
-                 ORDER BY s.\"default\" DESC, s.sequence ASC LIMIT 1",
-            )
-            .bind(project_id)
-            .bind(type_id)
-            .fetch_optional(&st.pool)
-            .await?
-        }
-        None => None,
-    };
-    let state = resolve_effective_state(body.state, typed_state.or(default_state), first_state);
+    let state = resolve_issue_state(&st.pool, project_id, body.type_id, body.state).await?;
 ```
 
-Di handler update v1: jika `state` berubah, panggil `validate_state_transition(&st.pool, project_id, current.type_id, current.state_id, target_state)`; tolak dengan `transition_denied(allowed)`. Gunakan `type_id` efektif setelah patch (jika body mengganti type, perlakukan seperti Task C3: tanpa cek transisi, state wajib milik type baru).
+Resolver sudah menangani explicit, typed (default lalu first by sequence), legacy default non-triage, dan fallback first non-triage. Hapus query `default_state`/`first_state` yang jadi tidak terpakai agar tidak ada warning; pastikan `resolve_issue_state` diimpor dari `super::issue_common`.
+
+Di handler update v1: jika `state` berubah, panggil `validate_state_transition(&st.pool, project_id, current.type_id, current.state_id, target_state)`; tolak dengan `transition_denied(allowed)`. Gunakan `type_id` efektif setelah patch (jika body mengganti type, perlakukan seperti Task C3: tanpa cek transisi, state wajib milik type baru). Perhatikan: resolver legacy-only di `v1/work_item.rs:765-780` harus diganti dengan resolver bersama agar konsisten dengan `type_id IS NULL`/typed lookup.
 
 - [ ] **Step 4: Jalankan test untuk memastikan lulus**
 
