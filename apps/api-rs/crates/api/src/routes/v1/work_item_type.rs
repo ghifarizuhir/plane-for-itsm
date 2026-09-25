@@ -293,6 +293,9 @@ async fn create_type(
     // Guard sebelum INSERT agar create yang konflik tidak meninggalkan type
     // orphan tanpa link.
     if let Some(workflow_id) = body.workflow {
+        if !workflow_in_workspace(&st.pool, ws, workflow_id).await? {
+            return Ok(bad("Workflow does not exist in this workspace"));
+        }
         if workflow_link_conflict(&st.pool, &link_ids, workflow_id, None).await? {
             return Ok(bad(
                 "Workflow is already enabled for another work item type in this project",
@@ -362,6 +365,22 @@ async fn workflow_link_conflict(
         }
     }
     Ok(false)
+}
+
+/// `true` bila `workflow_id` adalah workflow hidup di `workspace_id`.
+async fn workflow_in_workspace(
+    pool: &sqlx::PgPool,
+    workspace_id: uuid::Uuid,
+    workflow_id: uuid::Uuid,
+) -> Result<bool, common::errors::AppError> {
+    let (ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflows WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .bind(workspace_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
 }
 
 /// Insert `project_issue_types` links for types/projects both in `ws`,
@@ -475,6 +494,11 @@ async fn update_type(
         return Ok(missing());
     };
     let effective_workflow = body.workflow.or(current_workflow);
+    if let Some(workflow_id) = body.workflow {
+        if !workflow_in_workspace(&st.pool, ws, workflow_id).await? {
+            return Ok(bad("Workflow does not exist in this workspace"));
+        }
+    }
     // Switch workflow pada type yang sudah enabled: guard ke semua project
     // hidup yang mengaktifkan type ini, lalu materialize setelah UPDATE.
     let switch_to = match body.workflow {

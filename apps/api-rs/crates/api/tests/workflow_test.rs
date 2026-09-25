@@ -1989,5 +1989,68 @@ async fn workflow_switch_guard_and_map_details() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "Type is in use by work items");
 
+    // Workflow milik workspace lain / tidak ada tidak boleh dipakai.
+    let (foreign_slug, _foreign_ws_id, _foreign_project_id) = make_workspace(&st, "wfown").await;
+    let (foreign_owner,): (Uuid,) =
+        sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+            .bind(&foreign_slug)
+            .fetch_one(&st.pool)
+            .await
+            .expect("foreign owner");
+    let (_, foreign_wf) = create_workflow(
+        State(st.clone()),
+        AuthUser(foreign_owner),
+        Path(foreign_slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Foreign Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("foreign workflow");
+    let foreign_wf_id = Uuid::parse_str(foreign_wf["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_u)),
+        Json(V1UpdateWorkItemType {
+            workflow: Some(foreign_wf_id),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("switch to foreign workflow");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Workflow does not exist in this workspace");
+
+    let (status, body) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Foreign WF Type".into()),
+            workflow: Some(Uuid::new_v4()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create with missing workflow");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Workflow does not exist in this workspace");
+    let (ghost_types,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 AND name = 'Foreign WF Type' AND deleted_at IS NULL",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("ghost type rows");
+    assert_eq!(
+        ghost_types, 0,
+        "create dengan workflow invalid tidak boleh INSERT"
+    );
+
+    purge(&st.pool, &foreign_slug).await;
     purge(&st.pool, &slug).await;
 }
