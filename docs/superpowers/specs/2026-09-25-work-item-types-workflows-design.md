@@ -174,7 +174,7 @@ File baru `apps/api-rs/crates/api/src/routes/workflow.rs`, didaftarkan di `main.
 | `GET/POST /api/workspaces/:slug/workflows/`                               | list/create workflow                                  |
 | `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/`                   | CRUD workflow (delete diguard)                        |
 | `GET/POST /api/workspaces/:slug/workflows/:id/states/`                    | list/create state                                     |
-| `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/states/:state_id/`  | CRUD state + sync mirror                              |
+| `PATCH/DELETE /api/workspaces/:slug/workflows/:id/states/:state_id/`      | update/delete state + sync mirror (tanpa retrieve)    |
 | `GET/POST /api/workspaces/:slug/workflows/:id/transitions/`               | list/create transisi                                  |
 | `DELETE /api/workspaces/:slug/workflows/:id/transitions/:transition_id/`  | delete transisi (tanpa retrieve; editor memakai list) |
 | `GET/POST /api/workspaces/:slug/work-item-types/`                         | list/create type + assign `workflow`                  |
