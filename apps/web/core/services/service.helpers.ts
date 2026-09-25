@@ -174,3 +174,18 @@ export const normalizeServiceUrl = (value: string): string | null => {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 };
+
+/**
+ * True when the string parses as an absolute URL. Mirrors the service form's
+ * `validateUrl` so inline edits cannot persist values the modal would reject.
+ */
+export const isValidServiceUrl = (value: string): boolean => {
+  const canParse = (URL as unknown as { canParse?: (url: string) => boolean }).canParse;
+  if (typeof canParse === "function") return canParse(value);
+  try {
+    void new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};

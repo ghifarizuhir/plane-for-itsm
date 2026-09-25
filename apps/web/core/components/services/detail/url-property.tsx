@@ -9,10 +9,11 @@ import { useEffect, useState } from "react";
 import { EditOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
 import { Input } from "@plane/ui";
 // helpers
-import { normalizeServiceUrl } from "@/services/service.helpers";
+import { isValidServiceUrl, normalizeServiceUrl } from "@/services/service.helpers";
 
 type Props = {
   value: string | null;
@@ -28,12 +29,22 @@ export function ServiceUrlProperty(props: Props) {
   const { t } = useTranslation();
 
   useEffect(() => {
+    if (isEditing) return;
     setDraft(value ?? "");
-  }, [value]);
+  }, [value, isEditing]);
 
   const commit = () => {
     const next = normalizeServiceUrl(draft);
+    if (next !== null && !isValidServiceUrl(next)) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: t("common.url_is_invalid"),
+      });
+      return;
+    }
     setIsEditing(false);
+    setDraft(next ?? "");
     if (next !== value) onSubmit(next);
   };
 
@@ -51,7 +62,10 @@ export function ServiceUrlProperty(props: Props) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            commit();
+          }
           if (e.key === "Escape") cancel();
         }}
         placeholder="https://"
@@ -81,12 +95,12 @@ export function ServiceUrlProperty(props: Props) {
         className="flex h-7.5 min-w-0 grow items-center truncate rounded-sm px-2 text-body-xs-regular text-primary hover:bg-layer-1"
         title={value}
       >
-        {value}
+        <span className="truncate">{value}</span>
       </a>
       <button
         type="button"
         onClick={() => setIsEditing(true)}
-        className="hidden shrink-0 rounded-sm p-1 text-tertiary group-hover:block hover:text-primary"
+        className="shrink-0 rounded-sm p-1 text-tertiary opacity-0 group-hover:opacity-100 hover:text-primary focus-visible:opacity-100"
         aria-label={t("edit")}
       >
         <EditOutline className="h-3.5 w-3.5" />

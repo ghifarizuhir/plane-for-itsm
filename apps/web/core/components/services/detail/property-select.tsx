@@ -29,11 +29,14 @@ export function ServicePropertySelect<T extends string>(props: Props<T>) {
       onChange={(val: T) => onChange(val)}
       disabled={disabled}
       placement="bottom-start"
+      className="w-full grow"
       customButtonClassName="group h-7.5 w-full grow px-2 text-left"
       customButton={
         <span className="flex w-full items-center justify-between gap-1">
           <span className="truncate text-body-xs-regular capitalize">{t(`${i18nPrefix}.${value}`)}</span>
-          {!disabled && <ChevronDownOutline className="hidden h-3.5 w-3.5 shrink-0 group-hover:inline" />}
+          {!disabled && (
+            <ChevronDownOutline aria-hidden="true" className="hidden h-3.5 w-3.5 shrink-0 group-hover:inline" />
+          )}
         </span>
       }
     >
