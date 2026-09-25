@@ -468,13 +468,15 @@ async fn workspace_id(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uu
 
 /// Resolves the effective state for a new draft/issue, mirroring
 /// `DraftIssue.save` (`db/models/draft.py:84-98`) / `Issue._ensure_default_state`
-/// (`db/models/issue.py:231-243`): explicit id wins; else the project's
-/// default non-triage state, else the first non-triage state, else None.
-/// Django's `.first()` uses `State.Meta.ordering = ("sequence",)`
-/// (`db/models/state.py:115`), hence `sequence, created_at` here.
+/// (`db/models/issue.py:231-243`): explicit id wins; else the default state of
+/// the given type when it has one, else the project's default non-triage
+/// state, else the first non-triage state, else None. Django's `.first()` uses
+/// `State.Meta.ordering = ("sequence",)` (`db/models/state.py:115`), hence
+/// `sequence, created_at` here.
 async fn resolve_default_state(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
+    type_id: Option<uuid::Uuid>,
     explicit: Option<uuid::Uuid>,
 ) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     if explicit.is_some() {
@@ -483,6 +485,21 @@ async fn resolve_default_state(
     let Some(pid) = project_id else {
         return Ok(None);
     };
+    if let Some(type_id) = type_id {
+        let typed: Option<uuid::Uuid> = sqlx::query_scalar(
+            "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
+             WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
+               AND t.deleted_at IS NULL AND t.is_epic = false \
+             ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
+        )
+        .bind(pid)
+        .bind(type_id)
+        .fetch_optional(pool)
+        .await?;
+        if typed.is_some() {
+            return Ok(typed);
+        }
+    }
     let row: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
          AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
@@ -835,7 +852,7 @@ pub async fn create(
             return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
         }
     }
-    let state_id = resolve_default_state(&st.pool, b.project_id, b.state_id).await?;
+    let state_id = resolve_default_state(&st.pool, b.project_id, b.type_id, b.state_id).await?;
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
         if group.as_deref() == Some("completed") {
@@ -1256,7 +1273,7 @@ pub async fn create_draft_to_issue(
     let Some((workspace_id, default_assignee)) = proj else {
         return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
     };
-    let state_id = resolve_default_state(&st.pool, Some(project_id), b.state_id).await?;
+    let state_id = resolve_default_state(&st.pool, Some(project_id), d.type_id, b.state_id).await?;
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
         if group.as_deref() == Some("completed") {

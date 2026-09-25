@@ -859,13 +859,33 @@ pub fn resolve_effective_state(
 /// DB lookup behind [`resolve_effective_state`] (moved from `issue_write.rs`).
 /// Both `.first()` lookups order by `State.Meta.ordering = ("sequence",)`
 /// (`db/models/state.py:115`), `created_at` as the tiebreak.
-pub(crate) async fn resolve_issue_state(
+///
+/// Type-aware: when the work item has a type, its mirror state marked
+/// `default` wins over the project-wide legacy default; with no typed default
+/// the legacy `default` state, then the first non-triage state, applies.
+pub async fn resolve_issue_state(
     pool: &sqlx::PgPool,
     project_id: Uuid,
+    type_id: Option<Uuid>,
     explicit: Option<Uuid>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
     if explicit.is_some() {
         return Ok(explicit);
+    }
+    if let Some(type_id) = type_id {
+        let typed: Option<Uuid> = sqlx::query_scalar(
+            "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
+             WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
+               AND t.deleted_at IS NULL AND t.is_epic = false \
+             ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
+        )
+        .bind(project_id)
+        .bind(type_id)
+        .fetch_optional(pool)
+        .await?;
+        if typed.is_some() {
+            return Ok(typed);
+        }
     }
     let default_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \

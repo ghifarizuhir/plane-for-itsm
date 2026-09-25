@@ -748,10 +748,10 @@ pub async fn patch_issue(
     // `Issue._ensure_default_state` (`db/models/issue.py:180-236`).
     let new_state_id = match body.state_id {
         Some(Some(id)) => Some(id),
-        Some(None) => resolve_issue_state(&st.pool, project_id, None).await?,
+        Some(None) => resolve_issue_state(&st.pool, project_id, None, None).await?,
         None => match current.state_id {
             Some(id) => Some(id),
-            None => resolve_issue_state(&st.pool, project_id, None).await?,
+            None => resolve_issue_state(&st.pool, project_id, None, None).await?,
         },
     };
     let state_changed = new_state_id != current.state_id;

@@ -273,7 +273,7 @@ pub async fn create(
         return Ok(e);
     }
 
-    let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
+    let state_id = resolve_issue_state(&st.pool, project_id, body.type_id, body.state_id).await?;
     let start_date = match parse_date(&body.start_date) {
         Ok(v) => v,
         Err(e) => return Ok(bad(&e)),
