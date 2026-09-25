@@ -125,6 +125,8 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
             projectId={pid}
             multiple={false}
             placeholder={t("service.fields.owner")}
+            showUserDetails
+            showTooltip
             buttonVariant="transparent-with-text"
             className="group w-full grow"
             buttonContainerClassName="w-full text-left h-7.5"
