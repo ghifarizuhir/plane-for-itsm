@@ -232,6 +232,12 @@ pub struct TransitionContext {
 }
 
 /// Pure: `Ok(())` bila transisi boleh; `Err(allowed_state_ids)` bila ditolak.
+///
+/// Dua bentuk `Err`:
+/// - `Err(vec![])` — target di luar workflow type ini, atau legacy tanpa
+///   default: tidak ada state yang diizinkan;
+/// - `Err(allowed)` — target di dalam workflow tapi tidak terjangkau dari
+///   state sekarang; untuk state legacy, `allowed` = `[default_state_id]`.
 pub fn evaluate_transition(
     current_state: Uuid,
     target_state: Uuid,
@@ -240,18 +246,17 @@ pub fn evaluate_transition(
     if current_state == target_state {
         return Ok(());
     }
-    let current_workflow_state = ctx
+    if !ctx
         .pairs
         .iter()
-        .find(|(state_id, _)| *state_id == current_state)
-        .map(|(_, workflow_state_id)| *workflow_state_id);
-    let Some(current_workflow_state) = current_workflow_state else {
+        .any(|(state_id, _)| *state_id == current_state)
+    {
         return match ctx.default_state_id {
             Some(default_state_id) if default_state_id == target_state => Ok(()),
             Some(default_state_id) => Err(vec![default_state_id]),
             None => Err(Vec::new()),
         };
-    };
+    }
     if !ctx
         .pairs
         .iter()

@@ -62,3 +62,36 @@ fn legacy_current_state_only_moves_to_default() {
         Err(vec![mirror_new])
     );
 }
+
+#[test]
+fn legacy_without_default_denies_everything() {
+    let mirror_new = Uuid::new_v4();
+    let legacy_state = Uuid::new_v4();
+    let ctx = TransitionContext {
+        pairs: vec![(mirror_new, Uuid::new_v4())],
+        transitions: vec![],
+        default_state_id: None,
+    };
+    assert_eq!(
+        evaluate_transition(legacy_state, mirror_new, &ctx),
+        Err(vec![])
+    );
+}
+
+#[test]
+fn legacy_target_inside_workflow_still_must_be_default() {
+    let mirror_new = Uuid::new_v4();
+    let mirror_progress = Uuid::new_v4();
+    let legacy_state = Uuid::new_v4();
+    let wf_new = Uuid::new_v4();
+    let wf_progress = Uuid::new_v4();
+    let ctx = TransitionContext {
+        pairs: vec![(mirror_new, wf_new), (mirror_progress, wf_progress)],
+        transitions: vec![(wf_new, wf_progress)],
+        default_state_id: Some(mirror_new),
+    };
+    assert_eq!(
+        evaluate_transition(legacy_state, mirror_progress, &ctx),
+        Err(vec![mirror_new])
+    );
+}
