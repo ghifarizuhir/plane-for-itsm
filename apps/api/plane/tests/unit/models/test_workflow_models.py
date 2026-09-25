@@ -116,6 +116,7 @@ class TestStateTypeScoping:
         problem = IssueType.objects.create(workspace=workspace, name="Problem")
         State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=incident)
         State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=problem)
+        State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=None)
 
     @pytest.mark.django_db
     def test_same_state_name_rejected_within_type(self):
@@ -136,7 +137,9 @@ class TestStateTypeScoping:
     def test_only_one_default_per_type_per_project(self):
         workspace, project = make_project()
         incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        problem = IssueType.objects.create(workspace=workspace, name="Problem")
         State.objects.create(project=project, name="New", color="#60646C", group="backlog", type=incident, default=True)
+        State.objects.create(project=project, name="New", color="#60646C", group="backlog", type=problem, default=True)
         with pytest.raises(IntegrityError):
             State.objects.create(
                 project=project, name="Other", color="#60646C", group="backlog", type=incident, default=True
@@ -146,6 +149,7 @@ class TestStateTypeScoping:
     def test_workflow_state_mirror_unique_per_project(self):
         workspace, project = make_project()
         incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        problem = IssueType.objects.create(workspace=workspace, name="Problem")
         workflow = Workflow.objects.create(workspace=workspace, name="Incident Workflow")
         wf_state = WorkflowState.objects.create(
             workflow=workflow, name="New", color="#60646C", group="backlog", is_default=True
@@ -165,6 +169,6 @@ class TestStateTypeScoping:
                 name="New Mirror",
                 color="#60646C",
                 group="backlog",
-                type=incident,
+                type=problem,
                 workflow_state=wf_state,
             )
