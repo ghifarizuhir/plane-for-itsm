@@ -26,6 +26,7 @@ use super::issue_common::{
 };
 use super::issue_version_write::record_description_version;
 use super::work_item::ws_active_member;
+use super::workflow::{transition_denied, validate_state_transition};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -248,6 +249,7 @@ pub struct CurrentIssue {
     pub description_json: Value,
     pub priority: String,
     pub state_id: Option<Uuid>,
+    pub type_id: Option<Uuid>,
     pub parent_id: Option<Uuid>,
     pub start_date: Option<chrono::NaiveDate>,
     pub target_date: Option<chrono::NaiveDate>,
@@ -700,7 +702,7 @@ pub async fn patch_issue(
     // The row is also the snapshot `Issue.save` reads (`_state.adding ==
     // false`): `has_changed("state_id")` compares against it.
     let current: Option<CurrentIssue> = sqlx::query_as(
-        "SELECT i.name, i.description_html, i.description_json, i.priority, i.state_id, i.parent_id, \
+        "SELECT i.name, i.description_html, i.description_json, i.priority, i.state_id, i.type_id, i.parent_id, \
          i.start_date, i.target_date, i.estimate_point_id, i.created_by_id \
          FROM issues i LEFT JOIN states s ON s.id = i.state_id \
          WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
@@ -746,15 +748,64 @@ pub async fn patch_issue(
         Err(e) => return Ok(bad(&e)),
     };
     // `Issue._ensure_default_state` (`db/models/issue.py:180-236`).
-    let new_state_id = match body.state_id {
+    let type_changed = match body.type_id {
+        Some(Some(new_type)) => Some(new_type) != current.type_id,
+        Some(None) => current.type_id.is_some(),
+        None => false,
+    };
+    let effective_type_id = match body.type_id {
+        Some(Some(new_type)) => Some(new_type),
+        Some(None) => None,
+        None => current.type_id,
+    };
+    // Default resolution WAJIB memakai effective_type_id, termasuk saat state
+    // di-clear atau issue belum punya state — jangan pakai None (temuan review C2).
+    let mut new_state_id = match body.state_id {
         Some(Some(id)) => Some(id),
-        Some(None) => resolve_issue_state(&st.pool, project_id, None, None).await?,
+        Some(None) => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
         None => match current.state_id {
             Some(id) => Some(id),
-            None => resolve_issue_state(&st.pool, project_id, None, None).await?,
+            None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
         },
     };
+    if type_changed {
+        // Ganti type: state wajib milik type baru; tanpa cek transisi.
+        new_state_id = match body.state_id {
+            Some(Some(explicit)) => {
+                let (ok,): (bool,) = sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+                     AND deleted_at IS NULL AND type_id IS NOT DISTINCT FROM $3)",
+                )
+                .bind(explicit)
+                .bind(project_id)
+                .bind(effective_type_id)
+                .fetch_one(&st.pool)
+                .await?;
+                if !ok {
+                    return Ok(bad("State is not valid for this work item type"));
+                }
+                Some(explicit)
+            }
+            _ => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+        };
+    }
     let state_changed = new_state_id != current.state_id;
+    if state_changed && !type_changed {
+        if let (Some(current_state), Some(target_state)) = (current.state_id, new_state_id) {
+            match validate_state_transition(
+                &st.pool,
+                project_id,
+                effective_type_id,
+                current_state,
+                target_state,
+            )
+            .await?
+            {
+                Ok(()) => {}
+                Err(allowed) => return Ok(transition_denied(allowed)),
+            }
+        }
+    }
     let new_state_group: Option<String> = if state_changed {
         match new_state_id {
             Some(id) => {

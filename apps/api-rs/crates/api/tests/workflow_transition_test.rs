@@ -1,9 +1,15 @@
 use api::middleware::auth::AuthUser;
 use api::routes::issue_common::resolve_issue_state;
-use api::routes::workflow::{evaluate_transition, TransitionContext};
+use api::routes::issue_update::{patch_issue, PatchIssue};
+use api::routes::issue_write::{create as create_issue, CreateIssue};
+use api::routes::v1::work_item_type::import_to_project;
+use api::routes::workflow::{
+    create_state, create_transition, create_workflow, evaluate_transition, TransitionBody,
+    TransitionContext, WorkflowBody, WorkflowStateBody,
+};
 use api::routes::workspace::create;
 use api::state::AppState;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
@@ -172,6 +178,8 @@ async fn purge(pool: &PgPool, slug: &str) {
         "DELETE FROM cycle_issues WHERE workspace_id = $1",
         "DELETE FROM issue_labels WHERE workspace_id = $1",
         "DELETE FROM issue_activities WHERE workspace_id = $1",
+        "DELETE FROM issue_description_versions WHERE workspace_id = $1",
+        "DELETE FROM issue_subscribers WHERE workspace_id = $1",
         "DELETE FROM issue_sequences WHERE workspace_id = $1",
         "DELETE FROM issues WHERE workspace_id = $1",
         "DELETE FROM issue_views WHERE workspace_id = $1",
@@ -397,5 +405,203 @@ async fn typed_default_beats_legacy_default() {
     assert_ne!(resolved, Some(legacy_default));
 
     let _ = owner;
+    purge(&st.pool, &slug).await;
+}
+
+// --- DB-backed PATCH enforcement test --------------------------------------
+
+#[tokio::test]
+async fn patch_rejects_disallowed_transition() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfpatch").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Workflow W dengan state New (default), In Progress, Closed.
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().expect("workflow id")).expect("uuid");
+
+    let (_, new_state) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state New");
+    let workflow_new_id =
+        Uuid::parse_str(new_state["id"].as_str().expect("new state id")).expect("uuid");
+
+    let (_, progress_state) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("In Progress".into()),
+            group: Some("started".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state In Progress");
+    let workflow_progress_id =
+        Uuid::parse_str(progress_state["id"].as_str().expect("progress id")).expect("uuid");
+
+    let (_, closed_state) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Closed".into()),
+            group: Some("completed".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state Closed");
+    let _workflow_closed_id =
+        Uuid::parse_str(closed_state["id"].as_str().expect("closed id")).expect("uuid");
+
+    // Hanya New → In Progress yang terdaftar; New → Closed tidak.
+    let (status, _) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(workflow_new_id),
+            to_state_id: Some(workflow_progress_id),
+        }),
+    )
+    .await
+    .expect("transition");
+    assert_eq!(status, StatusCode::CREATED);
+
+    // Type T memakai workflow W, lalu di-enable di project (materialize mirror).
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": [type_id]})),
+    )
+    .await
+    .expect("import");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let mirrors: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, name FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_all(&st.pool)
+    .await
+    .expect("mirrors");
+    let mirror_of = |name: &str| {
+        mirrors
+            .iter()
+            .find(|(_, n)| n == name)
+            .map(|(id, _)| *id)
+            .unwrap_or_else(|| panic!("missing mirror state {name}"))
+    };
+    let new_state_id = mirror_of("New");
+    let in_progress_state_id = mirror_of("In Progress");
+    let closed_state_id = mirror_of("Closed");
+
+    // Issue typed dengan state New, dibuat lewat handler create publik.
+    let (status, Json(issue)) = create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(CreateIssue {
+            name: "Server down".into(),
+            assignee_ids: None,
+            label_ids: None,
+            state_id: Some(new_state_id),
+            description_html: None,
+            priority: None,
+            start_date: None,
+            target_date: None,
+            parent_id: None,
+            type_id: Some(type_id),
+            estimate_point: None,
+        }),
+    )
+    .await
+    .expect("issue create");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+
+    // New → Closed tidak terjangkau dari workflow type → 400 + allowed In Progress.
+    let (status, body) = patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, issue_id)),
+        Json(PatchIssue {
+            state_id: Some(Some(closed_state_id)),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch denied");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(
+        body["allowed_state_ids"],
+        json!([in_progress_state_id.to_string()])
+    );
+    let (stored,): (Option<Uuid>,) = sqlx::query_as("SELECT state_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("state after denial");
+    assert_eq!(stored, Some(new_state_id), "state tidak boleh berubah");
+
+    // New → In Progress terdaftar → lolos.
+    let (status, _) = patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, issue_id)),
+        Json(PatchIssue {
+            state_id: Some(Some(in_progress_state_id)),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch allowed");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored,): (Option<Uuid>,) = sqlx::query_as("SELECT state_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("state after patch");
+    assert_eq!(stored, Some(in_progress_state_id));
+
     purge(&st.pool, &slug).await;
 }
