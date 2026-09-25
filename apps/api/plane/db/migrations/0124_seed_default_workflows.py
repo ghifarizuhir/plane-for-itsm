@@ -115,6 +115,16 @@ def _has_external_ownership(instance):
     return bool(instance.external_source or instance.external_id)
 
 
+def _is_exact_seed_marker(instance, external_id):
+    return instance.external_source == SEED_EXTERNAL_SOURCE and instance.external_id == external_id
+
+
+def _has_custom_external_ownership(instance, external_id):
+    return not _is_exact_seed_marker(instance, external_id) and (
+        instance.external_source is not None or instance.external_id is not None
+    )
+
+
 def _active_marker_rows(model, filters):
     return list(
         model.objects.filter(
@@ -321,6 +331,31 @@ def _get_workflow_state(WorkflowState, workspace, seed, workflow, state_name, gr
     )
 
 
+def _validate_legacy_issue_type(workspace, seed, issue_type, workflow):
+    mismatches = []
+    expected_values = {
+        "workflow_id": workflow.id,
+        "is_epic": False,
+        "is_default": False,
+        "is_active": True,
+        "level": 0,
+        "description": "",
+        "logo_props": {},
+        "external_source": None,
+        "external_id": None,
+    }
+    for field, expected in expected_values.items():
+        if getattr(issue_type, field) != expected:
+            mismatches.append(f"{field}={getattr(issue_type, field)!r}")
+    if mismatches:
+        _conflict(
+            workspace,
+            seed,
+            f"unmarked issue type {seed['type']!r} has a legacy seed shape mismatch "
+            f"({', '.join(mismatches)})",
+        )
+
+
 def _get_issue_type(IssueType, workspace, seed, workflow):
     issue_type_external_id = _issue_type_external_id(seed)
     named_types = list(
@@ -355,11 +390,21 @@ def _get_issue_type(IssueType, workspace, seed, workflow):
                 seed,
                 "a different active issue type already uses the seed type name",
             )
-        marker_owned = True
-    elif named_types:
-        issue_type = named_types[0]
-        marker_owned = False
-    else:
+        if issue_type.workflow_id is None:
+            _conflict(
+                workspace,
+                seed,
+                "seed-owned issue type has a cleared workflow; refusing to reattach it",
+            )
+        if issue_type.workflow_id != workflow.id:
+            _conflict(
+                workspace,
+                seed,
+                "seed-owned issue type has a conflicting workflow; refusing to rewire it",
+            )
+        return issue_type
+
+    if not named_types:
         return IssueType.objects.create(
             workspace_id=workspace.id,
             name=seed["type"],
@@ -371,32 +416,32 @@ def _get_issue_type(IssueType, workspace, seed, workflow):
             external_id=issue_type_external_id,
         )
 
-    if issue_type.is_epic:
-        _conflict(workspace, seed, "existing issue type is an epic")
-    if issue_type.workflow_id is not None and issue_type.workflow_id != workflow.id:
+    issue_type = named_types[0]
+    if _has_custom_external_ownership(issue_type, issue_type_external_id):
         _conflict(
             workspace,
             seed,
-            "existing issue type is already attached to a different workflow",
-        )
-    if issue_type.workflow_id is None and _has_external_ownership(issue_type) and not marker_owned:
-        _conflict(
-            workspace,
-            seed,
-            "existing unassigned issue type has custom external ownership "
+            "same-name issue type has custom external ownership "
             f"({issue_type.external_source!r}, {issue_type.external_id!r})",
         )
-
-    update_fields = []
     if issue_type.workflow_id is None:
-        issue_type.workflow_id = workflow.id
-        update_fields.append("workflow")
-    if not marker_owned and not _has_external_ownership(issue_type):
-        issue_type.external_source = SEED_EXTERNAL_SOURCE
-        issue_type.external_id = issue_type_external_id
-        update_fields.extend(["external_source", "external_id"])
-    if update_fields:
-        issue_type.save(update_fields=update_fields)
+        _conflict(
+            workspace,
+            seed,
+            "unmarked issue type has a cleared workflow; only the exact legacy seed row "
+            "may be adopted",
+        )
+    if issue_type.workflow_id != workflow.id:
+        _conflict(
+            workspace,
+            seed,
+            "unmarked issue type has a conflicting workflow; only the exact legacy seed row "
+            "may be adopted",
+        )
+    _validate_legacy_issue_type(workspace, seed, issue_type, workflow)
+    issue_type.external_source = SEED_EXTERNAL_SOURCE
+    issue_type.external_id = issue_type_external_id
+    issue_type.save(update_fields=["external_source", "external_id"])
     return issue_type
 
 
