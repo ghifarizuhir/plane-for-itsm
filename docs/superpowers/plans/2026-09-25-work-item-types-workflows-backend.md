@@ -593,7 +593,7 @@ Ganti blok `if self.state is None:` di `DraftIssue.save()` (`apps/api/plane/db/m
 
 Run: `docker compose -f docker-compose-test.yml run --rm api-tests pytest plane/tests/unit/models/test_workflow_models.py -vv`
 
-Expected: PASS (15 passed).
+Expected: PASS (22 passed: 14 existing A1/A2 tests + 4 original A4 tests + 4 regression tests).
 
 - [ ] **Step 5: Commit**
 
