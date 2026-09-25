@@ -188,11 +188,53 @@ class TestTypeAwareDefaultState:
         assert issue.state.name == "New"
 
     @pytest.mark.django_db
+    def test_issue_typed_state_without_default_uses_first_by_sequence(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        later = State.objects.create(
+            project=project, name="Later", color="#60646C", group="backlog", type=incident, sequence=20
+        )
+        earlier = State.objects.create(
+            project=project, name="Earlier", color="#60646C", group="backlog", type=incident, sequence=10
+        )
+        State.objects.filter(pk=later.pk).update(sequence=20)
+        State.objects.filter(pk=earlier.pk).update(sequence=10)
+        issue = Issue.objects.create(project=project, name="Server down", type=incident)
+        assert issue.state == earlier
+
+    @pytest.mark.django_db
+    def test_issue_explicit_state_is_preserved_over_type_default(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        default_state = State.objects.create(
+            project=project, name="New", color="#60646C", group="backlog", type=incident, default=True
+        )
+        explicit_state = State.objects.create(
+            project=project, name="In Progress", color="#F59E0B", group="started"
+        )
+        issue = Issue.objects.create(project=project, name="Server down", type=incident, state=explicit_state)
+        assert issue.state == explicit_state
+        assert issue.state != default_state
+
+    @pytest.mark.django_db
     def test_issue_without_type_uses_legacy_default(self):
         _, project = make_project()
         State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
         issue = Issue.objects.create(project=project, name="Generic task")
         assert issue.state.name == "Backlog"
+
+    @pytest.mark.django_db
+    def test_issue_without_type_ignores_typed_default(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        State.objects.create(
+            project=project, name="New", color="#60646C", group="backlog", type=incident, default=True
+        )
+        legacy_state = State.objects.create(
+            project=project, name="Backlog", color="#60646C", group="backlog", default=True
+        )
+        issue = Issue.objects.create(project=project, name="Generic task")
+        assert issue.state == legacy_state
 
     @pytest.mark.django_db
     def test_issue_epic_type_uses_legacy_default(self):
@@ -201,6 +243,18 @@ class TestTypeAwareDefaultState:
         epic = IssueType.objects.create(workspace=workspace, name="Epic", is_epic=True)
         issue = Issue.objects.create(project=project, name="Big rock", type=epic)
         assert issue.state.name == "Backlog"
+
+    @pytest.mark.django_db
+    def test_issue_legacy_fallback_excludes_triage_state(self):
+        _, project = make_project()
+        State.objects.create(
+            project=project, name="Triage", color="#4E5355", group="triage", is_triage=True, default=True
+        )
+        legacy_state = State.objects.create(
+            project=project, name="Backlog", color="#60646C", group="backlog", default=True
+        )
+        issue = Issue.objects.create(project=project, name="Generic task")
+        assert issue.state == legacy_state
 
     @pytest.mark.django_db
     def test_draft_default_state_follows_type(self):
