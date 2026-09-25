@@ -903,7 +903,7 @@ pub async fn list_transitions(
     }
     let rows: Vec<WorkflowTransitionRow> = sqlx::query_as(
         "SELECT id, workflow_id, from_state_id, to_state_id FROM workflow_transitions \
-         WHERE workflow_id = $1 AND deleted_at IS NULL ORDER BY created_at",
+         WHERE workflow_id = $1 AND deleted_at IS NULL ORDER BY created_at, id",
     )
     .bind(workflow_id)
     .fetch_all(&st.pool)

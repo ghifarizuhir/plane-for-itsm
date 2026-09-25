@@ -1193,6 +1193,21 @@ async fn transition_crud_validates_states() {
     .expect("self");
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
+    // Salah satu id hilang → 400 dengan pesan required.
+    let (status, body) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: None,
+        }),
+    )
+    .await
+    .expect("missing to_state_id");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "from_state_id and to_state_id are required");
+
     let (_, list) = list_transitions(
         State(st.clone()),
         AuthUser(owner),
@@ -1242,6 +1257,21 @@ async fn transition_crud_validates_states() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "States must belong to this workflow");
 
+    // `from_state_id` dari workflow lain juga ditolak (sisi kiri `||`).
+    let (status, body) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(other_state_id),
+            to_state_id: Some(new_id),
+        }),
+    )
+    .await
+    .expect("cross workflow from");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "States must belong to this workflow");
+
     let (status, _) = delete_transition(
         State(st.clone()),
         AuthUser(owner),
@@ -1250,6 +1280,14 @@ async fn transition_crud_validates_states() {
     .await
     .expect("delete transition");
     assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = delete_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, transition_id)),
+    )
+    .await
+    .expect("delete transition twice");
+    assert_eq!(status, StatusCode::NOT_FOUND);
     let (_, list) = list_transitions(
         State(st.clone()),
         AuthUser(owner),
@@ -1258,6 +1296,58 @@ async fn transition_crud_validates_states() {
     .await
     .expect("list after delete");
     assert!(list.as_array().unwrap().is_empty());
+
+    // Partial unique hanya berlaku untuk baris hidup: pasangan yang sama
+    // boleh dibuat ulang setelah soft-delete.
+    let (status, _) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: Some(progress_id),
+        }),
+    )
+    .await
+    .expect("recreate after delete");
+    assert_eq!(status, StatusCode::CREATED);
+    let (_, list) = list_transitions(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("list after recreate");
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    // Workflow ter-soft-delete → list 404, bukan list kosong.
+    let (_, doomed) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Doomed Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("doomed workflow");
+    let doomed_id = Uuid::parse_str(doomed["id"].as_str().unwrap()).unwrap();
+    sqlx::query("UPDATE workflows SET deleted_at = now() WHERE id = $1")
+        .bind(doomed_id)
+        .execute(&st.pool)
+        .await
+        .expect("soft-delete workflow");
+    let (status, body) = list_transitions(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), doomed_id)),
+    )
+    .await
+    .expect("list deleted workflow");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "The required object does not exist.");
 
     purge(&st.pool, &slug).await;
 }
