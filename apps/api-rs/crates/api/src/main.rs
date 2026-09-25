@@ -654,7 +654,7 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
-        // Work item types + workflows (workspace-level, opt-in per project).
+        // Work item types + workflows (internal cookie-auth: workspace-level defs + project opt-in).
         .route(
             "/api/workspaces/:slug/workflows/",
             get(routes::workflow::list_workflows).post(routes::workflow::create_workflow),
@@ -697,7 +697,7 @@ async fn main() {
             post(routes::v1::work_item_type::import_to_project),
         )
         .route(
-            "/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/",
+            "/api/workspaces/:slug/projects/:project_id/work-item-types/:type_id/",
             delete(routes::workflow::unlink_type),
         )
         .route(

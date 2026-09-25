@@ -3,6 +3,7 @@
 //! schema drifts. Replaces the old hardcoded BASELINE in route_parity_test.rs.
 mod common;
 
+use axum::{routing::get, Router};
 use common::{endpoints, load_inventory, repo_root, rust_routes};
 use std::collections::HashSet;
 
@@ -40,12 +41,19 @@ const BASELINE: &[&str] = &[
 fn inventory_json_is_valid() {
     let inv = load_inventory();
     assert_eq!(inv["schema_version"], 2, "schema_version must be 2");
-    let domains = inv["domains"].as_object().expect("domains must be an object");
+    let domains = inv["domains"]
+        .as_object()
+        .expect("domains must be an object");
     assert!(!domains.is_empty(), "at least one domain required");
     let mut seen_paths: HashSet<String> = HashSet::new();
     for (domain, d) in domains {
-        assert!(d["rust_module"].is_string(), "{domain}: rust_module required");
-        let eps = d["endpoints"].as_array().expect("endpoints must be an array");
+        assert!(
+            d["rust_module"].is_string(),
+            "{domain}: rust_module required"
+        );
+        let eps = d["endpoints"]
+            .as_array()
+            .expect("endpoints must be an array");
         assert!(!eps.is_empty(), "{domain}: endpoints must be non-empty");
         for ep in eps {
             let methods = ep["methods"].as_array().expect("methods must be an array");
@@ -55,12 +63,29 @@ fn inventory_json_is_valid() {
                 assert!(VALID_METHODS.contains(&m), "{domain}: invalid method {m}");
             }
             let path = ep["path"].as_str().expect("path must be a string");
-            assert!(path.starts_with("/api/"), "{domain}: path must start with /api/: {path}");
-            assert!(seen_paths.insert(path.to_string()), "duplicate path: {path}");
-            let status = ep["rust_status"].as_str().expect("rust_status must be a string");
-            assert!(VALID_STATUSES.contains(&status), "{domain}: invalid rust_status {status} for {path}");
-            assert!(ep["out_scope"].is_boolean(), "{domain}: out_scope must be bool for {path}");
-            assert!(ep["django_source"].is_string(), "{domain}: django_source required for {path}");
+            assert!(
+                path.starts_with("/api/"),
+                "{domain}: path must start with /api/: {path}"
+            );
+            assert!(
+                seen_paths.insert(path.to_string()),
+                "duplicate path: {path}"
+            );
+            let status = ep["rust_status"]
+                .as_str()
+                .expect("rust_status must be a string");
+            assert!(
+                VALID_STATUSES.contains(&status),
+                "{domain}: invalid rust_status {status} for {path}"
+            );
+            assert!(
+                ep["out_scope"].is_boolean(),
+                "{domain}: out_scope must be bool for {path}"
+            );
+            assert!(
+                ep["django_source"].is_string(),
+                "{domain}: django_source required for {path}"
+            );
             // ADR pointer: required for decision statuses, optional otherwise.
             // When present it must be a non-empty string pointing at a real doc.
             if let Some(adr) = ep.get("adr") {
@@ -71,8 +96,14 @@ fn inventory_json_is_valid() {
             }
             if let Some(ev) = ep["fe_evidence"].as_array() {
                 for e in ev {
-                    assert!(e["service"].is_string(), "{domain}: fe_evidence.service must be string for {path}");
-                    assert!(e["method"].is_string(), "{domain}: fe_evidence.method must be string for {path}");
+                    assert!(
+                        e["service"].is_string(),
+                        "{domain}: fe_evidence.service must be string for {path}"
+                    );
+                    assert!(
+                        e["method"].is_string(),
+                        "{domain}: fe_evidence.method must be string for {path}"
+                    );
                 }
             }
         }
@@ -112,6 +143,27 @@ fn implemented_paths_are_registered_in_main_rs() {
     );
 }
 
+/// Path-shape gate: re-inserting every registered `main.rs` path into a bare
+/// `axum::Router` panics on overlapping shapes (`Router::route` is
+/// `#[track_caller]` and names the offending path), so a conflict fails here
+/// without booting the server or touching the DB.
+#[test]
+fn route_shapes_build_without_conflict() {
+    async fn dummy() {}
+
+    let mut router: Router = Router::new();
+    for path in rust_routes() {
+        // matchit 0.7.3 rejects two params in one segment (`:a-:b`); the
+        // composite work-items identifier is exempt from literal
+        // registration anyway (F6a: its `:ident/` alias serves traffic).
+        if path.split('/').any(|seg| seg.matches(':').count() > 1) {
+            continue;
+        }
+        router = router.route(&path, get(dummy));
+    }
+    let _ = router;
+}
+
 #[test]
 fn baseline_is_present_in_inventory() {
     let inv = load_inventory();
@@ -119,8 +171,16 @@ fn baseline_is_present_in_inventory() {
     for (_domain, ep) in endpoints(&inv) {
         present.insert(ep["path"].as_str().expect("path string").to_string());
     }
-    let absent: Vec<&str> = BASELINE.iter().copied().filter(|p| !present.contains(*p)).collect();
-    assert!(absent.is_empty(), "baseline paths missing from inventory:\n{}", absent.join("\n"));
+    let absent: Vec<&str> = BASELINE
+        .iter()
+        .copied()
+        .filter(|p| !present.contains(*p))
+        .collect();
+    assert!(
+        absent.is_empty(),
+        "baseline paths missing from inventory:\n{}",
+        absent.join("\n")
+    );
 }
 
 #[test]
@@ -137,7 +197,10 @@ fn decision_records_are_valid() {
                     !ep["rust_handler"].as_str().unwrap_or("").is_empty(),
                     "{domain}: deviation_accepted must keep a rust_handler for {path}"
                 );
-                assert!(!adr.is_empty(), "{domain}: deviation_accepted needs adr for {path}");
+                assert!(
+                    !adr.is_empty(),
+                    "{domain}: deviation_accepted needs adr for {path}"
+                );
                 assert!(
                     root.join(adr).exists(),
                     "{domain}: adr file missing for {path}: {adr}"
@@ -152,7 +215,10 @@ fn decision_records_are_valid() {
                     ep["rust_handler"].as_str().unwrap_or("x").is_empty(),
                     "{domain}: stays_on_django must have empty rust_handler for {path}"
                 );
-                assert!(!adr.is_empty(), "{domain}: stays_on_django needs adr for {path}");
+                assert!(
+                    !adr.is_empty(),
+                    "{domain}: stays_on_django needs adr for {path}"
+                );
                 assert!(
                     root.join(adr).exists(),
                     "{domain}: adr file missing for {path}: {adr}"
