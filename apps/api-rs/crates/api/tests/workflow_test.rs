@@ -326,3 +326,187 @@ async fn materialize_creates_and_updates_mirrors() {
 
     purge(&st.pool, &slug).await;
 }
+
+#[tokio::test]
+async fn materialize_switches_workflow_and_clears_old_mirrors() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfs").await;
+
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, now(), now()) \
+         RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("issue type");
+
+    let (wf_a,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO workflows (id, name, description, is_active, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Workflow A', '', true, $1, now(), now()) RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("workflow A");
+
+    let (wf_b,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO workflows (id, name, description, is_active, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Workflow B', '', true, $1, now(), now()) RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("workflow B");
+
+    // Nama state sengaja sama di kedua workflow untuk memicu tabrakan
+    // partial-unique (project_id, type_id, name) saat switch.
+    sqlx::query(
+        "INSERT INTO workflow_states (id, name, description, color, slug, sequence, \"group\", \
+         is_default, workflow_id, created_at, updated_at) VALUES \
+         (gen_random_uuid(), 'New', '', '#60646C', 'new', 15000, 'backlog', true, $1, now(), now()), \
+         (gen_random_uuid(), 'Closed', '', '#22C55E', 'closed', 30000, 'completed', false, $1, now(), now())",
+    )
+    .bind(wf_a)
+    .execute(&st.pool)
+    .await
+    .expect("workflow A states");
+
+    sqlx::query(
+        "INSERT INTO workflow_states (id, name, description, color, slug, sequence, \"group\", \
+         is_default, workflow_id, created_at, updated_at) VALUES \
+         (gen_random_uuid(), 'New', '', '#60646C', 'new', 15000, 'backlog', false, $1, now(), now()), \
+         (gen_random_uuid(), 'Closed', '', '#22C55E', 'closed', 30000, 'completed', true, $1, now(), now())",
+    )
+    .bind(wf_b)
+    .execute(&st.pool)
+    .await
+    .expect("workflow B states");
+
+    let (a_new,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM workflow_states WHERE workflow_id = $1 AND name = 'New'")
+            .bind(wf_a)
+            .fetch_one(&st.pool)
+            .await
+            .expect("A New");
+    let (a_closed,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM workflow_states WHERE workflow_id = $1 AND name = 'Closed'")
+            .bind(wf_a)
+            .fetch_one(&st.pool)
+            .await
+            .expect("A Closed");
+    let (b_new,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM workflow_states WHERE workflow_id = $1 AND name = 'New'")
+            .bind(wf_b)
+            .fetch_one(&st.pool)
+            .await
+            .expect("B New");
+    let (b_closed,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM workflow_states WHERE workflow_id = $1 AND name = 'Closed'")
+            .bind(wf_b)
+            .fetch_one(&st.pool)
+            .await
+            .expect("B Closed");
+
+    sqlx::query(
+        "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, level, is_default, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 0, false, now(), now())",
+    )
+    .bind(type_id)
+    .bind(project_id)
+    .bind(ws_id)
+    .execute(&st.pool)
+    .await
+    .expect("project type link");
+
+    sqlx::query("UPDATE issue_types SET workflow_id = $1 WHERE id = $2")
+        .bind(wf_a)
+        .bind(type_id)
+        .execute(&st.pool)
+        .await
+        .expect("attach workflow A");
+    let written_a = materialize_type_states(&st.pool, project_id, type_id)
+        .await
+        .expect("materialize A");
+    assert_eq!(written_a, 2);
+
+    // Switch ke workflow B: mirror lama harus di-soft-delete lebih dulu,
+    // jika tidak INSERT 'New'/'Closed' menabrak partial-unique name (23505).
+    sqlx::query("UPDATE issue_types SET workflow_id = $1 WHERE id = $2")
+        .bind(wf_b)
+        .bind(type_id)
+        .execute(&st.pool)
+        .await
+        .expect("switch to workflow B");
+    let written_b = materialize_type_states(&st.pool, project_id, type_id)
+        .await
+        .expect("materialize B after switch");
+    assert_eq!(written_b, 2);
+
+    let (old_live, old_total): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL), COUNT(*) FROM states \
+         WHERE project_id = $1 AND type_id = $2 AND workflow_state_id IN ($3, $4)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(a_new)
+    .bind(a_closed)
+    .fetch_one(&st.pool)
+    .await
+    .expect("old mirror counts");
+    assert_eq!(old_live, 0, "mirror workflow lama harus soft-deleted");
+    assert_eq!(old_total, 2, "baris lama tetap ada sebagai soft-deleted");
+
+    let (new_live, defaults_live): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE \"default\") FROM states \
+         WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL \
+           AND workflow_state_id IN ($3, $4)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(b_new)
+    .bind(b_closed)
+    .fetch_one(&st.pool)
+    .await
+    .expect("new mirror counts");
+    assert_eq!(new_live, 2);
+    assert_eq!(defaults_live, 1);
+
+    let (live_total,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("live total");
+    assert_eq!(live_total, 2);
+
+    // Idempotent: panggilan kedua hanya memproses 2 mirror B, tanpa insert.
+    let written_b_again = materialize_type_states(&st.pool, project_id, type_id)
+        .await
+        .expect("materialize B again");
+    assert_eq!(written_b_again, 2);
+    let (old_live_again, new_live_again, defaults_again): (i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE workflow_state_id IN ($3, $4) AND deleted_at IS NULL), \
+                COUNT(*) FILTER (WHERE workflow_state_id IN ($5, $6) AND deleted_at IS NULL), \
+                COUNT(*) FILTER (WHERE deleted_at IS NULL AND \"default\") \
+         FROM states WHERE project_id = $1 AND type_id = $2",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(a_new)
+    .bind(a_closed)
+    .bind(b_new)
+    .bind(b_closed)
+    .fetch_one(&st.pool)
+    .await
+    .expect("counts after idempotent call");
+    assert_eq!(old_live_again, 0);
+    assert_eq!(new_live_again, 2);
+    assert_eq!(defaults_again, 1);
+
+    purge(&st.pool, &slug).await;
+}

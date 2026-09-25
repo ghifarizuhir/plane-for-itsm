@@ -57,7 +57,8 @@ pub fn allowed_target_state_ids(
 }
 
 /// Materialize seluruh state workflow milik `type_id` ke project (idempotent).
-/// Return jumlah mirror yang ditulis (update + insert).
+/// Return jumlah mirror yang diproses (update + insert), bukan jumlah baris
+/// yang benar-benar berubah.
 pub async fn materialize_type_states(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -76,8 +77,10 @@ pub async fn materialize_type_states(
     materialize_workflow_for_project(pool, project_id, type_id, workflow_id).await
 }
 
-/// Inti materialization: turunkan default lama, revive + update mirror,
-/// insert mirror baru, soft-delete mirror yatim. Satu transaksi.
+/// Inti materialization: turunkan default lama, soft-delete mirror usang,
+/// revive + update mirror, lalu insert mirror baru. Satu transaksi. Return
+/// jumlah mirror yang diproses (update + insert), bukan jumlah baris yang
+/// benar-benar berubah.
 pub(crate) async fn materialize_workflow_for_project(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -86,6 +89,8 @@ pub(crate) async fn materialize_workflow_for_project(
 ) -> Result<u64, sqlx::Error> {
     let mut tx = pool.begin().await?;
 
+    // 1. Turunkan default lama lebih dulu agar partial-unique default
+    //    (project_id, type_id) tidak bentrok saat mirror baru di-insert.
     sqlx::query(
         "UPDATE states SET \"default\" = false, updated_at = now() \
          WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL AND \"default\" = true",
@@ -95,6 +100,26 @@ pub(crate) async fn materialize_workflow_for_project(
     .execute(&mut *tx)
     .await?;
 
+    // 2. Soft-delete mirror usang: workflow_state-nya sudah dihapus ATAU
+    //    milik workflow lain (type pindah workflow). Harus sebelum insert,
+    //    kalau tidak nama state lama menabrak partial-unique
+    //    (project_id, type_id, name) saat nama state baru sama.
+    sqlx::query(
+        "UPDATE states s SET deleted_at = now(), updated_at = now() \
+         WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
+         AND s.workflow_state_id IS NOT NULL \
+         AND NOT EXISTS (SELECT 1 FROM workflow_states ws \
+                         WHERE ws.id = s.workflow_state_id AND ws.deleted_at IS NULL \
+                           AND ws.workflow_id = $3)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(workflow_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // 3. Revive + update mirror (termasuk mirror workflow ini yang sempat
+    //    soft-deleted).
     let updated = sqlx::query(
         "UPDATE states s SET name = ws.name, description = ws.description, color = ws.color, \
          slug = ws.slug, sequence = ws.sequence, \"group\" = ws.\"group\", \"default\" = ws.is_default, \
@@ -110,6 +135,7 @@ pub(crate) async fn materialize_workflow_for_project(
     .await?
     .rows_affected();
 
+    // 4. Insert mirror baru untuk workflow_state yang belum punya mirror.
     let inserted = sqlx::query(
         "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
          \"default\", project_id, workspace_id, type_id, workflow_state_id, created_at, updated_at) \
@@ -125,18 +151,6 @@ pub(crate) async fn materialize_workflow_for_project(
     .execute(&mut *tx)
     .await?
     .rows_affected();
-
-    sqlx::query(
-        "UPDATE states s SET deleted_at = now(), updated_at = now() \
-         WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-         AND s.workflow_state_id IS NOT NULL \
-         AND NOT EXISTS (SELECT 1 FROM workflow_states ws \
-                         WHERE ws.id = s.workflow_state_id AND ws.deleted_at IS NULL)",
-    )
-    .bind(project_id)
-    .bind(type_id)
-    .execute(&mut *tx)
-    .await?;
 
     tx.commit().await?;
     Ok(updated + inserted)
