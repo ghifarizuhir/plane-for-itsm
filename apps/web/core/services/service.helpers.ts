@@ -165,3 +165,12 @@ export const stripHtmlToText = (html: string): string => {
     .join("\n")
     .trim();
 };
+
+/**
+ * Trims a service link field and collapses blank input to null so the API
+ * clears the column instead of storing whitespace.
+ */
+export const normalizeServiceUrl = (value: string): string | null => {
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+};
