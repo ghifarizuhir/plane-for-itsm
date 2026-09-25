@@ -886,3 +886,216 @@ async fn state_create_syncs_mirror_and_default() {
 
     purge(&st.pool, &slug).await;
 }
+
+#[tokio::test]
+async fn state_default_promote_and_guards() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfpromo").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().expect("workflow id")).expect("uuid");
+
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+    sqlx::query(
+        "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, level, is_default, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 0, false, now(), now())",
+    )
+    .bind(type_id)
+    .bind(project_id)
+    .bind(ws_id)
+    .execute(&st.pool)
+    .await
+    .expect("link");
+
+    let (status, first) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("first state");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(first["is_default"], true);
+    let first_id = Uuid::parse_str(first["id"].as_str().expect("first id")).expect("uuid");
+
+    let (status, second) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("In Progress".into()),
+            group: Some("started".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("second state");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(second["is_default"], false);
+    let second_id = Uuid::parse_str(second["id"].as_str().expect("second id")).expect("uuid");
+
+    // Promote state kedua: default lama turun, mirror project ikut pindah.
+    let (status, promoted) = patch_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, second_id)),
+        Json(WorkflowStateBody {
+            is_default: Some(true),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("promote");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(promoted["is_default"], true);
+
+    let (default_count, default_name): (i64, String) = sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE is_default), \
+                COALESCE(MAX(name) FILTER (WHERE is_default), '') \
+         FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("default count");
+    assert_eq!(default_count, 1, "hanya satu default di workflow_states");
+    assert_eq!(default_name, "In Progress");
+
+    let (first_is_default,): (bool,) =
+        sqlx::query_as("SELECT is_default FROM workflow_states WHERE id = $1")
+            .bind(first_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("first row");
+    assert!(!first_is_default, "default lama harus turun");
+
+    let (mirror_default,): (String,) = sqlx::query_as(
+        "SELECT ws.name FROM states s JOIN workflow_states ws ON ws.id = s.workflow_state_id \
+         WHERE s.project_id = $1 AND s.deleted_at IS NULL AND s.\"default\"",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("mirror default");
+    assert_eq!(mirror_default, "In Progress");
+
+    // Menurunkan default yang aktif ditolak.
+    let (status, body) = patch_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, second_id)),
+        Json(WorkflowStateBody {
+            is_default: Some(false),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("demote current default");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "A workflow must have a default state");
+
+    // State yang dipakai issue hidup tidak boleh dihapus.
+    let (mirror_first,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM states WHERE project_id = $1 AND workflow_state_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(first_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("first mirror");
+    sqlx::query(
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
+         sort_order, sequence_id, state_id, project_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Blocked work', '<p></p>', '{}', 'none', true, \
+         65535, (SELECT COALESCE(MAX(sequence_id), 0) + 1000 FROM issues WHERE project_id = $2), \
+         $1, $2, $3, now(), now())",
+    )
+    .bind(mirror_first)
+    .bind(project_id)
+    .bind(ws_id)
+    .execute(&st.pool)
+    .await
+    .expect("issue in use");
+    let (status, body) = delete_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, first_id)),
+    )
+    .await
+    .expect("delete in use");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Workflow state is in use by work items");
+    sqlx::query("UPDATE issues SET deleted_at = now() WHERE state_id = $1")
+        .bind(mirror_first)
+        .execute(&st.pool)
+        .await
+        .expect("close issue");
+
+    // Slug di-trim dari karakter non-alphanumerik di ujung.
+    let (status, trimmed) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Review!".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("trimmed slug");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(trimmed["slug"], "review");
+
+    // Drift nol-default (mis. hasil import) diheal: state baru jadi default.
+    sqlx::query("UPDATE workflow_states SET is_default = false WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .execute(&st.pool)
+        .await
+        .expect("drop all defaults");
+    let (status, healed) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Closed".into()),
+            group: Some("completed".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("healed state");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(healed["is_default"], true);
+
+    purge(&st.pool, &slug).await;
+}

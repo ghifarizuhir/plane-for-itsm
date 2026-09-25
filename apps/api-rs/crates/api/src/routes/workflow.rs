@@ -262,6 +262,20 @@ fn is_duplicate_workflow_state(e: &sqlx::Error) -> bool {
         .unwrap_or(false)
 }
 
+/// Pelanggaran partial-unique default
+/// (`workflow_state_unique_default_workflow_when_deleted_at_null`). Hanya
+/// constraint ini yang dipetakan; fallback kelas-23 sengaja tidak dipakai
+/// agar error duplikat nama/slug tidak salah dilabeli default.
+fn is_duplicate_workflow_default(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|db| db.try_downcast_ref::<sqlx::postgres::PgDatabaseError>())
+        .and_then(|pg| pg.constraint())
+        .map(|constraint| {
+            constraint == "workflow_state_unique_default_workflow_when_deleted_at_null"
+        })
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WorkflowRow {
     pub id: Uuid,
@@ -588,15 +602,18 @@ pub async fn create_state(
         .unwrap_or_else(|| default_color(&group).to_string());
 
     let mut tx = st.pool.begin().await?;
-    let (state_count,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL",
+    let (default_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE is_default) FROM workflow_states \
+         WHERE workflow_id = $1 AND deleted_at IS NULL",
     )
     .bind(workflow_id)
     .fetch_one(&mut *tx)
     .await?;
-    // State pertama wajib default; `is_default: true` eksplisit juga menurunkan
-    // default lama agar partial-unique (workflow) WHERE is_default tidak bentrok.
-    let make_default = body.is_default.unwrap_or(state_count == 0) || state_count == 0;
+    // Workflow wajib punya tepat satu default: state pertama selalu jadi
+    // default, dan workflow yang drift tanpa default (mis. hasil import)
+    // diheal ke state baru. `is_default: true` eksplisit menurunkan default
+    // lama agar partial-unique (workflow) WHERE is_default tidak bentrok.
+    let make_default = body.is_default.unwrap_or(default_count == 0) || default_count == 0;
     if make_default {
         sqlx::query(
             "UPDATE workflow_states SET is_default = false, updated_at = now() \
@@ -610,7 +627,7 @@ pub async fn create_state(
         "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
          \"group\", is_default, created_by_id, updated_by_id, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, COALESCE($3, ''), $4, \
-         regexp_replace(lower($2), '[^a-z0-9]+', '-', 'g'), \
+         trim(both '-' from regexp_replace(lower($2), '[^a-z0-9]+', '-', 'g')), \
          COALESCE($5, (SELECT COALESCE(MAX(sequence), 0) + 15000 FROM workflow_states WHERE workflow_id = $1)), \
          $6, $7, $8, $8, now(), now()) RETURNING {WF_STATE_COLS}"
     ))
@@ -626,6 +643,10 @@ pub async fn create_state(
     .await;
     let row = match inserted {
         Ok(row) => row,
+        Err(e) if is_duplicate_workflow_default(&e) => {
+            tx.rollback().await?;
+            return Ok(bad("Another state is already the default"));
+        }
         Err(e) if is_duplicate_workflow_state(&e) => {
             tx.rollback().await?;
             return Ok(bad("Workflow state with this name already exists"));
@@ -689,7 +710,8 @@ pub async fn patch_state(
     }
     let updated: Result<WorkflowStateRow, sqlx::Error> = sqlx::query_as(&format!(
         "UPDATE workflow_states SET name = COALESCE($3, name), \
-         slug = CASE WHEN $3::text IS NULL THEN slug ELSE regexp_replace(lower($3), '[^a-z0-9]+', '-', 'g') END, \
+         slug = CASE WHEN $3::text IS NULL THEN slug \
+         ELSE trim(both '-' from regexp_replace(lower($3), '[^a-z0-9]+', '-', 'g')) END, \
          description = COALESCE($4, description), \
          color = COALESCE($5, color), \"group\" = $6, sequence = COALESCE($7, sequence), \
          is_default = COALESCE($8, is_default), updated_by_id = $9, updated_at = now() \
@@ -708,6 +730,10 @@ pub async fn patch_state(
     .await;
     let row = match updated {
         Ok(row) => row,
+        Err(e) if is_duplicate_workflow_default(&e) => {
+            tx.rollback().await?;
+            return Ok(bad("Another state is already the default"));
+        }
         Err(e) if is_duplicate_workflow_state(&e) => {
             tx.rollback().await?;
             return Ok(bad("Workflow state with this name already exists"));
@@ -732,38 +758,38 @@ pub async fn delete_state(
     if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
         return Ok(missing());
     }
-    let (exists,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM workflow_states \
-         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL)",
+    let mut tx = st.pool.begin().await?;
+    // Lock baris state sampai commit agar promote bersamaan (patch is_default)
+    // tidak bisa menyisipkan di antara cek default dan soft-delete.
+    let locked: Option<(bool,)> = sqlx::query_as(
+        "SELECT is_default FROM workflow_states \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL FOR UPDATE",
     )
     .bind(state_id)
     .bind(workflow_id)
-    .fetch_one(&st.pool)
+    .fetch_optional(&mut *tx)
     .await?;
-    if !exists {
+    let Some((is_default,)) = locked else {
+        tx.rollback().await?;
         return Ok(missing());
+    };
+    if is_default {
+        tx.rollback().await?;
+        return Ok(bad(
+            "Cannot delete the default workflow state; set another state as default first",
+        ));
     }
     let (in_use,): (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM issues i JOIN states s ON s.id = i.state_id \
          WHERE s.workflow_state_id = $1 AND i.deleted_at IS NULL)",
     )
     .bind(state_id)
-    .fetch_one(&st.pool)
+    .fetch_one(&mut *tx)
     .await?;
     if in_use {
+        tx.rollback().await?;
         return Ok(bad("Workflow state is in use by work items"));
     }
-    let (is_default,): (bool,) =
-        sqlx::query_as("SELECT is_default FROM workflow_states WHERE id = $1")
-            .bind(state_id)
-            .fetch_one(&st.pool)
-            .await?;
-    if is_default {
-        return Ok(bad(
-            "Cannot delete the default workflow state; set another state as default first",
-        ));
-    }
-    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "UPDATE workflow_transitions SET deleted_at = now(), updated_at = now() \
          WHERE workflow_id = $1 AND (from_state_id = $2 OR to_state_id = $2) AND deleted_at IS NULL",
@@ -772,10 +798,22 @@ pub async fn delete_state(
     .bind(state_id)
     .execute(&mut *tx)
     .await?;
-    sqlx::query("UPDATE workflow_states SET deleted_at = now(), updated_at = now() WHERE id = $1")
-        .bind(state_id)
-        .execute(&mut *tx)
-        .await?;
+    // Guard kedua: kalau promote lolos dari lock (mis. jalur tulis lain),
+    // rows_affected = 0 dan delete dibatalkan, bukan diam-diam menghapus default.
+    let deleted = sqlx::query(
+        "UPDATE workflow_states SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL AND is_default = false",
+    )
+    .bind(state_id)
+    .bind(workflow_id)
+    .execute(&mut *tx)
+    .await?;
+    if deleted.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Ok(bad(
+            "Cannot delete the default workflow state; set another state as default first",
+        ));
+    }
     tx.commit().await?;
 
     sync_workflow_to_projects(&st.pool, workflow_id).await?;
