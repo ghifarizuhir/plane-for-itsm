@@ -31,7 +31,6 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
   // refs
   const lastSaved = useRef("");
   const hasUnsavedChanges = useRef(false);
-  const currentTitleRef = useRef("");
   const commitRef = useRef<() => Promise<void>>(async () => {});
   // router
   const { workspaceSlug, projectId } = useParams();
@@ -110,7 +109,6 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
           value={title}
           onChange={(e) => {
             setIsSubmitting("submitting");
-            currentTitleRef.current = e.target.value;
             hasUnsavedChanges.current = true;
             setTitle(e.target.value);
           }}
