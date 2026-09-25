@@ -31,6 +31,8 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
   // refs
   const lastSaved = useRef("");
   const hasUnsavedChanges = useRef(false);
+  const latestTitle = useRef("");
+  const lastServiceId = useRef(serviceId);
   const commitRef = useRef<() => Promise<void>>(async () => {});
   // router
   const { workspaceSlug, projectId } = useParams();
@@ -48,7 +50,11 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
 
   useEffect(() => {
     if (serviceName === undefined) return;
+    const isServiceSwitch = lastServiceId.current !== serviceId;
+    if (!isServiceSwitch && hasUnsavedChanges.current) return;
+    lastServiceId.current = serviceId;
     setTitle(serviceName);
+    latestTitle.current = serviceName;
     lastSaved.current = serviceName;
     hasUnsavedChanges.current = false;
   }, [serviceId, serviceName]);
@@ -66,6 +72,7 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
     const trimmed = title.trim();
     if (trimmed.length === 0) {
       setTitle(lastSaved.current);
+      latestTitle.current = lastSaved.current;
       hasUnsavedChanges.current = false;
       setIsSubmitting("saved");
       return;
@@ -77,15 +84,19 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
     }
     if (!slug || !workspaceId) return;
     setTitle(trimmed);
+    latestTitle.current = trimmed;
     setIsSubmitting("submitting");
     try {
       await updateService(slug, workspaceId, pid, serviceId, { name: trimmed });
       lastSaved.current = trimmed;
-      hasUnsavedChanges.current = false;
+      if (latestTitle.current.trim() === trimmed) hasUnsavedChanges.current = false;
       setIsSubmitting("submitted");
     } catch {
-      setTitle(lastSaved.current);
-      hasUnsavedChanges.current = false;
+      if (latestTitle.current.trim() === trimmed) {
+        setTitle(lastSaved.current);
+        latestTitle.current = lastSaved.current;
+        hasUnsavedChanges.current = false;
+      }
       setIsSubmitting("saved");
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -109,6 +120,7 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
           value={title}
           onChange={(e) => {
             setIsSubmitting("submitting");
+            latestTitle.current = e.target.value;
             hasUnsavedChanges.current = true;
             setTitle(e.target.value);
           }}
