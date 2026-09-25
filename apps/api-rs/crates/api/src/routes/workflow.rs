@@ -55,3 +55,130 @@ pub fn allowed_target_state_ids(
         .map(|(state_id, _)| *state_id)
         .collect()
 }
+
+/// Materialize seluruh state workflow milik `type_id` ke project (idempotent).
+/// Return jumlah mirror yang ditulis (update + insert).
+pub async fn materialize_type_states(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Uuid,
+) -> Result<u64, sqlx::Error> {
+    let workflow_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT workflow_id FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(type_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    let Some(workflow_id) = workflow_id else {
+        return Ok(0);
+    };
+    materialize_workflow_for_project(pool, project_id, type_id, workflow_id).await
+}
+
+/// Inti materialization: turunkan default lama, revive + update mirror,
+/// insert mirror baru, soft-delete mirror yatim. Satu transaksi.
+pub(crate) async fn materialize_workflow_for_project(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Uuid,
+    workflow_id: Uuid,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(
+        "UPDATE states SET \"default\" = false, updated_at = now() \
+         WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL AND \"default\" = true",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let updated = sqlx::query(
+        "UPDATE states s SET name = ws.name, description = ws.description, color = ws.color, \
+         slug = ws.slug, sequence = ws.sequence, \"group\" = ws.\"group\", \"default\" = ws.is_default, \
+         deleted_at = NULL, updated_at = now() \
+         FROM workflow_states ws \
+         WHERE s.workflow_state_id = ws.id AND s.project_id = $1 AND s.type_id = $2 \
+           AND ws.workflow_id = $3 AND ws.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(workflow_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    let inserted = sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, type_id, workflow_state_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), ws.name, ws.description, ws.color, ws.slug, ws.sequence, ws.\"group\", \
+         false, ws.is_default, $1, p.workspace_id, $2, ws.id, now(), now() \
+         FROM workflow_states ws JOIN projects p ON p.id = $1 \
+         WHERE ws.workflow_id = $3 AND ws.deleted_at IS NULL \
+         AND NOT EXISTS (SELECT 1 FROM states s WHERE s.project_id = $1 AND s.workflow_state_id = ws.id)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .bind(workflow_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    sqlx::query(
+        "UPDATE states s SET deleted_at = now(), updated_at = now() \
+         WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
+         AND s.workflow_state_id IS NOT NULL \
+         AND NOT EXISTS (SELECT 1 FROM workflow_states ws \
+                         WHERE ws.id = s.workflow_state_id AND ws.deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(updated + inserted)
+}
+
+/// Sync satu workflow ke semua project hidup yang mengaktifkan type-nya.
+pub(crate) async fn sync_workflow_to_projects(
+    pool: &sqlx::PgPool,
+    workflow_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT DISTINCT pit.project_id, t.id FROM project_issue_types pit \
+         JOIN issue_types t ON t.id = pit.issue_type_id \
+         JOIN projects p ON p.id = pit.project_id \
+         WHERE t.workflow_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+           AND p.deleted_at IS NULL AND p.archived_at IS NULL",
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await?;
+    for (project_id, type_id) in rows {
+        materialize_workflow_for_project(pool, project_id, type_id, workflow_id).await?;
+    }
+    Ok(())
+}
+
+/// Pastikan semua type yang aktif di project sudah ter-materialize.
+pub(crate) async fn ensure_project_workflows(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT pit.issue_type_id, t.workflow_id FROM project_issue_types pit \
+         JOIN issue_types t ON t.id = pit.issue_type_id \
+         WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+           AND t.workflow_id IS NOT NULL",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    for (type_id, workflow_id) in rows {
+        materialize_workflow_for_project(pool, project_id, type_id, workflow_id).await?;
+    }
+    Ok(())
+}
