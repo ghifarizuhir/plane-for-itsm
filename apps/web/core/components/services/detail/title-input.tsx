@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TNameDescriptionLoader } from "@plane/types";
 import { TextArea } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -29,6 +30,9 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
   const [isLengthVisible, setIsLengthVisible] = useState(false);
   // refs
   const lastSaved = useRef("");
+  const hasUnsavedChanges = useRef(false);
+  const currentTitleRef = useRef("");
+  const commitRef = useRef<() => Promise<void>>(async () => {});
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
@@ -38,15 +42,24 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
   const { getWorkspaceBySlug } = useWorkspace();
   // derived values
   const service = getServiceById(serviceId);
+  const serviceName = service?.name;
   const slug = workspaceSlug?.toString() ?? "";
   const pid = projectId?.toString() ?? service?.project_id ?? "";
   const workspaceId = getWorkspaceBySlug(slug)?.id;
 
   useEffect(() => {
-    if (!service) return;
-    setTitle(service.name);
-    lastSaved.current = service.name;
-  }, [service]);
+    if (serviceName === undefined) return;
+    setTitle(serviceName);
+    lastSaved.current = serviceName;
+    hasUnsavedChanges.current = false;
+  }, [serviceId, serviceName]);
+
+  useEffect(
+    () => () => {
+      if (hasUnsavedChanges.current) void commitRef.current();
+    },
+    []
+  );
 
   if (!service) return null;
 
@@ -54,10 +67,12 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
     const trimmed = title.trim();
     if (trimmed.length === 0) {
       setTitle(lastSaved.current);
+      hasUnsavedChanges.current = false;
       setIsSubmitting("saved");
       return;
     }
     if (trimmed === lastSaved.current) {
+      hasUnsavedChanges.current = false;
       setIsSubmitting("saved");
       return;
     }
@@ -67,12 +82,21 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
     try {
       await updateService(slug, workspaceId, pid, serviceId, { name: trimmed });
       lastSaved.current = trimmed;
+      hasUnsavedChanges.current = false;
       setIsSubmitting("submitted");
     } catch {
       setTitle(lastSaved.current);
+      hasUnsavedChanges.current = false;
       setIsSubmitting("saved");
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: t("entity.update.failed", { entity: t("service.title") }),
+      });
     }
   };
+
+  commitRef.current = commit;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -86,6 +110,8 @@ export const ServiceTitleInput = observer(function ServiceTitleInput(props: Prop
           value={title}
           onChange={(e) => {
             setIsSubmitting("submitting");
+            currentTitleRef.current = e.target.value;
+            hasUnsavedChanges.current = true;
             setTitle(e.target.value);
           }}
           onBlur={() => {
