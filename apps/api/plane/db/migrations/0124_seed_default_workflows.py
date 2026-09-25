@@ -92,6 +92,332 @@ GROUP_COLORS = {
 }
 
 
+SEED_EXTERNAL_SOURCE = "plane-default-itsm"
+
+
+def _seed_key(seed):
+    return slugify(seed["type"])
+
+
+def _workflow_external_id(seed):
+    return f"workflow:{_seed_key(seed)}"
+
+
+def _issue_type_external_id(seed):
+    return f"issue-type:{_seed_key(seed)}"
+
+
+def _workflow_state_external_id(seed, state_name):
+    return f"workflow-state:{_seed_key(seed)}:{slugify(state_name)}"
+
+
+def _has_external_ownership(instance):
+    return bool(instance.external_source or instance.external_id)
+
+
+def _active_marker_rows(model, filters):
+    return list(
+        model.objects.filter(
+            deleted_at__isnull=True,
+            external_source=SEED_EXTERNAL_SOURCE,
+            **filters,
+        )
+    )
+
+
+def _conflict(workspace, seed, detail):
+    raise RuntimeError(
+        f"Cannot seed {seed['workflow']!r} for workspace "
+        f"{workspace.name!r} ({workspace.id}): {detail}"
+    )
+
+
+def _expected_state_values(seed):
+    return {
+        name: {
+            "group": group,
+            "color": GROUP_COLORS[group],
+            "slug": slugify(name),
+            "sequence": (index + 1) * 15000,
+            "is_default": is_default,
+        }
+        for index, (name, group, is_default) in enumerate(seed["states"])
+    }
+
+
+def _validate_legacy_state(workspace, seed, state, expected):
+    mismatches = []
+    for field in ("group", "color", "slug", "sequence", "is_default"):
+        if getattr(state, field) != expected[field]:
+            mismatches.append(f"{field}={getattr(state, field)!r}")
+    if _has_external_ownership(state):
+        mismatches.append("has external ownership")
+    if mismatches:
+        _conflict(
+            workspace,
+            seed,
+            f"unmarked workflow state {state.name!r} differs from the "
+            f"expected legacy seed shape ({', '.join(mismatches)})",
+        )
+
+
+def _validate_legacy_workflow(WorkflowState, WorkflowTransition, workspace, seed, workflow):
+    if not workflow.is_active:
+        _conflict(workspace, seed, "unmarked workflow is inactive")
+    if workflow.description:
+        _conflict(workspace, seed, "unmarked workflow has a non-empty description")
+
+    expected_states = _expected_state_values(seed)
+    active_states = list(
+        WorkflowState.objects.filter(workflow_id=workflow.id, deleted_at__isnull=True)
+    )
+    state_names = {state.name for state in active_states}
+    if len(active_states) != len(expected_states) or state_names != set(expected_states):
+        _conflict(
+            workspace,
+            seed,
+            "unmarked workflow has an extra or missing active workflow state",
+        )
+
+    states_by_name = {state.name: state for state in active_states}
+    for state_name, expected in expected_states.items():
+        _validate_legacy_state(workspace, seed, states_by_name[state_name], expected)
+
+    expected_transitions = {
+        (states_by_name[from_name].id, states_by_name[to_name].id)
+        for from_name, to_name in seed["transitions"]
+    }
+    active_transitions = list(
+        WorkflowTransition.objects.filter(workflow_id=workflow.id, deleted_at__isnull=True).values_list(
+            "from_state_id", "to_state_id"
+        )
+    )
+    if len(active_transitions) != len(expected_transitions) or set(active_transitions) != expected_transitions:
+        _conflict(
+            workspace,
+            seed,
+            "unmarked workflow has extra or mismatched active workflow transitions",
+        )
+
+
+def _get_workflow(Workflow, WorkflowState, WorkflowTransition, workspace, seed):
+    workflow_external_id = _workflow_external_id(seed)
+    marked_workflows = _active_marker_rows(
+        Workflow,
+        {
+            "workspace_id": workspace.id,
+            "external_id": workflow_external_id,
+        },
+    )
+    named_workflows = list(
+        Workflow.objects.filter(
+            workspace_id=workspace.id,
+            name=seed["workflow"],
+            deleted_at__isnull=True,
+        )
+    )
+    if len(marked_workflows) > 1:
+        _conflict(workspace, seed, "multiple active workflows have the seed ownership marker")
+    if len(named_workflows) > 1:
+        _conflict(workspace, seed, "multiple active workflows have the seed workflow name")
+
+    if marked_workflows:
+        workflow = marked_workflows[0]
+        if named_workflows and named_workflows[0].id != workflow.id:
+            _conflict(
+                workspace,
+                seed,
+                "a different active workflow already uses the seed workflow name",
+            )
+        return workflow
+
+    if named_workflows:
+        workflow = named_workflows[0]
+        if _has_external_ownership(workflow):
+            _conflict(
+                workspace,
+                seed,
+                "same-name workflow has different external ownership "
+                f"({workflow.external_source!r}, {workflow.external_id!r})",
+            )
+        _validate_legacy_workflow(WorkflowState, WorkflowTransition, workspace, seed, workflow)
+        workflow.external_source = SEED_EXTERNAL_SOURCE
+        workflow.external_id = workflow_external_id
+        workflow.save(update_fields=["external_source", "external_id"])
+        return workflow
+
+    return Workflow.objects.create(
+        workspace_id=workspace.id,
+        name=seed["workflow"],
+        is_active=True,
+        external_source=SEED_EXTERNAL_SOURCE,
+        external_id=workflow_external_id,
+    )
+
+
+def _get_workflow_state(WorkflowState, workspace, seed, workflow, state_name, group, is_default, index):
+    state_external_id = _workflow_state_external_id(seed, state_name)
+    marked_states = _active_marker_rows(
+        WorkflowState,
+        {
+            "workflow__workspace_id": workspace.id,
+            "external_id": state_external_id,
+        },
+    )
+    named_states = list(
+        WorkflowState.objects.filter(
+            workflow_id=workflow.id,
+            name=state_name,
+            deleted_at__isnull=True,
+        )
+    )
+    if len(marked_states) > 1:
+        _conflict(workspace, seed, f"multiple active states have marker {state_external_id!r}")
+    if len(named_states) > 1:
+        _conflict(workspace, seed, f"multiple active states have name {state_name!r}")
+
+    if marked_states:
+        state = marked_states[0]
+        if named_states and named_states[0].id != state.id:
+            _conflict(
+                workspace,
+                seed,
+                f"a different active state already uses the seed state name {state_name!r}",
+            )
+        if state.workflow_id != workflow.id:
+            _conflict(
+                workspace,
+                seed,
+                f"state marker {state_external_id!r} belongs to a different workflow",
+            )
+        return state
+
+    expected = _expected_state_values(seed)[state_name]
+    if named_states:
+        state = named_states[0]
+        if _has_external_ownership(state):
+            _conflict(
+                workspace,
+                seed,
+                f"same-name state {state_name!r} has external ownership "
+                f"({state.external_source!r}, {state.external_id!r})",
+            )
+        _validate_legacy_state(workspace, seed, state, expected)
+        state.external_source = SEED_EXTERNAL_SOURCE
+        state.external_id = state_external_id
+        state.save(update_fields=["external_source", "external_id"])
+        return state
+
+    return WorkflowState.objects.create(
+        workflow_id=workflow.id,
+        name=state_name,
+        group=group,
+        color=GROUP_COLORS[group],
+        slug=slugify(state_name),
+        sequence=(index + 1) * 15000,
+        is_default=is_default,
+        external_source=SEED_EXTERNAL_SOURCE,
+        external_id=state_external_id,
+    )
+
+
+def _get_issue_type(IssueType, workspace, seed, workflow):
+    issue_type_external_id = _issue_type_external_id(seed)
+    named_types = list(
+        IssueType.objects.filter(
+            workspace_id=workspace.id,
+            name=seed["type"],
+            deleted_at__isnull=True,
+        )
+    )
+    if len(named_types) > 1:
+        _conflict(
+            workspace,
+            seed,
+            f"multiple active issue types have name {seed['type']!r}; refusing to choose one",
+        )
+
+    marked_types = _active_marker_rows(
+        IssueType,
+        {
+            "workspace_id": workspace.id,
+            "external_id": issue_type_external_id,
+        },
+    )
+    if len(marked_types) > 1:
+        _conflict(workspace, seed, "multiple active issue types have the seed ownership marker")
+
+    if marked_types:
+        issue_type = marked_types[0]
+        if named_types and named_types[0].id != issue_type.id:
+            _conflict(
+                workspace,
+                seed,
+                "a different active issue type already uses the seed type name",
+            )
+        marker_owned = True
+    elif named_types:
+        issue_type = named_types[0]
+        marker_owned = False
+    else:
+        return IssueType.objects.create(
+            workspace_id=workspace.id,
+            name=seed["type"],
+            is_epic=False,
+            is_default=False,
+            is_active=True,
+            workflow_id=workflow.id,
+            external_source=SEED_EXTERNAL_SOURCE,
+            external_id=issue_type_external_id,
+        )
+
+    if issue_type.is_epic:
+        _conflict(workspace, seed, "existing issue type is an epic")
+    if issue_type.workflow_id is not None and issue_type.workflow_id != workflow.id:
+        _conflict(
+            workspace,
+            seed,
+            "existing issue type is already attached to a different workflow",
+        )
+    if issue_type.workflow_id is None and _has_external_ownership(issue_type) and not marker_owned:
+        _conflict(
+            workspace,
+            seed,
+            "existing unassigned issue type has custom external ownership "
+            f"({issue_type.external_source!r}, {issue_type.external_id!r})",
+        )
+
+    update_fields = []
+    if issue_type.workflow_id is None:
+        issue_type.workflow_id = workflow.id
+        update_fields.append("workflow")
+    if not marker_owned and not _has_external_ownership(issue_type):
+        issue_type.external_source = SEED_EXTERNAL_SOURCE
+        issue_type.external_id = issue_type_external_id
+        update_fields.extend(["external_source", "external_id"])
+    if update_fields:
+        issue_type.save(update_fields=update_fields)
+    return issue_type
+
+
+def _ensure_transitions(WorkflowTransition, workflow, seed, state_map):
+    active_pairs = set(
+        WorkflowTransition.objects.filter(
+            workflow_id=workflow.id,
+            deleted_at__isnull=True,
+        ).values_list("from_state_id", "to_state_id")
+    )
+    for from_name, to_name in seed["transitions"]:
+        pair = (state_map[from_name], state_map[to_name])
+        if pair not in active_pairs:
+            WorkflowTransition.objects.create(
+                workflow_id=workflow.id,
+                from_state_id=pair[0],
+                to_state_id=pair[1],
+            )
+            active_pairs.add(pair)
+
+
 def seed_default_workflows(apps, schema_editor):
     Workspace = apps.get_model("db", "Workspace")
     IssueType = apps.get_model("db", "IssueType")
@@ -101,45 +427,30 @@ def seed_default_workflows(apps, schema_editor):
 
     for workspace in Workspace.objects.filter(deleted_at__isnull=True).iterator():
         for seed in WORKFLOW_SEEDS:
-            issue_type, _ = IssueType.objects.get_or_create(
-                workspace_id=workspace.id,
-                name=seed["type"],
-                deleted_at__isnull=True,
-                defaults={"is_epic": False, "is_default": False, "is_active": True},
+            workflow = _get_workflow(
+                Workflow,
+                WorkflowState,
+                WorkflowTransition,
+                workspace,
+                seed,
             )
-            workflow, _ = Workflow.objects.get_or_create(
-                workspace_id=workspace.id,
-                name=seed["workflow"],
-                deleted_at__isnull=True,
-                defaults={"is_active": True},
-            )
-            if issue_type.workflow_id != workflow.id:
-                issue_type.workflow_id = workflow.id
-                issue_type.save(update_fields=["workflow"])
+            _get_issue_type(IssueType, workspace, seed, workflow)
 
             state_map = {}
             for index, (name, group, is_default) in enumerate(seed["states"]):
-                wf_state, _ = WorkflowState.objects.get_or_create(
-                    workflow_id=workflow.id,
-                    name=name,
-                    deleted_at__isnull=True,
-                    defaults={
-                        "group": group,
-                        "color": GROUP_COLORS[group],
-                        "slug": slugify(name),
-                        "sequence": (index + 1) * 15000,
-                        "is_default": is_default,
-                    },
+                state = _get_workflow_state(
+                    WorkflowState,
+                    workspace,
+                    seed,
+                    workflow,
+                    name,
+                    group,
+                    is_default,
+                    index,
                 )
-                state_map[name] = wf_state.id
+                state_map[name] = state.id
 
-            for from_name, to_name in seed["transitions"]:
-                WorkflowTransition.objects.get_or_create(
-                    workflow_id=workflow.id,
-                    from_state_id=state_map[from_name],
-                    to_state_id=state_map[to_name],
-                    deleted_at__isnull=True,
-                )
+            _ensure_transitions(WorkflowTransition, workflow, seed, state_map)
 
 
 class Migration(migrations.Migration):
