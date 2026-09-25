@@ -1,10 +1,11 @@
 use api::middleware::auth::AuthUser;
 use api::routes::workflow::{
-    allowed_target_state_ids, materialize_type_states, validate_name, validate_state_group,
+    allowed_target_state_ids, create_workflow, delete_workflow, list_workflows,
+    materialize_type_states, validate_name, validate_state_group, WorkflowBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
@@ -237,6 +238,72 @@ async fn make_workspace(st: &AppState, prefix: &str) -> (String, Uuid, Uuid) {
             .await
             .expect("project row");
     (slug, ws_id, project_id)
+}
+
+#[tokio::test]
+async fn workflow_crud_roundtrip() {
+    let st = app_state().await;
+    let (slug, _ws_id, _project_id) = make_workspace(&st, "wfcrud").await;
+
+    let (status, _created) = create_workflow(
+        State(st.clone()),
+        AuthUser(Uuid::new_v4()),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: Some("ITIL incident".into()),
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("create");
+    // Pemanggil bukan member workspace → 403; test kepemilikan admin ada di
+    // test terpisah. Untuk roundtrip, pakai owner dari make_workspace.
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (status, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: Some("ITIL incident".into()),
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("create");
+    assert_eq!(status, StatusCode::CREATED);
+    let workflow_id = created["id"].as_str().expect("id").to_string();
+
+    let (status, list) = list_workflows(State(st.clone()), AuthUser(owner), Path(slug.clone()))
+        .await
+        .expect("list");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list.as_array().expect("array").len(), 1);
+    assert_eq!(list[0]["name"], "Incident Workflow");
+
+    let (status, _) = delete_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), Uuid::parse_str(&workflow_id).unwrap())),
+    )
+    .await
+    .expect("delete");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, list) = list_workflows(State(st.clone()), AuthUser(owner), Path(slug.clone()))
+        .await
+        .expect("list after delete");
+    assert!(list.as_array().expect("array").is_empty());
+
+    purge(&st.pool, &slug).await;
 }
 
 #[tokio::test]

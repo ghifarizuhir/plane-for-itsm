@@ -1,7 +1,22 @@
 //! Workflows workspace-level (state + transisi) dan materialization state ke
 //! project. Spec: docs/superpowers/specs/2026-09-25-work-item-types-workflows-design.md
 
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
+use serde::Deserialize;
+use serde_json::{json, Value};
 use uuid::Uuid;
+
+use crate::{
+    middleware::auth::AuthUser,
+    routes::project::{deny, is_integrity_error, missing, ws_role},
+    state::AppState,
+};
+
+use super::issue_common::bad;
 
 /// Group valid untuk workflow state; `triage` bukan bagian workflow
 /// (`StateGroup` di `apps/api/plane/db/models/state.py:14-20`).
@@ -195,4 +210,222 @@ pub(crate) async fn ensure_project_workflows(
         materialize_workflow_for_project(pool, project_id, type_id, workflow_id).await?;
     }
     Ok(())
+}
+
+// --- Workspace-admin CRUD --------------------------------------------------
+
+type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
+
+fn is_integrity_err(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| is_integrity_error(c.as_ref()))
+        .unwrap_or(false)
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WorkflowRow {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub is_active: bool,
+    pub workspace_id: Uuid,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub fn workflow_json(row: &WorkflowRow) -> Value {
+    json!({
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "is_active": row.is_active,
+        "workspace_id": row.workspace_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    })
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct WorkflowBody {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+}
+
+async fn is_ws_admin(st: &AppState, user: Uuid, slug: &str) -> Result<bool, sqlx::Error> {
+    Ok(matches!(ws_role(&st.pool, user, slug).await?, Some(r) if r >= 20))
+}
+
+async fn workflow_in_workspace(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    workflow_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let (ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflows w JOIN workspaces ws ON ws.id = w.workspace_id \
+         WHERE w.id = $1 AND ws.slug = $2 AND w.deleted_at IS NULL AND ws.deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .bind(slug)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
+}
+
+/// GET `/api/workspaces/:slug/workflows/`
+pub async fn list_workflows(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<WorkflowRow> = sqlx::query_as(
+        "SELECT w.id, w.name, w.description, w.is_active, w.workspace_id, w.created_at, w.updated_at \
+         FROM workflows w JOIN workspaces ws ON ws.id = w.workspace_id \
+         WHERE ws.slug = $1 AND w.deleted_at IS NULL ORDER BY w.created_at",
+    )
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(workflow_json).collect::<Vec<_>>())),
+    ))
+}
+
+/// POST `/api/workspaces/:slug/workflows/`
+pub async fn create_workflow(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<WorkflowBody>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let name = match validate_name(body.name.as_deref().unwrap_or(""), "name") {
+        Ok(name) => name,
+        Err(e) => return Ok(bad(&e)),
+    };
+    let inserted: Result<WorkflowRow, sqlx::Error> = sqlx::query_as(
+        "INSERT INTO workflows (id, name, description, is_active, workspace_id, \
+         created_by_id, updated_by_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, COALESCE($2, ''), COALESCE($3, true), w.id, $4, $4, now(), now() \
+         FROM workspaces w WHERE w.slug = $5 AND w.deleted_at IS NULL \
+         RETURNING id, name, description, is_active, workspace_id, created_at, updated_at",
+    )
+    .bind(&name)
+    .bind(&body.description)
+    .bind(body.is_active)
+    .bind(auth.0)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await;
+    match inserted {
+        Ok(row) => Ok((StatusCode::CREATED, Json(workflow_json(&row)))),
+        Err(e) if is_integrity_err(&e) => Ok(bad("Workflow with this name already exists")),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// GET `/api/workspaces/:slug/workflows/:workflow_id/`
+pub async fn retrieve_workflow(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let row: Option<WorkflowRow> = sqlx::query_as(
+        "SELECT w.id, w.name, w.description, w.is_active, w.workspace_id, w.created_at, w.updated_at \
+         FROM workflows w JOIN workspaces ws ON ws.id = w.workspace_id \
+         WHERE w.id = $1 AND ws.slug = $2 AND w.deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    match row {
+        Some(row) => Ok((StatusCode::OK, Json(workflow_json(&row)))),
+        None => Ok(missing()),
+    }
+}
+
+/// PATCH `/api/workspaces/:slug/workflows/:workflow_id/`
+pub async fn patch_workflow(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+    Json(body): Json<WorkflowBody>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let name = match body.name.as_deref() {
+        Some(raw) => match validate_name(raw, "name") {
+            Ok(name) => Some(name),
+            Err(e) => return Ok(bad(&e)),
+        },
+        None => None,
+    };
+    let updated: Result<WorkflowRow, sqlx::Error> = sqlx::query_as(
+        "UPDATE workflows SET name = COALESCE($3, name), description = COALESCE($4, description), \
+         is_active = COALESCE($5, is_active), updated_by_id = $6, updated_at = now() \
+         WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL \
+         RETURNING id, name, description, is_active, workspace_id, created_at, updated_at",
+    )
+    .bind(workflow_id)
+    .bind(&slug)
+    .bind(&name)
+    .bind(&body.description)
+    .bind(body.is_active)
+    .bind(auth.0)
+    .fetch_one(&st.pool)
+    .await;
+    match updated {
+        Ok(row) => Ok((StatusCode::OK, Json(workflow_json(&row)))),
+        Err(e) if is_integrity_err(&e) => Ok(bad("Workflow with this name already exists")),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// DELETE `/api/workspaces/:slug/workflows/:workflow_id/`
+pub async fn delete_workflow(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issue_types WHERE workflow_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Workflow is in use by a work item type"));
+    }
+    sqlx::query(
+        "UPDATE workflows SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
