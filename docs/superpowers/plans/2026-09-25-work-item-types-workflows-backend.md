@@ -2438,7 +2438,7 @@ Di `apps/api-rs/crates/api/src/routes/v1/work_item_type.rs`:
 
 sesuai nomor bind berikutnya, dan bind `body.workflow` di posisi yang sama.
 
-Catatan policy (dari review B2): menetapkan `workflow_id = NULL` pada type yang masih enabled di project (punya `project_issue_types` hidup) harus ditolak `400` dengan pesan `Cannot unassign a workflow while the type is enabled in projects`; mirror lama tidak boleh ditinggalkan hidup. `COALESCE` di update v1 sudah memblokir null eksplisit, tetapi guard ini wajib untuk jalur lain (Django/admin/direct DB) dan harus diuji di B6.
+Kebijakan unassign workflow (implementasi final B6): `V1UpdateWorkItemType.workflow` memakai double-option (`Option<Option<Uuid>>`) sehingga omitted ≠ null. Explicit null pada type yang punya live `project_issue_types` ditolak `400 Cannot unassign a workflow while the type is enabled in projects`; explicit null tanpa live link menghapus workflow (legacy). Switch workflow ditolak `400 Cannot change the workflow while the type has live work items`. Type epic tidak boleh punya workflow (`400 Epic types cannot have a workflow`). DB `SET_NULL` tetap deliberate; tidak ada guard DB.
 
 - [ ] **Step 2: Materialize saat import (+ guard shared workflow)**
 
@@ -2498,7 +2498,9 @@ Di `delete_workspace` (v1), sebelum soft-delete, tambahkan guard:
     }
 ```
 
-Tambahkan guard yang sama di `delete_project` (scope project) dengan tambahan `AND project_id = $2`.
+Di guard `delete_workspace` yang sama, tambahkan juga guard live project link (`Type is enabled in projects`) sebelum soft-delete type.
+
+`delete_project` (project-scope) BUKAN delete type: ia adalah **detach/unlink** sesuai kontrak MCP (`docs/superpowers/plans/2026-09-19-mcp-public-api-v1-types-features.md:29`). Perilakunya: tolak `400 Type is in use by work items` bila project masih punya live work item dengan type itu; jika tidak, soft-delete `project_issue_types` + mirror `states` type itu di project dalam satu transaksi; `204` idempotent (unlink kedua tetap 204). Reuse helper `detach_type_from_project` yang sama dengan `unlink_type`.
 
 - [ ] **Step 4: Tulis test yang gagal untuk import/un-enable/workflow-map**
 
