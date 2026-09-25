@@ -238,6 +238,14 @@ async fn make_workspace(st: &AppState, prefix: &str) -> (String, Uuid, Uuid) {
         .fetch_one(&st.pool)
         .await
         .expect("workspace row");
+    for stmt in [
+        "DELETE FROM workflow_transitions WHERE workflow_id IN (SELECT id FROM workflows WHERE workspace_id = $1)",
+        "DELETE FROM workflow_states WHERE workflow_id IN (SELECT id FROM workflows WHERE workspace_id = $1)",
+        "DELETE FROM issue_types WHERE workspace_id = $1",
+        "DELETE FROM workflows WHERE workspace_id = $1",
+    ] {
+        sqlx::query(stmt).bind(ws_id).execute(&st.pool).await.expect("seed cleanup");
+    }
     let (project_id,): (Uuid,) =
         sqlx::query_as("SELECT id FROM projects WHERE workspace_id = $1 AND deleted_at IS NULL")
             .bind(ws_id)
