@@ -17,6 +17,7 @@ import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import { ServiceDetailQuickActions } from "@/components/services/detail/quick-actions";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -50,7 +51,7 @@ const ServiceDetailBreadcrumbs = observer(function ServiceDetailBreadcrumbs() {
         </Breadcrumbs>
       </Header.LeftItem>
       <Header.RightItem>
-        <></>
+        <ServiceDetailQuickActions serviceId={serviceId?.toString() ?? ""} />
       </Header.RightItem>
     </Header>
   );
