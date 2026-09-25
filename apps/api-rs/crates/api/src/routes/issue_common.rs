@@ -857,14 +857,15 @@ pub fn resolve_effective_state(
 }
 
 /// DB lookup behind [`resolve_effective_state`] (moved from `issue_write.rs`).
-/// Both `.first()` lookups order by `State.Meta.ordering = ("sequence",)`
+/// The `.first()` lookups order by `State.Meta.ordering = ("sequence",)`
 /// (`db/models/state.py:115`), `created_at` as the tiebreak.
 ///
-/// Type-aware: when the work item has a type, its mirror state marked
-/// `default` wins over the project-wide legacy default; with no typed default
-/// the legacy `default` state, then the first non-triage state, applies. The
-/// legacy fallbacks are type-less by design (`type_id IS NULL`): an untyped or
-/// epic work item must never resolve to a typed mirror state.
+/// Type-aware: when the work item's type has any live mirror state, its
+/// `default` one wins — otherwise its first by sequence — so a non-default
+/// typed state still beats the project-wide legacy default; legacy is only
+/// reached when the type has NO live typed states. Legacy fallbacks are
+/// type-less by design (`type_id IS NULL`): an untyped or epic work item must
+/// never resolve to a typed mirror state.
 pub async fn resolve_issue_state(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -878,7 +879,8 @@ pub async fn resolve_issue_state(
         let typed: Option<Uuid> = sqlx::query_scalar(
             "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
              WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-               AND s.is_triage = false AND t.deleted_at IS NULL AND t.is_epic = false \
+               AND s.is_triage = false AND s.\"group\" != 'triage' \
+               AND t.deleted_at IS NULL AND t.is_epic = false \
              ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
         )
         .bind(project_id)

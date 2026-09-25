@@ -365,6 +365,37 @@ async fn typed_default_beats_legacy_default() {
     assert_eq!(resolved, Some(legacy_default));
     assert_ne!(resolved, Some(epic_state));
 
+    // Type dengan HANYA state typed non-default: state typed pertama menang,
+    // legacy tidak pernah dipakai selama type punya state hidup.
+    let (first_type,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Task', '', '{}', false, false, true, 0, $1, now(), now()) \
+         RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("typed-first type");
+    let (first_typed_state,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, type_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'New', '', '#60646C', 'new', 4000, 'backlog', false, false, \
+         $1, $2, $3, now(), now()) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(first_type)
+    .fetch_one(&st.pool)
+    .await
+    .expect("typed-first state");
+
+    let resolved = resolve_issue_state(&st.pool, project_id, Some(first_type), None)
+        .await
+        .expect("resolve typed-first");
+    assert_eq!(resolved, Some(first_typed_state));
+    assert_ne!(resolved, Some(legacy_default));
+
     let _ = owner;
     purge(&st.pool, &slug).await;
 }

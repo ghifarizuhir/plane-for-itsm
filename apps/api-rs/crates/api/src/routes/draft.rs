@@ -468,59 +468,24 @@ async fn workspace_id(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uu
 
 /// Resolves the effective state for a new draft/issue, mirroring
 /// `DraftIssue.save` (`db/models/draft.py:84-98`) / `Issue._ensure_default_state`
-/// (`db/models/issue.py:231-243`): explicit id wins; else the default state of
-/// the given type when it has one, else the project's default non-triage
-/// state, else the first non-triage state, else None. The legacy fallbacks are
-/// type-less by design (`type_id IS NULL`): an untyped or epic work item must
-/// never resolve to a typed mirror state. Django's `.first()` uses
-/// `State.Meta.ordering = ("sequence",)` (`db/models/state.py:115`), hence
-/// `sequence, created_at` here.
+/// (`db/models/issue.py:231-243`), by delegating to the shared type-aware
+/// [`resolve_issue_state`](crate::routes::issue_common::resolve_issue_state).
+/// A non-default typed state wins over the project's legacy default, which is
+/// only reached when the type has NO live typed states. Without a project
+/// there is no state lookup to do, so only an explicit id can be honoured.
 async fn resolve_default_state(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
     type_id: Option<uuid::Uuid>,
     explicit: Option<uuid::Uuid>,
 ) -> Result<Option<uuid::Uuid>, sqlx::Error> {
-    if explicit.is_some() {
-        return Ok(explicit);
-    }
-    let Some(pid) = project_id else {
-        return Ok(None);
-    };
-    if let Some(type_id) = type_id {
-        let typed: Option<uuid::Uuid> = sqlx::query_scalar(
-            "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
-             WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-               AND s.is_triage = false AND t.deleted_at IS NULL AND t.is_epic = false \
-             ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
-        )
-        .bind(pid)
-        .bind(type_id)
-        .fetch_optional(pool)
-        .await?;
-        if typed.is_some() {
-            return Ok(typed);
+    match project_id {
+        Some(project_id) => {
+            crate::routes::issue_common::resolve_issue_state(pool, project_id, type_id, explicit)
+                .await
         }
+        None => Ok(explicit),
     }
-    let row: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
-         ORDER BY sequence ASC, created_at ASC LIMIT 1",
-    )
-    .bind(pid)
-    .fetch_optional(pool)
-    .await?;
-    if row.is_some() {
-        return Ok(row);
-    }
-    sqlx::query_scalar(
-        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false \
-         ORDER BY sequence ASC, created_at ASC LIMIT 1",
-    )
-    .bind(pid)
-    .fetch_optional(pool)
-    .await
 }
 
 async fn state_group(
