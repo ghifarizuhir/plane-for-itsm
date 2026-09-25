@@ -475,6 +475,30 @@ async fn update_type(
         return Ok(missing());
     };
     let effective_workflow = body.workflow.or(current_workflow);
+    // Switch workflow pada type yang sudah enabled: guard ke semua project
+    // hidup yang mengaktifkan type ini, lalu materialize setelah UPDATE.
+    let switch_to = match body.workflow {
+        Some(wf) if current_workflow != Some(wf) => Some(wf),
+        _ => None,
+    };
+    let enabled_project_ids: Vec<uuid::Uuid> = if switch_to.is_some() {
+        sqlx::query_scalar(
+            "SELECT pit.project_id FROM project_issue_types pit \
+             WHERE pit.issue_type_id = $1 AND pit.deleted_at IS NULL",
+        )
+        .bind(pk)
+        .fetch_all(&st.pool)
+        .await?
+    } else {
+        Vec::new()
+    };
+    if let Some(wf) = switch_to {
+        if workflow_link_conflict(&st.pool, &enabled_project_ids, wf, Some(pk)).await? {
+            return Ok(bad(
+                "Workflow is already enabled for another work item type in this project",
+            ));
+        }
+    }
     if let (Some(ids), Some(workflow_id)) = (body.project_ids.as_ref(), effective_workflow) {
         if workflow_link_conflict(&st.pool, ids, workflow_id, Some(pk)).await? {
             return Ok(bad(
@@ -513,13 +537,22 @@ async fn update_type(
     if updated.rows_affected() == 0 {
         return Ok(missing());
     }
+    // Materialize union (dedup) dari project yang di-link request dan project
+    // enabled saat workflow pindah; supersede cleanup menangani mirror lama.
+    let mut materialize_ids: Vec<uuid::Uuid> = Vec::new();
     if let Some(ids) = body.project_ids.as_ref() {
         let linked = link_projects(st, &ws, pk, user, ids).await?;
         if effective_workflow.is_some() {
-            for pid in &linked {
-                crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
-            }
+            materialize_ids.extend(linked);
         }
+    }
+    if switch_to.is_some() {
+        materialize_ids.extend(enabled_project_ids.iter().copied());
+    }
+    materialize_ids.sort_unstable();
+    materialize_ids.dedup();
+    for pid in &materialize_ids {
+        crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
     }
     match reload(st, &ws, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),
@@ -792,5 +825,5 @@ pub async fn import_to_project(
     for (type_id,) in &linked {
         crate::routes::workflow::materialize_type_states(&st.pool, project_id, *type_id).await?;
     }
-    Ok((StatusCode::OK, Json(Value::Null)))
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }

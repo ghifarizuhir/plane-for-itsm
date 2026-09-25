@@ -153,6 +153,10 @@ pub(crate) async fn materialize_workflow_for_project(
     .rows_affected();
 
     // 4. Insert mirror baru untuk workflow_state yang belum punya mirror.
+    //    Hanya baris hidup yang menghalangi: baris soft-deleted milik type
+    //    lain (mis. type yang sudah di-unlink) tidak boleh menahan insert,
+    //    karena partial-unique `(project, workflow_state) WHERE deleted_at
+    //    IS NULL` hanya mengikat baris hidup.
     let inserted = sqlx::query(
         "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
          \"default\", project_id, workspace_id, type_id, workflow_state_id, created_at, updated_at) \
@@ -160,7 +164,8 @@ pub(crate) async fn materialize_workflow_for_project(
          false, ws.is_default, $1, p.workspace_id, $2, ws.id, now(), now() \
          FROM workflow_states ws JOIN projects p ON p.id = $1 \
          WHERE ws.workflow_id = $3 AND ws.deleted_at IS NULL \
-         AND NOT EXISTS (SELECT 1 FROM states s WHERE s.project_id = $1 AND s.workflow_state_id = ws.id)",
+         AND NOT EXISTS (SELECT 1 FROM states s WHERE s.project_id = $1 AND s.workflow_state_id = ws.id \
+                         AND s.deleted_at IS NULL)",
     )
     .bind(project_id)
     .bind(type_id)
@@ -1067,12 +1072,15 @@ pub async fn workflow_map(
         let default_state_id = states.iter().find(|s| s.5).map(|s| s.0);
         let transitions: Vec<(Uuid, Uuid)> = sqlx::query_as(
             "SELECT mf.id, mt.id FROM workflow_transitions tr \
-             JOIN states mf ON mf.workflow_state_id = tr.from_state_id AND mf.project_id = $1 AND mf.deleted_at IS NULL \
-             JOIN states mt ON mt.workflow_state_id = tr.to_state_id AND mt.project_id = $1 AND mt.deleted_at IS NULL \
+             JOIN states mf ON mf.workflow_state_id = tr.from_state_id AND mf.project_id = $1 \
+               AND mf.deleted_at IS NULL AND mf.type_id = $3 \
+             JOIN states mt ON mt.workflow_state_id = tr.to_state_id AND mt.project_id = $1 \
+               AND mt.deleted_at IS NULL AND mt.type_id = $3 \
              WHERE tr.workflow_id = $2 AND tr.deleted_at IS NULL",
         )
         .bind(project_id)
         .bind(workflow_id)
+        .bind(type_id)
         .fetch_all(&st.pool)
         .await?;
         out.push(json!({
