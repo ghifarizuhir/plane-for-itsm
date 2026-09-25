@@ -1,7 +1,7 @@
 use api::middleware::auth::AuthUser;
 use api::routes::v1::work_item_type::{
-    create_workspace, import_to_project, update_workspace, V1CreateWorkItemType,
-    V1UpdateWorkItemType,
+    create_workspace, delete_project, delete_workspace, import_to_project, update_workspace,
+    V1CreateWorkItemType, V1UpdateWorkItemType,
 };
 use api::routes::workflow::{
     allowed_target_state_ids, create_state, create_transition, create_workflow, delete_state,
@@ -1487,6 +1487,49 @@ async fn import_materializes_and_unlink_guards() {
     .await
     .expect("links");
     assert_eq!(links, 1, "import yang ditolak tidak boleh menambah link");
+
+    // Hapus type ditolak selama masih ada link hidup ke project (spec), baik
+    // lewat jalur workspace maupun project.
+    let (status, body) = delete_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+    )
+    .await
+    .expect("delete linked type");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Type is enabled in projects");
+    let (still_live,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issue_types WHERE id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type row");
+    assert!(still_live, "type tidak boleh ter-soft-delete");
+
+    let (status, body) = delete_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, type_id)),
+    )
+    .await
+    .expect("unlink via delete");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Type is enabled in projects");
+    let (links_still_live,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM project_issue_types \
+         WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("link after blocked delete");
+    assert_eq!(
+        links_still_live, 1,
+        "link hidup tidak boleh ter-soft-delete"
+    );
 
     // Un-enable saat belum ada issue → 204.
     let (status, _) = unlink_type(

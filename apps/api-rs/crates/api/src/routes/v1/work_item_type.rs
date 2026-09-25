@@ -232,6 +232,15 @@ pub async fn delete_workspace(
     if in_use {
         return Ok(bad("Type is in use by work items"));
     }
+    let (linked,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM project_issue_types WHERE issue_type_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if linked {
+        return Ok(bad("Type is enabled in projects"));
+    }
     let affected = sqlx::query(
         "UPDATE issue_types SET deleted_at = now(), updated_at = now() \
          WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) \
@@ -673,6 +682,16 @@ pub async fn delete_project(
     .await?;
     if in_use {
         return Ok(bad("Type is in use by work items"));
+    }
+    let (linked,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM project_issue_types WHERE issue_type_id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if linked {
+        return Ok(bad("Type is enabled in projects"));
     }
     // Project scope detaches only: soft-delete the link, never the type.
     let affected = sqlx::query(
