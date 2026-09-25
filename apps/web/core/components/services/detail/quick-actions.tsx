@@ -44,6 +44,7 @@ export const ServiceDetailQuickActions = observer(function ServiceDetailQuickAct
       <CustomMenu
         ellipsis
         placement="bottom-end"
+        closeOnSelect
         ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}
       >
         <CustomMenu.MenuItem onClick={() => setIsEditModalOpen(true)}>{t("edit")}</CustomMenu.MenuItem>
