@@ -4,6 +4,7 @@
 
 use api::middleware::auth::AuthUser;
 use api::routes::workspace::create;
+use api::seed::insert_workflows;
 use api::state::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -81,6 +82,12 @@ async fn purge(pool: &PgPool, slug: &str) {
         "DELETE FROM cycles WHERE workspace_id = $1",
         "DELETE FROM labels WHERE workspace_id = $1",
         "DELETE FROM states WHERE workspace_id = $1",
+        "DELETE FROM workflow_transitions WHERE workflow_id IN \
+         (SELECT id FROM workflows WHERE workspace_id = $1)",
+        "DELETE FROM workflow_states WHERE workflow_id IN \
+         (SELECT id FROM workflows WHERE workspace_id = $1)",
+        "DELETE FROM issue_types WHERE workspace_id = $1",
+        "DELETE FROM workflows WHERE workspace_id = $1",
         "DELETE FROM project_user_properties WHERE workspace_id = $1",
         "DELETE FROM project_members WHERE workspace_id = $1",
         "DELETE FROM projects WHERE workspace_id = $1",
@@ -125,16 +132,48 @@ async fn workspace_create_seeds_itsm_demo() {
         .await
         .expect("workspace row");
 
+    // `workflow_states`/`workflow_transitions` tidak punya kolom `workspace_id`;
+    // scope-nya lewat join ke `workflows`.
     let count = |table: &'static str| {
         let pool = pool.clone();
         async move {
-            let (c,): (i64,) = sqlx::query_as(&format!(
-                "SELECT COUNT(*) FROM {table} WHERE workspace_id = $1"
-            ))
-            .bind(ws_id)
-            .fetch_one(&pool)
-            .await
-            .expect("count");
+            let sql = if matches!(table, "workflow_states" | "workflow_transitions") {
+                format!(
+                    "SELECT COUNT(*) FROM {table} t JOIN workflows w ON w.id = t.workflow_id \
+                     WHERE w.workspace_id = $1"
+                )
+            } else {
+                format!("SELECT COUNT(*) FROM {table} WHERE workspace_id = $1")
+            };
+            let (c,): (i64,) = sqlx::query_as(&sql)
+                .bind(ws_id)
+                .fetch_one(&pool)
+                .await
+                .expect("count");
+            c
+        }
+    };
+
+    // Marker ownership contract `plane-default-itsm` (parity migrasi Django 0124).
+    let marked = |table: &'static str| {
+        let pool = pool.clone();
+        async move {
+            let sql = if matches!(table, "workflow_states" | "workflow_transitions") {
+                format!(
+                    "SELECT COUNT(*) FROM {table} t JOIN workflows w ON w.id = t.workflow_id \
+                     WHERE w.workspace_id = $1 AND t.external_source = 'plane-default-itsm'"
+                )
+            } else {
+                format!(
+                    "SELECT COUNT(*) FROM {table} WHERE workspace_id = $1 \
+                     AND external_source = 'plane-default-itsm'"
+                )
+            };
+            let (c,): (i64,) = sqlx::query_as(&sql)
+                .bind(ws_id)
+                .fetch_one(&pool)
+                .await
+                .expect("marked count");
             c
         }
     };
@@ -163,6 +202,38 @@ async fn workspace_create_seeds_itsm_demo() {
     assert_eq!(count("project_pages").await, 2);
     assert_eq!(count("project_members").await, 2);
     assert_eq!(count("project_user_properties").await, 2);
+    assert_eq!(count("workflows").await, 4);
+    assert_eq!(count("issue_types").await, 4);
+    assert_eq!(count("workflow_states").await, 19);
+    assert_eq!(count("workflow_transitions").await, 25);
+
+    assert_eq!(marked("workflows").await, 4);
+    assert_eq!(marked("issue_types").await, 4);
+    assert_eq!(marked("workflow_states").await, 19);
+
+    // Idempotensi marker: seed workflow/type dijalankan ulang pada workspace yang
+    // sama tidak boleh menduplikasi. Panggilan `seed_workspace` penuh kedua tidak
+    // dipakai karena konten demo (bot user, project) memang bukan operasi
+    // idempotent — ia gagal lebih dulu pada `user_email_key`.
+    let (bot_id,): (Uuid,) =
+        sqlx::query_as("SELECT id FROM users WHERE username = $1 AND bot_type = 'WORKSPACE_SEED'")
+            .bind(format!("bot_user_{ws_id}"))
+            .fetch_one(&pool)
+            .await
+            .expect("seed bot user");
+    let mut tx = pool.begin().await.expect("tx");
+    insert_workflows(&mut tx, ws_id, bot_id)
+        .await
+        .expect("re-run workflow seed");
+    tx.commit().await.expect("commit");
+
+    assert_eq!(count("workflows").await, 4);
+    assert_eq!(count("issue_types").await, 4);
+    assert_eq!(count("workflow_states").await, 19);
+    assert_eq!(count("workflow_transitions").await, 25);
+    assert_eq!(marked("workflows").await, 4);
+    assert_eq!(marked("issue_types").await, 4);
+    assert_eq!(marked("workflow_states").await, 19);
 
     let (bot_count,): (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_bot = true AND bot_type = 'WORKSPACE_SEED' AND username = $1")
