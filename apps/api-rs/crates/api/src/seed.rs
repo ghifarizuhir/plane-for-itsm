@@ -443,6 +443,19 @@ async fn seed_issue_type_id(
     {
         return Ok(id);
     }
+    let (conflict,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issue_types WHERE workspace_id = $1 AND name = $2 \
+         AND deleted_at IS NULL)",
+    )
+    .bind(workspace_id)
+    .bind(type_name)
+    .fetch_one(&mut **tx)
+    .await?;
+    if conflict {
+        return Err(sqlx::Error::Protocol(format!(
+            "seed conflict: workspace {workspace_id} already has an active issue type named '{type_name}'"
+        )));
+    }
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
          level, workflow_id, workspace_id, external_source, external_id, created_by_id, updated_by_id, \
@@ -510,9 +523,10 @@ async fn seed_workflow_state_id(
 /// Seed workflow + type default workspace (parity migrasi Django
 /// `0124_seed_default_workflows`). Tidak mengaktifkan type di project mana pun.
 /// Marker-first lookup idempotent untuk workspace baru di dalam satu transaksi
-/// `seed_workspace`, bukan rekonsiliasi umum: row senama tanpa marker gagal
-/// tertutup lewat partial unique constraint (tidak pernah diadopsi), row
-/// bermarker dipercaya apa adanya — fail-closed seperti Django 0124.
+/// `seed_workspace`, bukan rekonsiliasi umum: row senama tanpa marker ditolak
+/// (workflow/state lewat partial unique constraint, issue type lewat cek
+/// konflik eksplisit — tidak pernah diadopsi), row bermarker dipercaya apa
+/// adanya — fail-closed seperti Django 0124.
 pub async fn insert_workflows(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
