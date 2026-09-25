@@ -426,7 +426,9 @@ Ganti blok `Meta` `State` (baris `unique_together` + `constraints`) menjadi:
 
 Run: `docker compose -f docker-compose-test.yml run --rm api-tests pytest plane/tests/unit/models/test_workflow_models.py -vv`
 
-Expected: PASS (11 passed).
+Expected: PASS (14 passed: 9 existing A1 tests + 5 new A2 tests).
+
+Catatan arsitektur: `apps/api` adalah migrator-only pada deployment ini, jadi serializer Django bukan jalur write produksi. Field `State.type`/`State.workflow_state` harus tetap read-only bila serializer Django dipakai kembali; enforcement write aktif ditangani route api-rs pada Task B9, termasuk guard agar endpoint state legacy tidak memutasi mirror workflow.
 
 - [ ] **Step 5: Commit**
 
@@ -3178,13 +3180,25 @@ const STATE_FULL_SELECT_SQL: &str = "SELECT s.id, s.project_id, s.workspace_id, 
         "workflow_state_id": row.workflow_state_id,
 ```
 
-- [ ] **Step 2: Jalankan test state**
+- [ ] **Step 2: Jadikan endpoint state legacy-only untuk write**
+
+State hasil materialization (`workflow_state_id IS NOT NULL`) dikelola oleh workflow API, bukan endpoint state project lama. Tambahkan guard/helper di `state.rs` lalu terapkan ke `create`, `patch`, `destroy`, dan `mark_default`:
+
+1. `create` tetap hanya membuat state legacy; ubah duplicate-name query menjadi `type_id IS NULL` agar nama typed dan legacy boleh sama.
+2. `patch` baca `type_id`/`workflow_state_id` untuk row target. Jika `workflow_state_id IS NOT NULL`, return `400` dengan error `Typed workflow states are managed by the workflow API`. Untuk row legacy, duplicate-name query dan `UPDATE` wajib memakai `type_id IS NULL`.
+3. `destroy` select juga `workflow_state_id`; jika typed mirror, return error yang sama sebelum mengecek issue/default.
+4. `mark_default` tolak target typed mirror dan batasi clear/set default ke `type_id IS NULL`, supaya default per type tidak ikut terhapus ketika admin mengubah default legacy.
+5. Jangan sembunyikan typed mirror dari `list`/`detail`; endpoint read tetap mengembalikan mapping `type_id` dan `workflow_state_id` yang ditambahkan pada Step 1.
+
+Tambahkan pure helper tests untuk guard typed mutation (typed row ditolak, legacy row diizinkan) dan sesuaikan `StateFullRow` fixture di `batch_d_d3_tests::sample_row` dengan dua field `None`. Tambahkan integration assertion bila test state DB tersedia: patch/delete/mark-default terhadap typed mirror mengembalikan 400 dan tidak mengubah row.
+
+- [ ] **Step 3: Jalankan test state**
 
 Run: `cargo test -p api --lib state`
 
 Expected: PASS. Jika ada test in-file yang membandingkan exact JSON, perbarui ekspektasinya dengan dua key baru.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add apps/api-rs/crates/api/src/routes/state.rs
