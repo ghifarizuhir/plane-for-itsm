@@ -1,9 +1,14 @@
 use api::middleware::auth::AuthUser;
+use api::routes::v1::work_item_type::{
+    create_workspace, import_to_project, update_workspace, V1CreateWorkItemType,
+    V1UpdateWorkItemType,
+};
 use api::routes::workflow::{
     allowed_target_state_ids, create_state, create_transition, create_workflow, delete_state,
     delete_transition, delete_workflow, list_states, list_transitions, list_workflows,
-    materialize_type_states, patch_state, patch_workflow, retrieve_workflow, validate_name,
-    validate_state_group, TransitionBody, WorkflowBody, WorkflowStateBody,
+    materialize_type_states, patch_state, patch_workflow, retrieve_workflow, unlink_type,
+    validate_name, validate_state_group, workflow_map, TransitionBody, WorkflowBody,
+    WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -1348,6 +1353,317 @@ async fn transition_crud_validates_states() {
     .expect("list deleted workflow");
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"], "The required object does not exist.");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn import_materializes_and_unlink_guards() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wftype").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state");
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": [type_id]})),
+    )
+    .await
+    .expect("import");
+    assert_eq!(status, StatusCode::OK);
+
+    let (mirrors,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("mirrors");
+    assert_eq!(mirrors, 1);
+
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(map["types"].as_array().unwrap().len(), 1);
+    assert_eq!(map["types"][0]["type_id"], type_id.to_string());
+    assert_eq!(map["types"][0]["states"].as_array().unwrap().len(), 1);
+
+    // Policy: PATCH dengan `workflow: null` tidak melepas assignment
+    // (COALESCE no-op) selama type masih enabled di project.
+    let null_workflow: V1UpdateWorkItemType =
+        serde_json::from_value(json!({"workflow": null})).unwrap();
+    let (status, patched) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+        Json(null_workflow),
+    )
+    .await
+    .expect("patch null workflow");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["workflow"],
+        workflow_id.to_string(),
+        "null workflow tidak boleh melepas assignment type yang enabled"
+    );
+
+    // Type kedua tidak boleh memakai workflow yang sama di project yang sama.
+    let (other_type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Problem', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("second type");
+    let (status, body) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": [other_type_id]})),
+    )
+    .await
+    .expect("import conflict");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Workflow is already enabled for another work item type in this project"
+    );
+    let (links,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM project_issue_types WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("links");
+    assert_eq!(links, 1, "import yang ditolak tidak boleh menambah link");
+
+    // Un-enable saat belum ada issue → 204.
+    let (status, _) = unlink_type(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, type_id)),
+    )
+    .await
+    .expect("unlink");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Un-enable men-soft-delete mirror type dan mengosongkan workflow-map.
+    let (live_mirrors, total_mirrors): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL), COUNT(*) FROM states \
+         WHERE project_id = $1 AND type_id = $2",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("mirrors after unlink");
+    assert_eq!(live_mirrors, 0, "unlink harus men-soft-delete mirror");
+    assert_eq!(total_mirrors, 1);
+
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map after unlink");
+    assert_eq!(status, StatusCode::OK);
+    assert!(map["types"].as_array().unwrap().is_empty());
+
+    // Jalur `project_ids` v1: create/update harus link + materialize + guard.
+    let (_, second_workflow) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Problem Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("second workflow");
+    let second_workflow_id = Uuid::parse_str(second_workflow["id"].as_str().unwrap()).unwrap();
+    create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), second_workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Open".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("second workflow state");
+
+    let (status, created_type) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Problem Type".into()),
+            workflow: Some(second_workflow_id),
+            project_ids: vec![project_id],
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create with project_ids");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created_type["workflow"], second_workflow_id.to_string());
+    assert_eq!(created_type["project_ids"].as_array().unwrap().len(), 1);
+    let created_type_id = Uuid::parse_str(created_type["id"].as_str().unwrap()).unwrap();
+    let (created_mirrors,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(created_type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("created type mirrors");
+    assert_eq!(
+        created_mirrors, 1,
+        "create dengan project_ids harus materialize"
+    );
+
+    // Update lewat jalur project_ids (workflow diwarisi) tetap idempotent.
+    let (status, patched_type) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), created_type_id)),
+        Json(V1UpdateWorkItemType {
+            project_ids: Some(vec![project_id]),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("update with project_ids");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(patched_type["workflow"], second_workflow_id.to_string());
+
+    // Create kedua dengan workflow sama di project sama ditolak sebelum INSERT.
+    let (status, body) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Change Type".into()),
+            workflow: Some(second_workflow_id),
+            project_ids: vec![project_id],
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("conflicting create");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Workflow is already enabled for another work item type in this project"
+    );
+    let (conflicting_types,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 AND name = 'Change Type' AND deleted_at IS NULL",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("conflicting type rows");
+    assert_eq!(
+        conflicting_types, 0,
+        "create yang ditolak tidak boleh INSERT type"
+    );
+
+    // Batch conflict: dua type berbagi satu workflow dalam request yang sama.
+    let mut batch_ids = Vec::new();
+    for name in ["Batch A", "Batch B"] {
+        let (id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+             level, workflow_id, workspace_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, now(), now()) \
+             RETURNING id",
+        )
+        .bind(name)
+        .bind(second_workflow_id)
+        .bind(ws_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("batch type");
+        batch_ids.push(id);
+    }
+    let (status, body) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": batch_ids})),
+    )
+    .await
+    .expect("batch conflict");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Workflow is already enabled for another work item type in this project"
+    );
+    let (links,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM project_issue_types WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("links after batch conflict");
+    assert_eq!(
+        links, 1,
+        "import batch yang ditolak tidak boleh menambah link"
+    );
 
     purge(&st.pool, &slug).await;
 }

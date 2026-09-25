@@ -16,7 +16,9 @@ use crate::{
     state::AppState,
 };
 
-use super::issue_common::bad;
+use super::issue_common::{
+    bad, fetch_project_member_role, is_workspace_admin, project_gate_allows,
+};
 
 /// Group valid untuk workflow state; `triage` bukan bagian workflow
 /// (`StateGroup` di `apps/api/plane/db/models/state.py:14-20`).
@@ -982,4 +984,110 @@ pub async fn delete_transition(
         return Ok(missing());
     }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+// --- Project enablement + workflow map -------------------------------------
+
+/// DELETE `/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/`
+/// (un-enable type dari project).
+pub async fn unlink_type(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, type_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    if !super::v1::work_item_type::can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Type is in use by work items"));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
+         WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE states SET deleted_at = now(), updated_at = now() \
+         WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+/// GET `/api/workspaces/:slug/projects/:project_id/workflow-map/`
+pub async fn workflow_map(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+) -> R {
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !project_gate_allows(role.is_some(), role.is_some(), ws_admin) {
+        return Ok(deny());
+    }
+    ensure_project_workflows(&st.pool, project_id).await?;
+
+    let types: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+        "SELECT t.id, t.workflow_id, t.name FROM project_issue_types pit \
+         JOIN issue_types t ON t.id = pit.issue_type_id \
+         JOIN projects p ON p.id = pit.project_id \
+         WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+           AND t.workflow_id IS NOT NULL AND p.deleted_at IS NULL \
+         ORDER BY t.name",
+    )
+    .bind(project_id)
+    .fetch_all(&st.pool)
+    .await?;
+
+    let mut out = Vec::new();
+    for (type_id, workflow_id, type_name) in types {
+        let states: Vec<(Uuid, String, String, String, f64, bool)> = sqlx::query_as(
+            "SELECT id, name, color, \"group\", sequence, \"default\" FROM states \
+             WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL ORDER BY sequence",
+        )
+        .bind(project_id)
+        .bind(type_id)
+        .fetch_all(&st.pool)
+        .await?;
+        let default_state_id = states.iter().find(|s| s.5).map(|s| s.0);
+        let transitions: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            "SELECT mf.id, mt.id FROM workflow_transitions tr \
+             JOIN states mf ON mf.workflow_state_id = tr.from_state_id AND mf.project_id = $1 AND mf.deleted_at IS NULL \
+             JOIN states mt ON mt.workflow_state_id = tr.to_state_id AND mt.project_id = $1 AND mt.deleted_at IS NULL \
+             WHERE tr.workflow_id = $2 AND tr.deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(workflow_id)
+        .fetch_all(&st.pool)
+        .await?;
+        out.push(json!({
+            "type_id": type_id,
+            "type_name": type_name,
+            "workflow_id": workflow_id,
+            "default_state_id": default_state_id,
+            "states": states.iter().map(|(id, name, color, group, sequence, is_default)| json!({
+                "id": id, "name": name, "color": color, "group": group,
+                "sequence": sequence, "is_default": is_default,
+            })).collect::<Vec<_>>(),
+            "transitions": transitions.iter().map(|(from, to)| json!({
+                "from_state_id": from, "to_state_id": to,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+    Ok((StatusCode::OK, Json(json!({ "types": out }))))
 }

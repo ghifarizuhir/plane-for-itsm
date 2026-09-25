@@ -12,6 +12,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::FromRow;
 
+use crate::routes::issue_common::bad;
 use crate::routes::member::deny_detail;
 use crate::routes::project::{deny, fetch_project_full, missing, project_role, ws_role};
 use crate::routes::v1::common::PageParams;
@@ -22,7 +23,7 @@ type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 /// Column list for `issue_types t` (workspace-owned types; project links come
 /// from `project_issue_types`). `level` is `double precision` in the DB, cast
 /// to int for the SDK shape.
-pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
+pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.is_default, t.is_active, t.level::int AS level, t.workflow_id AS workflow, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
 
 #[derive(Debug, Clone, FromRow)]
 pub struct V1WorkItemTypeRow {
@@ -34,6 +35,7 @@ pub struct V1WorkItemTypeRow {
     pub is_default: bool,
     pub is_active: bool,
     pub level: Option<i32>,
+    pub workflow: Option<uuid::Uuid>,
     pub external_id: Option<String>,
     pub external_source: Option<String>,
     pub created_by: Option<uuid::Uuid>,
@@ -55,6 +57,7 @@ pub fn v1_work_item_type_json(row: &V1WorkItemTypeRow) -> Value {
         "is_default": row.is_default,
         "is_active": row.is_active,
         "level": row.level,
+        "workflow": row.workflow,
         "external_id": row.external_id,
         "external_source": row.external_source,
         "created_by": row.created_by,
@@ -82,6 +85,8 @@ pub struct V1CreateWorkItemType {
     #[serde(default)]
     pub level: Option<i32>,
     #[serde(default)]
+    pub workflow: Option<uuid::Uuid>,
+    #[serde(default)]
     pub external_id: Option<String>,
     #[serde(default)]
     pub external_source: Option<String>,
@@ -103,6 +108,8 @@ pub struct V1UpdateWorkItemType {
     pub is_active: Option<bool>,
     #[serde(default)]
     pub level: Option<i32>,
+    #[serde(default)]
+    pub workflow: Option<uuid::Uuid>,
     #[serde(default)]
     pub external_id: Option<String>,
     #[serde(default)]
@@ -216,6 +223,15 @@ pub async fn delete_workspace(
     if !can_write(&st.pool, auth.0, &slug, None).await? {
         return Ok(deny());
     }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE type_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Type is in use by work items"));
+    }
     let affected = sqlx::query(
         "UPDATE issue_types SET deleted_at = now(), updated_at = now() \
          WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) \
@@ -261,15 +277,28 @@ async fn create_type(
     let Some(ws) = ws_id(&st.pool, slug).await? else {
         return Ok(missing());
     };
+    let mut link_ids = body.project_ids.clone();
+    if let Some(pid) = scope_project {
+        link_ids.push(pid);
+    }
+    // Guard sebelum INSERT agar create yang konflik tidak meninggalkan type
+    // orphan tanpa link.
+    if let Some(workflow_id) = body.workflow {
+        if workflow_link_conflict(&st.pool, &link_ids, workflow_id, None).await? {
+            return Ok(bad(
+                "Workflow is already enabled for another work item type in this project",
+            ));
+        }
+    }
     let row: V1WorkItemTypeRow = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
-         is_active, level, external_id, external_source, workspace_id, created_by_id, updated_by_id, \
-         created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $10, now(), now()) \
+         is_active, level, workflow_id, external_id, external_source, workspace_id, created_by_id, \
+         updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $11, now(), now()) \
          RETURNING id, name, description, logo_props, is_epic, is_default, is_active, \
-         level::int AS level, external_id, external_source, created_by_id AS created_by, \
-         updated_by_id AS updated_by, workspace_id AS workspace, created_at, updated_at, deleted_at, \
-         ARRAY[]::uuid[] AS project_ids",
+         level::int AS level, workflow_id AS workflow, external_id, external_source, \
+         created_by_id AS created_by, updated_by_id AS updated_by, workspace_id AS workspace, \
+         created_at, updated_at, deleted_at, ARRAY[]::uuid[] AS project_ids",
     )
     .bind(name)
     .bind(body.description.clone().unwrap_or_default())
@@ -277,6 +306,7 @@ async fn create_type(
     .bind(body.is_epic.unwrap_or(false))
     .bind(body.is_active.unwrap_or(true))
     .bind(body.level.unwrap_or(0) as f64)
+    .bind(body.workflow)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(ws)
@@ -284,11 +314,12 @@ async fn create_type(
     .fetch_one(&st.pool)
     .await?;
 
-    let mut link_ids = body.project_ids.clone();
-    if let Some(pid) = scope_project {
-        link_ids.push(pid);
+    let linked = link_projects(st, &ws, row.id, user, &link_ids).await?;
+    if row.workflow.is_some() {
+        for pid in &linked {
+            crate::routes::workflow::materialize_type_states(&st.pool, *pid, row.id).await?;
+        }
     }
-    link_projects(st, &ws, row.id, user, &link_ids).await?;
 
     let row = reload(st, &ws, row.id)
         .await?
@@ -296,15 +327,44 @@ async fn create_type(
     Ok((StatusCode::CREATED, Json(v1_work_item_type_json(&row))))
 }
 
+/// Guard invariant "satu workflow per type per project" untuk jalur link
+/// `project_ids`: `true` bila salah satu `project_ids` sudah punya type hidup
+/// lain yang memakai `workflow_id` (opsional mengecualikan type itu sendiri).
+async fn workflow_link_conflict(
+    pool: &sqlx::PgPool,
+    project_ids: &[uuid::Uuid],
+    workflow_id: uuid::Uuid,
+    exclude_type_id: Option<uuid::Uuid>,
+) -> Result<bool, common::errors::AppError> {
+    for project_id in project_ids {
+        let (conflict,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM project_issue_types pit \
+             JOIN issue_types t ON t.id = pit.issue_type_id \
+             WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+               AND t.workflow_id = $2 AND ($3::uuid IS NULL OR t.id <> $3))",
+        )
+        .bind(project_id)
+        .bind(workflow_id)
+        .bind(exclude_type_id)
+        .fetch_one(pool)
+        .await?;
+        if conflict {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Insert `project_issue_types` links for types/projects both in `ws`,
-/// skipping deleted projects and existing live links.
+/// skipping deleted projects and existing live links. Returns the requested
+/// projects that hold a live link afterwards (new or pre-existing).
 async fn link_projects(
     st: &AppState,
     ws: &uuid::Uuid,
     type_id: uuid::Uuid,
     user: uuid::Uuid,
     project_ids: &[uuid::Uuid],
-) -> Result<(), common::errors::AppError> {
+) -> Result<Vec<uuid::Uuid>, common::errors::AppError> {
     for pid in project_ids {
         sqlx::query(
             "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, \
@@ -321,7 +381,18 @@ async fn link_projects(
         .execute(&st.pool)
         .await?;
     }
-    Ok(())
+    let linked: Vec<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT pit.project_id FROM project_issue_types pit \
+         JOIN projects p ON p.id = pit.project_id \
+         WHERE pit.issue_type_id = $1 AND pit.project_id = ANY($2) \
+           AND pit.deleted_at IS NULL AND p.workspace_id = $3 AND p.deleted_at IS NULL",
+    )
+    .bind(type_id)
+    .bind(project_ids)
+    .bind(ws)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok(linked.into_iter().map(|(pid,)| pid).collect())
 }
 
 async fn reload(
@@ -383,6 +454,25 @@ async fn update_type(
             ));
         }
     }
+    // Workflow efektif setelah UPDATE: `body.workflow` bila dikirim, kalau
+    // tidak workflow lama. Dipakai untuk guard sebelum UPDATE diterapkan.
+    let current: Option<Option<uuid::Uuid>> = sqlx::query_scalar(
+        "SELECT workflow_id FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(current_workflow) = current else {
+        return Ok(missing());
+    };
+    let effective_workflow = body.workflow.or(current_workflow);
+    if let (Some(ids), Some(workflow_id)) = (body.project_ids.as_ref(), effective_workflow) {
+        if workflow_link_conflict(&st.pool, ids, workflow_id, Some(pk)).await? {
+            return Ok(bad(
+                "Workflow is already enabled for another work item type in this project",
+            ));
+        }
+    }
     // Column-by-column COALESCE so omitted fields are untouched.
     let updated = sqlx::query(
         "UPDATE issue_types SET \
@@ -392,9 +482,10 @@ async fn update_type(
          is_epic = COALESCE($5, is_epic), \
          is_active = COALESCE($6, is_active), \
          level = COALESCE($7, level), \
-         external_id = COALESCE($8, external_id), \
-         external_source = COALESCE($9, external_source), \
-         updated_by_id = $10, updated_at = now() \
+         workflow_id = COALESCE($8, workflow_id), \
+         external_id = COALESCE($9, external_id), \
+         external_source = COALESCE($10, external_source), \
+         updated_by_id = $11, updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
@@ -404,6 +495,7 @@ async fn update_type(
     .bind(body.is_epic)
     .bind(body.is_active)
     .bind(body.level.map(|l| l as f64))
+    .bind(body.workflow)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(user)
@@ -413,7 +505,12 @@ async fn update_type(
         return Ok(missing());
     }
     if let Some(ids) = body.project_ids.as_ref() {
-        link_projects(st, &ws, pk, user, ids).await?;
+        let linked = link_projects(st, &ws, pk, user, ids).await?;
+        if effective_workflow.is_some() {
+            for pid in &linked {
+                crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
+            }
+        }
     }
     match reload(st, &ws, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),
@@ -567,6 +664,16 @@ pub async fn delete_project(
     if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
         return Ok(gate);
     }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Type is in use by work items"));
+    }
     // Project scope detaches only: soft-delete the link, never the type.
     let affected = sqlx::query(
         "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
@@ -608,7 +715,34 @@ pub async fn import_to_project(
                 .collect()
         })
         .unwrap_or_default();
-    for id in ids {
+    // Guard sebelum link: satu workflow hanya boleh dipakai satu type hidup
+    // per project, baik di dalam batch request maupun terhadap link existing.
+    let (batch_conflict,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT t.workflow_id FROM issue_types t \
+         WHERE t.id = ANY($1) AND t.workflow_id IS NOT NULL \
+         GROUP BY t.workflow_id HAVING COUNT(*) > 1)",
+    )
+    .bind(&ids)
+    .fetch_one(&st.pool)
+    .await?;
+    let (project_conflict,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS( \
+           SELECT 1 FROM project_issue_types pit \
+           JOIN issue_types t ON t.id = pit.issue_type_id \
+           WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+             AND t.id <> ALL($2) AND t.workflow_id IS NOT NULL \
+             AND t.workflow_id IN (SELECT workflow_id FROM issue_types WHERE id = ANY($2) AND workflow_id IS NOT NULL))",
+    )
+    .bind(project_id)
+    .bind(&ids)
+    .fetch_one(&st.pool)
+    .await?;
+    if batch_conflict || project_conflict {
+        return Ok(bad(
+            "Workflow is already enabled for another work item type in this project",
+        ));
+    }
+    for id in &ids {
         sqlx::query(
             "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, \
              level, is_default, created_by_id, updated_by_id, created_at, updated_at) \
@@ -626,5 +760,18 @@ pub async fn import_to_project(
         .execute(&st.pool)
         .await?;
     }
-    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+    // Materialize hanya type yang benar-benar punya link hidup di project ini,
+    // sehingga id asing/type dari workspace lain tidak ikut ter-materialize.
+    let linked: Vec<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT pit.issue_type_id FROM project_issue_types pit \
+         WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND pit.issue_type_id = ANY($2)",
+    )
+    .bind(project_id)
+    .bind(&ids)
+    .fetch_all(&st.pool)
+    .await?;
+    for (type_id,) in &linked {
+        crate::routes::workflow::materialize_type_states(&st.pool, project_id, *type_id).await?;
+    }
+    Ok((StatusCode::OK, Json(Value::Null)))
 }
