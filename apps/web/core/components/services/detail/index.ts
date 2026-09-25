@@ -5,8 +5,7 @@
  */
 
 export * from "./root";
-export * from "./header";
-export * from "./tabs";
-export * from "./overview";
+export * from "./quick-actions";
+export * from "./description";
 export * from "./dependencies";
 export * from "./work-items";

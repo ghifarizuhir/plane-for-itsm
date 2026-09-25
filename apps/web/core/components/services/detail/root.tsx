@@ -4,11 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import type { TNameDescriptionLoader } from "@plane/types";
 // assets
 import emptyModule from "@/app/assets/empty-state/module.svg?url";
 // components
@@ -19,10 +20,9 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { ServiceLoadErrorState } from "../service-load-error-state";
-import { ServiceDependencies } from "./dependencies";
-import { ServiceDetailHeader } from "./header";
-import { ServiceDetailTabs, type TServiceDetailTab } from "./tabs";
-import { ServiceOverview } from "./overview";
+import { ServiceDescription } from "./description";
+import { ServiceDetailSidebar } from "./sidebar";
+import { ServiceTitleInput } from "./title-input";
 import { ServiceWorkItems } from "./work-items";
 
 type Props = {
@@ -32,7 +32,7 @@ type Props = {
 export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Props) {
   const { serviceId } = props;
   // states
-  const [activeTab, setActiveTab] = useState<TServiceDetailTab>("overview");
+  const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
@@ -48,6 +48,12 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
 
   const workspaceId = currentWorkspace?.id;
   const hasError = pid ? errorMap[pid] : false;
+
+  useEffect(() => {
+    if (isSubmitting !== "submitted") return;
+    const timer = setTimeout(() => setIsSubmitting("saved"), 2000);
+    return () => clearTimeout(timer);
+  }, [isSubmitting]);
 
   const handleRetry = () => {
     if (!workspaceSlug || !workspaceId || !pid) return;
@@ -71,13 +77,14 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   }
 
   return (
-    <div className="flex h-full w-full flex-col gap-4 p-4">
-      <ServiceDetailHeader serviceId={serviceId} />
-      <ServiceDetailTabs activeTab={activeTab} onChange={setActiveTab} />
-      <div className="min-h-0 flex-1">
-        {activeTab === "overview" && <ServiceOverview serviceId={serviceId} />}
-        {activeTab === "dependencies" && <ServiceDependencies serviceId={serviceId} />}
-        {activeTab === "work_items" && <ServiceWorkItems serviceId={serviceId} />}
+    <div className="flex h-full w-full flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <div className="w-full space-y-6 px-9 py-5 md:h-full md:min-w-0 md:flex-1 md:overflow-y-auto">
+        <ServiceTitleInput serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
+        <ServiceDescription serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
+        <ServiceWorkItems serviceId={serviceId} />
+      </div>
+      <div className="w-full shrink-0 border-t border-subtle bg-surface-1 md:h-full md:w-1/4 md:min-w-80 md:border-t-0 md:border-l xl:min-w-96">
+        <ServiceDetailSidebar serviceId={serviceId} />
       </div>
     </div>
   );
