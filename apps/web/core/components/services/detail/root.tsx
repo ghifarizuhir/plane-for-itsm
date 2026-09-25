@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
+import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // local imports
 import { ServiceLoadErrorState } from "../service-load-error-state";
 import { ServiceDescription } from "./description";
@@ -38,6 +39,8 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
+  // unsaved changes guard
+  const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
   // store hooks
   const { fetchedMap, getServiceById, errorMap, fetchServices } = useService();
   const { currentWorkspace } = useWorkspace();
@@ -50,10 +53,13 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   const hasError = pid ? errorMap[pid] : false;
 
   useEffect(() => {
-    if (isSubmitting !== "submitted") return;
-    const timer = setTimeout(() => setIsSubmitting("saved"), 2000);
-    return () => clearTimeout(timer);
-  }, [isSubmitting]);
+    if (isSubmitting === "submitted") {
+      setShowAlert(false);
+      const timer = setTimeout(() => setIsSubmitting("saved"), 2000);
+      return () => clearTimeout(timer);
+    }
+    if (isSubmitting === "submitting") setShowAlert(true);
+  }, [isSubmitting, setShowAlert]);
 
   const handleRetry = () => {
     if (!workspaceSlug || !workspaceId || !pid) return;
