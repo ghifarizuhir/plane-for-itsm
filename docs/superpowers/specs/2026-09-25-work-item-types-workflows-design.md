@@ -169,18 +169,18 @@ Data migration membuat untuk semua workspace existing; jalur pembuatan workspace
 
 File baru `apps/api-rs/crates/api/src/routes/workflow.rs`, didaftarkan di `main.rs`.
 
-| Route                                                                        | Fungsi                               |
-| ---------------------------------------------------------------------------- | ------------------------------------ |
-| `GET/POST /api/workspaces/:slug/workflows/`                                  | list/create workflow                 |
-| `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/`                      | CRUD workflow (delete diguard)       |
-| `GET/POST /api/workspaces/:slug/workflows/:id/states/`                       | list/create state                    |
-| `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/states/:state_id/`     | CRUD state + sync mirror             |
-| `GET/POST /api/workspaces/:slug/workflows/:id/transitions/`                  | list/create transisi                 |
-| `GET/DELETE /api/workspaces/:slug/workflows/:id/transitions/:transition_id/` | retrieve/delete transisi             |
-| `GET/POST /api/workspaces/:slug/work-item-types/`                            | list/create type + assign `workflow` |
-| `GET/PATCH/DELETE /api/workspaces/:slug/work-item-types/:type_id/`           | CRUD type                            |
-| `POST /api/workspaces/:slug/projects/:project_id/import-work-item-types/`    | opt-in type ke project (materialize) |
-| `GET /api/workspaces/:slug/projects/:project_id/workflow-map/`               | peta workflow project untuk web      |
+| Route                                                                        | Fungsi                                                |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `GET/POST /api/workspaces/:slug/workflows/`                                  | list/create workflow                                  |
+| `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/`                      | CRUD workflow (delete diguard)                        |
+| `GET/POST /api/workspaces/:slug/workflows/:id/states/`                       | list/create state                                     |
+| `GET/PATCH/DELETE /api/workspaces/:slug/workflows/:id/states/:state_id/`     | CRUD state + sync mirror                              |
+| `GET/POST /api/workspaces/:slug/workflows/:id/transitions/`                  | list/create transisi                                  |
+| `GET/DELETE /api/workspaces/:slug/workflows/:id/transitions/:transition_id/` | delete transisi (tanpa retrieve; editor memakai list) |
+| `GET/POST /api/workspaces/:slug/work-item-types/`                            | list/create type + assign `workflow`                  |
+| `GET/PATCH/DELETE /api/workspaces/:slug/work-item-types/:type_id/`           | CRUD type                                             |
+| `POST /api/workspaces/:slug/projects/:project_id/import-work-item-types/`    | opt-in type ke project (materialize)                  |
+| `GET /api/workspaces/:slug/projects/:project_id/workflow-map/`               | peta workflow project untuk web                       |
 
 - Logika type CRUD di-refactor dari `routes/v1/work_item_type.rs` (helper SQL bersama), bukan diduplikasi.
 - `v1::work_item_type` payload (`TYPE_COLS` / `v1_work_item_type_json`) ditambah `workflow` (nullable) agar MCP/SDK melihat assignment, tanpa endpoint baru.
