@@ -22,6 +22,13 @@ class IssueType(BaseModel):
     level = models.FloatField(default=0)
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
+    workflow = models.ForeignKey(
+        "db.Workflow",
+        on_delete=models.SET_NULL,
+        related_name="issue_types",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = "Issue Type"

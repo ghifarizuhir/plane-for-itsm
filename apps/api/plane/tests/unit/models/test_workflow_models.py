@@ -6,14 +6,20 @@ import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 
-from plane.db.models import StateGroup, Workflow, WorkflowState, WorkflowTransition
-from plane.tests.factories import WorkspaceFactory
+from plane.db.models import IssueType, State, StateGroup, Workflow, WorkflowState, WorkflowTransition
+from plane.tests.factories import ProjectFactory, WorkspaceFactory
 
 
 def make_workflow():
     workspace = WorkspaceFactory()
     workflow = Workflow.objects.create(workspace=workspace, name="Incident Workflow")
     return workspace, workflow
+
+
+def make_project():
+    workspace = WorkspaceFactory()
+    project = ProjectFactory(workspace=workspace)
+    return workspace, project
 
 
 @pytest.mark.unit
@@ -99,3 +105,66 @@ class TestWorkflowModels:
         transition.deleted_at = timezone.now()
         transition.save()
         WorkflowTransition.objects.create(workflow=workflow, from_state=new, to_state=progress)
+
+
+@pytest.mark.unit
+class TestStateTypeScoping:
+    @pytest.mark.django_db
+    def test_same_state_name_allowed_across_types(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        problem = IssueType.objects.create(workspace=workspace, name="Problem")
+        State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=incident)
+        State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=problem)
+
+    @pytest.mark.django_db
+    def test_same_state_name_rejected_within_type(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=incident)
+        with pytest.raises(IntegrityError):
+            State.objects.create(project=project, name="Closed", color="#46A758", group="completed", type=incident)
+
+    @pytest.mark.django_db
+    def test_legacy_state_name_still_unique_per_project(self):
+        _, project = make_project()
+        State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
+        with pytest.raises(IntegrityError):
+            State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog")
+
+    @pytest.mark.django_db
+    def test_only_one_default_per_type_per_project(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        State.objects.create(project=project, name="New", color="#60646C", group="backlog", type=incident, default=True)
+        with pytest.raises(IntegrityError):
+            State.objects.create(
+                project=project, name="Other", color="#60646C", group="backlog", type=incident, default=True
+            )
+
+    @pytest.mark.django_db
+    def test_workflow_state_mirror_unique_per_project(self):
+        workspace, project = make_project()
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        workflow = Workflow.objects.create(workspace=workspace, name="Incident Workflow")
+        wf_state = WorkflowState.objects.create(
+            workflow=workflow, name="New", color="#60646C", group="backlog", is_default=True
+        )
+        State.objects.create(
+            project=project,
+            name="New",
+            color="#60646C",
+            group="backlog",
+            type=incident,
+            workflow_state=wf_state,
+            default=True,
+        )
+        with pytest.raises(IntegrityError):
+            State.objects.create(
+                project=project,
+                name="New Mirror",
+                color="#60646C",
+                group="backlog",
+                type=incident,
+                workflow_state=wf_state,
+            )
