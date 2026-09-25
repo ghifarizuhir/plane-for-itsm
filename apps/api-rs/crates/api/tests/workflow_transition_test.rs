@@ -476,7 +476,7 @@ async fn patch_rejects_disallowed_transition() {
     )
     .await
     .expect("state Closed");
-    let _workflow_closed_id =
+    let workflow_closed_id =
         Uuid::parse_str(closed_state["id"].as_str().expect("closed id")).expect("uuid");
 
     // Hanya New → In Progress yang terdaftar; New → Closed tidak.
@@ -492,6 +492,17 @@ async fn patch_rejects_disallowed_transition() {
     .await
     .expect("transition");
     assert_eq!(status, StatusCode::CREATED);
+    let (closed_pairs,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflow_transitions WHERE workflow_id = $1 \
+         AND from_state_id = $2 AND to_state_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .bind(workflow_new_id)
+    .bind(workflow_closed_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("closed pair count");
+    assert_eq!(closed_pairs, 0, "New → Closed tidak boleh terdaftar");
 
     // Type T memakai workflow W, lalu di-enable di project (materialize mirror).
     let (type_id,): (Uuid,) = sqlx::query_as(
@@ -559,6 +570,12 @@ async fn patch_rejects_disallowed_transition() {
     let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
 
     // New → Closed tidak terjangkau dari workflow type → 400 + allowed In Progress.
+    let (updated_before,): (String,) =
+        sqlx::query_as("SELECT updated_at::text FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("updated_at before denial");
     let (status, body) = patch_issue(
         State(st.clone()),
         AuthUser(owner),
@@ -576,12 +593,17 @@ async fn patch_rejects_disallowed_transition() {
         body["allowed_state_ids"],
         json!([in_progress_state_id.to_string()])
     );
-    let (stored,): (Option<Uuid>,) = sqlx::query_as("SELECT state_id FROM issues WHERE id = $1")
-        .bind(issue_id)
-        .fetch_one(&st.pool)
-        .await
-        .expect("state after denial");
+    let (stored, updated_after): (Option<Uuid>, String) =
+        sqlx::query_as("SELECT state_id, updated_at::text FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("state after denial");
     assert_eq!(stored, Some(new_state_id), "state tidak boleh berubah");
+    assert_eq!(
+        updated_after, updated_before,
+        "denied patch tidak boleh menyentuh row"
+    );
 
     // New → In Progress terdaftar → lolos.
     let (status, _) = patch_issue(
@@ -602,6 +624,66 @@ async fn patch_rejects_disallowed_transition() {
         .await
         .expect("state after patch");
     assert_eq!(stored, Some(in_progress_state_id));
+
+    // --- Current state NULL: hanya default type yang boleh dipilih ---------
+    sqlx::query("UPDATE issues SET state_id = NULL WHERE id = $1")
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("clear state");
+
+    // State typed non-default ditolak; allowed hanya default New.
+    let (status, body) = patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, issue_id)),
+        Json(PatchIssue {
+            state_id: Some(Some(in_progress_state_id)),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch from null denied");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(body["allowed_state_ids"], json!([new_state_id.to_string()]));
+    let (stored,): (Option<Uuid>,) = sqlx::query_as("SELECT state_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("state after null denial");
+    assert_eq!(stored, None, "state NULL tidak boleh berubah");
+
+    // Patch tanpa state_id menyelesaikan default typed; activity memakai
+    // state hasil resolusi, bukan body.state_id yang kosong.
+    let (status, _) = patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, issue_id)),
+        Json(PatchIssue {
+            priority: Some(Some("low".into())),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch resolves default");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored,): (Option<Uuid>,) = sqlx::query_as("SELECT state_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("state after resolve");
+    assert_eq!(stored, Some(new_state_id));
+    let (resolved_rows,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND field = 'state' \
+         AND old_identifier IS NULL AND new_identifier = $2",
+    )
+    .bind(issue_id)
+    .bind(new_state_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("resolved state activity");
+    assert_eq!(resolved_rows, 1, "state NULL → default harus tercatat");
 
     purge(&st.pool, &slug).await;
 }

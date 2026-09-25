@@ -26,7 +26,7 @@ use super::issue_common::{
 };
 use super::issue_version_write::record_description_version;
 use super::work_item::ws_active_member;
-use super::workflow::{transition_denied, validate_state_transition};
+use super::workflow::{transition_denied, validate_initial_transition, validate_state_transition};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -413,6 +413,7 @@ async fn write_update_activities(
     ctx: &ActivityCtx,
     current: &CurrentIssue,
     body: &PatchIssue,
+    new_state_id: Option<Uuid>,
     current_label_ids: &[Uuid],
     current_assignee_ids: &[Uuid],
 ) -> Result<(), sqlx::Error> {
@@ -486,23 +487,21 @@ async fn write_update_activities(
             .await?;
         }
     }
-    if let Some(requested) = body.state_id {
-        if requested != current.state_id {
-            let old = state_info(tx, current.state_id, ctx.project_id).await?;
-            let new = state_info(tx, requested, ctx.project_id).await?;
-            insert_activity_row(
-                tx,
-                ctx,
-                "updated",
-                "state",
-                "updated the state to",
-                old.as_ref().map(|(_, name)| name.as_str()),
-                new.as_ref().map(|(_, name)| name.as_str()),
-                old.as_ref().map(|(id, _)| *id),
-                new.as_ref().map(|(id, _)| *id),
-            )
-            .await?;
-        }
+    if new_state_id != current.state_id {
+        let old = state_info(tx, current.state_id, ctx.project_id).await?;
+        let new = state_info(tx, new_state_id, ctx.project_id).await?;
+        insert_activity_row(
+            tx,
+            ctx,
+            "updated",
+            "state",
+            "updated the state to",
+            old.as_ref().map(|(_, name)| name.as_str()),
+            new.as_ref().map(|(_, name)| name.as_str()),
+            old.as_ref().map(|(id, _)| *id),
+            new.as_ref().map(|(id, _)| *id),
+        )
+        .await?;
     }
     if let Some(requested) = &body.target_date {
         let new = parse_tri_date(&body.target_date).unwrap_or(None);
@@ -760,13 +759,20 @@ pub async fn patch_issue(
     };
     // Default resolution WAJIB memakai effective_type_id, termasuk saat state
     // di-clear atau issue belum punya state — jangan pakai None (temuan review C2).
-    let mut new_state_id = match body.state_id {
-        Some(Some(id)) => Some(id),
-        Some(None) => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
-        None => match current.state_id {
-            Some(id) => Some(id),
-            None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
-        },
+    // Ganti type: lewati resolusi awal, cabang di bawah menyelesaikan sekali.
+    let mut new_state_id = if type_changed {
+        None
+    } else {
+        match body.state_id {
+            Some(Some(id)) => Some(id),
+            Some(None) => {
+                resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?
+            }
+            None => match current.state_id {
+                Some(id) => Some(id),
+                None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+            },
+        }
     };
     if type_changed {
         // Ganti type: state wajib milik type baru; tanpa cek transisi.
@@ -791,18 +797,30 @@ pub async fn patch_issue(
     }
     let state_changed = new_state_id != current.state_id;
     if state_changed && !type_changed {
-        if let (Some(current_state), Some(target_state)) = (current.state_id, new_state_id) {
-            match validate_state_transition(
-                &st.pool,
-                project_id,
-                effective_type_id,
-                current_state,
-                target_state,
-            )
-            .await?
-            {
-                Ok(()) => {}
-                Err(allowed) => return Ok(transition_denied(allowed)),
+        if let Some(target_state) = new_state_id {
+            let verdict = match current.state_id {
+                Some(current_state) => {
+                    validate_state_transition(
+                        &st.pool,
+                        project_id,
+                        effective_type_id,
+                        current_state,
+                        target_state,
+                    )
+                    .await?
+                }
+                None => {
+                    validate_initial_transition(
+                        &st.pool,
+                        project_id,
+                        effective_type_id,
+                        target_state,
+                    )
+                    .await?
+                }
+            };
+            if let Err(allowed) = verdict {
+                return Ok(transition_denied(allowed));
             }
         }
     }
@@ -982,6 +1000,7 @@ pub async fn patch_issue(
             &ctx,
             &current,
             &body,
+            new_state_id,
             &label_ids_current,
             &assignee_ids_current,
         )

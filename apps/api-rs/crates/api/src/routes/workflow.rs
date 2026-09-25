@@ -296,7 +296,8 @@ pub(crate) async fn fetch_transition_context(
     let pairs: Vec<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT id, workflow_state_id FROM states \
          WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL \
-           AND workflow_state_id IS NOT NULL",
+           AND workflow_state_id IS NOT NULL \
+         ORDER BY sequence, created_at",
     )
     .bind(project_id)
     .bind(type_id)
@@ -340,6 +341,24 @@ pub(crate) async fn validate_state_transition(
         return Ok(Ok(()));
     };
     Ok(evaluate_transition(current_state, target_state, &ctx))
+}
+
+/// Validasi saat issue belum punya state: hanya default type yang diizinkan.
+/// `Uuid::nil()` bukan state nyata dan tidak pernah ada di `pairs`, jadi
+/// `evaluate_transition` memakai cabang legacy → hanya default type lolos.
+pub(crate) async fn validate_initial_transition(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Option<Uuid>,
+    target_state: Uuid,
+) -> Result<Result<(), Vec<Uuid>>, sqlx::Error> {
+    let Some(type_id) = type_id else {
+        return Ok(Ok(()));
+    };
+    let Some(ctx) = fetch_transition_context(pool, project_id, type_id).await? else {
+        return Ok(Ok(()));
+    };
+    Ok(evaluate_transition(Uuid::nil(), target_state, &ctx))
 }
 
 /// 400 untuk transisi ditolak (dipakai semua jalur ubah state).
