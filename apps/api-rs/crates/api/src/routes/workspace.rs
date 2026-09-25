@@ -39,8 +39,9 @@ pub fn validate_create(body: &CreateWorkspace) -> Result<(), String> {
         return Err("Slug is not valid".to_string());
     }
     if !valid_slug_chars(&body.slug) {
-        return Err("Slug can only contain letters, numbers, hyphens (-), and underscores (_)"
-            .to_string());
+        return Err(
+            "Slug can only contain letters, numbers, hyphens (-), and underscores (_)".to_string(),
+        );
     }
     Ok(())
 }
@@ -117,15 +118,68 @@ async fn fetch_ws_full(
 }
 
 pub const RESTRICTED_SLUGS: &[&str] = &[
-    "404", "accounts", "api", "create-workspace", "god-mode", "installations", "invitations",
-    "onboarding", "profile", "spaces", "workspace-invitations", "password", "flags", "monitor",
-    "monitoring", "ingest", "plane-pro", "plane-ultimate", "enterprise", "plane-enterprise",
-    "disco", "silo", "chat", "calendar", "drive", "channels", "upgrade", "billing", "sign-in",
-    "sign-up", "signin", "signup", "config", "live", "admin", "m", "import", "importers",
-    "integrations", "integration", "configuration", "initiatives", "initiative", "workflow",
-    "workflows", "epics", "epic", "story", "mobile", "dashboard", "desktop", "onload",
-    "real-time", "one", "pages", "business", "pro", "settings", "license", "licenses",
-    "instances", "instance",
+    "404",
+    "accounts",
+    "api",
+    "create-workspace",
+    "god-mode",
+    "installations",
+    "invitations",
+    "onboarding",
+    "profile",
+    "spaces",
+    "workspace-invitations",
+    "password",
+    "flags",
+    "monitor",
+    "monitoring",
+    "ingest",
+    "plane-pro",
+    "plane-ultimate",
+    "enterprise",
+    "plane-enterprise",
+    "disco",
+    "silo",
+    "chat",
+    "calendar",
+    "drive",
+    "channels",
+    "upgrade",
+    "billing",
+    "sign-in",
+    "sign-up",
+    "signin",
+    "signup",
+    "config",
+    "live",
+    "admin",
+    "m",
+    "import",
+    "importers",
+    "integrations",
+    "integration",
+    "configuration",
+    "initiatives",
+    "initiative",
+    "workflow",
+    "workflows",
+    "epics",
+    "epic",
+    "story",
+    "mobile",
+    "dashboard",
+    "desktop",
+    "onload",
+    "real-time",
+    "one",
+    "pages",
+    "business",
+    "pro",
+    "settings",
+    "license",
+    "licenses",
+    "instances",
+    "instance",
 ];
 
 fn has_alphanumeric(value: &str) -> bool {
@@ -202,7 +256,9 @@ pub async fn list(
         return Ok(deny_detail());
     }
     let search = params.get("search").cloned().unwrap_or_default();
-    let owner: Option<uuid::Uuid> = params.get("owner").and_then(|s| uuid::Uuid::parse_str(s).ok());
+    let owner: Option<uuid::Uuid> = params
+        .get("owner")
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
     let rows: Vec<WsFullRow> = sqlx::query_as(&format!(
         "SELECT {WS_FULL_COLS} FROM workspaces w \
          JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.member_id = $1 \
@@ -218,7 +274,10 @@ pub async fn list(
     .bind(owner)
     .fetch_all(&st.pool)
     .await?;
-    Ok((StatusCode::OK, Json(Value::Array(rows.iter().map(ws_full_json).collect()))))
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(ws_full_json).collect())),
+    ))
 }
 
 /// POST /api/workspaces/ — mirrors `WorkSpaceViewSet.create`
@@ -243,12 +302,21 @@ pub async fn create(
     }
     let name = body.get("name").and_then(Value::as_str).unwrap_or("");
     let slug = body.get("slug").and_then(Value::as_str).unwrap_or("");
-    if let Err(e) = validate_create(&CreateWorkspace { name: name.to_string(), slug: slug.to_string() }) {
-        return Ok((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))));
+    if let Err(e) = validate_create(&CreateWorkspace {
+        name: name.to_string(),
+        slug: slug.to_string(),
+    }) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": e})),
+        ));
     }
     let owner = auth.0;
     let color = format!("#{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
-    let company_role = body.get("company_role").and_then(Value::as_str).unwrap_or("");
+    let company_role = body
+        .get("company_role")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let mut tx = st.pool.begin().await.map_err(|e| {
         tracing::warn!(error = %e, "ws-create: begin transaction failed");
         common::errors::AppError(anyhow::anyhow!("internal error"))
@@ -361,18 +429,27 @@ pub async fn detail(
 fn clean_ws_patch(body: &Value) -> Result<(), (StatusCode, Json<Value>)> {
     if let Some(name) = body.get("name").and_then(Value::as_str) {
         if name.trim().is_empty() || name.chars().count() > 80 || contains_url(name) {
-            return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid name"}))));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid name"})),
+            ));
         }
         if !has_alphanumeric(name) {
             return Err((
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": "Name must contain at least one letter or number"})),
+                Json(
+                    serde_json::json!({"error": "Name must contain at least one letter or number"}),
+                ),
             ));
         }
     }
     if let Some(slug) = body.get("slug").and_then(Value::as_str) {
-        if RESTRICTED_SLUGS.contains(&slug) || !valid_slug_chars(slug) || slug.chars().count() > 48 {
-            return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid slug"}))));
+        if RESTRICTED_SLUGS.contains(&slug) || !valid_slug_chars(slug) || slug.chars().count() > 48
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid slug"})),
+            ));
         }
     }
     Ok(())
@@ -517,7 +594,8 @@ pub(crate) fn guard_ws_states(role: Option<i16>) -> Result<(), String> {
 /// - Deviations: `ORDER BY sequence ASC` for determinism (Django sets no
 ///   ordering); datetimes unneeded (no datetime keys in the shape);
 ///   JSON key order follows repo batch convention while the KEY SET
-///   matches `StateSerializer` exactly.
+///   matches `StateSerializer` plus the fork's `type_id` /
+///   `workflow_state_id` mapping keys (Task B9).
 pub async fn ws_states(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -528,7 +606,7 @@ pub async fn ws_states(
         return Ok(deny());
     }
     let rows: Vec<StateFullRow> = sqlx::query_as(
-        "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence \
+        "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence, s.type_id, s.workflow_state_id \
          FROM states s JOIN projects p ON p.id = s.project_id \
          WHERE s.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
          AND s.deleted_at IS NULL AND s.\"group\" != 'triage' AND s.is_triage = false \

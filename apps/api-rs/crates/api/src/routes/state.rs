@@ -89,9 +89,13 @@ async fn gate_state_admin(
     ))
 }
 
-/// Full-row SELECT prefix for the 9 persisted `StateSerializer` keys
-/// (`serializers/state.py:12-30`) plus the fork's `type_id` /
-/// `workflow_state_id` mapping columns, aliased for [`StateFullRow`].
+/// Full-row SELECT prefix for the 11 persisted `StateSerializer` +
+/// fork-mapping keys: the 9 Django columns (`serializers/state.py:12-30`)
+/// plus `type_id` / `workflow_state_id`, aliased for [`StateFullRow`].
+/// Every query projecting a [`StateFullRow`] (including
+/// `routes/workspace.rs::ws_states`) MUST select both mapping columns —
+/// the struct has no `#[sqlx(default)]` fallback, so an omitting SELECT
+/// fails loudly at runtime.
 const STATE_FULL_SELECT_SQL: &str = "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence, s.type_id, s.workflow_state_id FROM states s";
 
 pub async fn list(
@@ -202,10 +206,14 @@ pub(crate) const TYPED_MIRROR_WRITE_MSG: &str =
     "Typed workflow states are managed by the workflow API";
 
 /// Typed project states are materialized mirrors of `workflow_states`
-/// (`workflow_state_id IS NOT NULL`) owned by the workflow API; the legacy
-/// project-state write endpoints must reject them before any mutation.
-pub fn guard_typed_mirror_mutation(workflow_state_id: Option<uuid::Uuid>) -> Result<(), String> {
-    if workflow_state_id.is_some() {
+/// (`type_id IS NOT NULL` OR `workflow_state_id IS NOT NULL`) owned by the
+/// workflow API; the legacy project-state write endpoints must reject them
+/// before any mutation.
+pub fn guard_typed_state_mutation(
+    type_id: Option<uuid::Uuid>,
+    workflow_state_id: Option<uuid::Uuid>,
+) -> Result<(), String> {
+    if type_id.is_some() || workflow_state_id.is_some() {
         return Err(TYPED_MIRROR_WRITE_MSG.to_string());
     }
     Ok(())
@@ -289,8 +297,8 @@ pub async fn patch(
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
-    if let Some((_, workflow_state_id)) = target {
-        if let Err(e) = guard_typed_mirror_mutation(workflow_state_id) {
+    if let Some((type_id, workflow_state_id)) = target {
+        if let Err(e) = guard_typed_state_mutation(type_id, workflow_state_id) {
             return Ok((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": e})),
@@ -372,19 +380,19 @@ pub async fn destroy(
     // Triage states are outside the lookup scope (`base.py:115`
     // `is_triage=False`, plus the default `StateManager` excluding
     // `group='triage'`, `models/state.py:62-67`): a triage pk 404s.
-    let row: Option<(bool, Option<uuid::Uuid>)> = sqlx::query_as(
-        "SELECT \"default\", workflow_state_id FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage'",
+    let row: Option<(bool, Option<uuid::Uuid>, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT \"default\", type_id, workflow_state_id FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage'",
     )
     .bind(pk)
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
-    let Some((is_default, workflow_state_id)) = row else {
+    let Some((is_default, type_id, workflow_state_id)) = row else {
         return Ok(missing());
     };
     // Typed mirrors are owned by the workflow API (Task B9): reject before
     // the issue-count/default guards so the row is never mutated.
-    if let Err(e) = guard_typed_mirror_mutation(workflow_state_id) {
+    if let Err(e) = guard_typed_state_mutation(type_id, workflow_state_id) {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({"error": e})),
@@ -403,7 +411,7 @@ pub async fn destroy(
             Json(serde_json::json!({"error": e})),
         ));
     }
-    sqlx::query("UPDATE states SET deleted_at = now() WHERE id = $1")
+    sqlx::query("UPDATE states SET deleted_at = now() WHERE id = $1 AND type_id IS NULL")
         .bind(pk)
         .execute(&st.pool)
         .await?;
@@ -430,12 +438,15 @@ pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
 /// - Gate: PROJECT ADMIN (20) outright + shared ws-admin fallback via
 ///   `fetch_project_member_role` + `guard_mark_default`;
 ///   MEMBER (15) / GUEST (5) / non-member → 403 `deny()`.
-/// - Two blind updates, both scoped to (workspace slug + project_id), in a
-///   single tx: clear `"default"` where true, then set `"default"=true`
-///   where pk (`base.py:108-109`).
-/// - **204 ALWAYS** — even when pk matches 0 rows (no existence check;
-///   `base.py:108-109` are blind `.update()` calls whose row counts are
-///   discarded).
+/// - A typed mirror pk (`type_id` OR `workflow_state_id` set, Task B9) →
+///   400 `TYPED_MIRROR_WRITE_MSG` before any update.
+/// - Otherwise two blind updates, both scoped to (workspace slug +
+///   project_id) and `AND type_id IS NULL`, in a single tx: clear
+///   `"default"` where true, then set `"default"=true` where pk
+///   (`base.py:108-109`).
+/// - Unknown and triage pks still → 204: their updates match 0 rows and
+///   the row counts are discarded (`base.py:108-109` run no existence
+///   check).
 ///
 /// Queryset filters mirror Django exactly: `State.objects.filter(...)`
 /// uses the default `StateManager` (`plane/db/models/state.py:65-69`),
@@ -443,6 +454,8 @@ pub fn guard_mark_default(role: Option<i16>) -> Result<(), String> {
 /// `deleted_at IS NULL`) + `.exclude(group="triage")`. So BOTH updates
 /// carry `AND deleted_at IS NULL AND "group" != 'triage'` — triage states
 /// are skipped on clear AND set (a triage pk yields 204 with no change).
+/// The extra `AND type_id IS NULL` keeps a legacy mark-default from
+/// touching typed mirrors' defaults.
 /// `updated_at` is NOT bumped: Django `QuerySet.update()` bypasses
 /// `save()`/`auto_now`, unlike the `patch`/`archive` paths.
 ///
@@ -465,16 +478,16 @@ pub async fn mark_default(
     }
     // Typed mirrors are owned by the workflow API (Task B9); unknown/triage
     // pks still fall through to the blind no-op 204.
-    let target: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
-        "SELECT workflow_state_id FROM states WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL AND \"group\" != 'triage'",
+    let target: Option<(Option<uuid::Uuid>, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT type_id, workflow_state_id FROM states WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL AND \"group\" != 'triage'",
     )
     .bind(pk)
     .bind(project_id)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
-    if let Some((workflow_state_id,)) = target {
-        if let Err(e) = guard_typed_mirror_mutation(workflow_state_id) {
+    if let Some((type_id, workflow_state_id)) = target {
+        if let Err(e) = guard_typed_state_mutation(type_id, workflow_state_id) {
             return Ok((
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": e})),
@@ -520,12 +533,15 @@ pub(crate) fn guard_intake_state(role: Option<i16>) -> Result<(), String> {
 
 /// Full `StateSerializer` row (`plane/app/serializers/state.py:12-30`:
 /// `id,project_id,workspace_id,name,color,group,default,description,
-/// sequence` + view-computed `order`). The existing
-/// `common::models::state::State` covers only `{id,name,group}` — a real
-/// delta (plan D3 locked fact), so the 9 persisted keys are selected here;
+/// sequence` + view-computed `order`) plus the fork's `type_id` /
+/// `workflow_state_id` mapping columns — 11 persisted keys selected here.
+/// The existing `common::models::state::State` covers only
+/// `{id,name,group}` — a real delta (plan D3 locked fact).
 /// `order` is never a column (`order = FloatField(required=False)` on the
 /// serializer only) and is passed separately to `state_serializer_json`.
 /// (`"default"` is aliased to `is_default`: `default` is a Rust keyword.)
+/// Every `StateFullRow` query must select both mapping columns — no
+/// `#[sqlx(default)]` fallback, so an omitting SELECT fails loudly.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub(crate) struct StateFullRow {
     pub(crate) id: uuid::Uuid,
@@ -537,12 +553,7 @@ pub(crate) struct StateFullRow {
     pub(crate) is_default: bool,
     pub(crate) description: String,
     pub(crate) sequence: f64,
-    // `#[sqlx(default)]`: `workspace::ws_states` is outside this task's file
-    // scope and omits these columns; it keeps working (nulls) until its
-    // SELECT is updated in a follow-up.
-    #[sqlx(default)]
     pub type_id: Option<uuid::Uuid>,
-    #[sqlx(default)]
     pub workflow_state_id: Option<uuid::Uuid>,
 }
 
@@ -595,7 +606,9 @@ pub(crate) fn state_order(index_1based: usize, group_count: usize) -> f64 {
 ///   unordered — meaningless for uuid pks, so `created_at ASC` is used
 ///   for determinism (exactly one triage row per project in practice).
 /// - Miss → 404 `{"error":"Triage state not found"}` verbatim (NOT the
-///   standard `missing()`); hit → 200 `StateSerializer` WITHOUT `order`.
+///   standard `missing()`); hit → 200 `StateSerializer` WITHOUT `order`,
+///   which since Task B9 also carries the `type_id` /
+///   `workflow_state_id` mapping keys.
 pub async fn intake_state(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -650,15 +663,22 @@ mod typed_mirror_guard_tests {
     use super::*;
 
     #[test]
-    fn typed_mirror_write_is_denied() {
+    fn typed_mirror_write_is_denied_via_workflow_state_id() {
         let err =
-            guard_typed_mirror_mutation(Some(uuid::Uuid::new_v4())).expect_err("typed mirror");
+            guard_typed_state_mutation(None, Some(uuid::Uuid::new_v4())).expect_err("typed mirror");
+        assert_eq!(err, TYPED_MIRROR_WRITE_MSG);
+    }
+
+    #[test]
+    fn typed_mirror_write_is_denied_via_type_id_only() {
+        let err =
+            guard_typed_state_mutation(Some(uuid::Uuid::new_v4()), None).expect_err("typed mirror");
         assert_eq!(err, TYPED_MIRROR_WRITE_MSG);
     }
 
     #[test]
     fn legacy_state_write_is_allowed() {
-        assert!(guard_typed_mirror_mutation(None).is_ok());
+        assert!(guard_typed_state_mutation(None, None).is_ok());
     }
 }
 

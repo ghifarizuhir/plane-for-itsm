@@ -737,7 +737,8 @@ async fn main() {
         )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
-        // POST blind clear+set → 204 unconditional.
+        // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror
+        // pk → 400 (legacy writes cannot clear a typed default, Task B9).
         .route(
             "/api/workspaces/:slug/projects/:project_id/states/:pk/mark-default/",
             post(routes::state::mark_default),
