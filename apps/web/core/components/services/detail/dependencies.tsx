@@ -110,7 +110,7 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
         <CustomSelect
           value={selectedId}
           onChange={(val: string) => setSelectedId(val)}
-          className="h-7.5 min-w-0 grow"
+          className="h-7.5 min-w-0 grow basis-0"
           label={
             <span className="flex items-center gap-2 py-0.5 text-12">
               {selectedService ? (
