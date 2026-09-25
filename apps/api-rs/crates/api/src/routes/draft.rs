@@ -470,7 +470,9 @@ async fn workspace_id(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uu
 /// `DraftIssue.save` (`db/models/draft.py:84-98`) / `Issue._ensure_default_state`
 /// (`db/models/issue.py:231-243`): explicit id wins; else the default state of
 /// the given type when it has one, else the project's default non-triage
-/// state, else the first non-triage state, else None. Django's `.first()` uses
+/// state, else the first non-triage state, else None. The legacy fallbacks are
+/// type-less by design (`type_id IS NULL`): an untyped or epic work item must
+/// never resolve to a typed mirror state. Django's `.first()` uses
 /// `State.Meta.ordering = ("sequence",)` (`db/models/state.py:115`), hence
 /// `sequence, created_at` here.
 async fn resolve_default_state(
@@ -489,7 +491,7 @@ async fn resolve_default_state(
         let typed: Option<uuid::Uuid> = sqlx::query_scalar(
             "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
              WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-               AND t.deleted_at IS NULL AND t.is_epic = false \
+               AND s.is_triage = false AND t.deleted_at IS NULL AND t.is_epic = false \
              ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
         )
         .bind(pid)
@@ -502,7 +504,7 @@ async fn resolve_default_state(
     }
     let row: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
+         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(pid)
@@ -513,7 +515,7 @@ async fn resolve_default_state(
     }
     sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false \
+         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(pid)

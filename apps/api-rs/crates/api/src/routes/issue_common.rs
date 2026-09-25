@@ -862,7 +862,9 @@ pub fn resolve_effective_state(
 ///
 /// Type-aware: when the work item has a type, its mirror state marked
 /// `default` wins over the project-wide legacy default; with no typed default
-/// the legacy `default` state, then the first non-triage state, applies.
+/// the legacy `default` state, then the first non-triage state, applies. The
+/// legacy fallbacks are type-less by design (`type_id IS NULL`): an untyped or
+/// epic work item must never resolve to a typed mirror state.
 pub async fn resolve_issue_state(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -876,7 +878,7 @@ pub async fn resolve_issue_state(
         let typed: Option<Uuid> = sqlx::query_scalar(
             "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
              WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-               AND t.deleted_at IS NULL AND t.is_epic = false \
+               AND s.is_triage = false AND t.deleted_at IS NULL AND t.is_epic = false \
              ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
         )
         .bind(project_id)
@@ -889,7 +891,7 @@ pub async fn resolve_issue_state(
     }
     let default_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
+         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)
@@ -900,7 +902,7 @@ pub async fn resolve_issue_state(
     }
     let first_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND \"group\" != 'triage' AND is_triage = false \
+         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)

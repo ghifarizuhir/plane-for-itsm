@@ -304,6 +304,67 @@ async fn typed_default_beats_legacy_default() {
         .expect("resolve untyped");
     assert_eq!(resolved, Some(legacy_default));
 
+    // Regresi: fallback legacy dulu tidak memfilter `type_id IS NULL`, sehingga
+    // mirror typed ber-sequence lebih kecil menang untuk issue untyped.
+    let (low_type,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Problem', '', '{}', false, false, true, 0, $1, now(), now()) \
+         RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("low-seq type");
+    let (low_typed_state,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, type_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'New', '', '#60646C', 'new', 5000, 'backlog', false, true, \
+         $1, $2, $3, now(), now()) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(low_type)
+    .fetch_one(&st.pool)
+    .await
+    .expect("low-seq typed state");
+
+    let resolved = resolve_issue_state(&st.pool, project_id, None, None)
+        .await
+        .expect("resolve untyped vs low-seq typed default");
+    assert_eq!(resolved, Some(legacy_default));
+    assert_ne!(resolved, Some(low_typed_state));
+
+    // Type epic: lookup typed menolak `is_epic`, fallback legacy tetap untyped.
+    let (epic_type,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Epic', '', '{}', true, false, true, 0, $1, now(), now()) \
+         RETURNING id",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("epic type");
+    let (epic_state,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, type_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'New', '', '#60646C', 'new', 6000, 'backlog', false, true, \
+         $1, $2, $3, now(), now()) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(epic_type)
+    .fetch_one(&st.pool)
+    .await
+    .expect("epic typed state");
+
+    let resolved = resolve_issue_state(&st.pool, project_id, Some(epic_type), None)
+        .await
+        .expect("resolve epic");
+    assert_eq!(resolved, Some(legacy_default));
+    assert_ne!(resolved, Some(epic_state));
+
     let _ = owner;
     purge(&st.pool, &slug).await;
 }
