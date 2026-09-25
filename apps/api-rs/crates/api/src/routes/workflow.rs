@@ -708,7 +708,7 @@ pub async fn patch_state(
         .execute(&mut *tx)
         .await?;
     }
-    let updated: Result<WorkflowStateRow, sqlx::Error> = sqlx::query_as(&format!(
+    let updated: Result<Option<WorkflowStateRow>, sqlx::Error> = sqlx::query_as(&format!(
         "UPDATE workflow_states SET name = COALESCE($3, name), \
          slug = CASE WHEN $3::text IS NULL THEN slug \
          ELSE trim(both '-' from regexp_replace(lower($3), '[^a-z0-9]+', '-', 'g')) END, \
@@ -726,10 +726,15 @@ pub async fn patch_state(
     .bind(body.sequence)
     .bind(body.is_default)
     .bind(auth.0)
-    .fetch_one(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await;
     let row = match updated {
-        Ok(row) => row,
+        Ok(Some(row)) => row,
+        // Baris ter-soft-delete oleh request lain setelah SELECT awal → 404.
+        Ok(None) => {
+            tx.rollback().await?;
+            return Ok(missing());
+        }
         Err(e) if is_duplicate_workflow_default(&e) => {
             tx.rollback().await?;
             return Ok(bad("Another state is already the default"));
