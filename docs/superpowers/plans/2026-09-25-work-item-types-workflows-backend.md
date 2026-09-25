@@ -1318,6 +1318,8 @@ pub(crate) async fn ensure_project_workflows(
 
 Catatan: `let workflow_id: Option<Uuid> = sqlx::query_scalar(...).fetch_optional(pool).await?.flatten();` valid — `query_scalar` meng-infer `Option<Uuid>` sebagai tipe scalar sehingga `fetch_optional` menghasilkan `Option<Option<Uuid>>`.
 
+**Invariant penting (shared workflow):** dalam satu project, satu `Workflow` hanya boleh di-materialize untuk satu `IssueType`. Alasannya: mirror di-key oleh `(project, workflow_state)` (unique parsial di spec) dan `states.type_id` hanya menyimpan satu type, jadi type kedua tidak akan punya mirror dan resolusi default-nya diam-diam jatuh ke state legacy. Workflow yang sama tetap boleh dipakai type berbeda di project berbeda. Guard penegaknya ada di B6 `import_to_project` (dan jalur `project_ids` v1 create/update). `materialize_workflow_for_project` sendiri tidak memvalidasi ini agar tetap murni operasi sync (dipanggil dari `sync_workflow_to_projects`/`ensure_project_workflows` yang selalu type-scoped).
+
 - [ ] **Step 4: Jalankan test untuk memastikan lulus**
 
 Run: `DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test workflow_test`
@@ -1680,7 +1682,7 @@ git commit -m "feat(api-rs): workflow CRUD routes"
 - [ ] **Step 1: Tambah test DB yang gagal**
 
 ```rust
-use api::routes::workflow::{create_state, list_states, WorkflowStateBody};
+use api::routes::workflow::{create_state, delete_state, list_states, WorkflowStateBody};
 
 #[tokio::test]
 async fn state_create_syncs_mirror_and_default() {
@@ -1745,8 +1747,8 @@ async fn state_create_syncs_mirror_and_default() {
     .expect("state");
     assert_eq!(status, StatusCode::CREATED);
 
-    let (name, is_default, type_match): (String, bool, Uuid) = sqlx::query_as(
-        "SELECT s.name, s.\"default\", s.type_id FROM states s \
+    let (mirror_state_id, name, is_default, type_match): (Uuid, String, bool, Uuid) = sqlx::query_as(
+        "SELECT s.id, s.name, s.\"default\", s.type_id FROM states s \
          WHERE s.project_id = $1 AND s.workflow_state_id IS NOT NULL AND s.deleted_at IS NULL",
     )
     .bind(project_id)
@@ -1756,6 +1758,28 @@ async fn state_create_syncs_mirror_and_default() {
     assert_eq!(name, "New");
     assert!(is_default, "state pertama otomatis jadi default");
     assert_eq!(type_match, type_id);
+
+    // Hapus state default ditolak (workflow wajib selalu punya satu default).
+    let (status, body) = delete_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, mirror_state_id)),
+    )
+    .await
+    .expect("delete default");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Cannot delete the default workflow state; set another state as default first"
+    );
+    let (still_there,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflow_states WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(mirror_state_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("state alive");
+    assert_eq!(still_there, 1, "state default tidak boleh ter-soft-delete");
 
     let (_, list) = list_states(
         State(st.clone()),
@@ -2041,6 +2065,16 @@ pub async fn delete_state(
     .await?;
     if in_use {
         return Ok(bad("Workflow state is in use by work items"));
+    }
+    let (is_default,): (bool,) =
+        sqlx::query_as("SELECT is_default FROM workflow_states WHERE id = $1")
+            .bind(state_id)
+            .fetch_one(&st.pool)
+            .await?;
+    if is_default {
+        return Ok(bad(
+            "Cannot delete the default workflow state; set another state as default first",
+        ));
     }
     let mut tx = st.pool.begin().await?;
     sqlx::query(
@@ -2397,17 +2431,45 @@ Di `apps/api-rs/crates/api/src/routes/v1/work_item_type.rs`:
 
 sesuai nomor bind berikutnya, dan bind `body.workflow` di posisi yang sama.
 
-- [ ] **Step 2: Materialize saat import**
+- [ ] **Step 2: Materialize saat import (+ guard shared workflow)**
 
-Di `import_to_project` (akhir fungsi, setelah semua link di-insert), tambahkan:
+Di `import_to_project` (sebelum insert link), tambahkan guard: satu workflow tidak boleh dipakai dua type dalam project yang sama, baik terhadap type yang sudah enabled maupun di dalam batch request. Setelah link di-insert, materialize tiap type.
 
 ```rust
-    for type_id in ids {
-        crate::routes::workflow::materialize_type_states(&st.pool, project_id, type_id).await?;
+    // `type_ids` = kumpulan id dari body.get("work_item_types")
+    let (batch_conflict,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT t.workflow_id FROM issue_types t \
+         WHERE t.id = ANY($1) AND t.workflow_id IS NOT NULL \
+         GROUP BY t.workflow_id HAVING COUNT(*) > 1)",
+    )
+    .bind(&type_ids)
+    .fetch_one(&st.pool)
+    .await?;
+    let (project_conflict,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS( \
+           SELECT 1 FROM project_issue_types pit \
+           JOIN issue_types t ON t.id = pit.issue_type_id \
+           WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+             AND t.id <> ALL($2) AND t.workflow_id IS NOT NULL \
+             AND t.workflow_id IN (SELECT workflow_id FROM issue_types WHERE id = ANY($2) AND workflow_id IS NOT NULL))",
+    )
+    .bind(project_id)
+    .bind(&type_ids)
+    .fetch_one(&st.pool)
+    .await?;
+    if batch_conflict || project_conflict {
+        return Ok(crate::routes::issue_common::bad(
+            "Workflow is already enabled for another work item type in this project",
+        ));
+    }
+    for type_id in &type_ids {
+        crate::routes::workflow::materialize_type_states(&st.pool, project_id, *type_id).await?;
     }
 ```
 
-Sesuaikan nama variabel dengan kode aktual (fungsi saat ini meloop `body.get("work_item_types")`); kumpulkan dulu id-nya ke `Vec<uuid::Uuid>`, lalu loop setelah link.
+Sesuaikan nama variabel dengan kode aktual (fungsi saat ini meloop `body.get("work_item_types")`); kumpulkan dulu id-nya ke `Vec<uuid::Uuid>`, lalu jalankan guard + loop setelah link.
+
+Jalur yang sama wajib diterapkan bila `create_type`/`update_type` v1 memakai `project_ids` untuk link project: sebelum link, jalankan kedua guard di atas untuk tiap project tujuan, lalu materialize type di project tersebut. Jika `project_ids` tidak di-link di jalur itu, lewati dan catat di laporan.
 
 - [ ] **Step 3: Guard delete type**
 
@@ -2513,6 +2575,40 @@ async fn import_materializes_and_unlink_guards() {
     assert_eq!(map["types"].as_array().unwrap().len(), 1);
     assert_eq!(map["types"][0]["type_id"], type_id.to_string());
     assert_eq!(map["types"][0]["states"].as_array().unwrap().len(), 1);
+
+    // Type kedua tidak boleh memakai workflow yang sama di project yang sama.
+    let (other_type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Problem', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("second type");
+    let (status, body) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": [other_type_id]})),
+    )
+    .await
+    .expect("import conflict");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Workflow is already enabled for another work item type in this project"
+    );
+    let (links,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM project_issue_types WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("links");
+    assert_eq!(links, 1, "import yang ditolak tidak boleh menambah link");
 
     // Un-enable saat belum ada issue → 204.
     let (status, _) = unlink_type(

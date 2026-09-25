@@ -122,6 +122,7 @@ File baru: `apps/api/plane/db/models/workflow.py`, didaftarkan di `apps/api/plan
 2. `type IS NULL` atau `is_epic` → default state legacy project (perilaku sekarang, exclude triage).
 3. Jika `is_default` workflow diubah admin, semua mirror ikut berubah (sinkron).
 4. Workflow wajib selalu punya tepat satu `is_default` (divalidasi API; hapus/ubah default terakhir ditolak).
+5. Dalam satu project, satu workflow hanya boleh aktif untuk satu type — mirror di-key `(project, workflow_state)` dan `State.type` tunggal, jadi API menolak enable type kedua yang memakai workflow sama di project yang sama. Workflow yang sama tetap boleh dipakai type berbeda di project berbeda.
 
 ### Seed default
 
