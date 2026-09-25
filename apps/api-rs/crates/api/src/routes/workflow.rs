@@ -219,6 +219,132 @@ pub(crate) async fn ensure_project_workflows(
     Ok(())
 }
 
+// --- Konteks + evaluasi transisi -------------------------------------------
+
+/// Konteks transisi satu type di satu project.
+#[derive(Debug, Clone, Default)]
+pub struct TransitionContext {
+    /// (state_id, workflow_state_id) — mirror typed state di project.
+    pub pairs: Vec<(Uuid, Uuid)>,
+    /// (from_workflow_state_id, to_workflow_state_id).
+    pub transitions: Vec<(Uuid, Uuid)>,
+    pub default_state_id: Option<Uuid>,
+}
+
+/// Pure: `Ok(())` bila transisi boleh; `Err(allowed_state_ids)` bila ditolak.
+pub fn evaluate_transition(
+    current_state: Uuid,
+    target_state: Uuid,
+    ctx: &TransitionContext,
+) -> Result<(), Vec<Uuid>> {
+    if current_state == target_state {
+        return Ok(());
+    }
+    let current_workflow_state = ctx
+        .pairs
+        .iter()
+        .find(|(state_id, _)| *state_id == current_state)
+        .map(|(_, workflow_state_id)| *workflow_state_id);
+    let Some(current_workflow_state) = current_workflow_state else {
+        return match ctx.default_state_id {
+            Some(default_state_id) if default_state_id == target_state => Ok(()),
+            Some(default_state_id) => Err(vec![default_state_id]),
+            None => Err(Vec::new()),
+        };
+    };
+    if !ctx
+        .pairs
+        .iter()
+        .any(|(state_id, _)| *state_id == target_state)
+    {
+        return Err(Vec::new());
+    }
+    let allowed = allowed_target_state_ids(current_state, &ctx.pairs, &ctx.transitions);
+    if allowed.contains(&target_state) {
+        Ok(())
+    } else {
+        Err(allowed)
+    }
+}
+
+/// DB: konteks untuk (project, type). `None` = legacy (type tanpa workflow /
+/// epic / tidak aktif di project).
+pub(crate) async fn fetch_transition_context(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Uuid,
+) -> Result<Option<TransitionContext>, sqlx::Error> {
+    let workflow_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT t.workflow_id FROM issue_types t \
+         JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.project_id = $2 \
+           AND pit.deleted_at IS NULL \
+         WHERE t.id = $1 AND t.deleted_at IS NULL AND t.is_epic = false",
+    )
+    .bind(type_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    let Some(workflow_id) = workflow_id else {
+        return Ok(None);
+    };
+    let pairs: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, workflow_state_id FROM states \
+         WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL \
+           AND workflow_state_id IS NOT NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_all(pool)
+    .await?;
+    let transitions: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT from_state_id, to_state_id FROM workflow_transitions \
+         WHERE workflow_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .fetch_all(pool)
+    .await?;
+    let default_state_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND type_id = $2 AND \"default\" = true \
+         AND deleted_at IS NULL ORDER BY sequence LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(Some(TransitionContext {
+        pairs,
+        transitions,
+        default_state_id,
+    }))
+}
+
+/// Validasi transisi untuk satu issue. `Ok(Ok(()))` lolos/legacy,
+/// `Ok(Err(allowed))` ditolak.
+pub(crate) async fn validate_state_transition(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Option<Uuid>,
+    current_state: Uuid,
+    target_state: Uuid,
+) -> Result<Result<(), Vec<Uuid>>, sqlx::Error> {
+    let Some(type_id) = type_id else {
+        return Ok(Ok(()));
+    };
+    let Some(ctx) = fetch_transition_context(pool, project_id, type_id).await? else {
+        return Ok(Ok(()));
+    };
+    Ok(evaluate_transition(current_state, target_state, &ctx))
+}
+
+/// 400 untuk transisi ditolak (dipakai semua jalur ubah state).
+pub(crate) fn transition_denied(allowed: Vec<Uuid>) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": "Invalid state transition", "allowed_state_ids": allowed })),
+    )
+}
+
 // --- Workspace-admin CRUD --------------------------------------------------
 
 type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
