@@ -155,10 +155,12 @@ async fn workspace_create_seeds_itsm_demo() {
     };
 
     // Marker ownership contract `plane-default-itsm` (parity migrasi Django 0124).
+    // `workflow_transitions` sengaja tidak didukung: tabel itu tidak punya kolom
+    // `external_source`.
     let marked = |table: &'static str| {
         let pool = pool.clone();
         async move {
-            let sql = if matches!(table, "workflow_states" | "workflow_transitions") {
+            let sql = if matches!(table, "workflow_states") {
                 format!(
                     "SELECT COUNT(*) FROM {table} t JOIN workflows w ON w.id = t.workflow_id \
                      WHERE w.workspace_id = $1 AND t.external_source = 'plane-default-itsm'"
@@ -210,6 +212,37 @@ async fn workspace_create_seeds_itsm_demo() {
     assert_eq!(marked("workflows").await, 4);
     assert_eq!(marked("issue_types").await, 4);
     assert_eq!(marked("workflow_states").await, 19);
+
+    // Setiap type bermarker menunjuk workflow bermarker dengan external_id
+    // pasangannya (`issue-type:x` ↔ `workflow:x`).
+    let (linked_types,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_types it JOIN workflows w ON w.id = it.workflow_id \
+         WHERE it.workspace_id = $1 AND it.external_source = 'plane-default-itsm' \
+         AND w.external_source = 'plane-default-itsm' AND w.deleted_at IS NULL \
+         AND it.external_id = replace(w.external_id, 'workflow:', 'issue-type:')",
+    )
+    .bind(ws_id)
+    .fetch_one(&pool)
+    .await
+    .expect("issue type workflow links");
+    assert_eq!(linked_types, 4);
+
+    // Spot-check parity satu state seed terhadap migrasi Django 0124.
+    let (state_group, state_color, state_sequence, state_slug): (String, String, f64, String) =
+        sqlx::query_as(
+            "SELECT ws.\"group\", ws.color, ws.sequence, ws.slug FROM workflow_states ws \
+             JOIN workflows w ON w.id = ws.workflow_id \
+             WHERE w.workspace_id = $1 AND ws.external_source = 'plane-default-itsm' \
+             AND ws.external_id = 'workflow-state:incident:in-progress'",
+        )
+        .bind(ws_id)
+        .fetch_one(&pool)
+        .await
+        .expect("seeded incident in-progress state");
+    assert_eq!(state_group, "started");
+    assert_eq!(state_color, "#F59E0B");
+    assert_eq!(state_sequence, 30000.0);
+    assert_eq!(state_slug, "in-progress");
 
     // Idempotensi marker: seed workflow/type dijalankan ulang pada workspace yang
     // sama tidak boleh menduplikasi. Panggilan `seed_workspace` penuh kedua tidak

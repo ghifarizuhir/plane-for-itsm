@@ -290,6 +290,9 @@ fn slugify(name: &str) -> String {
     name.to_lowercase().replace(' ', "-")
 }
 
+/// Nama type/state seed wajib tetap ASCII agar `slugify` sepadan dengan Django;
+/// mengubah nama mengubah `external_id`, jadi identitas seed ini immutable.
+#[allow(clippy::type_complexity)]
 const WORKFLOW_SEEDS: &[(&str, &str, &[(&str, &str, bool)], &[(&str, &str)])] = &[
     (
         "Incident",
@@ -506,7 +509,10 @@ async fn seed_workflow_state_id(
 
 /// Seed workflow + type default workspace (parity migrasi Django
 /// `0124_seed_default_workflows`). Tidak mengaktifkan type di project mana pun.
-/// Idempotent lewat marker: aman dipanggil ulang dalam retry handler.
+/// Marker-first lookup idempotent untuk workspace baru di dalam satu transaksi
+/// `seed_workspace`, bukan rekonsiliasi umum: row senama tanpa marker gagal
+/// tertutup lewat partial unique constraint (tidak pernah diadopsi), row
+/// bermarker dipercaya apa adanya — fail-closed seperti Django 0124.
 pub async fn insert_workflows(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
@@ -954,6 +960,33 @@ mod tests {
         let (start, target) = module_dates(2, now);
         assert_eq!(start, now + Duration::days(4));
         assert_eq!(target, start + Duration::days(14));
+    }
+
+    #[test]
+    fn workflow_seeds_are_internally_consistent() {
+        for (_type_name, workflow_name, states, transitions) in WORKFLOW_SEEDS {
+            let names: std::collections::HashSet<&str> =
+                states.iter().map(|(name, _, _)| *name).collect();
+            assert_eq!(
+                names.len(),
+                states.len(),
+                "{workflow_name}: state names must be unique"
+            );
+            assert_eq!(
+                states
+                    .iter()
+                    .filter(|(_, _, is_default)| *is_default)
+                    .count(),
+                1,
+                "{workflow_name}: exactly one default state expected"
+            );
+            for (from_name, to_name) in transitions.iter() {
+                assert!(
+                    names.contains(from_name) && names.contains(to_name),
+                    "{workflow_name}: transition {from_name} -> {to_name} references an unknown state"
+                );
+            }
+        }
     }
 
     #[test]
