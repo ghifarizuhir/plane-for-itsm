@@ -4,8 +4,9 @@
 
 import pytest
 from django.db import IntegrityError
+from django.utils import timezone
 
-from plane.db.models import Workflow, WorkflowState, WorkflowTransition
+from plane.db.models import StateGroup, Workflow, WorkflowState, WorkflowTransition
 from plane.tests.factories import WorkspaceFactory
 
 
@@ -20,9 +21,7 @@ class TestWorkflowModels:
     @pytest.mark.django_db
     def test_state_default_unique_per_workflow(self):
         _, workflow = make_workflow()
-        WorkflowState.objects.create(
-            workflow=workflow, name="New", color="#60646C", group="backlog", is_default=True
-        )
+        WorkflowState.objects.create(workflow=workflow, name="New", color="#60646C", group="backlog", is_default=True)
         with pytest.raises(IntegrityError):
             WorkflowState.objects.create(
                 workflow=workflow, name="Other", color="#60646C", group="backlog", is_default=True
@@ -38,9 +37,7 @@ class TestWorkflowModels:
     @pytest.mark.django_db
     def test_state_slug_is_slugified(self):
         _, workflow = make_workflow()
-        state = WorkflowState.objects.create(
-            workflow=workflow, name="In Progress", color="#F59E0B", group="started"
-        )
+        state = WorkflowState.objects.create(workflow=workflow, name="In Progress", color="#F59E0B", group="started")
         assert state.slug == "in-progress"
 
     @pytest.mark.django_db
@@ -49,9 +46,7 @@ class TestWorkflowModels:
         new = WorkflowState.objects.create(
             workflow=workflow, name="New", color="#60646C", group="backlog", is_default=True
         )
-        progress = WorkflowState.objects.create(
-            workflow=workflow, name="In Progress", color="#F59E0B", group="started"
-        )
+        progress = WorkflowState.objects.create(workflow=workflow, name="In Progress", color="#F59E0B", group="started")
         WorkflowTransition.objects.create(workflow=workflow, from_state=new, to_state=progress)
         with pytest.raises(IntegrityError):
             WorkflowTransition.objects.create(workflow=workflow, from_state=new, to_state=progress)
@@ -70,3 +65,37 @@ class TestWorkflowModels:
         workspace, _ = make_workflow()
         with pytest.raises(IntegrityError):
             Workflow.objects.create(workspace=workspace, name="Incident Workflow")
+
+    @pytest.mark.django_db
+    def test_state_name_reusable_after_soft_delete(self):
+        _, workflow = make_workflow()
+        state = WorkflowState.objects.create(workflow=workflow, name="New", color="#60646C", group=StateGroup.BACKLOG)
+        state.deleted_at = timezone.now()
+        state.save()
+        WorkflowState.objects.create(workflow=workflow, name="New", color="#F59E0B", group=StateGroup.STARTED)
+
+    @pytest.mark.django_db
+    def test_state_default_and_name_scoped_per_workflow(self):
+        workspace = WorkspaceFactory()
+        workflow_a = Workflow.objects.create(workspace=workspace, name="Workflow A")
+        workflow_b = Workflow.objects.create(workspace=workspace, name="Workflow B")
+        WorkflowState.objects.create(
+            workflow=workflow_a, name="New", color="#60646C", group=StateGroup.BACKLOG, is_default=True
+        )
+        WorkflowState.objects.create(
+            workflow=workflow_b, name="New", color="#60646C", group=StateGroup.BACKLOG, is_default=True
+        )
+
+    @pytest.mark.django_db
+    def test_transition_pair_reusable_after_soft_delete(self):
+        _, workflow = make_workflow()
+        new = WorkflowState.objects.create(
+            workflow=workflow, name="New", color="#60646C", group=StateGroup.BACKLOG, is_default=True
+        )
+        progress = WorkflowState.objects.create(
+            workflow=workflow, name="In Progress", color="#F59E0B", group=StateGroup.STARTED
+        )
+        transition = WorkflowTransition.objects.create(workflow=workflow, from_state=new, to_state=progress)
+        transition.deleted_at = timezone.now()
+        transition.save()
+        WorkflowTransition.objects.create(workflow=workflow, from_state=new, to_state=progress)
