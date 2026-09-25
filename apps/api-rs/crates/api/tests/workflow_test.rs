@@ -1,8 +1,8 @@
 use api::middleware::auth::AuthUser;
 use api::routes::workflow::{
-    allowed_target_state_ids, create_workflow, delete_workflow, list_workflows,
-    materialize_type_states, patch_workflow, retrieve_workflow, validate_name,
-    validate_state_group, WorkflowBody,
+    allowed_target_state_ids, create_state, create_workflow, delete_state, delete_workflow,
+    list_states, list_workflows, materialize_type_states, patch_state, patch_workflow,
+    retrieve_workflow, validate_name, validate_state_group, WorkflowBody, WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -689,6 +689,200 @@ async fn materialize_switches_workflow_and_clears_old_mirrors() {
     assert_eq!(old_live_again, 0);
     assert_eq!(new_live_again, 2);
     assert_eq!(defaults_again, 1);
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn state_create_syncs_mirror_and_default() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfstate").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+    sqlx::query(
+        "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, level, is_default, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 0, false, now(), now())",
+    )
+    .bind(type_id)
+    .bind(project_id)
+    .bind(ws_id)
+    .execute(&st.pool)
+    .await
+    .expect("link");
+
+    let (status, created_state) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            description: None,
+            color: None,
+            group: None,
+            sequence: None,
+            is_default: None,
+        }),
+    )
+    .await
+    .expect("state");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created_state["name"], "New");
+    assert_eq!(created_state["slug"], "new");
+    assert_eq!(created_state["is_default"], true);
+    let workflow_state_id =
+        Uuid::parse_str(created_state["id"].as_str().expect("state id")).expect("state uuid");
+
+    let (mirror_state_id, mirror_workflow_state_id, name, is_default, type_match): (
+        Uuid,
+        Uuid,
+        String,
+        bool,
+        Uuid,
+    ) = sqlx::query_as(
+        "SELECT s.id, s.workflow_state_id, s.name, s.\"default\", s.type_id FROM states s \
+         WHERE s.project_id = $1 AND s.workflow_state_id IS NOT NULL AND s.deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("mirror");
+    assert_eq!(mirror_workflow_state_id, workflow_state_id);
+    assert_eq!(name, "New");
+    assert!(is_default, "state pertama otomatis jadi default");
+    assert_eq!(type_match, type_id);
+
+    // Hapus state default ditolak (workflow wajib selalu punya satu default).
+    let (status, body) = delete_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, workflow_state_id)),
+    )
+    .await
+    .expect("delete default");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Cannot delete the default workflow state; set another state as default first"
+    );
+    let (still_there,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM workflow_states WHERE id = $1 AND deleted_at IS NULL")
+            .bind(workflow_state_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("state alive");
+    assert_eq!(still_there, 1, "state default tidak boleh ter-soft-delete");
+
+    // Rename harus recompute slug dan men-sync mirror project.
+    let (status, renamed) = patch_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, workflow_state_id)),
+        Json(WorkflowStateBody {
+            name: Some("New State".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("rename");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(renamed["slug"], "new-state");
+    let (mirror_name,): (String,) = sqlx::query_as("SELECT name FROM states WHERE id = $1")
+        .bind(mirror_state_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("mirror renamed");
+    assert_eq!(mirror_name, "New State");
+
+    // Nama duplikat di workflow yang sama → 400 pesan duplikat, bukan error lain.
+    let (status, duplicate) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New State".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("duplicate state");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        duplicate["error"],
+        "Workflow state with this name already exists"
+    );
+
+    // State non-default boleh dihapus: row workflow_state di-soft-delete dan
+    // mirror project ikut hilang lewat sync.
+    let (_, done) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Done".into()),
+            group: Some("completed".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("second state");
+    assert_eq!(done["is_default"], false);
+    let done_state_id = Uuid::parse_str(done["id"].as_str().expect("done id")).expect("uuid");
+    let (status, _) = delete_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, done_state_id)),
+    )
+    .await
+    .expect("delete non-default");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (state_alive, mirror_alive): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM workflow_states WHERE id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM states WHERE workflow_state_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(done_state_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("deleted state gone");
+    assert_eq!(state_alive, 0);
+    assert_eq!(mirror_alive, 0);
+
+    let (_, list) = list_states(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("list");
+    assert_eq!(list.as_array().unwrap().len(), 1);
 
     purge(&st.pool, &slug).await;
 }

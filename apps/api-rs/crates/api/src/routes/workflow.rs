@@ -238,6 +238,30 @@ fn is_duplicate_workflow_name(e: &sqlx::Error) -> bool {
         .unwrap_or(false)
 }
 
+/// Duplikat nama/slug state workflow. Django membuat partial unique index
+/// `workflow_state_unique_name_workflow_when_deleted_at_null` dan
+/// `workflow_state_unique_slug_workflow_when_deleted_at_null`
+/// (`apps/api/plane/db/models/workflow.py:57-73`); PostgreSQL melaporkan
+/// namanya lewat field constraint saat index itu dilanggar. Error kelas 23
+/// lain (FK/check/default) tidak boleh dilabeli "sudah ada". Fallback: kalau
+/// driver tidak mengekspos nama constraint, pakai pemetaan kelas-23 lama.
+fn is_duplicate_workflow_state(e: &sqlx::Error) -> bool {
+    let Some(db) = e.as_database_error() else {
+        return false;
+    };
+    if let Some(constraint) = db
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+        .and_then(|pg| pg.constraint())
+    {
+        return constraint == "workflow_state_unique_name_workflow_when_deleted_at_null"
+            || constraint == "workflow_state_unique_slug_workflow_when_deleted_at_null";
+    }
+    db.code()
+        .as_deref()
+        .map(is_integrity_error)
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WorkflowRow {
     pub id: Uuid,
@@ -449,5 +473,311 @@ pub async fn delete_workflow(
     .bind(workflow_id)
     .execute(&st.pool)
     .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+// --- Workflow state CRUD ---------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WorkflowStateRow {
+    pub id: Uuid,
+    pub workflow_id: Uuid,
+    pub name: String,
+    pub description: String,
+    pub color: String,
+    pub slug: String,
+    pub sequence: f64,
+    pub group: String,
+    pub is_default: bool,
+}
+
+pub fn workflow_state_json(row: &WorkflowStateRow) -> Value {
+    json!({
+        "id": row.id,
+        "workflow_id": row.workflow_id,
+        "name": row.name,
+        "description": row.description,
+        "color": row.color,
+        "slug": row.slug,
+        "sequence": row.sequence,
+        "group": row.group,
+        "is_default": row.is_default,
+    })
+}
+
+const WF_STATE_COLS: &str =
+    "id, workflow_id, name, description, color, slug, sequence, \"group\", is_default";
+
+#[derive(Debug, Deserialize, Default)]
+pub struct WorkflowStateBody {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub group: Option<String>,
+    #[serde(default)]
+    pub sequence: Option<f64>,
+    #[serde(default)]
+    pub is_default: Option<bool>,
+}
+
+fn default_color(group: &str) -> &'static str {
+    match group {
+        "started" => "#F59E0B",
+        "completed" => "#46A758",
+        "cancelled" => "#9AA4BC",
+        _ => "#60646C",
+    }
+}
+
+/// GET `/api/workspaces/:slug/workflows/:workflow_id/states/`
+pub async fn list_states(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let rows: Vec<WorkflowStateRow> = sqlx::query_as(&format!(
+        "SELECT {WF_STATE_COLS} FROM workflow_states \
+         WHERE workflow_id = $1 AND deleted_at IS NULL ORDER BY sequence"
+    ))
+    .bind(workflow_id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows
+            .iter()
+            .map(workflow_state_json)
+            .collect::<Vec<_>>())),
+    ))
+}
+
+/// POST `/api/workspaces/:slug/workflows/:workflow_id/states/`
+pub async fn create_state(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+    Json(body): Json<WorkflowStateBody>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let name = match validate_name(body.name.as_deref().unwrap_or(""), "name") {
+        Ok(name) => name,
+        Err(e) => return Ok(bad(&e)),
+    };
+    let group = body.group.clone().unwrap_or_else(|| "backlog".to_string());
+    if let Err(e) = validate_state_group(&group) {
+        return Ok(bad(&e));
+    }
+    let color = body
+        .color
+        .clone()
+        .unwrap_or_else(|| default_color(&group).to_string());
+
+    let mut tx = st.pool.begin().await?;
+    let (state_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    // State pertama wajib default; `is_default: true` eksplisit juga menurunkan
+    // default lama agar partial-unique (workflow) WHERE is_default tidak bentrok.
+    let make_default = body.is_default.unwrap_or(state_count == 0) || state_count == 0;
+    if make_default {
+        sqlx::query(
+            "UPDATE workflow_states SET is_default = false, updated_at = now() \
+             WHERE workflow_id = $1 AND deleted_at IS NULL AND is_default = true",
+        )
+        .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    let inserted: Result<WorkflowStateRow, sqlx::Error> = sqlx::query_as(&format!(
+        "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
+         \"group\", is_default, created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, COALESCE($3, ''), $4, \
+         regexp_replace(lower($2), '[^a-z0-9]+', '-', 'g'), \
+         COALESCE($5, (SELECT COALESCE(MAX(sequence), 0) + 15000 FROM workflow_states WHERE workflow_id = $1)), \
+         $6, $7, $8, $8, now(), now()) RETURNING {WF_STATE_COLS}"
+    ))
+    .bind(workflow_id)
+    .bind(&name)
+    .bind(&body.description)
+    .bind(&color)
+    .bind(body.sequence)
+    .bind(&group)
+    .bind(make_default)
+    .bind(auth.0)
+    .fetch_one(&mut *tx)
+    .await;
+    let row = match inserted {
+        Ok(row) => row,
+        Err(e) if is_duplicate_workflow_state(&e) => {
+            tx.rollback().await?;
+            return Ok(bad("Workflow state with this name already exists"));
+        }
+        Err(e) => return Err(e.into()),
+    };
+    tx.commit().await?;
+
+    sync_workflow_to_projects(&st.pool, workflow_id).await?;
+    Ok((StatusCode::CREATED, Json(workflow_state_json(&row))))
+}
+
+/// PATCH `/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/`
+pub async fn patch_state(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id, state_id)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<WorkflowStateBody>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let current: Option<WorkflowStateRow> = sqlx::query_as(&format!(
+        "SELECT {WF_STATE_COLS} FROM workflow_states \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL"
+    ))
+    .bind(state_id)
+    .bind(workflow_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(current) = current else {
+        return Ok(missing());
+    };
+    let name = match body.name.as_deref() {
+        Some(raw) => match validate_name(raw, "name") {
+            Ok(name) => Some(name),
+            Err(e) => return Ok(bad(&e)),
+        },
+        None => None,
+    };
+    let group = body.group.clone().unwrap_or_else(|| current.group.clone());
+    if let Err(e) = validate_state_group(&group) {
+        return Ok(bad(&e));
+    }
+    if body.is_default == Some(false) && current.is_default {
+        return Ok(bad("A workflow must have a default state"));
+    }
+
+    let mut tx = st.pool.begin().await?;
+    if body.is_default == Some(true) && !current.is_default {
+        sqlx::query(
+            "UPDATE workflow_states SET is_default = false, updated_at = now() \
+             WHERE workflow_id = $1 AND deleted_at IS NULL AND is_default = true",
+        )
+        .bind(workflow_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    let updated: Result<WorkflowStateRow, sqlx::Error> = sqlx::query_as(&format!(
+        "UPDATE workflow_states SET name = COALESCE($3, name), \
+         slug = CASE WHEN $3::text IS NULL THEN slug ELSE regexp_replace(lower($3), '[^a-z0-9]+', '-', 'g') END, \
+         description = COALESCE($4, description), \
+         color = COALESCE($5, color), \"group\" = $6, sequence = COALESCE($7, sequence), \
+         is_default = COALESCE($8, is_default), updated_by_id = $9, updated_at = now() \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL RETURNING {WF_STATE_COLS}"
+    ))
+    .bind(state_id)
+    .bind(workflow_id)
+    .bind(&name)
+    .bind(&body.description)
+    .bind(&body.color)
+    .bind(&group)
+    .bind(body.sequence)
+    .bind(body.is_default)
+    .bind(auth.0)
+    .fetch_one(&mut *tx)
+    .await;
+    let row = match updated {
+        Ok(row) => row,
+        Err(e) if is_duplicate_workflow_state(&e) => {
+            tx.rollback().await?;
+            return Ok(bad("Workflow state with this name already exists"));
+        }
+        Err(e) => return Err(e.into()),
+    };
+    tx.commit().await?;
+
+    sync_workflow_to_projects(&st.pool, workflow_id).await?;
+    Ok((StatusCode::OK, Json(workflow_state_json(&row))))
+}
+
+/// DELETE `/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/`
+pub async fn delete_state(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id, state_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let (exists,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflow_states \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(state_id)
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if !exists {
+        return Ok(missing());
+    }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues i JOIN states s ON s.id = i.state_id \
+         WHERE s.workflow_state_id = $1 AND i.deleted_at IS NULL)",
+    )
+    .bind(state_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Workflow state is in use by work items"));
+    }
+    let (is_default,): (bool,) =
+        sqlx::query_as("SELECT is_default FROM workflow_states WHERE id = $1")
+            .bind(state_id)
+            .fetch_one(&st.pool)
+            .await?;
+    if is_default {
+        return Ok(bad(
+            "Cannot delete the default workflow state; set another state as default first",
+        ));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE workflow_transitions SET deleted_at = now(), updated_at = now() \
+         WHERE workflow_id = $1 AND (from_state_id = $2 OR to_state_id = $2) AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .bind(state_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE workflow_states SET deleted_at = now(), updated_at = now() WHERE id = $1")
+        .bind(state_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    sync_workflow_to_projects(&st.pool, workflow_id).await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
