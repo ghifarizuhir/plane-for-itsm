@@ -86,14 +86,12 @@ class DraftIssue(WorkspaceBaseModel):
             try:
                 from plane.db.models import State
 
-                default_state = State.objects.filter(
-                    ~models.Q(is_triage=True), project=self.project, default=True
-                ).first()
-                if default_state is None:
-                    random_state = State.objects.filter(~models.Q(is_triage=True), project=self.project).first()
-                    self.state = random_state
+                states = State.objects.filter(~models.Q(is_triage=True), project=self.project)
+                if self.type_id is not None and not self.type.is_epic:
+                    typed_states = states.filter(type_id=self.type_id)
+                    self.state = typed_states.filter(default=True).first() or typed_states.first()
                 else:
-                    self.state = default_state
+                    self.state = states.filter(default=True).first() or states.first()
             except ImportError:
                 pass
         else:

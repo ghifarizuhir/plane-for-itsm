@@ -6,7 +6,7 @@ import pytest
 from django.db import IntegrityError
 from django.utils import timezone
 
-from plane.db.models import IssueType, State, StateGroup, Workflow, WorkflowState, WorkflowTransition
+from plane.db.models import DraftIssue, Issue, IssueType, State, StateGroup, Workflow, WorkflowState, WorkflowTransition
 from plane.tests.factories import ProjectFactory, WorkspaceFactory
 
 
@@ -172,3 +172,43 @@ class TestStateTypeScoping:
                 type=problem,
                 workflow_state=wf_state,
             )
+
+
+@pytest.mark.unit
+class TestTypeAwareDefaultState:
+    @pytest.mark.django_db
+    def test_issue_default_state_follows_type(self):
+        workspace, project = make_project()
+        State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        State.objects.create(
+            project=project, name="New", color="#60646C", group="backlog", type=incident, default=True
+        )
+        issue = Issue.objects.create(project=project, name="Server down", type=incident)
+        assert issue.state.name == "New"
+
+    @pytest.mark.django_db
+    def test_issue_without_type_uses_legacy_default(self):
+        _, project = make_project()
+        State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
+        issue = Issue.objects.create(project=project, name="Generic task")
+        assert issue.state.name == "Backlog"
+
+    @pytest.mark.django_db
+    def test_issue_epic_type_uses_legacy_default(self):
+        workspace, project = make_project()
+        State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
+        epic = IssueType.objects.create(workspace=workspace, name="Epic", is_epic=True)
+        issue = Issue.objects.create(project=project, name="Big rock", type=epic)
+        assert issue.state.name == "Backlog"
+
+    @pytest.mark.django_db
+    def test_draft_default_state_follows_type(self):
+        workspace, project = make_project()
+        State.objects.create(project=project, name="Backlog", color="#60646C", group="backlog", default=True)
+        incident = IssueType.objects.create(workspace=workspace, name="Incident")
+        State.objects.create(
+            project=project, name="New", color="#60646C", group="backlog", type=incident, default=True
+        )
+        draft = DraftIssue.objects.create(project=project, name="Draft", type=incident)
+        assert draft.state.name == "New"

@@ -226,14 +226,18 @@ class Issue(ChangeTrackerMixin, ProjectBaseModel):
         return f"{self.name} <{self.project.name}>"
 
     def _ensure_default_state(self):
-        """Assign a default state when none is set."""
+        """Assign a default state when none is set (type-aware)."""
         if self.state is not None:
             return
         try:
             from plane.db.models import State
 
-            default_state = State.objects.filter(~models.Q(is_triage=True), project=self.project, default=True).first()
-            self.state = default_state or State.objects.filter(~models.Q(is_triage=True), project=self.project).first()
+            states = State.objects.filter(~models.Q(is_triage=True), project=self.project)
+            if self.type_id is not None and not self.type.is_epic:
+                typed_states = states.filter(type_id=self.type_id)
+                self.state = typed_states.filter(default=True).first() or typed_states.first()
+                return
+            self.state = states.filter(default=True).first() or states.first()
         except ImportError as e:
             log_exception(e)
 
