@@ -276,6 +276,28 @@ fn is_duplicate_workflow_default(e: &sqlx::Error) -> bool {
         .unwrap_or(false)
 }
 
+/// Duplikat pasangan transisi. Django membuat partial unique index
+/// `workflow_transition_unique_pair_when_deleted_at_null`
+/// (`apps/api/plane/db/models/workflow.py:94-98`); PostgreSQL melaporkan
+/// namanya lewat field constraint saat index itu dilanggar. Error kelas 23
+/// lain (FK/check) tidak boleh dilabeli "sudah ada". Fallback: kalau driver
+/// tidak mengekspos nama constraint, pakai pemetaan kelas-23 lama.
+fn is_duplicate_transition(e: &sqlx::Error) -> bool {
+    let Some(db) = e.as_database_error() else {
+        return false;
+    };
+    if let Some(constraint) = db
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+        .and_then(|pg| pg.constraint())
+    {
+        return constraint == "workflow_transition_unique_pair_when_deleted_at_null";
+    }
+    db.code()
+        .as_deref()
+        .map(is_integrity_error)
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WorkflowRow {
     pub id: Uuid,
@@ -822,5 +844,142 @@ pub async fn delete_state(
     tx.commit().await?;
 
     sync_workflow_to_projects(&st.pool, workflow_id).await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
+}
+
+// --- Workflow transition CRUD ----------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WorkflowTransitionRow {
+    pub id: Uuid,
+    pub workflow_id: Uuid,
+    pub from_state_id: Uuid,
+    pub to_state_id: Uuid,
+}
+
+pub fn transition_json(row: &WorkflowTransitionRow) -> Value {
+    json!({
+        "id": row.id,
+        "workflow_id": row.workflow_id,
+        "from_state_id": row.from_state_id,
+        "to_state_id": row.to_state_id,
+    })
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct TransitionBody {
+    #[serde(default)]
+    pub from_state_id: Option<Uuid>,
+    #[serde(default)]
+    pub to_state_id: Option<Uuid>,
+}
+
+async fn state_in_workflow(
+    pool: &sqlx::PgPool,
+    workflow_id: Uuid,
+    state_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let (ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflow_states WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(state_id)
+    .bind(workflow_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
+}
+
+/// GET `/api/workspaces/:slug/workflows/:workflow_id/transitions/`
+pub async fn list_transitions(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let rows: Vec<WorkflowTransitionRow> = sqlx::query_as(
+        "SELECT id, workflow_id, from_state_id, to_state_id FROM workflow_transitions \
+         WHERE workflow_id = $1 AND deleted_at IS NULL ORDER BY created_at",
+    )
+    .bind(workflow_id)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(json!(rows.iter().map(transition_json).collect::<Vec<_>>())),
+    ))
+}
+
+/// POST `/api/workspaces/:slug/workflows/:workflow_id/transitions/`
+pub async fn create_transition(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id)): Path<(String, Uuid)>,
+    Json(body): Json<TransitionBody>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let (Some(from_state_id), Some(to_state_id)) = (body.from_state_id, body.to_state_id) else {
+        return Ok(bad("from_state_id and to_state_id are required"));
+    };
+    if from_state_id == to_state_id {
+        return Ok(bad("A transition cannot start and end on the same state"));
+    }
+    if !state_in_workflow(&st.pool, workflow_id, from_state_id).await?
+        || !state_in_workflow(&st.pool, workflow_id, to_state_id).await?
+    {
+        return Ok(bad("States must belong to this workflow"));
+    }
+    let inserted: Result<WorkflowTransitionRow, sqlx::Error> = sqlx::query_as(
+        "INSERT INTO workflow_transitions (id, workflow_id, from_state_id, to_state_id, \
+         created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now()) \
+         RETURNING id, workflow_id, from_state_id, to_state_id",
+    )
+    .bind(workflow_id)
+    .bind(from_state_id)
+    .bind(to_state_id)
+    .bind(auth.0)
+    .fetch_one(&st.pool)
+    .await;
+    match inserted {
+        Ok(row) => Ok((StatusCode::CREATED, Json(transition_json(&row)))),
+        Err(e) if is_duplicate_transition(&e) => Ok(bad("This transition already exists")),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// DELETE `/api/workspaces/:slug/workflows/:workflow_id/transitions/:transition_id/`
+pub async fn delete_transition(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, workflow_id, transition_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    if !is_ws_admin(&st, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if !workflow_in_workspace(&st.pool, &slug, workflow_id).await? {
+        return Ok(missing());
+    }
+    let rows = sqlx::query(
+        "UPDATE workflow_transitions SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND workflow_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(transition_id)
+    .bind(workflow_id)
+    .execute(&st.pool)
+    .await?
+    .rows_affected();
+    if rows == 0 {
+        return Ok(missing());
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }

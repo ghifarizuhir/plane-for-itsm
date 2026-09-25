@@ -1,8 +1,9 @@
 use api::middleware::auth::AuthUser;
 use api::routes::workflow::{
-    allowed_target_state_ids, create_state, create_workflow, delete_state, delete_workflow,
-    list_states, list_workflows, materialize_type_states, patch_state, patch_workflow,
-    retrieve_workflow, validate_name, validate_state_group, WorkflowBody, WorkflowStateBody,
+    allowed_target_state_ids, create_state, create_transition, create_workflow, delete_state,
+    delete_transition, delete_workflow, list_states, list_transitions, list_workflows,
+    materialize_type_states, patch_state, patch_workflow, retrieve_workflow, validate_name,
+    validate_state_group, TransitionBody, WorkflowBody, WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -1096,6 +1097,167 @@ async fn state_default_promote_and_guards() {
     .expect("healed state");
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(healed["is_default"], true);
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn transition_crud_validates_states() {
+    let st = app_state().await;
+    let (slug, _ws_id, _project_id) = make_workspace(&st, "wftr").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (_, new) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state new");
+    let (_, progress) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("In Progress".into()),
+            group: Some("started".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state progress");
+    let new_id = Uuid::parse_str(new["id"].as_str().unwrap()).unwrap();
+    let progress_id = Uuid::parse_str(progress["id"].as_str().unwrap()).unwrap();
+
+    let (status, created_transition) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: Some(progress_id),
+        }),
+    )
+    .await
+    .expect("transition");
+    assert_eq!(status, StatusCode::CREATED);
+    let transition_id = Uuid::parse_str(created_transition["id"].as_str().unwrap()).unwrap();
+
+    // Duplikat → 400.
+    let (status, body) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: Some(progress_id),
+        }),
+    )
+    .await
+    .expect("dup");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "This transition already exists");
+
+    // Self transition → 400.
+    let (status, _) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: Some(new_id),
+        }),
+    )
+    .await
+    .expect("self");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (_, list) = list_transitions(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("list");
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    // State milik workflow lain di workspace yang sama → 400.
+    let (_, other) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Second Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("second workflow");
+    let other_workflow_id = Uuid::parse_str(other["id"].as_str().unwrap()).unwrap();
+    let (_, other_state) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), other_workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("Other".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("other state");
+    let other_state_id = Uuid::parse_str(other_state["id"].as_str().unwrap()).unwrap();
+    let (status, body) = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(new_id),
+            to_state_id: Some(other_state_id),
+        }),
+    )
+    .await
+    .expect("cross workflow");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "States must belong to this workflow");
+
+    let (status, _) = delete_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, transition_id)),
+    )
+    .await
+    .expect("delete transition");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, list) = list_transitions(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("list after delete");
+    assert!(list.as_array().unwrap().is_empty());
 
     purge(&st.pool, &slug).await;
 }
