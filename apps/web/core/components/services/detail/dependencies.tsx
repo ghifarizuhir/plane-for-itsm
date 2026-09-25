@@ -88,15 +88,15 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
     return (
       <div
         key={dependencyId}
-        className="flex items-center justify-between gap-2 rounded-md border border-subtle px-3 py-2"
+        className="flex items-center justify-between gap-2 rounded-sm border border-subtle px-2 py-1.5"
       >
-        <span className="truncate text-13 text-primary" title={other?.name ?? otherServiceId}>
+        <span className="truncate text-12 text-primary" title={other?.name ?? otherServiceId}>
           {other?.name ?? otherServiceId}
         </span>
         <button
           type="button"
           onClick={() => handleRemove(dependencyId)}
-          className="shrink-0 text-12 text-tertiary hover:text-primary"
+          className="shrink-0 text-11 text-tertiary hover:text-primary"
         >
           {t("remove")}
         </button>
@@ -105,15 +105,16 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
   };
 
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
+    <div className="mt-3 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <CustomSelect
           value={selectedId}
           onChange={(val: string) => setSelectedId(val)}
+          className="h-7.5 min-w-0 grow"
           label={
             <span className="flex items-center gap-2 py-0.5 text-12">
               {selectedService ? (
-                selectedService.name
+                <span className="truncate">{selectedService.name}</span>
               ) : (
                 <span className="text-secondary">{t("service.detail.select_service")}</span>
               )}
@@ -126,27 +127,25 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
             </CustomSelect.Option>
           ))}
         </CustomSelect>
-        <Button variant="primary" size="sm" onClick={handleAdd} disabled={!selectedId} loading={isAdding}>
+        <Button variant="secondary" size="sm" onClick={handleAdd} disabled={!selectedId} loading={isAdding}>
           {t("add")}
         </Button>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <p className="text-12 font-medium text-tertiary">{t("service.detail.depends_on")}</p>
-          {outgoing.length === 0 ? (
-            <p className="text-12 text-tertiary">{t("service.detail.no_dependencies")}</p>
-          ) : (
-            outgoing.map((d) => renderEdgeRow(d.id, d.to_service_id))
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <p className="text-12 font-medium text-tertiary">{t("service.detail.depended_on_by")}</p>
-          {incoming.length === 0 ? (
-            <p className="text-12 text-tertiary">{t("service.detail.no_dependents")}</p>
-          ) : (
-            incoming.map((d) => renderEdgeRow(d.id, d.from_service_id))
-          )}
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-12 font-medium text-tertiary">{t("service.detail.depends_on")}</p>
+        {outgoing.length === 0 ? (
+          <p className="text-12 text-tertiary">{t("service.detail.no_dependencies")}</p>
+        ) : (
+          outgoing.map((d) => renderEdgeRow(d.id, d.to_service_id))
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-12 font-medium text-tertiary">{t("service.detail.depended_on_by")}</p>
+        {incoming.length === 0 ? (
+          <p className="text-12 text-tertiary">{t("service.detail.no_dependents")}</p>
+        ) : (
+          incoming.map((d) => renderEdgeRow(d.id, d.from_service_id))
+        )}
       </div>
     </div>
   );
