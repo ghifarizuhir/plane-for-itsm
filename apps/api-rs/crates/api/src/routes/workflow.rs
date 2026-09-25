@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 /// Group valid untuk workflow state; `triage` bukan bagian workflow
 /// (`StateGroup` di `apps/api/plane/db/models/state.py:14-20`).
-pub const STATE_GROUPS: [&str; 5] = ["backlog", "unstarted", "started", "completed", "cancelled"];
+/// Alias ke `state::ALLOWED_GROUPS` agar daftarnya tidak pernah menyimpang.
+pub const STATE_GROUPS: &[&str] = super::state::ALLOWED_GROUPS;
 
 /// Validasi nama ala DRF (required, <=255). Mengembalikan nama ter-trim.
 pub fn validate_name(name: &str, field: &str) -> Result<String, String> {
@@ -23,13 +24,14 @@ pub fn validate_state_group(group: &str) -> Result<(), String> {
     if STATE_GROUPS.contains(&group) {
         Ok(())
     } else {
-        Err("\"group\" is not a valid choice.".to_string())
+        Err(format!("\"{group}\" is not a valid choice."))
     }
 }
 
 /// Target state (mirror) yang diizinkan dari `current_state`, dihitung murni
 /// dari pasangan `(state_id, workflow_state_id)` dan daftar transisi
-/// `(from_workflow_state_id, to_workflow_state_id)`.
+/// `(from_workflow_state_id, to_workflow_state_id)`. Urutan output mengikuti
+/// urutan `mirror_pairs` dan tidak di-sort lebih lanjut.
 pub fn allowed_target_state_ids(
     current_state: Uuid,
     mirror_pairs: &[(Uuid, Uuid)],
