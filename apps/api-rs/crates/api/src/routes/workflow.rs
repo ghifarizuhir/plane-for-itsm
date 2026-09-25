@@ -993,27 +993,14 @@ pub async fn delete_transition(
 
 // --- Project enablement + workflow map -------------------------------------
 
-/// DELETE `/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/`
-/// (un-enable type dari project).
-pub async fn unlink_type(
-    State(st): State<AppState>,
-    auth: AuthUser,
-    Path((slug, project_id, type_id)): Path<(String, Uuid, Uuid)>,
-) -> R {
-    if !super::v1::work_item_type::can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
-        return Ok(deny());
-    }
-    let (in_use,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM issues WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(project_id)
-    .bind(type_id)
-    .fetch_one(&st.pool)
-    .await?;
-    if in_use {
-        return Ok(bad("Type is in use by work items"));
-    }
-    let mut tx = st.pool.begin().await?;
+/// Soft-delete link + state mirror satu type dari project (satu transaksi).
+/// Dipakai un-enable (`unlink_type`) dan project-scope v1 DELETE.
+pub(crate) async fn detach_type_from_project(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    type_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query(
         "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
          WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
@@ -1031,6 +1018,43 @@ pub async fn unlink_type(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    Ok(())
+}
+
+/// DELETE `/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/`
+/// (un-enable type dari project).
+pub async fn unlink_type(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, type_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    if !super::v1::work_item_type::can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    // Project wajib milik workspace di slug; kalau tidak, jangan sentuh data
+    // workspace lain (404).
+    let (project_ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL AND w.deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_ok {
+        return Ok(missing());
+    }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Type is in use by work items"));
+    }
+    detach_type_from_project(&st.pool, project_id, type_id).await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -1063,7 +1087,7 @@ pub async fn workflow_map(
     for (type_id, workflow_id, type_name) in types {
         let states: Vec<(Uuid, String, String, String, f64, bool)> = sqlx::query_as(
             "SELECT id, name, color, \"group\", sequence, \"default\" FROM states \
-             WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL ORDER BY sequence",
+             WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL ORDER BY sequence, id",
         )
         .bind(project_id)
         .bind(type_id)
@@ -1076,7 +1100,8 @@ pub async fn workflow_map(
                AND mf.deleted_at IS NULL AND mf.type_id = $3 \
              JOIN states mt ON mt.workflow_state_id = tr.to_state_id AND mt.project_id = $1 \
                AND mt.deleted_at IS NULL AND mt.type_id = $3 \
-             WHERE tr.workflow_id = $2 AND tr.deleted_at IS NULL",
+             WHERE tr.workflow_id = $2 AND tr.deleted_at IS NULL \
+             ORDER BY tr.created_at, tr.id",
         )
         .bind(project_id)
         .bind(workflow_id)

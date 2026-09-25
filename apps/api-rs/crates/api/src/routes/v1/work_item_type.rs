@@ -94,6 +94,17 @@ pub struct V1CreateWorkItemType {
     pub project_ids: Vec<uuid::Uuid>,
 }
 
+/// Membedakan field `workflow` yang hilang (`None`) dari `null` eksplisit
+/// (`Some(None)`); nilai biasa menjadi `Some(Some(id))`.
+fn deserialize_optional_nullable<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<uuid::Uuid>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Some(Option::<uuid::Uuid>::deserialize(deserializer)?))
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct V1UpdateWorkItemType {
     #[serde(default)]
@@ -108,8 +119,8 @@ pub struct V1UpdateWorkItemType {
     pub is_active: Option<bool>,
     #[serde(default)]
     pub level: Option<i32>,
-    #[serde(default)]
-    pub workflow: Option<uuid::Uuid>,
+    #[serde(default, deserialize_with = "deserialize_optional_nullable")]
+    pub workflow: Option<Option<uuid::Uuid>>,
     #[serde(default)]
     pub external_id: Option<String>,
     #[serde(default)]
@@ -290,6 +301,9 @@ async fn create_type(
     if let Some(pid) = scope_project {
         link_ids.push(pid);
     }
+    if body.is_epic.unwrap_or(false) && body.workflow.is_some() {
+        return Ok(bad("Epic types cannot have a workflow"));
+    }
     // Guard sebelum INSERT agar create yang konflik tidak meninggalkan type
     // orphan tanpa link.
     if let Some(workflow_id) = body.workflow {
@@ -352,7 +366,9 @@ async fn workflow_link_conflict(
         let (conflict,): (bool,) = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM project_issue_types pit \
              JOIN issue_types t ON t.id = pit.issue_type_id \
+             JOIN projects p ON p.id = pit.project_id \
              WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
+               AND p.deleted_at IS NULL \
                AND t.workflow_id = $2 AND ($3::uuid IS NULL OR t.id <> $3))",
         )
         .bind(project_id)
@@ -482,26 +498,52 @@ async fn update_type(
             ));
         }
     }
-    // Workflow efektif setelah UPDATE: `body.workflow` bila dikirim, kalau
-    // tidak workflow lama. Dipakai untuk guard sebelum UPDATE diterapkan.
-    let current: Option<Option<uuid::Uuid>> = sqlx::query_scalar(
-        "SELECT workflow_id FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    // Workflow: omitted (`None`) = unchanged, `Some(None)` = clear, dan
+    // `Some(Some(wf))` = set/switch. Query ini sekaligus membawa `is_epic`
+    // efektif.
+    let current: Option<(Option<uuid::Uuid>, bool)> = sqlx::query_as(
+        "SELECT workflow_id, is_epic FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
     .fetch_optional(&st.pool)
     .await?;
-    let Some(current_workflow) = current else {
+    let Some((current_workflow, current_is_epic)) = current else {
         return Ok(missing());
     };
-    let effective_workflow = body.workflow.or(current_workflow);
-    if let Some(workflow_id) = body.workflow {
+    let set_workflow = match body.workflow {
+        Some(Some(wf)) => Some(wf),
+        _ => None,
+    };
+    let clear_workflow = matches!(body.workflow, Some(None));
+    let effective_workflow: Option<uuid::Uuid> = match body.workflow {
+        Some(Some(wf)) => Some(wf),
+        Some(None) => None,
+        None => current_workflow,
+    };
+    if body.is_epic.unwrap_or(current_is_epic) && effective_workflow.is_some() {
+        return Ok(bad("Epic types cannot have a workflow"));
+    }
+    if let Some(workflow_id) = set_workflow {
         if !workflow_in_workspace(&st.pool, ws, workflow_id).await? {
             return Ok(bad("Workflow does not exist in this workspace"));
         }
     }
+    if clear_workflow {
+        let (enabled,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM project_issue_types WHERE issue_type_id = $1 AND deleted_at IS NULL)",
+        )
+        .bind(pk)
+        .fetch_one(&st.pool)
+        .await?;
+        if enabled {
+            return Ok(bad(
+                "Cannot unassign a workflow while the type is enabled in projects",
+            ));
+        }
+    }
     // Switch workflow pada type yang sudah enabled: guard ke semua project
     // hidup yang mengaktifkan type ini, lalu materialize setelah UPDATE.
-    let switch_to = match body.workflow {
+    let switch_to = match set_workflow {
         Some(wf) if current_workflow != Some(wf) => Some(wf),
         _ => None,
     };
@@ -522,6 +564,19 @@ async fn update_type(
                 "Workflow is already enabled for another work item type in this project",
             ));
         }
+        let (has_live_issues,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM issues i JOIN states s ON s.id = i.state_id \
+             WHERE i.type_id = $1 AND i.deleted_at IS NULL AND s.project_id = ANY($2))",
+        )
+        .bind(pk)
+        .bind(&enabled_project_ids)
+        .fetch_one(&st.pool)
+        .await?;
+        if has_live_issues {
+            return Ok(bad(
+                "Cannot change the workflow while the type has live work items",
+            ));
+        }
     }
     if let (Some(ids), Some(workflow_id)) = (body.project_ids.as_ref(), effective_workflow) {
         if workflow_link_conflict(&st.pool, ids, workflow_id, Some(pk)).await? {
@@ -539,10 +594,10 @@ async fn update_type(
          is_epic = COALESCE($5, is_epic), \
          is_active = COALESCE($6, is_active), \
          level = COALESCE($7, level), \
-         workflow_id = COALESCE($8, workflow_id), \
-         external_id = COALESCE($9, external_id), \
-         external_source = COALESCE($10, external_source), \
-         updated_by_id = $11, updated_at = now() \
+         workflow_id = CASE WHEN $8 THEN NULL ELSE COALESCE($9, workflow_id) END, \
+         external_id = COALESCE($10, external_id), \
+         external_source = COALESCE($11, external_source), \
+         updated_by_id = $12, updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
@@ -552,7 +607,8 @@ async fn update_type(
     .bind(body.is_epic)
     .bind(body.is_active)
     .bind(body.level.map(|l| l as f64))
-    .bind(body.workflow)
+    .bind(clear_workflow)
+    .bind(set_workflow)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(user)
@@ -740,29 +796,9 @@ pub async fn delete_project(
     if in_use {
         return Ok(bad("Type is in use by work items"));
     }
-    let (linked,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM project_issue_types WHERE issue_type_id = $1 AND project_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .fetch_one(&st.pool)
-    .await?;
-    if linked {
-        return Ok(bad("Type is enabled in projects"));
-    }
-    // Project scope detaches only: soft-delete the link, never the type.
-    let affected = sqlx::query(
-        "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
-         WHERE issue_type_id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .execute(&st.pool)
-    .await?
-    .rows_affected();
-    if affected == 0 {
-        return Ok(missing());
-    }
+    // Project scope detaches only: soft-delete link + mirror, never the type.
+    // Idempotent: project/type tanpa link hidup tetap 204.
+    crate::routes::workflow::detach_type_from_project(&st.pool, project_id, pk).await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
@@ -795,7 +831,7 @@ pub async fn import_to_project(
     // per project, baik di dalam batch request maupun terhadap link existing.
     let (batch_conflict,): (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT t.workflow_id FROM issue_types t \
-         WHERE t.id = ANY($1) AND t.workflow_id IS NOT NULL \
+         WHERE t.id = ANY($1) AND t.deleted_at IS NULL AND t.workflow_id IS NOT NULL \
          GROUP BY t.workflow_id HAVING COUNT(*) > 1)",
     )
     .bind(&ids)

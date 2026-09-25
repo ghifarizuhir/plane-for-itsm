@@ -1380,7 +1380,7 @@ async fn import_materializes_and_unlink_guards() {
     .await
     .expect("workflow");
     let workflow_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
-    create_state(
+    let _ = create_state(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), workflow_id)),
@@ -1435,11 +1435,10 @@ async fn import_materializes_and_unlink_guards() {
     assert_eq!(map["types"][0]["type_id"], type_id.to_string());
     assert_eq!(map["types"][0]["states"].as_array().unwrap().len(), 1);
 
-    // Policy: PATCH dengan `workflow: null` tidak melepas assignment
-    // (COALESCE no-op) selama type masih enabled di project.
+    // Policy: explicit `workflow: null` pada type yang masih enabled → 400.
     let null_workflow: V1UpdateWorkItemType =
         serde_json::from_value(json!({"workflow": null})).unwrap();
-    let (status, patched) = update_workspace(
+    let (status, body) = update_workspace(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), type_id)),
@@ -1447,11 +1446,10 @@ async fn import_materializes_and_unlink_guards() {
     )
     .await
     .expect("patch null workflow");
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
-        patched["workflow"],
-        workflow_id.to_string(),
-        "null workflow tidak boleh melepas assignment type yang enabled"
+        body["error"],
+        "Cannot unassign a workflow while the type is enabled in projects"
     );
 
     // Type kedua tidak boleh memakai workflow yang sama di project yang sama.
@@ -1508,28 +1506,42 @@ async fn import_materializes_and_unlink_guards() {
     .expect("type row");
     assert!(still_live, "type tidak boleh ter-soft-delete");
 
-    let (status, body) = delete_project(
+    // Project-scope DELETE = detach link + mirror, 204 (idempotent).
+    let (status, _) = delete_project(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), project_id, type_id)),
     )
     .await
-    .expect("unlink via delete");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Type is enabled in projects");
-    let (links_still_live,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM project_issue_types \
-         WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
+    .expect("detach via delete");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (links_still_live, mirrors_still_live): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM project_issue_types \
+                 WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM states \
+                 WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
     )
     .bind(project_id)
     .bind(type_id)
     .fetch_one(&st.pool)
     .await
-    .expect("link after blocked delete");
+    .expect("link after detach");
     assert_eq!(
-        links_still_live, 1,
-        "link hidup tidak boleh ter-soft-delete"
+        links_still_live, 0,
+        "project-scope delete harus detach link"
     );
+    assert_eq!(
+        mirrors_still_live, 0,
+        "project-scope delete harus soft-delete mirror"
+    );
+    let (status, _) = delete_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, type_id)),
+    )
+    .await
+    .expect("detach via delete again");
+    assert_eq!(status, StatusCode::NO_CONTENT, "delete kedua idempotent");
 
     // Un-enable saat belum ada issue → 204.
     let (status, _) = unlink_type(
@@ -1564,6 +1576,20 @@ async fn import_materializes_and_unlink_guards() {
     assert_eq!(status, StatusCode::OK);
     assert!(map["types"].as_array().unwrap().is_empty());
 
+    // Explicit null saat tidak ada link hidup → 200 dan workflow dikosongkan.
+    let clear_workflow: V1UpdateWorkItemType =
+        serde_json::from_value(json!({"workflow": null})).unwrap();
+    let (status, cleared) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+        Json(clear_workflow),
+    )
+    .await
+    .expect("clear workflow");
+    assert_eq!(status, StatusCode::OK);
+    assert!(cleared["workflow"].is_null(), "workflow harus dikosongkan");
+
     // Jalur `project_ids` v1: create/update harus link + materialize + guard.
     let (_, second_workflow) = create_workflow(
         State(st.clone()),
@@ -1578,7 +1604,7 @@ async fn import_materializes_and_unlink_guards() {
     .await
     .expect("second workflow");
     let second_workflow_id = Uuid::parse_str(second_workflow["id"].as_str().unwrap()).unwrap();
-    create_state(
+    let _ = create_state(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), second_workflow_id)),
@@ -1787,7 +1813,7 @@ async fn workflow_switch_guard_and_map_details() {
     .await
     .expect("workflow B");
     let wf_b_id = Uuid::parse_str(wf_b["id"].as_str().unwrap()).unwrap();
-    create_state(
+    let _ = create_state(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), wf_b_id)),
@@ -1873,7 +1899,7 @@ async fn workflow_switch_guard_and_map_details() {
         AuthUser(owner),
         Path((slug.clone(), type_u)),
         Json(V1UpdateWorkItemType {
-            workflow: Some(wf_a_id),
+            workflow: Some(Some(wf_a_id)),
             ..Default::default()
         }),
     )
@@ -1912,7 +1938,7 @@ async fn workflow_switch_guard_and_map_details() {
         AuthUser(owner),
         Path((slug.clone(), type_t)),
         Json(V1UpdateWorkItemType {
-            workflow: Some(wf_b_id),
+            workflow: Some(Some(wf_b_id)),
             ..Default::default()
         }),
     )
@@ -2016,7 +2042,7 @@ async fn workflow_switch_guard_and_map_details() {
         AuthUser(owner),
         Path((slug.clone(), type_u)),
         Json(V1UpdateWorkItemType {
-            workflow: Some(foreign_wf_id),
+            workflow: Some(Some(foreign_wf_id)),
             ..Default::default()
         }),
     )
@@ -2053,4 +2079,268 @@ async fn workflow_switch_guard_and_map_details() {
 
     purge(&st.pool, &foreign_slug).await;
     purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn unlink_cross_workspace_and_switch_with_issues() {
+    let st = app_state().await;
+    let (slug_a, ws_a, project_a) = make_workspace(&st, "wfxa").await;
+    let (slug_b, ws_b, project_b) = make_workspace(&st, "wfxb").await;
+    let (owner_a,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug_a)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner A");
+    let (owner_b,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug_b)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner B");
+
+    // Workspace B: workflow + type enabled di project B.
+    let (_, wf_b) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner_b),
+        Path(slug_b.clone()),
+        Json(WorkflowBody {
+            name: Some("B Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("B workflow");
+    let wf_b_id = Uuid::parse_str(wf_b["id"].as_str().unwrap()).unwrap();
+    let _ = create_state(
+        State(st.clone()),
+        AuthUser(owner_b),
+        Path((slug_b.clone(), wf_b_id)),
+        Json(WorkflowStateBody {
+            name: Some("B New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("B state");
+    let (type_b,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Type B', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(wf_b_id)
+    .bind(ws_b)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type B");
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner_b),
+        Path((slug_b.clone(), project_b)),
+        Json(json!({"work_item_types": [type_b]})),
+    )
+    .await
+    .expect("import B");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Admin A tidak boleh men-unlink project B (cross-workspace) → 404.
+    let (status, _) = unlink_type(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), project_b, type_b)),
+    )
+    .await
+    .expect("cross-workspace unlink");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (b_link_live, b_mirror_live): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM project_issue_types \
+                 WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM states \
+                 WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_b)
+    .bind(type_b)
+    .fetch_one(&st.pool)
+    .await
+    .expect("B data");
+    assert_eq!(b_link_live, 1, "data workspace B tidak boleh berubah");
+    assert_eq!(b_mirror_live, 1);
+
+    // Workspace A: dua workflow; type T pakai workflow A1, enabled di project A.
+    let (_, wf_a1) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path(slug_a.clone()),
+        Json(WorkflowBody {
+            name: Some("A Workflow 1".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("A workflow 1");
+    let wf_a1_id = Uuid::parse_str(wf_a1["id"].as_str().unwrap()).unwrap();
+    let _ = create_state(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), wf_a1_id)),
+        Json(WorkflowStateBody {
+            name: Some("A1 New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("A1 state");
+    let (_, wf_a2) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path(slug_a.clone()),
+        Json(WorkflowBody {
+            name: Some("A Workflow 2".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("A workflow 2");
+    let wf_a2_id = Uuid::parse_str(wf_a2["id"].as_str().unwrap()).unwrap();
+    let _ = create_state(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), wf_a2_id)),
+        Json(WorkflowStateBody {
+            name: Some("A2 New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("A2 state");
+    let (type_t,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Type T', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(wf_a1_id)
+    .bind(ws_a)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type T");
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), project_a)),
+        Json(json!({"work_item_types": [type_t]})),
+    )
+    .await
+    .expect("import T");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Live issue bertipe T memblokir switch workflow.
+    let (state_id,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL LIMIT 1",
+    )
+    .bind(project_a)
+    .bind(type_t)
+    .fetch_one(&st.pool)
+    .await
+    .expect("T mirror");
+    let (issue_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
+         sort_order, sequence_id, state_id, type_id, project_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Live work', '<p></p>', '{}', 'none', true, \
+         65535, (SELECT COALESCE(MAX(sequence_id), 0) + 1000 FROM issues WHERE project_id = $2), \
+         $1, $4, $2, $3, now(), now()) RETURNING id",
+    )
+    .bind(state_id)
+    .bind(project_a)
+    .bind(ws_a)
+    .bind(type_t)
+    .fetch_one(&st.pool)
+    .await
+    .expect("live issue");
+
+    let (status, body) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), type_t)),
+        Json(V1UpdateWorkItemType {
+            workflow: Some(Some(wf_a2_id)),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("switch with live issues");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Cannot change the workflow while the type has live work items"
+    );
+
+    // Project-scope DELETE: 400 saat issue hidup, 204 setelah issue ditutup.
+    let (status, body) = delete_project(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), project_a, type_t)),
+    )
+    .await
+    .expect("delete in use");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Type is in use by work items");
+
+    sqlx::query("UPDATE issues SET deleted_at = now() WHERE id = $1")
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("close issue");
+
+    let (status, _) = delete_project(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), project_a, type_t)),
+    )
+    .await
+    .expect("detach T");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (link_live, mirror_live): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM project_issue_types \
+                 WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM states \
+                 WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_a)
+    .bind(type_t)
+    .fetch_one(&st.pool)
+    .await
+    .expect("detached T");
+    assert_eq!(link_live, 0);
+    assert_eq!(mirror_live, 0);
+    let (status, _) = delete_project(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path((slug_a.clone(), project_a, type_t)),
+    )
+    .await
+    .expect("detach T again");
+    assert_eq!(status, StatusCode::NO_CONTENT, "delete kedua idempotent");
+
+    // Epic tidak boleh punya workflow.
+    let (status, body) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner_a),
+        Path(slug_a.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Epic Type".into()),
+            is_epic: Some(true),
+            workflow: Some(wf_a1_id),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("epic with workflow");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Epic types cannot have a workflow");
+
+    purge(&st.pool, &slug_b).await;
+    purge(&st.pool, &slug_a).await;
 }
