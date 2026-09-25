@@ -4696,6 +4696,99 @@
           "notes": "MISMATCH keys + gate: verified WebhookLogsEndpoint.get (base.py:126-129) vs list_logs (webhook.rs:131-148, main.rs:1092): Django 200 array WebhookLogSerializer fields=__all__ (serializers/webhook.py:98-102; workspace,webhook,event_type,request_method,request_headers,request_body,response_status,response_headers,response_body) vs Rust 200 array 2-key {id,event_type} (webhook.rs:143-147); Django webhook_id == main.rs :webhook_id verbatim; empty filter -> [] both, no miss path; ADMIN-only gate (base.py:125) vs _auth-only unused (webhook.rs:133); no FE caller found -> fe_evidence [] | F6f: full __all__ log rows + ADMIN gate."
         }
       ]
+    },
+    "workflow": {
+      "rust_module": "routes/workflow.rs",
+      "endpoints": [
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/workflows/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::list_workflows",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/workflows/:workflow_id/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::retrieve_workflow",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/workflows/:workflow_id/states/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::list_states",
+          "out_scope": false
+        },
+        {
+          "methods": ["PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::patch_state",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/workflows/:workflow_id/transitions/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::list_transitions",
+          "out_scope": false
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/workflows/:workflow_id/transitions/:transition_id/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::delete_transition",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET", "POST"],
+          "path": "/api/workspaces/:slug/work-item-types/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::v1::work_item_type::list_workspace",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET", "PATCH", "DELETE"],
+          "path": "/api/workspaces/:slug/work-item-types/:pk/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::v1::work_item_type::retrieve_workspace",
+          "out_scope": false
+        },
+        {
+          "methods": ["POST"],
+          "path": "/api/workspaces/:slug/projects/:project_id/import-work-item-types/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::v1::work_item_type::import_to_project",
+          "out_scope": false
+        },
+        {
+          "methods": ["DELETE"],
+          "path": "/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::unlink_type",
+          "out_scope": false
+        },
+        {
+          "methods": ["GET"],
+          "path": "/api/workspaces/:slug/projects/:project_id/workflow-map/",
+          "django_source": "n/a (fitur baru)",
+          "rust_status": "implemented",
+          "rust_handler": "routes::workflow::workflow_map",
+          "out_scope": false
+        }
+      ]
     }
   }
 }

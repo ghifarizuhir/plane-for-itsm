@@ -654,6 +654,56 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
+        // Work item types + workflows (workspace-level, opt-in per project).
+        .route(
+            "/api/workspaces/:slug/workflows/",
+            get(routes::workflow::list_workflows).post(routes::workflow::create_workflow),
+        )
+        .route(
+            "/api/workspaces/:slug/workflows/:workflow_id/",
+            get(routes::workflow::retrieve_workflow)
+                .patch(routes::workflow::patch_workflow)
+                .delete(routes::workflow::delete_workflow),
+        )
+        .route(
+            "/api/workspaces/:slug/workflows/:workflow_id/states/",
+            get(routes::workflow::list_states).post(routes::workflow::create_state),
+        )
+        .route(
+            "/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/",
+            patch(routes::workflow::patch_state).delete(routes::workflow::delete_state),
+        )
+        .route(
+            "/api/workspaces/:slug/workflows/:workflow_id/transitions/",
+            get(routes::workflow::list_transitions).post(routes::workflow::create_transition),
+        )
+        .route(
+            "/api/workspaces/:slug/workflows/:workflow_id/transitions/:transition_id/",
+            delete(routes::workflow::delete_transition),
+        )
+        .route(
+            "/api/workspaces/:slug/work-item-types/",
+            get(routes::v1::work_item_type::list_workspace)
+                .post(routes::v1::work_item_type::create_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/work-item-types/:pk/",
+            get(routes::v1::work_item_type::retrieve_workspace)
+                .patch(routes::v1::work_item_type::update_workspace)
+                .delete(routes::v1::work_item_type::delete_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/import-work-item-types/",
+            post(routes::v1::work_item_type::import_to_project),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/work-item-types/:pk/",
+            delete(routes::workflow::unlink_type),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/workflow-map/",
+            get(routes::workflow::workflow_map),
+        )
         // Services (ITSM catalog + dependency DAG + work-item links).
         // Session auth; project-scoped. GET = any active member (incl.
         // guest), writes = project ADMIN/MEMBER. Bodies/error strings follow
