@@ -216,10 +216,25 @@ pub(crate) async fn ensure_project_workflows(
 
 type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 
-fn is_integrity_err(e: &sqlx::Error) -> bool {
-    e.as_database_error()
-        .and_then(|d| d.code())
-        .map(|c| is_integrity_error(c.as_ref()))
+/// Duplikat nama workflow saja. Django membuat
+/// `workflow_unique_name_workspace_when_deleted_at_null` sebagai partial unique
+/// index (`apps/api/plane/db/models/workflow.py:28-34`), dan PostgreSQL
+/// melaporkan namanya lewat field constraint saat index itu dilanggar. Error
+/// kelas 23 lain (FK/check) tidak boleh dilabeli "sudah ada". Fallback: kalau
+/// driver tidak mengekspos nama constraint, pakai pemetaan kelas-23 lama.
+fn is_duplicate_workflow_name(e: &sqlx::Error) -> bool {
+    let Some(db) = e.as_database_error() else {
+        return false;
+    };
+    if let Some(constraint) = db
+        .try_downcast_ref::<sqlx::postgres::PgDatabaseError>()
+        .and_then(|pg| pg.constraint())
+    {
+        return constraint == "workflow_unique_name_workspace_when_deleted_at_null";
+    }
+    db.code()
+        .as_deref()
+        .map(is_integrity_error)
         .unwrap_or(false)
 }
 
@@ -288,7 +303,8 @@ pub async fn list_workflows(
     let rows: Vec<WorkflowRow> = sqlx::query_as(
         "SELECT w.id, w.name, w.description, w.is_active, w.workspace_id, w.created_at, w.updated_at \
          FROM workflows w JOIN workspaces ws ON ws.id = w.workspace_id \
-         WHERE ws.slug = $1 AND w.deleted_at IS NULL ORDER BY w.created_at",
+         WHERE ws.slug = $1 AND ws.deleted_at IS NULL AND w.deleted_at IS NULL \
+         ORDER BY w.created_at DESC",
     )
     .bind(&slug)
     .fetch_all(&st.pool)
@@ -313,7 +329,7 @@ pub async fn create_workflow(
         Ok(name) => name,
         Err(e) => return Ok(bad(&e)),
     };
-    let inserted: Result<WorkflowRow, sqlx::Error> = sqlx::query_as(
+    let inserted: Result<Option<WorkflowRow>, sqlx::Error> = sqlx::query_as(
         "INSERT INTO workflows (id, name, description, is_active, workspace_id, \
          created_by_id, updated_by_id, created_at, updated_at) \
          SELECT gen_random_uuid(), $1, COALESCE($2, ''), COALESCE($3, true), w.id, $4, $4, now(), now() \
@@ -325,11 +341,14 @@ pub async fn create_workflow(
     .bind(body.is_active)
     .bind(auth.0)
     .bind(&slug)
-    .fetch_one(&st.pool)
+    .fetch_optional(&st.pool)
     .await;
     match inserted {
-        Ok(row) => Ok((StatusCode::CREATED, Json(workflow_json(&row)))),
-        Err(e) if is_integrity_err(&e) => Ok(bad("Workflow with this name already exists")),
+        Ok(Some(row)) => Ok((StatusCode::CREATED, Json(workflow_json(&row)))),
+        Ok(None) => Ok(missing()),
+        Err(e) if is_duplicate_workflow_name(&e) => {
+            Ok(bad("Workflow with this name already exists"))
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -346,7 +365,7 @@ pub async fn retrieve_workflow(
     let row: Option<WorkflowRow> = sqlx::query_as(
         "SELECT w.id, w.name, w.description, w.is_active, w.workspace_id, w.created_at, w.updated_at \
          FROM workflows w JOIN workspaces ws ON ws.id = w.workspace_id \
-         WHERE w.id = $1 AND ws.slug = $2 AND w.deleted_at IS NULL",
+         WHERE w.id = $1 AND ws.slug = $2 AND ws.deleted_at IS NULL AND w.deleted_at IS NULL",
     )
     .bind(workflow_id)
     .bind(&slug)
@@ -378,7 +397,7 @@ pub async fn patch_workflow(
         },
         None => None,
     };
-    let updated: Result<WorkflowRow, sqlx::Error> = sqlx::query_as(
+    let updated: Result<Option<WorkflowRow>, sqlx::Error> = sqlx::query_as(
         "UPDATE workflows SET name = COALESCE($3, name), description = COALESCE($4, description), \
          is_active = COALESCE($5, is_active), updated_by_id = $6, updated_at = now() \
          WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL \
@@ -390,11 +409,14 @@ pub async fn patch_workflow(
     .bind(&body.description)
     .bind(body.is_active)
     .bind(auth.0)
-    .fetch_one(&st.pool)
+    .fetch_optional(&st.pool)
     .await;
     match updated {
-        Ok(row) => Ok((StatusCode::OK, Json(workflow_json(&row)))),
-        Err(e) if is_integrity_err(&e) => Ok(bad("Workflow with this name already exists")),
+        Ok(Some(row)) => Ok((StatusCode::OK, Json(workflow_json(&row)))),
+        Ok(None) => Ok(missing()),
+        Err(e) if is_duplicate_workflow_name(&e) => {
+            Ok(bad("Workflow with this name already exists"))
+        }
         Err(e) => Err(e.into()),
     }
 }

@@ -1,7 +1,8 @@
 use api::middleware::auth::AuthUser;
 use api::routes::workflow::{
     allowed_target_state_ids, create_workflow, delete_workflow, list_workflows,
-    materialize_type_states, validate_name, validate_state_group, WorkflowBody,
+    materialize_type_states, patch_workflow, retrieve_workflow, validate_name,
+    validate_state_group, WorkflowBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -243,7 +244,7 @@ async fn make_workspace(st: &AppState, prefix: &str) -> (String, Uuid, Uuid) {
 #[tokio::test]
 async fn workflow_crud_roundtrip() {
     let st = app_state().await;
-    let (slug, _ws_id, _project_id) = make_workspace(&st, "wfcrud").await;
+    let (slug, ws_id, _project_id) = make_workspace(&st, "wfcrud").await;
 
     let (status, _created) = create_workflow(
         State(st.clone()),
@@ -280,19 +281,121 @@ async fn workflow_crud_roundtrip() {
     .await
     .expect("create");
     assert_eq!(status, StatusCode::CREATED);
-    let workflow_id = created["id"].as_str().expect("id").to_string();
+    assert_eq!(created["description"], "ITIL incident");
+    assert_eq!(created["is_active"], true);
+    let workflow_id = Uuid::parse_str(created["id"].as_str().expect("id")).expect("uuid");
+
+    // Nama duplikat → 400 dengan pesan duplikat, bukan error integritas lain.
+    let (status, duplicate) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Incident Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("duplicate create");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(duplicate["error"], "Workflow with this name already exists");
+
+    // PATCH description "" + is_active false, lalu retrieve harus konsisten.
+    let (status, patched) = patch_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowBody {
+            name: None,
+            description: Some(String::new()),
+            is_active: Some(false),
+        }),
+    )
+    .await
+    .expect("patch");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(patched["description"], "");
+    assert_eq!(patched["is_active"], false);
+
+    let (status, fetched) = retrieve_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("retrieve");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fetched["description"], "");
+    assert_eq!(fetched["is_active"], false);
+
+    // Workflow kedua sengaja dibuat lebih lama → list harus DESC (baru dulu).
+    let (status, _second) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Second Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("create second");
+    assert_eq!(status, StatusCode::CREATED);
+    let (second_id,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM workflows WHERE workspace_id = $1 AND name = 'Second Workflow'",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("second id");
+    sqlx::query("UPDATE workflows SET created_at = now() - interval '1 day' WHERE id = $1")
+        .bind(second_id)
+        .execute(&st.pool)
+        .await
+        .expect("age second workflow");
 
     let (status, list) = list_workflows(State(st.clone()), AuthUser(owner), Path(slug.clone()))
         .await
         .expect("list");
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list.as_array().expect("array").len(), 1);
+    let list = list.as_array().expect("array");
+    assert_eq!(list.len(), 2);
     assert_eq!(list[0]["name"], "Incident Workflow");
+    assert_eq!(list[1]["name"], "Second Workflow");
 
+    // Workflow yang masih dipakai issue type hidup → 400.
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, workflow_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Incident', '', '{}', false, false, true, 0, $1, $2, now(), now())",
+    )
+    .bind(ws_id)
+    .bind(workflow_id)
+    .execute(&st.pool)
+    .await
+    .expect("issue type in use");
+    let (status, in_use) = delete_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+    )
+    .await
+    .expect("delete in use");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(in_use["error"], "Workflow is in use by a work item type");
+
+    // Soft-delete issue type → workflow boleh dihapus.
+    sqlx::query("UPDATE issue_types SET deleted_at = now() WHERE workflow_id = $1")
+        .bind(workflow_id)
+        .execute(&st.pool)
+        .await
+        .expect("detach issue type");
     let (status, _) = delete_workflow(
         State(st.clone()),
         AuthUser(owner),
-        Path((slug.clone(), Uuid::parse_str(&workflow_id).unwrap())),
+        Path((slug.clone(), workflow_id)),
     )
     .await
     .expect("delete");
@@ -301,9 +404,21 @@ async fn workflow_crud_roundtrip() {
     let (_, list) = list_workflows(State(st.clone()), AuthUser(owner), Path(slug.clone()))
         .await
         .expect("list after delete");
-    assert!(list.as_array().expect("array").is_empty());
+    let list = list.as_array().expect("array");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["name"], "Second Workflow");
 
     purge(&st.pool, &slug).await;
+    let (workflows_left, types_left): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM workflows WHERE workspace_id = $1), \
+                (SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1)",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("scratch rows");
+    assert_eq!(workflows_left, 0);
+    assert_eq!(types_left, 0);
 }
 
 #[tokio::test]
