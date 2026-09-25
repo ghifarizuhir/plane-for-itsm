@@ -51,4 +51,5 @@ pub mod versions;
 pub mod view;
 pub mod webhook;
 pub mod work_item;
+pub mod workflow;
 pub mod workspace;
