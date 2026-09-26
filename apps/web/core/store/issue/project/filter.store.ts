@@ -28,8 +28,6 @@ import { IssueFilterHelperStore } from "../helpers/issue-filter-helper.store";
 // types
 import type { IIssueRootStore } from "../root.store";
 import { ProjectService } from "@/services/project";
-// helpers
-import { getSingleWorkItemTypeId, resolveTypedWorkflowGroupBy } from "@/store/workflow.helpers";
 // constants
 // services
 
@@ -100,30 +98,11 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
   }
 
   getIssueFilters(projectId: string) {
-    const storedFilters = this.filters[projectId] || undefined;
-    if (isEmpty(storedFilters)) return undefined;
+    const displayFilters = this.filters[projectId] || undefined;
+    if (isEmpty(displayFilters)) return undefined;
 
-    return this.computedIssueFilters(this.applyTypedWorkflowGroupBy(projectId, storedFilters));
+    return this.computedIssueFilters(displayFilters);
   }
-
-  /**
-   * Board default utk project yang punya workflow-map: kolom = 5 group saat
-   * type campuran, kolom state type saat difilter satu type. Hanya nilai
-   * group_by default (null / "state") yang ditimpa; pilihan user lain tetap.
-   */
-  private applyTypedWorkflowGroupBy = (projectId: string, filters: IIssueFilters): IIssueFilters => {
-    const displayFilters = filters.displayFilters;
-    if (!displayFilters || displayFilters.layout !== "kanban") return filters;
-
-    const groupBy = resolveTypedWorkflowGroupBy(
-      displayFilters.group_by,
-      this.rootIssueStore.rootStore.workflow.getWorkflowMap(projectId),
-      getSingleWorkItemTypeId(filters)
-    );
-    if (groupBy === (displayFilters.group_by ?? null)) return filters;
-
-    return { ...filters, displayFilters: { ...displayFilters, group_by: groupBy } };
-  };
 
   getAppliedFilters(projectId: string) {
     const userFilters = this.getIssueFilters(projectId);

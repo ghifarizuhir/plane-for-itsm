@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IState, TWorkflowMapType } from "@plane/types";
+import type { IIssueFilters, IState, TWorkflowMapType } from "@plane/types";
 import {
   allowedTargetStateIds,
   buildTransitionMatrix,
@@ -7,7 +7,6 @@ import {
   getSingleWorkItemTypeId,
   isTypedState,
   resolveStateColumns,
-  resolveTypedWorkflowGroupBy,
 } from "./workflow.helpers";
 
 const mapType: TWorkflowMapType = {
@@ -128,34 +127,28 @@ describe("findWorkflowMapType", () => {
 });
 
 describe("getSingleWorkItemTypeId", () => {
-  it("mengembalikan type tunggal dari filters.issue_type", () => {
+  it("membaca satu type dari bentuk legacy filters.issue_type", () => {
     expect(getSingleWorkItemTypeId({ filters: { issue_type: ["type-1"] } })).toBe("type-1");
   });
 
-  it("null saat tidak ada filter type", () => {
+  it("null saat bentuk legacy tidak berisi tepat satu type", () => {
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: [] } })).toBeNull();
     expect(getSingleWorkItemTypeId({ filters: { issue_type: ["t-1", "t-2"] } })).toBeNull();
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: null } })).toBeNull();
     expect(getSingleWorkItemTypeId({ filters: {} })).toBeNull();
-    expect(getSingleWorkItemTypeId({ richFilters: {} })).toBeNull();
     expect(getSingleWorkItemTypeId(undefined)).toBeNull();
   });
-});
 
-describe("resolveTypedWorkflowGroupBy", () => {
-  it("default state/null jadi state group saat project punya type", () => {
-    expect(resolveTypedWorkflowGroupBy("state", { types: [mapType] })).toBe("state_detail.group");
-    expect(resolveTypedWorkflowGroupBy(null, { types: [mapType] })).toBe("state_detail.group");
-    expect(resolveTypedWorkflowGroupBy(undefined, { types: [mapType] })).toBe("state_detail.group");
-  });
-
-  it("menghormati group_by lain dan project tanpa tipe", () => {
-    expect(resolveTypedWorkflowGroupBy("priority", { types: [mapType] })).toBe("priority");
-    expect(resolveTypedWorkflowGroupBy("state", { types: [] })).toBe("state");
-    expect(resolveTypedWorkflowGroupBy("state", undefined)).toBe("state");
-  });
-
-  it("tidak menimpa saat difilter satu type", () => {
-    expect(resolveTypedWorkflowGroupBy("state", { types: [mapType] }, "type-1")).toBe("state");
-    expect(resolveTypedWorkflowGroupBy(null, { types: [mapType] }, "type-1")).toBeNull();
+  it("null untuk bentuk board saat ini (IIssueFilters tanpa field legacy)", () => {
+    // revamp rich filters menghapus filter type, jadi semua pemanggil board
+    // mengirim objek ini dan hasilnya selalu null sampai follow-up type filter.
+    const currentBoardFilters: IIssueFilters = {
+      richFilters: {},
+      displayFilters: { group_by: "state" },
+      displayProperties: {},
+      kanbanFilters: { group_by: [], sub_group_by: [] },
+    };
+    expect(getSingleWorkItemTypeId(currentBoardFilters)).toBeNull();
   });
 });
 

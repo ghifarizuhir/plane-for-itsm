@@ -1,36 +1,28 @@
-import type { IIssueFilterOptions, IState, TIssueGroupByOptions, TWorkflowMap, TWorkflowMapType } from "@plane/types";
+import type { IIssueFilterOptions, IIssueFilters, IState, TWorkflowMap, TWorkflowMapType } from "@plane/types";
 
 export const findWorkflowMapType = (
   map: TWorkflowMap | undefined,
   typeId: string | null | undefined
 ): TWorkflowMapType | undefined => (typeId ? map?.types.find((type) => type.type_id === typeId) : undefined);
 
-/**
- * Type tunggal aktif dari filter store. Filter board saat ini memakai rich
- * filters (tanpa key type), jadi pembacaan legacy `filters.issue_type` tetap
- * dipertahankan supaya kolom hybrid menyala begitu filter type tersedia.
- */
-export const getSingleWorkItemTypeId = (issueFilters: unknown): string | null => {
-  const filters = (issueFilters as { filters?: IIssueFilterOptions | null } | null | undefined)?.filters;
-  const typeIds = filters?.issue_type;
-  return typeIds?.length === 1 ? (typeIds[0] ?? null) : null;
-};
+type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
 
 /**
- * Default group_by board project bertipe. Campuran type memakai kolom group
- * (5 kolom) supaya state tiap type tidak menumpuk. `"state"`/null adalah
- * default lama yang boleh ditimpa; pilihan user lain dipertahankan.
+ * Type tunggal aktif dari bentuk **legacy** `filters.issue_type`. Revamp rich
+ * filters menghapus filter type dari board, jadi tidak ada jalur web yang
+ * mengisi bentuk ini saat ini: semua pemanggil board mengirim `IIssueFilters`
+ * (tanpa field `filters`) dan helper selalu mengembalikan `null`. Follow-up
+ * type filter harus mengarahkan pembacaan ini ke `richFilters`.
+ *
+ * Parameter menerima bentuk legacy maupun `IIssueFilters` supaya call site
+ * tidak perlu cast; probe `"filters" in ...` yang menentukan bentuknya.
  */
-export const resolveTypedWorkflowGroupBy = (
-  groupBy: TIssueGroupByOptions | undefined,
-  workflowMap: TWorkflowMap | undefined,
-  singleTypeId?: string | null
-): TIssueGroupByOptions => {
-  if (singleTypeId) return groupBy ?? null;
-  const hasTypedWorkflow = (workflowMap?.types.length ?? 0) > 0;
-  if (!hasTypedWorkflow) return groupBy ?? null;
-  const isDefaultGroupBy = groupBy === undefined || groupBy === null || groupBy === "state";
-  return isDefaultGroupBy ? "state_detail.group" : groupBy;
+export const getSingleWorkItemTypeId = (
+  issueFilters: TLegacyIssueFilterBag | IIssueFilters | null | undefined
+): string | null => {
+  if (!issueFilters || !("filters" in issueFilters)) return null;
+  const typeIds = issueFilters.filters?.issue_type;
+  return typeIds?.length === 1 ? (typeIds[0] ?? null) : null;
 };
 
 /** State tujuan yang diizinkan dari `currentStateId` (mirror ids). */
