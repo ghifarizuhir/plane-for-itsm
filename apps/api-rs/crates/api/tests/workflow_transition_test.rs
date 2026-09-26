@@ -5,6 +5,7 @@ use api::routes::draft::{
 use api::routes::issue_common::resolve_issue_state;
 use api::routes::issue_update::{patch_issue, PatchIssue};
 use api::routes::issue_write::{create as create_issue, CreateIssue};
+use api::routes::v1::work_item::{create as v1_create, update as v1_update, V1WriteWorkItem};
 use api::routes::v1::work_item_type::import_to_project;
 use api::routes::workflow::{
     create_state, create_transition, create_workflow, evaluate_transition, TransitionBody,
@@ -2082,6 +2083,300 @@ async fn draft_convert_drops_kept_state_of_other_type() {
         "kept state type Y harus diganti default type X"
     );
     assert_ne!(stored_state, Some(y.state("Todo")));
+
+    purge(&st.pool, &slug).await;
+}
+
+// --- DB-backed v1 public API write enforcement (C5) ------------------------
+
+async fn v1_update_issue(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    issue_id: Uuid,
+    body: V1WriteWorkItem,
+) -> (StatusCode, Value) {
+    let (status, Json(payload)) = v1_update(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id, issue_id)),
+        Json(body),
+    )
+    .await
+    .expect("v1 update");
+    (status, payload)
+}
+
+#[tokio::test]
+async fn v1_update_enforces_transitions() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfv1upd").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let a = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[
+            ("New", "backlog"),
+            ("In Progress", "started"),
+            ("Closed", "completed"),
+        ],
+        &[("New", "In Progress")],
+    )
+    .await;
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "v1 issue",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+
+    // New → Closed tidak terdaftar → 400 + allowed persis In Progress.
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("Closed")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(
+        body["allowed_state_ids"],
+        json!([a.state("In Progress").to_string()])
+    );
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(
+        stored_state,
+        Some(a.state("New")),
+        "update yang ditolak tidak boleh menyentuh state"
+    );
+
+    // New → In Progress terdaftar → 200 dan tersimpan.
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("In Progress")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("In Progress")));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn v1_update_type_change_reconciles_state() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfv1tc").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let a = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[
+            ("New", "backlog"),
+            ("In Progress", "started"),
+            ("Closed", "completed"),
+        ],
+        &[("New", "In Progress")],
+    )
+    .await;
+    let b = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Service Request",
+        &[("Todo", "backlog"), ("Done", "completed")],
+        &[("Todo", "Done")],
+    )
+    .await;
+
+    // Ganti type + state milik type LAMA → 400, row tidak berubah.
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed one",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            type_id: Some(b.type_id),
+            state: Some(a.state("New")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("New")));
+
+    // Ganti type + state valid milik type BARU: tanpa cek transisi (B.Done
+    // tidak terjangkau dari workflow A).
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            type_id: Some(b.type_id),
+            state: Some(b.state("Done")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(b.type_id));
+    assert_eq!(stored_state, Some(b.state("Done")));
+
+    // Ganti type tanpa state → default type baru.
+    let moved = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed two",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        moved,
+        V1WriteWorkItem {
+            type_id: Some(b.type_id),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (stored_type, stored_state) = issue_type_state(&st, moved).await;
+    assert_eq!(stored_type, Some(b.type_id));
+    assert_eq!(stored_state, Some(b.state("Todo")));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn v1_create_type_aware_default_and_state() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfv1create").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let type_a = insert_issue_type(&st, ws_id, "Incident", false).await;
+    let state_a = insert_typed_state(
+        &st, project_id, ws_id, type_a, "New", "new", 10000.0, "backlog", true,
+    )
+    .await;
+    let type_b = insert_issue_type(&st, ws_id, "Problem", false).await;
+    let state_b = insert_typed_state(
+        &st, project_id, ws_id, type_b, "TriageB", "triage-b", 10000.0, "backlog", true,
+    )
+    .await;
+    for t in [type_a, type_b] {
+        let (status, _) = import_to_project(
+            State(st.clone()),
+            AuthUser(owner),
+            Path((slug.clone(), project_id)),
+            Json(json!({"work_item_types": [t]})),
+        )
+        .await
+        .expect("import");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    // State milik type B dikirim dengan type A → 400 type message.
+    let (status, body) = v1_create(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(V1WriteWorkItem {
+            name: Some("Server down".into()),
+            state: Some(state_b),
+            type_id: Some(type_a),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("v1 create cross-type state");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+
+    // Type tanpa state → default milik type (bukan default legacy).
+    let (status, Json(issue)) = v1_create(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(V1WriteWorkItem {
+            name: Some("Server up".into()),
+            type_id: Some(type_a),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("v1 create typed");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(state_a));
 
     purge(&st.pool, &slug).await;
 }

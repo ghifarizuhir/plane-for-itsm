@@ -7,7 +7,7 @@ use sqlx::{Postgres, QueryBuilder};
 use crate::routes::issue_archive_one::guard_archive_one_group;
 use crate::routes::issue_common::{
     fetch_guest_scoped, fetch_project_member_role, is_workspace_admin, page_window, parse_date,
-    project_gate_allows, replace_bridges, require_project_write, resolve_effective_state,
+    project_gate_allows, replace_bridges, require_project_write, resolve_issue_state,
     IssueDetailRow, IssueListRow, PageWindow,
 };
 use crate::routes::issue_query::{build_ungrouped_envelope, DETAIL_SELECT_SQL, LIST_SELECT_SQL};
@@ -15,6 +15,9 @@ use crate::routes::project::{deny, missing};
 use crate::routes::v1::common::PageParams;
 use crate::routes::v1::pql::{parse_v1_pql, push_pql_where, V1Pql};
 use crate::routes::work_item::ws_active_member;
+use crate::routes::workflow::{
+    transition_denied, validate_initial_transition, validate_state_transition,
+};
 
 /// Serialize a list row and add the SDK-key aliases `assignees`/`labels`
 /// (the fork's rows carry `assignee_ids`/`label_ids`). `WorkItemDetail`'s
@@ -672,11 +675,18 @@ fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {
     )
 }
 
+/// `state_type_check`: `Some(effective_type)` asks for the type-aware state
+/// predicate shared with the C4 create path — a live non-triage state may be
+/// owned by `effective_type` or be a legacy untyped state (`type_id IS NULL`);
+/// states of another type → 400 `State is not valid for this work item type`.
+/// `None` keeps only the project/live/non-triage check, so untyped/epic and
+/// unchanged-type updates keep their free state movement.
 async fn validate_write(
     st: &AppState,
     project_id: uuid::Uuid,
     body: &V1WriteWorkItem,
     require_name: bool,
+    state_type_check: Option<Option<uuid::Uuid>>,
 ) -> Result<(), (StatusCode, Json<Value>)> {
     let bad = |msg: String| (StatusCode::BAD_REQUEST, Json(json!({"error": msg})));
     match body.name.as_deref() {
@@ -719,10 +729,31 @@ async fn validate_write(
         }
     }
     if let Some(state_id) = body.state {
-        let (ok,): (bool,) = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false)")
-            .bind(state_id).bind(project_id).fetch_one(&st.pool).await.map_err(internal)?;
-        if !ok {
+        // Two-stage check in one round trip (same shape/predicate as the C4
+        // create path, `issue_write.rs::validate_create_refs`): (1) the state
+        // is a live, non-triage state of this project — legacy message;
+        // (2) when the caller asks for it, the state belongs to the effective
+        // type OR is a legacy untyped state (`type_id IS NULL`), which stays
+        // valid for typed work items.
+        let (valid, type_ok): (bool, bool) = sqlx::query_as(
+            "SELECT \
+             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false), \
+             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false \
+               AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .bind(state_type_check.flatten())
+        .fetch_one(&st.pool)
+        .await
+        .map_err(internal)?;
+        if !valid {
             return Err(bad("State is not valid please pass a valid state_id".into()));
+        }
+        if state_type_check.is_some() && !type_ok {
+            return Err(bad("State is not valid for this work item type".into()));
         }
     }
     if let Some(ep) = body.estimate_point {
@@ -766,18 +797,14 @@ pub async fn create(
             Json(json!({"error": "Project not found"})),
         ));
     }
-    if let Err(e) = validate_write(&st, project_id, &body, true).await {
+    if let Err(e) = validate_write(&st, project_id, &body, true, Some(body.type_id)).await {
         return Ok(e);
     }
     let name = body.name.clone().unwrap_or_default();
 
-    let (default_state, first_state): (Option<uuid::Uuid>, Option<uuid::Uuid>) = (
-        sqlx::query_scalar("SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true ORDER BY created_at ASC LIMIT 1")
-            .bind(project_id).fetch_optional(&st.pool).await?,
-        sqlx::query_scalar("SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false ORDER BY created_at ASC LIMIT 1")
-            .bind(project_id).fetch_optional(&st.pool).await?,
-    );
-    let state_id = resolve_effective_state(body.state, default_state, first_state);
+    // Shared type-aware resolver: explicit → the type's default/first mirror →
+    // the legacy untyped default/first (no inline typed default query).
+    let state = resolve_issue_state(&st.pool, project_id, body.type_id, body.state).await?;
     let start_date = match parse_date(&body.start_date) {
         Ok(v) => v,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
@@ -816,7 +843,7 @@ pub async fn create(
     .bind(&name).bind(&html).bind(body.description_stripped.as_deref())
     .bind(&priority).bind(start_date).bind(target_date)
     .bind(body.is_draft.unwrap_or(false)).bind(body.sort_order)
-    .bind(project_id).bind(sequence as i32).bind(state_id).bind(auth.0)
+    .bind(project_id).bind(sequence as i32).bind(state).bind(auth.0)
     .bind(body.point).bind(body.estimate_point).bind(body.type_id).bind(body.parent)
     .bind(body.external_source.as_deref()).bind(body.external_id.as_deref())
     .bind(&slug)
@@ -872,20 +899,37 @@ pub async fn update(
     {
         return Ok(deny());
     }
-    let exists: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT i.id FROM issues i LEFT JOIN states s ON s.id = i.state_id \
+    let current: Option<(uuid::Uuid, Option<uuid::Uuid>, Option<uuid::Uuid>)> = sqlx::query_as(
+        "SELECT i.id, i.state_id, i.type_id FROM issues i LEFT JOIN states s ON s.id = i.state_id \
          WHERE i.id = $1 AND i.project_id = $2 AND i.workspace_id = (SELECT id FROM workspaces WHERE slug = $3) \
          AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false \
          AND (s.id IS NULL OR s.\"group\" != 'triage') \
          AND EXISTS(SELECT 1 FROM projects p WHERE p.id = $2 AND p.deleted_at IS NULL AND p.archived_at IS NULL)",
     ).bind(pk).bind(project_id).bind(&slug).fetch_optional(&st.pool).await?;
-    if exists.is_none() {
+    let Some((_id, current_state, current_type)) = current else {
         return Ok((
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Issue not found"})),
         ));
-    }
-    if let Err(e) = validate_write(&st, project_id, &body, false).await {
+    };
+    // C3 semantics for type changes: a type change skips transition checks but
+    // the effective (new) type still gates an explicit state, while an
+    // unchanged type keeps the legacy check-only path so the transition
+    // verdict owns cross-type rejection (`allowed_state_ids: []`).
+    let type_changed = match body.type_id {
+        Some(new_type) => Some(new_type) != current_type,
+        None => false,
+    };
+    let effective_type_id = body.type_id.or(current_type);
+    if let Err(e) = validate_write(
+        &st,
+        project_id,
+        &body,
+        false,
+        type_changed.then_some(effective_type_id),
+    )
+    .await
+    {
         return Ok(e);
     }
 
@@ -907,6 +951,44 @@ pub async fn update(
                 .filter(|s| !s.is_empty())
                 .map(wrap_stripped)
         });
+
+    // Final state resolution + transition enforcement: a type change carries
+    // the explicit state when it belongs to the new type (checked above) and
+    // otherwise auto-moves to the new type's default; an unchanged type
+    // enforces the workflow when the state actually moves, using the initial
+    // check while the issue has no current state. The resolved value is what
+    // the SET list writes.
+    let state_write: Option<Option<uuid::Uuid>> = if type_changed {
+        Some(match body.state {
+            Some(explicit) => Some(explicit),
+            None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+        })
+    } else {
+        if let Some(target) = body.state {
+            if Some(target) != current_state {
+                let verdict = match current_state {
+                    Some(current_state) => {
+                        validate_state_transition(
+                            &st.pool,
+                            project_id,
+                            effective_type_id,
+                            current_state,
+                            target,
+                        )
+                        .await?
+                    }
+                    None => {
+                        validate_initial_transition(&st.pool, project_id, effective_type_id, target)
+                            .await?
+                    }
+                };
+                if let Err(allowed) = verdict {
+                    return Ok(transition_denied(allowed));
+                }
+            }
+        }
+        body.state.map(Some)
+    };
 
     // Only fields present in the JSON body are written (`COALESCE` cannot set
     // an explicit NULL back), so the SET list and its positional binds are
@@ -955,13 +1037,8 @@ pub async fn update(
             BindValue::Date(target_date),
         );
     }
-    if body.state.is_some() {
-        add(
-            &mut sets,
-            &mut values,
-            "state_id",
-            BindValue::Uuid(body.state),
-        );
+    if let Some(state) = state_write {
+        add(&mut sets, &mut values, "state_id", BindValue::Uuid(state));
     }
     if body.type_id.is_some() {
         add(
