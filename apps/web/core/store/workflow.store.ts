@@ -230,6 +230,7 @@ export class WorkflowStore implements IWorkflowStore {
     runInAction(() => {
       this.workItemTypes = [...(this.workItemTypes ?? []), type];
     });
+    await this.refreshWorkflowMaps(workspaceSlug, type.project_ids);
     return type;
   };
 
