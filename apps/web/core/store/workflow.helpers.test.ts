@@ -34,8 +34,18 @@ describe("allowedTargetStateIds", () => {
     expect(allowedTargetStateIds(mapType, "legacy-state")).toEqual(["s-new"]);
   });
 
+  it("state sekarang null memakai default", () => {
+    expect(allowedTargetStateIds(mapType, null)).toEqual(["s-new"]);
+  });
+
   it("tanpa map mengembalikan kosong", () => {
     expect(allowedTargetStateIds(undefined, "s-new")).toEqual([]);
+  });
+
+  it("tanpa default state mengembalikan kosong untuk state tak dikenal", () => {
+    const noDefault: TWorkflowMapType = { ...mapType, default_state_id: null };
+    expect(allowedTargetStateIds(noDefault, "legacy-state")).toEqual([]);
+    expect(allowedTargetStateIds(noDefault, null)).toEqual([]);
   });
 });
 
@@ -63,9 +73,18 @@ describe("resolveStateColumns", () => {
         project_id: "p",
       } as IState,
     ];
-    const columns = resolveStateColumns(projectStates, mapType);
+    const shuffledMapType: TWorkflowMapType = {
+      ...mapType,
+      states: [mapType.states[2], mapType.states[1], mapType.states[0]],
+    };
+    const columns = resolveStateColumns(projectStates, shuffledMapType);
     expect(columns.map((c) => c.id)).toEqual(["s-new", "s-closed"]);
+    expect(columns[0].name).toBe("New");
+    expect(columns[0].group).toBe("backlog");
     expect(columns[0].color).toBe("#60646C");
+    expect(columns[1].name).toBe("Closed");
+    expect(columns[1].group).toBe("completed");
+    expect(columns[1].color).toBe("#46A758");
   });
 
   it("tanpa map mengembalikan state apa adanya", () => {
@@ -77,6 +96,20 @@ describe("resolveStateColumns", () => {
 describe("buildTransitionMatrix", () => {
   it("membuat semua pasangan kecuali self dan menandai yang ada", () => {
     const matrix = buildTransitionMatrix([{ id: "a" }, { id: "b" }], [{ from_state_id: "a", to_state_id: "b" }]);
+    expect(matrix).toEqual([
+      { from_state_id: "a", to_state_id: "b", exists: true },
+      { from_state_id: "b", to_state_id: "a", exists: false },
+    ]);
+  });
+
+  it("transisi ke state tak dikenal tidak menandai pasangan apa pun", () => {
+    const matrix = buildTransitionMatrix(
+      [{ id: "a" }, { id: "b" }],
+      [
+        { from_state_id: "a", to_state_id: "b" },
+        { from_state_id: "a", to_state_id: "ghost" },
+      ]
+    );
     expect(matrix).toEqual([
       { from_state_id: "a", to_state_id: "b", exists: true },
       { from_state_id: "b", to_state_id: "a", exists: false },
