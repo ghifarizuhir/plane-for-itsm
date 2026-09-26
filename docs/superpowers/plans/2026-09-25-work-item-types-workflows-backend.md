@@ -3837,14 +3837,25 @@ git commit -m "feat(api-rs): enforce state transitions on issue patch"
 **Files:**
 
 - Modify: `apps/api-rs/crates/api/src/routes/issue_write.rs`
-- Modify: `apps/api-rs/crates/api/src/routes/draft.rs` (reconcile type pada draft→issue convert)
+- Modify: `apps/api-rs/crates/api/src/routes/draft.rs` (reconcile type + enforcement pada draft→issue convert)
+- Modify: `apps/api-rs/crates/api/src/routes/workflow.rs` (drive-by `ORDER BY sequence, created_at, id`)
 - Modify: `apps/api-rs/crates/api/tests/workflow_transition_test.rs`
 
 Catatan amandemen (temuan review C2): `create_draft_to_issue` saat ini me-resolve default dari `d.type_id` tetapi meng-bind `b.type_id` ke row issue, sehingga bisa terjadi mismatch type/state (issue type NULL + state typed, atau type U + state type T). Wajib diselesaikan di task ini:
 
 - Hitung satu `effective_type = b.type_id.or(d.type_id)` (atau tolak mismatch dengan 400, pilih salah satu dan dokumentasikan).
 - Pakai `effective_type` untuk resolve default state DAN untuk nilai `type_id` yang di-bind ke INSERT issue.
-- Tambahkan test: draft bertipe X + body tanpa type → issue memakai type X dan state default X; body type Y berbeda dari draft X → salah satu: 400 mismatch, atau issue type Y + state default Y (sesuai pilihan implementasi) — jangan sampai type/state beda sumber.
+- Enforcement transisi saat convert (spec §Enforcement: draft confirm termasuk):
+  - `effective_type` terisi dan state kosong → resolve default type (shared resolver).
+  - state eksplisit tidak cocok `effective_type` → 400 `State is not valid for this work item type`.
+  - type berubah dari `d.type_id` → tanpa cek transisi, state wajib milik type baru/default baru.
+  - type sama dan state berubah dari `d.state_id` → panggil `validate_state_transition` + `transition_denied(allowed)`.
+- Tambahkan test: draft bertipe X + body tanpa type → issue memakai type X dan state default X; body type Y berbeda dari draft X → issue type Y + state default Y (atau 400 mismatch, sesuai pilihan); state eksplisit beda type → 400; type sama + state berpindah tanpa transisi → 400.
+
+Catatan amandemen tambahan dari review C3:
+
+- Drive-by determinism: ubah `ORDER BY sequence, created_at` pada pairs query di `fetch_transition_context` (`workflow.rs`) menjadi `ORDER BY sequence, created_at, id` (tambahkan `workflow.rs` ke daftar file task ini).
+- Tambahkan test coverage type-change di PATCH (file yang sama): type change + state eksplisit valid milik type baru → 204 tanpa transisi; type change + state milik type lama → 400 `State is not valid for this work item type`; type change tanpa state → default type baru; `type_id: null` → fallback legacy; target cross-type pada patch type sama → 400 dengan `allowed_state_ids: []`; untyped legacy dan epic tetap bebas; explicit same-state no-op. Sertakan assertion bahwa type-change auto-move menulis activity `state`.
 
 - [ ] **Step 1: Tulis test DB yang gagal**
 
@@ -3914,7 +3925,7 @@ Di handler `create` (baris ~276), ubah pemanggilan menjadi:
 
 Run: `DATABASE_URL=postgres://plane:plane@localhost:5432/plane cargo test -p api --test workflow_transition_test`
 
-Expected: PASS (6 passed).
+Expected: PASS (semua hijau; jumlah test bertambah sesuai test baru dari catatan amandemen di atas — jangan terpaku angka).
 
 Run: `cargo test -p api --test issue_create_test`
 
@@ -3923,7 +3934,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/api-rs/crates/api/src/routes/issue_write.rs apps/api-rs/crates/api/tests/workflow_transition_test.rs
+git add apps/api-rs/crates/api/src/routes/issue_write.rs apps/api-rs/crates/api/src/routes/draft.rs apps/api-rs/crates/api/src/routes/workflow.rs apps/api-rs/crates/api/tests/workflow_transition_test.rs
 git commit -m "feat(api-rs): validate typed state on issue create"
 ```
 
