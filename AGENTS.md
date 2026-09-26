@@ -39,7 +39,7 @@ Stack backend berjalan dikelola `docker-compose-local.yml` (via systemd `plane-b
 
 - Rebuild setelah mengubah `apps/api-rs`:
   `docker compose -f docker-compose-local.yml up -d --build api worker beat-worker`
-- Build Rust memakai LTO (`-C lto -C codegen-units=1`): tahap link bisa 10+ menit TANPA output sama sekali — bukan hang, jangan abort. Jalankan detached ke file log lalu poll, jangan pipe ke `tail`/buffer (terlihat seperti menggantung).
+- Build Rust memakai LTO (`-C lto -C codegen-units=1`): tahap link bisa 10+ menit TANPA output sama sekali — bukan hang, jangan abort. Jalankan detached ke file log lalu poll, jangan pipe ke `tail`/buffer (terlihat seperti menggantung). Gunakan `setsid` untuk detached build agar tidak ikut terbunuh saat tool call timeout: `setsid docker compose -f docker-compose-local.yml up -d --build api worker beat-worker > /tmp/plane-api-build.log 2>&1 < /dev/null &`.
 - Verifikasi setelah rebuild: `curl http://localhost:8000/health` → 200, lalu restart live (ia memegang koneksi Redis yang ikut ter-recreate):
   `systemctl --user restart plane-live.service && curl http://localhost:3100/live/health/`
 - Jika `plane-backend.service` berstatus failed: `systemctl --user reset-failed plane-backend.service`.
