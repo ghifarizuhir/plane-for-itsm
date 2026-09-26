@@ -9,6 +9,7 @@ use super::issue_common::{
     next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
     DetailEnvelope, PageWindow,
 };
+use super::workflow::{transition_denied, validate_initial_transition, validate_state_transition};
 
 /// Workspace drafts + draft-to-issue — parity with Django
 /// `WorkspaceDraftIssueViewSet` (`plane/app/views/workspace/draft.py:46-311`,
@@ -110,6 +111,9 @@ pub(crate) const NO_PROJECT_MSG: &str = "Project is required to create an issue.
 pub(crate) const START_DATE_MSG: &str = "Start date cannot exceed target date";
 /// Quoted from `plane/app/serializers/draft.py:119`.
 pub(crate) const STATE_MSG: &str = "State is not valid please pass a valid state_id";
+/// Type-aware state rejection on draft→issue convert (mirrors the create/
+/// PATCH message, `issue_write.rs` / `issue_update.rs`).
+pub(crate) const STATE_TYPE_MSG: &str = "State is not valid for this work item type";
 /// Quoted from `plane/app/serializers/draft.py:129`.
 pub(crate) const PARENT_MSG: &str = "Parent is not valid issue_id please pass a valid issue_id";
 /// Quoted from `plane/app/serializers/draft.py:138`.
@@ -1178,6 +1182,14 @@ pub async fn destroy(
 ///   `{"name": [...]}`; start>target → 400 `{"non_field_errors": [...]}`;
 ///   unknown state/parent/estimate → 400 verbatim; assignees/labels
 ///   silently filtered (Django drops ineligible ids, no 400).
+/// - Type/state reconciliation (C4): `effective_type = body.type_id or
+///   draft.type_id` drives BOTH the default-state resolution and the
+///   `type_id` stored on the issue. An explicit state owned by a different
+///   type → 400 `State is not valid for this work item type`. A type change
+///   skips transition enforcement (state must be the new type's/default);
+///   an unchanged type with a state moved off the draft's state is enforced
+///   through `validate_state_transition`/`validate_initial_transition` and
+///   denied with `transition_denied`.
 /// - Side-writes mirrored (`draft.py:239-307`, Celery skipped):
 ///   `CycleIssue` when `cycle_id` present, `ModuleIssue` bulk when
 ///   `module_ids` non-empty, `FileAsset`s re-pointed
@@ -1216,9 +1228,30 @@ pub async fn create_draft_to_issue(
     if let Err(e) = validate_dates(b.start_date, b.target_date) {
         return Ok(bad_request(json!({"non_field_errors": [e]})));
     }
+    // Satu type efektif untuk konversi: body menang, type draft jadi
+    // fallback. Dipakai untuk validasi state DAN nilai `type_id` pada INSERT
+    // supaya type issue dan state-nya tidak pernah mismatch (temuan review
+    // C2: dulu default di-resolve dari `d.type_id` tapi row di-bind
+    // `b.type_id`).
+    let effective_type = b.type_id.or(d.type_id);
     if let Some(sid) = b.state_id {
         if !check_state(&st.pool, Some(project_id), sid).await? {
             return Ok(bad_request(json!({"non_field_errors": [STATE_MSG]})));
+        }
+        // State milik type lain selalu ditolak; state untyped (legacy) tetap
+        // boleh, sama seperti `validate_create_refs` di issue_write.rs.
+        let (type_ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+             AND deleted_at IS NULL AND \"group\" != 'triage' \
+             AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+        )
+        .bind(sid)
+        .bind(project_id)
+        .bind(effective_type)
+        .fetch_one(&st.pool)
+        .await?;
+        if !type_ok {
+            return Ok(bad_request(json!({"error": STATE_TYPE_MSG})));
         }
     }
     if let Some(pid) = b.parent_id {
@@ -1240,7 +1273,40 @@ pub async fn create_draft_to_issue(
     let Some((workspace_id, default_assignee)) = proj else {
         return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
     };
-    let state_id = resolve_default_state(&st.pool, Some(project_id), d.type_id, b.state_id).await?;
+    let state_id = match b.state_id {
+        Some(sid) => Some(sid),
+        None => resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?,
+    };
+    // Type berubah (draft→body atau body mengganti type draft): tanpa cek
+    // transisi, state cukup milik/default type baru. Type sama dan state
+    // berpindah dari `d.state_id`: enforcement transisi seperti PATCH; draft
+    // tanpa state lama diperlakukan sebagai transisi awal (hanya default type
+    // yang boleh dipilih).
+    let type_changed = effective_type != d.type_id;
+    let state_changed = state_id != d.state_id;
+    if state_changed && !type_changed {
+        if let Some(target_state) = state_id {
+            let verdict = match d.state_id {
+                Some(current_state) => {
+                    validate_state_transition(
+                        &st.pool,
+                        project_id,
+                        effective_type,
+                        current_state,
+                        target_state,
+                    )
+                    .await?
+                }
+                None => {
+                    validate_initial_transition(&st.pool, project_id, effective_type, target_state)
+                        .await?
+                }
+            };
+            if let Err(allowed) = verdict {
+                return Ok(transition_denied(allowed));
+            }
+        }
+    }
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
         if group.as_deref() == Some("completed") {
@@ -1325,7 +1391,7 @@ pub async fn create_draft_to_issue(
     .bind(completed_at)
     .bind(b.estimate_point_id)
     .bind(b.parent_id)
-    .bind(b.type_id)
+    .bind(effective_type)
     .bind(state_id)
     .bind(project_id)
     .bind(workspace_id)
@@ -1337,7 +1403,13 @@ pub async fn create_draft_to_issue(
         "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, created_by_id, deleted, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, now(), now())",
     )
-    .bind(sequence)
+    // `as i32`: SQL text ini identik dengan seed.rs:737, dan cache prepared
+    // statement sqlx di-key hanya oleh teks query — bind `i64` di sini vs
+    // `i32` di seed membuat Parse param #1 (INT8 vs INT4) bentrok dan Bind
+    // gagal "incorrect binary data format in bind parameter 1" tergantung
+    // koneksi mana yang menyiapkan duluan. Samakan dengan seed (dan dengan
+    // `sequence as i32` pada INSERT issues di atas).
+    .bind(sequence as i32)
     .bind(issue_id)
     .bind(project_id)
     .bind(workspace_id)

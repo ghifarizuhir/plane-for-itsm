@@ -15,7 +15,7 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 
 /// Mirrors `plane/app/serializers/issue.py:IssueCreateSerializer`
 /// with #9526 fix: unknown assignee/label ids must 400, not silently drop.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct CreateIssue {
     pub name: String,
     #[serde(default, deserialize_with = "de_opt_uuid_vec_lax")]
@@ -101,15 +101,33 @@ async fn validate_create_refs(
         }
     }
     if let Some(state_id) = body.state_id {
-        let (ok,): (bool,) =
-            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2)")
-                .bind(state_id)
-                .bind(project_id)
-                .fetch_one(&st.pool)
-                .await
-                .map_err(error)?;
-        if !ok {
+        // Two-stage check in one round trip: (1) the state is a live,
+        // non-triage state of this project — same predicate as the PATCH
+        // refs check, with the legacy message; (2) the state belongs to the
+        // requested type. `type_id IS NULL` states stay valid for typed work
+        // items: they are the project-wide legacy states the shared resolver
+        // (`resolve_issue_state`) falls back to when a type has no mirror
+        // states, and clients that predate work item types keep sending them.
+        // A state owned by a DIFFERENT type is always rejected.
+        let (valid, type_ok): (bool, bool) = sqlx::query_as(
+            "SELECT \
+             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage'), \
+             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage' \
+               AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+        )
+        .bind(state_id)
+        .bind(project_id)
+        .bind(body.type_id)
+        .fetch_one(&st.pool)
+        .await
+        .map_err(error)?;
+        if !valid {
             return Err(bad("State is not valid please pass a valid state_id"));
+        }
+        if !type_ok {
+            return Err(bad("State is not valid for this work item type"));
         }
     }
     if let Some(t) = body.type_id {

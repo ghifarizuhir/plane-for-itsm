@@ -297,7 +297,7 @@ pub(crate) async fn fetch_transition_context(
         "SELECT id, workflow_state_id FROM states \
          WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL \
            AND workflow_state_id IS NOT NULL \
-         ORDER BY sequence, created_at",
+         ORDER BY sequence, created_at, id",
     )
     .bind(project_id)
     .bind(type_id)

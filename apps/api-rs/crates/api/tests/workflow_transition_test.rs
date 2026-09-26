@@ -1,4 +1,7 @@
 use api::middleware::auth::AuthUser;
+use api::routes::draft::{
+    create as draft_create, create_draft_to_issue, ConvertBody, CreateDraftBody,
+};
 use api::routes::issue_common::resolve_issue_state;
 use api::routes::issue_update::{patch_issue, PatchIssue};
 use api::routes::issue_write::{create as create_issue, CreateIssue};
@@ -13,7 +16,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -181,6 +184,7 @@ async fn purge(pool: &PgPool, slug: &str) {
         "DELETE FROM issue_description_versions WHERE workspace_id = $1",
         "DELETE FROM issue_subscribers WHERE workspace_id = $1",
         "DELETE FROM issue_sequences WHERE workspace_id = $1",
+        "DELETE FROM draft_issues WHERE workspace_id = $1",
         "DELETE FROM issues WHERE workspace_id = $1",
         "DELETE FROM issue_views WHERE workspace_id = $1",
         "DELETE FROM states WHERE workspace_id = $1",
@@ -684,6 +688,907 @@ async fn patch_rejects_disallowed_transition() {
     .await
     .expect("resolved state activity");
     assert_eq!(resolved_rows, 1, "state NULL → default harus tercatat");
+
+    purge(&st.pool, &slug).await;
+}
+
+// --- DB-backed create + type-change + draft-convert coverage (C4) ----------
+
+/// Type hasil workflow materialization + map nama state mirror → id.
+struct WorkflowType {
+    type_id: Uuid,
+    states: std::collections::HashMap<String, Uuid>,
+}
+
+impl WorkflowType {
+    fn state(&self, name: &str) -> Uuid {
+        *self
+            .states
+            .get(name)
+            .unwrap_or_else(|| panic!("missing mirror state {name}"))
+    }
+}
+
+/// Buat workflow + states + transisi, type yang memakainya, lalu import ke
+/// project (materialize mirror). State pertama otomatis jadi default
+/// (`create_state`, workflow.rs:791-795).
+async fn make_workflow_type(
+    st: &AppState,
+    slug: &str,
+    ws_id: Uuid,
+    owner: Uuid,
+    project_id: Uuid,
+    type_name: &str,
+    states: &[(&str, &str)],
+    transitions: &[(&str, &str)],
+) -> WorkflowType {
+    let (_, created) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.to_string()),
+        Json(WorkflowBody {
+            name: Some(format!("{type_name} Workflow")),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let workflow_id = Uuid::parse_str(created["id"].as_str().expect("workflow id")).expect("uuid");
+
+    let mut workflow_states = std::collections::HashMap::new();
+    for (name, group) in states {
+        let (status, body) = create_state(
+            State(st.clone()),
+            AuthUser(owner),
+            Path((slug.to_string(), workflow_id)),
+            Json(WorkflowStateBody {
+                name: Some((*name).to_string()),
+                group: Some((*group).to_string()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("workflow state");
+        assert_eq!(status, StatusCode::CREATED, "state {name}");
+        workflow_states.insert(
+            (*name).to_string(),
+            Uuid::parse_str(body["id"].as_str().expect("state id")).expect("uuid"),
+        );
+    }
+    for (from, to) in transitions {
+        let (status, _) = create_transition(
+            State(st.clone()),
+            AuthUser(owner),
+            Path((slug.to_string(), workflow_id)),
+            Json(TransitionBody {
+                from_state_id: Some(workflow_states[*from]),
+                to_state_id: Some(workflow_states[*to]),
+            }),
+        )
+        .await
+        .expect("transition");
+        assert_eq!(status, StatusCode::CREATED, "transition {from} -> {to}");
+    }
+
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, now(), now()) \
+         RETURNING id",
+    )
+    .bind(type_name)
+    .bind(workflow_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id)),
+        Json(json!({"work_item_types": [type_id]})),
+    )
+    .await
+    .expect("import");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let mirrors: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, name FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_all(&st.pool)
+    .await
+    .expect("mirror states");
+    let states: std::collections::HashMap<String, Uuid> =
+        mirrors.into_iter().map(|(id, name)| (name, id)).collect();
+    WorkflowType { type_id, states }
+}
+
+async fn insert_issue_type(st: &AppState, ws_id: Uuid, name: &str, is_epic: bool) -> Uuid {
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', '{}', $2, false, true, 0, $3, now(), now()) \
+         RETURNING id",
+    )
+    .bind(name)
+    .bind(is_epic)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("issue type");
+    type_id
+}
+
+async fn insert_typed_state(
+    st: &AppState,
+    project_id: Uuid,
+    ws_id: Uuid,
+    type_id: Uuid,
+    name: &str,
+    slug: &str,
+    sequence: f64,
+    group: &str,
+    is_default: bool,
+) -> Uuid {
+    let (state_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, type_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', '#60646C', $2, $3, $4, false, $5, $6, $7, $8, now(), now()) \
+         RETURNING id",
+    )
+    .bind(name)
+    .bind(slug)
+    .bind(sequence)
+    .bind(group)
+    .bind(is_default)
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("typed state");
+    state_id
+}
+
+async fn create_issue_id(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    name: &str,
+    type_id: Option<Uuid>,
+    state_id: Option<Uuid>,
+) -> Uuid {
+    let (status, Json(issue)) = create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id)),
+        Json(CreateIssue {
+            name: name.to_string(),
+            type_id,
+            state_id,
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("issue create");
+    assert_eq!(status, StatusCode::CREATED, "create {name}");
+    Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid")
+}
+
+async fn issue_type_state(st: &AppState, issue_id: Uuid) -> (Option<Uuid>, Option<Uuid>) {
+    sqlx::query_as("SELECT type_id, state_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("issue row")
+}
+
+async fn state_activity_count(st: &AppState, issue_id: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND field = 'state'",
+    )
+    .bind(issue_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("state activity count")
+}
+
+fn patch_body(type_id: Option<Option<Uuid>>, state_id: Option<Option<Uuid>>) -> PatchIssue {
+    PatchIssue {
+        type_id,
+        state_id,
+        ..Default::default()
+    }
+}
+
+async fn patch_issue_req(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    issue_id: Uuid,
+    body: PatchIssue,
+) -> (StatusCode, Value) {
+    let (status, Json(payload)) = patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id, issue_id)),
+        Json(body),
+    )
+    .await
+    .expect("patch");
+    (status, payload)
+}
+
+#[tokio::test]
+async fn create_rejects_state_from_other_type() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfcreate").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let type_a = insert_issue_type(&st, ws_id, "Incident", false).await;
+    let state_a = insert_typed_state(
+        &st, project_id, ws_id, type_a, "New", "new", 10000.0, "backlog", true,
+    )
+    .await;
+    let type_b = insert_issue_type(&st, ws_id, "Problem", false).await;
+    let state_b = insert_typed_state(
+        &st, project_id, ws_id, type_b, "TriageB", "triage-b", 10000.0, "backlog", true,
+    )
+    .await;
+
+    // Kedua type di-enable di project.
+    for t in [type_a, type_b] {
+        let (status, _) = import_to_project(
+            State(st.clone()),
+            AuthUser(owner),
+            Path((slug.clone(), project_id)),
+            Json(json!({"work_item_types": [t]})),
+        )
+        .await
+        .expect("import");
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    // State milik type B dengan body type A → 400, bukan tersimpan.
+    let (status, body) = create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(CreateIssue {
+            name: "Server down".into(),
+            state_id: Some(state_b),
+            type_id: Some(type_a),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create cross-type state");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+    // Seed workspace membuat issue onboarding; yang dicek hanya issue baru
+    // bertipe A (tidak boleh ada).
+    let (persisted,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM issues WHERE project_id = $1 AND type_id = $2")
+            .bind(project_id)
+            .bind(type_a)
+            .fetch_one(&st.pool)
+            .await
+            .expect("persisted issues");
+    assert_eq!(
+        persisted, 0,
+        "create cross-type tidak boleh menyimpan issue"
+    );
+
+    // Tanpa state → default milik type A (typed default menang).
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "Server up",
+        Some(type_a),
+        None,
+    )
+    .await;
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(state_a));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn patch_type_change_reconciles_state_and_enforces() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wftc").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let a = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[
+            ("New", "backlog"),
+            ("In Progress", "started"),
+            ("Closed", "completed"),
+        ],
+        &[("New", "In Progress"), ("In Progress", "Closed")],
+    )
+    .await;
+    let b = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Service Request",
+        &[("Todo", "backlog"), ("Done", "completed")],
+        &[("Todo", "Done")],
+    )
+    .await;
+
+    // Type change + state milik type LAMA → 400, row tidak berubah.
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed one",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, body) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(Some(Some(b.type_id)), Some(Some(a.state("New")))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("New")));
+
+    // Type change + state valid milik type BARU: tanpa cek transisi (B.Done
+    // tidak terjangkau dari workflow A, jadi ini hanya lolos karena skip).
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(Some(Some(b.type_id)), Some(Some(b.state("Done")))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(b.type_id));
+    assert_eq!(stored_state, Some(b.state("Done")));
+
+    // Explicit same-state: no-op, tidak menambah activity `state`.
+    let activities_before = state_activity_count(&st, issue_id).await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(None, Some(Some(b.state("Done")))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        state_activity_count(&st, issue_id).await,
+        activities_before,
+        "same-state tidak boleh menulis activity state"
+    );
+
+    // Type change tanpa state → default type baru + activity `state` dari
+    // auto-move.
+    let moved_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed two",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        moved_id,
+        patch_body(Some(Some(b.type_id)), None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored_type, stored_state) = issue_type_state(&st, moved_id).await;
+    assert_eq!(stored_type, Some(b.type_id));
+    assert_eq!(stored_state, Some(b.state("Todo")));
+    let (auto_moves,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_activities WHERE issue_id = $1 AND field = 'state' \
+         AND old_identifier = $2 AND new_identifier = $3",
+    )
+    .bind(moved_id)
+    .bind(a.state("New"))
+    .bind(b.state("Todo"))
+    .fetch_one(&st.pool)
+    .await
+    .expect("auto-move activity");
+    assert_eq!(
+        auto_moves, 1,
+        "type-change auto-move harus menulis activity state"
+    );
+
+    // Target cross-type pada patch type sama → 400 allowed_state_ids [].
+    let cross_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed three",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, body) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        cross_id,
+        patch_body(None, Some(Some(b.state("Todo")))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(body["allowed_state_ids"], json!([]));
+    let (stored_type, stored_state) = issue_type_state(&st, cross_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("New")));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn patch_type_clear_falls_back_to_legacy() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wftnull").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let type_a = insert_issue_type(&st, ws_id, "Incident", false).await;
+    let state_a = insert_typed_state(
+        &st, project_id, ws_id, type_a, "New", "new", 10000.0, "backlog", true,
+    )
+    .await;
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed",
+        Some(type_a),
+        Some(state_a),
+    )
+    .await;
+
+    let legacy = resolve_issue_state(&st.pool, project_id, None, None)
+        .await
+        .expect("legacy default");
+    assert!(legacy.is_some(), "seed workspace punya default legacy");
+
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(Some(None), None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, None, "type_id: null harus terhapus");
+    assert_eq!(
+        stored_state, legacy,
+        "fallback ke default legacy tanpa cek transisi"
+    );
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn patch_untyped_legacy_state_stays_free() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfuntyped").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let mut legacy = Vec::new();
+    for (name, slug_part, sequence) in [
+        ("Legacy One", "legacy-one", 70001.0),
+        ("Legacy Two", "legacy-two", 70002.0),
+    ] {
+        let (state_id,): (Uuid,) = sqlx::query_as(
+            "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+             \"default\", project_id, workspace_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, '', '#60646C', $2, $3, 'backlog', false, false, \
+             $4, $5, now(), now()) RETURNING id",
+        )
+        .bind(name)
+        .bind(slug_part)
+        .bind(sequence)
+        .bind(project_id)
+        .bind(ws_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("legacy state");
+        legacy.push(state_id);
+    }
+
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "legacy",
+        None,
+        Some(legacy[0]),
+    )
+    .await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(None, Some(Some(legacy[1]))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, None);
+    assert_eq!(stored_state, Some(legacy[1]));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn patch_epic_type_state_stays_free() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfepic").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let epic_type = insert_issue_type(&st, ws_id, "Epic", true).await;
+    let first = insert_typed_state(
+        &st, project_id, ws_id, epic_type, "New", "epic-new", 10000.0, "backlog", true,
+    )
+    .await;
+    let second = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        epic_type,
+        "In Progress",
+        "epic-progress",
+        20000.0,
+        "started",
+        false,
+    )
+    .await;
+
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "epic",
+        Some(epic_type),
+        Some(first),
+    )
+    .await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(None, Some(Some(second))),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NO_CONTENT,
+        "epic tidak di-enforce workflow"
+    );
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(epic_type));
+    assert_eq!(stored_state, Some(second));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn patch_explicit_same_state_is_noop() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfsame").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let type_a = insert_issue_type(&st, ws_id, "Incident", false).await;
+    let state_a = insert_typed_state(
+        &st, project_id, ws_id, type_a, "New", "new", 10000.0, "backlog", true,
+    )
+    .await;
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "same",
+        Some(type_a),
+        Some(state_a),
+    )
+    .await;
+
+    let before = state_activity_count(&st, issue_id).await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(None, Some(Some(state_a))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(state_activity_count(&st, issue_id).await, before);
+    let (_, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_state, Some(state_a));
+
+    purge(&st.pool, &slug).await;
+}
+
+async fn make_draft(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    name: &str,
+    type_id: Option<Uuid>,
+    state_id: Option<Uuid>,
+) -> Uuid {
+    let (status, Json(draft)) = draft_create(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.to_string()),
+        Some(Json(CreateDraftBody {
+            name: Some(name.to_string()),
+            project_id: Some(project_id),
+            type_id,
+            state_id,
+            ..Default::default()
+        })),
+    )
+    .await
+    .expect("draft create");
+    assert_eq!(status, StatusCode::CREATED, "draft {name}");
+    Uuid::parse_str(draft["id"].as_str().expect("draft id")).expect("uuid")
+}
+
+async fn convert_draft(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    draft_id: Uuid,
+    body: ConvertBody,
+) -> (StatusCode, Value) {
+    let (status, Json(payload)) = create_draft_to_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), draft_id)),
+        Some(Json(body)),
+    )
+    .await
+    .expect("convert");
+    (status, payload)
+}
+
+#[tokio::test]
+async fn draft_convert_reconciles_type_and_enforces_transitions() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfdraft").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Type X tanpa transisi: perpindahan state apa pun ditolak. Type Y hanya
+    // menyediakan default Todo.
+    let x = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[],
+    )
+    .await;
+    let y = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Problem",
+        &[("Todo", "backlog"), ("Done", "completed")],
+        &[],
+    )
+    .await;
+
+    // Draft bertipe X + body tanpa type → issue type X + default X.
+    let draft_x = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "draft x",
+        Some(x.type_id),
+        Some(x.state("New")),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_x,
+        ConvertBody {
+            name: Some("issue x".into()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_x = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_x).await;
+    assert_eq!(stored_type, Some(x.type_id));
+    assert_eq!(stored_state, Some(x.state("New")));
+
+    // Body type Y ≠ draft X → issue type Y + default Y (body menang).
+    let draft_y = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "draft y",
+        Some(x.type_id),
+        Some(x.state("New")),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_y,
+        ConvertBody {
+            name: Some("issue y".into()),
+            type_id: Some(y.type_id),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_y = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_y).await;
+    assert_eq!(stored_type, Some(y.type_id));
+    assert_eq!(stored_state, Some(y.state("Todo")));
+
+    // State eksplisit milik type lain → 400, draft tetap hidup.
+    let draft_bad = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "draft bad",
+        Some(x.type_id),
+        Some(x.state("New")),
+    )
+    .await;
+    let (status, body) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_bad,
+        ConvertBody {
+            name: Some("issue bad".into()),
+            state_id: Some(y.state("Todo")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+    let (alive,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM draft_issues WHERE id = $1 AND deleted_at IS NULL")
+            .bind(draft_bad)
+            .fetch_one(&st.pool)
+            .await
+            .expect("draft alive");
+    assert_eq!(alive, 1, "convert gagal tidak boleh menghapus draft");
+
+    // Type sama + state pindah tanpa transisi terdaftar → 400.
+    let draft_move = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "draft move",
+        Some(x.type_id),
+        Some(x.state("New")),
+    )
+    .await;
+    let (status, body) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_move,
+        ConvertBody {
+            name: Some("issue move".into()),
+            state_id: Some(x.state("In Progress")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(body["allowed_state_ids"], json!([]));
+    let (alive,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM draft_issues WHERE id = $1 AND deleted_at IS NULL")
+            .bind(draft_move)
+            .fetch_one(&st.pool)
+            .await
+            .expect("draft alive");
+    assert_eq!(alive, 1, "convert gagal tidak boleh menghapus draft");
 
     purge(&st.pool, &slug).await;
 }
