@@ -286,6 +286,7 @@
   "title_is_required": "Názov je povinný",
   "title": "Názov",
   "state": "Stav",
+  "type": "Typ",
   "transition": "Prechod",
   "history": "História",
   "priority": "Priorita",

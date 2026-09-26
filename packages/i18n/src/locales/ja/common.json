@@ -286,6 +286,7 @@
   "title_is_required": "タイトルは必須です",
   "title": "タイトル",
   "state": "状態",
+  "type": "タイプ",
   "transition": "トランジション",
   "history": "履歴",
   "priority": "優先度",

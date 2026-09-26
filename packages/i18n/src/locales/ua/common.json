@@ -286,6 +286,7 @@
   "title_is_required": "Назва є обов'язковою",
   "title": "Назва",
   "state": "Стан",
+  "type": "Тип",
   "transition": "Перехід",
   "history": "Історія",
   "priority": "Пріоритет",

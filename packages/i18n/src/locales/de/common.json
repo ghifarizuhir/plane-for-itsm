@@ -286,6 +286,7 @@
   "title_is_required": "Ein Titel ist erforderlich",
   "title": "Titel",
   "state": "Status",
+  "type": "Typ",
   "transition": "Übergang",
   "history": "Verlauf",
   "priority": "Priorität",

@@ -286,6 +286,7 @@
   "title_is_required": "标题为必填项",
   "title": "标题",
   "state": "状态",
+  "type": "类型",
   "transition": "转换",
   "history": "历史",
   "priority": "优先级",

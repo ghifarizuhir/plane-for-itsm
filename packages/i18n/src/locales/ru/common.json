@@ -286,6 +286,7 @@
   "title_is_required": "Требуется заголовок",
   "title": "Заголовок",
   "state": "Статус",
+  "type": "Тип",
   "transition": "Переход",
   "history": "История",
   "priority": "Приоритет",

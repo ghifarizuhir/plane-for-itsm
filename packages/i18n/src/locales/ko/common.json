@@ -286,6 +286,7 @@
   "title_is_required": "제목이 필요합니다",
   "title": "제목",
   "state": "상태",
+  "type": "유형",
   "transition": "전환",
   "history": "히스토리",
   "priority": "우선순위",

@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
-import { Controller } from "react-hook-form";
+import { Controller, useFormContext } from "react-hook-form";
 import { ETabIndices, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ParentOutline } from "@makeplane/propel/icons";
@@ -24,14 +24,18 @@ import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
+import { WorkItemTypeDropdown } from "@/components/dropdowns/work-item-type/dropdown";
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
 import { IssueLabelSelect } from "@/components/issues/select";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useProject } from "@/hooks/store/use-project";
+import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+// store
+import { findWorkflowMapType } from "@/store/workflow.helpers";
 
 type TIssueDefaultPropertiesProps = {
   control: Control<TIssue>;
@@ -67,10 +71,16 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
+  const { getWorkflowMap } = useWorkflow();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
+  // form context
+  const { setValue, watch } = useFormContext<TIssue>();
   // derived values
   const projectDetails = getProjectById(projectId);
+  const typeId = watch("type_id");
+  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
+  const workflowMapTypes = workflowMap?.types ?? [];
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -85,6 +95,29 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {!id && workflowMapTypes.length > 0 && (
+        <Controller
+          control={control}
+          name="type_id"
+          render={({ field: { value, onChange } }) => (
+            <div className="h-7">
+              <WorkItemTypeDropdown
+                value={value}
+                onChange={(newTypeId) => {
+                  onChange(newTypeId);
+                  setValue("state_id", findWorkflowMapType(workflowMap, newTypeId)?.default_state_id ?? null, {
+                    shouldValidate: true,
+                  });
+                  handleFormChange();
+                }}
+                projectId={projectId ?? undefined}
+                buttonVariant="border-with-text"
+                tabIndex={getIndex("type_id")}
+              />
+            </div>
+          )}
+        />
+      )}
       <Controller
         control={control}
         name="state_id"
@@ -100,6 +133,8 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               buttonVariant="border-with-text"
               tabIndex={getIndex("state_id")}
               isForWorkItemCreation={!id}
+              workItemTypeId={typeId}
+              currentStateId={value}
             />
           </div>
         )}

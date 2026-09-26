@@ -270,6 +270,7 @@
   "title_is_required": "Title is required",
   "title": "Title",
   "state": "State",
+  "type": "Type",
   "transition": "Transition",
   "history": "History",
   "priority": "Priority",

@@ -286,6 +286,7 @@
   "title_is_required": "სათაური სავალდებულოა",
   "title": "სათაური",
   "state": "მდგომარეობა",
+  "type": "ტიპი",
   "transition": "Transition",
   "history": "History",
   "priority": "პრიორიტეტი",

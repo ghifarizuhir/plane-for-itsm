@@ -286,6 +286,7 @@
   "title_is_required": "Il titolo è obbligatorio",
   "title": "Titolo",
   "state": "Stato",
+  "type": "Tipo",
   "transition": "Transizione",
   "history": "Cronologia",
   "priority": "Priorità",

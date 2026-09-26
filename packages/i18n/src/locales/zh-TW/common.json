@@ -286,6 +286,7 @@
   "title_is_required": "標題為必填",
   "title": "標題",
   "state": "狀態",
+  "type": "類型",
   "transition": "轉換",
   "history": "歷史",
   "priority": "優先順序",

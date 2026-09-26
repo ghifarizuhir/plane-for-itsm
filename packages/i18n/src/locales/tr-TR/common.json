@@ -286,6 +286,7 @@
   "title_is_required": "Başlık gereklidir",
   "title": "Başlık",
   "state": "Durum",
+  "type": "Tür",
   "transition": "Geçiş",
   "history": "Geçmiş",
   "priority": "Öncelik",

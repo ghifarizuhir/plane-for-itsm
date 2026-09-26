@@ -286,6 +286,7 @@
   "title_is_required": "Tiêu đề là bắt buộc",
   "title": "Tiêu đề",
   "state": "Trạng thái",
+  "type": "Loại",
   "transition": "Chuyển đổi",
   "history": "Lịch sử",
   "priority": "Ưu tiên",

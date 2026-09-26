@@ -286,6 +286,7 @@
   "title_is_required": "Titlul este obligatoriu",
   "title": "Titlu",
   "state": "Stare",
+  "type": "Tip",
   "transition": "Tranziție",
   "history": "Istoric",
   "priority": "Prioritate",

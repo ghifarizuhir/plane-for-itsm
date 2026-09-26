@@ -286,6 +286,7 @@
   "title_is_required": "Judul diperlukan",
   "title": "Judul",
   "state": "Negara",
+  "type": "Tipe",
   "transition": "Transisi",
   "history": "Riwayat",
   "priority": "Prioritas",
