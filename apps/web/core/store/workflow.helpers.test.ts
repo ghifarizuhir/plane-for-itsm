@@ -6,6 +6,7 @@ import {
   findWorkflowMapType,
   getSingleWorkItemTypeId,
   isTypedState,
+  resolveSelectableStateIds,
   resolveStateColumns,
 } from "./workflow.helpers";
 
@@ -48,6 +49,112 @@ describe("allowedTargetStateIds", () => {
     const noDefault: TWorkflowMapType = { ...mapType, default_state_id: null };
     expect(allowedTargetStateIds(noDefault, "legacy-state")).toEqual([]);
     expect(allowedTargetStateIds(noDefault, null)).toEqual([]);
+  });
+});
+
+describe("resolveSelectableStateIds", () => {
+  it.each([
+    {
+      label: "map absen → stateIds apa adanya",
+      map: undefined,
+      stateIds: ["a", "b"],
+      currentStateId: "a",
+      isForWorkItemCreation: false,
+      expected: ["a", "b"],
+    },
+    {
+      label: "create tanpa map → stateIds apa adanya",
+      map: undefined,
+      stateIds: ["a", "b"],
+      currentStateId: null,
+      isForWorkItemCreation: true,
+      expected: ["a", "b"],
+    },
+    {
+      label: "create dengan map → irisan state type, urut stateIds",
+      map: mapType,
+      stateIds: ["legacy", "s-closed", "s-new", "s-progress"],
+      currentStateId: null,
+      isForWorkItemCreation: true,
+      expected: ["s-closed", "s-new", "s-progress"],
+    },
+    {
+      label: "create dengan current legacy yang ada di stateIds tetap terlihat",
+      map: mapType,
+      stateIds: ["legacy", "s-new"],
+      currentStateId: "legacy",
+      isForWorkItemCreation: true,
+      expected: ["legacy", "s-new"],
+    },
+    {
+      label: "edit dari New → New + In Progress",
+      map: mapType,
+      stateIds: ["s-new", "s-progress", "s-closed"],
+      currentStateId: "s-new",
+      isForWorkItemCreation: false,
+      expected: ["s-new", "s-progress"],
+    },
+    {
+      label: "edit dari In Progress → In Progress + Closed",
+      map: mapType,
+      stateIds: ["s-new", "s-progress", "s-closed"],
+      currentStateId: "s-progress",
+      isForWorkItemCreation: false,
+      expected: ["s-progress", "s-closed"],
+    },
+    {
+      label: "edit dari Closed tanpa transisi keluar → state sekarang saja",
+      map: mapType,
+      stateIds: ["s-new", "s-progress", "s-closed"],
+      currentStateId: "s-closed",
+      isForWorkItemCreation: false,
+      expected: ["s-closed"],
+    },
+    {
+      label: "edit tanpa current state → default saja",
+      map: mapType,
+      stateIds: ["s-new", "s-progress", "s-closed"],
+      currentStateId: null,
+      isForWorkItemCreation: false,
+      expected: ["s-new"],
+    },
+    {
+      label: "edit dari state legacy di luar workflow → current + default",
+      map: mapType,
+      stateIds: ["legacy", "s-new", "s-closed"],
+      currentStateId: "legacy",
+      isForWorkItemCreation: false,
+      expected: ["legacy", "s-new"],
+    },
+    {
+      label: "edit current tidak ada di stateIds → default dari stateIds",
+      map: mapType,
+      stateIds: ["s-new", "s-closed"],
+      currentStateId: "legacy",
+      isForWorkItemCreation: false,
+      expected: ["s-new"],
+    },
+    {
+      label: "stateIds kosong → kosong",
+      map: mapType,
+      stateIds: [],
+      currentStateId: "s-new",
+      isForWorkItemCreation: false,
+      expected: [],
+    },
+  ])("$label", ({ map, stateIds, currentStateId, isForWorkItemCreation, expected }) => {
+    expect(resolveSelectableStateIds(map, { stateIds, currentStateId, isForWorkItemCreation })).toEqual(expected);
+  });
+
+  it("type tidak ada di map → stateIds apa adanya", () => {
+    const resolvedMapType = findWorkflowMapType({ types: [mapType] }, "type-lain");
+    const stateIds = ["legacy", "s-new"];
+    expect(resolveSelectableStateIds(resolvedMapType, { stateIds, currentStateId: "legacy" })).toEqual(stateIds);
+  });
+
+  it("tanpa map mengembalikan referensi stateIds yang sama", () => {
+    const stateIds = ["s-new"];
+    expect(resolveSelectableStateIds(undefined, { stateIds })).toBe(stateIds);
   });
 });
 

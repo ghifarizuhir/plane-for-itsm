@@ -27,7 +27,7 @@ import { useWorkflow } from "@/hooks/store/use-workflow";
 // plane web imports
 import { StateOption } from "@/components/workflow";
 // plane web store
-import { allowedTargetStateIds, findWorkflowMapType } from "@/store/workflow.helpers";
+import { findWorkflowMapType, resolveSelectableStateIds } from "@/store/workflow.helpers";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   alwaysAllowStateChange?: boolean;
@@ -98,17 +98,13 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   // the states of that type; editing additionally follows the type's allowed transitions
   const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
   const mapType = findWorkflowMapType(workflowMap, workItemTypeId);
-  // creation has no current state yet, so transitions do not apply: keep every state of the
-  // selected type (the type default stays preselected through `showDefaultState`)
-  const allowedStateIds = mapType
-    ? isForWorkItemCreation
-      ? mapType.states.map((state) => state.id)
-      : allowedTargetStateIds(mapType, currentStateId)
-    : undefined;
-  // the current state always stays visible, even when no transition leaves it
-  const effectiveStateIds = allowedStateIds
-    ? stateIds.filter((stateId) => stateId === currentStateId || allowedStateIds.includes(stateId))
-    : stateIds;
+  // editing without an explicit source state falls back to the selected value so the
+  // transition filter cannot silently collapse to the default state alone
+  const effectiveStateIds = resolveSelectableStateIds(mapType, {
+    stateIds,
+    currentStateId: isForWorkItemCreation ? currentStateId : (currentStateId ?? value),
+    isForWorkItemCreation,
+  });
   const statesList = effectiveStateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);
   const defaultState = statesList?.find((state) => state?.default);
   const stateValue = value ? value : showDefaultState ? defaultState?.id : undefined;

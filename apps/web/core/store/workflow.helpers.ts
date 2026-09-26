@@ -41,6 +41,31 @@ export const allowedTargetStateIds = (
   return mapType.states.filter((state) => allowed.has(state.id)).map((state) => state.id);
 };
 
+type TSelectableStateIdsOptions = {
+  stateIds: string[];
+  currentStateId?: string | null;
+  isForWorkItemCreation?: boolean;
+};
+
+/**
+ * State ids yang boleh dipilih di dropdown untuk `mapType`.
+ *
+ * - Tanpa `mapType` (type tidak ada / map belum termuat) → `stateIds` apa adanya.
+ * - Create (`isForWorkItemCreation`) → irisan state type dengan `stateIds`, tanpa filter
+ *   transisi (state sekarang belum ada; urutan mengikuti `stateIds`).
+ * - Edit → hanya state sekarang + tujuan transisi valid; state sekarang selalu tampil.
+ */
+export const resolveSelectableStateIds = (
+  mapType: TWorkflowMapType | undefined,
+  { stateIds, currentStateId, isForWorkItemCreation }: TSelectableStateIdsOptions
+): string[] => {
+  if (!mapType) return stateIds;
+  const allowedStateIds = isForWorkItemCreation
+    ? mapType.states.map((state) => state.id)
+    : allowedTargetStateIds(mapType, currentStateId);
+  return stateIds.filter((stateId) => stateId === currentStateId || allowedStateIds.includes(stateId));
+};
+
 /** State mirror typed (workflow-owned) bila punya `type_id` atau `workflow_state_id`. */
 export const isTypedState = (state: Partial<Pick<IState, "type_id" | "workflow_state_id">>): boolean =>
   Boolean(state.type_id || state.workflow_state_id);
