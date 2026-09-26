@@ -1016,11 +1016,12 @@ pub async fn update(
         body.state.map(Some)
     };
 
-    // `_sync_completed_at` (C3 parity, `issue_update.rs:942-957`): a state move
-    // into the completed group stamps `completed_at`, anything else clears it.
-    // A cleared state (None) leaves `completed_at` alone, like C3.
+    // `_sync_completed_at` (C3 parity, `issue_update.rs:942-957`): only a REAL
+    // state change syncs `completed_at` — an explicit same-state write leaves
+    // it untouched, and a cleared state (None) is skipped, like C3.
+    let state_changed = matches!(state_write, Some(resolved) if resolved != current_state);
     let new_state_group: Option<String> = match state_write {
-        Some(Some(id)) => {
+        Some(Some(id)) if state_changed => {
             sqlx::query_scalar("SELECT \"group\" FROM states WHERE id = $1 AND project_id = $2")
                 .bind(id)
                 .bind(project_id)
@@ -1082,7 +1083,7 @@ pub async fn update(
     // not reflect field/state changes made through the public v1 API yet.
     if let Some(state) = state_write {
         add(&mut sets, &mut values, "state_id", BindValue::Uuid(state));
-        if state.is_some() {
+        if state_changed && state.is_some() {
             if new_state_group.as_deref() == Some("completed") {
                 sets.push("completed_at = now()".to_string());
             } else {
