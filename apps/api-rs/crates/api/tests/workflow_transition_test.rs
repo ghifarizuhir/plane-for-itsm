@@ -12,8 +12,8 @@ use api::routes::issue_write::{create as create_issue, CreateIssue};
 use api::routes::v1::work_item::{create as v1_create, update as v1_update, V1WriteWorkItem};
 use api::routes::v1::work_item_type::import_to_project;
 use api::routes::workflow::{
-    create_state, create_transition, create_workflow, evaluate_transition, TransitionBody,
-    TransitionContext, WorkflowBody, WorkflowStateBody,
+    create_state, create_transition, create_workflow, evaluate_transition, patch_state,
+    TransitionBody, TransitionContext, WorkflowBody, WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -2900,6 +2900,14 @@ async fn issue_state_and_completed(st: &AppState, issue_id: Uuid) -> (Option<Uui
     (state_id, completed_at.is_some())
 }
 
+async fn issue_updated_by(st: &AppState, issue_id: Uuid) -> Option<Uuid> {
+    sqlx::query_scalar("SELECT updated_by_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("issue updated_by")
+}
+
 #[tokio::test]
 async fn intake_accept_moves_issue_to_typed_default_state() {
     let st = app_state().await;
@@ -2953,6 +2961,11 @@ async fn intake_accept_moves_issue_to_typed_default_state() {
     );
     assert_ne!(state_id, Some(triage_id), "keluar dari triage");
     assert!(!completed, "completed_at dibersihkan");
+    assert_eq!(
+        issue_updated_by(&st, issue_id).await,
+        Some(owner),
+        "actor accept tercatat di issues.updated_by_id"
+    );
 
     purge(&st.pool, &slug).await;
 }
@@ -2996,6 +3009,149 @@ async fn intake_accept_falls_back_to_legacy_default_state() {
     assert_eq!(state_id, Some(legacy_default), "fallback default legacy");
     assert_ne!(state_id, Some(triage_id), "keluar dari triage");
     assert!(!completed, "completed_at dibersihkan");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn intake_accept_uses_typed_default_not_first_by_sequence() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "intakedefault2").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let wf = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[("New", "In Progress")],
+    )
+    .await;
+    let typed_first = wf.state("New");
+    let typed_second = wf.state("In Progress");
+
+    // Jadikan state KEDUA (sequence lebih besar) sebagai default workflow;
+    // `patch_state` ikut menyinkronkan mirror ke project.
+    let (workflow_id,): (Uuid,) =
+        sqlx::query_as("SELECT workflow_id FROM issue_types WHERE id = $1")
+            .bind(wf.type_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("workflow id");
+    let (wf_second,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM workflow_states WHERE workflow_id = $1 AND name = 'In Progress' \
+         AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("workflow state");
+    let (status, _) = patch_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id, wf_second)),
+        Json(WorkflowStateBody {
+            is_default: Some(true),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch state default");
+    assert_eq!(status, StatusCode::OK);
+
+    // Mirror: default adalah state kedua, bukan yang pertama by sequence.
+    let (mirror_default,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL \
+         AND \"default\" = true ORDER BY sequence LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(wf.type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("mirror default");
+    assert_eq!(mirror_default, typed_second);
+    assert_ne!(mirror_default, typed_first);
+
+    let (issue_id, triage_id) =
+        create_intake_issue(&st, owner, &slug, project_id, ws_id, "Printer jam").await;
+    sqlx::query("UPDATE issues SET type_id = $1 WHERE id = $2")
+        .bind(wf.type_id)
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("arm default-not-first accept");
+
+    let (status, payload) = accept_intake(&st, owner, &slug, project_id, issue_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload["status"], 1);
+
+    let (state_id, _) = issue_state_and_completed(&st, issue_id).await;
+    assert_eq!(
+        state_id,
+        Some(typed_second),
+        "default `true` menang walau sequence-nya kedua"
+    );
+    assert_ne!(state_id, Some(typed_first), "bukan first-by-sequence");
+    assert_ne!(state_id, Some(triage_id), "keluar dari triage");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn intake_accept_without_default_state_is_rejected_and_stays_pending() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "intakenodefault").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Issue bertipe tanpa state typed; semua state non-triage project
+    // di-soft-delete → resolver tidak punya kandidat default sama sekali.
+    let type_id = insert_issue_type(&st, ws_id, "Request", false).await;
+    let (issue_id, triage_id) =
+        create_intake_issue(&st, owner, &slug, project_id, ws_id, "Broken").await;
+    sqlx::query("UPDATE issues SET type_id = $1 WHERE id = $2")
+        .bind(type_id)
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("arm no-default accept");
+    sqlx::query(
+        "UPDATE states SET deleted_at = now() WHERE project_id = $1 \
+         AND \"group\" != 'triage' AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .execute(&st.pool)
+    .await
+    .expect("strip non-triage states");
+
+    let (status, payload) = accept_intake(&st, owner, &slug, project_id, issue_id).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        payload["error"],
+        "Cannot accept intake issue: No default state found for the project"
+    );
+
+    // Intake tetap pending dan issue tetap di triage.
+    let (intake_status,): (i32,) = sqlx::query_as(
+        "SELECT status FROM intake_issues WHERE issue_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("intake status");
+    assert_eq!(intake_status, -2);
+    let (state_id, _) = issue_state_and_completed(&st, issue_id).await;
+    assert_eq!(state_id, Some(triage_id));
 
     purge(&st.pool, &slug).await;
 }

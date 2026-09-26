@@ -1035,7 +1035,7 @@ pub async fn destroy_issue(
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
-use super::issue_common::{fetch_project_member_role, is_workspace_admin};
+use super::issue_common::{fetch_project_member_role, is_workspace_admin, resolve_issue_state};
 use crate::routes::project::missing;
 
 /// PATCH `.../inbox-issues/:pk/` (and the `intake-issues/:pk/` twin —
@@ -1572,6 +1572,33 @@ pub async fn patch_issue(
             None => (false, None),
             Some(ref v) => (true, v.clone()),
         };
+        // C6: accepting resolves the target default state BEFORE any write so
+        // a project without one 400s and the intake stays pending (Django
+        // parity). The shared resolver picks the typed mirror default first,
+        // then the legacy project default, excluding epic types and triage.
+        let accept_target: Option<uuid::Uuid> = if n_status == Some(1) {
+            let issue_scope: Option<(uuid::Uuid, Option<uuid::Uuid>)> =
+                sqlx::query_as("SELECT project_id, type_id FROM issues WHERE id = $1")
+                    .bind(issue_id)
+                    .fetch_optional(&st.pool)
+                    .await?;
+            match issue_scope {
+                Some((issue_project_id, issue_type_id)) => {
+                    resolve_issue_state(&st.pool, issue_project_id, issue_type_id, None).await?
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        if n_status == Some(1) && accept_target.is_none() {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "Cannot accept intake issue: No default state found for the project"
+                })),
+            ));
+        }
         if n_status.is_some() || dup_set || snooze_set || source_set {
             // The intake write and the accepted→default-state move below
             // share one transaction so an accept never commits with the
@@ -1602,31 +1629,23 @@ pub async fn patch_issue(
             .execute(&mut *tx)
             .await?;
 
-            // C6: accepting an intake item moves its issue out of the triage
-            // state to the type's default state (typed mirror first, legacy
-            // project default as fallback), clearing `completed_at`. The
-            // typed branch mirrors `issue_common::resolve_issue_state` (epic
-            // types and triage excluded); the legacy branch is type-less by
-            // design. The trailing `i.state_id` arm keeps the current state
-            // when no default exists (a bare two-arm COALESCE would write
-            // NULL).
-            if n_status == Some(1) {
+            if let Some(target_state_id) = accept_target {
+                // C6: move the accepted issue out of triage to the resolved
+                // default. `completed_at` mirrors `_sync_completed_at`
+                // (`issue_update.rs:946-953`): set when the target state's
+                // group is `completed`, cleared otherwise. The triage guard
+                // keeps a repeat or concurrent accept a no-op.
                 sqlx::query(
-                    "UPDATE issues i SET state_id = COALESCE( \
-                       (SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
-                          AND t.is_epic = false AND t.deleted_at IS NULL \
-                        WHERE s.project_id = i.project_id AND s.type_id = i.type_id \
-                          AND s.deleted_at IS NULL AND s.is_triage = false AND s.\"group\" != 'triage' \
-                          AND s.\"default\" = true ORDER BY s.sequence LIMIT 1), \
-                       (SELECT s.id FROM states s WHERE s.project_id = i.project_id AND s.type_id IS NULL \
-                          AND s.deleted_at IS NULL AND s.is_triage = false AND s.\"group\" != 'triage' \
-                          AND s.\"default\" = true ORDER BY s.sequence LIMIT 1), \
-                       i.state_id \
-                     ), completed_at = NULL, updated_at = now() \
+                    "UPDATE issues i SET state_id = $2, \
+                       completed_at = CASE WHEN (SELECT \"group\" FROM states WHERE id = $2) = 'completed' \
+                                           THEN now() ELSE NULL END, \
+                       updated_at = now(), updated_by_id = $3 \
                      WHERE i.id = $1 AND i.state_id IN \
                        (SELECT id FROM states WHERE project_id = i.project_id AND \"group\" = 'triage' AND deleted_at IS NULL)",
                 )
                 .bind(issue_id)
+                .bind(target_state_id)
+                .bind(user_id)
                 .execute(&mut *tx)
                 .await?;
             }
