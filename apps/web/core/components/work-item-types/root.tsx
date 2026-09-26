@@ -9,6 +9,9 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+// ui
+import { Spinner } from "@plane/ui";
 // components
 import { SettingsHeading } from "@/components/settings/heading";
 // hooks
@@ -34,9 +37,21 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
   const { workItemTypes, workflows, fetchWorkItemTypes, fetchWorkflows } = useWorkflow();
 
   useEffect(() => {
-    void fetchWorkItemTypes(workspaceSlug);
-    void fetchWorkflows(workspaceSlug);
-  }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows]);
+    void fetchWorkItemTypes(workspaceSlug).catch((error: any) => {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: error?.error ?? t("common.error.message"),
+      });
+    });
+    void fetchWorkflows(workspaceSlug).catch((error: any) => {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("common.error.label"),
+        message: error?.error ?? t("common.error.message"),
+      });
+    });
+  }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows, t]);
 
   return (
     <>
@@ -71,7 +86,11 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
           </Button>
         }
       />
-      {workItemTypes?.length === 0 ? (
+      {workItemTypes === undefined ? (
+        <div className="mt-6 flex h-40 items-center justify-center">
+          <Spinner />
+        </div>
+      ) : workItemTypes.length === 0 ? (
         <div className="mt-6 flex flex-col items-center justify-center gap-1 rounded-lg border border-subtle py-16 text-center">
           <p className="text-13 font-medium text-primary">
             {t("workspace_settings.settings.work_item_types.empty_state.title")}
@@ -82,11 +101,12 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
         </div>
       ) : (
         <div className="mt-6 flex flex-col divide-y divide-subtle rounded-lg border border-subtle">
-          {workItemTypes?.map((type) => (
+          {workItemTypes.map((type) => (
             <TypeListItem
               key={type.id}
               type={type}
               workflowName={workflows?.find((workflow) => workflow.id === type.workflow)?.name}
+              isWorkflowsLoading={workflows === undefined}
               onEdit={() => {
                 setEditingTypeId(type.id);
                 setIsFormOpen(true);

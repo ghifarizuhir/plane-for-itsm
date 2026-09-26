@@ -70,21 +70,31 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
   };
 
   const onSubmit = async (formData: TWorkItemTypePayload) => {
+    const isEdit = Boolean(typeId);
+
     try {
       if (typeId) await updateWorkItemType(workspaceSlug, typeId, formData);
       else await createWorkItemType(workspaceSlug, formData);
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: typeId ? "Work item type updated successfully." : "Work item type created successfully.",
+        title: isEdit
+          ? t("work_item_types.update.toast.success.title")
+          : t("work_item_types.create.toast.success.title"),
+        message: isEdit
+          ? t("work_item_types.update.toast.success.message", { name: formData.name ?? "" })
+          : t("work_item_types.create.toast.success.message"),
       });
       handleClose();
     } catch (error: any) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error?.error ?? "Work item type could not be saved. Please try again.",
+        title: isEdit ? t("work_item_types.update.toast.error.title") : t("work_item_types.create.toast.error.title"),
+        message:
+          error?.error ??
+          (isEdit
+            ? t("work_item_types.update.toast.error.message.default")
+            : t("work_item_types.create.toast.error.message.default")),
       });
     }
   };
@@ -94,7 +104,7 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="space-y-5 p-5">
           <h3 className="text-18 font-medium text-secondary">
-            {typeId ? t("common.edit") : t("workspace_settings.settings.work_item_types.add_type")}
+            {typeId ? t("work_item_types.update.title") : t("work_item_types.create.title")}
           </h3>
           <div className="space-y-3">
             <div className="space-y-1">
@@ -104,7 +114,7 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
               <Controller
                 control={control}
                 name="name"
-                rules={{ required: t("title_is_required") }}
+                rules={{ required: t("name_is_required") }}
                 render={({ field: { value, onChange } }) => (
                   <Field name="input" invalid={Boolean(errors.name)}>
                     <InputGroup size="2xl">
@@ -114,7 +124,7 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                         type="text"
                         value={value ?? ""}
                         onChange={onChange}
-                        placeholder={t("workspace_settings.settings.work_item_types.form.name")}
+                        placeholder={t("work_item_types.create_update.form.name.placeholder")}
                         aria-label={t("workspace_settings.settings.work_item_types.form.name")}
                       />
                     </InputGroup>
@@ -136,7 +146,7 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                     value={value ?? ""}
                     onChange={onChange}
                     hasError={Boolean(errors.description)}
-                    placeholder={t("workspace_settings.settings.work_item_types.form.description")}
+                    placeholder={t("work_item_types.create_update.form.description.placeholder")}
                     className="min-h-24 w-full resize-none text-14"
                   />
                 )}
@@ -158,11 +168,16 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                       className="w-56"
                       label={
                         <span className="truncate text-13">
-                          {workflows?.find((workflow) => workflow.id === value)?.name ?? "No workflow"}
+                          {workflows === undefined
+                            ? t("common.loading")
+                            : (workflows.find((workflow) => workflow.id === value)?.name ??
+                              t("workspace_settings.settings.work_item_types.no_workflow"))}
                         </span>
                       }
                     >
-                      <CustomSelect.Option value={null}>No workflow</CustomSelect.Option>
+                      <CustomSelect.Option value={null}>
+                        {t("workspace_settings.settings.work_item_types.no_workflow")}
+                      </CustomSelect.Option>
                       {workflows?.map((workflow) => (
                         <CustomSelect.Option key={workflow.id} value={workflow.id}>
                           {workflow.name}

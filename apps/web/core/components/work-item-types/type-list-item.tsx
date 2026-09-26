@@ -15,12 +15,13 @@ import { cn } from "@plane/utils";
 type Props = {
   type: TWorkItemType;
   workflowName?: string;
+  isWorkflowsLoading: boolean;
   onEdit: () => void;
   onDelete: () => void;
 };
 
 export const TypeListItem = observer(function TypeListItem(props: Props) {
-  const { type, workflowName, onEdit, onDelete } = props;
+  const { type, workflowName, isWorkflowsLoading, onEdit, onDelete } = props;
   // plane hooks
   const { t } = useTranslation();
 
@@ -40,13 +41,17 @@ export const TypeListItem = observer(function TypeListItem(props: Props) {
               "bg-layer-1 text-placeholder": !type.is_active,
             })}
           >
-            {type.is_active ? t("common.active") : "Inactive"}
+            {type.is_active ? t("common.active") : t("workspace_settings.settings.work_item_types.inactive")}
           </span>
         </div>
         {type.description && <p className="mt-0.5 truncate text-11 text-secondary">{type.description}</p>}
-        <p className="mt-0.5 text-11 text-placeholder">{workflowName ?? "No workflow"}</p>
+        <p className="mt-0.5 text-11 text-placeholder">
+          {isWorkflowsLoading
+            ? t("common.loading")
+            : (workflowName ?? t("workspace_settings.settings.work_item_types.no_workflow"))}
+        </p>
       </div>
-      <CustomMenu ellipsis>
+      <CustomMenu ellipsis ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}>
         <CustomMenu.MenuItem onClick={onEdit}>
           <span className="flex items-center justify-start gap-2">
             <EditOutline width={14} height={14} />
