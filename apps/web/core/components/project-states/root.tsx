@@ -16,6 +16,8 @@ import { ProjectStateLoader, GroupList } from "@/components/project-states";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useUserPermissions } from "@/hooks/store/user";
+// store
+import { isTypedState } from "@/store/workflow.helpers";
 
 type TProjectState = {
   workspaceSlug: string;
@@ -45,12 +47,12 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     projectId
   );
   const projectStates = getProjectStates(projectId);
-  const typedStates = useMemo(() => projectStates?.filter((state) => Boolean(state.type_id)) ?? [], [projectStates]);
+  const typedStates = useMemo(() => projectStates?.filter((state) => isTypedState(state)) ?? [], [projectStates]);
   const legacyGroupedStates = useMemo(() => {
     if (!groupedProjectStates) return;
     const grouped: Record<string, IState[]> = {};
     Object.entries(groupedProjectStates).forEach(([group, states]) => {
-      grouped[group] = states.filter((state) => !state.type_id);
+      grouped[group] = states.filter((state) => !isTypedState(state));
     });
     return grouped;
   }, [groupedProjectStates]);
@@ -59,7 +61,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   useSWR(
     workspaceSlug && projectId ? `PROJECT_STATES_${workspaceSlug}_${projectId}` : null,
     workspaceSlug && projectId ? () => fetchProjectStates(workspaceSlug.toString(), projectId.toString()) : null,
-    { revalidateIfStale: false, revalidateOnFocus: false }
+    { revalidateOnMount: true, revalidateOnFocus: false }
   );
 
   // State operations callbacks

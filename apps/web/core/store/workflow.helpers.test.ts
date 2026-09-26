@@ -4,6 +4,7 @@ import {
   allowedTargetStateIds,
   buildTransitionMatrix,
   findWorkflowMapType,
+  isTypedState,
   resolveStateColumns,
 } from "./workflow.helpers";
 
@@ -121,5 +122,23 @@ describe("findWorkflowMapType", () => {
   it("menemukan type dari map", () => {
     expect(findWorkflowMapType({ types: [mapType] }, "type-1")?.type_name).toBe("Incident");
     expect(findWorkflowMapType({ types: [mapType] }, null)).toBeUndefined();
+  });
+});
+
+describe("isTypedState", () => {
+  it("true bila type_id terisi", () => {
+    expect(isTypedState({ type_id: "type-1", workflow_state_id: null })).toBe(true);
+  });
+
+  it("true bila hanya workflow_state_id terisi", () => {
+    expect(isTypedState({ type_id: null, workflow_state_id: "ws-1" })).toBe(true);
+  });
+
+  it("false untuk state legacy", () => {
+    expect(isTypedState({ type_id: null, workflow_state_id: null })).toBe(false);
+  });
+
+  it("false bila field mapping tidak ada", () => {
+    expect(isTypedState({})).toBe(false);
   });
 });

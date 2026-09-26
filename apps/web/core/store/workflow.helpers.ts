@@ -21,6 +21,10 @@ export const allowedTargetStateIds = (
   return mapType.states.filter((state) => allowed.has(state.id)).map((state) => state.id);
 };
 
+/** State mirror typed (workflow-owned) bila punya `type_id` atau `workflow_state_id`. */
+export const isTypedState = (state: Partial<Pick<IState, "type_id" | "workflow_state_id">>): boolean =>
+  Boolean(state.type_id || state.workflow_state_id);
+
 /** Kolom kanban untuk satu type: urut `sequence` mirror, metadata mirror. */
 export const resolveStateColumns = (projectStates: IState[], mapType: TWorkflowMapType | undefined): IState[] => {
   if (!mapType) return projectStates;

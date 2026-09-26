@@ -219,6 +219,10 @@ export class StateStore implements IStateStore {
   fetchProjectStates = async (workspaceSlug: string, projectId: string) => {
     const statesResponse = await this.stateService.getStates(workspaceSlug, projectId);
     runInAction(() => {
+      const fetchedStateIds = new Set(statesResponse.map((state) => state.id));
+      Object.values(this.stateMap).forEach((state) => {
+        if (state.project_id === projectId && !fetchedStateIds.has(state.id)) delete this.stateMap[state.id];
+      });
       statesResponse.forEach((state) => {
         set(this.stateMap, [state.id], state);
       });
