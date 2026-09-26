@@ -3989,6 +3989,8 @@ git add apps/api-rs/crates/api/src/routes/v1/work_item.rs apps/api-rs/crates/api
 git commit -m "feat(api-rs): enforce transitions on v1 work item writes"
 ```
 
+Catatan hasil review C5: `completed_at` v1 sudah disinkronkan pada create/update; v1 **tidak** menulis `issue_activities` (gap pre-existing untuk semua field, bukan hanya state) — dicatat sebagai follow-up opsional, bukan blocker. Pre-check rule 3 (`epic_and_target_ownership`) mengecualikan epic hidup sesuai spec rule 1; type epic yang soft-deleted diperlakukan non-epic (fail closed).
+
 ---
 
 ### Task C6: Accept intake memindahkan state ke default type
