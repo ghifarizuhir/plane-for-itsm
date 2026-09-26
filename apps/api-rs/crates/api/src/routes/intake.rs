@@ -1573,6 +1573,10 @@ pub async fn patch_issue(
             Some(ref v) => (true, v.clone()),
         };
         if n_status.is_some() || dup_set || snooze_set || source_set {
+            // The intake write and the accepted→default-state move below
+            // share one transaction so an accept never commits with the
+            // issue still in triage.
+            let mut tx = st.pool.begin().await?;
             // Positional binds are static, so each nullable column is set
             // via "= value (possibly NULL)" only when present — absent
             // columns keep their value. `updated_by_id` mirrors save().
@@ -1595,8 +1599,38 @@ pub async fn patch_issue(
             .bind(source_val)
             .bind(row_id)
             .bind(user_id)
-            .execute(&st.pool)
+            .execute(&mut *tx)
             .await?;
+
+            // C6: accepting an intake item moves its issue out of the triage
+            // state to the type's default state (typed mirror first, legacy
+            // project default as fallback), clearing `completed_at`. The
+            // typed branch mirrors `issue_common::resolve_issue_state` (epic
+            // types and triage excluded); the legacy branch is type-less by
+            // design. The trailing `i.state_id` arm keeps the current state
+            // when no default exists (a bare two-arm COALESCE would write
+            // NULL).
+            if n_status == Some(1) {
+                sqlx::query(
+                    "UPDATE issues i SET state_id = COALESCE( \
+                       (SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
+                          AND t.is_epic = false AND t.deleted_at IS NULL \
+                        WHERE s.project_id = i.project_id AND s.type_id = i.type_id \
+                          AND s.deleted_at IS NULL AND s.is_triage = false AND s.\"group\" != 'triage' \
+                          AND s.\"default\" = true ORDER BY s.sequence LIMIT 1), \
+                       (SELECT s.id FROM states s WHERE s.project_id = i.project_id AND s.type_id IS NULL \
+                          AND s.deleted_at IS NULL AND s.is_triage = false AND s.\"group\" != 'triage' \
+                          AND s.\"default\" = true ORDER BY s.sequence LIMIT 1), \
+                       i.state_id \
+                     ), completed_at = NULL, updated_at = now() \
+                     WHERE i.id = $1 AND i.state_id IN \
+                       (SELECT id FROM states WHERE project_id = i.project_id AND \"group\" = 'triage' AND deleted_at IS NULL)",
+                )
+                .bind(issue_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            tx.commit().await?;
         }
     }
 

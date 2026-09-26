@@ -2,6 +2,10 @@ use api::middleware::auth::AuthUser;
 use api::routes::draft::{
     create as draft_create, create_draft_to_issue, ConvertBody, CreateDraftBody,
 };
+use api::routes::intake::{
+    create_issue as intake_create_issue, patch_issue as intake_patch_issue, CreateIntakeIssue,
+    InboxIssuePatch, IntakeIssuePayload,
+};
 use api::routes::issue_common::resolve_issue_state;
 use api::routes::issue_update::{patch_issue, PatchIssue};
 use api::routes::issue_write::{create as create_issue, CreateIssue};
@@ -186,6 +190,7 @@ async fn purge(pool: &PgPool, slug: &str) {
         "DELETE FROM issue_subscribers WHERE workspace_id = $1",
         "DELETE FROM issue_sequences WHERE workspace_id = $1",
         "DELETE FROM draft_issues WHERE workspace_id = $1",
+        "DELETE FROM intake_issues WHERE workspace_id = $1",
         "DELETE FROM issues WHERE workspace_id = $1",
         "DELETE FROM issue_views WHERE workspace_id = $1",
         "DELETE FROM states WHERE workspace_id = $1",
@@ -201,6 +206,7 @@ async fn purge(pool: &PgPool, slug: &str) {
         "DELETE FROM labels WHERE workspace_id = $1",
         "DELETE FROM project_user_properties WHERE workspace_id = $1",
         "DELETE FROM project_members WHERE workspace_id = $1",
+        "DELETE FROM intakes WHERE workspace_id = $1",
         "DELETE FROM projects WHERE workspace_id = $1",
         "DELETE FROM workspace_members WHERE workspace_id = $1",
         "DELETE FROM workspaces WHERE id = $1",
@@ -2797,6 +2803,199 @@ async fn v1_create_type_aware_default_and_state() {
         completed.is_some(),
         "create dengan state completed harus mengisi completed_at"
     );
+
+    purge(&st.pool, &slug).await;
+}
+
+// --- C6: intake accept moves the issue out of triage -----------------------
+
+/// Seed Rust tidak membuat baris `intakes`; buat satu agar handler
+/// intake-create bisa dipakai.
+async fn ensure_intake(st: &AppState, project_id: Uuid, ws_id: Uuid, owner: Uuid) -> Uuid {
+    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
+        "SELECT id FROM intakes WHERE project_id = $1 AND deleted_at IS NULL LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(&st.pool)
+    .await
+    .expect("intake lookup")
+    {
+        return id;
+    }
+    let (id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, \
+         project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Default', '', true, '{}', '{}', $1, $2, $3, $3, now(), now()) \
+         RETURNING id",
+    )
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(owner)
+    .fetch_one(&st.pool)
+    .await
+    .expect("intake row");
+    id
+}
+
+/// Buat intake issue lewat handler create (issue mendarat di state triage);
+/// mengembalikan (issue_id, triage_state_id).
+async fn create_intake_issue(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    ws_id: Uuid,
+    name: &str,
+) -> (Uuid, Uuid) {
+    ensure_intake(st, project_id, ws_id, owner).await;
+    let (status, payload) = intake_create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id)),
+        Json(CreateIntakeIssue {
+            issue: IntakeIssuePayload {
+                name: Some(name.to_string()),
+                priority: None,
+            },
+        }),
+    )
+    .await
+    .expect("intake create");
+    assert_eq!(status, StatusCode::OK, "intake create {name}");
+    let issue_id =
+        Uuid::parse_str(payload["issue"]["id"].as_str().expect("issue id")).expect("uuid");
+    let state_id =
+        Uuid::parse_str(payload["issue"]["state_id"].as_str().expect("state id")).expect("uuid");
+    (issue_id, state_id)
+}
+
+async fn accept_intake(
+    st: &AppState,
+    owner: Uuid,
+    slug: &str,
+    project_id: Uuid,
+    issue_id: Uuid,
+) -> (StatusCode, Value) {
+    let (status, Json(payload)) = intake_patch_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.to_string(), project_id, issue_id)),
+        Json(InboxIssuePatch {
+            status: Some(1),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("intake accept");
+    (status, payload)
+}
+
+async fn issue_state_and_completed(st: &AppState, issue_id: Uuid) -> (Option<Uuid>, bool) {
+    let (state_id, completed_at): (Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT state_id, completed_at FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("issue state");
+    (state_id, completed_at.is_some())
+}
+
+#[tokio::test]
+async fn intake_accept_moves_issue_to_typed_default_state() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "intakeaccept").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let wf = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[("New", "In Progress")],
+    )
+    .await;
+    let typed_default = wf.state("New");
+    let typed_second = wf.state("In Progress");
+
+    let (issue_id, triage_id) =
+        create_intake_issue(&st, owner, &slug, project_id, ws_id, "VPN down").await;
+    assert_ne!(triage_id, typed_default);
+
+    // Beri type + completed_at supaya kedua efek accept teruji.
+    sqlx::query("UPDATE issues SET type_id = $1, completed_at = now() WHERE id = $2")
+        .bind(wf.type_id)
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("arm typed accept");
+
+    let (status, payload) = accept_intake(&st, owner, &slug, project_id, issue_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload["status"], 1);
+
+    let (state_id, completed) = issue_state_and_completed(&st, issue_id).await;
+    assert_eq!(
+        state_id,
+        Some(typed_default),
+        "default mirror milik type menang"
+    );
+    assert_ne!(
+        state_id,
+        Some(typed_second),
+        "bukan state typed non-default"
+    );
+    assert_ne!(state_id, Some(triage_id), "keluar dari triage");
+    assert!(!completed, "completed_at dibersihkan");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn intake_accept_falls_back_to_legacy_default_state() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "intakelegacy").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Type tanpa mirror state apa pun → subquery typed kosong.
+    let type_id = insert_issue_type(&st, ws_id, "Request", false).await;
+    let (legacy_default,): (Uuid,) = sqlx::query_as(
+        "SELECT id FROM states WHERE project_id = $1 AND type_id IS NULL AND deleted_at IS NULL \
+         AND is_triage = false AND \"group\" != 'triage' AND \"default\" = true \
+         ORDER BY sequence LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("legacy default");
+
+    let (issue_id, triage_id) =
+        create_intake_issue(&st, owner, &slug, project_id, ws_id, "New laptop").await;
+    sqlx::query("UPDATE issues SET type_id = $1, completed_at = now() WHERE id = $2")
+        .bind(type_id)
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("arm legacy accept");
+
+    let (status, payload) = accept_intake(&st, owner, &slug, project_id, issue_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(payload["status"], 1);
+
+    let (state_id, completed) = issue_state_and_completed(&st, issue_id).await;
+    assert_eq!(state_id, Some(legacy_default), "fallback default legacy");
+    assert_ne!(state_id, Some(triage_id), "keluar dari triage");
+    assert!(!completed, "completed_at dibersihkan");
 
     purge(&st.pool, &slug).await;
 }
