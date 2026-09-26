@@ -1900,7 +1900,7 @@ async fn draft_convert_type_and_state_guards() {
     assert_eq!(stored_type, None);
     assert_eq!(stored_state, Some(legacy_two));
 
-    // (6) Draft epic (body tanpa type): enforcement dilewati.
+    // (6) Draft epic.
     let epic_type = insert_issue_type(&st, ws_id, "Epic Draft", true).await;
     let epic_first = insert_typed_state(
         &st,
@@ -1926,6 +1926,65 @@ async fn draft_convert_type_and_state_guards() {
         false,
     )
     .await;
+
+    // (6a) Body meng-echo type epic draft sendiri → diterima (FE menyebar
+    // payload draft), state draft dipertahankan.
+    let draft_epic_echo = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "epic echo draft",
+        Some(epic_type),
+        Some(epic_first),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_epic_echo,
+        ConvertBody {
+            name: Some("epic echo issue".into()),
+            type_id: Some(epic_type),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "epic echo type draft sendiri");
+    let epic_echo_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, epic_echo_id).await;
+    assert_eq!(stored_type, Some(epic_type));
+    assert_eq!(stored_state, Some(epic_first));
+
+    // (6b) Epic LAIN di body → 400 `type_id is not valid`.
+    let epic_other = insert_issue_type(&st, ws_id, "Epic Other", true).await;
+    let draft_epic_other = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "epic other draft",
+        Some(epic_type),
+        Some(epic_first),
+    )
+    .await;
+    let (status, body) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_epic_other,
+        ConvertBody {
+            name: Some("epic other issue".into()),
+            type_id: Some(epic_other),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "type_id is not valid");
+
+    // (6c) Body tanpa type: enforcement dilewati, state eksplisit bebas.
     let draft_epic = make_draft(
         &st,
         owner,
@@ -1953,6 +2012,76 @@ async fn draft_convert_type_and_state_guards() {
     let (stored_type, stored_state) = issue_type_state(&st, epic_id).await;
     assert_eq!(stored_type, Some(epic_type));
     assert_eq!(stored_state, Some(epic_second));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn draft_convert_drops_kept_state_of_other_type() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfdraftkept").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let x = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[],
+    )
+    .await;
+    let y = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Problem",
+        &[("Todo", "backlog")],
+        &[],
+    )
+    .await;
+
+    // Regresi review: draft type X + state milik type Y; body TANPA state.
+    // State draft tidak boleh ikut (mismatch type) — harus jatuh ke default X.
+    let draft = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "mismatch draft",
+        Some(x.type_id),
+        Some(y.state("Todo")),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft,
+        ConvertBody {
+            name: Some("mismatch issue".into()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(x.type_id));
+    assert_eq!(
+        stored_state,
+        Some(x.state("New")),
+        "kept state type Y harus diganti default type X"
+    );
+    assert_ne!(stored_state, Some(y.state("Todo")));
 
     purge(&st.pool, &slug).await;
 }

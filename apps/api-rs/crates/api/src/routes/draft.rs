@@ -601,6 +601,30 @@ async fn check_state(
     .await
 }
 
+/// Apakah `state_id` sah dipakai work item bertipe `type_id`: state hidup,
+/// non-triage, dan dimiliki type itu ATAU state legacy untyped (`type_id IS
+/// NULL`) yang tetap kompatibel dengan type apa pun — aturan yang sama dengan
+/// `validate_create_refs` (`issue_write.rs`). Dipakai untuk state eksplisit
+/// body DAN untuk state draft yang dipertahankan saat convert.
+async fn state_matches_type(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    state_id: uuid::Uuid,
+    type_id: Option<uuid::Uuid>,
+) -> Result<bool, sqlx::Error> {
+    let (ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+         AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage' \
+         AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+    )
+    .bind(state_id)
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(ok)
+}
+
 async fn check_parent(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
@@ -1183,16 +1207,17 @@ pub async fn destroy(
 ///   unknown state/parent/estimate → 400 verbatim; assignees/labels
 ///   silently filtered (Django drops ineligible ids, no 400).
 /// - Type/state reconciliation (C4): a body `type_id` must exist, be live and
-///   be enabled in the project (non-epic) → else 400 `type_id is not valid`.
-///   `effective_type = body.type_id or draft.type_id` drives BOTH the
-///   default-state resolution and the `type_id` stored on the issue. State
-///   resolution order is explicit body → draft's stored state (kept as-is,
-///   no fabricated move) → type default; a type change resolves the new
-///   type's default unless the body sent an explicit state. An explicit
-///   state owned by a different type → 400 `State is not valid for this work
-///   item type`. A type change skips transition enforcement (state must be
-///   the new type's/default); an unchanged type with a state moved off the
-///   draft's state is enforced through
+///   be enabled in the project; an epic is accepted only when it echoes the
+///   draft's own type → else 400 `type_id is not valid`. `effective_type =
+///   body.type_id or draft.type_id` drives BOTH the default-state resolution
+///   and the `type_id` stored on the issue. State resolution order is
+///   explicit body → draft's stored state (kept only while it still matches
+///   the effective type; otherwise the type default) → type default; a type
+///   change resolves the new type's default unless the body sent an explicit
+///   state. An explicit state owned by a different type → 400 `State is not
+///   valid for this work item type`. A type change skips transition
+///   enforcement (state must be the new type's/default); an unchanged type
+///   with a state moved off the draft's state is enforced through
 ///   `validate_state_transition`/`validate_initial_transition` and denied
 ///   with `transition_denied`.
 /// - Side-writes mirrored (`draft.py:239-307`, Celery skipped):
@@ -1235,16 +1260,24 @@ pub async fn create_draft_to_issue(
     }
     // Type dari body wajib ada, hidup, dan enabled di project ini (review
     // C4): tanpa cek ini type asing/typo lolos sampai FK-violation 500 atau
-    // error state yang menyesatkan.
+    // error state yang menyesatkan. Convert sengaja butuh enablement project
+    // (`project_issue_types`), beda dari create yang hanya cek eksistensi
+    // type (`issue_write.rs`, sengaja dibiarkan apa adanya). Type epic
+    // diterima HANYA saat body meng-echo type draft sendiri (FE menyebar
+    // payload draft; epic tidak lewat workflow).
     if let Some(t) = b.type_id {
         let (ok,): (bool,) = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM issue_types t \
-             JOIN project_issue_types pit ON pit.issue_type_id = t.id \
-               AND pit.project_id = $2 AND pit.deleted_at IS NULL \
-             WHERE t.id = $1 AND t.deleted_at IS NULL AND t.is_epic = false)",
+             WHERE t.id = $1 AND t.deleted_at IS NULL \
+               AND ((t.is_epic = false AND EXISTS( \
+                       SELECT 1 FROM project_issue_types pit \
+                       WHERE pit.issue_type_id = t.id AND pit.project_id = $2 \
+                         AND pit.deleted_at IS NULL)) \
+                 OR (t.is_epic = true AND t.id = $3)))",
         )
         .bind(t)
         .bind(project_id)
+        .bind(d.type_id)
         .fetch_one(&st.pool)
         .await?;
         if !ok {
@@ -1264,17 +1297,7 @@ pub async fn create_draft_to_issue(
         }
         // State milik type lain selalu ditolak; state untyped (legacy) tetap
         // boleh, sama seperti `validate_create_refs` di issue_write.rs.
-        let (type_ok,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-             AND deleted_at IS NULL AND \"group\" != 'triage' \
-             AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
-        )
-        .bind(sid)
-        .bind(project_id)
-        .bind(effective_type)
-        .fetch_one(&st.pool)
-        .await?;
-        if !type_ok {
+        if !state_matches_type(&st.pool, project_id, sid, effective_type).await? {
             return Ok(bad_request(json!({"error": STATE_TYPE_MSG})));
         }
     }
@@ -1298,19 +1321,23 @@ pub async fn create_draft_to_issue(
         return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
     };
     // Urutan resolusi state (review C4): explicit body → state draft
-    // (dipertahankan apa adanya, tanpa transisi) → default type. Body tanpa
-    // state tidak boleh memfabrikasi perpindahan ke default saat draft sudah
-    // punya state. Saat type berubah, state draft milik type lama tidak boleh
-    // ikut, jadi default type baru yang dipakai.
-    let state_id = match b.state_id {
-        Some(sid) => Some(sid),
-        None if type_changed => {
+    // (dipertahankan HANYA jika masih sah untuk type efektif) → default type.
+    // Body tanpa state tidak boleh memfabrikasi perpindahan ke default saat
+    // draft punya state yang valid; state draft yang deleted/triage/atau
+    // dimiliki type lain tidak boleh ikut dan jatuh ke default type efektif.
+    // Saat type berubah, state draft milik type lama tidak pernah ikut.
+    let state_id = if let Some(sid) = b.state_id {
+        Some(sid)
+    } else if type_changed {
+        resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
+    } else if let Some(sid) = d.state_id {
+        if state_matches_type(&st.pool, project_id, sid, effective_type).await? {
+            Some(sid)
+        } else {
             resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
         }
-        None => match d.state_id {
-            Some(sid) => Some(sid),
-            None => resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?,
-        },
+    } else {
+        resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
     };
     // Type berubah (draft→body atau body mengganti type draft): tanpa cek
     // transisi, state cukup milik/default type baru. Type sama dan state
