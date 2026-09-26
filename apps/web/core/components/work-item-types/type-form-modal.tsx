@@ -24,6 +24,7 @@ type Props = {
   workspaceSlug: string;
   isOpen: boolean;
   typeId: string | null;
+  isWorkflowsLoading: boolean;
   onClose: () => void;
 };
 
@@ -35,7 +36,7 @@ const defaultValues: TWorkItemTypePayload = {
 };
 
 export const TypeFormModal = observer(function TypeFormModal(props: Props) {
-  const { workspaceSlug, isOpen, typeId, onClose } = props;
+  const { workspaceSlug, isOpen, typeId, isWorkflowsLoading, onClose } = props;
   // store hooks
   const { workItemTypes, workflows, createWorkItemType, updateWorkItemType } = useWorkflow();
   // plane hooks
@@ -168,9 +169,9 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                       className="w-56"
                       label={
                         <span className="truncate text-13">
-                          {workflows === undefined
+                          {isWorkflowsLoading
                             ? t("common.loading")
-                            : (workflows.find((workflow) => workflow.id === value)?.name ??
+                            : (workflows?.find((workflow) => workflow.id === value)?.name ??
                               t("workspace_settings.settings.work_item_types.no_workflow"))}
                         </span>
                       }

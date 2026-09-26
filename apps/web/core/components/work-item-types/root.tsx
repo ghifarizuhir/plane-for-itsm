@@ -31,27 +31,36 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [deletingTypeId, setDeletingTypeId] = useState<string | null>(null);
+  const [isWorkflowsLoading, setIsWorkflowsLoading] = useState(true);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
   const { workItemTypes, workflows, fetchWorkItemTypes, fetchWorkflows } = useWorkflow();
+  // derived values
+  // `t` is rebuilt on every render by `useTranslation`, so depending on it directly would re-run the effect endlessly.
+  // Capturing the resolved strings keeps the dependency values stable across renders.
+  const fetchErrorTitle = t("common.error.label");
+  const fetchErrorMessage = t("common.error.message");
 
   useEffect(() => {
+    setIsWorkflowsLoading(true);
     void fetchWorkItemTypes(workspaceSlug).catch((error: any) => {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("common.error.label"),
-        message: error?.error ?? t("common.error.message"),
+        title: fetchErrorTitle,
+        message: error?.error ?? fetchErrorMessage,
       });
     });
-    void fetchWorkflows(workspaceSlug).catch((error: any) => {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("common.error.label"),
-        message: error?.error ?? t("common.error.message"),
-      });
-    });
-  }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows, t]);
+    void fetchWorkflows(workspaceSlug)
+      .catch((error: any) => {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: fetchErrorTitle,
+          message: error?.error ?? fetchErrorMessage,
+        });
+      })
+      .finally(() => setIsWorkflowsLoading(false));
+  }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows, fetchErrorTitle, fetchErrorMessage]);
 
   return (
     <>
@@ -59,6 +68,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
         workspaceSlug={workspaceSlug}
         isOpen={isFormOpen}
         typeId={editingTypeId}
+        isWorkflowsLoading={isWorkflowsLoading}
         onClose={() => {
           setIsFormOpen(false);
           setEditingTypeId(null);
@@ -106,7 +116,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
               key={type.id}
               type={type}
               workflowName={workflows?.find((workflow) => workflow.id === type.workflow)?.name}
-              isWorkflowsLoading={workflows === undefined}
+              isWorkflowsLoading={isWorkflowsLoading}
               onEdit={() => {
                 setEditingTypeId(type.id);
                 setIsFormOpen(true);
