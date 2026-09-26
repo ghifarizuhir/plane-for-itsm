@@ -67,3 +67,10 @@ Prereq (once): `./setup.sh` — generates `apps/api/.env` from `.env.example`.
 - Teardown: `docker compose -f docker-compose-test.yml down -v`
 
 See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/tests/TESTING_GUIDE.md` for test conventions and fixtures.
+
+## Rust tests (api-rs)
+
+Run from `apps/api-rs`. DB-backed integration tests need `DATABASE_URL` (default `postgres://plane:plane@localhost:5432/plane`).
+
+- Single target: `DATABASE_URL=... cargo test -p api --test <name>`
+- Scratch-workspace suites (`issue_create_test`, `issue_patch_test`, `issue_test`, `workflow_test`, `workflow_transition_test`) must run serially — their `purge` helpers delete by slug prefix, so parallel runs wipe each other's fixtures: add `-- --test-threads=1`.
