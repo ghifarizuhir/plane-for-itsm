@@ -10,18 +10,21 @@ import { EUserWorkspaceRoles } from "@plane/types";
 
 export enum WORKSPACE_SETTINGS_CATEGORY {
   ADMINISTRATION = "administration",
+  SERVICE_MANAGEMENT = "service-management",
   FEATURES = "features",
   DEVELOPER = "developer",
 }
 
 export const WORKSPACE_SETTINGS_CATEGORIES: WORKSPACE_SETTINGS_CATEGORY[] = [
   WORKSPACE_SETTINGS_CATEGORY.ADMINISTRATION,
+  WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT,
   WORKSPACE_SETTINGS_CATEGORY.FEATURES,
   WORKSPACE_SETTINGS_CATEGORY.DEVELOPER,
 ];
 
 export const WORKSPACE_SETTINGS_CATEGORY_LABELS: Record<WORKSPACE_SETTINGS_CATEGORY, string> = {
   [WORKSPACE_SETTINGS_CATEGORY.ADMINISTRATION]: "common.administration",
+  [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: "common.service_management",
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: "common.features",
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: "common.developer",
 };
@@ -55,6 +58,20 @@ export const WORKSPACE_SETTINGS: Record<TWorkspaceSettingsTabs, TWorkspaceSettin
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/webhooks/`,
   },
+  work_item_types: {
+    key: "work_item_types",
+    i18n_label: "workspace_settings.settings.work_item_types.title",
+    href: `/settings/work-item-types`,
+    access: [EUserWorkspaceRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/work-item-types/`,
+  },
+  workflows: {
+    key: "workflows",
+    i18n_label: "workspace_settings.settings.workflows.title",
+    href: `/settings/workflows`,
+    access: [EUserWorkspaceRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/workflows/`),
+  },
 };
 
 export const WORKSPACE_SETTINGS_ACCESS = Object.fromEntries(
@@ -66,6 +83,10 @@ export const GROUPED_WORKSPACE_SETTINGS: Record<WORKSPACE_SETTINGS_CATEGORY, TWo
     WORKSPACE_SETTINGS["general"],
     WORKSPACE_SETTINGS["members"],
     WORKSPACE_SETTINGS["export"],
+  ],
+  [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: [
+    WORKSPACE_SETTINGS["work_item_types"],
+    WORKSPACE_SETTINGS["workflows"],
   ],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"]],

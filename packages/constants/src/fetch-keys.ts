@@ -71,6 +71,11 @@ export const WORKSPACE_ESTIMATES = (workspaceSlug: string) => `WORKSPACE_ESTIMAT
 export const WORKSPACE_WORKFLOW_STATES = (workspaceSlug: string) =>
   `WORKSPACE_WORKFLOW_STATES_${workspaceSlug.toUpperCase()}`;
 
+export const WORKSPACE_WORKFLOWS = (workspaceSlug: string) => `WORKSPACE_WORKFLOWS_${workspaceSlug.toUpperCase()}`;
+
+export const WORKSPACE_WORK_ITEM_TYPES = (workspaceSlug: string) =>
+  `WORKSPACE_WORK_ITEM_TYPES_${workspaceSlug.toUpperCase()}`;
+
 export const WORKSPACE_INVITATION = (invitationId: string) => `WORKSPACE_INVITATION_${invitationId}`;
 
 export const WORKSPACE_MEMBER_ME_INFORMATION = (workspaceSlug: string) =>
@@ -195,6 +200,8 @@ export const PROJECT_MEMBER_PREFERENCES = (projectId: string, projectRole: EUser
 
 export const PROJECT_WORKFLOWS = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `PROJECT_WORKFLOWS_${projectId.toString().toUpperCase()}_${projectRole}`;
+
+export const PROJECT_WORKFLOW_MAP = (projectId: string) => `PROJECT_WORKFLOW_MAP_${projectId.toString().toUpperCase()}`;
 
 export const EPICS_PROPERTIES_AND_OPTIONS = (projectId: string, projectRole: EUserPermissions | undefined) =>
   `EPICS_PROPERTIES_AND_OPTIONS_${projectId.toString().toUpperCase()}_${projectRole}`;
