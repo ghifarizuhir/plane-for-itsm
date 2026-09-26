@@ -325,25 +325,27 @@ pub(crate) async fn fetch_transition_context(
     }))
 }
 
-/// `EXISTS`: `target_state` is a live state owned by `type_id` in this
-/// project. Both validators enforce this BEFORE consulting any workflow
-/// context, so a typed issue can never move to a legacy (`type_id IS NULL`)
-/// or cross-type state even when the type is workflow-less, not enabled in
-/// the project, or an epic (rule 3, unconditional). The type default passes
-/// because it belongs to the type.
-async fn target_state_belongs_to_type(
+/// `(is_epic, target_owned)` in one round trip: whether the type is a live
+/// epic and whether `target_state` is a live state owned by that type in this
+/// project. Epic types skip ALL transition enforcement (spec rule 1), so
+/// callers short-circuit on `is_epic` BEFORE applying the ownership rule;
+/// only non-epic types require the target to be their own state. The type
+/// default passes because it belongs to the type.
+async fn epic_and_target_ownership(
     pool: &sqlx::PgPool,
     project_id: Uuid,
-    target_state: Uuid,
     type_id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-         AND deleted_at IS NULL AND type_id IS NOT DISTINCT FROM $3)",
+    target_state: Uuid,
+) -> Result<(bool, bool), sqlx::Error> {
+    sqlx::query_as(
+        "SELECT \
+         EXISTS(SELECT 1 FROM issue_types WHERE id = $1 AND deleted_at IS NULL AND is_epic = true), \
+         EXISTS(SELECT 1 FROM states WHERE id = $2 AND project_id = $3 \
+           AND deleted_at IS NULL AND type_id IS NOT DISTINCT FROM $1)",
     )
+    .bind(type_id)
     .bind(target_state)
     .bind(project_id)
-    .bind(type_id)
     .fetch_one(pool)
     .await
 }
@@ -360,7 +362,12 @@ pub(crate) async fn validate_state_transition(
     let Some(type_id) = type_id else {
         return Ok(Ok(()));
     };
-    if !target_state_belongs_to_type(pool, project_id, target_state, type_id).await? {
+    let (is_epic, target_owned) =
+        epic_and_target_ownership(pool, project_id, type_id, target_state).await?;
+    if is_epic {
+        return Ok(Ok(()));
+    }
+    if !target_owned {
         return Ok(Err(Vec::new()));
     }
     let Some(ctx) = fetch_transition_context(pool, project_id, type_id).await? else {
@@ -381,7 +388,12 @@ pub(crate) async fn validate_initial_transition(
     let Some(type_id) = type_id else {
         return Ok(Ok(()));
     };
-    if !target_state_belongs_to_type(pool, project_id, target_state, type_id).await? {
+    let (is_epic, target_owned) =
+        epic_and_target_ownership(pool, project_id, type_id, target_state).await?;
+    if is_epic {
+        return Ok(Ok(()));
+    }
+    if !target_owned {
         return Ok(Err(Vec::new()));
     }
     let Some(ctx) = fetch_transition_context(pool, project_id, type_id).await? else {

@@ -1437,6 +1437,50 @@ async fn patch_epic_type_state_stays_free() {
     assert_eq!(stored_type, Some(epic_type));
     assert_eq!(stored_state, Some(second));
 
+    // Rule 1: epic juga bebas dari ownership check — pindah ke state legacy
+    // (`type_id IS NULL`) lewat PATCH, lalu kembali ke state epic lewat v1.
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-epic",
+        53001.0,
+        "backlog",
+        false,
+    )
+    .await;
+    let (status, _) = patch_issue_req(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        patch_body(None, Some(Some(legacy))),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "epic bebas ke state legacy");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(epic_type));
+    assert_eq!(stored_state, Some(legacy));
+
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(first),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "epic bebas lewat v1 juga");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(epic_type));
+    assert_eq!(stored_state, Some(first));
+
     purge(&st.pool, &slug).await;
 }
 
