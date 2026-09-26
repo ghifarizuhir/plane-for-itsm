@@ -73,6 +73,8 @@ export class WorkflowStore implements IWorkflowStore {
   workflowStates: Record<string, TWorkflowState[]> = {};
   workflowTransitions: Record<string, TWorkflowTransition[]> = {};
   workflowMap: Record<string, TWorkflowMap> = {};
+  // request sequencing so a slow response cannot overwrite a newer workflow map (plain field, not observable)
+  private workflowMapRequestId: Record<string, number> = {};
   // services
   private service = new WorkflowService();
 
@@ -266,9 +268,12 @@ export class WorkflowStore implements IWorkflowStore {
   };
 
   fetchWorkflowMap = async (workspaceSlug: string, projectId: string) => {
+    const requestId = (this.workflowMapRequestId[projectId] ?? 0) + 1;
+    this.workflowMapRequestId[projectId] = requestId;
     const map = await this.service.getWorkflowMap(workspaceSlug, projectId);
     runInAction(() => {
-      this.workflowMap[projectId] = map;
+      // only the latest in-flight request for this project may write the map
+      if (this.workflowMapRequestId[projectId] === requestId) this.workflowMap[projectId] = map;
     });
     return map;
   };

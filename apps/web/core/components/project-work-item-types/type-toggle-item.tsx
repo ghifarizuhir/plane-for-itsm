@@ -27,6 +27,7 @@ export const TypeToggleItem = observer(function TypeToggleItem(props: Props) {
   const { t } = useTranslation();
   // derived values
   const isDisabled = Boolean(disabledReason) || isUpdating;
+  const disabledReasonId = `work-item-type-${type.id}-disabled-reason`;
 
   const handleToggle = async (next: boolean) => {
     setIsUpdating(true);
@@ -41,10 +42,16 @@ export const TypeToggleItem = observer(function TypeToggleItem(props: Props) {
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="flex min-w-0 flex-col">
         <p className="truncate text-13 font-medium text-primary">{type.name}</p>
-        <p className="mt-0.5 truncate text-11 text-secondary">
-          {workflowName ?? t("workspace_settings.settings.work_item_types.no_workflow")}
-        </p>
-        {disabledReason && <p className="mt-0.5 text-11 text-tertiary">{disabledReason}</p>}
+        {!disabledReason && (
+          <p className="mt-0.5 truncate text-11 text-secondary">
+            {workflowName ?? t("workspace_settings.settings.work_item_types.no_workflow")}
+          </p>
+        )}
+        {disabledReason && (
+          <p id={disabledReasonId} className="mt-0.5 text-11 text-tertiary">
+            {disabledReason}
+          </p>
+        )}
       </div>
       <Switch
         size="sm"
@@ -52,6 +59,7 @@ export const TypeToggleItem = observer(function TypeToggleItem(props: Props) {
         onCheckedChange={(next) => void handleToggle(next)}
         disabled={isDisabled}
         aria-label={type.name}
+        aria-describedby={disabledReason ? disabledReasonId : undefined}
       />
     </div>
   );
