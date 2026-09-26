@@ -1409,7 +1409,7 @@ async fn labels_get_no_activity_rows() {
 }
 
 #[tokio::test]
-async fn create_response_has_26_key_list_shape() {
+async fn create_response_has_list_shape_with_fork_type_id() {
     let st = state().await;
     let mut scratch = Scratch::new(&st.pool).await;
     let member = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
@@ -1425,7 +1425,11 @@ async fn create_response_has_26_key_list_shape() {
     assert_eq!(status, StatusCode::CREATED);
 
     let obj = payload.as_object().expect("response must be a JSON object");
-    assert_eq!(obj.len(), 26, "response must have exactly the 26 list keys");
+    assert_eq!(
+        obj.len(),
+        27,
+        "response must have the 26 list keys plus the fork type_id key"
+    );
     for key in [
         "id",
         "name",
@@ -1453,15 +1457,17 @@ async fn create_response_has_26_key_list_shape() {
         "is_draft",
         "archived_at",
         "deleted_at",
+        "type_id",
     ] {
         assert!(obj.contains_key(key), "missing response key: {key}");
     }
-    for absent in ["description_html", "type_id"] {
-        assert!(
-            !obj.contains_key(absent),
-            "unexpected response key: {absent}"
-        );
-    }
+    // B10: untyped issue → fork key present but null.
+    assert!(payload["type_id"].is_null());
+    let absent = "description_html";
+    assert!(
+        !obj.contains_key(absent),
+        "unexpected response key: {absent}"
+    );
 
     let id = Uuid::parse_str(payload["id"].as_str().expect("id")).unwrap();
     let sequence_id = sequence_of(&st.pool, id).await;

@@ -1,7 +1,7 @@
+use api::routes::issue_common::IssueListRow;
 use api::routes::v1::work_item::{
     count_group_column, v1_count_json, v1_search_issue_json, v1_work_item_json, V1SearchRow,
 };
-use api::routes::issue_common::IssueListRow;
 use chrono::Utc;
 use serde_json::Value;
 use uuid::Uuid;
@@ -34,6 +34,7 @@ fn list_row() -> IssueListRow {
         is_draft: false,
         archived_at: None,
         deleted_at: None,
+        type_id: None,
     }
 }
 
@@ -58,7 +59,12 @@ fn count_json_no_grouping() {
 
 #[test]
 fn count_json_flat_grouping() {
-    let v = v1_count_json(Some("priority"), None, 7, vec![("urgent".into(), 2), ("None".into(), 5)]);
+    let v = v1_count_json(
+        Some("priority"),
+        None,
+        7,
+        vec![("urgent".into(), 2), ("None".into(), 5)],
+    );
     assert_eq!(v["grouped_by"], Value::from("priority"));
     assert_eq!(v["grouped_counts"]["urgent"]["count"], Value::from(2));
     assert_eq!(v["grouped_counts"]["None"]["count"], Value::from(5));
@@ -71,8 +77,14 @@ fn count_group_column_allowlist() {
     assert_eq!(count_group_column("priority"), Some("i.priority"));
     assert_eq!(count_group_column("project_id"), Some("i.project_id::text"));
     assert_eq!(count_group_column("type_id"), Some("i.type_id::text"));
-    assert_eq!(count_group_column("created_by"), Some("i.created_by_id::text"));
-    assert_eq!(count_group_column("target_date"), Some("i.target_date::text"));
+    assert_eq!(
+        count_group_column("created_by"),
+        Some("i.created_by_id::text")
+    );
+    assert_eq!(
+        count_group_column("target_date"),
+        Some("i.target_date::text")
+    );
     assert_eq!(count_group_column("start_date"), Some("i.start_date::text"));
     assert_eq!(count_group_column("cycle_id"), None);
     assert_eq!(count_group_column("label_ids"), None);
@@ -89,7 +101,14 @@ fn search_issue_json_has_sdk_required_fields() {
         workspace_slug: "itsm".into(),
     };
     let v = v1_search_issue_json(&row);
-    for key in ["id", "name", "sequence_id", "project_id", "project__identifier", "workspace__slug"] {
+    for key in [
+        "id",
+        "name",
+        "sequence_id",
+        "project_id",
+        "project__identifier",
+        "workspace__slug",
+    ] {
         assert!(v.get(key).is_some(), "missing {key}");
     }
 }

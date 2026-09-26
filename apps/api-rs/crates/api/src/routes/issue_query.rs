@@ -64,9 +64,10 @@ pub fn build_ungrouped_envelope(total: i64, limit: i64, page: i128, results: Vec
     })
 }
 
-/// The page-query SELECT prefix for `list`: the 26 `IssueListRow` columns
-/// (same projection as the flat path below, `issue_common.rs:20-47`).
-pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at FROM issues i LEFT JOIN states s ON s.id = i.state_id";
+/// The page-query SELECT prefix for `list`: the 26 Django `IssueListRow`
+/// columns (`issue_common.rs:24-58`) plus the fork `i.type_id` key (B10).
+/// Same projection as the flat path below.
+pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at, i.type_id FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 
 /// Key-scan SELECT for grouped `list` mode: every groupable key as text
 /// over the flat scope (same FROM/WHERE as the flat path). Arrays use the
@@ -275,7 +276,8 @@ pub async fn list(
     // as documented for rich `issue_filters()` below); `order_by`/`filters`
     // accepted-and-ignored here.
     let _ = (&q.order_by, &q.filters);
-    // 8. Count + page using IssueListRow 26-key SELECT (issue_common.rs:20-47).
+    // 8. Count + page using IssueListRow SELECT (26 Django keys + fork
+    // `type_id`; issue_common.rs:24-58).
     // NOTE: full legacy `issue_filters()` + rich filters ignored in this
     // slice (same deviation as list_detail docs); base visibility only:
     // not deleted, not archived, not draft.
@@ -449,7 +451,7 @@ pub async fn list_by_ids(
           AND fa.deleted_at IS NULL) AS attachment_count, \
         (SELECT COUNT(*) FROM issue_links lin \
           WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
-        i.is_draft, i.archived_at, i.deleted_at \
+        i.is_draft, i.archived_at, i.deleted_at, i.type_id \
         FROM issues i \
         LEFT JOIN states s ON s.id = i.state_id \
         WHERE i.project_id = $1 \
@@ -473,7 +475,8 @@ pub async fn list_by_ids(
     Ok((StatusCode::OK, Json(json!(rows))))
 }
 
-/// Fetch one issue in the same 26-key shape as the list page. Mirrors the
+/// Fetch one issue in the same shape as the list page (26 Django keys + fork
+/// `type_id`). Mirrors the
 /// Django create response re-query (`views/issue/base.py:432-441`), which runs
 /// through `Issue.issue_objects` (`db/models/issue.py:92-101`): non-deleted,
 /// non-archived, non-draft, non-triage, project not archived.
@@ -1760,7 +1763,8 @@ fn server_error() -> (StatusCode, Json<Value>) {
 
 /// The page-query SELECT prefix for `list_detail`: the 25 `SELECT` items in
 /// `IssueListDetailSerializer` order with the `apply_annotations`
-/// subqueries (`base.py:979-1025`). The `array_agg` aggregates carry
+/// subqueries (`base.py:979-1025`), plus the fork `i.type_id` key (B10). The
+/// `array_agg` aggregates carry
 /// `ORDER BY <bridge>.created_at DESC` because the `.all()` prefetches
 /// follow bridge `Meta.ordering = ("-created_at",)` (`db/models/issue.py`
 /// `IssueAssignee`/`IssueLabel`, `db/models/cycle.py` `CycleIssue`,
@@ -1791,7 +1795,8 @@ pub(crate) const DETAIL_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.s
        WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' \
        AND fa.deleted_at IS NULL) AS attachment_count, \
      (SELECT COUNT(*) FROM issue_links lin \
-       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count \
+       WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
+     i.type_id \
      FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 pub async fn list_detail(
     State(st): State<AppState>,
@@ -2636,6 +2641,17 @@ mod issue_detail_tests {
         assert_eq!(
             GENERIC_500_MSG,
             "Something went wrong please try again later"
+        );
+    }
+
+    #[test]
+    fn list_and_detail_selects_expose_issue_type_id() {
+        // B10: the web type selector and transition-aware state dropdown read
+        // `issue.type_id`, so both payload SELECTs must carry `i.type_id`.
+        assert!(LIST_SELECT_SQL.contains("i.type_id"), "{LIST_SELECT_SQL}");
+        assert!(
+            DETAIL_SELECT_SQL.contains("i.type_id"),
+            "{DETAIL_SELECT_SQL}"
         );
     }
 }

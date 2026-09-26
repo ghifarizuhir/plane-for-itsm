@@ -7,17 +7,19 @@ use api::routes::intake::{
     InboxIssuePatch, IntakeIssuePayload,
 };
 use api::routes::issue_common::resolve_issue_state;
+use api::routes::issue_query::{list, list_by_ids, ListIssuesQuery, ProjectIssuesQuery};
 use api::routes::issue_update::{patch_issue, PatchIssue};
 use api::routes::issue_write::{create as create_issue, CreateIssue};
 use api::routes::v1::work_item::{create as v1_create, update as v1_update, V1WriteWorkItem};
 use api::routes::v1::work_item_type::import_to_project;
+use api::routes::work_item::get_issue;
 use api::routes::workflow::{
     create_state, create_transition, create_workflow, evaluate_transition, patch_state,
     TransitionBody, TransitionContext, WorkflowBody, WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use common::config::AppConfig;
@@ -3152,6 +3154,127 @@ async fn intake_accept_without_default_state_is_rejected_and_stays_pending() {
     assert_eq!(intake_status, -2);
     let (state_id, _) = issue_state_and_completed(&st, issue_id).await;
     assert_eq!(state_id, Some(triage_id));
+
+    purge(&st.pool, &slug).await;
+}
+
+// --- B10: type_id in issue payloads ----------------------------------------
+
+#[tokio::test]
+async fn issue_payloads_expose_type_id() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wftypeid").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let wf = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog")],
+        &[],
+    )
+    .await;
+
+    // Create response (`fetch_issue_row` → `LIST_SELECT_SQL`).
+    let (status, Json(created)) = create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(CreateIssue {
+            name: "Typed issue".into(),
+            type_id: Some(wf.type_id),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("typed create");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["type_id"], json!(wf.type_id));
+    let typed_id = Uuid::parse_str(created["id"].as_str().expect("id")).expect("uuid");
+
+    let (status, Json(untyped_created)) = create_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(CreateIssue {
+            name: "Untyped issue".into(),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("untyped create");
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(untyped_created["type_id"].is_null());
+    let untyped_id = Uuid::parse_str(untyped_created["id"].as_str().expect("id")).expect("uuid");
+
+    // Detail payload (`DETAIL_SELECT_SQL` via `get_issue`).
+    let (status, Json(typed_detail)) = get_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, typed_id)),
+    )
+    .await
+    .expect("typed detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(typed_detail["type_id"], json!(wf.type_id));
+
+    let (status, Json(untyped_detail)) = get_issue(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, untyped_id)),
+    )
+    .await
+    .expect("untyped detail");
+    assert_eq!(status, StatusCode::OK);
+    assert!(untyped_detail["type_id"].is_null());
+
+    // Paginated list (`LIST_SELECT_SQL`).
+    let (status, Json(page)) = list(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Query(ProjectIssuesQuery::default()),
+    )
+    .await
+    .expect("list");
+    assert_eq!(status, StatusCode::OK);
+    let rows = page["results"].as_array().expect("results array");
+    let typed_row = rows
+        .iter()
+        .find(|r| r["id"] == json!(typed_id))
+        .expect("typed row in list");
+    assert_eq!(typed_row["type_id"], json!(wf.type_id));
+    let untyped_row = rows
+        .iter()
+        .find(|r| r["id"] == json!(untyped_id))
+        .expect("untyped row in list");
+    assert!(untyped_row["type_id"].is_null());
+
+    // `/issues/list/` (`list_by_ids`, its own inline projection).
+    let (status, Json(by_ids)) = list_by_ids(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Query(ListIssuesQuery {
+            issues: Some(typed_id.to_string()),
+        }),
+    )
+    .await
+    .expect("list_by_ids");
+    assert_eq!(status, StatusCode::OK);
+    let row = by_ids
+        .as_array()
+        .expect("list_by_ids array")
+        .first()
+        .expect("by-ids row");
+    assert_eq!(row["type_id"], json!(wf.type_id));
 
     purge(&st.pool, &slug).await;
 }

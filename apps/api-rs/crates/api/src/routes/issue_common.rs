@@ -16,10 +16,13 @@ pub struct IssueOut {
 
 /// One row of the default-branch `list_by_ids` response. Field order is the
 /// exact 26-key `.values()` order from `IssueListEndpoint.get`
-/// (`plane/app/views/issue/base.py:175-202`); struct serialization preserves
-/// declaration order, so the JSON keys keep this order. `estimate_point`,
-/// `created_by`, `updated_by` are the FK ids (`values()` on an FK yields
-/// the id, aliased from `*_id` columns in the SELECT).
+/// (`plane/app/views/issue/base.py:175-202`) followed by the fork key
+/// `type_id` (27 keys total: Django's list `.values()` omits `type_id`, but
+/// the web type selector and transition-aware state dropdown read
+/// `issue.type_id`); struct serialization preserves declaration order, so the
+/// JSON keys keep this order. `estimate_point`, `created_by`, `updated_by`
+/// are the FK ids (`values()` on an FK yields the id, aliased from `*_id`
+/// columns in the SELECT).
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct IssueListRow {
     pub id: uuid::Uuid,
@@ -48,6 +51,9 @@ pub struct IssueListRow {
     pub is_draft: bool,
     pub archived_at: Option<chrono::NaiveDate>,
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Fork key appended after the Django 26-key order (B10): drives the web
+    /// work-item-type UI.
+    pub type_id: Option<uuid::Uuid>,
 }
 
 /// Pure allow/deny decision for the project-level gate in `list_by_ids`,
@@ -379,8 +385,10 @@ pub(crate) fn detail_order_expr(sanitized: &str) -> (&'static str, bool) {
 /// One row of the `issues-detail/` page. Field order is the exact
 /// `IssueListDetailSerializer.to_representation` key order
 /// (`plane/app/serializers/issue.py:842-870`): 25 base keys (note: NO
-/// `deleted_at`, unlike the `/list/` 26-key shape), then `issue_relation` /
-/// `issue_related` appended ONLY when expanded (`issue.py:873-922`).
+/// `deleted_at`, unlike the `/list/` 26-key shape) plus the fork key
+/// `type_id` (26 keys total; Django's serializer has no `type_id`), then
+/// `issue_relation` / `issue_related` appended ONLY when expanded
+/// (`issue.py:873-922`).
 /// `estimate_point` is `estimate_point_id`, `created_by`/`updated_by` the FK
 /// ids. `module_ids`/`label_ids`/`assignee_ids` come from the `.all()`
 /// prefetches (`issue.py:832-839`, `base.py:1007-1025`) — live bridge rows
@@ -413,6 +421,9 @@ pub struct IssueDetailRow {
     pub sub_issues_count: i64,
     pub attachment_count: i64,
     pub link_count: i64,
+    /// Fork key appended after the Django 25-key order (B10): drives the web
+    /// work-item-type UI.
+    pub type_id: Option<uuid::Uuid>,
 }
 
 /// One entry of the expanded `issue_relation[]` / `issue_related[]` arrays.
