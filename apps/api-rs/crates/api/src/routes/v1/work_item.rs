@@ -675,10 +675,23 @@ fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {
     )
 }
 
-/// `state_type_check`: `Some(effective_type)` asks for the type-aware state
-/// predicate shared with the C4 create path — a live non-triage state may be
-/// owned by `effective_type` or be a legacy untyped state (`type_id IS NULL`);
-/// states of another type → 400 `State is not valid for this work item type`.
+/// Which predicate the explicit state must satisfy during `validate_write`.
+/// Create keeps the legacy allowance (amendment rule 7); a v1 update type
+/// change requires the state to belong to the NEW type strictly (rule 6,
+/// mirroring the C3 PATCH type-change branch).
+#[derive(Debug, Clone, Copy)]
+enum StateTypeCheck {
+    /// Create: the state may belong to the effective type OR be a legacy
+    /// untyped state (`type_id IS NULL`).
+    Create(Option<uuid::Uuid>),
+    /// Update type change: the state must belong to the new type strictly.
+    TypeChange(uuid::Uuid),
+}
+
+/// `state_type_check`: `Some(Create(_))` applies the C4 create predicate — a
+/// live non-triage state may be owned by the effective type or be a legacy
+/// untyped state (`type_id IS NULL`); `Some(TypeChange(_))` applies the strict
+/// C3 predicate (state must belong to the new type, no legacy allowance).
 /// `None` keeps only the project/live/non-triage check, so untyped/epic and
 /// unchanged-type updates keep their free state movement.
 async fn validate_write(
@@ -686,7 +699,7 @@ async fn validate_write(
     project_id: uuid::Uuid,
     body: &V1WriteWorkItem,
     require_name: bool,
-    state_type_check: Option<Option<uuid::Uuid>>,
+    state_type_check: Option<StateTypeCheck>,
 ) -> Result<(), (StatusCode, Json<Value>)> {
     let bad = |msg: String| (StatusCode::BAD_REQUEST, Json(json!({"error": msg})));
     match body.name.as_deref() {
@@ -729,23 +742,29 @@ async fn validate_write(
         }
     }
     if let Some(state_id) = body.state {
-        // Two-stage check in one round trip (same shape/predicate as the C4
-        // create path, `issue_write.rs::validate_create_refs`): (1) the state
-        // is a live, non-triage state of this project — legacy message;
-        // (2) when the caller asks for it, the state belongs to the effective
-        // type OR is a legacy untyped state (`type_id IS NULL`), which stays
-        // valid for typed work items.
+        // Two-stage check in one round trip: (1) the state is a live,
+        // non-triage state of this project — legacy message; (2) when the
+        // caller asks for it, the state satisfies the effective-type predicate
+        // (legacy-allowed on create, strict on a type change). `$4` gates the
+        // `type_id IS NULL` allowance so the strict path can never admit a
+        // legacy state.
+        let (state_type_id, allow_legacy) = match state_type_check {
+            Some(StateTypeCheck::Create(t)) => (t, true),
+            Some(StateTypeCheck::TypeChange(t)) => (Some(t), false),
+            None => (None, false),
+        };
         let (valid, type_ok): (bool, bool) = sqlx::query_as(
             "SELECT \
              EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
                AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false), \
              EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
                AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false \
-               AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+               AND (type_id IS NOT DISTINCT FROM $3 OR ($4::bool AND type_id IS NULL)))",
         )
         .bind(state_id)
         .bind(project_id)
-        .bind(state_type_check.flatten())
+        .bind(state_type_id)
+        .bind(allow_legacy)
         .fetch_one(&st.pool)
         .await
         .map_err(internal)?;
@@ -797,7 +816,15 @@ pub async fn create(
             Json(json!({"error": "Project not found"})),
         ));
     }
-    if let Err(e) = validate_write(&st, project_id, &body, true, Some(body.type_id)).await {
+    if let Err(e) = validate_write(
+        &st,
+        project_id,
+        &body,
+        true,
+        Some(StateTypeCheck::Create(body.type_id)),
+    )
+    .await
+    {
         return Ok(e);
     }
     let name = body.name.clone().unwrap_or_default();
@@ -913,23 +940,20 @@ pub async fn update(
         ));
     };
     // C3 semantics for type changes: a type change skips transition checks but
-    // the effective (new) type still gates an explicit state, while an
-    // unchanged type keeps the legacy check-only path so the transition
-    // verdict owns cross-type rejection (`allowed_state_ids: []`).
+    // an explicit state must belong to the new type STRICTLY (rule 6, no
+    // legacy allowance), while an unchanged type keeps the legacy check-only
+    // path so the transition verdict owns cross-type rejection
+    // (`allowed_state_ids: []`).
     let type_changed = match body.type_id {
         Some(new_type) => Some(new_type) != current_type,
         None => false,
     };
     let effective_type_id = body.type_id.or(current_type);
-    if let Err(e) = validate_write(
-        &st,
-        project_id,
-        &body,
-        false,
-        type_changed.then_some(effective_type_id),
-    )
-    .await
-    {
+    let state_type_check = body
+        .type_id
+        .filter(|new_type| Some(*new_type) != current_type)
+        .map(StateTypeCheck::TypeChange);
+    if let Err(e) = validate_write(&st, project_id, &body, false, state_type_check).await {
         return Ok(e);
     }
 

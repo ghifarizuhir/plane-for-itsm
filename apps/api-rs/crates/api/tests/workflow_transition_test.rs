@@ -2279,6 +2279,48 @@ async fn v1_update_type_change_reconciles_state() {
     assert_eq!(stored_type, Some(b.type_id));
     assert_eq!(stored_state, Some(b.state("Done")));
 
+    // Ganti type + state legacy untyped eksplisit → 400: type change
+    // mensyaratkan state milik type BARU secara ketat (tanpa allowance legacy).
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-backlog-tc",
+        53000.0,
+        "backlog",
+        false,
+    )
+    .await;
+    let legacy_issue = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "typed legacy",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        legacy_issue,
+        V1WriteWorkItem {
+            type_id: Some(b.type_id),
+            state: Some(legacy),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "State is not valid for this work item type");
+    let (stored_type, stored_state) = issue_type_state(&st, legacy_issue).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("New")));
+
     // Ganti type tanpa state → default type baru.
     let moved = create_issue_id(
         &st,
