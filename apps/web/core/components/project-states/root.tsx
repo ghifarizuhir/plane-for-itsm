@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 // components
 import { EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { IState, TStateOperationsCallbacks } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 import { ProjectStateLoader, GroupList } from "@/components/project-states";
@@ -26,6 +27,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   // hooks
   const {
     groupedProjectStates,
+    getProjectStates,
     fetchProjectStates,
     createState,
     moveStatePosition,
@@ -34,6 +36,7 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     markStateAsDefault,
   } = useProjectState();
   const { allowPermissions } = useUserPermissions();
+  const { t } = useTranslation();
   // derived values
   const isEditable = allowPermissions(
     [EUserProjectRoles.ADMIN],
@@ -41,6 +44,16 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     workspaceSlug,
     projectId
   );
+  const projectStates = getProjectStates(projectId);
+  const typedStates = useMemo(() => projectStates?.filter((state) => Boolean(state.type_id)) ?? [], [projectStates]);
+  const legacyGroupedStates = useMemo(() => {
+    if (!groupedProjectStates) return;
+    const grouped: Record<string, IState[]> = {};
+    Object.entries(groupedProjectStates).forEach(([group, states]) => {
+      grouped[group] = states.filter((state) => !state.type_id);
+    });
+    return grouped;
+  }, [groupedProjectStates]);
 
   // Fetching all project states
   useSWR(
@@ -64,13 +77,30 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
   );
 
   // Loader
-  if (!groupedProjectStates) return <ProjectStateLoader />;
+  if (!legacyGroupedStates) return <ProjectStateLoader />;
 
   return (
-    <GroupList
-      groupedStates={groupedProjectStates}
-      stateOperationsCallbacks={stateOperationsCallbacks}
-      isEditable={isEditable}
-    />
+    <>
+      <GroupList
+        groupedStates={legacyGroupedStates}
+        stateOperationsCallbacks={stateOperationsCallbacks}
+        isEditable={isEditable}
+      />
+      {typedStates.length > 0 && (
+        <div className="mt-8 flex flex-col gap-2">
+          <h4 className="text-14 font-medium">{t("workspace_settings.settings.work_item_types.title")}</h4>
+          <p className="text-caption-md-regular text-tertiary">
+            {t("workspace_settings.settings.work_item_types.description")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {typedStates.map((state) => (
+              <span key={state.id} className="rounded border border-subtle px-2 py-1 text-caption-md-medium">
+                {state.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 });
