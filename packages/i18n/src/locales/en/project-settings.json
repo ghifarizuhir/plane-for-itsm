@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Work item types",
+        "short_title": "Work item types",
+        "description": "Categorize work items by type and use a dedicated workflow for each type.",
+        "toggle_title": "Enable work item types",
+        "toggle_description": "Project members will be able to categorize work items by type."
+      },
       "time_tracking": {
         "title": "Time tracking",
         "short_title": "Time tracking",

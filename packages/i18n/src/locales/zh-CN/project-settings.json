@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "工作项类型",
+        "short_title": "工作项类型",
+        "description": "按类型对工作项进行分类，并为每种类型使用专用工作流。",
+        "toggle_title": "启用工作项类型",
+        "toggle_description": "项目成员将能够按类型对工作项进行分类。"
+      },
       "time_tracking": {
         "title": "时间跟踪",
         "short_title": "时间跟踪",

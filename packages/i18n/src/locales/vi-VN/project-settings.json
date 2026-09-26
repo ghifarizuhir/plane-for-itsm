@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Loại mục công việc",
+        "short_title": "Loại mục công việc",
+        "description": "Phân loại mục công việc theo loại và sử dụng quy trình làm việc riêng cho từng loại.",
+        "toggle_title": "Bật loại mục công việc",
+        "toggle_description": "Thành viên dự án sẽ có thể phân loại mục công việc theo loại."
+      },
       "time_tracking": {
         "title": "Theo dõi thời gian",
         "short_title": "Theo dõi thời gian",

@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "作業項目タイプ",
+        "short_title": "作業項目タイプ",
+        "description": "作業項目をタイプ別に分類し、タイプごとに専用のワークフローを使用します。",
+        "toggle_title": "作業項目タイプを有効にする",
+        "toggle_description": "プロジェクトメンバーは作業項目をタイプ別に分類できるようになります。"
+      },
       "time_tracking": {
         "title": "時間追跡",
         "short_title": "時間追跡",

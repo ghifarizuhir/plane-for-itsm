@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Typy elementów pracy",
+        "short_title": "Typy elementów pracy",
+        "description": "Kategoryzuj elementy pracy według typu i używaj dedykowanego przepływu pracy dla każdego typu.",
+        "toggle_title": "Włącz typy elementów pracy",
+        "toggle_description": "Członkowie projektu będą mogli kategoryzować elementy pracy według typu."
+      },
       "time_tracking": {
         "title": "Śledzenie czasu",
         "short_title": "Śledzenie czasu",

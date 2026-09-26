@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "작업 항목 유형",
+        "short_title": "작업 항목 유형",
+        "description": "작업 항목을 유형별로 분류하고 유형마다 전용 워크플로우를 사용합니다.",
+        "toggle_title": "작업 항목 유형 활성화",
+        "toggle_description": "프로젝트 멤버가 작업 항목을 유형별로 분류할 수 있습니다."
+      },
       "time_tracking": {
         "title": "시간 추적",
         "short_title": "시간 추적",

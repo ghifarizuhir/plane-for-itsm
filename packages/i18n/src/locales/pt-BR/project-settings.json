@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Tipos de item de trabalho",
+        "short_title": "Tipos de item de trabalho",
+        "description": "Categorize itens de trabalho por tipo e use um fluxo de trabalho dedicado para cada tipo.",
+        "toggle_title": "Ativar tipos de item de trabalho",
+        "toggle_description": "Os membros do projeto poderão categorizar itens de trabalho por tipo."
+      },
       "time_tracking": {
         "title": "Rastreamento de tempo",
         "short_title": "Rastreamento de tempo",

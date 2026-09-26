@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "İş öğesi türleri",
+        "short_title": "İş öğesi türleri",
+        "description": "İş öğelerini türe göre kategorilere ayırın ve her tür için özel bir iş akışı kullanın.",
+        "toggle_title": "İş öğesi türlerini etkinleştir",
+        "toggle_description": "Proje üyeleri iş öğelerini türe göre kategorilere ayırabilecektir."
+      },
       "time_tracking": {
         "title": "Zaman takibi",
         "short_title": "Zaman takibi",

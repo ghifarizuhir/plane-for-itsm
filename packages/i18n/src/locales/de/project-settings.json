@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Arbeitselementtypen",
+        "short_title": "Arbeitselementtypen",
+        "description": "Kategorisieren Sie Arbeitselemente nach Typ und verwenden Sie für jeden Typ einen eigenen Workflow.",
+        "toggle_title": "Arbeitselementtypen aktivieren",
+        "toggle_description": "Projektmitglieder können Arbeitselemente nach Typ kategorisieren."
+      },
       "time_tracking": {
         "title": "Zeiterfassung",
         "short_title": "Zeiterfassung",

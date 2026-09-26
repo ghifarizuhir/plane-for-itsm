@@ -410,6 +410,13 @@
           }
         }
       },
+      "work_item_types": {
+        "title": "Types d’éléments de travail",
+        "short_title": "Types d’éléments de travail",
+        "description": "Classez les éléments de travail par type et utilisez un flux de travail dédié pour chaque type.",
+        "toggle_title": "Activer les types d’éléments de travail",
+        "toggle_description": "Les membres du projet pourront classer les éléments de travail par type."
+      },
       "time_tracking": {
         "title": "Suivi du temps",
         "short_title": "Suivi du temps",
