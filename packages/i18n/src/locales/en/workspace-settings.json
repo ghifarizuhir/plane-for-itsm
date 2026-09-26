@@ -476,6 +476,52 @@
         "heading": "Scripts",
         "new_script": "New Script",
         "description": "Automate your workflows with custom scripts and automation rules."
+      },
+      "work_item_types": {
+        "title": "Work item types",
+        "heading": "Work item types",
+        "description": "Define the ITSM work item types available across the workspace and attach a workflow to each.",
+        "add_type": "Add type",
+        "empty_state": {
+          "title": "No work item types yet",
+          "description": "Create Incident, Problem, Change, or Improvement types and attach a workflow."
+        },
+        "form": {
+          "name": "Name",
+          "description": "Description",
+          "workflow": "Workflow",
+          "active": "Active"
+        }
+      },
+      "workflows": {
+        "title": "Workflows",
+        "heading": "Workflows",
+        "description": "Define states and the allowed transitions between them for each work item type.",
+        "add_workflow": "Add workflow",
+        "empty_state": {
+          "title": "No workflows yet",
+          "description": "Create a workflow, then add states and allowed transitions."
+        },
+        "form": {
+          "name": "Name",
+          "description": "Description",
+          "active": "Active"
+        },
+        "states": {
+          "heading": "States",
+          "add_state": "Add state",
+          "name": "Name",
+          "color": "Color",
+          "group": "Group",
+          "default": "Default",
+          "set_default": "Set as default"
+        },
+        "transitions": {
+          "heading": "Allowed transitions",
+          "description": "Check every from → to pair that is allowed. Unchecked pairs are blocked.",
+          "from": "From",
+          "to": "To"
+        }
       }
     },
     "empty_state": {

@@ -484,6 +484,52 @@
         "heading": "Skripte",
         "new_script": "Neues Skript",
         "description": "Automatisieren Sie Ihre Workflows mit benutzerdefinierten Skripten und Automatisierungsregeln."
+      },
+      "work_item_types": {
+        "title": "Arbeitselementtypen",
+        "heading": "Arbeitselementtypen",
+        "description": "Definieren Sie die im gesamten Arbeitsbereich verfügbaren ITSM-Arbeitselementtypen und weisen Sie jedem einen Workflow zu.",
+        "add_type": "Typ hinzufügen",
+        "empty_state": {
+          "title": "Noch keine Arbeitselementtypen",
+          "description": "Erstellen Sie Typen wie Störung, Problem, Änderung oder Verbesserung und weisen Sie jedem einen Workflow zu."
+        },
+        "form": {
+          "name": "Name",
+          "description": "Beschreibung",
+          "workflow": "Workflow",
+          "active": "Aktiv"
+        }
+      },
+      "workflows": {
+        "title": "Workflows",
+        "heading": "Workflows",
+        "description": "Definieren Sie Status und die zulässigen Übergänge zwischen ihnen für jeden Arbeitselementtyp.",
+        "add_workflow": "Workflow hinzufügen",
+        "empty_state": {
+          "title": "Noch keine Workflows",
+          "description": "Erstellen Sie einen Workflow und fügen Sie dann Status und zulässige Übergänge hinzu."
+        },
+        "form": {
+          "name": "Name",
+          "description": "Beschreibung",
+          "active": "Aktiv"
+        },
+        "states": {
+          "heading": "Status",
+          "add_state": "Status hinzufügen",
+          "name": "Name",
+          "color": "Farbe",
+          "group": "Gruppe",
+          "default": "Standard",
+          "set_default": "Als Standard festlegen"
+        },
+        "transitions": {
+          "heading": "Zulässige Übergänge",
+          "description": "Markieren Sie jedes zulässige Paar von → zu. Nicht markierte Paare sind blockiert.",
+          "from": "Von",
+          "to": "Zu"
+        }
       }
     },
     "empty_state": {

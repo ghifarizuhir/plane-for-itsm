@@ -484,6 +484,52 @@
         "heading": "スクリプト",
         "new_script": "新しいスクリプト",
         "description": "カスタムスクリプトと自動化ルールでワークフローを自動化します。"
+      },
+      "work_item_types": {
+        "title": "作業項目タイプ",
+        "heading": "作業項目タイプ",
+        "description": "ワークスペース全体で利用できるITSM作業項目タイプを定義し、それぞれにワークフローを関連付けます。",
+        "add_type": "タイプを追加",
+        "empty_state": {
+          "title": "作業項目タイプはまだありません",
+          "description": "インシデント、問題、変更、改善のタイプを作成し、ワークフローを関連付けます。"
+        },
+        "form": {
+          "name": "名前",
+          "description": "説明",
+          "workflow": "ワークフロー",
+          "active": "アクティブ"
+        }
+      },
+      "workflows": {
+        "title": "ワークフロー",
+        "heading": "ワークフロー",
+        "description": "作業項目タイプごとに、ステータスとステータス間で許可されるトランジションを定義します。",
+        "add_workflow": "ワークフローを追加",
+        "empty_state": {
+          "title": "ワークフローはまだありません",
+          "description": "ワークフローを作成し、ステータスと許可されるトランジションを追加します。"
+        },
+        "form": {
+          "name": "名前",
+          "description": "説明",
+          "active": "アクティブ"
+        },
+        "states": {
+          "heading": "ステータス",
+          "add_state": "ステータスを追加",
+          "name": "名前",
+          "color": "色",
+          "group": "グループ",
+          "default": "デフォルト",
+          "set_default": "デフォルトに設定"
+        },
+        "transitions": {
+          "heading": "許可されるトランジション",
+          "description": "許可する「遷移元 → 遷移先」の各組み合わせにチェックを入れます。チェックのない組み合わせはブロックされます。",
+          "from": "遷移元",
+          "to": "遷移先"
+        }
       }
     },
     "empty_state": {

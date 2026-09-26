@@ -484,6 +484,52 @@
         "heading": "Scripts",
         "new_script": "Novo Script",
         "description": "Automatize seus fluxos de trabalho com scripts personalizados e regras de automação."
+      },
+      "work_item_types": {
+        "title": "Tipos de item de trabalho",
+        "heading": "Tipos de item de trabalho",
+        "description": "Defina os tipos de item de trabalho de ITSM disponíveis em todo o espaço de trabalho e associe um fluxo de trabalho a cada um.",
+        "add_type": "Adicionar tipo",
+        "empty_state": {
+          "title": "Ainda não há tipos de item de trabalho",
+          "description": "Crie tipos Incidente, Problema, Mudança ou Melhoria e associe um fluxo de trabalho."
+        },
+        "form": {
+          "name": "Nome",
+          "description": "Descrição",
+          "workflow": "Fluxo de trabalho",
+          "active": "Ativo"
+        }
+      },
+      "workflows": {
+        "title": "Fluxos de trabalho",
+        "heading": "Fluxos de trabalho",
+        "description": "Defina estados e as transições permitidas entre eles para cada tipo de item de trabalho.",
+        "add_workflow": "Adicionar fluxo de trabalho",
+        "empty_state": {
+          "title": "Ainda não há fluxos de trabalho",
+          "description": "Crie um fluxo de trabalho e depois adicione estados e transições permitidas."
+        },
+        "form": {
+          "name": "Nome",
+          "description": "Descrição",
+          "active": "Ativo"
+        },
+        "states": {
+          "heading": "Estados",
+          "add_state": "Adicionar estado",
+          "name": "Nome",
+          "color": "Cor",
+          "group": "Grupo",
+          "default": "Padrão",
+          "set_default": "Definir como padrão"
+        },
+        "transitions": {
+          "heading": "Transições permitidas",
+          "description": "Marque cada par de → para permitido. Pares não marcados são bloqueados.",
+          "from": "De",
+          "to": "Para"
+        }
       }
     },
     "empty_state": {

@@ -484,6 +484,52 @@
         "heading": "Skrip",
         "new_script": "Skrip Baru",
         "description": "Otomatisasi alur kerja Anda dengan skrip kustom dan aturan otomatisasi."
+      },
+      "work_item_types": {
+        "title": "Tipe item kerja",
+        "heading": "Tipe item kerja",
+        "description": "Tentukan tipe item kerja ITSM yang tersedia di seluruh ruang kerja dan lampirkan alur kerja ke setiap tipe.",
+        "add_type": "Tambah tipe",
+        "empty_state": {
+          "title": "Belum ada tipe item kerja",
+          "description": "Buat tipe Insiden, Masalah, Perubahan, atau Peningkatan dan lampirkan alur kerja."
+        },
+        "form": {
+          "name": "Nama",
+          "description": "Deskripsi",
+          "workflow": "Alur kerja",
+          "active": "Aktif"
+        }
+      },
+      "workflows": {
+        "title": "Alur kerja",
+        "heading": "Alur kerja",
+        "description": "Tentukan status dan transisi yang diizinkan di antara status tersebut untuk setiap tipe item kerja.",
+        "add_workflow": "Tambah alur kerja",
+        "empty_state": {
+          "title": "Belum ada alur kerja",
+          "description": "Buat alur kerja, lalu tambahkan status dan transisi yang diizinkan."
+        },
+        "form": {
+          "name": "Nama",
+          "description": "Deskripsi",
+          "active": "Aktif"
+        },
+        "states": {
+          "heading": "Status",
+          "add_state": "Tambah status",
+          "name": "Nama",
+          "color": "Warna",
+          "group": "Grup",
+          "default": "Bawaan",
+          "set_default": "Atur sebagai default"
+        },
+        "transitions": {
+          "heading": "Transisi yang diizinkan",
+          "description": "Centang setiap pasangan dari → ke yang diizinkan. Pasangan yang tidak dicentang akan diblokir.",
+          "from": "Dari",
+          "to": "Ke"
+        }
       }
     },
     "empty_state": {

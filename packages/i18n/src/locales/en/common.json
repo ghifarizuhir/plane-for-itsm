@@ -695,7 +695,8 @@
     "developer": "Developer",
     "work_structure": "Work structure",
     "execution": "Execution",
-    "administration": "Administration"
+    "administration": "Administration",
+    "service_management": "Service management"
   },
   "chart": {
     "x_axis": "X-axis",

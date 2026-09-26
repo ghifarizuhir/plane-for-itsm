@@ -484,6 +484,52 @@
         "heading": "Script-uri",
         "new_script": "Script nou",
         "description": "Automatizează fluxurile tale de lucru cu scripturi personalizate și reguli de automatizare."
+      },
+      "work_item_types": {
+        "title": "Tipuri de activități",
+        "heading": "Tipuri de activități",
+        "description": "Definește tipurile de activități ITSM disponibile în întregul spațiu de lucru și atribuie un flux de lucru fiecăruia.",
+        "add_type": "Adaugă tip",
+        "empty_state": {
+          "title": "Încă nu există tipuri de activități",
+          "description": "Creează tipuri Incident, Problemă, Schimbare sau Îmbunătățire și atribuie un flux de lucru."
+        },
+        "form": {
+          "name": "Nume",
+          "description": "Descriere",
+          "workflow": "Flux de lucru",
+          "active": "Activ"
+        }
+      },
+      "workflows": {
+        "title": "Fluxuri de lucru",
+        "heading": "Fluxuri de lucru",
+        "description": "Definește stările și tranzițiile permise între ele pentru fiecare tip de activitate.",
+        "add_workflow": "Adaugă flux de lucru",
+        "empty_state": {
+          "title": "Încă nu există fluxuri de lucru",
+          "description": "Creează un flux de lucru, apoi adaugă stări și tranziții permise."
+        },
+        "form": {
+          "name": "Nume",
+          "description": "Descriere",
+          "active": "Activ"
+        },
+        "states": {
+          "heading": "Stări",
+          "add_state": "Adaugă stare",
+          "name": "Nume",
+          "color": "Culoare",
+          "group": "Grup",
+          "default": "Implicit",
+          "set_default": "Setează ca implicit"
+        },
+        "transitions": {
+          "heading": "Tranziții permise",
+          "description": "Bifează fiecare pereche permisă de la → la. Perechile nebifate sunt blocate.",
+          "from": "De la",
+          "to": "La"
+        }
       }
     },
     "empty_state": {

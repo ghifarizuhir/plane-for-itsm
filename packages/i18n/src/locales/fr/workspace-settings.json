@@ -484,6 +484,52 @@
         "heading": "Scripts",
         "new_script": "Nouveau script",
         "description": "Automatisez vos flux de travail avec des scripts personnalisés et des règles d’automatisation."
+      },
+      "work_item_types": {
+        "title": "Types d’éléments de travail",
+        "heading": "Types d’éléments de travail",
+        "description": "Définissez les types d’éléments de travail ITSM disponibles dans l’espace de travail et associez un flux de travail à chacun.",
+        "add_type": "Ajouter un type",
+        "empty_state": {
+          "title": "Aucun type d’élément de travail pour le moment",
+          "description": "Créez des types Incident, Problème, Changement ou Amélioration et associez un flux de travail."
+        },
+        "form": {
+          "name": "Nom",
+          "description": "Description",
+          "workflow": "Flux de travail",
+          "active": "Actif"
+        }
+      },
+      "workflows": {
+        "title": "Flux de travail",
+        "heading": "Flux de travail",
+        "description": "Définissez les états et les transitions autorisées entre eux pour chaque type d’élément de travail.",
+        "add_workflow": "Ajouter un flux de travail",
+        "empty_state": {
+          "title": "Aucun flux de travail pour le moment",
+          "description": "Créez un flux de travail, puis ajoutez des états et les transitions autorisées."
+        },
+        "form": {
+          "name": "Nom",
+          "description": "Description",
+          "active": "Actif"
+        },
+        "states": {
+          "heading": "États",
+          "add_state": "Ajouter un état",
+          "name": "Nom",
+          "color": "Couleur",
+          "group": "Groupe",
+          "default": "Par défaut",
+          "set_default": "Définir par défaut"
+        },
+        "transitions": {
+          "heading": "Transitions autorisées",
+          "description": "Cochez chaque paire de → à autorisée. Les paires non cochées sont bloquées.",
+          "from": "De",
+          "to": "À"
+        }
       }
     },
     "empty_state": {

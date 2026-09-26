@@ -717,7 +717,8 @@
     "developer": "Developer",
     "work_structure": "Work structure",
     "execution": "Execution",
-    "administration": "Administration"
+    "administration": "Administration",
+    "service_management": "서비스 관리"
   },
   "chart": {
     "x_axis": "X축",

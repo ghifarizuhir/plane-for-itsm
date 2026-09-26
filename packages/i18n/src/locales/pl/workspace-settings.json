@@ -484,6 +484,52 @@
         "heading": "Skrypty",
         "new_script": "Nowy skrypt",
         "description": "Automatyzuj swoje przepływy pracy za pomocą niestandardowych skryptów i reguł automatyzacji."
+      },
+      "work_item_types": {
+        "title": "Typy elementów pracy",
+        "heading": "Typy elementów pracy",
+        "description": "Zdefiniuj typy elementów pracy ITSM dostępne w całej przestrzeni roboczej i przypisz przepływ pracy do każdego z nich.",
+        "add_type": "Dodaj typ",
+        "empty_state": {
+          "title": "Brak typów elementów pracy",
+          "description": "Utwórz typy Incydent, Problem, Zmiana lub Ulepszenie i przypisz przepływ pracy."
+        },
+        "form": {
+          "name": "Nazwa",
+          "description": "Opis",
+          "workflow": "Przepływ pracy",
+          "active": "Aktywny"
+        }
+      },
+      "workflows": {
+        "title": "Przepływy pracy",
+        "heading": "Przepływy pracy",
+        "description": "Zdefiniuj stany i dozwolone przejścia między nimi dla każdego typu elementu pracy.",
+        "add_workflow": "Dodaj przepływ pracy",
+        "empty_state": {
+          "title": "Brak przepływów pracy",
+          "description": "Utwórz przepływ pracy, a następnie dodaj stany i dozwolone przejścia."
+        },
+        "form": {
+          "name": "Nazwa",
+          "description": "Opis",
+          "active": "Aktywny"
+        },
+        "states": {
+          "heading": "Stany",
+          "add_state": "Dodaj stan",
+          "name": "Nazwa",
+          "color": "Kolor",
+          "group": "Grupa",
+          "default": "Domyślne",
+          "set_default": "Ustaw jako domyślny"
+        },
+        "transitions": {
+          "heading": "Dozwolone przejścia",
+          "description": "Zaznacz każdą dozwoloną parę od → do. Niezaznaczone pary są blokowane.",
+          "from": "Od",
+          "to": "Do"
+        }
       }
     },
     "empty_state": {

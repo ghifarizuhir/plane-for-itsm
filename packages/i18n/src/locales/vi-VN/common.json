@@ -717,7 +717,8 @@
     "developer": "Developer",
     "work_structure": "Work structure",
     "execution": "Execution",
-    "administration": "Administration"
+    "administration": "Administration",
+    "service_management": "Quản lý dịch vụ"
   },
   "chart": {
     "x_axis": "Trục X",

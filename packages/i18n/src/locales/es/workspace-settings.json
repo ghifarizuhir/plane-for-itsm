@@ -484,6 +484,52 @@
         "heading": "Scripts",
         "new_script": "Nuevo script",
         "description": "Automatiza tus flujos de trabajo con scripts personalizados y reglas de automatización."
+      },
+      "work_item_types": {
+        "title": "Tipos de elemento de trabajo",
+        "heading": "Tipos de elemento de trabajo",
+        "description": "Define los tipos de elemento de trabajo de ITSM disponibles en todo el espacio de trabajo y asocia un flujo de trabajo a cada uno.",
+        "add_type": "Agregar tipo",
+        "empty_state": {
+          "title": "Aún no hay tipos de elemento de trabajo",
+          "description": "Crea tipos Incidente, Problema, Cambio o Mejora y asocia un flujo de trabajo."
+        },
+        "form": {
+          "name": "Nombre",
+          "description": "Descripción",
+          "workflow": "Flujo de trabajo",
+          "active": "Activo"
+        }
+      },
+      "workflows": {
+        "title": "Flujos de trabajo",
+        "heading": "Flujos de trabajo",
+        "description": "Define los estados y las transiciones permitidas entre ellos para cada tipo de elemento de trabajo.",
+        "add_workflow": "Agregar flujo de trabajo",
+        "empty_state": {
+          "title": "Aún no hay flujos de trabajo",
+          "description": "Crea un flujo de trabajo y luego agrega estados y transiciones permitidas."
+        },
+        "form": {
+          "name": "Nombre",
+          "description": "Descripción",
+          "active": "Activo"
+        },
+        "states": {
+          "heading": "Estados",
+          "add_state": "Agregar estado",
+          "name": "Nombre",
+          "color": "Color",
+          "group": "Grupo",
+          "default": "Predeterminado",
+          "set_default": "Establecer como predeterminado"
+        },
+        "transitions": {
+          "heading": "Transiciones permitidas",
+          "description": "Marca cada par desde → hasta permitido. Los pares no marcados se bloquean.",
+          "from": "Desde",
+          "to": "Hasta"
+        }
       }
     },
     "empty_state": {

@@ -484,6 +484,52 @@
         "heading": "Skripty",
         "new_script": "Nový skript",
         "description": "Automatizujte své pracovní postupy pomocí vlastních skriptů a pravidel automatizace."
+      },
+      "work_item_types": {
+        "title": "Typy pracovních položek",
+        "heading": "Typy pracovních položek",
+        "description": "Definujte typy pracovních položek ITSM dostupné v celém pracovním prostoru a ke každému typu přiřaďte workflow.",
+        "add_type": "Přidat typ",
+        "empty_state": {
+          "title": "Zatím žádné typy pracovních položek",
+          "description": "Vytvořte typy Incident, Problém, Změna nebo Zlepšení a přiřaďte k nim workflow."
+        },
+        "form": {
+          "name": "Název",
+          "description": "Popis",
+          "workflow": "Workflow",
+          "active": "Aktivní"
+        }
+      },
+      "workflows": {
+        "title": "Workflow",
+        "heading": "Workflow",
+        "description": "Definujte stavy a povolené přechody mezi nimi pro každý typ pracovní položky.",
+        "add_workflow": "Přidat workflow",
+        "empty_state": {
+          "title": "Zatím žádné workflow",
+          "description": "Vytvořte workflow a poté přidejte stavy a povolené přechody."
+        },
+        "form": {
+          "name": "Název",
+          "description": "Popis",
+          "active": "Aktivní"
+        },
+        "states": {
+          "heading": "Stavy",
+          "add_state": "Přidat stav",
+          "name": "Název",
+          "color": "Barva",
+          "group": "Skupina",
+          "default": "Výchozí",
+          "set_default": "Nastavit jako výchozí"
+        },
+        "transitions": {
+          "heading": "Povolené přechody",
+          "description": "Zaškrtněte každou povolenou dvojici od → do. Nezaškrtnuté dvojice jsou blokovány.",
+          "from": "Od",
+          "to": "Do"
+        }
       }
     },
     "empty_state": {

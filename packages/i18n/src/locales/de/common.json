@@ -717,7 +717,8 @@
     "developer": "Entwickler",
     "work_structure": "Arbeitsstruktur",
     "execution": "Ausführung",
-    "administration": "Verwaltung"
+    "administration": "Verwaltung",
+    "service_management": "Serviceverwaltung"
   },
   "chart": {
     "x_axis": "X-Achse",

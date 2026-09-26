@@ -484,6 +484,52 @@
         "heading": "Script",
         "new_script": "Script mới",
         "description": "Tự động hóa quy trình làm việc của bạn với các script và quy tắc tự động hóa tùy chỉnh."
+      },
+      "work_item_types": {
+        "title": "Loại mục công việc",
+        "heading": "Loại mục công việc",
+        "description": "Xác định các loại mục công việc ITSM có sẵn trên toàn không gian làm việc và đính kèm quy trình làm việc cho từng loại.",
+        "add_type": "Thêm loại",
+        "empty_state": {
+          "title": "Chưa có loại mục công việc",
+          "description": "Tạo các loại Sự cố, Vấn đề, Thay đổi hoặc Cải tiến và đính kèm quy trình làm việc."
+        },
+        "form": {
+          "name": "Tên",
+          "description": "Mô tả",
+          "workflow": "Quy trình làm việc",
+          "active": "Hoạt động"
+        }
+      },
+      "workflows": {
+        "title": "Quy trình làm việc",
+        "heading": "Quy trình làm việc",
+        "description": "Xác định trạng thái và các chuyển đổi được phép giữa chúng cho từng loại mục công việc.",
+        "add_workflow": "Thêm quy trình làm việc",
+        "empty_state": {
+          "title": "Chưa có quy trình làm việc",
+          "description": "Tạo quy trình làm việc, sau đó thêm trạng thái và chuyển đổi được phép."
+        },
+        "form": {
+          "name": "Tên",
+          "description": "Mô tả",
+          "active": "Hoạt động"
+        },
+        "states": {
+          "heading": "Trạng thái",
+          "add_state": "Thêm trạng thái",
+          "name": "Tên",
+          "color": "Màu",
+          "group": "Nhóm",
+          "default": "Mặc định",
+          "set_default": "Đặt làm mặc định"
+        },
+        "transitions": {
+          "heading": "Chuyển đổi được phép",
+          "description": "Chọn mọi cặp từ → đến được phép. Những cặp không được chọn sẽ bị chặn.",
+          "from": "Từ",
+          "to": "Đến"
+        }
       }
     },
     "empty_state": {

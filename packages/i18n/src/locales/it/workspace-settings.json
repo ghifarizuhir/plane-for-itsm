@@ -484,6 +484,52 @@
         "heading": "Script",
         "new_script": "Nuovo script",
         "description": "Automatizza i tuoi flussi di lavoro con script personalizzati e regole di automazione."
+      },
+      "work_item_types": {
+        "title": "Tipi di elemento di lavoro",
+        "heading": "Tipi di elemento di lavoro",
+        "description": "Definisci i tipi di elemento di lavoro ITSM disponibili in tutto lo spazio di lavoro e associa un flusso di lavoro a ciascuno.",
+        "add_type": "Aggiungi tipo",
+        "empty_state": {
+          "title": "Nessun tipo di elemento di lavoro ancora",
+          "description": "Crea tipi Incidente, Problema, Cambiamento o Miglioramento e associa un flusso di lavoro."
+        },
+        "form": {
+          "name": "Nome",
+          "description": "Descrizione",
+          "workflow": "Flusso di lavoro",
+          "active": "Attivo"
+        }
+      },
+      "workflows": {
+        "title": "Flussi di lavoro",
+        "heading": "Flussi di lavoro",
+        "description": "Definisci gli stati e le transizioni consentite tra di essi per ogni tipo di elemento di lavoro.",
+        "add_workflow": "Aggiungi flusso di lavoro",
+        "empty_state": {
+          "title": "Nessun flusso di lavoro ancora",
+          "description": "Crea un flusso di lavoro, poi aggiungi stati e transizioni consentite."
+        },
+        "form": {
+          "name": "Nome",
+          "description": "Descrizione",
+          "active": "Attivo"
+        },
+        "states": {
+          "heading": "Stati",
+          "add_state": "Aggiungi stato",
+          "name": "Nome",
+          "color": "Colore",
+          "group": "Gruppo",
+          "default": "Predefinito",
+          "set_default": "Imposta come predefinito"
+        },
+        "transitions": {
+          "heading": "Transizioni consentite",
+          "description": "Seleziona ogni coppia da → a consentita. Le coppie non selezionate sono bloccate.",
+          "from": "Da",
+          "to": "A"
+        }
       }
     },
     "empty_state": {

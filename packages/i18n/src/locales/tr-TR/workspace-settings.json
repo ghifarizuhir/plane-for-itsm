@@ -484,6 +484,52 @@
         "heading": "Komut Dosyaları",
         "new_script": "Yeni Komut Dosyası",
         "description": "İş akışlarınızı özel komut dosyaları ve otomasyon kurallarıyla otomatikleştirin."
+      },
+      "work_item_types": {
+        "title": "İş öğesi türleri",
+        "heading": "İş öğesi türleri",
+        "description": "Çalışma alanı genelinde kullanılabilen ITSM iş öğesi türlerini tanımlayın ve her birine bir iş akışı ekleyin.",
+        "add_type": "Tür ekle",
+        "empty_state": {
+          "title": "Henüz iş öğesi türü yok",
+          "description": "Olay, Problem, Değişiklik veya İyileştirme türleri oluşturun ve bir iş akışı ekleyin."
+        },
+        "form": {
+          "name": "Ad",
+          "description": "Açıklama",
+          "workflow": "İş akışı",
+          "active": "Aktif"
+        }
+      },
+      "workflows": {
+        "title": "İş akışları",
+        "heading": "İş akışları",
+        "description": "Her iş öğesi türü için durumları ve aralarında izin verilen geçişleri tanımlayın.",
+        "add_workflow": "İş akışı ekle",
+        "empty_state": {
+          "title": "Henüz iş akışı yok",
+          "description": "Bir iş akışı oluşturun, ardından durumları ve izin verilen geçişleri ekleyin."
+        },
+        "form": {
+          "name": "Ad",
+          "description": "Açıklama",
+          "active": "Aktif"
+        },
+        "states": {
+          "heading": "Durumlar",
+          "add_state": "Durum ekle",
+          "name": "Ad",
+          "color": "Renk",
+          "group": "Grup",
+          "default": "Varsayılan",
+          "set_default": "Varsayılan olarak ayarla"
+        },
+        "transitions": {
+          "heading": "İzin verilen geçişler",
+          "description": "İzin verilen her kaynak → hedef çiftini işaretleyin. İşaretlenmeyen çiftler engellenir.",
+          "from": "Kaynak",
+          "to": "Hedef"
+        }
       }
     },
     "empty_state": {

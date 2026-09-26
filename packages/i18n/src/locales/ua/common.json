@@ -717,7 +717,8 @@
     "developer": "Developer",
     "work_structure": "Work structure",
     "execution": "Execution",
-    "administration": "Administration"
+    "administration": "Administration",
+    "service_management": "Керування сервісами"
   },
   "chart": {
     "x_axis": "Вісь X",

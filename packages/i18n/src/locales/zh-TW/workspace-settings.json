@@ -484,6 +484,52 @@
         "heading": "指令碼",
         "new_script": "新指令碼",
         "description": "使用自訂指令碼和自動化規則，自動化您的工作流程。"
+      },
+      "work_item_types": {
+        "title": "工作事項類型",
+        "heading": "工作事項類型",
+        "description": "定義工作區中可用的 ITSM 工作事項類型，並為每種類型附加一個工作流程。",
+        "add_type": "新增類型",
+        "empty_state": {
+          "title": "尚無工作事項類型",
+          "description": "建立事件、問題、變更或改善類型，並附加工作流程。"
+        },
+        "form": {
+          "name": "名稱",
+          "description": "描述",
+          "workflow": "工作流程",
+          "active": "使用中"
+        }
+      },
+      "workflows": {
+        "title": "工作流程",
+        "heading": "工作流程",
+        "description": "為每種工作事項類型定義狀態及狀態之間允許的轉換。",
+        "add_workflow": "新增工作流程",
+        "empty_state": {
+          "title": "尚無工作流程",
+          "description": "建立工作流程，然後新增狀態和允許的轉換。"
+        },
+        "form": {
+          "name": "名稱",
+          "description": "描述",
+          "active": "使用中"
+        },
+        "states": {
+          "heading": "狀態",
+          "add_state": "新增狀態",
+          "name": "名稱",
+          "color": "顏色",
+          "group": "群組",
+          "default": "預設",
+          "set_default": "設為預設"
+        },
+        "transitions": {
+          "heading": "允許的轉換",
+          "description": "勾選每一對允許的「從 → 到」轉換。未勾選的配對將被封鎖。",
+          "from": "從",
+          "to": "到"
+        }
       }
     },
     "empty_state": {
