@@ -860,11 +860,13 @@ pub async fn create(
     .fetch_one(&mut *tx)
     .await?;
     let row: Option<(uuid::Uuid,)> = sqlx::query_as(
-        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, priority, start_date, target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, updated_by_id, point, estimate_point_id, type_id, parent_id, external_source, external_id, created_at, updated_at) \
+        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, priority, start_date, target_date, is_draft, sort_order, sequence_id, state_id, project_id, workspace_id, created_by_id, updated_by_id, point, estimate_point_id, type_id, parent_id, external_source, external_id, completed_at, created_at, updated_at) \
          SELECT gen_random_uuid(), $1, $2, '{}', $3, $4, $5, $6, $7, \
                 COALESCE($8, COALESCE((SELECT MAX(sort_order) FROM issues WHERE project_id = $9 AND deleted_at IS NULL), 65535.0) + 10000), \
                 $10, \
-                $11, $9, w.id, $12, $12, $13, $14, $15, $16, $17, $18, now(), now() \
+                $11, $9, w.id, $12, $12, $13, $14, $15, $16, $17, $18, \
+                CASE WHEN (SELECT \"group\" FROM states WHERE id = $11) = 'completed' THEN now() ELSE NULL END, \
+                now(), now() \
          FROM workspaces w WHERE w.slug = $19 RETURNING id",
     )
     .bind(&name).bind(&html).bind(body.description_stripped.as_deref())
@@ -1014,6 +1016,20 @@ pub async fn update(
         body.state.map(Some)
     };
 
+    // `_sync_completed_at` (C3 parity, `issue_update.rs:942-957`): a state move
+    // into the completed group stamps `completed_at`, anything else clears it.
+    // A cleared state (None) leaves `completed_at` alone, like C3.
+    let new_state_group: Option<String> = match state_write {
+        Some(Some(id)) => {
+            sqlx::query_scalar("SELECT \"group\" FROM states WHERE id = $1 AND project_id = $2")
+                .bind(id)
+                .bind(project_id)
+                .fetch_optional(&st.pool)
+                .await?
+        }
+        _ => None,
+    };
+
     // Only fields present in the JSON body are written (`COALESCE` cannot set
     // an explicit NULL back), so the SET list and its positional binds are
     // built together in one pass via `BindValue`.
@@ -1061,8 +1077,18 @@ pub async fn update(
             BindValue::Date(target_date),
         );
     }
+    // Known pre-existing gap: unlike the legacy PATCH path (`issue_update.rs`),
+    // v1 writes never insert `issue_activities` rows, so the activity feed does
+    // not reflect field/state changes made through the public v1 API yet.
     if let Some(state) = state_write {
         add(&mut sets, &mut values, "state_id", BindValue::Uuid(state));
+        if state.is_some() {
+            if new_state_group.as_deref() == Some("completed") {
+                sets.push("completed_at = now()".to_string());
+            } else {
+                sets.push("completed_at = NULL".to_string());
+            }
+        }
     }
     if body.type_id.is_some() {
         add(

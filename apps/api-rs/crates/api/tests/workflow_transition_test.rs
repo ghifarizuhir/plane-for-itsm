@@ -2130,7 +2130,11 @@ async fn v1_update_enforces_transitions() {
             ("In Progress", "started"),
             ("Closed", "completed"),
         ],
-        &[("New", "In Progress")],
+        &[
+            ("New", "In Progress"),
+            ("In Progress", "Closed"),
+            ("Closed", "In Progress"),
+        ],
     )
     .await;
     let issue_id = create_issue_id(
@@ -2188,6 +2192,264 @@ async fn v1_update_enforces_transitions() {
     let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
     assert_eq!(stored_type, Some(a.type_id));
     assert_eq!(stored_state, Some(a.state("In Progress")));
+
+    // `_sync_completed_at` (C3 parity): masuk group completed → completed_at
+    // terisi; keluar → NULL.
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("Closed")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (completed,): (Option<chrono::DateTime<chrono::Utc>>,) =
+        sqlx::query_as("SELECT completed_at FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("completed_at after completed state");
+    assert!(
+        completed.is_some(),
+        "state group completed harus mengisi completed_at"
+    );
+
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("In Progress")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (completed,): (Option<chrono::DateTime<chrono::Utc>>,) =
+        sqlx::query_as("SELECT completed_at FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("completed_at after leaving completed state");
+    assert!(completed.is_none(), "keluar dari completed harus clear");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn v1_update_rejects_cross_type_target_without_workflow() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfv1noctx").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Type tanpa workflow: `fetch_transition_context` mengembalikan None,
+    // tetapi rule 3 tetap berlaku — target wajib state hidup milik type issue.
+    let type_a = insert_issue_type(&st, ws_id, "Incident", false).await;
+    let a_new = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        type_a,
+        "New",
+        "noctx-new",
+        10000.0,
+        "backlog",
+        true,
+    )
+    .await;
+    let a_progress = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        type_a,
+        "In Progress",
+        "noctx-progress",
+        20000.0,
+        "started",
+        false,
+    )
+    .await;
+    let type_b = insert_issue_type(&st, ws_id, "Problem", false).await;
+    let b_todo = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        type_b,
+        "Todo",
+        "noctx-todo",
+        10000.0,
+        "backlog",
+        true,
+    )
+    .await;
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-backlog-noctx",
+        54000.0,
+        "backlog",
+        false,
+    )
+    .await;
+
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "no workflow",
+        Some(type_a),
+        Some(a_new),
+    )
+    .await;
+
+    // Target milik type lain → 400 + allowed [].
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(b_todo),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(body["allowed_state_ids"], json!([]));
+
+    // Target legacy untyped → 400 + allowed [] (rule 3 tanpa workflow).
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(legacy),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(body["allowed_state_ids"], json!([]));
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(a_new));
+
+    // State milik type sendiri tetap bebas tanpa workflow.
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a_progress),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(a_progress));
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn v1_update_initial_transition_requires_default() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfv1init").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let a = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[("New", "In Progress")],
+    )
+    .await;
+    let issue_id = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "null state",
+        Some(a.type_id),
+        Some(a.state("New")),
+    )
+    .await;
+    sqlx::query("UPDATE issues SET state_id = NULL WHERE id = $1")
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await
+        .expect("clear state");
+
+    // State typed non-default dari state NULL → 400, allowed hanya default.
+    let (status, body) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("In Progress")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(
+        body["allowed_state_ids"],
+        json!([a.state("New").to_string()])
+    );
+    let (_, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_state, None, "state NULL tidak boleh berubah");
+
+    // Default typed → 200 dan tersimpan.
+    let (status, _) = v1_update_issue(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        issue_id,
+        V1WriteWorkItem {
+            state: Some(a.state("New")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(a.type_id));
+    assert_eq!(stored_state, Some(a.state("New")));
 
     purge(&st.pool, &slug).await;
 }
@@ -2419,6 +2681,78 @@ async fn v1_create_type_aware_default_and_state() {
     let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
     assert_eq!(stored_type, Some(type_a));
     assert_eq!(stored_state, Some(state_a));
+
+    // Rule 7: state legacy untyped eksplisit tetap sah untuk work item
+    // bertipe — create mempertahankan allowance legacy.
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-backlog-create",
+        54001.0,
+        "backlog",
+        false,
+    )
+    .await;
+    let (status, Json(issue)) = v1_create(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(V1WriteWorkItem {
+            name: Some("legacy typed".into()),
+            state: Some(legacy),
+            type_id: Some(type_a),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("v1 create legacy typed");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(legacy));
+
+    // `_sync_completed_at` pada create: state group completed mengisi
+    // completed_at (C3/`insert_issue` parity).
+    let state_done = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        type_b,
+        "Done",
+        "done",
+        20000.0,
+        "completed",
+        false,
+    )
+    .await;
+    let (status, Json(issue)) = v1_create(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(V1WriteWorkItem {
+            name: Some("done typed".into()),
+            state: Some(state_done),
+            type_id: Some(type_b),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("v1 create completed state");
+    assert_eq!(status, StatusCode::CREATED);
+    let issue_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (completed,): (Option<chrono::DateTime<chrono::Utc>>,) =
+        sqlx::query_as("SELECT completed_at FROM issues WHERE id = $1")
+            .bind(issue_id)
+            .fetch_one(&st.pool)
+            .await
+            .expect("completed_at");
+    assert!(
+        completed.is_some(),
+        "create dengan state completed harus mengisi completed_at"
+    );
 
     purge(&st.pool, &slug).await;
 }
