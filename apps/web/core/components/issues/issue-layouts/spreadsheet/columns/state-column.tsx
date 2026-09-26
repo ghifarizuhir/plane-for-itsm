@@ -26,6 +26,8 @@ export const SpreadsheetStateColumn = observer(function SpreadsheetStateColumn(p
       <StateDropdown
         projectId={issue.project_id ?? undefined}
         value={issue.state_id}
+        workItemTypeId={issue.type_id}
+        currentStateId={issue.state_id}
         onChange={(data) => onChange(issue, { state_id: data }, { changed_property: "state", change_details: data })}
         disabled={disabled}
         buttonVariant="transparent-with-text"

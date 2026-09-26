@@ -90,6 +90,8 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 value={issue?.state_id}
                 onChange={(val) => issueOperations.update(workspaceSlug, projectId, issueId, { state_id: val })}
                 projectId={projectId?.toString() ?? ""}
+                workItemTypeId={issue.type_id}
+                currentStateId={issue.state_id}
                 disabled={!isEditable}
                 buttonVariant="transparent-with-text"
                 className="group w-full grow"
