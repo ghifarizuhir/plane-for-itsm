@@ -29,6 +29,7 @@ export type TProjectSettingsTabs =
   | "features_intake"
   | "features_work_item_types"
   | "states"
+  | "work_item_types"
   | "labels"
   | "estimates"
   | "automations";
