@@ -499,7 +499,9 @@
           "description": "Opis",
           "workflow": "Przepływ pracy",
           "active": "Aktywny"
-        }
+        },
+        "no_workflow": "Brak przepływu pracy",
+        "inactive": "Nieaktywny"
       },
       "workflows": {
         "title": "Przepływy pracy",

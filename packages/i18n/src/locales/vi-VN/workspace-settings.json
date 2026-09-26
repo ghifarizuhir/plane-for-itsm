@@ -499,7 +499,9 @@
           "description": "Mô tả",
           "workflow": "Quy trình làm việc",
           "active": "Hoạt động"
-        }
+        },
+        "no_workflow": "Không có quy trình làm việc",
+        "inactive": "Không hoạt động"
       },
       "workflows": {
         "title": "Quy trình làm việc",

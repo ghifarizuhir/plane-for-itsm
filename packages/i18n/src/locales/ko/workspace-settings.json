@@ -499,7 +499,9 @@
           "description": "설명",
           "workflow": "워크플로우",
           "active": "활성"
-        }
+        },
+        "no_workflow": "워크플로우 없음",
+        "inactive": "비활성"
       },
       "workflows": {
         "title": "워크플로우",

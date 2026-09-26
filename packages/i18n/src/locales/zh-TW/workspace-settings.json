@@ -499,7 +499,9 @@
           "description": "描述",
           "workflow": "工作流程",
           "active": "使用中"
-        }
+        },
+        "no_workflow": "無工作流程",
+        "inactive": "停用中"
       },
       "workflows": {
         "title": "工作流程",

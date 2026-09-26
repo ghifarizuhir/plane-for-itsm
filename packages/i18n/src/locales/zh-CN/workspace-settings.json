@@ -499,7 +499,9 @@
           "description": "描述",
           "workflow": "工作流",
           "active": "活动"
-        }
+        },
+        "no_workflow": "无工作流",
+        "inactive": "不活动"
       },
       "workflows": {
         "title": "工作流",

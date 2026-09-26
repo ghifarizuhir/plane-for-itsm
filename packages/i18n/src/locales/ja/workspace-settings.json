@@ -499,7 +499,9 @@
           "description": "説明",
           "workflow": "ワークフロー",
           "active": "アクティブ"
-        }
+        },
+        "no_workflow": "ワークフローなし",
+        "inactive": "非アクティブ"
       },
       "workflows": {
         "title": "ワークフロー",

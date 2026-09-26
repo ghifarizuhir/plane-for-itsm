@@ -491,7 +491,9 @@
           "description": "Description",
           "workflow": "Workflow",
           "active": "Active"
-        }
+        },
+        "no_workflow": "No workflow",
+        "inactive": "Inactive"
       },
       "workflows": {
         "title": "Workflows",

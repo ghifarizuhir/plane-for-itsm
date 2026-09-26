@@ -499,7 +499,9 @@
           "description": "Deskripsi",
           "workflow": "Alur kerja",
           "active": "Aktif"
-        }
+        },
+        "no_workflow": "Tidak ada alur kerja",
+        "inactive": "Tidak aktif"
       },
       "workflows": {
         "title": "Alur kerja",

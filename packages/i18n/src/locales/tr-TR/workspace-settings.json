@@ -499,7 +499,9 @@
           "description": "Açıklama",
           "workflow": "İş akışı",
           "active": "Aktif"
-        }
+        },
+        "no_workflow": "İş akışı yok",
+        "inactive": "Pasif"
       },
       "workflows": {
         "title": "İş akışları",

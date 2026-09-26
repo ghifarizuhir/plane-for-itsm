@@ -499,7 +499,9 @@
           "description": "Опис",
           "workflow": "Воркфлоу",
           "active": "Активний"
-        }
+        },
+        "no_workflow": "Без воркфлоу",
+        "inactive": "Неактивний"
       },
       "workflows": {
         "title": "Воркфлоу",

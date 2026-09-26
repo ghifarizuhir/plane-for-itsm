@@ -499,7 +499,9 @@
           "description": "Descriere",
           "workflow": "Flux de lucru",
           "active": "Activ"
-        }
+        },
+        "no_workflow": "Niciun flux de lucru",
+        "inactive": "Inactiv"
       },
       "workflows": {
         "title": "Fluxuri de lucru",

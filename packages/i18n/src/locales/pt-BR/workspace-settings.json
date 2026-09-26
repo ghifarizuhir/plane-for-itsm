@@ -499,7 +499,9 @@
           "description": "Descrição",
           "workflow": "Fluxo de trabalho",
           "active": "Ativo"
-        }
+        },
+        "no_workflow": "Sem fluxo de trabalho",
+        "inactive": "Inativo"
       },
       "workflows": {
         "title": "Fluxos de trabalho",

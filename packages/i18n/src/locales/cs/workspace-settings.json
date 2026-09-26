@@ -499,7 +499,9 @@
           "description": "Popis",
           "workflow": "Workflow",
           "active": "Aktivní"
-        }
+        },
+        "no_workflow": "Žádný workflow",
+        "inactive": "Neaktivní"
       },
       "workflows": {
         "title": "Workflow",

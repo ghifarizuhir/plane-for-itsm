@@ -499,7 +499,9 @@
           "description": "Popis",
           "workflow": "Pracovný postup",
           "active": "Aktívne"
-        }
+        },
+        "no_workflow": "Žiadny pracovný postup",
+        "inactive": "Neaktívny"
       },
       "workflows": {
         "title": "Pracovné postupy",
