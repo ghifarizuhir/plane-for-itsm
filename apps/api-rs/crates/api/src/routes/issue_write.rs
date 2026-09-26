@@ -104,11 +104,14 @@ async fn validate_create_refs(
         // Two-stage check in one round trip: (1) the state is a live,
         // non-triage state of this project — same predicate as the PATCH
         // refs check, with the legacy message; (2) the state belongs to the
-        // requested type. `type_id IS NULL` states stay valid for typed work
-        // items: they are the project-wide legacy states the shared resolver
-        // (`resolve_issue_state`) falls back to when a type has no mirror
-        // states, and clients that predate work item types keep sending them.
-        // A state owned by a DIFFERENT type is always rejected.
+        // requested type. Deliberately STRICTER than Django's
+        // `all_state_objects` (which would also accept soft-deleted and
+        // triage states): an issue must never be created against a state the
+        // StateManager UI hides. `type_id IS NULL` states stay valid for
+        // typed work items: they are the project-wide legacy states the
+        // shared resolver (`resolve_issue_state`) falls back to when a type
+        // has no mirror states, and clients that predate work item types keep
+        // sending them. A state owned by a DIFFERENT type is always rejected.
         let (valid, type_ok): (bool, bool) = sqlx::query_as(
             "SELECT \
              EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \

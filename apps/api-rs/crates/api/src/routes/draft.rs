@@ -1182,14 +1182,19 @@ pub async fn destroy(
 ///   `{"name": [...]}`; start>target → 400 `{"non_field_errors": [...]}`;
 ///   unknown state/parent/estimate → 400 verbatim; assignees/labels
 ///   silently filtered (Django drops ineligible ids, no 400).
-/// - Type/state reconciliation (C4): `effective_type = body.type_id or
-///   draft.type_id` drives BOTH the default-state resolution and the
-///   `type_id` stored on the issue. An explicit state owned by a different
-///   type → 400 `State is not valid for this work item type`. A type change
-///   skips transition enforcement (state must be the new type's/default);
-///   an unchanged type with a state moved off the draft's state is enforced
-///   through `validate_state_transition`/`validate_initial_transition` and
-///   denied with `transition_denied`.
+/// - Type/state reconciliation (C4): a body `type_id` must exist, be live and
+///   be enabled in the project (non-epic) → else 400 `type_id is not valid`.
+///   `effective_type = body.type_id or draft.type_id` drives BOTH the
+///   default-state resolution and the `type_id` stored on the issue. State
+///   resolution order is explicit body → draft's stored state (kept as-is,
+///   no fabricated move) → type default; a type change resolves the new
+///   type's default unless the body sent an explicit state. An explicit
+///   state owned by a different type → 400 `State is not valid for this work
+///   item type`. A type change skips transition enforcement (state must be
+///   the new type's/default); an unchanged type with a state moved off the
+///   draft's state is enforced through
+///   `validate_state_transition`/`validate_initial_transition` and denied
+///   with `transition_denied`.
 /// - Side-writes mirrored (`draft.py:239-307`, Celery skipped):
 ///   `CycleIssue` when `cycle_id` present, `ModuleIssue` bulk when
 ///   `module_ids` non-empty, `FileAsset`s re-pointed
@@ -1228,12 +1233,31 @@ pub async fn create_draft_to_issue(
     if let Err(e) = validate_dates(b.start_date, b.target_date) {
         return Ok(bad_request(json!({"non_field_errors": [e]})));
     }
+    // Type dari body wajib ada, hidup, dan enabled di project ini (review
+    // C4): tanpa cek ini type asing/typo lolos sampai FK-violation 500 atau
+    // error state yang menyesatkan.
+    if let Some(t) = b.type_id {
+        let (ok,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM issue_types t \
+             JOIN project_issue_types pit ON pit.issue_type_id = t.id \
+               AND pit.project_id = $2 AND pit.deleted_at IS NULL \
+             WHERE t.id = $1 AND t.deleted_at IS NULL AND t.is_epic = false)",
+        )
+        .bind(t)
+        .bind(project_id)
+        .fetch_one(&st.pool)
+        .await?;
+        if !ok {
+            return Ok(bad_request(json!({"error": "type_id is not valid"})));
+        }
+    }
     // Satu type efektif untuk konversi: body menang, type draft jadi
     // fallback. Dipakai untuk validasi state DAN nilai `type_id` pada INSERT
     // supaya type issue dan state-nya tidak pernah mismatch (temuan review
     // C2: dulu default di-resolve dari `d.type_id` tapi row di-bind
     // `b.type_id`).
     let effective_type = b.type_id.or(d.type_id);
+    let type_changed = effective_type != d.type_id;
     if let Some(sid) = b.state_id {
         if !check_state(&st.pool, Some(project_id), sid).await? {
             return Ok(bad_request(json!({"non_field_errors": [STATE_MSG]})));
@@ -1273,16 +1297,26 @@ pub async fn create_draft_to_issue(
     let Some((workspace_id, default_assignee)) = proj else {
         return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
     };
+    // Urutan resolusi state (review C4): explicit body → state draft
+    // (dipertahankan apa adanya, tanpa transisi) → default type. Body tanpa
+    // state tidak boleh memfabrikasi perpindahan ke default saat draft sudah
+    // punya state. Saat type berubah, state draft milik type lama tidak boleh
+    // ikut, jadi default type baru yang dipakai.
     let state_id = match b.state_id {
         Some(sid) => Some(sid),
-        None => resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?,
+        None if type_changed => {
+            resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
+        }
+        None => match d.state_id {
+            Some(sid) => Some(sid),
+            None => resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?,
+        },
     };
     // Type berubah (draft→body atau body mengganti type draft): tanpa cek
     // transisi, state cukup milik/default type baru. Type sama dan state
     // berpindah dari `d.state_id`: enforcement transisi seperti PATCH; draft
     // tanpa state lama diperlakukan sebagai transisi awal (hanya default type
     // yang boleh dipilih).
-    let type_changed = effective_type != d.type_id;
     let state_changed = state_id != d.state_id;
     if state_changed && !type_changed {
         if let Some(target_state) = state_id {
@@ -1403,12 +1437,7 @@ pub async fn create_draft_to_issue(
         "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, created_by_id, deleted, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, now(), now())",
     )
-    // `as i32`: SQL text ini identik dengan seed.rs:737, dan cache prepared
-    // statement sqlx di-key hanya oleh teks query — bind `i64` di sini vs
-    // `i32` di seed membuat Parse param #1 (INT8 vs INT4) bentrok dan Bind
-    // gagal "incorrect binary data format in bind parameter 1" tergantung
-    // koneksi mana yang menyiapkan duluan. Samakan dengan seed (dan dengan
-    // `sequence as i32` pada INSERT issues di atas).
+    // Kolom `sequence` bigint; `as i32` menyamai bind `seed.rs` di teks SQL identik agar prepare cache sqlx tak bentrok INT4/INT8.
     .bind(sequence as i32)
     .bind(issue_id)
     .bind(project_id)

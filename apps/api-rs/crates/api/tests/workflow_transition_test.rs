@@ -853,6 +853,38 @@ async fn insert_typed_state(
     state_id
 }
 
+/// State legacy (type_id NULL) + opsi soft-deleted; `group="triage"` juga
+/// menandai `is_triage`.
+async fn insert_legacy_state(
+    st: &AppState,
+    project_id: Uuid,
+    ws_id: Uuid,
+    name: &str,
+    slug: &str,
+    sequence: f64,
+    group: &str,
+    deleted: bool,
+) -> Uuid {
+    let (state_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO states (id, name, description, color, slug, sequence, \"group\", is_triage, \
+         \"default\", project_id, workspace_id, created_at, updated_at, deleted_at) \
+         VALUES (gen_random_uuid(), $1, '', '#60646C', $2, $3, $4, $5, false, $6, $7, now(), now(), \
+         CASE WHEN $8 THEN now() ELSE NULL END) RETURNING id",
+    )
+    .bind(name)
+    .bind(slug)
+    .bind(sequence)
+    .bind(group)
+    .bind(group == "triage")
+    .bind(project_id)
+    .bind(ws_id)
+    .bind(deleted)
+    .fetch_one(&st.pool)
+    .await
+    .expect("legacy state");
+    state_id
+}
+
 async fn create_issue_id(
     st: &AppState,
     owner: Uuid,
@@ -1002,6 +1034,71 @@ async fn create_rejects_state_from_other_type() {
     let (stored_type, stored_state) = issue_type_state(&st, issue_id).await;
     assert_eq!(stored_type, Some(type_a));
     assert_eq!(stored_state, Some(state_a));
+
+    // Aturan amandemen #7: state legacy (untyped, live) eksplisit tetap sah
+    // untuk work item bertipe.
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-backlog",
+        50000.0,
+        "backlog",
+        false,
+    )
+    .await;
+    let legacy_issue = create_issue_id(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "legacy typed",
+        Some(type_a),
+        Some(legacy),
+    )
+    .await;
+    let (stored_type, stored_state) = issue_type_state(&st, legacy_issue).await;
+    assert_eq!(stored_type, Some(type_a));
+    assert_eq!(stored_state, Some(legacy));
+
+    // Predikat create sengaja lebih ketat dari Django `all_state_objects`:
+    // state soft-deleted / triage ditolak dengan pesan lama.
+    let deleted = insert_legacy_state(
+        &st, project_id, ws_id, "Gone", "gone", 50001.0, "backlog", true,
+    )
+    .await;
+    let triage = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Triage Probe",
+        "triage-probe",
+        50002.0,
+        "triage",
+        false,
+    )
+    .await;
+    for bad_state in [deleted, triage] {
+        let (status, body) = create_issue(
+            State(st.clone()),
+            AuthUser(owner),
+            Path((slug.clone(), project_id)),
+            Json(CreateIssue {
+                name: "bad state".into(),
+                state_id: Some(bad_state),
+                type_id: Some(type_a),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("create bad state");
+        assert_eq!(status, StatusCode::BAD_REQUEST, "state {bad_state}");
+        assert_eq!(
+            body["error"], "State is not valid please pass a valid state_id",
+            "state {bad_state}"
+        );
+    }
 
     purge(&st.pool, &slug).await;
 }
@@ -1589,6 +1686,273 @@ async fn draft_convert_reconciles_type_and_enforces_transitions() {
             .await
             .expect("draft alive");
     assert_eq!(alive, 1, "convert gagal tidak boleh menghapus draft");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn draft_convert_type_and_state_guards() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfdraftguard").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let x = make_workflow_type(
+        &st,
+        &slug,
+        ws_id,
+        owner,
+        project_id,
+        "Incident",
+        &[("New", "backlog"), ("In Progress", "started")],
+        &[],
+    )
+    .await;
+    // Type hidup di workspace yang sama tapi belum enabled di project.
+    let not_enabled = insert_issue_type(&st, ws_id, "Not Enabled", false).await;
+    let legacy = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Backlog",
+        "legacy-backlog-guard",
+        51000.0,
+        "backlog",
+        false,
+    )
+    .await;
+    let legacy_two = insert_legacy_state(
+        &st,
+        project_id,
+        ws_id,
+        "Legacy Todo",
+        "legacy-todo-guard",
+        51001.0,
+        "backlog",
+        false,
+    )
+    .await;
+
+    // (1) Type asing / belum enabled di project di body → 400 `type_id is not
+    // valid` (bukan FK-violation 500), draft tetap hidup.
+    for bad_type in [Uuid::new_v4(), not_enabled] {
+        let draft = make_draft(
+            &st,
+            owner,
+            &slug,
+            project_id,
+            "bad type draft",
+            Some(x.type_id),
+            Some(x.state("New")),
+        )
+        .await;
+        let (status, body) = convert_draft(
+            &st,
+            owner,
+            &slug,
+            draft,
+            ConvertBody {
+                name: Some("bad type issue".into()),
+                type_id: Some(bad_type),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "type {bad_type}");
+        assert_eq!(body["error"], "type_id is not valid");
+        let (alive,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM draft_issues WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(draft)
+        .fetch_one(&st.pool)
+        .await
+        .expect("draft alive");
+        assert_eq!(alive, 1, "convert gagal tidak boleh menghapus draft");
+    }
+
+    // (2) Body tanpa state → state draft dipertahankan apa adanya, bukan
+    // dipindah paksa ke default (yang bisa 400 tanpa transisi).
+    let draft_keep = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "keep draft",
+        Some(x.type_id),
+        Some(x.state("In Progress")),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_keep,
+        ConvertBody {
+            name: Some("keep issue".into()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let keep_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, keep_id).await;
+    assert_eq!(stored_type, Some(x.type_id));
+    assert_eq!(
+        stored_state,
+        Some(x.state("In Progress")),
+        "state draft harus dipertahankan"
+    );
+
+    // (3) Draft typed + state legacy eksplisit → sukses (state untyped sah).
+    let draft_legacy = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "legacy draft",
+        Some(x.type_id),
+        Some(legacy),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_legacy,
+        ConvertBody {
+            name: Some("legacy issue".into()),
+            state_id: Some(legacy),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let legacy_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, legacy_id).await;
+    assert_eq!(stored_type, Some(x.type_id));
+    assert_eq!(stored_state, Some(legacy));
+
+    // (4) Draft tanpa state + explicit typed non-default → cek transisi awal:
+    // hanya default type yang diizinkan.
+    let draft_null = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "null state draft",
+        Some(x.type_id),
+        Some(x.state("New")),
+    )
+    .await;
+    sqlx::query("UPDATE draft_issues SET state_id = NULL WHERE id = $1")
+        .bind(draft_null)
+        .execute(&st.pool)
+        .await
+        .expect("null draft state");
+    let (status, body) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_null,
+        ConvertBody {
+            name: Some("null state issue".into()),
+            state_id: Some(x.state("In Progress")),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid state transition");
+    assert_eq!(
+        body["allowed_state_ids"],
+        json!([x.state("New").to_string()])
+    );
+
+    // (5) Draft untyped: pindah state legacy bebas (tanpa enforcement).
+    let draft_untyped = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "untyped draft",
+        None,
+        Some(legacy),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_untyped,
+        ConvertBody {
+            name: Some("untyped issue".into()),
+            state_id: Some(legacy_two),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let untyped_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, untyped_id).await;
+    assert_eq!(stored_type, None);
+    assert_eq!(stored_state, Some(legacy_two));
+
+    // (6) Draft epic (body tanpa type): enforcement dilewati.
+    let epic_type = insert_issue_type(&st, ws_id, "Epic Draft", true).await;
+    let epic_first = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        epic_type,
+        "New",
+        "epic-draft-new",
+        52000.0,
+        "backlog",
+        true,
+    )
+    .await;
+    let epic_second = insert_typed_state(
+        &st,
+        project_id,
+        ws_id,
+        epic_type,
+        "In Progress",
+        "epic-draft-progress",
+        52001.0,
+        "started",
+        false,
+    )
+    .await;
+    let draft_epic = make_draft(
+        &st,
+        owner,
+        &slug,
+        project_id,
+        "epic draft",
+        Some(epic_type),
+        Some(epic_first),
+    )
+    .await;
+    let (status, issue) = convert_draft(
+        &st,
+        owner,
+        &slug,
+        draft_epic,
+        ConvertBody {
+            name: Some("epic issue".into()),
+            state_id: Some(epic_second),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "epic draft convert bebas");
+    let epic_id = Uuid::parse_str(issue["id"].as_str().expect("issue id")).expect("uuid");
+    let (stored_type, stored_state) = issue_type_state(&st, epic_id).await;
+    assert_eq!(stored_type, Some(epic_type));
+    assert_eq!(stored_state, Some(epic_second));
 
     purge(&st.pool, &slug).await;
 }
