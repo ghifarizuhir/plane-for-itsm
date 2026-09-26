@@ -167,9 +167,12 @@ export class WorkflowStore implements IWorkflowStore {
   ) => {
     const state = await this.service.updateWorkflowState(workspaceSlug, workflowId, stateId, data);
     runInAction(() => {
-      this.workflowStates[workflowId] = (this.workflowStates[workflowId] ?? []).map((item) =>
-        item.id === stateId ? state : item
-      );
+      this.workflowStates[workflowId] = (this.workflowStates[workflowId] ?? []).map((item) => {
+        if (item.id === stateId) return state;
+        // the API demotes the previous default state; mirror that so the UI never shows two defaults
+        if (state.is_default) return Object.assign({}, item, { is_default: false });
+        return item;
+      });
     });
     await this.refreshWorkflowMaps(workspaceSlug);
     return state;
