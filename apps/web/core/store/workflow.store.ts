@@ -128,6 +128,7 @@ export class WorkflowStore implements IWorkflowStore {
     runInAction(() => {
       this.workflows = this.workflows?.map((item) => (item.id === workflowId ? workflow : item));
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
     return workflow;
   };
 
@@ -138,6 +139,7 @@ export class WorkflowStore implements IWorkflowStore {
       delete this.workflowStates[workflowId];
       delete this.workflowTransitions[workflowId];
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
   };
 
   fetchWorkflowStates = async (workspaceSlug: string, workflowId: string) => {
@@ -153,6 +155,7 @@ export class WorkflowStore implements IWorkflowStore {
     runInAction(() => {
       this.workflowStates[workflowId] = [...(this.workflowStates[workflowId] ?? []), state];
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
     return state;
   };
 
@@ -168,6 +171,7 @@ export class WorkflowStore implements IWorkflowStore {
         item.id === stateId ? state : item
       );
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
     return state;
   };
 
@@ -179,6 +183,7 @@ export class WorkflowStore implements IWorkflowStore {
         (transition) => transition.from_state_id !== stateId && transition.to_state_id !== stateId
       );
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
   };
 
   fetchWorkflowTransitions = async (workspaceSlug: string, workflowId: string) => {
@@ -198,6 +203,7 @@ export class WorkflowStore implements IWorkflowStore {
     runInAction(() => {
       this.workflowTransitions[workflowId] = [...(this.workflowTransitions[workflowId] ?? []), transition];
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
     return transition;
   };
 
@@ -208,6 +214,7 @@ export class WorkflowStore implements IWorkflowStore {
         (item) => item.id !== transitionId
       );
     });
+    await this.refreshWorkflowMaps(workspaceSlug);
   };
 
   fetchWorkItemTypes = async (workspaceSlug: string) => {
@@ -231,24 +238,27 @@ export class WorkflowStore implements IWorkflowStore {
     runInAction(() => {
       this.workItemTypes = this.workItemTypes?.map((item) => (item.id === typeId ? type : item));
     });
+    await this.refreshWorkflowMaps(workspaceSlug, type.project_ids);
     return type;
   };
 
   deleteWorkItemType = async (workspaceSlug: string, typeId: string) => {
+    const projectIds = this.workItemTypes?.find((item) => item.id === typeId)?.project_ids ?? [];
     await this.service.deleteWorkItemType(workspaceSlug, typeId);
     runInAction(() => {
       this.workItemTypes = this.workItemTypes?.filter((item) => item.id !== typeId);
     });
+    await this.refreshWorkflowMaps(workspaceSlug, projectIds);
   };
 
   importWorkItemTypes = async (workspaceSlug: string, projectId: string, typeIds: string[]) => {
     await this.service.importWorkItemTypes(workspaceSlug, projectId, typeIds);
-    await this.fetchWorkflowMap(workspaceSlug, projectId);
+    await this.refreshWorkflowMaps(workspaceSlug, [projectId]);
   };
 
   unlinkWorkItemType = async (workspaceSlug: string, projectId: string, typeId: string) => {
     await this.service.unlinkWorkItemType(workspaceSlug, projectId, typeId);
-    await this.fetchWorkflowMap(workspaceSlug, projectId);
+    await this.refreshWorkflowMaps(workspaceSlug, [projectId]);
   };
 
   fetchWorkflowMap = async (workspaceSlug: string, projectId: string) => {
@@ -257,6 +267,15 @@ export class WorkflowStore implements IWorkflowStore {
       this.workflowMap[projectId] = map;
     });
     return map;
+  };
+
+  private refreshWorkflowMaps = async (workspaceSlug: string, projectIds?: string[]) => {
+    const targets = projectIds
+      ? projectIds.filter((projectId) => this.workflowMap[projectId] !== undefined)
+      : Object.keys(this.workflowMap);
+    await Promise.all(
+      targets.map((projectId) => this.fetchWorkflowMap(workspaceSlug, projectId).catch(() => undefined))
+    );
   };
 
   getWorkflowMap = (projectId: string) => this.workflowMap[projectId];
