@@ -223,7 +223,7 @@ Aturan:
 4. Resolve `workflow_state_id` state sekarang dan target; wajib ada `WorkflowTransition` dari current → target untuk workflow type itu; jika tidak → 400 + daftar `allowed_state_ids`.
 5. Jika state sekarang tidak punya `workflow_state` (mis. issue lama yang baru diberi type tanpa ganti state) dan issue sudah punya type → satu-satunya target valid adalah default state type itu; selain itu 400.
 6. Ganti `type` pada issue existing: tanpa cek transisi; `state` wajib ikut state milik type baru — kalau tidak dikirim, auto default type baru.
-7. Create issue/draft confirm dengan `type` terisi dan `state` kosong → default type; `state` dikirim tapi tidak cocok type → 400.
+7. Create issue/draft confirm dengan `type` terisi dan `state` kosong → default type; `state` milik type lain → 400. State legacy (`type_id IS NULL`) tetap diizinkan (Django parity/kompatibilitas), dengan konsekuensi issue hanya bisa bergerak ke default type (rule 5).
 8. Bulk: **atomic** — bila ada satu item invalid, seluruh request ditolak dengan `invalid_issue_ids`.
 
 `IssueActivity` tetap tercatat otomatis (`Issue.TRACKED_FIELDS = ["state_id"]`, `ChangeTrackerMixin`) — tidak ada perubahan.
