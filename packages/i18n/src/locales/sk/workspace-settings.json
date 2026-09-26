@@ -508,6 +508,14 @@
         "heading": "Pracovné postupy",
         "description": "Definujte stavy a povolené prechody medzi nimi pre každý typ pracovnej položky.",
         "add_workflow": "Pridať pracovný postup",
+        "delete_confirmation": {
+          "title": "Zmazať pracovný postup",
+          "description": "Tento pracovný postup bude natrvalo zmazaný. Túto akciu nie je možné vrátiť späť."
+        },
+        "not_found": {
+          "title": "Pracovný postup sa nenašiel",
+          "description": "Pracovný postup, ktorý hľadáte, neexistuje alebo bol odstránený."
+        },
         "empty_state": {
           "title": "Zatiaľ žiadne pracovné postupy",
           "description": "Vytvorte pracovný postup a potom pridajte stavy a povolené prechody."
@@ -524,7 +532,11 @@
           "color": "Farba",
           "group": "Skupina",
           "default": "Predvolené",
-          "set_default": "Nastaviť ako predvolený"
+          "set_default": "Nastaviť ako predvolený",
+          "delete_confirmation": {
+            "title": "Zmazať stav",
+            "description": "Tento stav bude natrvalo zmazaný. Túto akciu nie je možné vrátiť späť."
+          }
         },
         "transitions": {
           "heading": "Povolené prechody",

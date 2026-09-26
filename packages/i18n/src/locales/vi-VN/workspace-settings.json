@@ -508,6 +508,14 @@
         "heading": "Quy trình làm việc",
         "description": "Xác định trạng thái và các chuyển đổi được phép giữa chúng cho từng loại mục công việc.",
         "add_workflow": "Thêm quy trình làm việc",
+        "delete_confirmation": {
+          "title": "Xóa quy trình làm việc",
+          "description": "Quy trình làm việc này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này."
+        },
+        "not_found": {
+          "title": "Không tìm thấy quy trình làm việc",
+          "description": "Quy trình làm việc bạn đang tìm không tồn tại hoặc đã bị xóa."
+        },
         "empty_state": {
           "title": "Chưa có quy trình làm việc",
           "description": "Tạo quy trình làm việc, sau đó thêm trạng thái và chuyển đổi được phép."
@@ -524,7 +532,11 @@
           "color": "Màu",
           "group": "Nhóm",
           "default": "Mặc định",
-          "set_default": "Đặt làm mặc định"
+          "set_default": "Đặt làm mặc định",
+          "delete_confirmation": {
+            "title": "Xóa trạng thái",
+            "description": "Trạng thái này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này."
+          }
         },
         "transitions": {
           "heading": "Chuyển đổi được phép",

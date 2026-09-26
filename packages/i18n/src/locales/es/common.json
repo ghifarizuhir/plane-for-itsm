@@ -690,6 +690,8 @@
     "saving": "Guardando",
     "save_changes": "Guardar cambios",
     "delete": "Eliminar",
+    "move_up": "Mover hacia arriba",
+    "move_down": "Mover hacia abajo",
     "deleting": "Eliminando",
     "pending": "Pendiente",
     "invite": "Invitar",

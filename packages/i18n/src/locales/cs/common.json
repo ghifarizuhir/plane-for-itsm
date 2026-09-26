@@ -690,6 +690,8 @@
     "saving": "Ukládání",
     "save_changes": "Uložit změny",
     "delete": "Smazat",
+    "move_up": "Posunout nahoru",
+    "move_down": "Posunout dolů",
     "deleting": "Mazání",
     "pending": "Čekající",
     "invite": "Pozvat",

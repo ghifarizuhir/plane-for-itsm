@@ -690,6 +690,8 @@
     "saving": "Salvataggio in corso",
     "save_changes": "Salva modifiche",
     "delete": "Elimina",
+    "move_up": "Sposta su",
+    "move_down": "Sposta giù",
     "deleting": "Eliminazione in corso",
     "pending": "In sospeso",
     "invite": "Invita",

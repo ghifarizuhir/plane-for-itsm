@@ -508,6 +508,14 @@
         "heading": "Przepływy pracy",
         "description": "Zdefiniuj stany i dozwolone przejścia między nimi dla każdego typu elementu pracy.",
         "add_workflow": "Dodaj przepływ pracy",
+        "delete_confirmation": {
+          "title": "Usuń przepływ pracy",
+          "description": "Ten przepływ pracy zostanie trwale usunięty. Tej operacji nie można cofnąć."
+        },
+        "not_found": {
+          "title": "Nie znaleziono przepływu pracy",
+          "description": "Przepływ pracy, którego szukasz, nie istnieje lub został usunięty."
+        },
         "empty_state": {
           "title": "Brak przepływów pracy",
           "description": "Utwórz przepływ pracy, a następnie dodaj stany i dozwolone przejścia."
@@ -524,7 +532,11 @@
           "color": "Kolor",
           "group": "Grupa",
           "default": "Domyślne",
-          "set_default": "Ustaw jako domyślny"
+          "set_default": "Ustaw jako domyślny",
+          "delete_confirmation": {
+            "title": "Usuń stan",
+            "description": "Ten stan zostanie trwale usunięty. Tej operacji nie można cofnąć."
+          }
         },
         "transitions": {
           "heading": "Dozwolone przejścia",

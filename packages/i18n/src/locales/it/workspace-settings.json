@@ -508,6 +508,14 @@
         "heading": "Flussi di lavoro",
         "description": "Definisci gli stati e le transizioni consentite tra di essi per ogni tipo di elemento di lavoro.",
         "add_workflow": "Aggiungi flusso di lavoro",
+        "delete_confirmation": {
+          "title": "Elimina flusso di lavoro",
+          "description": "Questo flusso di lavoro verrà eliminato definitivamente. Questa azione non può essere annullata."
+        },
+        "not_found": {
+          "title": "Flusso di lavoro non trovato",
+          "description": "Il flusso di lavoro cercato non esiste o è stato eliminato."
+        },
         "empty_state": {
           "title": "Nessun flusso di lavoro ancora",
           "description": "Crea un flusso di lavoro, poi aggiungi stati e transizioni consentite."
@@ -524,7 +532,11 @@
           "color": "Colore",
           "group": "Gruppo",
           "default": "Predefinito",
-          "set_default": "Imposta come predefinito"
+          "set_default": "Imposta come predefinito",
+          "delete_confirmation": {
+            "title": "Elimina stato",
+            "description": "Questo stato verrà eliminato definitivamente. Questa azione non può essere annullata."
+          }
         },
         "transitions": {
           "heading": "Transizioni consentite",

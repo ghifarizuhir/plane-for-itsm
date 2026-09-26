@@ -508,6 +508,14 @@
         "heading": "ワークフロー",
         "description": "作業項目タイプごとに、ステータスとステータス間で許可されるトランジションを定義します。",
         "add_workflow": "ワークフローを追加",
+        "delete_confirmation": {
+          "title": "ワークフローを削除",
+          "description": "このワークフローは完全に削除されます。この操作は取り消せません。"
+        },
+        "not_found": {
+          "title": "ワークフローが見つかりません",
+          "description": "お探しのワークフローは存在しないか、削除されました。"
+        },
         "empty_state": {
           "title": "ワークフローはまだありません",
           "description": "ワークフローを作成し、ステータスと許可されるトランジションを追加します。"
@@ -524,7 +532,11 @@
           "color": "色",
           "group": "グループ",
           "default": "デフォルト",
-          "set_default": "デフォルトに設定"
+          "set_default": "デフォルトに設定",
+          "delete_confirmation": {
+            "title": "ステータスを削除",
+            "description": "このステータスは完全に削除されます。この操作は取り消せません。"
+          }
         },
         "transitions": {
           "heading": "許可されるトランジション",

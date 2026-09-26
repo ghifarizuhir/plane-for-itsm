@@ -690,6 +690,8 @@
     "saving": "セービング",
     "save_changes": "セーブ チェンジズ",
     "delete": "デリート",
+    "move_up": "上に移動",
+    "move_down": "下に移動",
     "deleting": "デリーティング",
     "pending": "保留中",
     "invite": "招待",

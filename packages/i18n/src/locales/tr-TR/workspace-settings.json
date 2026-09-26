@@ -508,6 +508,14 @@
         "heading": "İş akışları",
         "description": "Her iş öğesi türü için durumları ve aralarında izin verilen geçişleri tanımlayın.",
         "add_workflow": "İş akışı ekle",
+        "delete_confirmation": {
+          "title": "İş akışını sil",
+          "description": "Bu iş akışı kalıcı olarak silinecek. Bu işlem geri alınamaz."
+        },
+        "not_found": {
+          "title": "İş akışı bulunamadı",
+          "description": "Aradığınız iş akışı mevcut değil veya silinmiş."
+        },
         "empty_state": {
           "title": "Henüz iş akışı yok",
           "description": "Bir iş akışı oluşturun, ardından durumları ve izin verilen geçişleri ekleyin."
@@ -524,7 +532,11 @@
           "color": "Renk",
           "group": "Grup",
           "default": "Varsayılan",
-          "set_default": "Varsayılan olarak ayarla"
+          "set_default": "Varsayılan olarak ayarla",
+          "delete_confirmation": {
+            "title": "Durumu sil",
+            "description": "Bu durum kalıcı olarak silinecek. Bu işlem geri alınamaz."
+          }
         },
         "transitions": {
           "heading": "İzin verilen geçişler",

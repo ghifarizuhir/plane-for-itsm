@@ -508,6 +508,14 @@
         "heading": "워크플로우",
         "description": "각 작업 항목 유형에 대해 상태와 상태 간에 허용되는 전환을 정의하세요.",
         "add_workflow": "워크플로우 추가",
+        "delete_confirmation": {
+          "title": "워크플로우 삭제",
+          "description": "이 워크플로우는 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다."
+        },
+        "not_found": {
+          "title": "워크플로우를 찾을 수 없습니다",
+          "description": "찾으시는 워크플로우가 존재하지 않거나 삭제되었습니다."
+        },
         "empty_state": {
           "title": "아직 워크플로우가 없습니다",
           "description": "워크플로우를 만든 다음 상태와 허용되는 전환을 추가하세요."
@@ -524,7 +532,11 @@
           "color": "색상",
           "group": "그룹",
           "default": "기본값",
-          "set_default": "기본값으로 설정"
+          "set_default": "기본값으로 설정",
+          "delete_confirmation": {
+            "title": "상태 삭제",
+            "description": "이 상태는 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다."
+          }
         },
         "transitions": {
           "heading": "허용되는 전환",

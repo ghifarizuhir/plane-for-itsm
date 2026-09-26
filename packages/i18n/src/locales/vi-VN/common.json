@@ -690,6 +690,8 @@
     "saving": "Đang lưu",
     "save_changes": "Lưu thay đổi",
     "delete": "Xóa",
+    "move_up": "Di chuyển lên",
+    "move_down": "Di chuyển xuống",
     "deleting": "Đang xóa",
     "pending": "Đang chờ xử lý",
     "invite": "Mời",

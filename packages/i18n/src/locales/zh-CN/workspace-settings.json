@@ -508,6 +508,14 @@
         "heading": "工作流",
         "description": "为每种工作项类型定义状态及状态之间允许的流转。",
         "add_workflow": "添加工作流",
+        "delete_confirmation": {
+          "title": "删除工作流",
+          "description": "此工作流将被永久删除。此操作无法撤销。"
+        },
+        "not_found": {
+          "title": "工作流不存在",
+          "description": "您要查找的工作流不存在或已被删除。"
+        },
         "empty_state": {
           "title": "暂无工作流",
           "description": "创建工作流，然后添加状态和允许的流转。"
@@ -524,7 +532,11 @@
           "color": "颜色",
           "group": "分组",
           "default": "默认",
-          "set_default": "设为默认"
+          "set_default": "设为默认",
+          "delete_confirmation": {
+            "title": "删除状态",
+            "description": "此状态将被永久删除。此操作无法撤销。"
+          }
         },
         "transitions": {
           "heading": "允许的流转",

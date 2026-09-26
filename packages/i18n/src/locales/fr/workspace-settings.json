@@ -508,6 +508,14 @@
         "heading": "Flux de travail",
         "description": "Définissez les états et les transitions autorisées entre eux pour chaque type d’élément de travail.",
         "add_workflow": "Ajouter un flux de travail",
+        "delete_confirmation": {
+          "title": "Supprimer le flux de travail",
+          "description": "Ce flux de travail sera définitivement supprimé. Cette action est irréversible."
+        },
+        "not_found": {
+          "title": "Flux de travail introuvable",
+          "description": "Le flux de travail que vous recherchez n’existe pas ou a été supprimé."
+        },
         "empty_state": {
           "title": "Aucun flux de travail pour le moment",
           "description": "Créez un flux de travail, puis ajoutez des états et les transitions autorisées."
@@ -524,7 +532,11 @@
           "color": "Couleur",
           "group": "Groupe",
           "default": "Par défaut",
-          "set_default": "Définir par défaut"
+          "set_default": "Définir par défaut",
+          "delete_confirmation": {
+            "title": "Supprimer l’état",
+            "description": "Cet état sera définitivement supprimé. Cette action est irréversible."
+          }
         },
         "transitions": {
           "heading": "Transitions autorisées",

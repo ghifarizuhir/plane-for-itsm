@@ -508,6 +508,14 @@
         "heading": "Fluxuri de lucru",
         "description": "Definește stările și tranzițiile permise între ele pentru fiecare tip de activitate.",
         "add_workflow": "Adaugă flux de lucru",
+        "delete_confirmation": {
+          "title": "Șterge fluxul de lucru",
+          "description": "Acest flux de lucru va fi șters definitiv. Această acțiune nu poate fi anulată."
+        },
+        "not_found": {
+          "title": "Fluxul de lucru nu a fost găsit",
+          "description": "Fluxul de lucru căutat nu există sau a fost șters."
+        },
         "empty_state": {
           "title": "Încă nu există fluxuri de lucru",
           "description": "Creează un flux de lucru, apoi adaugă stări și tranziții permise."
@@ -524,7 +532,11 @@
           "color": "Culoare",
           "group": "Grup",
           "default": "Implicit",
-          "set_default": "Setează ca implicit"
+          "set_default": "Setează ca implicit",
+          "delete_confirmation": {
+            "title": "Șterge starea",
+            "description": "Această stare va fi ștearsă definitiv. Această acțiune nu poate fi anulată."
+          }
         },
         "transitions": {
           "heading": "Tranziții permise",

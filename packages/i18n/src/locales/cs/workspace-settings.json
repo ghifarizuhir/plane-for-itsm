@@ -508,6 +508,14 @@
         "heading": "Workflow",
         "description": "Definujte stavy a povolené přechody mezi nimi pro každý typ pracovní položky.",
         "add_workflow": "Přidat workflow",
+        "delete_confirmation": {
+          "title": "Smazat workflow",
+          "description": "Tento workflow bude trvale smazán. Tuto akci nelze vrátit zpět."
+        },
+        "not_found": {
+          "title": "Workflow nenalezen",
+          "description": "Workflow, který hledáte, neexistuje nebo byl odstraněn."
+        },
         "empty_state": {
           "title": "Zatím žádné workflow",
           "description": "Vytvořte workflow a poté přidejte stavy a povolené přechody."
@@ -524,7 +532,11 @@
           "color": "Barva",
           "group": "Skupina",
           "default": "Výchozí",
-          "set_default": "Nastavit jako výchozí"
+          "set_default": "Nastavit jako výchozí",
+          "delete_confirmation": {
+            "title": "Smazat stav",
+            "description": "Tento stav bude trvale smazán. Tuto akci nelze vrátit zpět."
+          }
         },
         "transitions": {
           "heading": "Povolené přechody",

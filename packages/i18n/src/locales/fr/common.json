@@ -690,6 +690,8 @@
     "saving": "Enregistrement",
     "save_changes": "Enregistrer les modifications",
     "delete": "Supprimer",
+    "move_up": "Déplacer vers le haut",
+    "move_down": "Déplacer vers le bas",
     "deleting": "Suppression",
     "pending": "En attente",
     "invite": "Inviter",

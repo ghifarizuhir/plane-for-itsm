@@ -508,6 +508,14 @@
         "heading": "Alur kerja",
         "description": "Tentukan status dan transisi yang diizinkan di antara status tersebut untuk setiap tipe item kerja.",
         "add_workflow": "Tambah alur kerja",
+        "delete_confirmation": {
+          "title": "Hapus alur kerja",
+          "description": "Alur kerja ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan."
+        },
+        "not_found": {
+          "title": "Alur kerja tidak ditemukan",
+          "description": "Alur kerja yang Anda cari tidak ada atau telah dihapus."
+        },
         "empty_state": {
           "title": "Belum ada alur kerja",
           "description": "Buat alur kerja, lalu tambahkan status dan transisi yang diizinkan."
@@ -524,7 +532,11 @@
           "color": "Warna",
           "group": "Grup",
           "default": "Bawaan",
-          "set_default": "Atur sebagai default"
+          "set_default": "Atur sebagai default",
+          "delete_confirmation": {
+            "title": "Hapus status",
+            "description": "Status ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan."
+          }
         },
         "transitions": {
           "heading": "Transisi yang diizinkan",

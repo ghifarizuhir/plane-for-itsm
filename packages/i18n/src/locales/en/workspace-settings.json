@@ -500,6 +500,14 @@
         "heading": "Workflows",
         "description": "Define states and the allowed transitions between them for each work item type.",
         "add_workflow": "Add workflow",
+        "delete_confirmation": {
+          "title": "Delete workflow",
+          "description": "This workflow will be permanently deleted. This action cannot be undone."
+        },
+        "not_found": {
+          "title": "Workflow not found",
+          "description": "The workflow you are looking for does not exist or has been deleted."
+        },
         "empty_state": {
           "title": "No workflows yet",
           "description": "Create a workflow, then add states and allowed transitions."
@@ -516,7 +524,11 @@
           "color": "Color",
           "group": "Group",
           "default": "Default",
-          "set_default": "Set as default"
+          "set_default": "Set as default",
+          "delete_confirmation": {
+            "title": "Delete state",
+            "description": "This state will be permanently deleted. This action cannot be undone."
+          }
         },
         "transitions": {
           "heading": "Allowed transitions",

@@ -668,6 +668,8 @@
     "saving": "Saving",
     "save_changes": "Save changes",
     "delete": "Delete",
+    "move_up": "Move up",
+    "move_down": "Move down",
     "deleting": "Deleting",
     "pending": "Pending",
     "invite": "Invite",

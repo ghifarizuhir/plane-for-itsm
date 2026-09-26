@@ -508,6 +508,14 @@
         "heading": "Fluxos de trabalho",
         "description": "Defina estados e as transições permitidas entre eles para cada tipo de item de trabalho.",
         "add_workflow": "Adicionar fluxo de trabalho",
+        "delete_confirmation": {
+          "title": "Excluir fluxo de trabalho",
+          "description": "Este fluxo de trabalho será excluído permanentemente. Esta ação não pode ser desfeita."
+        },
+        "not_found": {
+          "title": "Fluxo de trabalho não encontrado",
+          "description": "O fluxo de trabalho que você procura não existe ou foi excluído."
+        },
         "empty_state": {
           "title": "Ainda não há fluxos de trabalho",
           "description": "Crie um fluxo de trabalho e depois adicione estados e transições permitidas."
@@ -524,7 +532,11 @@
           "color": "Cor",
           "group": "Grupo",
           "default": "Padrão",
-          "set_default": "Definir como padrão"
+          "set_default": "Definir como padrão",
+          "delete_confirmation": {
+            "title": "Excluir estado",
+            "description": "Este estado será excluído permanentemente. Esta ação não pode ser desfeita."
+          }
         },
         "transitions": {
           "heading": "Transições permitidas",

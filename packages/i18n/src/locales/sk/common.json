@@ -690,6 +690,8 @@
     "saving": "Ukladanie",
     "save_changes": "Uložiť zmeny",
     "delete": "Zmazať",
+    "move_up": "Presunúť nahor",
+    "move_down": "Presunúť nadol",
     "deleting": "Mazanie",
     "pending": "Čakajúce",
     "invite": "Pozvať",

@@ -508,6 +508,14 @@
         "heading": "Workflows",
         "description": "Definieren Sie Status und die zulässigen Übergänge zwischen ihnen für jeden Arbeitselementtyp.",
         "add_workflow": "Workflow hinzufügen",
+        "delete_confirmation": {
+          "title": "Workflow löschen",
+          "description": "Dieser Workflow wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
+        },
+        "not_found": {
+          "title": "Workflow nicht gefunden",
+          "description": "Der gesuchte Workflow existiert nicht oder wurde gelöscht."
+        },
         "empty_state": {
           "title": "Noch keine Workflows",
           "description": "Erstellen Sie einen Workflow und fügen Sie dann Status und zulässige Übergänge hinzu."
@@ -524,7 +532,11 @@
           "color": "Farbe",
           "group": "Gruppe",
           "default": "Standard",
-          "set_default": "Als Standard festlegen"
+          "set_default": "Als Standard festlegen",
+          "delete_confirmation": {
+            "title": "Status löschen",
+            "description": "Dieser Status wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
+          }
         },
         "transitions": {
           "heading": "Zulässige Übergänge",

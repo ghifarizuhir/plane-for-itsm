@@ -508,6 +508,14 @@
         "heading": "工作流程",
         "description": "為每種工作事項類型定義狀態及狀態之間允許的轉換。",
         "add_workflow": "新增工作流程",
+        "delete_confirmation": {
+          "title": "刪除工作流程",
+          "description": "此工作流程將被永久刪除。此操作無法復原。"
+        },
+        "not_found": {
+          "title": "工作流程不存在",
+          "description": "您要尋找的工作流程不存在或已被刪除。"
+        },
         "empty_state": {
           "title": "尚無工作流程",
           "description": "建立工作流程，然後新增狀態和允許的轉換。"
@@ -524,7 +532,11 @@
           "color": "顏色",
           "group": "群組",
           "default": "預設",
-          "set_default": "設為預設"
+          "set_default": "設為預設",
+          "delete_confirmation": {
+            "title": "刪除狀態",
+            "description": "此狀態將被永久刪除。此操作無法復原。"
+          }
         },
         "transitions": {
           "heading": "允許的轉換",

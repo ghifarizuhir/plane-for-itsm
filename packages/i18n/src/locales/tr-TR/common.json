@@ -690,6 +690,8 @@
     "saving": "Kaydediliyor",
     "save_changes": "Değişiklikleri Kaydet",
     "delete": "Sil",
+    "move_up": "Yukarı taşı",
+    "move_down": "Aşağı taşı",
     "deleting": "Siliniyor",
     "pending": "Beklemede",
     "invite": "Davet Et",
