@@ -1,9 +1,37 @@
-import type { IState, TWorkflowMap, TWorkflowMapType } from "@plane/types";
+import type { IIssueFilterOptions, IState, TIssueGroupByOptions, TWorkflowMap, TWorkflowMapType } from "@plane/types";
 
 export const findWorkflowMapType = (
   map: TWorkflowMap | undefined,
   typeId: string | null | undefined
 ): TWorkflowMapType | undefined => (typeId ? map?.types.find((type) => type.type_id === typeId) : undefined);
+
+/**
+ * Type tunggal aktif dari filter store. Filter board saat ini memakai rich
+ * filters (tanpa key type), jadi pembacaan legacy `filters.issue_type` tetap
+ * dipertahankan supaya kolom hybrid menyala begitu filter type tersedia.
+ */
+export const getSingleWorkItemTypeId = (issueFilters: unknown): string | null => {
+  const filters = (issueFilters as { filters?: IIssueFilterOptions | null } | null | undefined)?.filters;
+  const typeIds = filters?.issue_type;
+  return typeIds?.length === 1 ? (typeIds[0] ?? null) : null;
+};
+
+/**
+ * Default group_by board project bertipe. Campuran type memakai kolom group
+ * (5 kolom) supaya state tiap type tidak menumpuk. `"state"`/null adalah
+ * default lama yang boleh ditimpa; pilihan user lain dipertahankan.
+ */
+export const resolveTypedWorkflowGroupBy = (
+  groupBy: TIssueGroupByOptions | undefined,
+  workflowMap: TWorkflowMap | undefined,
+  singleTypeId?: string | null
+): TIssueGroupByOptions => {
+  if (singleTypeId) return groupBy ?? null;
+  const hasTypedWorkflow = (workflowMap?.types.length ?? 0) > 0;
+  if (!hasTypedWorkflow) return groupBy ?? null;
+  const isDefaultGroupBy = groupBy === undefined || groupBy === null || groupBy === "state";
+  return isDefaultGroupBy ? "state_detail.group" : groupBy;
+};
 
 /** State tujuan yang diizinkan dari `currentStateId` (mirror ids). */
 export const allowedTargetStateIds = (

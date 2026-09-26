@@ -4,8 +4,10 @@ import {
   allowedTargetStateIds,
   buildTransitionMatrix,
   findWorkflowMapType,
+  getSingleWorkItemTypeId,
   isTypedState,
   resolveStateColumns,
+  resolveTypedWorkflowGroupBy,
 } from "./workflow.helpers";
 
 const mapType: TWorkflowMapType = {
@@ -122,6 +124,38 @@ describe("findWorkflowMapType", () => {
   it("menemukan type dari map", () => {
     expect(findWorkflowMapType({ types: [mapType] }, "type-1")?.type_name).toBe("Incident");
     expect(findWorkflowMapType({ types: [mapType] }, null)).toBeUndefined();
+  });
+});
+
+describe("getSingleWorkItemTypeId", () => {
+  it("mengembalikan type tunggal dari filters.issue_type", () => {
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: ["type-1"] } })).toBe("type-1");
+  });
+
+  it("null saat tidak ada filter type", () => {
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: ["t-1", "t-2"] } })).toBeNull();
+    expect(getSingleWorkItemTypeId({ filters: {} })).toBeNull();
+    expect(getSingleWorkItemTypeId({ richFilters: {} })).toBeNull();
+    expect(getSingleWorkItemTypeId(undefined)).toBeNull();
+  });
+});
+
+describe("resolveTypedWorkflowGroupBy", () => {
+  it("default state/null jadi state group saat project punya type", () => {
+    expect(resolveTypedWorkflowGroupBy("state", { types: [mapType] })).toBe("state_detail.group");
+    expect(resolveTypedWorkflowGroupBy(null, { types: [mapType] })).toBe("state_detail.group");
+    expect(resolveTypedWorkflowGroupBy(undefined, { types: [mapType] })).toBe("state_detail.group");
+  });
+
+  it("menghormati group_by lain dan project tanpa tipe", () => {
+    expect(resolveTypedWorkflowGroupBy("priority", { types: [mapType] })).toBe("priority");
+    expect(resolveTypedWorkflowGroupBy("state", { types: [] })).toBe("state");
+    expect(resolveTypedWorkflowGroupBy("state", undefined)).toBe("state");
+  });
+
+  it("tidak menimpa saat difilter satu type", () => {
+    expect(resolveTypedWorkflowGroupBy("state", { types: [mapType] }, "type-1")).toBe("state");
+    expect(resolveTypedWorkflowGroupBy(null, { types: [mapType] }, "type-1")).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@
 
 import type { MutableRefObject } from "react";
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 import type {
   GroupByColumnTypes,
   IGroupByColumn,
@@ -24,8 +25,11 @@ import { ContentWrapper } from "@plane/ui";
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
 import { KanbanColumnLoader } from "@/components/ui/loader/layouts/kanban-layout-loader";
 // hooks
+import { useIssues } from "@/hooks/store/use-issues";
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+// store
+import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
 // types
 // parent components
 import { useWorkFlowFDragNDrop } from "@/components/workflow";
@@ -101,8 +105,12 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
   // store hooks
   const storeType = useIssueStoreType();
   const issueKanBanView = useKanbanView();
+  const { issuesFilter } = useIssues(storeType);
+  // router
+  const { projectId } = useParams();
   // derived values
   const isDragDisabled = !issueKanBanView?.getCanUserDragDrop(group_by, sub_group_by);
+  const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
 
   const { getIsWorkflowWorkItemCreationDisabled } = useWorkFlowFDragNDrop(group_by, sub_group_by);
 
@@ -111,6 +119,8 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    projectId,
+    typeId: workItemTypeId,
   });
 
   if (!list) return null;

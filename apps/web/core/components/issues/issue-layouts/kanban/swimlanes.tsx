@@ -6,6 +6,7 @@
 
 import type { MutableRefObject } from "react";
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 // plane imports
 import type {
   GroupByColumnTypes,
@@ -21,9 +22,12 @@ import type {
 } from "@plane/types";
 import { Row } from "@plane/ui";
 // hooks
+import { useIssues } from "@/hooks/store/use-issues";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // plane web imports
 import { useWorkFlowFDragNDrop } from "@/components/workflow";
+// store
+import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
 import type { GroupDropLocation } from "../utils";
@@ -289,18 +293,26 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
   } = props;
   // store hooks
   const storeType = useIssueStoreType();
+  const { issuesFilter } = useIssues(storeType);
+  // router
+  const { projectId } = useParams();
   // derived values
+  const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
   const groupByList = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    projectId,
+    typeId: workItemTypeId,
   });
   const subGroupByList = getGroupByColumns({
     groupBy: sub_group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    projectId,
+    typeId: workItemTypeId,
   });
 
   if (!groupByList || !subGroupByList) return null;

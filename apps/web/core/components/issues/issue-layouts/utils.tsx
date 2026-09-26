@@ -54,6 +54,7 @@ import { renderFormattedDate, getFileURL } from "@plane/utils";
 import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
+import { findWorkflowMapType, resolveStateColumns } from "@/store/workflow.helpers";
 // constants
 import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
 // components
@@ -111,6 +112,7 @@ type TGetGroupByColumns = {
   isWorkspaceLevel: boolean;
   isEpic?: boolean;
   projectId?: string;
+  typeId?: string | null;
 };
 
 // NOTE: Type of groupBy is different compared to what's being passed from the components.
@@ -122,6 +124,7 @@ export const getGroupByColumns = ({
   isWorkspaceLevel,
   isEpic = false,
   projectId,
+  typeId,
 }: TGetGroupByColumns): IGroupByColumn[] | undefined => {
   // If no groupBy is specified and includeNone is true, return "All Issues" group
   if (!groupBy && includeNone) {
@@ -156,7 +159,7 @@ export const getGroupByColumns = ({
   };
 
   // Get and return the columns for the specified group by option
-  return groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId });
+  return groupByColumnMap[groupBy]?.({ isWorkspaceLevel, projectId, typeId });
 };
 
 const getProjectColumns = (): IGroupByColumn[] | undefined => {
@@ -239,12 +242,16 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
   return modules;
 };
 
-const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefined => {
+const getStateColumns = ({ projectId, typeId }: TGetColumns): IGroupByColumn[] | undefined => {
   const { getProjectStates, projectStates } = store.state;
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
+  // typed states come from the project workflow map: sequence + label are workspace-owned
+  const workflowMap = projectId ? store.workflow.getWorkflowMap(projectId) : undefined;
+  const mapType = findWorkflowMapType(workflowMap, typeId);
+  const states = resolveStateColumns(_states, mapType);
   // map project states to group by columns
-  return _states.map((state) => ({
+  return states.map((state) => ({
     id: state.id,
     name: state.name,
     icon: (
