@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -19,6 +19,7 @@ import { useWorkflow } from "@/hooks/store/use-workflow";
 // local imports
 import { WorkflowFormModal } from "./workflow-form-modal";
 import { WorkflowList } from "./workflow-list";
+import { WorkflowLoadErrorState } from "./workflow-load-error-state";
 
 type Props = {
   workspaceSlug: string;
@@ -31,6 +32,7 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [deletingWorkflowId, setDeletingWorkflowId] = useState<string | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [hasFetchError, setHasFetchError] = useState(false);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -42,7 +44,8 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
   const fetchErrorMessage = t("common.error.message");
   const deletingWorkflow = deletingWorkflowId ? workflows?.find((item) => item.id === deletingWorkflowId) : undefined;
 
-  useEffect(() => {
+  const loadWorkflows = useCallback(() => {
+    setHasFetchError(false);
     void (async () => {
       try {
         const fetchedWorkflows = await fetchWorkflows(workspaceSlug);
@@ -51,6 +54,7 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
           fetchedWorkflows.map((workflow) => fetchWorkflowStates(workspaceSlug, workflow.id).catch(() => undefined))
         );
       } catch (error: any) {
+        setHasFetchError(true);
         setToast({
           type: TOAST_TYPE.ERROR,
           title: fetchErrorTitle,
@@ -59,6 +63,10 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
       }
     })();
   }, [workspaceSlug, fetchWorkflows, fetchWorkflowStates, fetchErrorTitle, fetchErrorMessage]);
+
+  useEffect(() => {
+    loadWorkflows();
+  }, [loadWorkflows]);
 
   const handleCloseDeleteModal = () => {
     setDeletingWorkflowId(null);
@@ -104,10 +112,8 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
         handleClose={handleCloseDeleteModal}
         handleSubmit={handleDeleteWorkflow}
         isSubmitting={isDeleteLoading}
-        title={t("entity.delete.label", {
-          entity: deletingWorkflow?.name ?? t("workspace_settings.settings.workflows.title"),
-        })}
-        content="This workflow will be permanently deleted. This action cannot be undone."
+        title={t("workspace_settings.settings.workflows.delete_confirmation.title")}
+        content={t("workspace_settings.settings.workflows.delete_confirmation.description")}
         primaryButtonText={{
           loading: t("deleting"),
           default: t("common.delete"),
@@ -129,7 +135,11 @@ export const WorkflowsRoot = observer(function WorkflowsRoot(props: Props) {
           </Button>
         }
       />
-      {workflows === undefined ? (
+      {workflows === undefined && hasFetchError ? (
+        <div className="mt-6">
+          <WorkflowLoadErrorState onRetry={loadWorkflows} />
+        </div>
+      ) : workflows === undefined ? (
         <div className="mt-6 flex h-40 items-center justify-center">
           <Spinner />
         </div>

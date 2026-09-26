@@ -6,4 +6,3 @@
 
 export * from "./root";
 export * from "./workflow-editor";
-export * from "./workflow-form-modal";

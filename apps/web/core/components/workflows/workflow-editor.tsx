@@ -4,16 +4,22 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+// assets
+import emptyModule from "@/app/assets/empty-state/module.svg?url";
+// components
+import { EmptyState } from "@/components/common/empty-state";
 // hooks
 import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { StateList } from "./state-list";
 import { TransitionMatrix } from "./transition-matrix";
+import { WorkflowLoadErrorState } from "./workflow-load-error-state";
 
 type Props = {
   workspaceSlug: string;
@@ -22,6 +28,12 @@ type Props = {
 
 export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   const { workspaceSlug, workflowId } = props;
+  // router
+  const router = useAppRouter();
+  // states
+  const [statesError, setStatesError] = useState(false);
+  const [transitionsError, setTransitionsError] = useState(false);
+  const [workflowsError, setWorkflowsError] = useState(false);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -40,27 +52,38 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   // Capturing the resolved strings keeps the dependency values stable across renders.
   const fetchErrorTitle = t("common.error.label");
   const fetchErrorMessage = t("common.error.message");
+  const workflowExists = workflows?.some((workflow) => workflow.id === workflowId) ?? false;
+  const isWorkflowNotFound = workflows !== undefined && !workflowExists;
 
-  useEffect(() => {
+  const loadStates = useCallback(() => {
+    setStatesError(false);
     void fetchWorkflowStates(workspaceSlug, workflowId).catch((error: any) => {
+      setStatesError(true);
       setToast({
         type: TOAST_TYPE.ERROR,
         title: fetchErrorTitle,
         message: error?.error ?? fetchErrorMessage,
       });
     });
-    void fetchWorkflowTransitions(workspaceSlug, workflowId).catch((error: any) => {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: fetchErrorTitle,
-        message: error?.error ?? fetchErrorMessage,
-      });
-    });
-  }, [workspaceSlug, workflowId, fetchWorkflowStates, fetchWorkflowTransitions, fetchErrorTitle, fetchErrorMessage]);
+  }, [workspaceSlug, workflowId, fetchWorkflowStates, fetchErrorTitle, fetchErrorMessage]);
 
-  useEffect(() => {
+  const loadTransitions = useCallback(() => {
+    setTransitionsError(false);
+    void fetchWorkflowTransitions(workspaceSlug, workflowId).catch((error: any) => {
+      setTransitionsError(true);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: fetchErrorTitle,
+        message: error?.error ?? fetchErrorMessage,
+      });
+    });
+  }, [workspaceSlug, workflowId, fetchWorkflowTransitions, fetchErrorTitle, fetchErrorMessage]);
+
+  const loadWorkflows = useCallback(() => {
     if (workflows !== undefined) return;
+    setWorkflowsError(false);
     void fetchWorkflows(workspaceSlug).catch((error: any) => {
+      setWorkflowsError(true);
       setToast({
         type: TOAST_TYPE.ERROR,
         title: fetchErrorTitle,
@@ -69,14 +92,58 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
     });
   }, [workspaceSlug, workflows, fetchWorkflows, fetchErrorTitle, fetchErrorMessage]);
 
+  useEffect(() => {
+    // wait until the workflow is known to exist so an unknown deep link never fires 404 fetches
+    if (!workflowExists) return;
+    loadStates();
+    loadTransitions();
+  }, [workflowExists, loadStates, loadTransitions]);
+
+  useEffect(() => {
+    loadWorkflows();
+  }, [loadWorkflows]);
+
+  const handleRetryEditor = () => {
+    loadStates();
+    loadTransitions();
+  };
+
+  if (workflows === undefined && workflowsError) {
+    return <WorkflowLoadErrorState onRetry={loadWorkflows} />;
+  }
+
+  if (isWorkflowNotFound) {
+    return (
+      <div className="mt-6 flex h-80 items-center justify-center">
+        <EmptyState
+          image={emptyModule}
+          title={t("workspace_settings.settings.workflows.not_found.title")}
+          description={t("workspace_settings.settings.workflows.not_found.description")}
+          primaryButton={{
+            text: t("common.go_back"),
+            onClick: () => router.push(`/${workspaceSlug}/settings/workflows`),
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-2">
-      <StateList workspaceSlug={workspaceSlug} workflowId={workflowId} states={states} />
+      <StateList
+        workspaceSlug={workspaceSlug}
+        workflowId={workflowId}
+        states={states}
+        hasError={statesError}
+        onRetry={loadStates}
+      />
       <TransitionMatrix
         workspaceSlug={workspaceSlug}
         workflowId={workflowId}
-        states={states ?? []}
-        transitions={transitions ?? []}
+        states={states}
+        transitions={transitions}
+        hasError={statesError || transitionsError}
+        onRetry={handleRetryEditor}
       />
     </div>
   );

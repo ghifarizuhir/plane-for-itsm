@@ -33,6 +33,12 @@ export const WorkflowEditorWorkspaceSettingsHeader = observer(function WorkflowE
   const settingsDetails = WORKSPACE_SETTINGS.workflows;
   const Icon = WORKSPACE_SETTINGS_ICONS.workflows;
   const workflow = workflows?.find((item) => item.id === workflowId);
+  // keep the crumb informative instead of blank when workflows are loaded but the id does not exist
+  const workflowLabel = workflow
+    ? workflow.name
+    : workflows !== undefined
+      ? t("workspace_settings.settings.workflows.not_found.title")
+      : undefined;
 
   return (
     <SettingsPageHeader
@@ -48,7 +54,7 @@ export const WorkflowEditorWorkspaceSettingsHeader = observer(function WorkflowE
                 />
               }
             />
-            {workflow && <Breadcrumbs.Item component={<BreadcrumbLink label={workflow.name} />} />}
+            {workflowLabel && <Breadcrumbs.Item component={<BreadcrumbLink label={workflowLabel} />} />}
           </Breadcrumbs>
         </div>
       }

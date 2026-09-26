@@ -20,15 +20,18 @@ import { AlertModalCore, Spinner } from "@plane/ui";
 import { useWorkflow } from "@/hooks/store/use-workflow";
 // local imports
 import { StateFormModal } from "./state-form-modal";
+import { WorkflowLoadErrorState } from "./workflow-load-error-state";
 
 type Props = {
   workspaceSlug: string;
   workflowId: string;
   states?: TWorkflowState[];
+  hasError: boolean;
+  onRetry: () => void;
 };
 
 export const StateList = observer(function StateList(props: Props) {
-  const { workspaceSlug, workflowId, states } = props;
+  const { workspaceSlug, workflowId, states, hasError, onRetry } = props;
   // states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingStateId, setEditingStateId] = useState<string | null>(null);
@@ -152,114 +155,116 @@ export const StateList = observer(function StateList(props: Props) {
         handleClose={handleCloseDeleteModal}
         handleSubmit={handleDeleteState}
         isSubmitting={isDeleteLoading}
-        title={t("entity.delete.label", {
-          entity: deletingState?.name ?? t("common.state"),
-        })}
-        content="This state will be permanently deleted. This action cannot be undone."
+        title={t("workspace_settings.settings.workflows.states.delete_confirmation.title")}
+        content={t("workspace_settings.settings.workflows.states.delete_confirmation.description")}
         primaryButtonText={{
           loading: t("deleting"),
           default: t("common.delete"),
         }}
       />
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <h4 className="text-14 font-medium">{t("workspace_settings.settings.workflows.states.heading")}</h4>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setEditingStateId(null);
-              setIsFormOpen(true);
-            }}
-          >
-            {t("workspace_settings.settings.workflows.states.add_state")}
-          </Button>
-        </div>
-        {sortedStates === undefined ? (
-          <div className="flex h-40 items-center justify-center">
-            <Spinner />
+      {hasError ? (
+        <WorkflowLoadErrorState onRetry={onRetry} />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-14 font-medium">{t("workspace_settings.settings.workflows.states.heading")}</h4>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setEditingStateId(null);
+                setIsFormOpen(true);
+              }}
+            >
+              {t("workspace_settings.settings.workflows.states.add_state")}
+            </Button>
           </div>
-        ) : sortedStates.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center text-11 text-tertiary">
-            {t("common.no_items_in_this_group")}
-          </p>
-        ) : (
-          <div className="flex flex-col divide-y divide-subtle rounded-lg border border-subtle">
-            {sortedStates.map((state, index) => {
-              const isFirst = index === 0;
-              const isLast = index === sortedStates.length - 1;
+          {sortedStates === undefined ? (
+            <div className="flex h-40 items-center justify-center">
+              <Spinner />
+            </div>
+          ) : sortedStates.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center text-11 text-tertiary">
+              {t("common.no_items_in_this_group")}
+            </p>
+          ) : (
+            <div className="flex flex-col divide-y divide-subtle rounded-lg border border-subtle">
+              {sortedStates.map((state, index) => {
+                const isFirst = index === 0;
+                const isLast = index === sortedStates.length - 1;
 
-              return (
-                <div key={state.id} className="group flex items-center justify-between gap-2 px-4 py-2.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} />
-                    <div className="flex min-w-0 flex-col">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-13 font-medium text-primary">{state.name}</p>
-                        {state.is_default && (
-                          <span className="flex h-4 max-h-fit items-center rounded-xs bg-accent-primary/20 px-2 text-11 font-medium text-accent-primary">
-                            {t("workspace_settings.settings.workflows.states.default")}
-                          </span>
-                        )}
+                return (
+                  <div key={state.id} className="group flex items-center justify-between gap-2 px-4 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} />
+                      <div className="flex min-w-0 flex-col">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-13 font-medium text-primary">{state.name}</p>
+                          {state.is_default && (
+                            <span className="flex h-4 max-h-fit items-center rounded-xs bg-accent-primary/20 px-2 text-11 font-medium text-accent-primary">
+                              {t("workspace_settings.settings.workflows.states.default")}
+                            </span>
+                          )}
+                        </div>
+                        {state.description && <p className="truncate text-11 text-secondary">{state.description}</p>}
                       </div>
-                      {state.description && <p className="truncate text-11 text-secondary">{state.description}</p>}
                     </div>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-1">
-                    {!state.is_default && (
+                    <div className="flex flex-shrink-0 items-center gap-1">
+                      {!state.is_default && (
+                        <button
+                          type="button"
+                          className="rounded-sm px-2 py-1 text-11 text-accent-primary transition-colors hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:text-placeholder"
+                          disabled={Boolean(busyStateId)}
+                          onClick={() => void handleSetDefault(state)}
+                        >
+                          {t("workspace_settings.settings.workflows.states.set_default")}
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className="rounded-sm px-2 py-1 text-11 text-accent-primary transition-colors hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:text-placeholder"
-                        disabled={Boolean(busyStateId)}
-                        onClick={() => void handleSetDefault(state)}
+                        aria-label={t("common.move_up")}
+                        className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder"
+                        disabled={isFirst || Boolean(busyStateId)}
+                        onClick={() => void handleMove(state, "up")}
                       >
-                        {t("workspace_settings.settings.workflows.states.set_default")}
+                        <ChevronUpOutline className="size-3.5" />
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      aria-label="Move up"
-                      className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder"
-                      disabled={isFirst || Boolean(busyStateId)}
-                      onClick={() => void handleMove(state, "up")}
-                    >
-                      <ChevronUpOutline className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move down"
-                      className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder"
-                      disabled={isLast || Boolean(busyStateId)}
-                      onClick={() => void handleMove(state, "down")}
-                    >
-                      <ChevronDownOutline className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
-                      aria-label={t("common.edit")}
-                      onClick={() => {
-                        setEditingStateId(state.id);
-                        setIsFormOpen(true);
-                      }}
-                    >
-                      <EditOutline className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-danger-primary"
-                      aria-label={t("common.delete")}
-                      onClick={() => setDeletingStateId(state.id)}
-                    >
-                      <DeleteOutline className="size-3.5" />
-                    </button>
+                      <button
+                        type="button"
+                        aria-label={t("common.move_down")}
+                        className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary disabled:cursor-not-allowed disabled:text-placeholder"
+                        disabled={isLast || Boolean(busyStateId)}
+                        onClick={() => void handleMove(state, "down")}
+                      >
+                        <ChevronDownOutline className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+                        aria-label={t("common.edit")}
+                        onClick={() => {
+                          setEditingStateId(state.id);
+                          setIsFormOpen(true);
+                        }}
+                      >
+                        <EditOutline className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="flex size-6 items-center justify-center rounded-sm text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-danger-primary"
+                        aria-label={t("common.delete")}
+                        onClick={() => setDeletingStateId(state.id)}
+                      >
+                        <DeleteOutline className="size-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 });
