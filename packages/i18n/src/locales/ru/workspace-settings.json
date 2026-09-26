@@ -501,6 +501,7 @@
           "active": "Активный"
         },
         "no_workflow": "Нет рабочего процесса",
+        "attach_workflow_first": "Сначала привяжите рабочий процесс",
         "inactive": "Неактивный"
       },
       "workflows": {

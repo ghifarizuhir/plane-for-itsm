@@ -501,6 +501,7 @@
           "active": "Aktywny"
         },
         "no_workflow": "Brak przepływu pracy",
+        "attach_workflow_first": "Najpierw przypisz przepływ pracy",
         "inactive": "Nieaktywny"
       },
       "workflows": {

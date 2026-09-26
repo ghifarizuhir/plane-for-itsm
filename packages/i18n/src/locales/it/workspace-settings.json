@@ -501,6 +501,7 @@
           "active": "Attivo"
         },
         "no_workflow": "Nessun flusso di lavoro",
+        "attach_workflow_first": "Associa prima un flusso di lavoro",
         "inactive": "Inattivo"
       },
       "workflows": {

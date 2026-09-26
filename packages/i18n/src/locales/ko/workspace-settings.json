@@ -501,6 +501,7 @@
           "active": "활성"
         },
         "no_workflow": "워크플로우 없음",
+        "attach_workflow_first": "먼저 워크플로우를 연결하세요",
         "inactive": "비활성"
       },
       "workflows": {

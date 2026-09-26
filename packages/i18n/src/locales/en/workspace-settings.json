@@ -493,6 +493,7 @@
           "active": "Active"
         },
         "no_workflow": "No workflow",
+        "attach_workflow_first": "Attach a workflow first",
         "inactive": "Inactive"
       },
       "workflows": {

@@ -501,6 +501,7 @@
           "active": "Hoạt động"
         },
         "no_workflow": "Không có quy trình làm việc",
+        "attach_workflow_first": "Đính kèm quy trình làm việc trước",
         "inactive": "Không hoạt động"
       },
       "workflows": {

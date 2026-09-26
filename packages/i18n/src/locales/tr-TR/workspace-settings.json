@@ -501,6 +501,7 @@
           "active": "Aktif"
         },
         "no_workflow": "İş akışı yok",
+        "attach_workflow_first": "Önce bir iş akışı ekleyin",
         "inactive": "Pasif"
       },
       "workflows": {

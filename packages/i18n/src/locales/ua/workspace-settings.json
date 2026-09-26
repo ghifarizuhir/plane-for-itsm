@@ -501,6 +501,7 @@
           "active": "Активний"
         },
         "no_workflow": "Без воркфлоу",
+        "attach_workflow_first": "Спочатку призначте воркфлоу",
         "inactive": "Неактивний"
       },
       "workflows": {

@@ -501,6 +501,7 @@
           "active": "Aktif"
         },
         "no_workflow": "Tidak ada alur kerja",
+        "attach_workflow_first": "Lampirkan alur kerja terlebih dahulu",
         "inactive": "Tidak aktif"
       },
       "workflows": {

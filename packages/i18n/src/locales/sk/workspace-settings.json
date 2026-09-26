@@ -501,6 +501,7 @@
           "active": "Aktívne"
         },
         "no_workflow": "Žiadny pracovný postup",
+        "attach_workflow_first": "Najprv priraďte pracovný postup",
         "inactive": "Neaktívny"
       },
       "workflows": {

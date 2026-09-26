@@ -501,6 +501,7 @@
           "active": "Aktivní"
         },
         "no_workflow": "Žádný workflow",
+        "attach_workflow_first": "Nejprve přiřaďte workflow",
         "inactive": "Neaktivní"
       },
       "workflows": {

@@ -501,6 +501,7 @@
           "active": "活动"
         },
         "no_workflow": "无工作流",
+        "attach_workflow_first": "请先附加工作流",
         "inactive": "不活动"
       },
       "workflows": {

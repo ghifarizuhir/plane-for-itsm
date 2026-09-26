@@ -501,6 +501,7 @@
           "active": "აქტიური"
         },
         "no_workflow": "სამუშაო პროცესი არ არის",
+        "attach_workflow_first": "ჯერ მიაბით სამუშაო პროცესი",
         "inactive": "არააქტიური"
       },
       "workflows": {

@@ -501,6 +501,7 @@
           "active": "Activ"
         },
         "no_workflow": "Niciun flux de lucru",
+        "attach_workflow_first": "Atribuie mai întâi un flux de lucru",
         "inactive": "Inactiv"
       },
       "workflows": {

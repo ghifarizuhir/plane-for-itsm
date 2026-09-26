@@ -501,6 +501,7 @@
           "active": "使用中"
         },
         "no_workflow": "無工作流程",
+        "attach_workflow_first": "請先附加工作流程",
         "inactive": "停用中"
       },
       "workflows": {
