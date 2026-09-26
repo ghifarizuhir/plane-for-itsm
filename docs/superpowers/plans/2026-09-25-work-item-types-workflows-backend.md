@@ -4047,6 +4047,8 @@ git add apps/api-rs/crates/api/src/routes/intake.rs apps/api-rs/crates/api/tests
 git commit -m "feat(api-rs): move accepted intake items to typed default state"
 ```
 
+Catatan hasil review C6: accept memakai resolver bersama + bind target, `updated_by_id` terisi, `completed_at` group-aware, dan 400 Django-parity saat tidak ada state eligible. Follow-up non-blocking: hoist resolusi/validasi 400 ke atas transaksi nested-issue write agar request gabungan `issue.* + status:1` tidak menulis field issue sebelum 400 (Django memvalidasi kedua serializer sebelum save).
+
 ---
 
 ## Milestone D — Verifikasi end-to-end
