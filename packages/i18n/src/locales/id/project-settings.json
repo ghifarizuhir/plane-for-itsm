@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "Tipe item kerja",
-      "description": "Buat dan sesuaikan berbagai tipe item kerja dengan properti unik"
+      "description": "Buat dan sesuaikan berbagai tipe item kerja dengan properti unik",
+      "untyped": "Tanpa tipe"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "Tipe item kerja",
-        "short_title": "Tipe item kerja",
-        "description": "Kategorikan item kerja berdasarkan tipe dan gunakan alur kerja khusus untuk setiap tipe.",
-        "toggle_title": "Aktifkan tipe item kerja",
-        "toggle_description": "Anggota proyek akan dapat mengategorikan item kerja berdasarkan tipe."
       },
       "time_tracking": {
         "title": "Pelacakan waktu",

@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "Tipi di elementi di lavoro",
-      "description": "Crea e personalizza diversi tipi di elementi di lavoro con proprietà uniche"
+      "description": "Crea e personalizza diversi tipi di elementi di lavoro con proprietà uniche",
+      "untyped": "Senza tipo"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "Tipi di elemento di lavoro",
-        "short_title": "Tipi di elemento di lavoro",
-        "description": "Categorizza gli elementi di lavoro per tipo e usa un flusso di lavoro dedicato per ogni tipo.",
-        "toggle_title": "Abilita tipi di elemento di lavoro",
-        "toggle_description": "I membri del progetto potranno categorizzare gli elementi di lavoro per tipo."
       },
       "time_tracking": {
         "title": "Monitoraggio del tempo",

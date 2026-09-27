@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "工作事項類型",
-      "description": "使用獨特屬性建立和自訂不同類型的工作事項"
+      "description": "使用獨特屬性建立和自訂不同類型的工作事項",
+      "untyped": "無類型"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "工作事項類型",
-        "short_title": "工作事項類型",
-        "description": "依類型分類工作事項，並為每種類型使用專用工作流程。",
-        "toggle_title": "啟用工作事項類型",
-        "toggle_description": "專案成員將能夠依類型分類工作事項。"
       },
       "time_tracking": {
         "title": "時間追蹤",

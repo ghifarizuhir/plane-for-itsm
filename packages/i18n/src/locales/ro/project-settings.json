@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "Tipuri de activități",
-      "description": "Creează și personalizează diferite tipuri de activități cu proprietăți unice"
+      "description": "Creează și personalizează diferite tipuri de activități cu proprietăți unice",
+      "untyped": "Fără tip"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "Tipuri de activități",
-        "short_title": "Tipuri de activități",
-        "description": "Categorisiți activitățile după tip și utilizați un flux de lucru dedicat pentru fiecare tip.",
-        "toggle_title": "Activați tipurile de activități",
-        "toggle_description": "Membrii proiectului vor putea categorisi activitățile după tip."
       },
       "time_tracking": {
         "title": "Urmărire timp",

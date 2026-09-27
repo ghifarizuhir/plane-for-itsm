@@ -42,8 +42,8 @@ function ProjectWorkItemTypesSettingsPage({ params }: Route.ComponentProps) {
       <PageHead title={pageTitle} />
       <div className="w-full">
         <SettingsHeading
-          title={t("workspace_settings.settings.work_item_types.heading")}
-          description={t("project_settings.features.work_item_types.description")}
+          title={t("project_settings.work_item_types.heading")}
+          description={t("project_settings.work_item_types.description")}
         />
         <ProjectWorkItemTypesRoot workspaceSlug={workspaceSlug} projectId={projectId} />
       </div>

@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "Typy pracovních položek",
-      "description": "Vytvářejte a přizpůsobujte různé typy pracovních položek s jedinečnými vlastnostmi"
+      "description": "Vytvářejte a přizpůsobujte různé typy pracovních položek s jedinečnými vlastnostmi",
+      "untyped": "Bez typu"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "Typy pracovních položek",
-        "short_title": "Typy pracovních položek",
-        "description": "Kategorizujte pracovní položky podle typu a pro každý typ použijte vlastní workflow.",
-        "toggle_title": "Povolit typy pracovních položek",
-        "toggle_description": "Členové projektu budou moci kategorizovat pracovní položky podle typu."
       },
       "time_tracking": {
         "title": "Sledování času",

@@ -320,7 +320,8 @@
     },
     "work_item_types": {
       "heading": "Loại mục công việc",
-      "description": "Tạo và tùy chỉnh các loại mục công việc khác nhau với các thuộc tính riêng"
+      "description": "Tạo và tùy chỉnh các loại mục công việc khác nhau với các thuộc tính riêng",
+      "untyped": "Không có loại"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "Loại mục công việc",
-        "short_title": "Loại mục công việc",
-        "description": "Phân loại mục công việc theo loại và sử dụng quy trình làm việc riêng cho từng loại.",
-        "toggle_title": "Bật loại mục công việc",
-        "toggle_description": "Thành viên dự án sẽ có thể phân loại mục công việc theo loại."
       },
       "time_tracking": {
         "title": "Theo dõi thời gian",

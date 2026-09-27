@@ -319,8 +319,9 @@
       }
     },
     "work_item_types": {
-      "heading": "Work item Types",
-      "description": "Create and customize different types of work items with unique properties"
+      "heading": "სამუშაო ელემენტის ტიპები",
+      "description": "შექმენით და მოარგეთ სხვადასხვა ტიპის სამუშაო ელემენტი უნიკალური თვისებებით",
+      "untyped": "ტიპის გარეშე"
     },
     "features": {
       "cycles": {
@@ -409,13 +410,6 @@
             }
           }
         }
-      },
-      "work_item_types": {
-        "title": "სამუშაო ელემენტის ტიპები",
-        "short_title": "სამუშაო ელემენტის ტიპები",
-        "description": "დაახარისხეთ სამუშაო ელემენტები ტიპის მიხედვით და თითოეული ტიპისთვის გამოიყენეთ საკუთარი სამუშაო პროცესი.",
-        "toggle_title": "სამუშაო ელემენტის ტიპების ჩართვა",
-        "toggle_description": "პროექტის წევრები შეძლებენ სამუშაო ელემენტების ტიპის მიხედვით დახარისხებას."
       },
       "time_tracking": {
         "title": "Time tracking",

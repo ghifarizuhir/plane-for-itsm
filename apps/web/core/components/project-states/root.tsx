@@ -18,7 +18,7 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 // store
-import { isTypedState } from "@/store/workflow.helpers";
+import { findWorkflowMapType, isTypedState } from "@/store/workflow.helpers";
 
 type TProjectState = {
   workspaceSlug: string;
@@ -107,7 +107,8 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
             {typedStateGroups.map(([typeId, states]) => (
               <div key={typeId} className="flex flex-col gap-1">
                 <span className="text-caption-md-medium text-tertiary">
-                  {workflowMap?.types.find((type) => type.type_id === typeId)?.type_name ?? ""}
+                  {findWorkflowMapType(workflowMap, typeId)?.type_name ??
+                    (typeId === "untyped" ? t("project_settings.work_item_types.untyped") : "")}
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {states.map((state) => (
