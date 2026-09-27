@@ -95,7 +95,7 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
   },
   work_item_types: {
     key: "work_item_types",
-    i18n_label: "workspace_settings.settings.work_item_types.title",
+    i18n_label: "project_settings.work_item_types.heading",
     href: `/work-item-types`,
     access: [EUserProjectRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/work-item-types/`,

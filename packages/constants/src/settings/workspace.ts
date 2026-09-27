@@ -63,14 +63,14 @@ export const WORKSPACE_SETTINGS: Record<TWorkspaceSettingsTabs, TWorkspaceSettin
     i18n_label: "workspace_settings.settings.work_item_types.title",
     href: `/settings/work-item-types`,
     access: [EUserWorkspaceRoles.ADMIN],
-    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/work-item-types/`,
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/work-item-types/`,
   },
   workflows: {
     key: "workflows",
     i18n_label: "workspace_settings.settings.workflows.title",
     href: `/settings/workflows`,
     access: [EUserWorkspaceRoles.ADMIN],
-    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/workflows/`),
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/workflows/`),
   },
 };
 
