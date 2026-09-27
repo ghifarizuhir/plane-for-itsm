@@ -86,6 +86,8 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
     try {
       if (next) await importWorkItemTypes(workspaceSlug, projectId, [typeId]);
       else await unlinkWorkItemType(workspaceSlug, projectId, typeId);
+      // daftar type menopang status switch (project_ids); refresh agar UI akurat
+      await fetchWorkItemTypes(workspaceSlug);
       if (mapRefreshError[projectId]) {
         setToast({
           type: TOAST_TYPE.WARNING,
