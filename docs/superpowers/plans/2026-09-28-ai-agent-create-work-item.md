@@ -1955,7 +1955,7 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
   const { workspaceSlug: rawSlug } = useParams<{ workspaceSlug: string }>();
   const workspaceSlug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
   // store hooks
-  const { projectIds, getProjectById } = useProject();
+  const { workspaceProjectIds, getProjectById } = useProject();
   const { getProjectStates, fetchProjectStates } = useProjectState();
   const { project: projectMemberStore } = useMember();
   const { getProjectLabels, fetchProjectLabels } = useLabel();
@@ -1971,11 +1971,11 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
 
   const projects = useMemo(
     () =>
-      (projectIds ?? [])
+      (workspaceProjectIds ?? [])
         .map((id) => getProjectById(id))
         .filter((project): project is NonNullable<typeof project> => Boolean(project))
         .map((project) => ({ id: project.id, identifier: project.identifier, name: project.name })),
-    [projectIds, getProjectById]
+    [workspaceProjectIds, getProjectById]
   );
 
   const resolvedProjectId = useMemo(() => matchProject(projects, draft.project)?.id ?? null, [projects, draft.project]);
@@ -1984,22 +1984,41 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
     setProjectId(resolvedProjectId);
   }, [resolvedProjectId]);
 
+  // Fetch project data that is not loaded yet. Fetch-only: no local state
+  // writes, so it cannot loop.
+  useEffect(() => {
+    if (!projectId || !workspaceSlug) return;
+    if (!getProjectStates(projectId)) void fetchProjectStates(workspaceSlug, projectId);
+    if (!projectMemberStore.getProjectMemberFetchStatus(projectId))
+      void projectMemberStore.fetchProjectMembers(workspaceSlug, projectId);
+    if (!getProjectLabels(projectId)) void fetchProjectLabels(workspaceSlug, projectId);
+  }, [
+    projectId,
+    workspaceSlug,
+    getProjectStates,
+    fetchProjectStates,
+    projectMemberStore,
+    getProjectLabels,
+    fetchProjectLabels,
+  ]);
+
   const states = projectId ? getProjectStates(projectId) : undefined;
   const labels = projectId ? getProjectLabels(projectId) : undefined;
   const memberIds = projectId ? (projectMemberStore.getProjectMemberIds(projectId, true) ?? []) : [];
-  const members = useMemo(
-    () =>
-      memberIds
-        .map((id) => ({ id, details: projectMemberStore.getProjectMemberDetails(id, projectId ?? "") }))
-        .filter((entry) => Boolean(entry.details))
-        .map((entry) => ({
-          id: entry.id,
-          display_name: entry.details?.member.display_name,
-          email: entry.details?.member.email,
-        })),
-    [memberIds, projectMemberStore, projectId]
-  );
+  const members = memberIds
+    .map((id) => ({ id, details: projectMemberStore.getProjectMemberDetails(id, projectId ?? "") }))
+    .filter((entry) => Boolean(entry.details))
+    .map((entry) => ({
+      id: entry.id,
+      display_name: entry.details?.member.display_name,
+      email: entry.details?.member.email,
+    }));
 
+  // Resolve the agent's human-readable values against the loaded project data.
+  // Runs during render (React's adjust-state-during-render pattern): re-runs
+  // when the project or proposal changes, or when a fetch lands (lengths in
+  // the key change). User edits to the resolved ids never touch the key, so
+  // they are never clobbered.
   const resolutionKey = [
     projectId ?? "",
     states?.length ?? -1,
@@ -2009,30 +2028,26 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
     (draft.assignees ?? []).join("|"),
     (draft.labels ?? []).join("|"),
   ].join("::");
-
-  useEffect(() => {
-    if (!projectId || !workspaceSlug) {
+  const [syncedKey, setSyncedKey] = useState<string | null>(null);
+  if (syncedKey !== resolutionKey) {
+    setSyncedKey(resolutionKey);
+    if (!projectId) {
       setStateId("");
       setAssigneeIds([]);
       setLabelIds([]);
       setMissing([]);
-      return;
+    } else {
+      setStateId(matchState(states ?? [], draft.state)?.id ?? "");
+      const assigneeResult = matchAssignees(members, draft.assignees ?? []);
+      setAssigneeIds(assigneeResult.matched);
+      const labelResult = matchLabels(labels ?? [], draft.labels ?? []);
+      setLabelIds(labelResult.matched);
+      setMissing([
+        ...assigneeResult.missing.map((name) => `Assignee not found: ${name}`),
+        ...labelResult.missing.map((name) => `Label not found: ${name}`),
+      ]);
     }
-    if (!states) void fetchProjectStates(workspaceSlug, projectId);
-    if (!projectMemberStore.getProjectMemberFetchStatus(projectId))
-      void projectMemberStore.fetchProjectMembers(workspaceSlug, projectId);
-    if (!labels) void fetchProjectLabels(workspaceSlug, projectId);
-
-    setStateId(matchState(states ?? [], draft.state)?.id ?? "");
-    const assigneeResult = matchAssignees(members, draft.assignees ?? []);
-    setAssigneeIds(assigneeResult.matched);
-    const labelResult = matchLabels(labels ?? [], draft.labels ?? []);
-    setLabelIds(labelResult.matched);
-    setMissing([
-      ...assigneeResult.missing.map((name) => `Assignee not found: ${name}`),
-      ...labelResult.missing.map((name) => `Label not found: ${name}`),
-    ]);
-  }, [resolutionKey]);
+  }
 
   if (decision?.decision === "created" && decision.created_work_item_id && decision.created_project_id) {
     return (
