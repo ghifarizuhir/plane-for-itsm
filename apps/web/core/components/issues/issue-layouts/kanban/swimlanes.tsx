@@ -298,13 +298,16 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
   const { projectId } = useParams();
   // derived values
   const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
+  // typed state columns only apply to a `state` axis; other axes keep their own grouping
+  const groupTypeId = group_by === "state" ? workItemTypeId : null;
+  const subGroupTypeId = sub_group_by === "state" ? workItemTypeId : null;
   const groupByList = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
     projectId,
-    typeId: workItemTypeId,
+    typeId: groupTypeId,
   });
   const subGroupByList = getGroupByColumns({
     groupBy: sub_group_by as GroupByColumnTypes,
@@ -312,7 +315,7 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
     projectId,
-    typeId: workItemTypeId,
+    typeId: subGroupTypeId,
   });
 
   if (!groupByList || !subGroupByList) return null;

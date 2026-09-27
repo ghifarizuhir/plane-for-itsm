@@ -259,7 +259,8 @@ const getStateColumns = ({ projectId, typeId }: TGetColumns): IGroupByColumn[] |
         <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} percentage={state.order} />
       </div>
     ),
-    payload: { state_id: state.id },
+    // type_id ikut payload supaya header "+" create form membuka type yang benar
+    payload: { state_id: state.id, ...(mapType ? { type_id: mapType.type_id } : {}) },
   }));
 };
 

@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 // plane constants
 import { ALL_ISSUES } from "@plane/constants";
 // types
@@ -26,6 +27,7 @@ import type {
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 // hooks
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { useIssues } from "@/hooks/store/use-issues";
 // plane web hooks
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 // utils
@@ -33,6 +35,7 @@ import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { ListGroup } from "./list-group";
 import type { TRenderQuickActions } from "./list-view-types";
+import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
 
 export interface IList {
   groupedIssueIds: TGroupedIssues;
@@ -82,6 +85,11 @@ export const List = observer(function List(props: IList) {
   const storeType = useIssueStoreType();
   // plane web hooks
   const isBulkOperationsEnabled = useBulkOperationStatus();
+  const { issuesFilter } = useIssues(storeType);
+  // router
+  const { projectId } = useParams();
+  // derived values
+  const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -90,6 +98,8 @@ export const List = observer(function List(props: IList) {
     includeNone: true,
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
+    projectId,
+    typeId: group_by === "state" ? workItemTypeId : null,
   });
 
   // Enable Auto Scroll for Main Kanban
@@ -109,7 +119,7 @@ export const List = observer(function List(props: IList) {
 
   const getGroupIndex = (groupId: string | undefined) => groups.findIndex(({ id }) => id === groupId);
 
-  const is_list = group_by === null ? true : false;
+  const is_list = group_by === null;
 
   // create groupIds array and entities object for bulk ops
   const groupIds = groups.map((g) => g.id);
