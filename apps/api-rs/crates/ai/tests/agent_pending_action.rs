@@ -16,7 +16,10 @@ async fn pending_action_returns_last_create_schedule_proposal() {
         &mut ToolContext::new(),
         CreateScheduleArgs {
             name: "Weekly backlog".to_string(),
-            prompt: "Summarize backlog".to_string(),
+            description: "Summarize the backlog every week".to_string(),
+            how_to: vec!["Count backlog items".to_string()],
+            tools: vec!["count_work_items".to_string()],
+            expected_output: "A short summary".to_string(),
             frequency: "weekly".to_string(),
             time: Some("09:00".to_string()),
             day_of_week: Some(1),
@@ -31,6 +34,7 @@ async fn pending_action_returns_last_create_schedule_proposal() {
     assert_eq!(action["kind"], json!("create_schedule"));
     assert_eq!(action["proposal"]["name"], json!("Weekly backlog"));
     assert_eq!(action["proposal"]["day_of_week"], json!(1));
+    assert_eq!(action["proposal"]["tools"][0], json!("count_work_items"));
 }
 
 #[test]

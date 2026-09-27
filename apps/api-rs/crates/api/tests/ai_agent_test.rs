@@ -268,7 +268,7 @@ mod tool_roundtrip {
                                 "type": "function",
                                 "function": {
                                     "name": "create_schedule",
-                                    "arguments": "{\"name\":\"Daily\",\"prompt\":\"Report\",\"frequency\":\"daily\",\"time\":\"09:00\",\"timezone\":\"UTC\"}"
+                                    "arguments": "{\"name\":\"Daily\",\"description\":\"Report\",\"how_to\":[\"Count overdue\"],\"tools\":[\"count_work_items\"],\"expected_output\":\"A summary\",\"frequency\":\"daily\",\"time\":\"09:00\",\"timezone\":\"UTC\"}"
                                 }
                             }]
                         },
@@ -366,6 +366,8 @@ mod tool_roundtrip {
         assert_eq!(action["kind"], json!("create_schedule"));
         assert_eq!(action["proposal"]["frequency"], json!("daily"));
         assert_eq!(action["proposal"]["time"], json!("09:00"));
+        assert_eq!(action["proposal"]["description"], json!("Report"));
+        assert_eq!(action["proposal"]["tools"][0], json!("count_work_items"));
 
         let bodies = upstream.bodies.lock().unwrap();
         assert_eq!(

@@ -14,7 +14,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::agent::{record, ToolTrace};
-use crate::schedule::ScheduleProposal;
+use crate::schedule::ScheduleRecipe;
 
 pub const PROJECTS_SQL: &str = "SELECT identifier, name FROM projects \
      WHERE workspace_id = $1 AND deleted_at IS NULL AND archived_at IS NULL \
@@ -311,8 +311,14 @@ pub const CREATE_SCHEDULE_NAME: &str = "create_schedule";
 pub struct CreateScheduleArgs {
     /// Short human-readable schedule name (1-120 characters), e.g. "Daily overdue report".
     pub name: String,
-    /// The exact instruction the agent will run on every fire (1-2000 characters).
-    pub prompt: String,
+    /// What the schedule is for: one or two sentences of context (1-500 characters).
+    pub description: String,
+    /// Ordered, concrete steps the agent must follow on every fire (1-10 steps, each 1-500 characters).
+    pub how_to: Vec<String>,
+    /// Tools the run may use: at least one of list_projects, count_work_items, search_work_items.
+    pub tools: Vec<String>,
+    /// What the result should contain, e.g. "a markdown table of overdue items with owner and due date" (1-1000 characters).
+    pub expected_output: String,
     /// One of: hourly, daily, weekly, monthly.
     pub frequency: String,
     /// Time of day "HH:MM" (24h). For hourly only the minutes are used. Defaults to 09:00 (00:00 for hourly).
@@ -325,13 +331,14 @@ pub struct CreateScheduleArgs {
     pub timezone: Option<String>,
 }
 
-/// Validate raw tool args into a normalized proposal (defaults applied).
-pub fn proposal_from_args(
-    args: CreateScheduleArgs,
-) -> Result<ScheduleProposal, ToolExecutionError> {
-    ScheduleProposal::new(
+/// Validate raw tool args into a normalized recipe (defaults applied, prompt rendered).
+pub fn recipe_from_args(args: CreateScheduleArgs) -> Result<ScheduleRecipe, ToolExecutionError> {
+    ScheduleRecipe::new(
         &args.name,
-        &args.prompt,
+        &args.description,
+        &args.how_to,
+        &args.tools,
+        &args.expected_output,
         &args.frequency,
         args.time.as_deref(),
         args.day_of_week,
@@ -352,7 +359,7 @@ impl Tool for CreateSchedule {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Propose a recurring scheduled task for this workspace. Only call this when the user explicitly asks for a recurring or scheduled task (for example a message starting with /schedule), and only after you know what to run and how often. The user must confirm the proposal in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
+        "Propose a recurring scheduled task for this workspace. Only call this when the user explicitly asks for a recurring or scheduled task (for example a message starting with /schedule), and only after the recipe is complete: description, ordered how_to steps, the tools it needs (at least one of list_projects, count_work_items, search_work_items), expected_output, and the frequency. The user must confirm and may edit every field in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -364,9 +371,9 @@ impl Tool for CreateSchedule {
         _context: &mut ToolContext,
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
-        let proposal = proposal_from_args(args)?;
-        record(&self.trace, Self::NAME, &proposal);
-        Ok(serde_json::to_string(&proposal).expect("ScheduleProposal serializes"))
+        let recipe = recipe_from_args(args)?;
+        record(&self.trace, Self::NAME, &recipe);
+        Ok(serde_json::to_string(&recipe).expect("ScheduleRecipe serializes"))
     }
 }
 
@@ -398,6 +405,40 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .run()
+}
+
+/// Build the schedule-run tool server: only the allowed read tools, never
+/// `create_schedule`. Unknown names are ignored (specs are validated before
+/// this is called).
+pub fn read_tools(
+    pool: PgPool,
+    workspace_id: Uuid,
+    trace: ToolTrace,
+    allowed: &[&str],
+) -> rig::tool::server::ToolServerHandle {
+    let mut server = rig::tool::server::ToolServer::new();
+    if allowed.contains(&ListProjects::NAME) {
+        server = server.tool(ListProjects {
+            pool: pool.clone(),
+            workspace_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&CountWorkItems::NAME) {
+        server = server.tool(CountWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&SearchWorkItems::NAME) {
+        server = server.tool(SearchWorkItems {
+            pool,
+            workspace_id,
+            trace: trace.clone(),
+        });
+    }
+    server.run()
 }
 
 #[cfg(test)]
@@ -579,10 +620,13 @@ mod tests {
     }
 
     #[test]
-    fn create_schedule_proposal_normalizes_defaults() {
-        let proposal = proposal_from_args(CreateScheduleArgs {
+    fn create_schedule_recipe_normalizes_defaults() {
+        let recipe = recipe_from_args(CreateScheduleArgs {
             name: " Daily overdue ".to_string(),
-            prompt: " List overdue items ".to_string(),
+            description: " Summarize overdue work ".to_string(),
+            how_to: vec![" Count overdue items ".to_string()],
+            tools: vec!["count_work_items".to_string()],
+            expected_output: " A short list ".to_string(),
             frequency: "weekly".to_string(),
             time: None,
             day_of_week: Some(1),
@@ -590,18 +634,22 @@ mod tests {
             timezone: Some("Asia/Jakarta".to_string()),
         })
         .expect("valid args");
-        assert_eq!(proposal.name, "Daily overdue");
-        assert_eq!(proposal.prompt, "List overdue items");
-        assert_eq!(proposal.time, "09:00");
-        assert_eq!(proposal.timezone, "Asia/Jakarta");
-        assert_eq!(proposal.day_of_week, Some(1));
+        assert_eq!(recipe.proposal.name, "Daily overdue");
+        assert_eq!(recipe.spec.description, "Summarize overdue work");
+        assert_eq!(recipe.proposal.time, "09:00");
+        assert_eq!(recipe.proposal.timezone, "Asia/Jakarta");
+        assert_eq!(recipe.proposal.day_of_week, Some(1));
+        assert_eq!(recipe.spec.tools, vec!["count_work_items".to_string()]);
     }
 
     #[test]
-    fn create_schedule_proposal_rejects_bad_args() {
-        let err = proposal_from_args(CreateScheduleArgs {
+    fn create_schedule_recipe_rejects_bad_args() {
+        let err = recipe_from_args(CreateScheduleArgs {
             name: "x".to_string(),
-            prompt: "y".to_string(),
+            description: "d".to_string(),
+            how_to: vec!["s".to_string()],
+            tools: vec!["list_projects".to_string()],
+            expected_output: "o".to_string(),
             frequency: "sometimes".to_string(),
             time: None,
             day_of_week: None,
@@ -613,7 +661,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_schedule_tool_records_proposal() {
+    async fn create_schedule_tool_records_recipe() {
         let trace = crate::agent::new_trace();
         let tool = CreateSchedule {
             trace: trace.clone(),
@@ -623,7 +671,10 @@ mod tests {
                 &mut rig::tool::ToolContext::new(),
                 CreateScheduleArgs {
                     name: "Daily".to_string(),
-                    prompt: "Report".to_string(),
+                    description: "Report".to_string(),
+                    how_to: vec!["Count overdue".to_string()],
+                    tools: vec!["count_work_items".to_string()],
+                    expected_output: "Summary".to_string(),
                     frequency: "daily".to_string(),
                     time: Some("08:00".to_string()),
                     day_of_week: None,
@@ -633,20 +684,26 @@ mod tests {
             )
             .await
             .unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&out).expect("proposal json");
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("recipe json");
         assert_eq!(parsed["frequency"], json!("daily"));
         assert_eq!(parsed["time"], json!("08:00"));
+        assert_eq!(parsed["tools"][0], json!("count_work_items"));
+        assert_eq!(parsed["how_to"][0], json!("Count overdue"));
         let recorded = trace.lock().unwrap().clone();
         assert_eq!(recorded.len(), 1);
         assert_eq!(recorded[0].name, "create_schedule");
         assert_eq!(recorded[0].arguments["time"], json!("08:00"));
+        assert_eq!(recorded[0].arguments["description"], json!("Report"));
     }
 
     #[test]
-    fn create_schedule_proposal_hourly_default_and_rejections() {
-        let hourly = proposal_from_args(CreateScheduleArgs {
+    fn create_schedule_recipe_hourly_default_and_rejections() {
+        let hourly = recipe_from_args(CreateScheduleArgs {
             name: "Hourly".to_string(),
-            prompt: "Check".to_string(),
+            description: "Check".to_string(),
+            how_to: vec!["Check".to_string()],
+            tools: vec!["list_projects".to_string()],
+            expected_output: "Notes".to_string(),
             frequency: "hourly".to_string(),
             time: None,
             day_of_week: None,
@@ -654,12 +711,15 @@ mod tests {
             timezone: None,
         })
         .expect("valid args");
-        assert_eq!(hourly.time, "00:00");
-        assert_eq!(hourly.timezone, "UTC");
+        assert_eq!(hourly.proposal.time, "00:00");
+        assert_eq!(hourly.proposal.timezone, "UTC");
 
-        let bad_tz = proposal_from_args(CreateScheduleArgs {
+        let bad_tz = recipe_from_args(CreateScheduleArgs {
             name: "x".to_string(),
-            prompt: "y".to_string(),
+            description: "d".to_string(),
+            how_to: vec!["s".to_string()],
+            tools: vec!["list_projects".to_string()],
+            expected_output: "o".to_string(),
             frequency: "daily".to_string(),
             time: None,
             day_of_week: None,
@@ -668,9 +728,12 @@ mod tests {
         });
         assert!(bad_tz.is_err());
 
-        let monthly_without_day = proposal_from_args(CreateScheduleArgs {
+        let monthly_without_day = recipe_from_args(CreateScheduleArgs {
             name: "x".to_string(),
-            prompt: "y".to_string(),
+            description: "d".to_string(),
+            how_to: vec!["s".to_string()],
+            tools: vec!["list_projects".to_string()],
+            expected_output: "o".to_string(),
             frequency: "monthly".to_string(),
             time: None,
             day_of_week: None,
@@ -691,8 +754,11 @@ mod tests {
                 &mut rig::tool::ToolContext::new(),
                 CreateScheduleArgs {
                     name: "x".to_string(),
-                    prompt: "y".to_string(),
-                    frequency: "sometimes".to_string(),
+                    description: "d".to_string(),
+                    how_to: vec!["s".to_string()],
+                    tools: vec![],
+                    expected_output: "o".to_string(),
+                    frequency: "daily".to_string(),
                     time: None,
                     day_of_week: None,
                     day_of_month: None,
@@ -701,8 +767,18 @@ mod tests {
             )
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("frequency"));
+        assert!(error.to_string().contains("tools"));
         assert!(trace.lock().unwrap().is_empty());
         assert!(crate::agent::pending_action(&trace).is_none());
+    }
+
+    #[tokio::test]
+    async fn read_tools_accepts_a_subset() {
+        let _handle = read_tools(
+            lazy_pool(),
+            Uuid::nil(),
+            crate::agent::new_trace(),
+            &["list_projects"],
+        );
     }
 }
