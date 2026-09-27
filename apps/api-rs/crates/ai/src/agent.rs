@@ -49,10 +49,13 @@ states. All tools are scoped to the user's current workspace and read-only, \
 except create_schedule, which only proposes a schedule and never saves \
 anything. If a tool returns no results, say so. Answer concisely in the \
 user's language. When the user's message starts with /schedule they want a \
-recurring scheduled task: gather anything unclear first (what to run and how \
-often), then call create_schedule once with the final details. The schedule is \
-only created after the user confirms the proposal card, so never say it is \
-already created.";
+recurring scheduled task. A schedule is a recipe, not a one-line command: \
+gather anything unclear first, then call create_schedule once with a complete \
+recipe — description, ordered how_to steps, the tools it needs (at least one \
+of list_projects, count_work_items, search_work_items), expected_output, and \
+how often. Tell the user they can edit every field in the confirmation card. \
+The schedule is only created after the user confirms the proposal card, so \
+never say it is already created.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
