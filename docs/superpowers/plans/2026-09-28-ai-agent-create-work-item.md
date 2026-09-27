@@ -1690,6 +1690,7 @@ describe("work item proposals", () => {
     services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
     const store = makeStore(services);
     store.setWorkspace("acme");
+    await flush();
     store.setMode("agent");
     await flush();
 
@@ -1721,6 +1722,7 @@ describe("work item proposals", () => {
     services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
     const store = makeStore(services);
     store.setWorkspace("acme");
+    await flush();
     store.setMode("agent");
     await flush();
 
@@ -1737,6 +1739,7 @@ describe("work item proposals", () => {
     });
     const store = makeStore(services);
     store.setWorkspace("acme");
+    await flush();
     store.setMode("agent");
     await flush();
 
@@ -1752,6 +1755,7 @@ describe("work item proposals", () => {
     services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
     const store = makeStore(services);
     store.setWorkspace("acme");
+    await flush();
     store.setMode("agent");
     await flush();
 
@@ -1839,7 +1843,7 @@ type TIssueService = Pick<IssueService, "createIssue">;
     if (!created?.id) throw new Error("Work item creation returned no id");
     runInAction(() => {
       message.workItemDecisions = {
-        ...(message.workItemDecisions ?? {}),
+        ...message.workItemDecisions,
         [key]: {
           decision: "created",
           created_work_item_id: created.id,
@@ -1857,7 +1861,7 @@ type TIssueService = Pick<IssueService, "createIssue">;
     if (message.workItemDecisions?.[key]) return;
     runInAction(() => {
       message.workItemDecisions = {
-        ...(message.workItemDecisions ?? {}),
+        ...message.workItemDecisions,
         [key]: { decision: "cancelled" } satisfies TAiWorkItemDecision,
       };
     });

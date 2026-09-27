@@ -79,10 +79,19 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
     updateMessageMetadata: vi.fn(async () => storedMessage("srv-assistant", "assistant", "ok")),
     ...overrides.conversations,
   },
+  issues: {
+    createIssue: vi.fn(async (_slug: string, projectId: string) => ({ id: "i1", project_id: projectId })),
+    ...overrides.issues,
+  },
 });
 
 const makeStore = (services = makeServices()) =>
-  new AIAssistantStore(services.ai as any, services.schedules as any, services.conversations as any);
+  new AIAssistantStore(
+    services.ai as any,
+    services.schedules as any,
+    services.conversations as any,
+    services.issues as any
+  );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -1273,5 +1282,105 @@ describe("race hardening", () => {
     expect(store.activeConversationId).toBe("c-beta");
     expect(store.messages.map((m) => m.content)).toEqual(["beta question", "classic ok"]);
     expect(store.conversations.some((c) => c.id === "c-alpha")).toBe(false);
+  });
+});
+
+const messageWithProposal = () => ({
+  id: "srv-assistant",
+  role: "assistant" as const,
+  content: "Here is a proposal",
+  content_html: "<p>Here is a proposal</p>",
+  metadata: {
+    work_item_proposals: [{ key: "k1", proposal: { project: "LTS", name: "Fix pump" } }],
+  },
+  created_at: "2026-09-28T09:00:00Z",
+});
+
+describe("work item proposals", () => {
+  it("confirms a proposal, creates the issue and persists the decision", async () => {
+    const services = makeServices();
+    services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    await store.confirmWorkItemProposal("srv-assistant", "k1", {
+      projectId: "p1",
+      issue: { name: "Fix pump" },
+    });
+
+    expect(services.issues.createIssue).toHaveBeenCalledWith("acme", "p1", { name: "Fix pump" });
+    expect(store.messages[0].workItemDecisions?.k1).toEqual({
+      decision: "created",
+      created_work_item_id: "i1",
+      created_project_id: "p1",
+    });
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
+      "acme",
+      expect.any(String),
+      "srv-assistant",
+      {
+        work_item_decisions: {
+          k1: { decision: "created", created_work_item_id: "i1", created_project_id: "p1" },
+        },
+      }
+    );
+  });
+
+  it("does not create twice for the same proposal", async () => {
+    const services = makeServices();
+    services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    await store.confirmWorkItemProposal("srv-assistant", "k1", { projectId: "p1", issue: { name: "Fix pump" } });
+    await store.confirmWorkItemProposal("srv-assistant", "k1", { projectId: "p1", issue: { name: "Fix pump" } });
+    expect(services.issues.createIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the decision pending when creation fails", async () => {
+    const services = makeServices();
+    services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
+    services.issues.createIssue = vi.fn(async () => {
+      throw new Error("nope");
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    await expect(
+      store.confirmWorkItemProposal("srv-assistant", "k1", { projectId: "p1", issue: { name: "Fix pump" } })
+    ).rejects.toThrow("nope");
+    expect(store.messages[0].workItemDecisions?.k1).toBeUndefined();
+    expect(services.conversations.updateMessageMetadata).not.toHaveBeenCalled();
+  });
+
+  it("cancels a proposal and persists the decision", async () => {
+    const services = makeServices();
+    services.conversations.listMessages = vi.fn(async () => [messageWithProposal()]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    store.resolveWorkItemProposal("srv-assistant", "k1");
+    expect(store.messages[0].workItemDecisions?.k1).toEqual({ decision: "cancelled" });
+    await flush();
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
+      "acme",
+      expect.any(String),
+      "srv-assistant",
+      {
+        work_item_decisions: { k1: { decision: "cancelled" } },
+      }
+    );
   });
 });

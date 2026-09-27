@@ -6,12 +6,15 @@
 
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { v4 as uuidv4 } from "uuid";
+import type { TIssue } from "@plane/types";
 import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
+import { IssueService } from "@/services/issue/issue.service";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
 import { isScheduleCommand, type TAiScheduleProposal } from "@/lib/ai-schedule";
+import type { TAiWorkItemDecision } from "@/lib/ai-work-items";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 import type { TAiConversation, TAiConversationMode } from "@/lib/ai-conversations";
 
@@ -23,6 +26,7 @@ type TAiConversationsService = Pick<
   AiConversationsService,
   "list" | "create" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
 >;
+type TIssueService = Pick<IssueService, "createIssue">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -47,6 +51,12 @@ export interface IAIAssistantStore {
   retryLast: () => Promise<void>;
   confirmScheduleProposal: (messageId: string, proposal?: TAiScheduleProposal) => Promise<void>;
   resolveScheduleProposal: (messageId: string, decision: "cancelled") => void;
+  confirmWorkItemProposal: (
+    messageId: string,
+    key: string,
+    payload: { projectId: string; issue: Partial<TIssue> }
+  ) => Promise<void>;
+  resolveWorkItemProposal: (messageId: string, key: string) => void;
 }
 
 export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
@@ -97,7 +107,8 @@ export class AIAssistantStore implements IAIAssistantStore {
   constructor(
     private aiService: TAiService = new AIService(),
     private schedulesService: TAiSchedulesService = new AiSchedulesService(),
-    private conversationsService: TAiConversationsService = new AiConversationsService()
+    private conversationsService: TAiConversationsService = new AiConversationsService(),
+    private issuesService: TIssueService = new IssueService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -122,6 +133,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       retryLast: action,
       confirmScheduleProposal: action,
       resolveScheduleProposal: action,
+      confirmWorkItemProposal: action,
+      resolveWorkItemProposal: action,
     });
   }
 
@@ -384,6 +397,58 @@ export class AIAssistantStore implements IAIAssistantStore {
       message.scheduleDecision = decision;
     });
     void this.persistDecision(conversationId, message, { schedule_decision: decision });
+  };
+
+  confirmWorkItemProposal = async (
+    messageId: string,
+    key: string,
+    payload: { projectId: string; issue: Partial<TIssue> }
+  ) => {
+    const slug = this.workspaceSlug;
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    if (!slug || !message?.workItemProposals?.some((entry) => entry.key === key)) return;
+    if (message.workItemDecisions?.[key]) return;
+    const created = await this.issuesService.createIssue(slug, payload.projectId, payload.issue);
+    if (!created?.id) throw new Error("Work item creation returned no id");
+    runInAction(() => {
+      message.workItemDecisions = {
+        ...message.workItemDecisions,
+        [key]: {
+          decision: "created",
+          created_work_item_id: created.id,
+          created_project_id: payload.projectId,
+        },
+      };
+    });
+    await this.persistWorkItemDecisions(conversationId, message);
+  };
+
+  resolveWorkItemProposal = (messageId: string, key: string) => {
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    if (!message?.workItemProposals?.some((entry) => entry.key === key)) return;
+    if (message.workItemDecisions?.[key]) return;
+    const cancelled: TAiWorkItemDecision = { decision: "cancelled" };
+    runInAction(() => {
+      message.workItemDecisions = {
+        ...message.workItemDecisions,
+        [key]: cancelled,
+      };
+    });
+    void this.persistWorkItemDecisions(conversationId, message);
+  };
+
+  private persistWorkItemDecisions = async (conversationId: string | undefined, message: TAiMessage) => {
+    const slug = this.workspaceSlug;
+    if (!slug || !conversationId || !message.workItemDecisions) return;
+    try {
+      await this.conversationsService.updateMessageMetadata(slug, conversationId, message.id, {
+        work_item_decisions: message.workItemDecisions,
+      });
+    } catch {
+      // best-effort: the created work item is already the source of truth
+    }
   };
 
   private ensureConversation = async (): Promise<string | undefined> => {
