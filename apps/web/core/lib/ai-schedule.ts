@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import type { TNotificationData, TNotificationScheduleRun } from "@plane/types";
+
 export type TAiScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
 
 export const AI_SCHEDULE_TOOLS = ["list_projects", "count_work_items", "search_work_items"] as const;
@@ -153,3 +155,44 @@ export const isStructuredProposal = (proposal: TAiScheduleProposal): proposal is
 
 export const scheduleDescription = (schedule: { spec?: TAiScheduleSpec | null; prompt: string }): string =>
   schedule.spec?.description?.trim() || schedule.prompt;
+
+export type TAiScheduleListFilter = {
+  query: string;
+  status: "all" | "active" | "paused";
+};
+
+export const RUN_STATUS_BADGE_VARIANTS: Record<TAiScheduleRun["status"], "success" | "danger" | "brand"> = {
+  success: "success",
+  failed: "danger",
+  queued: "brand",
+  running: "brand",
+};
+
+export const isScheduleRunNotification = (
+  data: TNotificationData | undefined
+): data is TNotificationData & { ai_schedule: TNotificationScheduleRun } =>
+  typeof data?.ai_schedule?.schedule_id === "string" && data.ai_schedule.schedule_id.length > 0;
+
+export const scheduleRunNotificationHref = (workspaceSlug: string, scheduleId: string): string =>
+  `/${workspaceSlug}/scheduler?schedule=${scheduleId}`;
+
+export const scheduleRunNotificationText = (status: TNotificationScheduleRun["status"]): string =>
+  status === "success" ? "Scheduled run finished" : "Scheduled run failed";
+
+/** Search + status filter + deterministic ordering for the scheduler list. */
+export const filterSchedules = (schedules: TAiSchedule[], filter: TAiScheduleListFilter): TAiSchedule[] => {
+  const query = filter.query.trim().toLowerCase();
+  const matches = schedules.filter((schedule) => {
+    if (filter.status === "active" && !schedule.enabled) return false;
+    if (filter.status === "paused" && schedule.enabled) return false;
+    if (!query) return true;
+    return schedule.name.toLowerCase().includes(query);
+  });
+  return [...matches].toSorted((a, b) => {
+    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+    if (a.next_run_at && b.next_run_at) return a.next_run_at.localeCompare(b.next_run_at);
+    if (a.next_run_at) return -1;
+    if (b.next_run_at) return 1;
+    return b.created_at.localeCompare(a.created_at);
+  });
+};

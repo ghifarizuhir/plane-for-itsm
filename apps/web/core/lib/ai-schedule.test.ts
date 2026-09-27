@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterSchedules,
   humanizeSchedule,
   isScheduleCommand,
+  isScheduleRunNotification,
   isStructuredProposal,
   runDurationInSeconds,
   scheduleDescription,
+  scheduleRunNotificationHref,
+  scheduleRunNotificationText,
   scheduleStatusLabel,
   validateScheduleSpec,
 } from "./ai-schedule";
-import type { TAiScheduleSpec } from "./ai-schedule";
+import type { TAiSchedule, TAiScheduleSpec } from "./ai-schedule";
 
 describe("isScheduleCommand", () => {
   it("matches only leading /schedule commands", () => {
@@ -157,5 +161,78 @@ describe("scheduleDescription", () => {
   it("prefers the spec description and falls back to the prompt", () => {
     expect(scheduleDescription({ spec: validSpec, prompt: "legacy" })).toBe("Summarize overdue work");
     expect(scheduleDescription({ spec: null, prompt: "legacy" })).toBe("legacy");
+  });
+});
+
+const schedule = (overrides: Partial<TAiSchedule>): TAiSchedule => ({
+  id: "s1",
+  name: "Daily report",
+  frequency: "daily",
+  time: "09:00",
+  timezone: "UTC",
+  enabled: true,
+  next_run_at: "2026-09-28T09:00:00Z",
+  created_by_id: "u1",
+  created_at: "2026-09-01T00:00:00Z",
+  prompt: "Summarize",
+  spec: null,
+  ...overrides,
+});
+
+describe("filterSchedules", () => {
+  it("filters by name case-insensitively", () => {
+    const rows = [schedule({ id: "a", name: "Daily report" }), schedule({ id: "b", name: "Weekly digest" })];
+    expect(filterSchedules(rows, { query: "daily", status: "all" }).map((row) => row.id)).toEqual(["a"]);
+    expect(filterSchedules(rows, { query: "WEEKLY", status: "all" }).map((row) => row.id)).toEqual(["b"]);
+    expect(filterSchedules(rows, { query: "  ", status: "all" })).toHaveLength(2);
+  });
+
+  it("filters by status", () => {
+    const rows = [schedule({ id: "a", enabled: true }), schedule({ id: "b", enabled: false })];
+    expect(filterSchedules(rows, { query: "", status: "active" }).map((row) => row.id)).toEqual(["a"]);
+    expect(filterSchedules(rows, { query: "", status: "paused" }).map((row) => row.id)).toEqual(["b"]);
+  });
+
+  it("sorts active before paused, then by next run ascending", () => {
+    const rows = [
+      schedule({ id: "paused", enabled: false, next_run_at: "2026-09-01T00:00:00Z" }),
+      schedule({ id: "late", enabled: true, next_run_at: "2026-09-30T09:00:00Z" }),
+      schedule({ id: "soon", enabled: true, next_run_at: "2026-09-28T09:00:00Z" }),
+    ];
+    expect(filterSchedules(rows, { query: "", status: "all" }).map((row) => row.id)).toEqual([
+      "soon",
+      "late",
+      "paused",
+    ]);
+  });
+});
+
+describe("schedule run notifications", () => {
+  it("detects the ai_schedule payload", () => {
+    expect(
+      isScheduleRunNotification({
+        ai_schedule: {
+          schedule_id: "s1",
+          run_id: "r1",
+          name: "Daily report",
+          status: "success",
+          finished_at: null,
+        },
+      })
+    ).toBe(true);
+    expect(isScheduleRunNotification({})).toBe(false);
+    expect(isScheduleRunNotification(undefined)).toBe(false);
+    expect(
+      isScheduleRunNotification({
+        issue: { id: "i1" },
+        issue_activity: { id: "a1", actor: "u1", field: "state", issue_comment: "", verb: "updated" },
+      } as never)
+    ).toBe(false);
+  });
+
+  it("builds the scheduler deep link and status sentence", () => {
+    expect(scheduleRunNotificationHref("acme", "s1")).toBe("/acme/scheduler?schedule=s1");
+    expect(scheduleRunNotificationText("success")).toBe("Scheduled run finished");
+    expect(scheduleRunNotificationText("failed")).toBe("Scheduled run failed");
   });
 });

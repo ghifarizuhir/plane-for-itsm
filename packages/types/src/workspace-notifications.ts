@@ -27,9 +27,18 @@ export type TNotificationIssueLite = {
   state_group: string | undefined;
 };
 
+export type TNotificationScheduleRun = {
+  schedule_id: string;
+  run_id: string;
+  name: string;
+  status: "success" | "failed";
+  finished_at: string | null;
+  error?: string | null;
+};
+
 export type TNotificationData = {
-  issue: TNotificationIssueLite | undefined;
-  issue_activity: {
+  issue?: TNotificationIssueLite | undefined;
+  issue_activity?: {
     id: string | undefined;
     actor: string | undefined;
     field: string | undefined;
@@ -38,6 +47,7 @@ export type TNotificationData = {
     new_value: string | undefined;
     old_value: string | undefined;
   };
+  ai_schedule?: TNotificationScheduleRun | undefined;
 };
 
 export type TNotification = {
