@@ -15,6 +15,7 @@ import { EUserProjectRoles } from "@plane/types";
 import { ProjectStateLoader, GroupList } from "@/components/project-states";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 // store
 import { isTypedState } from "@/store/workflow.helpers";
@@ -56,6 +57,16 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
     });
     return grouped;
   }, [groupedProjectStates]);
+  const { getWorkflowMap } = useWorkflow();
+  const workflowMap = getWorkflowMap(projectId);
+  const typedStateGroups = useMemo(() => {
+    const groups = new Map<string, IState[]>();
+    typedStates.forEach((state) => {
+      const key = state.type_id ?? "untyped";
+      groups.set(key, [...(groups.get(key) ?? []), state]);
+    });
+    return [...groups.entries()];
+  }, [typedStates]);
 
   // Fetching all project states
   useSWR(
@@ -90,15 +101,22 @@ export const ProjectStateRoot = observer(function ProjectStateRoot(props: TProje
       />
       {typedStates.length > 0 && (
         <div className="mt-8 flex flex-col gap-2">
-          <h4 className="text-14 font-medium">{t("workspace_settings.settings.work_item_types.title")}</h4>
-          <p className="text-caption-md-regular text-tertiary">
-            {t("workspace_settings.settings.work_item_types.description")}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {typedStates.map((state) => (
-              <span key={state.id} className="rounded border border-subtle px-2 py-1 text-caption-md-medium">
-                {state.name}
-              </span>
+          <h4 className="text-14 font-medium">{t("project_settings.work_item_types.heading")}</h4>
+          <p className="text-caption-md-regular text-tertiary">{t("project_settings.work_item_types.description")}</p>
+          <div className="flex flex-col gap-3">
+            {typedStateGroups.map(([typeId, states]) => (
+              <div key={typeId} className="flex flex-col gap-1">
+                <span className="text-caption-md-medium text-tertiary">
+                  {workflowMap?.types.find((type) => type.type_id === typeId)?.type_name ?? ""}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {states.map((state) => (
+                    <span key={state.id} className="rounded border border-subtle px-2 py-1 text-caption-md-medium">
+                      {state.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
