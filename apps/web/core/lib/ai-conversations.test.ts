@@ -52,4 +52,29 @@ describe("toAiMessage", () => {
     const message = toAiMessage(stored({ metadata: { is_error: true } }));
     expect(message.isError).toBe(true);
   });
+
+  it("maps work item proposals and decisions from metadata", () => {
+    const message = toAiMessage(
+      stored({
+        metadata: {
+          work_item_proposals: [{ key: "k1", proposal: { project: "LTS", name: "Fix pump" } }],
+          work_item_decisions: {
+            k1: { decision: "created", created_work_item_id: "i1", created_project_id: "p1" },
+          },
+        },
+      })
+    );
+    expect(message.workItemProposals).toHaveLength(1);
+    expect(message.workItemProposals?.[0].key).toBe("k1");
+    expect(message.workItemProposals?.[0].proposal.name).toBe("Fix pump");
+    expect(message.workItemDecisions?.k1.decision).toBe("created");
+    expect(message.workItemDecisions?.k1.created_work_item_id).toBe("i1");
+    expect(message.workItemDecisions?.k1.created_project_id).toBe("p1");
+  });
+
+  it("leaves work item fields undefined when metadata is absent", () => {
+    const message = toAiMessage(stored({}));
+    expect(message.workItemProposals).toBeUndefined();
+    expect(message.workItemDecisions).toBeUndefined();
+  });
 });
