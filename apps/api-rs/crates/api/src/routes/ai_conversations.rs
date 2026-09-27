@@ -396,9 +396,103 @@ pub async fn messages(
     ))
 }
 
+/// Validate one allowlisted metadata patch. Pure so it is unit-testable
+/// without a DB; returns the cleaned object or a 400 message.
+fn clean_metadata_patch(patch: &serde_json::Map<String, Value>) -> Result<Value, String> {
+    let mut clean = serde_json::Map::new();
+    for (key, value) in patch {
+        match key.as_str() {
+            "schedule_decision" => match value.as_str() {
+                Some("created") | Some("cancelled") => {
+                    clean.insert(key.clone(), value.clone());
+                }
+                _ => return Err("schedule_decision must be 'created' or 'cancelled'".to_string()),
+            },
+            "created_schedule_id" => match value.as_str().and_then(|raw| Uuid::parse_str(raw).ok()) {
+                Some(id) => {
+                    clean.insert(key.clone(), json!(id));
+                }
+                None => return Err("created_schedule_id must be a uuid".to_string()),
+            },
+            "work_item_decisions" => {
+                clean.insert(key.clone(), clean_work_item_decisions(value)?);
+            }
+            _ => return Err(format!("metadata key not allowed: {key}")),
+        }
+    }
+    if clean.is_empty() {
+        return Err("metadata patch is empty".to_string());
+    }
+    Ok(Value::Object(clean))
+}
+
+/// Shape-check the `work_item_decisions` map: UUID keys, decision enum, and the
+/// created ids required exactly when the decision is `created`.
+fn clean_work_item_decisions(value: &Value) -> Result<Value, String> {
+    let Some(decisions) = value.as_object() else {
+        return Err("work_item_decisions must be an object".to_string());
+    };
+    let mut clean = serde_json::Map::new();
+    for (key, decision) in decisions {
+        let Some(decision_key) = Uuid::parse_str(key).ok() else {
+            return Err("work_item_decisions keys must be uuids".to_string());
+        };
+        let Some(entry) = decision.as_object() else {
+            return Err("work_item_decisions values must be objects".to_string());
+        };
+        match entry.get("decision").and_then(Value::as_str) {
+            Some("created") => {
+                let issue = entry
+                    .get("created_work_item_id")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| Uuid::parse_str(raw).ok());
+                let project = entry
+                    .get("created_project_id")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| Uuid::parse_str(raw).ok());
+                let (Some(issue), Some(project)) = (issue, project) else {
+                    return Err(
+                        "work_item_decisions created entries need created_work_item_id and \
+                         created_project_id uuids"
+                            .to_string(),
+                    );
+                };
+                clean.insert(
+                    decision_key.to_string(),
+                    json!({
+                        "decision": "created",
+                        "created_work_item_id": issue,
+                        "created_project_id": project,
+                    }),
+                );
+            }
+            Some("cancelled") => {
+                if entry.get("created_work_item_id").is_some()
+                    || entry.get("created_project_id").is_some()
+                {
+                    return Err(
+                        "work_item_decisions cancelled entries must not carry created ids"
+                            .to_string(),
+                    );
+                }
+                clean.insert(
+                    decision_key.to_string(),
+                    json!({"decision": "cancelled"}),
+                );
+            }
+            _ => {
+                return Err(
+                    "work_item_decisions decision must be 'created' or 'cancelled'".to_string(),
+                );
+            }
+        }
+    }
+    Ok(Value::Object(clean))
+}
+
 /// `PATCH .../messages/:message_id/` — merge an allowlisted metadata patch
-/// (`schedule_decision`, `created_schedule_id`) written by the FE when the
-/// user resolves a schedule proposal card.
+/// (`schedule_decision`, `created_schedule_id`, `work_item_decisions`) written
+/// by the FE when the user resolves a proposal card.
 pub async fn patch_message(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -419,48 +513,12 @@ pub async fn patch_message(
             Json(json!({"error": "metadata must be an object"})),
         ));
     };
-    let mut clean = serde_json::Map::new();
-    for (key, value) in patch {
-        match key.as_str() {
-            "schedule_decision" => match value.as_str() {
-                Some("created") | Some("cancelled") => {
-                    clean.insert(key.clone(), value.clone());
-                }
-                _ => {
-                    return Ok((
-                        StatusCode::BAD_REQUEST,
-                        Json(
-                            json!({"error": "schedule_decision must be 'created' or 'cancelled'"}),
-                        ),
-                    ));
-                }
-            },
-            "created_schedule_id" => match value.as_str().and_then(|raw| Uuid::parse_str(raw).ok())
-            {
-                Some(id) => {
-                    clean.insert(key.clone(), json!(id));
-                }
-                None => {
-                    return Ok((
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"error": "created_schedule_id must be a uuid"})),
-                    ));
-                }
-            },
-            _ => {
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("metadata key not allowed: {key}")})),
-                ));
-            }
+    let clean = match clean_metadata_patch(patch) {
+        Ok(clean) => clean,
+        Err(message) => {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
         }
-    }
-    if clean.is_empty() {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "metadata patch is empty"})),
-        ));
-    }
+    };
     let row: Option<MessageRow> = sqlx::query_as(
         "UPDATE ai_messages SET metadata = metadata || $3::jsonb \
          WHERE id = $1 AND conversation_id = $2 \
@@ -468,7 +526,7 @@ pub async fn patch_message(
     )
     .bind(message_id)
     .bind(conversation_id)
-    .bind(Value::Object(clean))
+    .bind(clean)
     .fetch_optional(&st.pool)
     .await?;
     match row {
@@ -491,5 +549,112 @@ mod tests {
         assert_eq!(title_from("   \n\n  "), "");
         let long = "a".repeat(80);
         assert_eq!(title_from(&long).chars().count(), TITLE_MAX_CHARS);
+    }
+
+    fn patch_map(entries: Vec<(&str, Value)>) -> serde_json::Map<String, Value> {
+        entries
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect()
+    }
+
+    #[test]
+    fn metadata_patch_accepts_schedule_keys() {
+        let clean = clean_metadata_patch(&patch_map(vec![
+            ("schedule_decision", json!("created")),
+            ("created_schedule_id", json!(Uuid::new_v4())),
+        ]))
+        .expect("valid patch");
+        assert_eq!(clean["schedule_decision"], json!("created"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_work_item_decisions() {
+        let key = Uuid::new_v4().to_string();
+        let issue = Uuid::new_v4();
+        let project = Uuid::new_v4();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({ (key.clone()): {
+                "decision": "created",
+                "created_work_item_id": issue,
+                "created_project_id": project,
+            }}),
+        )]))
+        .expect("valid patch");
+        assert_eq!(clean["work_item_decisions"][&key]["decision"], json!("created"));
+        assert_eq!(
+            clean["work_item_decisions"][&key]["created_work_item_id"],
+            json!(issue)
+        );
+        assert_eq!(
+            clean["work_item_decisions"][&key]["created_project_id"],
+            json!(project)
+        );
+    }
+
+    #[test]
+    fn metadata_patch_accepts_cancelled_without_ids() {
+        let key = Uuid::new_v4().to_string();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({ (key.clone()): {"decision": "cancelled"} }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(clean["work_item_decisions"][&key]["decision"], json!("cancelled"));
+    }
+
+    #[test]
+    fn metadata_patch_rejects_bad_work_item_decisions() {
+        let key = Uuid::new_v4().to_string();
+        let issue = Uuid::new_v4();
+        let project = Uuid::new_v4();
+
+        let missing_ids = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({ (key.clone()): {"decision": "created"} }),
+        )]))
+        .unwrap_err();
+        assert!(missing_ids.contains("created_work_item_id"));
+
+        let ids_on_cancel = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({ (key.clone()): {
+                "decision": "cancelled",
+                "created_work_item_id": issue,
+                "created_project_id": project,
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(ids_on_cancel.contains("cancelled"));
+
+        let bad_decision = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({ (key.clone()): {"decision": "maybe"} }),
+        )]))
+        .unwrap_err();
+        assert!(bad_decision.contains("decision"));
+
+        let bad_key = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!({"not-a-uuid": {"decision": "cancelled"}}),
+        )]))
+        .unwrap_err();
+        assert!(bad_key.contains("uuid"));
+
+        let not_an_object = clean_metadata_patch(&patch_map(vec![(
+            "work_item_decisions",
+            json!("nope"),
+        )]))
+        .unwrap_err();
+        assert!(not_an_object.contains("object"));
+    }
+
+    #[test]
+    fn metadata_patch_rejects_unknown_and_empty() {
+        let unknown = clean_metadata_patch(&patch_map(vec![("nope", json!(1))])).unwrap_err();
+        assert!(unknown.contains("not allowed"));
+        let empty = clean_metadata_patch(&patch_map(vec![])).unwrap_err();
+        assert!(empty.contains("empty"));
     }
 }
