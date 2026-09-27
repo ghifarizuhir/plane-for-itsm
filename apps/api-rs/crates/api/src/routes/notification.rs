@@ -262,7 +262,8 @@ pub async fn list(
     let base_where = format!(
         "FROM notifications n JOIN workspaces w ON w.id = n.workspace_id \
          LEFT JOIN users tu ON tu.id = n.triggered_by_id \
-         WHERE w.slug = $1 AND n.receiver_id = $2 AND n.entity_name = 'issue' \
+         WHERE w.slug = $1 AND n.receiver_id = $2 \
+          AND n.entity_name IN ('issue', 'ai_schedule_run') \
          AND n.deleted_at IS NULL {snoozed_filter} {archived_filter} \
          {read_filter} {mentioned_filter} {type_filter}"
     );
