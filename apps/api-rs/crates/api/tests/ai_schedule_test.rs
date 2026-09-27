@@ -492,7 +492,10 @@ async fn destroy_soft_deletes_schedule_run_notifications() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(soft_deleted, "notifications follow the schedule soft delete");
+    assert!(
+        soft_deleted,
+        "notifications follow the schedule soft delete"
+    );
 
     scratch.purge(&pool).await;
 }
