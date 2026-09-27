@@ -20,7 +20,13 @@ import { useAiSchedules } from "@/hooks/store/use-ai-schedules";
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 // lib
-import { humanizeSchedule, scheduleStatusLabel, type TAiSchedule, type TAiScheduleRun } from "@/lib/ai-schedule";
+import {
+  humanizeSchedule,
+  scheduleDescription,
+  scheduleStatusLabel,
+  type TAiSchedule,
+  type TAiScheduleRun,
+} from "@/lib/ai-schedule";
 // local imports
 import { ScheduleRunsList } from "./schedule-runs-list";
 
@@ -52,11 +58,13 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
   const [deleting, setDeleting] = useState(false);
   const [running, setRunning] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [recipeOpen, setRecipeOpen] = useState(false);
 
   const role = slug ? getWorkspaceRoleByWorkspaceSlug(slug) : undefined;
   const canManage = currentUser?.id === schedule.created_by_id || role === EUserWorkspaceRoles.ADMIN;
   const runs = runsBySchedule[schedule.id] ?? schedule.runs ?? [];
   const creator = getWorkspaceMemberDetails(schedule.created_by_id);
+  const recipeSteps = schedule.spec?.how_to.map((step, index) => ({ id: `${index}-${step}`, step })) ?? [];
 
   const handleToggleExpanded = () => {
     const next = !expanded;
@@ -114,7 +122,16 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
             )}
           </div>
           <p className="text-xs mt-0.5 text-secondary">{humanizeSchedule(schedule)}</p>
-          <p className="text-xs line-clamp-1 text-tertiary">{schedule.prompt}</p>
+          <p className="text-xs line-clamp-1 text-tertiary">{scheduleDescription(schedule)}</p>
+          {schedule.spec && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {schedule.spec.tools.map((tool) => (
+                <Badge key={tool} variant="neutral" size="sm">
+                  {tool}
+                </Badge>
+              ))}
+            </div>
+          )}
           {schedule.enabled ? (
             <p className="text-xs mt-0.5 text-tertiary">
               Next run: {renderFormattedDate(schedule.next_run_at)} at {renderFormattedTime(schedule.next_run_at)}
@@ -150,8 +167,25 @@ export const ScheduleItem = observer(function ScheduleItem({ schedule }: Props) 
         <Button size="sm" variant="ghost" onClick={handleToggleExpanded}>
           {expanded ? "Hide history" : "History"}
         </Button>
+        {schedule.spec && (
+          <Button size="sm" variant="ghost" onClick={() => setRecipeOpen((open) => !open)}>
+            {recipeOpen ? "Hide recipe" : "Recipe"}
+          </Button>
+        )}
       </div>
       {expanded && <ScheduleRunsList runs={runs} />}
+      {recipeOpen && schedule.spec && (
+        <div className="mt-2 rounded-md border border-subtle bg-layer-2 p-2">
+          <p className="text-xs font-medium text-secondary">How to</p>
+          <ol className="text-xs mt-1 list-decimal space-y-0.5 pl-4 text-tertiary">
+            {recipeSteps.map((entry) => (
+              <li key={entry.id}>{entry.step}</li>
+            ))}
+          </ol>
+          <p className="text-xs mt-2 font-medium text-secondary">Expected output</p>
+          <p className="text-xs mt-0.5 text-tertiary">{schedule.spec.expected_output}</p>
+        </div>
+      )}
       <AlertModalCore
         isOpen={deleteOpen}
         handleClose={() => setDeleteOpen(false)}
