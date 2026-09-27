@@ -15,6 +15,8 @@ import { sortStates } from "@plane/utils";
 // plane web
 import { ProjectStateService } from "@/services/project/project-state.service";
 import type { RootStore } from "@/store/root.store";
+// store
+import { isTypedState } from "./workflow.helpers";
 
 export interface IStateStore {
   //Loaders
@@ -405,8 +407,10 @@ export class StateStore implements IStateStore {
 
     if (!group || !this.groupedProjectStates || !this.groupedProjectStates[group]) return -1;
 
-    // Get all states in the same group
-    const statesInGroup = this.groupedProjectStates[group];
+    // typed mirror states dikelola di halaman terpisah; jangan dilusikan ke
+    // persentase state legacy (list legacy juga memfilternya di UI).
+    const statesInGroup = this.groupedProjectStates[group].filter((s) => !isTypedState(s));
+    if (statesInGroup.length === 0) return -1;
     const stateIndex = statesInGroup.findIndex((s) => s.id === stateId);
 
     if (stateIndex === -1) return undefined;
