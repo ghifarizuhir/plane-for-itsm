@@ -11,7 +11,7 @@ import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
-import { isScheduleCommand } from "@/lib/ai-schedule";
+import { isScheduleCommand, type TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
 import type { TAiConversation, TAiConversationMode } from "@/lib/ai-conversations";
 
@@ -45,7 +45,7 @@ export interface IAIAssistantStore {
   deleteConversation: (conversationId: string) => Promise<boolean>;
   sendMessage: (question: string) => Promise<void>;
   retryLast: () => Promise<void>;
-  confirmScheduleProposal: (messageId: string) => Promise<void>;
+  confirmScheduleProposal: (messageId: string, proposal?: TAiScheduleProposal) => Promise<void>;
   resolveScheduleProposal: (messageId: string, decision: "cancelled") => void;
 }
 
@@ -354,13 +354,17 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   };
 
-  confirmScheduleProposal = async (messageId: string) => {
+  confirmScheduleProposal = async (messageId: string, proposal?: TAiScheduleProposal) => {
     const slug = this.workspaceSlug;
     const conversationId = this.activeConversationId;
     const message = this.messages.find((candidate) => candidate.id === messageId);
     if (!slug || !message?.scheduleProposal || !message.scheduleProposalKey) return;
     if (message.scheduleDecision !== "pending") return;
-    const created = await this.schedulesService.create(slug, message.scheduleProposal, message.scheduleProposalKey);
+    const effective = proposal ?? message.scheduleProposal;
+    runInAction(() => {
+      message.scheduleProposal = effective;
+    });
+    const created = await this.schedulesService.create(slug, effective, message.scheduleProposalKey);
     if (!created?.id) throw new Error("Schedule creation returned no id");
     runInAction(() => {
       message.scheduleDecision = "created";

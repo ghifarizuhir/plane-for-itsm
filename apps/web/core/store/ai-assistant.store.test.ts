@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AIAssistantStore, AI_ASSISTANT_ACTIVE_PREFIX, clearPersistedAiConversations } from "./ai-assistant.store";
 import type { TAiIssueContext } from "@/lib/ai-context";
+import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiConversation, TAiStoredMessage } from "@/lib/ai-conversations";
 
 class LocalStorageStub {
@@ -341,6 +342,45 @@ describe("stateful send flow", () => {
     expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith("acme", "c-agent", message.id, {
       schedule_decision: "cancelled",
     });
+  });
+
+  it("confirming with an edited proposal sends the edited fields", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async (_slug: string, data: any) => ({
+          ...chatResponse(data.conversation_id, data.prompt, "proposal ready"),
+          pending_action: {
+            kind: "create_schedule",
+            proposal: {
+              name: "Laporan",
+              prompt: "ringkas overdue",
+              frequency: "weekly",
+              time: "09:00",
+              timezone: "Asia/Jakarta",
+            },
+          },
+        })),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    await store.sendMessage("buat jadwal");
+    const message = store.messages.find((m) => m.scheduleProposal)!;
+    const edited: TAiScheduleProposal = {
+      ...message.scheduleProposal!,
+      description: "Edited description",
+      how_to: ["Edited step"],
+      tools: ["list_projects"],
+      expected_output: "Edited output",
+    };
+
+    await store.confirmScheduleProposal(message.id, edited);
+    expect(services.schedules.create).toHaveBeenCalledWith("acme", edited, message.scheduleProposalKey);
+    expect(message.scheduleProposal).toEqual(edited);
+    expect(message.scheduleDecision).toBe("created");
   });
 });
 
