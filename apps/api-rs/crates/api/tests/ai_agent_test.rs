@@ -307,6 +307,71 @@ mod tool_roundtrip {
         spawn_schedule_roundtrip().await.0
     }
 
+    async fn work_item_handler(
+        State(state): State<Shared>,
+        Json(body): Json<Value>,
+    ) -> (StatusCode, Json<Value>) {
+        let n = {
+            let mut calls = state.calls.lock().unwrap();
+            let n = *calls;
+            *calls += 1;
+            n
+        };
+        state.bodies.lock().unwrap().push(body);
+        if n == 0 {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "id": "1", "object": "chat.completion", "created": 0, "model": "test",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": null,
+                            "tool_calls": [{
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_work_item",
+                                    "arguments": "{\"project\":\"LTS\",\"name\":\"Fix pump\",\"description\":\"Pump is noisy\",\"priority\":\"urgent\",\"state\":\"In Progress\",\"assignees\":[\"Budi\"],\"labels\":[\"maintenance\"],\"target_date\":\"2026-10-05\"}"
+                                }
+                            }]
+                        },
+                        "finish_reason": "tool_calls"
+                    }]
+                })),
+            )
+        } else {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "id": "2", "object": "chat.completion", "created": 0, "model": "test",
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "final answer"},
+                        "finish_reason": "stop"
+                    }]
+                })),
+            )
+        }
+    }
+
+    async fn spawn_work_item_roundtrip() -> (String, Shared) {
+        let state: Shared = Arc::new(Upstream::default());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = Router::new()
+            .route("/v1/chat/completions", post(work_item_handler))
+            .with_state(state.clone());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (format!("http://{addr}/v1"), state)
+    }
+
+    /// URL only — for DB-backed tests that don't need the upstream handle.
+    pub(super) async fn work_item_roundtrip_url() -> String {
+        spawn_work_item_roundtrip().await.0
+    }
+
     #[tokio::test]
     async fn tool_call_roundtrip_records_trace_and_returns_final_text() {
         let (base, upstream) = spawn_roundtrip().await;
@@ -780,6 +845,127 @@ async fn agent_proposal_metadata_is_persisted_and_returned() {
     .unwrap();
     assert_eq!(stored["schedule_decision"], json!("pending"));
     assert_eq!(stored["schedule_proposal"]["name"], json!("Daily"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn work_item_proposal_metadata_and_decisions_roundtrip() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::work_item_roundtrip_url().await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "/task fix the pump in LTS",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    // pending_actions carries the proposal for the current turn.
+    let actions = body["pending_actions"].as_array().expect("actions array");
+    let action = actions
+        .iter()
+        .find(|action| action["kind"] == json!("create_work_item"))
+        .expect("work item action");
+    assert_eq!(action["proposal"]["project"], json!("LTS"));
+    assert_eq!(action["proposal"]["name"], json!("Fix pump"));
+    assert_eq!(action["proposal"]["priority"], json!("urgent"));
+    assert_eq!(action["proposal"]["assignees"][0], json!("Budi"));
+    assert_eq!(action["proposal"]["target_date"], json!("2026-10-05"));
+
+    // Metadata on the assistant message carries one keyed proposal.
+    let proposals = body["assistant_message"]["metadata"]["work_item_proposals"]
+        .as_array()
+        .expect("work_item_proposals array");
+    assert_eq!(proposals.len(), 1);
+    let key = proposals[0]["key"].as_str().expect("proposal key");
+    assert_eq!(proposals[0]["proposal"]["name"], json!("Fix pump"));
+    let message_id =
+        Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+
+    // A created decision roundtrips through the real PATCH endpoint.
+    let issue_id = Uuid::new_v4();
+    let project_id = Uuid::new_v4();
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"work_item_decisions": {
+            (key): {
+                "decision": "created",
+                "created_work_item_id": issue_id,
+                "created_project_id": project_id,
+            }
+        }}})),
+    )
+    .await
+    .expect("patch created");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["work_item_decisions"][key]["decision"],
+        json!("created")
+    );
+    assert_eq!(
+        patched["metadata"]["work_item_decisions"][key]["created_work_item_id"],
+        json!(issue_id)
+    );
+
+    // A cancelled decision replaces it (the FE sends the whole map).
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"work_item_decisions": {
+            (key): {"decision": "cancelled"}
+        }}})),
+    )
+    .await
+    .expect("patch cancelled");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["work_item_decisions"][key]["decision"],
+        json!("cancelled")
+    );
+    assert!(patched["metadata"]["work_item_decisions"][key]
+        .get("created_work_item_id")
+        .is_none());
+
+    // Malformed decisions are rejected.
+    let (status, _) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"work_item_decisions": {
+            (key): {"decision": "created"}
+        }}})),
+    )
+    .await
+    .expect("patch invalid");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // The stored row kept the proposals and the last decision.
+    let stored: Value = sqlx::query_scalar(
+        "SELECT metadata FROM ai_messages WHERE id = $1",
+    )
+    .bind(message_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored["work_item_proposals"][0]["proposal"]["name"], json!("Fix pump"));
+    assert_eq!(stored["work_item_decisions"][key]["decision"], json!("cancelled"));
 
     scratch.purge(&pool).await;
 }
