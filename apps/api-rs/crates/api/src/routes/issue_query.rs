@@ -75,22 +75,35 @@ pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sor
 /// `cycle_id` mirrors the row annotation (latest bridge, `created_at DESC`).
 pub(crate) const LIST_SCAN_SELECT_SQL: &str = "SELECT i.id, i.state_id::text AS state_id, s.\"group\" AS state_group, i.priority AS priority, COALESCE((SELECT ARRAY_AGG(il.label_id::text) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}') AS label_ids, COALESCE((SELECT ARRAY_AGG(ia.assignee_id::text) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}') AS assignee_ids, COALESCE((SELECT ARRAY_AGG(mi.module_id::text) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}') AS module_ids, (SELECT ci.cycle_id::text FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, i.project_id::text AS project_id, i.created_by_id::text AS created_by, i.target_date::text AS target_date, i.start_date::text AS start_date";
 
-/// Shared WHERE scope for the `list` COUNT + page + scan queries: the flat
-/// visibility (`base.py:266-294`) — project scoping (slug enforced by the
-/// project-exists check above) + not deleted + not archived + not draft +
-/// triage-state exclusion — then the GUEST scoping (`base.py:310-321`).
+/// Shared WHERE scope for the `list` COUNT + page + scan + rows queries: the
+/// flat visibility (`base.py:266-294`) plus, when present, the complex
+/// `filters` tree (same parse/apply as `list_detail`). Apply errors map to
+/// the DRF-style 400 body via `complex_filter_error_response`.
 fn push_list_where(
     qb: &mut QueryBuilder<Postgres>,
     project_id: uuid::Uuid,
     guest_scoped: bool,
     user_id: uuid::Uuid,
-) {
+    filters: Option<&serde_json::Value>,
+) -> Result<(), (StatusCode, Json<Value>)> {
     qb.push(" WHERE i.project_id = ").push_bind(project_id).push(
         " AND i.deleted_at IS NULL AND i.archived_at IS NULL AND i.is_draft = false AND s.\"group\" <> 'triage'",
     );
     if guest_scoped {
         qb.push(" AND i.created_by_id = ").push_bind(user_id);
     }
+    if let Some(tree) = filters {
+        apply_complex_filter(qb, tree).map_err(complex_filter_error_response)?;
+    }
+    Ok(())
+}
+
+/// `ComplexFilterError` → 400 body `{"message","code"}` (sama seperti `list_detail`).
+fn complex_filter_error_response(e: ComplexFilterError) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"message": e.message, "code": e.code})),
+    )
 }
 
 /// F5-style grouped branch of [`list`]: two-phase grouped 200
@@ -106,6 +119,7 @@ async fn grouped_list_response(
     guest_scoped: bool,
     group: &str,
     sub: Option<&str>,
+    filters: Option<&serde_json::Value>,
     limit: i64,
     page: i128,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
@@ -114,7 +128,9 @@ async fn grouped_list_response(
     };
     let mut scan_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SCAN_SELECT_SQL);
     scan_qb.push(" FROM issues i LEFT JOIN states s ON s.id = i.state_id");
-    push_list_where(&mut scan_qb, project_id, guest_scoped, user_id);
+    if let Err(resp) = push_list_where(&mut scan_qb, project_id, guest_scoped, user_id, filters) {
+        return Ok(resp);
+    }
     // Flat-path order is fixed `-created_at` (order_by accepted-and-ignored);
     // the scan keeps that order (+ id tiebreak per the grouped core docs).
     scan_qb.push(" ORDER BY i.created_at DESC, i.id ASC");
@@ -148,7 +164,10 @@ async fn grouped_list_response(
     let mut rows_by_id: HashMap<uuid::Uuid, Value> = HashMap::new();
     if !page_ids.is_empty() {
         let mut rows_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
-        push_list_where(&mut rows_qb, project_id, guest_scoped, user_id);
+        if let Err(resp) = push_list_where(&mut rows_qb, project_id, guest_scoped, user_id, filters)
+        {
+            return Ok(resp);
+        }
         rows_qb
             .push(" AND i.id = ANY(")
             .push_bind(page_ids)
@@ -236,6 +255,12 @@ pub async fn list(
     {
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": msg}))));
     }
+    // Rich `filters` kini juga berlaku untuk board/list project (parity
+    // `list_detail`): parse + validasi sekali, lalu diteruskan ke semua query.
+    let filter_tree = match parse_complex_filter(q.filters.as_deref()) {
+        Ok(t) => t,
+        Err(e) => return Ok(complex_filter_error_response(e)),
+    };
     let limit = per_page.min(1000);
     let window = match page_window(cursor.page, limit) {
         Err(()) => {
@@ -267,23 +292,31 @@ pub async fn list(
             guest_scoped,
             q.group_by.as_deref().unwrap_or(""),
             q.sub_group_by.as_deref().filter(|s| !s.is_empty()),
+            filter_tree.as_ref(),
             limit,
             cursor.page,
         )
         .await;
     }
     // 7. Order expr: fixed `-created_at` path for this slice (same deviation
-    // as documented for rich `issue_filters()` below); `order_by`/`filters`
-    // accepted-and-ignored here.
-    let _ = (&q.order_by, &q.filters);
+    // as documented for rich `issue_filters()` below); `order_by` accepted-and-ignored
+    // here, while `filters` is applied via the shared `push_list_where`.
+    let _ = &q.order_by;
     // 8. Count + page using IssueListRow SELECT (26 Django keys + fork
     // `type_id`; issue_common.rs:24-58).
-    // NOTE: full legacy `issue_filters()` + rich filters ignored in this
-    // slice (same deviation as list_detail docs); base visibility only:
-    // not deleted, not archived, not draft.
+    // NOTE: full legacy `issue_filters()` ignored in this slice (same
+    // deviation as list_detail docs); base visibility + rich `filters`.
     let mut count_qb: QueryBuilder<Postgres> =
         QueryBuilder::new("SELECT COUNT(*) FROM issues i LEFT JOIN states s ON s.id = i.state_id");
-    push_list_where(&mut count_qb, project_id, guest_scoped, auth.0);
+    if let Err(resp) = push_list_where(
+        &mut count_qb,
+        project_id,
+        guest_scoped,
+        auth.0,
+        filter_tree.as_ref(),
+    ) {
+        return Ok(resp);
+    }
     let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
     // `BeyondEnd` (unbounded page) slices to `[]` in Django and returns an
     // empty page with a 200 — no page query needed.
@@ -294,7 +327,15 @@ pub async fn list(
     let rows: Vec<IssueListRow> = match offset_opt {
         Some(offset) => {
             let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(LIST_SELECT_SQL);
-            push_list_where(&mut page_qb, project_id, guest_scoped, auth.0);
+            if let Err(resp) = push_list_where(
+                &mut page_qb,
+                project_id,
+                guest_scoped,
+                auth.0,
+                filter_tree.as_ref(),
+            ) {
+                return Ok(resp);
+            }
             page_qb
                 .push(" ORDER BY i.created_at DESC LIMIT ")
                 .push_bind(limit);
@@ -2126,6 +2167,33 @@ mod issue_list_tests {
         assert!(!project_gate_allows(false, false, false));
         assert!(!project_gate_allows(false, true, false));
         assert!(!project_gate_allows(false, false, true));
+    }
+
+    /// `list` (board/list project) harus ikut menerapkan complex `filters`,
+    /// bukan hanya `list_detail`. Bentuk SQL: WHERE dasar + ` AND (...i.priority...)`.
+    #[test]
+    fn list_where_includes_complex_filter_like_django() {
+        let mut qb: QueryBuilder<Postgres> =
+            QueryBuilder::new("SELECT 1 FROM issues i LEFT JOIN states s ON s.id = i.state_id");
+        let tree =
+            parse_complex_filter(Some(r#"{"and":[{"priority__in":"urgent,high"}]}"#)).unwrap();
+        push_list_where(
+            &mut qb,
+            uuid::Uuid::nil(),
+            false,
+            uuid::Uuid::nil(),
+            tree.as_ref(),
+        )
+        .unwrap();
+        let sql = qb.sql();
+        assert!(sql.contains("i.priority"), "sql: {sql}");
+    }
+
+    /// Field tidak dikenal tetap 400 (bukan diabaikan) — parity dengan list_detail.
+    #[test]
+    fn list_where_rejects_unknown_field_like_django() {
+        let err = parse_complex_filter(Some(r#"{"and":[{"nope__in":"x"}]}"#)).unwrap_err();
+        assert_eq!(err.code, "invalid_filter_field");
     }
 }
 
