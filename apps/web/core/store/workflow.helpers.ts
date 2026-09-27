@@ -2,7 +2,7 @@ import type {
   IIssueFilterOptions,
   IIssueFilters,
   IState,
-  TWorkItemFilterExpressionData,
+  TWorkItemFilterExpression,
   TWorkflowMap,
   TWorkflowMapType,
 } from "@plane/types";
@@ -19,14 +19,15 @@ export const getTypeDefaultStateId = (
 ): string | null => findWorkflowMapType(map, typeId)?.default_state_id ?? null;
 
 type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
+type TRichIssueFilterBag = { richFilters?: TWorkItemFilterExpression };
 
 /** Kumpulkan semua nilai type dari kondisi `type_id*` (rekursif pada grup `and`). */
-const collectTypeIds = (node: TWorkItemFilterExpressionData | undefined, out: Set<string>): void => {
-  if (!node) return;
+const collectTypeIds = (node: unknown, out: Set<string>): void => {
+  if (!node || typeof node !== "object") return;
   const record = node as Record<string, unknown>;
   const andChildren = record.and;
   if (Array.isArray(andChildren)) {
-    andChildren.forEach((child) => collectTypeIds(child as TWorkItemFilterExpressionData, out));
+    andChildren.forEach((child) => collectTypeIds(child, out));
     return;
   }
   for (const key of ["type_id", "type_id__exact", "type_id__in"] as const) {
@@ -51,7 +52,7 @@ const collectTypeIds = (node: TWorkItemFilterExpressionData | undefined, out: Se
  * tidak perlu cast; probe `"filters" in ...` yang menentukan bentuknya.
  */
 export const getSingleWorkItemTypeId = (
-  issueFilters: TLegacyIssueFilterBag | IIssueFilters | null | undefined
+  issueFilters: TLegacyIssueFilterBag | TRichIssueFilterBag | IIssueFilters | null | undefined
 ): string | null => {
   if (!issueFilters) return null;
   if ("filters" in issueFilters) {
@@ -59,7 +60,7 @@ export const getSingleWorkItemTypeId = (
     return legacyTypeIds?.length === 1 ? (legacyTypeIds[0] ?? null) : null;
   }
   const ids = new Set<string>();
-  collectTypeIds(issueFilters.richFilters, ids);
+  collectTypeIds((issueFilters as TRichIssueFilterBag).richFilters, ids);
   return ids.size === 1 ? ([...ids][0] ?? null) : null;
 };
 
