@@ -52,3 +52,23 @@ describe("WorkflowStore.unlinkWorkItemType", () => {
     expect(fetchProjectStates).toHaveBeenCalledWith("acme", "p-1");
   });
 });
+
+describe("WorkflowStore.map refresh failures", () => {
+  it("mencatat kegagalan refresh map tanpa menggagalkan mutasi", async () => {
+    const { store, service } = makeStore();
+    store.workflowMap["p-1"] = { types: [] };
+    service.getWorkflowMap.mockRejectedValueOnce(new Error("boom"));
+
+    await expect(store.importWorkItemTypes("acme", "p-1", ["type-1"])).resolves.toBeUndefined();
+    expect(store.mapRefreshError["p-1"]).toBeTruthy();
+  });
+
+  it("membersihkan flag setelah refresh sukses", async () => {
+    const { store } = makeStore();
+    store.workflowMap["p-1"] = { types: [] };
+    store.mapRefreshError["p-1"] = "failed";
+
+    await store.importWorkItemTypes("acme", "p-1", ["type-1"]);
+    expect(store.mapRefreshError["p-1"]).toBeNull();
+  });
+});

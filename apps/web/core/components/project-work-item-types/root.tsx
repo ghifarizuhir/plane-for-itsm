@@ -34,6 +34,7 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
     workItemTypes,
     workflows,
     workflowMap,
+    mapRefreshError,
     fetchWorkItemTypes,
     fetchWorkflows,
     fetchWorkflowMap,
@@ -80,6 +81,13 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
     try {
       if (next) await importWorkItemTypes(workspaceSlug, projectId, [typeId]);
       else await unlinkWorkItemType(workspaceSlug, projectId, typeId);
+      if (mapRefreshError[projectId]) {
+        setToast({
+          type: TOAST_TYPE.WARNING,
+          title: t("common.warning"),
+          message: t("workspace_settings.settings.work_item_types.map_refresh_failed"),
+        });
+      }
     } catch (error: any) {
       setToast({
         type: TOAST_TYPE.ERROR,

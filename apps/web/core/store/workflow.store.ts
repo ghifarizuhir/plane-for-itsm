@@ -29,6 +29,8 @@ export interface IWorkflowStore {
   workflowStates: Record<string, TWorkflowState[]>;
   workflowTransitions: Record<string, TWorkflowTransition[]>;
   workflowMap: Record<string, TWorkflowMap>;
+  // pesan kegagalan refresh map per project (dibaca UI untuk toast peringatan)
+  mapRefreshError: Record<string, string | null>;
   // fetch actions
   fetchWorkflows(workspaceSlug: string): Promise<TWorkflow[]>;
   fetchWorkflowStates(workspaceSlug: string, workflowId: string): Promise<TWorkflowState[]>;
@@ -73,6 +75,8 @@ export class WorkflowStore implements IWorkflowStore {
   workflowStates: Record<string, TWorkflowState[]> = {};
   workflowTransitions: Record<string, TWorkflowTransition[]> = {};
   workflowMap: Record<string, TWorkflowMap> = {};
+  // pesan kegagalan refresh map per project (dibaca UI untuk toast peringatan)
+  mapRefreshError: Record<string, string | null> = {};
   // request sequencing so a slow response cannot overwrite a newer workflow map (plain field, not observable)
   private workflowMapRequestId: Record<string, number> = {};
   // services
@@ -88,6 +92,7 @@ export class WorkflowStore implements IWorkflowStore {
       workflowStates: observable,
       workflowTransitions: observable,
       workflowMap: observable,
+      mapRefreshError: observable,
       // fetch actions
       fetchWorkflows: action,
       fetchWorkflowStates: action,
@@ -287,7 +292,18 @@ export class WorkflowStore implements IWorkflowStore {
       ? projectIds.filter((projectId) => this.workflowMap[projectId] !== undefined)
       : Object.keys(this.workflowMap);
     await Promise.all(
-      targets.map((projectId) => this.fetchWorkflowMap(workspaceSlug, projectId).catch(() => undefined))
+      targets.map(async (projectId) => {
+        try {
+          await this.fetchWorkflowMap(workspaceSlug, projectId);
+          runInAction(() => {
+            this.mapRefreshError[projectId] = null;
+          });
+        } catch {
+          runInAction(() => {
+            this.mapRefreshError[projectId] = "refresh_failed";
+          });
+        }
+      })
     );
   };
 
