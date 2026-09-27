@@ -291,21 +291,32 @@ describe("getTypeDefaultStateId", () => {
 });
 
 describe("getSingleWorkItemTypeId", () => {
-  it("membaca satu type dari bentuk legacy filters.issue_type", () => {
-    expect(getSingleWorkItemTypeId({ filters: { issue_type: ["type-1"] } })).toBe("type-1");
+  it("membaca satu type dari richFilters bentuk type_id__in", () => {
+    expect(getSingleWorkItemTypeId({ richFilters: { and: [{ type_id__in: "type-1" }] } })).toBe("type-1");
   });
 
-  it("null saat bentuk legacy tidak berisi tepat satu type", () => {
-    expect(getSingleWorkItemTypeId({ filters: { issue_type: [] } })).toBeNull();
+  it("membaca type_id__exact dan nilai comma tunggal", () => {
+    expect(getSingleWorkItemTypeId({ richFilters: { type_id__exact: "type-2" } })).toBe("type-2");
+    expect(getSingleWorkItemTypeId({ richFilters: { and: [{ type_id__in: "type-3," }] } })).toBe("type-3");
+  });
+
+  it("null saat tidak ada / lebih dari satu type", () => {
+    expect(getSingleWorkItemTypeId({ richFilters: {} })).toBeNull();
+    expect(getSingleWorkItemTypeId({ richFilters: { and: [{ type_id__in: "t-1,t-2" }] } })).toBeNull();
+    expect(getSingleWorkItemTypeId({ richFilters: { and: [{ priority__in: "urgent" }] } })).toBeNull();
+  });
+
+  it("tetap membaca bentuk legacy filters.issue_type", () => {
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: ["type-1"] } })).toBe("type-1");
     expect(getSingleWorkItemTypeId({ filters: { issue_type: ["t-1", "t-2"] } })).toBeNull();
+    expect(getSingleWorkItemTypeId({ filters: { issue_type: [] } })).toBeNull();
     expect(getSingleWorkItemTypeId({ filters: { issue_type: null } })).toBeNull();
     expect(getSingleWorkItemTypeId({ filters: {} })).toBeNull();
-    expect(getSingleWorkItemTypeId(undefined)).toBeNull();
   });
 
-  it("null untuk bentuk board saat ini (IIssueFilters tanpa field legacy)", () => {
-    // revamp rich filters menghapus filter type, jadi semua pemanggil board
-    // mengirim objek ini dan hasilnya selalu null sampai follow-up type filter.
+  it("null untuk input kosong atau board tanpa filter type", () => {
+    expect(getSingleWorkItemTypeId(undefined)).toBeNull();
+    expect(getSingleWorkItemTypeId(null)).toBeNull();
     const currentBoardFilters: IIssueFilters = {
       richFilters: {},
       displayFilters: { group_by: "state" },

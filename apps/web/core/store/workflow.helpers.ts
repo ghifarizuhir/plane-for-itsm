@@ -1,4 +1,11 @@
-import type { IIssueFilterOptions, IIssueFilters, IState, TWorkflowMap, TWorkflowMapType } from "@plane/types";
+import type {
+  IIssueFilterOptions,
+  IIssueFilters,
+  IState,
+  TWorkItemFilterExpressionData,
+  TWorkflowMap,
+  TWorkflowMapType,
+} from "@plane/types";
 
 export const findWorkflowMapType = (
   map: TWorkflowMap | undefined,
@@ -13,12 +20,32 @@ export const getTypeDefaultStateId = (
 
 type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
 
+/** Kumpulkan semua nilai type dari kondisi `type_id*` (rekursif pada grup `and`). */
+const collectTypeIds = (node: TWorkItemFilterExpressionData | undefined, out: Set<string>): void => {
+  if (!node) return;
+  const record = node as Record<string, unknown>;
+  const andChildren = record.and;
+  if (Array.isArray(andChildren)) {
+    andChildren.forEach((child) => collectTypeIds(child as TWorkItemFilterExpressionData, out));
+    return;
+  }
+  for (const key of ["type_id", "type_id__exact", "type_id__in"] as const) {
+    const raw = record[key];
+    if (raw === undefined || raw === null) continue;
+    const value = Array.isArray(raw) ? raw.join(",") : String(raw);
+    value
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+      .forEach((part) => out.add(part));
+  }
+};
+
 /**
- * Type tunggal aktif dari bentuk **legacy** `filters.issue_type`. Revamp rich
- * filters menghapus filter type dari board, jadi tidak ada jalur web yang
- * mengisi bentuk ini saat ini: semua pemanggil board mengirim `IIssueFilters`
- * (tanpa field `filters`) dan helper selalu mengembalikan `null`. Follow-up
- * type filter harus mengarahkan pembacaan ini ke `richFilters`.
+ * Type tunggal efektif dari filter board: utamanya `richFilters`
+ * (`type_id__in` / `type_id__exact`, boleh di dalam grup `and`), fallback ke
+ * bentuk legacy `filters.issue_type`. Dipakai `getStateColumns` untuk memilih
+ * kolom state milik type tersebut.
  *
  * Parameter menerima bentuk legacy maupun `IIssueFilters` supaya call site
  * tidak perlu cast; probe `"filters" in ...` yang menentukan bentuknya.
@@ -26,9 +53,14 @@ type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
 export const getSingleWorkItemTypeId = (
   issueFilters: TLegacyIssueFilterBag | IIssueFilters | null | undefined
 ): string | null => {
-  if (!issueFilters || !("filters" in issueFilters)) return null;
-  const typeIds = issueFilters.filters?.issue_type;
-  return typeIds?.length === 1 ? (typeIds[0] ?? null) : null;
+  if (!issueFilters) return null;
+  if ("filters" in issueFilters) {
+    const legacyTypeIds = issueFilters.filters?.issue_type;
+    return legacyTypeIds?.length === 1 ? (legacyTypeIds[0] ?? null) : null;
+  }
+  const ids = new Set<string>();
+  collectTypeIds(issueFilters.richFilters, ids);
+  return ids.size === 1 ? ([...ids][0] ?? null) : null;
 };
 
 /** State tujuan yang diizinkan dari `currentStateId` (mirror ids). */
