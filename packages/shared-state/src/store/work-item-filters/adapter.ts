@@ -165,9 +165,11 @@ class WorkItemFiltersAdapter extends FilterAdapter<TWorkItemFilterProperty, TWor
     const property = key.substring(0, lastDoubleUnderscoreIndex);
     const operator = key.substring(lastDoubleUnderscoreIndex + 2);
 
-    // Validate property is in allowed list
+    // Validate property is in allowed list. Legacy `customproperty_*` conditions
+    // are dropped here: this fork has no custom property tables, so keeping them
+    // would surface filter chips that can never match anything.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!WORK_ITEM_FILTER_PROPERTY_KEYS.includes(property as any) && !property.startsWith("customproperty_")) {
+    if (!WORK_ITEM_FILTER_PROPERTY_KEYS.includes(property as any)) {
       return false;
     }
 
