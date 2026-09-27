@@ -68,6 +68,13 @@ export class StateStore implements IStateStore {
   rootStore: RootStore;
   router;
   stateService: ProjectStateService;
+  // epoch per-project: mutasi menaikkan nilai ini supaya GET basi tidak
+  // men-prune/menimpa state yang baru dibuat/diubah saat request in-flight.
+  private stateRequestEpoch: Record<string, number> = {};
+
+  private bumpStateEpoch = (projectId: string) => {
+    this.stateRequestEpoch[projectId] = (this.stateRequestEpoch[projectId] ?? 0) + 1;
+  };
 
   constructor(_rootStore: RootStore) {
     makeObservable(this, {
@@ -217,13 +224,20 @@ export class StateStore implements IStateStore {
    * @returns
    */
   fetchProjectStates = async (workspaceSlug: string, projectId: string) => {
+    const epoch = this.stateRequestEpoch[projectId] ?? 0;
     const statesResponse = await this.stateService.getStates(workspaceSlug, projectId);
     runInAction(() => {
+      // mutasi lokal terjadi setelah GET ini dimulai → jangan prune state lokal
+      const isStale = (this.stateRequestEpoch[projectId] ?? 0) !== epoch;
       const fetchedStateIds = new Set(statesResponse.map((state) => state.id));
-      Object.values(this.stateMap).forEach((state) => {
-        if (state.project_id === projectId && !fetchedStateIds.has(state.id)) delete this.stateMap[state.id];
-      });
+      if (!isStale) {
+        Object.values(this.stateMap).forEach((state) => {
+          if (state.project_id === projectId && !fetchedStateIds.has(state.id)) delete this.stateMap[state.id];
+        });
+      }
       statesResponse.forEach((state) => {
+        // GET basi tidak boleh menimpa state yang sudah dibuat/diubah lokal
+        if (isStale && this.stateMap[state.id]) return;
         set(this.stateMap, [state.id], state);
       });
       set(this.fetchedMap, projectId, true);
@@ -269,13 +283,15 @@ export class StateStore implements IStateStore {
    * @param data
    * @returns
    */
-  createState = async (workspaceSlug: string, projectId: string, data: Partial<IState>) =>
-    await this.stateService.createState(workspaceSlug, projectId, data).then((response) => {
+  createState = async (workspaceSlug: string, projectId: string, data: Partial<IState>) => {
+    this.bumpStateEpoch(projectId);
+    return await this.stateService.createState(workspaceSlug, projectId, data).then((response) => {
       runInAction(() => {
         set(this.stateMap, [response?.id], response);
       });
       return response;
     });
+  };
 
   /**
    * Updates the state details in the store, in case of failure reverts back to original state
@@ -286,6 +302,7 @@ export class StateStore implements IStateStore {
    * @returns
    */
   updateState = async (workspaceSlug: string, projectId: string, stateId: string, data: Partial<IState>) => {
+    this.bumpStateEpoch(projectId);
     const originalState = this.stateMap[stateId];
     try {
       runInAction(() => {
@@ -312,6 +329,7 @@ export class StateStore implements IStateStore {
    */
   deleteState = async (workspaceSlug: string, projectId: string, stateId: string) => {
     if (!this.stateMap?.[stateId]) return;
+    this.bumpStateEpoch(projectId);
     // oxlint-disable-next-line promise/always-return
     await this.stateService.deleteState(workspaceSlug, projectId, stateId).then(() => {
       runInAction(() => {
@@ -327,6 +345,7 @@ export class StateStore implements IStateStore {
    * @param stateId
    */
   markStateAsDefault = async (workspaceSlug: string, projectId: string, stateId: string) => {
+    this.bumpStateEpoch(projectId);
     const originalStates = this.stateMap;
     const currentDefaultState = Object.values(this.stateMap).find(
       (state) => state.project_id === projectId && state.default
@@ -355,6 +374,7 @@ export class StateStore implements IStateStore {
    * @param groupIndex
    */
   moveStatePosition = async (workspaceSlug: string, projectId: string, stateId: string, payload: Partial<IState>) => {
+    this.bumpStateEpoch(projectId);
     const originalStates = this.stateMap;
     try {
       Object.entries(payload).forEach(([key, value]) => {

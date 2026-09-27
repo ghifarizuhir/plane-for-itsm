@@ -49,4 +49,22 @@ describe("StateStore.fetchProjectStates", () => {
     expect(store.stateMap["s-old"]).toBeDefined();
     expect(store.stateMap["s-new"]).toBeDefined();
   });
+
+  it("tidak men-prune state yang dibuat saat GET masih in-flight", async () => {
+    const store = makeStore();
+    store.stateMap = {};
+    let resolveGet!: (states: IState[]) => void;
+    store.stateService = {
+      getStates: vi.fn(() => new Promise<IState[]>((resolve) => (resolveGet = resolve))),
+      createState: vi.fn(async () => makeState("s-new", "p-1")),
+    } as never;
+
+    const fetchPromise = store.fetchProjectStates("acme", "p-1");
+    await store.createState("acme", "p-1", { name: "New" } as Partial<IState>);
+    resolveGet([makeState("s-old", "p-1")]);
+    await fetchPromise;
+
+    expect(store.stateMap["s-new"]).toBeDefined();
+    expect(store.stateMap["s-old"]).toBeDefined();
+  });
 });
