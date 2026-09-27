@@ -67,6 +67,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
+  const [workflowMapRetry, setWorkflowMapRetry] = useState(0);
   // refs
   const requestedWorkflowMaps = useRef(new Set<string>());
   // store hooks
@@ -91,8 +92,13 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     if (!projectId || !workspaceSlug || getWorkflowMap(projectId) !== undefined) return;
     if (requestedWorkflowMaps.current.has(projectId)) return;
     requestedWorkflowMaps.current.add(projectId);
-    void fetchWorkflowMap(workspaceSlug, projectId).catch(() => requestedWorkflowMaps.current.delete(projectId));
-  }, [fetchWorkflowMap, getWorkflowMap, projectId, workspaceSlug]);
+    void fetchWorkflowMap(workspaceSlug, projectId).catch(() => {
+      requestedWorkflowMaps.current.delete(projectId);
+      // retry terbatas (maks 2) supaya kegagalan sesaat tidak menghilangkan
+      // dropdown Type sampai modal di-remount
+      if (workflowMapRetry < 2) setTimeout(() => setWorkflowMapRetry((value) => value + 1), 1500);
+    });
+  }, [fetchWorkflowMap, getWorkflowMap, projectId, workspaceSlug, workflowMapRetry]);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
