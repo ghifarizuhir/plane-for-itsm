@@ -753,7 +753,10 @@ async fn create_with_spec_stores_rendered_prompt_and_returns_spec() {
         "Task: Daily report\n\nDescription:\nSummarize overdue work items for the team\n\nSteps:\n1. Count overdue work items\n2. List the top five by priority\n\nExpected output:\nA short markdown list with identifiers and owners\n\nAllowed tools: count_work_items, search_work_items"
     );
     assert_eq!(spec["version"], json!(1));
-    assert_eq!(spec["tools"], json!(["count_work_items", "search_work_items"]));
+    assert_eq!(
+        spec["tools"],
+        json!(["count_work_items", "search_work_items"])
+    );
 
     let (status, Json(detail)) = ai_schedule::detail(
         State(st),
@@ -767,7 +770,10 @@ async fn create_with_spec_stores_rendered_prompt_and_returns_spec() {
         detail["spec"]["description"],
         json!("Summarize overdue work items for the team")
     );
-    assert_eq!(detail["spec"]["how_to"][0], json!("Count overdue work items"));
+    assert_eq!(
+        detail["spec"]["how_to"][0],
+        json!("Count overdue work items")
+    );
 
     scratch.purge(&pool).await;
 }

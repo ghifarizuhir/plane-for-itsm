@@ -616,12 +616,16 @@ mod tests {
         assert_eq!(spec.how_to, vec!["Step one".to_string()]);
         assert_eq!(spec.expected_output, "A report");
 
-        assert!(ScheduleSpec::new("", &["s".to_string()], &["list_projects".to_string()], "o").is_err());
+        assert!(
+            ScheduleSpec::new("", &["s".to_string()], &["list_projects".to_string()], "o").is_err()
+        );
         assert!(ScheduleSpec::new("d", &[], &["list_projects".to_string()], "o").is_err());
         let too_many: Vec<String> = (0..11).map(|index| format!("step {index}")).collect();
         assert!(ScheduleSpec::new("d", &too_many, &["list_projects".to_string()], "o").is_err());
         assert!(ScheduleSpec::new("d", &["s".to_string()], &[], "o").is_err());
-        assert!(ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "").is_err());
+        assert!(
+            ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "").is_err()
+        );
     }
 
     #[test]
@@ -642,13 +646,16 @@ mod tests {
             vec!["list_projects".to_string(), "search_work_items".to_string()]
         );
 
-        let err = ScheduleSpec::new("d", &["s".to_string()], &["drop_tables".to_string()], "o").unwrap_err();
+        let err = ScheduleSpec::new("d", &["s".to_string()], &["drop_tables".to_string()], "o")
+            .unwrap_err();
         assert!(err.contains("subset"), "unexpected error: {err}");
     }
 
     #[test]
     fn spec_version_is_rejected_when_unknown() {
-        let mut spec = ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "o").unwrap();
+        let mut spec =
+            ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "o")
+                .unwrap();
         spec.version = 2;
         assert!(spec.validated().unwrap_err().contains("version"));
     }
@@ -657,7 +664,10 @@ mod tests {
     fn render_prompt_is_deterministic() {
         let spec = ScheduleSpec::new(
             "Summarize overdue",
-            &["Count overdue items".to_string(), "List the top 5".to_string()],
+            &[
+                "Count overdue items".to_string(),
+                "List the top 5".to_string(),
+            ],
             &["list_projects".to_string(), "search_work_items".to_string()],
             "A short markdown list",
         )

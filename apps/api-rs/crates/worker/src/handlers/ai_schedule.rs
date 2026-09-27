@@ -168,11 +168,12 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
         return Ok(());
     };
 
-    let spec_value: Option<Value> = sqlx::query_scalar("SELECT spec FROM ai_schedules WHERE id = $1")
-        .bind(run.schedule_id)
-        .fetch_optional(pool)
-        .await?
-        .flatten();
+    let spec_value: Option<Value> =
+        sqlx::query_scalar("SELECT spec FROM ai_schedules WHERE id = $1")
+            .bind(run.schedule_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
     let allowed = match allowed_tools(spec_value) {
         Ok(allowed) => allowed,
         Err(error) => {
@@ -192,7 +193,8 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
 
     let trace = ai::agent::new_trace();
     let allowed_refs: Vec<&str> = allowed.iter().map(String::as_str).collect();
-    let handle = ai::tools::read_tools(pool.clone(), run.workspace_id, trace.clone(), &allowed_refs);
+    let handle =
+        ai::tools::read_tools(pool.clone(), run.workspace_id, trace.clone(), &allowed_refs);
     let started = std::time::Instant::now();
     let result = tokio::time::timeout(
         ai::agent::AGENT_TIMEOUT,
