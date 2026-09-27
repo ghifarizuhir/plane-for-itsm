@@ -2090,6 +2090,139 @@ async fn workflow_switch_guard_and_map_details() {
 }
 
 #[tokio::test]
+async fn workflow_map_hides_inactive_types() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfhide").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Workflow + state, lalu type aktif yang di-enable ke project.
+    let (_, wf) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Hidden Type Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let wf_id = Uuid::parse_str(wf["id"].as_str().unwrap()).unwrap();
+    let _ = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), wf_id)),
+        Json(WorkflowStateBody {
+            name: Some("New".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state");
+
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Type Hideable', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(wf_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("type");
+    let (status, _) = import_to_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+        Json(json!({"work_item_types": [type_id]})),
+    )
+    .await
+    .expect("import");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Aktif → muncul di map.
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map active");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        map["types"].as_array().unwrap().len(),
+        1,
+        "type aktif harus muncul di map"
+    );
+
+    // Nonaktif → link/mirror tetap hidup, tapi type disembunyikan dari map.
+    sqlx::query("UPDATE issue_types SET is_active = false WHERE id = $1")
+        .bind(type_id)
+        .execute(&st.pool)
+        .await
+        .expect("deactivate type");
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map inactive");
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        map["types"].as_array().unwrap().is_empty(),
+        "type nonaktif tidak boleh muncul di map"
+    );
+    let (link_live, mirror_live): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM project_issue_types \
+                 WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM states \
+                 WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("link/mirror after deactivate");
+    assert_eq!(
+        link_live, 1,
+        "menonaktifkan type tidak boleh menghapus link"
+    );
+    assert_eq!(
+        mirror_live, 1,
+        "menonaktifkan type tidak boleh menghapus mirror"
+    );
+
+    // Aktif kembali → muncul lagi.
+    sqlx::query("UPDATE issue_types SET is_active = true WHERE id = $1")
+        .bind(type_id)
+        .execute(&st.pool)
+        .await
+        .expect("reactivate type");
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map reactivated");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        map["types"].as_array().unwrap().len(),
+        1,
+        "type yang diaktifkan kembali harus muncul di map"
+    );
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
 async fn unlink_cross_workspace_and_switch_with_issues() {
     let st = app_state().await;
     let (slug_a, ws_a, project_a) = make_workspace(&st, "wfxa").await;

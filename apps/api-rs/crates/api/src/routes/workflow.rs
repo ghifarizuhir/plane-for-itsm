@@ -1268,6 +1268,7 @@ pub async fn workflow_map(
          JOIN projects p ON p.id = pit.project_id \
          WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
            AND t.workflow_id IS NOT NULL AND p.deleted_at IS NULL \
+           AND t.is_active = true AND t.is_epic = false \
          ORDER BY t.name",
     )
     .bind(project_id)
