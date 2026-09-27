@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { humanizeSchedule, isScheduleCommand, runDurationInSeconds, scheduleStatusLabel } from "./ai-schedule";
+import {
+  humanizeSchedule,
+  isScheduleCommand,
+  isStructuredProposal,
+  runDurationInSeconds,
+  scheduleDescription,
+  scheduleStatusLabel,
+  validateScheduleSpec,
+} from "./ai-schedule";
+import type { TAiScheduleSpec } from "./ai-schedule";
 
 describe("isScheduleCommand", () => {
   it("matches only leading /schedule commands", () => {
@@ -86,5 +95,67 @@ describe("runDurationInSeconds", () => {
     expect(
       runDurationInSeconds({ started_at: "2024-01-01T00:00:05Z", finished_at: "2024-01-01T00:00:00Z" })
     ).toBeNull();
+  });
+});
+
+const validSpec: TAiScheduleSpec = {
+  version: 1,
+  description: "Summarize overdue work",
+  how_to: ["Count overdue items"],
+  tools: ["count_work_items"],
+  expected_output: "A short list",
+};
+
+describe("validateScheduleSpec", () => {
+  it("accepts a complete spec", () => {
+    expect(validateScheduleSpec({ ...validSpec, tools: [...validSpec.tools] })).toBeNull();
+  });
+
+  it("rejects missing fields with a message", () => {
+    expect(validateScheduleSpec({ ...validSpec, description: "  ", tools: [...validSpec.tools] })).toBe(
+      "Description is required."
+    );
+    expect(validateScheduleSpec({ ...validSpec, how_to: [], tools: [...validSpec.tools] })).toBe(
+      "Add at least one step."
+    );
+    expect(validateScheduleSpec({ ...validSpec, how_to: ["ok", "  "], tools: [...validSpec.tools] })).toBe(
+      "Each step must be 1-500 characters."
+    );
+    expect(validateScheduleSpec({ ...validSpec, tools: [] })).toBe("Select at least one tool.");
+    expect(validateScheduleSpec({ ...validSpec, expected_output: "", tools: [...validSpec.tools] })).toBe(
+      "Expected output is required."
+    );
+  });
+
+  it("rejects over-limit and unknown values", () => {
+    expect(validateScheduleSpec({ ...validSpec, description: "x".repeat(501), tools: [...validSpec.tools] })).toBe(
+      "Description must be at most 500 characters."
+    );
+    expect(
+      validateScheduleSpec({
+        ...validSpec,
+        how_to: Array.from({ length: 11 }, (_, index) => `step ${index}`),
+        tools: [...validSpec.tools],
+      })
+    ).toBe("At most 10 steps are allowed.");
+    expect(validateScheduleSpec({ ...validSpec, tools: ["drop_tables" as never] })).toBe("Unknown tool selected.");
+  });
+});
+
+describe("isStructuredProposal", () => {
+  it("detects proposals carrying every spec field", () => {
+    expect(
+      isStructuredProposal({ ...validSpec, name: "Daily", frequency: "daily", time: "09:00", timezone: "UTC" })
+    ).toBe(true);
+    expect(
+      isStructuredProposal({ name: "Daily", prompt: "Report", frequency: "daily", time: "09:00", timezone: "UTC" })
+    ).toBe(false);
+  });
+});
+
+describe("scheduleDescription", () => {
+  it("prefers the spec description and falls back to the prompt", () => {
+    expect(scheduleDescription({ spec: validSpec, prompt: "legacy" })).toBe("Summarize overdue work");
+    expect(scheduleDescription({ spec: null, prompt: "legacy" })).toBe("legacy");
   });
 });

@@ -6,15 +6,28 @@
 
 export type TAiScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
 
+export const AI_SCHEDULE_TOOLS = ["list_projects", "count_work_items", "search_work_items"] as const;
+export type TAiScheduleTool = (typeof AI_SCHEDULE_TOOLS)[number];
+
+export type TAiScheduleSpec = {
+  version: number;
+  description: string;
+  how_to: string[];
+  tools: TAiScheduleTool[];
+  expected_output: string;
+};
+
 export type TAiScheduleProposal = {
   name: string;
-  prompt: string;
   frequency: TAiScheduleFrequency;
   time: string;
   day_of_week?: number | null;
   day_of_month?: number | null;
   timezone: string;
-};
+  prompt?: string;
+} & Partial<TAiScheduleSpec>;
+
+export type TStructuredScheduleProposal = TAiScheduleProposal & TAiScheduleSpec;
 
 export type TAiScheduleRun = {
   id: string;
@@ -29,12 +42,14 @@ export type TAiScheduleRun = {
   finished_at?: string | null;
 };
 
-export type TAiSchedule = TAiScheduleProposal & {
+export type TAiSchedule = Omit<TAiScheduleProposal, "prompt"> & {
   id: string;
   enabled: boolean;
   next_run_at: string;
   created_by_id: string;
   created_at: string;
+  prompt: string;
+  spec?: TAiScheduleSpec | null;
   last_status?: TAiScheduleRun["status"] | null;
   last_finished_at?: string | null;
   last_run_at?: string | null;
@@ -97,3 +112,44 @@ export const humanizeSchedule = (
       return "—";
   }
 };
+
+export const SCHEDULE_SPEC_LIMITS = {
+  description: 500,
+  steps: 10,
+  step: 500,
+  expectedOutput: 1000,
+} as const;
+
+/** Mirrors `ScheduleSpec::validated` on the backend; returns the first error. */
+export const validateScheduleSpec = (spec: Partial<TAiScheduleSpec>): string | null => {
+  const description = spec.description?.trim() ?? "";
+  if (!description) return "Description is required.";
+  if (description.length > SCHEDULE_SPEC_LIMITS.description)
+    return `Description must be at most ${SCHEDULE_SPEC_LIMITS.description} characters.`;
+
+  const howTo = spec.how_to ?? [];
+  if (howTo.length === 0) return "Add at least one step.";
+  if (howTo.length > SCHEDULE_SPEC_LIMITS.steps) return `At most ${SCHEDULE_SPEC_LIMITS.steps} steps are allowed.`;
+  if (howTo.some((step) => !step.trim() || step.trim().length > SCHEDULE_SPEC_LIMITS.step))
+    return `Each step must be 1-${SCHEDULE_SPEC_LIMITS.step} characters.`;
+
+  const tools = spec.tools ?? [];
+  if (tools.length === 0) return "Select at least one tool.";
+  if (tools.some((tool) => !AI_SCHEDULE_TOOLS.includes(tool))) return "Unknown tool selected.";
+
+  const expected = spec.expected_output?.trim() ?? "";
+  if (!expected) return "Expected output is required.";
+  if (expected.length > SCHEDULE_SPEC_LIMITS.expectedOutput)
+    return `Expected output must be at most ${SCHEDULE_SPEC_LIMITS.expectedOutput} characters.`;
+
+  return null;
+};
+
+export const isStructuredProposal = (proposal: TAiScheduleProposal): proposal is TStructuredScheduleProposal =>
+  Array.isArray(proposal.how_to) &&
+  Array.isArray(proposal.tools) &&
+  typeof proposal.description === "string" &&
+  typeof proposal.expected_output === "string";
+
+export const scheduleDescription = (schedule: { spec?: TAiScheduleSpec | null; prompt: string }): string =>
+  schedule.spec?.description?.trim() || schedule.prompt;
