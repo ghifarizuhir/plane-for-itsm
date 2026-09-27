@@ -73,6 +73,10 @@ export class StateStore implements IStateStore {
   // epoch per-project: mutasi menaikkan nilai ini supaya GET basi tidak
   // men-prune/menimpa state yang baru dibuat/diubah saat request in-flight.
   private stateRequestEpoch: Record<string, number> = {};
+  // state ids yang dihapus lokal selagi GET in-flight; GET basi tidak boleh
+  // menghidupkannya kembali. Set baru per fetch-start, jadi GET yang dimulai
+  // setelah delete selesai tetap memercayai server.
+  private stateTombstones: Record<string, Set<string>> = {};
 
   private bumpStateEpoch = (projectId: string) => {
     this.stateRequestEpoch[projectId] = (this.stateRequestEpoch[projectId] ?? 0) + 1;
@@ -227,6 +231,7 @@ export class StateStore implements IStateStore {
    */
   fetchProjectStates = async (workspaceSlug: string, projectId: string) => {
     const epoch = this.stateRequestEpoch[projectId] ?? 0;
+    const deletedDuringFlight = (this.stateTombstones[projectId] = new Set<string>());
     const statesResponse = await this.stateService.getStates(workspaceSlug, projectId);
     runInAction(() => {
       // mutasi lokal terjadi setelah GET ini dimulai → jangan prune state lokal
@@ -240,6 +245,8 @@ export class StateStore implements IStateStore {
       statesResponse.forEach((state) => {
         // GET basi tidak boleh menimpa state yang sudah dibuat/diubah lokal
         if (isStale && this.stateMap[state.id]) return;
+        // dan tidak boleh menghidupkan kembali state yang dihapus saat in-flight
+        if (deletedDuringFlight.has(state.id)) return;
         set(this.stateMap, [state.id], state);
       });
       set(this.fetchedMap, projectId, true);
@@ -332,12 +339,17 @@ export class StateStore implements IStateStore {
   deleteState = async (workspaceSlug: string, projectId: string, stateId: string) => {
     if (!this.stateMap?.[stateId]) return;
     this.bumpStateEpoch(projectId);
-    // oxlint-disable-next-line promise/always-return
-    await this.stateService.deleteState(workspaceSlug, projectId, stateId).then(() => {
+    this.stateTombstones[projectId]?.add(stateId);
+    try {
+      await this.stateService.deleteState(workspaceSlug, projectId, stateId);
       runInAction(() => {
         delete this.stateMap[stateId];
       });
-    });
+    } catch (error) {
+      // delete gagal → buang tombstone supaya server tetap menjadi sumber kebenaran
+      this.stateTombstones[projectId]?.delete(stateId);
+      throw error;
+    }
   };
 
   /**
@@ -397,7 +409,10 @@ export class StateStore implements IStateStore {
   /**
    * Returns the percentage position of a state within its group based on sequence
    * @param stateId The ID of the state to find the percentage for
-   * @returns The percentage position of the state in its group (0-100), or -1 if not found
+   * @returns The percentage position of the state among the legacy (untyped)
+   * states of its group (0-100); `-1` when the state or its group is missing,
+   * and `undefined` when the state exists but is a typed mirror state, which is
+   * filtered out of the legacy denominator.
    */
   getStatePercentageInGroup = computedFn((stateId: string | null | undefined) => {
     if (!stateId || !this.stateMap[stateId]) return -1;

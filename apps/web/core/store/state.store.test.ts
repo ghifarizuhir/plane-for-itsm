@@ -67,6 +67,56 @@ describe("StateStore.fetchProjectStates", () => {
     expect(store.stateMap["s-new"]).toBeDefined();
     expect(store.stateMap["s-old"]).toBeDefined();
   });
+
+  it("GET basi tidak menimpa state yang sudah di-update lokal", async () => {
+    const store = makeStore();
+    store.stateMap = { "s-1": makeState("s-1", "p-1") };
+    let resolveGet!: (states: IState[]) => void;
+    store.stateService = {
+      getStates: vi.fn(() => new Promise<IState[]>((resolve) => (resolveGet = resolve))),
+      patchState: vi.fn(async () => makeState("s-1", "p-1")),
+    } as never;
+
+    const fetchPromise = store.fetchProjectStates("acme", "p-1");
+    await store.updateState("acme", "p-1", "s-1", { name: "Local Name" });
+    resolveGet([makeState("s-1", "p-1")]);
+    await fetchPromise;
+
+    expect(store.stateMap["s-1"].name).toBe("Local Name");
+  });
+
+  it("GET basi tidak menghidupkan kembali state yang dihapus saat in-flight", async () => {
+    const store = makeStore();
+    store.stateMap = { "s-del": makeState("s-del", "p-1") };
+    let resolveGet!: (states: IState[]) => void;
+    store.stateService = {
+      getStates: vi.fn(() => new Promise<IState[]>((resolve) => (resolveGet = resolve))),
+      deleteState: vi.fn(async () => undefined),
+    } as never;
+
+    const fetchPromise = store.fetchProjectStates("acme", "p-1");
+    await store.deleteState("acme", "p-1", "s-del");
+    resolveGet([makeState("s-del", "p-1")]);
+    await fetchPromise;
+
+    expect(store.stateMap["s-del"]).toBeUndefined();
+  });
+
+  it("delete gagal tidak menandai tombstone permanen", async () => {
+    const store = makeStore();
+    store.stateMap = { "s-1": makeState("s-1", "p-1") };
+    store.stateService = {
+      getStates: vi.fn(async () => [makeState("s-1", "p-1")]),
+      deleteState: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    } as never;
+
+    await expect(store.deleteState("acme", "p-1", "s-1")).rejects.toThrow("boom");
+    await store.fetchProjectStates("acme", "p-1");
+
+    expect(store.stateMap["s-1"]).toBeDefined();
+  });
 });
 
 describe("StateStore.getStatePercentageInGroup", () => {
@@ -81,5 +131,7 @@ describe("StateStore.getStatePercentageInGroup", () => {
 
     expect(store.getStatePercentageInGroup("s-1")).toBe(50);
     expect(store.getStatePercentageInGroup("s-2")).toBe(100);
+    // typed mirror states are filtered out of the legacy list → no position
+    expect(store.getStatePercentageInGroup("s-mirror")).toBeUndefined();
   });
 });
