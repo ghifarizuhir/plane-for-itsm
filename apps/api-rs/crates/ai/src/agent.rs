@@ -9,10 +9,10 @@ use rig::completion::PromptError;
 use rig::prelude::*;
 use rig::providers::openai;
 use rig::tool::server::ToolServerHandle;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::llm::LlmError;
-use crate::tools::CREATE_SCHEDULE_NAME;
+use crate::tools::{CREATE_SCHEDULE_NAME, CREATE_WORK_ITEM_NAME};
 
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -46,16 +46,22 @@ pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
 Answer factual questions about projects and work items by calling the provided \
 tools; never invent project identifiers, work item identifiers, counts, or \
 states. All tools are scoped to the user's current workspace and read-only, \
-except create_schedule, which only proposes a schedule and never saves \
-anything. If a tool returns no results, say so. Answer concisely in the \
-user's language. When the user's message starts with /schedule they want a \
+except create_schedule and create_work_item, which only propose something and \
+never save anything. If a tool returns no results, say so. Answer concisely in \
+the user's language. When the user's message starts with /schedule they want a \
 recurring scheduled task. A schedule is a recipe, not a one-line command: \
 gather anything unclear first, then call create_schedule once with a complete \
 recipe — description, ordered how_to steps, the tools it needs (at least one \
 of list_projects, count_work_items, search_work_items), expected_output, and \
 how often. Tell the user they can edit every field in the confirmation card. \
 The schedule is only created after the user confirms the proposal card, so \
-never say it is already created.";
+never say it is already created. When the user clearly asks to create a work \
+item or task (natural language or a message starting with /task), propose \
+exactly one work item per create_work_item call. The project must be named by \
+the user: ask when it is missing or ambiguous, and never guess. State names, \
+assignee names or emails, and label names may be human-readable; the UI \
+resolves them. A work item is only created after the user confirms the \
+proposal card, so never say it is already created.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -187,4 +193,54 @@ pub fn pending_action(trace: &ToolTrace) -> Option<Value> {
                 "proposal": call.arguments.clone(),
             })
         })
+}
+
+/// All proposal tool calls recorded during an agent run, in call order, shaped
+/// for the FE confirmation cards. Covers `create_schedule` and
+/// `create_work_item`; read-only calls are ignored.
+pub fn pending_actions(trace: &ToolTrace) -> Vec<Value> {
+    let Ok(recorded) = trace.lock() else {
+        return Vec::new();
+    };
+    recorded
+        .iter()
+        .filter(|call| call.name == CREATE_SCHEDULE_NAME || call.name == CREATE_WORK_ITEM_NAME)
+        .map(|call| {
+            json!({
+                "kind": call.name,
+                "proposal": call.arguments.clone(),
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn pending_actions_returns_all_proposals_in_order() {
+        let trace = new_trace();
+        record(&trace, "list_projects", &json!({}));
+        record(&trace, CREATE_SCHEDULE_NAME, &json!({"name": "Daily"}));
+        record(&trace, CREATE_WORK_ITEM_NAME, &json!({"name": "Fix pump"}));
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["kind"], json!("create_schedule"));
+        assert_eq!(actions[0]["proposal"]["name"], json!("Daily"));
+        assert_eq!(actions[1]["kind"], json!("create_work_item"));
+        assert_eq!(actions[1]["proposal"]["name"], json!("Fix pump"));
+    }
+
+    #[test]
+    fn pending_action_keeps_returning_the_last_schedule() {
+        let trace = new_trace();
+        record(&trace, CREATE_SCHEDULE_NAME, &json!({"name": "First"}));
+        record(&trace, CREATE_WORK_ITEM_NAME, &json!({"name": "Task"}));
+        record(&trace, CREATE_SCHEDULE_NAME, &json!({"name": "Second"}));
+        let action = pending_action(&trace).expect("schedule action");
+        assert_eq!(action["kind"], json!("create_schedule"));
+        assert_eq!(action["proposal"]["name"], json!("Second"));
+    }
 }
