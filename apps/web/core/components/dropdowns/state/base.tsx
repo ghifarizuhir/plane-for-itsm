@@ -30,7 +30,6 @@ import { StateOption } from "@/components/workflow";
 import { findWorkflowMapType, resolveSelectableStateIds } from "@/store/workflow.helpers";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
-  alwaysAllowStateChange?: boolean;
   button?: ReactNode;
   currentStateId?: string | null;
   dropdownArrow?: boolean;

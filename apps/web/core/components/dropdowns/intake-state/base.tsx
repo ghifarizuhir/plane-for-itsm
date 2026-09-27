@@ -27,7 +27,6 @@ import { useDropdown } from "@/hooks/use-dropdown";
 import { StateOption } from "@/components/workflow";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
-  alwaysAllowStateChange?: boolean;
   button?: ReactNode;
   dropdownArrow?: boolean;
   dropdownArrowClassName?: string;

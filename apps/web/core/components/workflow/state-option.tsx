@@ -20,7 +20,6 @@ export type TStateOptionProps = {
   className?: string;
   filterAvailableStateIds?: boolean;
   isForWorkItemCreation?: boolean;
-  alwaysAllowStateChange?: boolean;
 };
 
 export const StateOption = observer(function StateOption(props: TStateOptionProps) {
