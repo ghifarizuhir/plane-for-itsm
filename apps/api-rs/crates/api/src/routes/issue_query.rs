@@ -1199,6 +1199,11 @@ pub(crate) fn parse_complex_filter(
     }
     validate_filter_node(&value, MAX_DEPTH, 1)?;
     for field in extract_filter_fields(&value) {
+        // Fork ini tidak punya tabel custom property; kondisi `customproperty_*`
+        // (mungkin tersisa dari data lama) di-skip sebagai no-op alih-alih 400.
+        if field.starts_with("customproperty_") {
+            continue;
+        }
         if !COMPLEX_FILTER_ALLOWLIST.contains(&field.as_str()) {
             return Err(ComplexFilterError::new(
                 &format!("Filtering on field '{field}' is not allowed"),
@@ -2218,6 +2223,20 @@ mod issue_list_tests {
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id"));
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__exact"));
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__in"));
+    }
+
+    /// Fork tidak punya custom property; kondisi legacy `customproperty_*`
+    /// di-skip (no-op) supaya board lama tidak 400 begitu `filters` dihormati.
+    #[test]
+    fn complex_customproperty_leaf_is_noop_not_400() {
+        let tree =
+            parse_complex_filter(Some(r#"{"and":[{"customproperty_abc__in":"x"}]}"#)).unwrap();
+        assert!(tree.is_some());
+        let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
+            "SELECT 1 FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE true",
+        );
+        apply_complex_filter(&mut qb, tree.as_ref().unwrap()).unwrap();
+        assert!(qb.sql().contains("TRUE"), "sql: {}", qb.sql());
     }
 }
 
