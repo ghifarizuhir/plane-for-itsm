@@ -3,11 +3,12 @@
 # See the LICENSE file for details.
 
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from rest_framework import status
 
-from plane.db.models import Issue, Project, ProjectMember, State, User
+from plane.db.models import Issue, Notification, Project, ProjectMember, State, User
 
 
 @pytest.fixture
@@ -133,3 +134,45 @@ class TestIssueNotificationContract:
         kwargs = mock_issue_activity.delay.call_args.kwargs
         assert kwargs["type"] == "issue.activity.updated"
         assert kwargs["notification"] is True
+
+
+@pytest.mark.contract
+class TestNotificationEntityFilterContract:
+    """
+    Contract: the workspace notification list includes work-item notifications
+    and AI schedule run notifications, and nothing else.
+    """
+
+    @pytest.mark.django_db
+    def test_list_includes_schedule_run_notifications(self, session_client, workspace, create_user):
+        Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            entity_name="issue",
+            entity_identifier=uuid4(),
+            title="Issue notification",
+            sender="in_app:issue_activities:created",
+            data={},
+        )
+        Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            entity_name="ai_schedule_run",
+            entity_identifier=uuid4(),
+            title="Daily report",
+            sender="in_app:ai_schedule:run",
+            data={"ai_schedule": {"schedule_id": str(uuid4())}},
+        )
+        Notification.objects.create(
+            workspace=workspace,
+            receiver=create_user,
+            entity_name="mystery",
+            entity_identifier=uuid4(),
+            title="Hidden",
+            sender="in_app:other",
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/users/notifications/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert {row["entity_name"] for row in response.data} == {"issue", "ai_schedule_run"}
