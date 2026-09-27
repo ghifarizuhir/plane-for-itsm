@@ -214,7 +214,7 @@ Expected: `rg` kosong (selain i18n keys); types/lint exit 0.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/constants/src/settings/project.ts apps/web/core/components/settings/project/sidebar/item-icon.tsx apps/web/app/routes/core.ts
+git add packages/constants/src/settings/project.ts packages/types/src/settings.ts apps/web/core/components/settings/project/sidebar/item-icon.tsx apps/web/app/routes/core.ts
 git rm -r "apps/web/app/(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/features/work-item-types"
 git commit -m "chore(web): remove inert work item types feature toggle page"
 ```
@@ -441,11 +441,13 @@ if (refreshFailed) {
 }
 ```
 
-Tambahkan key `map_refresh_failed` di `packages/i18n/src/locales/en/workspace-settings.json` (dan locale lain mengikuti pola i18n yang sama seperti Task B4):
+Tambahkan key `map_refresh_failed` **hanya di `en`** (`packages/i18n/src/locales/en/workspace-settings.json`):
 
 ```json
 "map_refresh_failed": "The type was saved, but the project workflow list could not be refreshed. Reload the page to see the latest state."
 ```
+
+Lokalisasi key ini ke 19 locale lain digabung dalam satu pass terjemahan di Task B10 (jangan menambah ke locale lain di task ini). Konsekuensinya drift sementara naik 1 missing per locale non-en; B10 mengembalikannya ke baseline.
 
 Gunakan hook `useWorkflow()` di scope komponen (bukan memanggilnya di dalam callback berulang); baca flag via variabel yang sudah di-destructure.
 
@@ -457,7 +459,7 @@ Expected: PASS; test lama "tidak gagal saat refresh state gagal" tetap lulus (pe
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/web/core/store/workflow.store.ts apps/web/core/store/workflow.store.test.ts apps/web/core/components/project-work-item-types/root.tsx packages/i18n/src/locales
+git add apps/web/core/store/workflow.store.ts apps/web/core/store/workflow.store.test.ts apps/web/core/components/project-work-item-types/root.tsx packages/i18n/src/locales/en/workspace-settings.json
 git commit -m "fix(web): surface workflow map refresh failures"
 ```
 
@@ -478,6 +480,9 @@ Masalah: `getStatePercentageInGroup` menghitung `this.groupedProjectStates[group
 describe("StateStore.getStatePercentageInGroup", () => {
   it("mengabaikan typed mirror state di denominator", () => {
     const store = makeStore();
+    // `groupedProjectStates` digate oleh fetchedMap; tanpa ini daftar kosong
+    // dan test gagal karena alasan yang salah.
+    store.fetchedMap["p-1"] = true;
     store.stateMap = {
       "s-1": { ...makeState("s-1", "p-1"), sequence: 1, order: 1 },
       "s-2": { ...makeState("s-2", "p-1"), sequence: 2, order: 2 },
@@ -534,7 +539,7 @@ git commit -m "fix(web): exclude typed states from legacy state percentage"
 
 Masalah: `typedStates` dirender sebagai daftar datar, sehingga state bernama sama dari type berbeda tampak duplikat tanpa konteks.
 
-Sekaligus konsistensi namespace: heading di `:93` masih memakai `workspace_settings.settings.work_item_types.title`; ganti ke `project_settings.work_item_types.heading` (key yang sama dipakai entri settings project).
+Sekaligus konsistensi namespace: heading di `:93` masih memakai `workspace_settings.settings.work_item_types.title` dan deskripsi di `:94-95` memakai `.description` namespace yang sama; ganti keduanya ke namespace project — `project_settings.work_item_types.heading` dan `project_settings.work_item_types.description` (kedua key sudah ada di 20 locale).
 
 - [ ] **Step 1: Kelompokkan per type**
 
@@ -608,6 +613,8 @@ Muat skill `translate`, lalu tambahkan di `workspace_settings.settings.workflows
 "no_states": "No states yet",
 "no_transitions": "Add states first to configure transitions",
 ```
+
+Sekaligus lokalisasikan key `workspace_settings.settings.work_item_types.map_refresh_failed` (yang di task B7 baru ditambahkan di `en`) ke 19 locale lain dalam pass yang sama.
 
 Lalu terjemahkan ke seluruh locale mengikuti alur skill (generate types + sync check; drift tidak bertambah).
 

@@ -64,8 +64,7 @@ fn list_where_includes_complex_filter_like_django() {
     let mut qb: QueryBuilder<Postgres> =
         QueryBuilder::new("SELECT 1 FROM issues i LEFT JOIN states s ON s.id = i.state_id");
     let tree = parse_complex_filter(Some(r#"{"and":[{"priority__in":"urgent,high"}]}"#)).unwrap();
-    let err = push_list_where(&mut qb, uuid::Uuid::nil(), false, uuid::Uuid::nil(), tree.as_ref()).unwrap_err();
-    let _ = err;
+    push_list_where(&mut qb, uuid::Uuid::nil(), false, uuid::Uuid::nil(), tree.as_ref()).unwrap();
     let sql = qb.sql();
     assert!(sql.contains("i.priority"), "sql: {sql}");
 }
@@ -153,18 +152,20 @@ Ganti baris `let _ = (&q.order_by, &q.filters);` (`:278`) menjadi:
     let _ = &q.order_by;
 ```
 
-Pada dua query flat (`:284-287` count dan `:294-302` page) tambahkan argumen tree + propagasi error:
+Pada dua query flat (`:284-287` count dan `:294-302` page) tambahkan argumen tree + propagasi error (`list` mengembalikan `Ok(400 JSON)`, bukan `AppError`, jadi pakai `if let`):
 
 ```rust
-    push_list_where(&mut count_qb, project_id, guest_scoped, auth.0, filter_tree.as_ref())
-        .map_err(|resp| resp)?;
+    if let Err(resp) = push_list_where(&mut count_qb, project_id, guest_scoped, auth.0, filter_tree.as_ref()) {
+        return Ok(resp);
+    }
 ```
 
 dan
 
 ```rust
-            push_list_where(&mut page_qb, project_id, guest_scoped, auth.0, filter_tree.as_ref())
-                .map_err(|resp| resp)?;
+            if let Err(resp) = push_list_where(&mut page_qb, project_id, guest_scoped, auth.0, filter_tree.as_ref()) {
+                return Ok(resp);
+            }
 ```
 
 Ubah `grouped_list_response` (`:101-111`) supaya menerima + memakai tree:
