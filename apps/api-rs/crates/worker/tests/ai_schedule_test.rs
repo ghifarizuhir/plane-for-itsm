@@ -203,6 +203,18 @@ async fn run_marks_failed_when_llm_is_not_configured() {
     assert_eq!(status, "failed");
     assert!(error.unwrap().contains("not configured"));
 
+    let (receiver, title, status): (Uuid, String, String) = sqlx::query_as(
+        "SELECT receiver_id, title, data->'ai_schedule'->>'status' FROM notifications \
+         WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(receiver, user_id);
+    assert_eq!(title, "Daily");
+    assert_eq!(status, "failed");
+
     // cleanup (mirror the tick test's cleanup for this workspace)
     std::env::remove_var("SKIP_ENV_VAR");
     sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
@@ -541,6 +553,192 @@ async fn run_success_records_response_and_prunes() {
 }
 
 #[tokio::test]
+async fn run_does_not_notify_manual_runs() {
+    let pool = pool().await;
+    let slug = format!("aism-{}", Uuid::new_v4().simple());
+    let workspace_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let schedule_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    insert_user(&pool, user_id, &slug).await;
+    sqlx::query(
+        "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, background_color) \
+         VALUES ($1, 'AI Manual', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+    )
+    .bind(workspace_id)
+    .bind(&slug)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, frequency, time_of_day, \
+         timezone, enabled, next_run_at, proposal_key, created_at, updated_at) \
+         VALUES ($1, $2, $3, 'Manual digest', 'Summarize', 'daily', '09:00', 'UTC', true, \
+         now() + interval '1 day', $4, now(), now())",
+    )
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .bind(user_id)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at) \
+         VALUES ($1, $2, $3, 'queued', 'manual', 'Summarize', now())",
+    )
+    .bind(run_id)
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let base_url = spawn_fake_upstream().await;
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::set_var("LLM_API_KEY", "test-key");
+    std::env::set_var("LLM_BASE_URL", &base_url);
+    std::env::set_var("LLM_MODEL", "test-model");
+    ai_schedule::run(&pool, serde_json::json!({ "run_id": run_id }))
+        .await
+        .expect("run");
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 0, "manual runs must not notify");
+
+    std::env::remove_var("SKIP_ENV_VAR");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::remove_var("LLM_BASE_URL");
+    std::env::remove_var("LLM_MODEL");
+    sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn soft_deleted_schedule_does_not_notify() {
+    let pool = pool().await;
+    let slug = format!("aisd-{}", Uuid::new_v4().simple());
+    let workspace_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let schedule_id = Uuid::new_v4();
+    let run_id = Uuid::new_v4();
+    insert_user(&pool, user_id, &slug).await;
+    sqlx::query(
+        "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, background_color) \
+         VALUES ($1, 'AI Deleted', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+    )
+    .bind(workspace_id)
+    .bind(&slug)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, frequency, time_of_day, \
+         timezone, enabled, next_run_at, proposal_key, created_at, updated_at, deleted_at) \
+         VALUES ($1, $2, $3, 'Gone digest', 'Summarize', 'daily', '09:00', 'UTC', true, \
+         now() + interval '1 day', $4, now(), now(), now())",
+    )
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .bind(user_id)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at) \
+         VALUES ($1, $2, $3, 'queued', 'scheduled', 'Summarize', now())",
+    )
+    .bind(run_id)
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // No LLM configured: the run fails before any model call.
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::remove_var("LLM_API_KEY");
+    ai_schedule::run(&pool, serde_json::json!({ "run_id": run_id }))
+        .await
+        .expect("run handled");
+    std::env::remove_var("SKIP_ENV_VAR");
+
+    let (status, _): (String, Option<String>) =
+        sqlx::query_as("SELECT status, error FROM ai_schedule_runs WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "failed");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 0, "soft-deleted schedules must not notify");
+
+    sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn run_success_notifies_scheduled_creator_once() {
     let pool = pool().await;
     let slug = format!("aisn-{}", Uuid::new_v4().simple());
@@ -705,6 +903,17 @@ async fn tick_sweeps_stuck_runs() {
     .execute(&pool)
     .await
     .unwrap();
+    let stuck_manual = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai_schedule_runs (id, schedule_id, workspace_id, status, trigger, prompt, created_at, started_at) \
+         VALUES ($1, $2, $3, 'running', 'manual', 'x', now() - interval '1 hour', now() - interval '20 minutes')",
+    )
+    .bind(stuck_manual)
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let mut redis = common::redis::create_redis(
         &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
@@ -728,6 +937,23 @@ async fn tick_sweeps_stuck_runs() {
             .unwrap();
     assert_eq!(queued_status, "failed");
     assert!(queued_error.unwrap().contains("never started"));
+
+    let notified: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE entity_name = 'ai_schedule_run' AND workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(notified, 2, "swept scheduled runs notify; the manual one does not");
+    let manual_notified: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
+    )
+    .bind(stuck_manual)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(manual_notified, 0);
 
     sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
         .bind(workspace_id)

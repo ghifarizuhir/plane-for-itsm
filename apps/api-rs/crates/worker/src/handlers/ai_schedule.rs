@@ -50,20 +50,25 @@ fn allowed_tools(spec: Option<Value>) -> Result<Vec<String>, String> {
 /// (agent timeout is 180 s, so 15 minutes means genuinely stuck); `queued`
 /// uses a horizon larger than the worst-case serial drain of one tick batch.
 async fn sweep_stuck_runs(pool: &PgPool) -> anyhow::Result<()> {
-    sqlx::query(
+    let swept_running: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE ai_schedule_runs SET status = 'failed', \
          error = 'run did not finish within 15 minutes', finished_at = now() \
-         WHERE status = 'running' AND started_at < now() - interval '15 minutes'",
+         WHERE status = 'running' AND started_at < now() - interval '15 minutes' \
+         RETURNING id",
     )
-    .execute(pool)
+    .fetch_all(pool)
     .await?;
-    sqlx::query(
+    let swept_queued: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE ai_schedule_runs SET status = 'failed', \
          error = 'run was never started (worker backlog or lost job)', finished_at = now() \
-         WHERE status = 'queued' AND created_at < now() - interval '6 hours'",
+         WHERE status = 'queued' AND created_at < now() - interval '6 hours' \
+         RETURNING id",
     )
-    .execute(pool)
+    .fetch_all(pool)
     .await?;
+    for run_id in swept_running.into_iter().chain(swept_queued) {
+        insert_run_notification(pool, run_id).await?;
+    }
     Ok(())
 }
 
@@ -315,6 +320,8 @@ async fn finish_failed(pool: &PgPool, run_id: Uuid, message: &str) -> anyhow::Re
             run_id=%run_id,
             "ai.schedule.run: run no longer running, failure not recorded"
         );
+    } else {
+        insert_run_notification(pool, run_id).await?;
     }
     Ok(())
 }
