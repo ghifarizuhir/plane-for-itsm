@@ -14,6 +14,14 @@ pub const DEFAULT_TIME: &str = "09:00";
 pub const DEFAULT_HOURLY_TIME: &str = "00:00";
 pub const DEFAULT_TIMEZONE: &str = "UTC";
 
+pub const SPEC_VERSION: u8 = 1;
+pub const SPEC_TOOLS: [&str; 3] = ["list_projects", "count_work_items", "search_work_items"];
+pub const SPEC_DESCRIPTION_MAX: usize = 500;
+pub const SPEC_STEPS_MAX: usize = 10;
+pub const SPEC_STEP_MAX: usize = 500;
+pub const SPEC_EXPECTED_OUTPUT_MAX: usize = 1000;
+pub const SPEC_PROMPT_MAX: usize = 8000;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleProposal {
     pub name: String,
@@ -53,13 +61,38 @@ impl ScheduleProposal {
         day_of_month: Option<i16>,
         timezone: Option<&str>,
     ) -> Result<Self, String> {
+        Self::with_prompt_limit(
+            name,
+            prompt,
+            frequency,
+            time,
+            day_of_week,
+            day_of_month,
+            timezone,
+            2000,
+        )
+    }
+
+    /// Same as [`ScheduleProposal::new`] but with a caller-chosen prompt cap:
+    /// rendered schedule recipes may exceed the legacy 2000 character limit.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_prompt_limit(
+        name: &str,
+        prompt: &str,
+        frequency: &str,
+        time: Option<&str>,
+        day_of_week: Option<i16>,
+        day_of_month: Option<i16>,
+        timezone: Option<&str>,
+        prompt_max: usize,
+    ) -> Result<Self, String> {
         let name = name.trim().to_string();
         if name.is_empty() || name.chars().count() > 120 {
             return Err("name must be 1-120 characters".to_string());
         }
         let prompt = prompt.trim().to_string();
-        if prompt.is_empty() || prompt.chars().count() > 2000 {
-            return Err("prompt must be 1-2000 characters".to_string());
+        if prompt.is_empty() || prompt.chars().count() > prompt_max {
+            return Err(format!("prompt must be 1-{prompt_max} characters"));
         }
         let frequency = frequency.trim().to_ascii_lowercase();
         if !FREQUENCIES.contains(&frequency.as_str()) {
@@ -134,6 +167,154 @@ impl ScheduleProposal {
         };
         debug_assert!(candidate > local, "next_occurrence must be strictly future");
         candidate.with_timezone(&Utc)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleSpec {
+    pub version: u8,
+    pub description: String,
+    pub how_to: Vec<String>,
+    pub tools: Vec<String>,
+    pub expected_output: String,
+}
+
+fn bounded_text(field: &str, value: &str, max: usize) -> Result<String, String> {
+    let trimmed = value.trim();
+    let length = trimmed.chars().count();
+    if length == 0 || length > max {
+        return Err(format!("{field} must be 1-{max} characters"));
+    }
+    Ok(trimmed.to_string())
+}
+
+impl ScheduleSpec {
+    pub fn new(
+        description: &str,
+        how_to: &[String],
+        tools: &[String],
+        expected_output: &str,
+    ) -> Result<Self, String> {
+        Self {
+            version: SPEC_VERSION,
+            description: description.to_string(),
+            how_to: how_to.to_vec(),
+            tools: tools.to_vec(),
+            expected_output: expected_output.to_string(),
+        }
+        .validated()
+    }
+
+    /// Re-check a spec parsed from storage: version, bounds, and the tool
+    /// allowlist; returns the canonical form (trimmed, deduped tools in
+    /// `SPEC_TOOLS` order).
+    pub fn validated(mut self) -> Result<Self, String> {
+        if self.version != SPEC_VERSION {
+            return Err(format!("unsupported spec version: {}", self.version));
+        }
+        self.description = bounded_text("description", &self.description, SPEC_DESCRIPTION_MAX)?;
+        if self.how_to.is_empty() || self.how_to.len() > SPEC_STEPS_MAX {
+            return Err(format!("how_to must have 1-{SPEC_STEPS_MAX} steps"));
+        }
+        self.how_to = self
+            .how_to
+            .iter()
+            .map(|step| bounded_text("how_to step", step, SPEC_STEP_MAX))
+            .collect::<Result<Vec<_>, _>>()?;
+        if self.tools.is_empty() {
+            return Err(format!(
+                "tools must include at least one of: {}",
+                SPEC_TOOLS.join(", ")
+            ));
+        }
+        if let Some(unknown) = self
+            .tools
+            .iter()
+            .map(|tool| tool.trim())
+            .find(|tool| !SPEC_TOOLS.contains(tool))
+        {
+            return Err(format!(
+                "tools must be a subset of: {} (unknown: {unknown})",
+                SPEC_TOOLS.join(", ")
+            ));
+        }
+        self.tools = SPEC_TOOLS
+            .iter()
+            .filter(|known| self.tools.iter().any(|tool| tool.trim() == **known))
+            .map(|known| (*known).to_string())
+            .collect();
+        self.expected_output = bounded_text(
+            "expected_output",
+            &self.expected_output,
+            SPEC_EXPECTED_OUTPUT_MAX,
+        )?;
+        Ok(self)
+    }
+}
+
+/// Canonical subset of `SPEC_TOOLS` in declaration order.
+pub fn allowed_read_tools(allowed: &[String]) -> Vec<&'static str> {
+    SPEC_TOOLS
+        .iter()
+        .copied()
+        .filter(|name| allowed.iter().any(|tool| tool == name))
+        .collect()
+}
+
+/// Deterministic prompt rendering for a structured recipe.
+pub fn render_schedule_prompt(name: &str, spec: &ScheduleSpec) -> String {
+    let steps = spec
+        .how_to
+        .iter()
+        .enumerate()
+        .map(|(index, step)| format!("{}. {step}", index + 1))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "Task: {}\n\nDescription:\n{}\n\nSteps:\n{}\n\nExpected output:\n{}\n\nAllowed tools: {}",
+        name.trim(),
+        spec.description,
+        steps,
+        spec.expected_output,
+        spec.tools.join(", ")
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleRecipe {
+    #[serde(flatten)]
+    pub spec: ScheduleSpec,
+    #[serde(flatten)]
+    pub proposal: ScheduleProposal,
+}
+
+impl ScheduleRecipe {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        name: &str,
+        description: &str,
+        how_to: &[String],
+        tools: &[String],
+        expected_output: &str,
+        frequency: &str,
+        time: Option<&str>,
+        day_of_week: Option<i16>,
+        day_of_month: Option<i16>,
+        timezone: Option<&str>,
+    ) -> Result<Self, String> {
+        let spec = ScheduleSpec::new(description, how_to, tools, expected_output)?;
+        let prompt = render_schedule_prompt(name, &spec);
+        let proposal = ScheduleProposal::with_prompt_limit(
+            name,
+            &prompt,
+            frequency,
+            time,
+            day_of_week,
+            day_of_month,
+            timezone,
+            SPEC_PROMPT_MAX,
+        )?;
+        Ok(Self { spec, proposal })
     }
 }
 
@@ -232,6 +413,7 @@ fn next_monthly(from: DateTime<Tz>, day_of_month: u32, hour: u32, minute: u32) -
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
+    use serde_json::json;
 
     fn proposal(
         frequency: &str,
@@ -418,5 +600,126 @@ mod tests {
             p.next_occurrence(from),
             Utc.with_ymd_and_hms(2028, 2, 29, 9, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn spec_validation_bounds_and_trim() {
+        let spec = ScheduleSpec::new(
+            "  Do things  ",
+            &[" Step one ".to_string()],
+            &["list_projects".to_string()],
+            " A report ",
+        )
+        .unwrap();
+        assert_eq!(spec.version, SPEC_VERSION);
+        assert_eq!(spec.description, "Do things");
+        assert_eq!(spec.how_to, vec!["Step one".to_string()]);
+        assert_eq!(spec.expected_output, "A report");
+
+        assert!(ScheduleSpec::new("", &["s".to_string()], &["list_projects".to_string()], "o").is_err());
+        assert!(ScheduleSpec::new("d", &[], &["list_projects".to_string()], "o").is_err());
+        let too_many: Vec<String> = (0..11).map(|index| format!("step {index}")).collect();
+        assert!(ScheduleSpec::new("d", &too_many, &["list_projects".to_string()], "o").is_err());
+        assert!(ScheduleSpec::new("d", &["s".to_string()], &[], "o").is_err());
+        assert!(ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "").is_err());
+    }
+
+    #[test]
+    fn spec_tools_are_canonical_and_deduped() {
+        let spec = ScheduleSpec::new(
+            "d",
+            &["s".to_string()],
+            &[
+                "search_work_items".to_string(),
+                "list_projects".to_string(),
+                "list_projects".to_string(),
+            ],
+            "o",
+        )
+        .unwrap();
+        assert_eq!(
+            spec.tools,
+            vec!["list_projects".to_string(), "search_work_items".to_string()]
+        );
+
+        let err = ScheduleSpec::new("d", &["s".to_string()], &["drop_tables".to_string()], "o").unwrap_err();
+        assert!(err.contains("subset"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn spec_version_is_rejected_when_unknown() {
+        let mut spec = ScheduleSpec::new("d", &["s".to_string()], &["list_projects".to_string()], "o").unwrap();
+        spec.version = 2;
+        assert!(spec.validated().unwrap_err().contains("version"));
+    }
+
+    #[test]
+    fn render_prompt_is_deterministic() {
+        let spec = ScheduleSpec::new(
+            "Summarize overdue",
+            &["Count overdue items".to_string(), "List the top 5".to_string()],
+            &["list_projects".to_string(), "search_work_items".to_string()],
+            "A short markdown list",
+        )
+        .unwrap();
+        assert_eq!(
+            render_schedule_prompt("Daily overdue", &spec),
+            "Task: Daily overdue\n\nDescription:\nSummarize overdue\n\nSteps:\n1. Count overdue items\n2. List the top 5\n\nExpected output:\nA short markdown list\n\nAllowed tools: list_projects, search_work_items"
+        );
+    }
+
+    #[test]
+    fn recipe_flattens_spec_and_preset() {
+        let recipe = ScheduleRecipe::new(
+            "Daily",
+            "desc",
+            &["step".to_string()],
+            &["list_projects".to_string()],
+            "out",
+            "daily",
+            Some("09:00"),
+            None,
+            None,
+            Some("UTC"),
+        )
+        .unwrap();
+        let value = serde_json::to_value(&recipe).unwrap();
+        assert_eq!(value["version"], json!(1));
+        assert_eq!(value["description"], json!("desc"));
+        assert_eq!(value["how_to"][0], json!("step"));
+        assert_eq!(value["tools"][0], json!("list_projects"));
+        assert_eq!(value["expected_output"], json!("out"));
+        assert_eq!(value["name"], json!("Daily"));
+        assert_eq!(value["frequency"], json!("daily"));
+        assert_eq!(
+            value["prompt"],
+            json!("Task: Daily\n\nDescription:\ndesc\n\nSteps:\n1. step\n\nExpected output:\nout\n\nAllowed tools: list_projects")
+        );
+    }
+
+    #[test]
+    fn recipe_prompt_limit_is_enforced() {
+        let long = "x".repeat(SPEC_PROMPT_MAX + 1);
+        let err = ScheduleProposal::with_prompt_limit(
+            "n",
+            &long,
+            "daily",
+            None,
+            None,
+            None,
+            Some("UTC"),
+            SPEC_PROMPT_MAX,
+        )
+        .unwrap_err();
+        assert!(err.contains("8000"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn allowed_read_tools_follows_canonical_order() {
+        assert_eq!(
+            allowed_read_tools(&["search_work_items".to_string(), "list_projects".to_string()]),
+            vec!["list_projects", "search_work_items"]
+        );
+        assert!(allowed_read_tools(&[]).is_empty());
     }
 }
