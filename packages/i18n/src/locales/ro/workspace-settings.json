@@ -502,7 +502,8 @@
         },
         "no_workflow": "Niciun flux de lucru",
         "attach_workflow_first": "Atribuiți mai întâi un flux de lucru",
-        "inactive": "Inactiv"
+        "inactive": "Inactiv",
+        "map_refresh_failed": "Tipul a fost salvat, dar lista de fluxuri de lucru a proiectului nu a putut fi reîmprospătată. Reîncărcați pagina pentru a vedea starea cea mai recentă."
       },
       "workflows": {
         "title": "Fluxuri de lucru",
@@ -526,6 +527,7 @@
           "description": "Descriere",
           "active": "Activ"
         },
+        "no_states": "Încă nu există stări",
         "states": {
           "heading": "Stări",
           "add_state": "Adaugă stare",
@@ -539,6 +541,7 @@
             "description": "Această stare va fi ștearsă definitiv. Această acțiune nu poate fi anulată."
           }
         },
+        "no_transitions": "Adăugați mai întâi stări pentru a configura tranzițiile.",
         "transitions": {
           "heading": "Tranziții permise",
           "description": "Bifați fiecare pereche permisă de la → la. Perechile nebifate sunt blocate.",

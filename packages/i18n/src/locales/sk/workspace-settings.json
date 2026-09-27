@@ -502,7 +502,8 @@
         },
         "no_workflow": "Žiadny pracovný postup",
         "attach_workflow_first": "Najprv priraďte pracovný postup",
-        "inactive": "Neaktívny"
+        "inactive": "Neaktívny",
+        "map_refresh_failed": "Typ bol uložený, ale zoznam pracovných postupov projektu sa nepodarilo obnoviť. Načítajte stránku znova, aby ste videli aktuálny stav."
       },
       "workflows": {
         "title": "Pracovné postupy",
@@ -526,6 +527,7 @@
           "description": "Popis",
           "active": "Aktívne"
         },
+        "no_states": "Zatiaľ žiadne stavy",
         "states": {
           "heading": "Stavy",
           "add_state": "Pridať stav",
@@ -539,6 +541,7 @@
             "description": "Tento stav bude natrvalo zmazaný. Túto akciu nie je možné vrátiť späť."
           }
         },
+        "no_transitions": "Najprv pridajte stavy, aby ste mohli konfigurovať prechody.",
         "transitions": {
           "heading": "Povolené prechody",
           "description": "Začiarknite každú povolenú dvojicu od → do. Nezačiarknuté dvojice sú blokované.",

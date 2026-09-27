@@ -502,7 +502,8 @@
         },
         "no_workflow": "워크플로우 없음",
         "attach_workflow_first": "먼저 워크플로우를 연결하세요",
-        "inactive": "비활성"
+        "inactive": "비활성",
+        "map_refresh_failed": "유형이 저장되었지만 프로젝트 워크플로우 목록을 새로 고치지 못했습니다. 최신 상태를 보려면 페이지를 새로 고침하세요."
       },
       "workflows": {
         "title": "워크플로우",
@@ -526,6 +527,7 @@
           "description": "설명",
           "active": "활성"
         },
+        "no_states": "아직 상태가 없습니다",
         "states": {
           "heading": "상태",
           "add_state": "상태 추가",
@@ -539,6 +541,7 @@
             "description": "이 상태는 영구적으로 삭제됩니다. 이 작업은 취소할 수 없습니다."
           }
         },
+        "no_transitions": "전환을 구성하려면 먼저 상태를 추가하세요.",
         "transitions": {
           "heading": "허용되는 전환",
           "description": "허용되는 모든 출발 → 도착 쌍을 선택하세요. 선택하지 않은 쌍은 차단됩니다.",

@@ -502,7 +502,8 @@
         },
         "no_workflow": "İş akışı yok",
         "attach_workflow_first": "Önce bir iş akışı ekleyin",
-        "inactive": "Pasif"
+        "inactive": "Pasif",
+        "map_refresh_failed": "Tür kaydedildi, ancak projenin iş akışı listesi yenilenemedi. En güncel durumu görmek için sayfayı yenileyin."
       },
       "workflows": {
         "title": "İş akışları",
@@ -526,6 +527,7 @@
           "description": "Açıklama",
           "active": "Aktif"
         },
+        "no_states": "Henüz durum yok",
         "states": {
           "heading": "Durumlar",
           "add_state": "Durum ekle",
@@ -539,6 +541,7 @@
             "description": "Bu durum kalıcı olarak silinecek. Bu işlem geri alınamaz."
           }
         },
+        "no_transitions": "Geçişleri yapılandırmak için önce durumları ekleyin.",
         "transitions": {
           "heading": "İzin verilen geçişler",
           "description": "İzin verilen her kaynak → hedef çiftini işaretleyin. İşaretlenmeyen çiftler engellenir.",

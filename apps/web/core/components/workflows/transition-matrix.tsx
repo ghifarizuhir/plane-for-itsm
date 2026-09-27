@@ -89,9 +89,9 @@ export const TransitionMatrix = observer(function TransitionMatrix(props: Props)
           <Spinner />
         </div>
       ) : states.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center text-11 text-tertiary">
-          {t("common.no_items_in_this_group")}
-        </p>
+        <div className="flex items-center justify-center py-8 text-13 text-tertiary">
+          {t("workspace_settings.settings.workflows.no_transitions")}
+        </div>
       ) : (
         <div
           className="grid items-center gap-2 overflow-x-auto"

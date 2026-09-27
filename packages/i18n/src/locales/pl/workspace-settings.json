@@ -502,7 +502,8 @@
         },
         "no_workflow": "Brak przepływu pracy",
         "attach_workflow_first": "Najpierw przypisz przepływ pracy",
-        "inactive": "Nieaktywny"
+        "inactive": "Nieaktywny",
+        "map_refresh_failed": "Typ został zapisany, ale nie udało się odświeżyć listy przepływów pracy projektu. Odśwież stronę, aby zobaczyć najnowszy stan."
       },
       "workflows": {
         "title": "Przepływy pracy",
@@ -526,6 +527,7 @@
           "description": "Opis",
           "active": "Aktywny"
         },
+        "no_states": "Brak stanów",
         "states": {
           "heading": "Stany",
           "add_state": "Dodaj stan",
@@ -539,6 +541,7 @@
             "description": "Ten stan zostanie trwale usunięty. Tej operacji nie można cofnąć."
           }
         },
+        "no_transitions": "Najpierw dodaj stany, aby skonfigurować przejścia.",
         "transitions": {
           "heading": "Dozwolone przejścia",
           "description": "Zaznacz każdą dozwoloną parę od → do. Niezaznaczone pary są blokowane.",

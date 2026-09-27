@@ -502,7 +502,8 @@
         },
         "no_workflow": "无工作流",
         "attach_workflow_first": "请先附加工作流",
-        "inactive": "不活动"
+        "inactive": "不活动",
+        "map_refresh_failed": "类型已保存，但无法刷新项目工作流列表。请重新加载页面以查看最新状态。"
       },
       "workflows": {
         "title": "工作流",
@@ -526,6 +527,7 @@
           "description": "描述",
           "active": "活动"
         },
+        "no_states": "暂无状态",
         "states": {
           "heading": "状态",
           "add_state": "添加状态",
@@ -539,6 +541,7 @@
             "description": "此状态将被永久删除。此操作无法撤销。"
           }
         },
+        "no_transitions": "请先添加状态，再配置流转。",
         "transitions": {
           "heading": "允许的流转",
           "description": "勾选每一对允许的“从 → 到”流转。未勾选的配对将被阻止。",

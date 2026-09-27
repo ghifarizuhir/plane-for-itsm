@@ -502,7 +502,8 @@
         },
         "no_workflow": "Žádný workflow",
         "attach_workflow_first": "Nejprve přiřaďte workflow",
-        "inactive": "Neaktivní"
+        "inactive": "Neaktivní",
+        "map_refresh_failed": "Typ byl uložen, ale seznam pracovních postupů projektu se nepodařilo obnovit. Načtěte stránku znovu, abyste viděli aktuální stav."
       },
       "workflows": {
         "title": "Workflow",
@@ -526,6 +527,7 @@
           "description": "Popis",
           "active": "Aktivní"
         },
+        "no_states": "Zatím žádné stavy",
         "states": {
           "heading": "Stavy",
           "add_state": "Přidat stav",
@@ -539,6 +541,7 @@
             "description": "Tento stav bude trvale smazán. Tuto akci nelze vrátit zpět."
           }
         },
+        "no_transitions": "Nejprve přidejte stavy, abyste mohli nakonfigurovat přechody.",
         "transitions": {
           "heading": "Povolené přechody",
           "description": "Zaškrtněte každou povolenou dvojici od → do. Nezaškrtnuté dvojice jsou blokovány.",

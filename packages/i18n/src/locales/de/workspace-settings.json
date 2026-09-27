@@ -502,7 +502,8 @@
         },
         "no_workflow": "Kein Workflow",
         "attach_workflow_first": "Zuerst einen Workflow zuweisen",
-        "inactive": "Inaktiv"
+        "inactive": "Inaktiv",
+        "map_refresh_failed": "Der Typ wurde gespeichert, aber die Workflowliste des Projekts konnte nicht aktualisiert werden. Laden Sie die Seite neu, um den aktuellen Stand zu sehen."
       },
       "workflows": {
         "title": "Workflows",
@@ -526,6 +527,7 @@
           "description": "Beschreibung",
           "active": "Aktiv"
         },
+        "no_states": "Noch keine Status",
         "states": {
           "heading": "Status",
           "add_state": "Status hinzufügen",
@@ -539,6 +541,7 @@
             "description": "Dieser Status wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
           }
         },
+        "no_transitions": "Fügen Sie zuerst Status hinzu, um Übergänge zu konfigurieren.",
         "transitions": {
           "heading": "Zulässige Übergänge",
           "description": "Markieren Sie jedes zulässige Paar von → zu. Nicht markierte Paare sind blockiert.",

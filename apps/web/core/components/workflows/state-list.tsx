@@ -184,9 +184,9 @@ export const StateList = observer(function StateList(props: Props) {
               <Spinner />
             </div>
           ) : sortedStates.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-subtle px-4 py-6 text-center text-11 text-tertiary">
-              {t("common.no_items_in_this_group")}
-            </p>
+            <div className="flex items-center justify-center py-8 text-13 text-tertiary">
+              {t("workspace_settings.settings.workflows.no_states")}
+            </div>
           ) : (
             <div className="flex flex-col divide-y divide-subtle rounded-lg border border-subtle">
               {sortedStates.map((state, index) => {

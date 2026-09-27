@@ -502,7 +502,8 @@
         },
         "no_workflow": "Sin flujo de trabajo",
         "attach_workflow_first": "Asocia primero un flujo de trabajo",
-        "inactive": "Inactivo"
+        "inactive": "Inactivo",
+        "map_refresh_failed": "El tipo se guardó, pero no se pudo actualizar la lista de flujos de trabajo del proyecto. Recarga la página para ver el estado más reciente."
       },
       "workflows": {
         "title": "Flujos de trabajo",
@@ -526,6 +527,7 @@
           "description": "Descripción",
           "active": "Activo"
         },
+        "no_states": "Aún no hay estados",
         "states": {
           "heading": "Estados",
           "add_state": "Agregar estado",
@@ -539,6 +541,7 @@
             "description": "Este estado se eliminará de forma permanente. Esta acción no se puede deshacer."
           }
         },
+        "no_transitions": "Agrega primero los estados para configurar las transiciones.",
         "transitions": {
           "heading": "Transiciones permitidas",
           "description": "Marca cada par desde → hasta permitido. Los pares no marcados se bloquean.",

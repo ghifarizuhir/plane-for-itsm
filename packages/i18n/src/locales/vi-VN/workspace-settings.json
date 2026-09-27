@@ -502,7 +502,8 @@
         },
         "no_workflow": "Không có quy trình làm việc",
         "attach_workflow_first": "Đính kèm quy trình làm việc trước",
-        "inactive": "Không hoạt động"
+        "inactive": "Không hoạt động",
+        "map_refresh_failed": "Loại đã được lưu, nhưng không thể làm mới danh sách quy trình làm việc của dự án. Tải lại trang để xem trạng thái mới nhất."
       },
       "workflows": {
         "title": "Quy trình làm việc",
@@ -526,6 +527,7 @@
           "description": "Mô tả",
           "active": "Hoạt động"
         },
+        "no_states": "Chưa có trạng thái",
         "states": {
           "heading": "Trạng thái",
           "add_state": "Thêm trạng thái",
@@ -539,6 +541,7 @@
             "description": "Trạng thái này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này."
           }
         },
+        "no_transitions": "Thêm trạng thái trước để định cấu hình chuyển đổi.",
         "transitions": {
           "heading": "Chuyển đổi được phép",
           "description": "Chọn mọi cặp từ → đến được phép. Những cặp không được chọn sẽ bị chặn.",

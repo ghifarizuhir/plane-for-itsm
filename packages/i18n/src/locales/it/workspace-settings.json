@@ -502,7 +502,8 @@
         },
         "no_workflow": "Nessun flusso di lavoro",
         "attach_workflow_first": "Associa prima un flusso di lavoro",
-        "inactive": "Inattivo"
+        "inactive": "Inattivo",
+        "map_refresh_failed": "Il tipo è stato salvato, ma non è stato possibile aggiornare l'elenco dei flussi di lavoro del progetto. Ricarica la pagina per vedere lo stato più recente."
       },
       "workflows": {
         "title": "Flussi di lavoro",
@@ -526,6 +527,7 @@
           "description": "Descrizione",
           "active": "Attivo"
         },
+        "no_states": "Nessuno stato ancora",
         "states": {
           "heading": "Stati",
           "add_state": "Aggiungi stato",
@@ -539,6 +541,7 @@
             "description": "Questo stato verrà eliminato definitivamente. Questa azione non può essere annullata."
           }
         },
+        "no_transitions": "Aggiungi prima gli stati per configurare le transizioni.",
         "transitions": {
           "heading": "Transizioni consentite",
           "description": "Seleziona ogni coppia da → a consentita. Le coppie non selezionate sono bloccate.",

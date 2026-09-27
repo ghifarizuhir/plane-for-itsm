@@ -502,7 +502,8 @@
         },
         "no_workflow": "Tidak ada alur kerja",
         "attach_workflow_first": "Lampirkan alur kerja terlebih dahulu",
-        "inactive": "Tidak aktif"
+        "inactive": "Tidak aktif",
+        "map_refresh_failed": "Tipe telah disimpan, tetapi daftar alur kerja proyek tidak dapat disegarkan. Muat ulang halaman untuk melihat status terbaru."
       },
       "workflows": {
         "title": "Alur kerja",
@@ -526,6 +527,7 @@
           "description": "Deskripsi",
           "active": "Aktif"
         },
+        "no_states": "Belum ada status",
         "states": {
           "heading": "Status",
           "add_state": "Tambah status",
@@ -539,6 +541,7 @@
             "description": "Status ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan."
           }
         },
+        "no_transitions": "Tambahkan status terlebih dahulu untuk mengonfigurasi transisi.",
         "transitions": {
           "heading": "Transisi yang diizinkan",
           "description": "Centang setiap pasangan dari → ke yang diizinkan. Pasangan yang tidak dicentang akan diblokir.",

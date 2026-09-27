@@ -502,7 +502,8 @@
         },
         "no_workflow": "Aucun flux de travail",
         "attach_workflow_first": "Associez d’abord un flux de travail",
-        "inactive": "Inactif"
+        "inactive": "Inactif",
+        "map_refresh_failed": "Le type a été enregistré, mais la liste des flux de travail du projet n’a pas pu être actualisée. Rechargez la page pour voir l’état le plus récent."
       },
       "workflows": {
         "title": "Flux de travail",
@@ -526,6 +527,7 @@
           "description": "Description",
           "active": "Actif"
         },
+        "no_states": "Aucun état pour le moment",
         "states": {
           "heading": "États",
           "add_state": "Ajouter un état",
@@ -539,6 +541,7 @@
             "description": "Cet état sera définitivement supprimé. Cette action est irréversible."
           }
         },
+        "no_transitions": "Ajoutez d’abord des états pour configurer les transitions.",
         "transitions": {
           "heading": "Transitions autorisées",
           "description": "Cochez chaque paire de → à autorisée. Les paires non cochées sont bloquées.",

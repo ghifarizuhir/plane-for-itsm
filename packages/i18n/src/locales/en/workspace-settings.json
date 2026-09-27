@@ -519,6 +519,7 @@
           "description": "Description",
           "active": "Active"
         },
+        "no_states": "No states yet",
         "states": {
           "heading": "States",
           "add_state": "Add state",
@@ -532,6 +533,7 @@
             "description": "This state will be permanently deleted. This action cannot be undone."
           }
         },
+        "no_transitions": "Add states first to configure transitions",
         "transitions": {
           "heading": "Allowed transitions",
           "description": "Check every from → to pair that is allowed. Unchecked pairs are blocked.",
