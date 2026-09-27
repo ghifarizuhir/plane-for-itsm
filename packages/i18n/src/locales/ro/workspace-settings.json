@@ -488,11 +488,11 @@
       "work_item_types": {
         "title": "Tipuri de activități",
         "heading": "Tipuri de activități",
-        "description": "Definește tipurile de activități ITSM disponibile în întregul spațiu de lucru și atribuie un flux de lucru fiecăruia.",
+        "description": "Definiți tipurile de activități ITSM disponibile în întregul spațiu de lucru și atribuiți un flux de lucru fiecăruia.",
         "add_type": "Adaugă tip",
         "empty_state": {
           "title": "Încă nu există tipuri de activități",
-          "description": "Creează tipuri Incident, Problemă, Schimbare sau Îmbunătățire și atribuie un flux de lucru."
+          "description": "Creați tipuri Incident, Problemă, Schimbare sau Îmbunătățire și atribuiți un flux de lucru."
         },
         "form": {
           "name": "Nume",
@@ -501,13 +501,13 @@
           "active": "Activ"
         },
         "no_workflow": "Niciun flux de lucru",
-        "attach_workflow_first": "Atribuie mai întâi un flux de lucru",
+        "attach_workflow_first": "Atribuiți mai întâi un flux de lucru",
         "inactive": "Inactiv"
       },
       "workflows": {
         "title": "Fluxuri de lucru",
         "heading": "Fluxuri de lucru",
-        "description": "Definește stările și tranzițiile permise între ele pentru fiecare tip de activitate.",
+        "description": "Definiți stările și tranzițiile permise între ele pentru fiecare tip de activitate.",
         "add_workflow": "Adaugă flux de lucru",
         "delete_confirmation": {
           "title": "Șterge fluxul de lucru",
@@ -519,7 +519,7 @@
         },
         "empty_state": {
           "title": "Încă nu există fluxuri de lucru",
-          "description": "Creează un flux de lucru, apoi adaugă stări și tranziții permise."
+          "description": "Creați un flux de lucru, apoi adăugați stări și tranziții permise."
         },
         "form": {
           "name": "Nume",
@@ -541,7 +541,7 @@
         },
         "transitions": {
           "heading": "Tranziții permise",
-          "description": "Bifează fiecare pereche permisă de la → la. Perechile nebifate sunt blocate.",
+          "description": "Bifați fiecare pereche permisă de la → la. Perechile nebifate sunt blocate.",
           "from": "De la",
           "to": "La"
         }

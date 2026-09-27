@@ -515,7 +515,7 @@
         },
         "not_found": {
           "title": "El flujo de trabajo no existe",
-          "description": "El flujo de trabajo que busca no existe o ha sido eliminado."
+          "description": "El flujo de trabajo que buscas no existe o ha sido eliminado."
         },
         "empty_state": {
           "title": "Aún no hay flujos de trabajo",
