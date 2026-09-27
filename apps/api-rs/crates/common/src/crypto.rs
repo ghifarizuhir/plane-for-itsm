@@ -41,14 +41,14 @@ fn pkcs7_unpad(data: &[u8]) -> Option<Vec<u8>> {
 fn aes128_cbc_decrypt(key: &[u8; 16], iv: &[u8; 16], ciphertext: &[u8]) -> Option<Vec<u8>> {
     use aes::cipher::{BlockDecryptMut, KeyInit};
     use aes::Aes128;
-    if ciphertext.is_empty() || ciphertext.len() % 16 != 0 {
+    if ciphertext.is_empty() || !ciphertext.len().is_multiple_of(16) {
         return None;
     }
     let mut cipher = Aes128::new_from_slice(key).expect("16-byte key");
     let mut out = Vec::with_capacity(ciphertext.len());
     let mut prev = *iv;
     for block in ciphertext.chunks(16) {
-        let mut g = aes::cipher::generic_array::GenericArray::from_slice(block).clone();
+        let mut g = *aes::cipher::generic_array::GenericArray::from_slice(block);
         cipher.decrypt_block_mut(&mut g);
         let mut plain = [0u8; 16];
         for (i, b) in g.iter().enumerate() {
