@@ -237,6 +237,7 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
                     "ai.schedule.run: run no longer running, success not recorded"
                 );
             } else {
+                insert_run_notification(pool, run.id).await?;
                 tracing::info!(
                     run_id=%run.id,
                     schedule_id=%run.schedule_id,
@@ -256,6 +257,30 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
     }
 
     prune_runs(pool, run.schedule_id).await?;
+    Ok(())
+}
+
+/// One in-app notification per scheduled run that reaches a terminal status.
+/// Idempotent per run; skips manual runs and soft-deleted schedules.
+pub async fn insert_run_notification(pool: &PgPool, run_id: Uuid) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO notifications (id, workspace_id, receiver_id, entity_name, entity_identifier, \
+         title, sender, data, message_html, created_at, updated_at) \
+         SELECT gen_random_uuid(), r.workspace_id, s.created_by_id, 'ai_schedule_run', r.id, \
+                s.name, 'in_app:ai_schedule:run', \
+                jsonb_build_object('ai_schedule', jsonb_build_object( \
+                  'schedule_id', s.id, 'run_id', r.id, 'name', s.name, 'status', r.status, \
+                  'finished_at', r.finished_at, 'error', r.error)), \
+                '<p></p>', now(), now() \
+         FROM ai_schedule_runs r JOIN ai_schedules s ON s.id = r.schedule_id \
+         WHERE r.id = $1 AND r.trigger = 'scheduled' AND r.status IN ('success', 'failed') \
+           AND s.deleted_at IS NULL \
+           AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.entity_name = 'ai_schedule_run' \
+                           AND n.entity_identifier = r.id)",
+    )
+    .bind(run_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
