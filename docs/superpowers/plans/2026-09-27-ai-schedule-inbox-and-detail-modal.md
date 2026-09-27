@@ -1131,6 +1131,7 @@ export type TNotificationData = {
 (b) Di `apps/web/core/lib/ai-schedule.ts`, tambahkan import di baris pertama setelah komentar lisensi:
 
 ```ts
+import { orderBy } from "lodash-es";
 import type { TNotificationData, TNotificationScheduleRun } from "@plane/types";
 ```
 
@@ -1169,13 +1170,18 @@ export const filterSchedules = (schedules: TAiSchedule[], filter: TAiScheduleLis
     if (!query) return true;
     return schedule.name.toLowerCase().includes(query);
   });
-  return [...matches].sort((a, b) => {
-    if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
-    if (a.next_run_at && b.next_run_at) return a.next_run_at.localeCompare(b.next_run_at);
-    if (a.next_run_at) return -1;
-    if (b.next_run_at) return 1;
-    return b.created_at.localeCompare(a.created_at);
-  });
+  // NOTE: do not use `.sort()` here — the repo's `oxlint --fix` pre-commit
+  // hook rewrites it to `.toSorted()`, which the TS lib target does not know.
+  return orderBy(
+    matches,
+    [
+      (schedule) => (schedule.enabled ? 0 : 1),
+      (schedule) => (schedule.next_run_at ? 0 : 1),
+      (schedule) => schedule.next_run_at ?? "",
+      (schedule) => schedule.created_at,
+    ],
+    ["asc", "asc", "asc", "desc"]
+  );
 };
 ```
 
