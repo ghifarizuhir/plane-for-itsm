@@ -15,12 +15,16 @@ import { cn } from "@plane/utils";
 import { LogoSpinner } from "@/components/common/logo-spinner";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
+import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-properties";
 import { useNotificationPreview } from "@/hooks/use-notification-preview";
+// lib
+import { isScheduleRunNotification } from "@/lib/ai-schedule";
 // local imports
 import { InboxContentRoot } from "../inbox/content";
+import { ScheduleRunInboxDetail } from "./schedule-run-detail";
 
 type NotificationsRootProps = {
   workspaceSlug?: string;
@@ -41,6 +45,10 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
   // derived values
   const { workspace_slug, project_id, issue_id, is_inbox_issue } =
     notificationLiteByNotificationId(currentSelectedNotificationId);
+  const { asJson: selectedNotification } = useNotification(currentSelectedNotificationId);
+  const selectedScheduleRun = isScheduleRunNotification(selectedNotification?.data)
+    ? selectedNotification?.data?.ai_schedule
+    : undefined;
 
   // fetching workspace work item properties
   useWorkspaceIssueProperties(workspaceSlug);
@@ -90,7 +98,13 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
         </div>
       ) : (
         <>
-          {is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
+          {selectedScheduleRun && workspace_slug ? (
+            <ScheduleRunInboxDetail
+              workspaceSlug={workspace_slug}
+              scheduleRun={selectedScheduleRun}
+              embedRemoveCurrentNotification={embedRemoveCurrentNotification}
+            />
+          ) : is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
             <>
               {projectMemberInfoLoader ? (
                 <div className="flex h-full w-full items-center justify-center">

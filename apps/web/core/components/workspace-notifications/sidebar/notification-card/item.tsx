@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { useRouter } from "next/navigation";
 import { CalendarOutline, ClockOutline } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
@@ -19,12 +18,7 @@ import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // lib
-import {
-  isScheduleRunNotification,
-  scheduleRunNotificationHref,
-  scheduleRunNotificationText,
-  scheduleStatusLabel,
-} from "@/lib/ai-schedule";
+import { isScheduleRunNotification, scheduleRunNotificationText, scheduleStatusLabel } from "@/lib/ai-schedule";
 // local imports
 import { NotificationContent } from "./content";
 import { NotificationOption } from "./options";
@@ -36,8 +30,6 @@ type TNotificationItem = {
 
 export const NotificationItem = observer(function NotificationItem(props: TNotificationItem) {
   const { workspaceSlug, notificationId } = props;
-  // router
-  const router = useRouter();
   // hooks
   const { currentSelectedNotificationId, setCurrentSelectedNotificationId } = useWorkspaceNotifications();
   const { asJson: notification, markNotificationAsRead } = useNotification(notificationId);
@@ -59,7 +51,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const handleNotificationClick = async () => {
     if (!workspaceSlug || !notification?.id || isSnoozeStateModalOpen || customSnoozeModal) return;
 
-    setPeekIssue(undefined);
     setCurrentSelectedNotificationId(notificationId);
 
     // make the notification as read
@@ -71,11 +62,10 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
       }
     }
 
-    if (scheduleRun) {
-      router.push(scheduleRunNotificationHref(workspaceSlug, scheduleRun.schedule_id));
-      return;
-    }
+    // schedule runs render their output in the right pane; nothing else to do
+    if (scheduleRun) return;
 
+    setPeekIssue(undefined);
     if (projectId && issueId && notification?.is_inbox_issue === false && !getIsIssuePeeked(issueId)) {
       setPeekIssue({ workspaceSlug, projectId, issueId });
     }

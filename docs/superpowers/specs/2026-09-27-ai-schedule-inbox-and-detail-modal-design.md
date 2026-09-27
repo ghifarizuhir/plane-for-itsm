@@ -29,8 +29,10 @@ modal, dan cap dinaikkan.
 2. Run yang memicu notifikasi: **hanya `trigger='scheduled'`**, status terminal
    success maupun failed. Run manual (`Run now`) tidak memberi notifikasi.
 3. Penerima: **hanya pembuat jadwal** (`created_by_id`).
-4. Klik notifikasi → **`/{slug}/scheduler?schedule=<id>`**, modal detail jadwal
-   terbuka. Inbox tetap ringkas sebagai notifikasi.
+4. Klik notifikasi → **output run tampil langsung di pane kanan Inbox**
+   (revisi 2026-09-27: sebelumnya deep link ke modal Scheduler). Tombol
+   "View in Scheduler" di pane memakai deep link `?schedule=<id>` untuk
+   konteks penuh.
 5. Struktur halaman Scheduler: **list + modal detail per jadwal**. Recipe
    read-only (edit jadwal tersimpan tetap out of scope), history 20 run
    terakhir, aksi (toggle, Run now, Delete) pindah ke modal.
@@ -127,9 +129,10 @@ tetap tersedia.
     nama jadwal, baris kedua = badge status (`Success`/`Failed`, error
     terpotong) + time-ago. Unread dot dan aksi hover (read/archive/snooze)
     memakai mekanisme lama.
-  - Klik: tandai read (handler lama) lalu
-    `router.push('/{workspaceSlug}/scheduler?schedule=<schedule_id>')`. Tidak
-    menyentuh `setPeekIssue` / intake embed.
+- Klik: tandai read (handler lama) + pilih notifikasi; **tidak** `router.push`.
+  Pane kanan merender output run lewat cabang ketiga di `NotificationsRoot`
+  (revisi 2026-09-27; pola yang sama dengan intake embed). Tidak menyentuh
+  `setPeekIssue` / intake embed untuk tipe ini.
 - `notification-card/content.tsx`: cabang kalimat untuk tipe ini ("Scheduled run
   finished" / "Scheduled run failed").
 - `store/notifications/workspace-notifications.store.ts`: `issue_id` pada
@@ -171,15 +174,25 @@ tetap tersedia.
 - Tanpa perubahan API: endpoint detail sudah membawa `spec` + 20 run terakhir,
   dan list sudah membawa seluruh field jadwal termasuk `spec`.
 
-### 7. FE — deep link
+### 7. FE — output run di pane Inbox + deep link
 
+- `NotificationsRoot` mendapat cabang ketiga: notifikasi terpilih bertipe
+  schedule-run → render `ScheduleRunInboxDetail` (komponen baru), didahulukan
+  sebelum cabang intake/peek.
+- `ScheduleRunInboxDetail` membaca `schedule_id`/`run_id` dari
+  `data.ai_schedule`, memanggil endpoint detail schedule yang sudah ada
+  (membawa 20 run terakhir), lalu menampilkan run yang cocok lewat reuse
+  `ScheduleRunsList` (sanitized `response_html` / error).
+- Run sudah diprune dari 20 terakhir → ringkasan dari `data` (status, waktu,
+  error) + catatan retensi. Schedule terhapus (404) → "This schedule no longer
+  exists." Gagal load lain → pesan + Retry.
+- Tombol "View in Scheduler" → deep link `?schedule=<id>`; "Dismiss" →
+  batalkan pilihan (kembali ke empty state). Tanpa perubahan backend/API.
 - `?schedule=<id>` dibaca `scheduler-view.tsx` saat mount dan saat berubah:
   jika id ada di list yang termuat → buka modal; jika tidak dikenal → abaikan
   dan bersihkan param.
 - Menutup modal → `router.replace` tanpa param `schedule` (tidak menambah
   history browser).
-- Klik notifikasi di Inbox mengandalkan mekanisme ini; tidak ada endpoint atau
-  route baru.
 
 ### 8. Batas & error handling
 
@@ -266,7 +279,12 @@ tetap tersedia.
 - Modify: `packages/types/src/workspace-notifications.ts` — data varian
   `ai_schedule`.
 - Modify: `apps/web/core/components/workspace-notifications/sidebar/notification-card/item.tsx`
-  dan `content.tsx` — cabang render + klik.
+  dan `content.tsx` — cabang render + klik (klik memilih notifikasi, pane kanan
+  yang merender; tanpa `router.push`).
+- Create: `apps/web/core/components/workspace-notifications/schedule-run-detail.tsx`
+  — output run di pane Inbox + tombol "View in Scheduler" / "Dismiss".
+- Modify: `apps/web/core/components/workspace-notifications/root.tsx` — cabang
+  ketiga untuk notifikasi schedule-run.
 - Modify: `apps/web/core/store/notifications/workspace-notifications.store.ts` —
   `issue_id` nullable.
 - Modify: `apps/web/core/components/ai-scheduler/scheduler-view.tsx` — header
