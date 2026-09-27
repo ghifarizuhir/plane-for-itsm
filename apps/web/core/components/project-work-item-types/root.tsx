@@ -47,7 +47,12 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
   const fetchErrorTitle = t("common.error.label");
   const fetchErrorMessage = t("common.error.message");
   const workflowMapType = workflowMap[projectId];
-  const enabledIds = new Set((workflowMapType?.types ?? []).map((type) => type.type_id));
+  // status enable mengikuti link project (project_issue_types), bukan workflow-map:
+  // map menyembunyikan type nonaktif, sementara link-nya tetap hidup dan harus
+  // tetap bisa di-unlink dari halaman ini.
+  const enabledIds = new Set(
+    (workItemTypes ?? []).filter((type) => type.project_ids?.includes(projectId)).map((type) => type.id)
+  );
 
   const loadData = useCallback(() => {
     setHasFetchError(false);

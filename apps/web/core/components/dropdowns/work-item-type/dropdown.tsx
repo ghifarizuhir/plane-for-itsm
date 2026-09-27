@@ -62,8 +62,8 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
   // store hooks
   const { t } = useTranslation();
   const { getWorkflowMap } = useWorkflow();
-  // derived values: the project workflow map exposes types with an attached workflow
-  // (the API filters deleted/workflow presence; is_active is not filtered yet)
+  // derived values: the project workflow map exposes only types with an attached
+  // workflow; the API filters deleted types, workflow presence, inactive types and epics
   const mapTypes = projectId ? (getWorkflowMap(projectId)?.types ?? []) : [];
   const selectedType = mapTypes.find((type) => type.type_id === value);
   const options = mapTypes.map((type) => ({
