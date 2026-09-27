@@ -1130,6 +1130,9 @@ pub(crate) const COMPLEX_FILTER_ALLOWLIST: &[&str] = &[
     "state_id",
     "state_id__exact",
     "state_id__in",
+    "type_id",
+    "type_id__exact",
+    "type_id__in",
     "project_id",
     "project_id__exact",
     "project_id__in",
@@ -1504,6 +1507,7 @@ fn apply_complex_leaf(
     if let Some(col) = match base {
         "created_by_id" => Some("i.created_by_id"),
         "state_id" => Some("i.state_id"),
+        "type_id" => Some("i.type_id"),
         "project_id" => Some("i.project_id"),
         _ => None,
     } {
@@ -2194,6 +2198,26 @@ mod issue_list_tests {
     fn list_where_rejects_unknown_field_like_django() {
         let err = parse_complex_filter(Some(r#"{"and":[{"nope__in":"x"}]}"#)).unwrap_err();
         assert_eq!(err.code, "invalid_filter_field");
+    }
+
+    #[test]
+    fn complex_type_id_filter_maps_to_issue_column() {
+        let mut qb: QueryBuilder<Postgres> = QueryBuilder::new(
+            "SELECT 1 FROM issues i LEFT JOIN states s ON s.id = i.state_id WHERE true",
+        );
+        let tree = parse_complex_filter(Some(
+            r#"{"and":[{"type_id__in":"11111111-1111-1111-1111-111111111111"}]}"#,
+        ))
+        .unwrap();
+        apply_complex_filter(&mut qb, tree.as_ref().unwrap()).unwrap();
+        assert!(qb.sql().contains("i.type_id"), "sql: {}", qb.sql());
+    }
+
+    #[test]
+    fn complex_type_id_exact_is_allowlisted() {
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id"));
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__exact"));
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__in"));
     }
 }
 
