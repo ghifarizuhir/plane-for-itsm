@@ -18,6 +18,7 @@ import {
   StartDateOutline,
   StateOutline,
   UserOutline,
+  WorkItemsOutline,
 } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
@@ -51,6 +52,7 @@ import {
   getSubscriberFilterConfig,
   getTargetDateFilterConfig,
   getUpdatedAtFilterConfig,
+  getWorkItemTypeFilterConfig,
   isLoaderReady,
 } from "@plane/utils";
 // store hooks
@@ -60,6 +62,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useWorkflow } from "@/hooks/store/use-workflow";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/hooks/rich-filters/use-filters-operator-configs";
 
@@ -97,11 +100,22 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const { getLabelById } = useLabel();
   const { getModuleById } = useModule();
   const { getStateById } = useProjectState();
+  const { getWorkflowMap } = useWorkflow();
   const { getUserDetails } = useMember();
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
   const filtersToShow = useMemo(() => new Set(allowedFilters), [allowedFilters]);
   const project = useMemo(() => getProjectById(projectId), [projectId, getProjectById]);
+  const workItemTypes = useMemo(
+    () =>
+      projectId
+        ? (getWorkflowMap(projectId)?.types ?? []).map((type) => ({
+            type_id: type.type_id,
+            type_name: type.type_name,
+          }))
+        : [],
+    [projectId, getWorkflowMap]
+  );
   const members: IUserLite[] | undefined = useMemo(
     () =>
       memberIds
@@ -133,7 +147,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const projects = useMemo(
     () =>
       projectIds
-        ? (projectIds.map((projectId) => getProjectById(projectId)).filter((project) => project) as IProject[])
+        ? (projectIds.map((id) => getProjectById(id)).filter((projectDetails) => projectDetails) as IProject[])
         : [],
     [projectIds, getProjectById]
   );
@@ -305,6 +319,19 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     [isFilterEnabled, operatorConfigs]
   );
 
+  // work item type filter config (options come from the project workflow map)
+  const workItemTypeFilterConfig = useMemo(
+    () =>
+      getWorkItemTypeFilterConfig<TWorkItemFilterProperty>("type_id")({
+        isEnabled: isFilterEnabled("type_id") && workItemTypes.length > 0,
+        filterIcon: WorkItemsOutline,
+        getOptionIcon: () => <WorkItemsOutline className="h-3 w-3 flex-shrink-0" />,
+        types: workItemTypes,
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, workItemTypes, operatorConfigs]
+  );
+
   // start date filter config
   const startDateFilterConfig = useMemo(
     () =>
@@ -356,7 +383,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         isEnabled: isFilterEnabled("project_id") && projects !== undefined,
         filterIcon: ProjectsOutline,
         projects: projects,
-        getOptionIcon: (project) => <Logo logo={project.logo_props} size={12} />,
+        getOptionIcon: (projectDetails) => <Logo logo={projectDetails.logo_props} size={12} />,
         ...operatorConfigs,
       }),
     [isFilterEnabled, projects, operatorConfigs]
@@ -366,6 +393,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     areAllConfigsInitialized,
     configs: [
       stateFilterConfig,
+      workItemTypeFilterConfig,
       stateGroupFilterConfig,
       assigneeFilterConfig,
       priorityFilterConfig,
@@ -385,6 +413,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       project_id: projectFilterConfig,
       state_group: stateGroupFilterConfig,
       state_id: stateFilterConfig,
+      type_id: workItemTypeFilterConfig,
       label_id: labelFilterConfig,
       cycle_id: cycleFilterConfig,
       module_id: moduleFilterConfig,
