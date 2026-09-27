@@ -77,8 +77,10 @@ export class WorkflowStore implements IWorkflowStore {
   private workflowMapRequestId: Record<string, number> = {};
   // services
   private service = new WorkflowService();
+  private _rootStore: CoreRootStore;
 
   constructor(_rootStore: CoreRootStore) {
+    this._rootStore = _rootStore;
     makeObservable(this, {
       // observables
       workflows: observable,
@@ -260,11 +262,13 @@ export class WorkflowStore implements IWorkflowStore {
   importWorkItemTypes = async (workspaceSlug: string, projectId: string, typeIds: string[]) => {
     await this.service.importWorkItemTypes(workspaceSlug, projectId, typeIds);
     await this.refreshWorkflowMaps(workspaceSlug, [projectId]);
+    await this._rootStore.state.fetchProjectStates(workspaceSlug, projectId).catch(() => undefined);
   };
 
   unlinkWorkItemType = async (workspaceSlug: string, projectId: string, typeId: string) => {
     await this.service.unlinkWorkItemType(workspaceSlug, projectId, typeId);
     await this.refreshWorkflowMaps(workspaceSlug, [projectId]);
+    await this._rootStore.state.fetchProjectStates(workspaceSlug, projectId).catch(() => undefined);
   };
 
   fetchWorkflowMap = async (workspaceSlug: string, projectId: string) => {

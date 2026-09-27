@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -14,6 +14,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Spinner } from "@plane/ui";
 // components
 import { SettingsHeading } from "@/components/settings/heading";
+import { WorkflowLoadErrorState } from "@/components/workflows/workflow-load-error-state";
 // hooks
 import { useWorkflow } from "@/hooks/store/use-workflow";
 // local imports
@@ -32,6 +33,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [deletingTypeId, setDeletingTypeId] = useState<string | null>(null);
   const [isWorkflowsLoading, setIsWorkflowsLoading] = useState(true);
+  const [hasFetchError, setHasFetchError] = useState(false);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -42,17 +44,12 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
   const fetchErrorTitle = t("common.error.label");
   const fetchErrorMessage = t("common.error.message");
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
+    setHasFetchError(false);
     setIsWorkflowsLoading(true);
-    void fetchWorkItemTypes(workspaceSlug).catch((error: any) => {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: fetchErrorTitle,
-        message: error?.error ?? fetchErrorMessage,
-      });
-    });
-    void fetchWorkflows(workspaceSlug)
+    void Promise.all([fetchWorkItemTypes(workspaceSlug), fetchWorkflows(workspaceSlug)])
       .catch((error: any) => {
+        setHasFetchError(true);
         setToast({
           type: TOAST_TYPE.ERROR,
           title: fetchErrorTitle,
@@ -61,6 +58,10 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
       })
       .finally(() => setIsWorkflowsLoading(false));
   }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows, fetchErrorTitle, fetchErrorMessage]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   return (
     <>
@@ -96,7 +97,11 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
           </Button>
         }
       />
-      {workItemTypes === undefined ? (
+      {hasFetchError && (workItemTypes === undefined || workflows === undefined) ? (
+        <div className="mt-6">
+          <WorkflowLoadErrorState onRetry={loadData} />
+        </div>
+      ) : workItemTypes === undefined ? (
         <div className="mt-6 flex h-40 items-center justify-center">
           <Spinner />
         </div>
