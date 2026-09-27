@@ -71,6 +71,7 @@ interface Props {
   handleCollapsedGroups: (value: string) => void;
   collapsedGroups: TIssueKanbanFilters;
   isEpic?: boolean;
+  workItemTypeId?: string | null;
 }
 
 export const ListGroup = observer(function ListGroup(props: Props) {
@@ -98,6 +99,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     handleCollapsedGroups,
     collapsedGroups,
     isEpic = false,
+    workItemTypeId,
   } = props;
 
   const [isDraggingOverColumn, setIsDraggingOverColumn] = useState(false);
@@ -155,7 +157,11 @@ export const ListGroup = observer(function ListGroup(props: Props) {
       preloadedData = { ...preloadedData };
     } else {
       if (groupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: value };
+        preloadedData = {
+          ...preloadedData,
+          state_id: value,
+          ...(workItemTypeId ? { type_id: workItemTypeId } : {}),
+        };
       } else if (groupByKey === "priority") {
         preloadedData = { ...preloadedData, priority: value };
       } else if (groupByKey === "labels" && value != "None") {

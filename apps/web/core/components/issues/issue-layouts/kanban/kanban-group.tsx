@@ -70,6 +70,7 @@ interface IKanbanGroup {
   handleOnDrop: (source: GroupDropLocation, destination: GroupDropLocation) => Promise<void>;
   orderBy: TIssueOrderByOptions | undefined;
   isEpic?: boolean;
+  workItemTypeId?: string | null;
 }
 
 export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
@@ -94,6 +95,7 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
     scrollableContainerRef,
     handleOnDrop,
     isEpic = false,
+    workItemTypeId,
   } = props;
   // i18n
   const { t } = useTranslation();
@@ -207,7 +209,11 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
 
     if (groupByKey) {
       if (groupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: groupValue };
+        preloadedData = {
+          ...preloadedData,
+          state_id: groupValue,
+          ...(workItemTypeId ? { type_id: workItemTypeId } : {}),
+        };
       } else if (groupByKey === "priority") {
         preloadedData = { ...preloadedData, priority: groupValue };
       } else if (groupByKey === "cycle") {
@@ -227,7 +233,11 @@ export const KanbanGroup = observer(function KanbanGroup(props: IKanbanGroup) {
 
     if (subGroupByKey) {
       if (subGroupByKey === "state") {
-        preloadedData = { ...preloadedData, state_id: subGroupValue };
+        preloadedData = {
+          ...preloadedData,
+          state_id: subGroupValue,
+          ...(workItemTypeId ? { type_id: workItemTypeId } : {}),
+        };
       } else if (subGroupByKey === "priority") {
         preloadedData = { ...preloadedData, priority: subGroupValue };
       } else if (subGroupByKey === "cycle") {

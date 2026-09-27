@@ -238,6 +238,7 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
                     loadMoreIssues={loadMoreIssues}
                     handleOnDrop={handleOnDrop}
                     isEpic={isEpic}
+                    workItemTypeId={workItemTypeId}
                   />
                 </RenderIfVisible>
               )}

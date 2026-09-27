@@ -176,6 +176,7 @@ export const List = observer(function List(props: IList) {
                     handleCollapsedGroups={handleCollapsedGroups}
                     collapsedGroups={collapsedGroups}
                     isEpic={isEpic}
+                    workItemTypeId={group_by === "state" ? workItemTypeId : null}
                   />
                 ))}
               </div>
