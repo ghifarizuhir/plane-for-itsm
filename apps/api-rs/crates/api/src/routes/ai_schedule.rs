@@ -22,7 +22,7 @@ use crate::routes::module::guard_am;
 use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
-pub const MAX_SCHEDULES_PER_WORKSPACE: i64 = 20;
+pub const MAX_SCHEDULES_PER_WORKSPACE: i64 = 100;
 
 pub(crate) async fn workspace_id_for_slug(
     pool: &PgPool,
@@ -520,6 +520,14 @@ pub async fn destroy(
         .bind(schedule_id)
         .execute(&st.pool)
         .await?;
+    sqlx::query(
+        "UPDATE notifications SET deleted_at = now(), updated_at = now() \
+         WHERE entity_name = 'ai_schedule_run' AND deleted_at IS NULL \
+           AND data->'ai_schedule'->>'schedule_id' = $1",
+    )
+    .bind(schedule_id.to_string())
+    .execute(&st.pool)
+    .await?;
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 

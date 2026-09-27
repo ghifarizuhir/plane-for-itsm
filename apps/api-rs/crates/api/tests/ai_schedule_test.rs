@@ -139,6 +139,11 @@ impl Scratch {
     }
 
     async fn purge(&self, pool: &PgPool) {
+        sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
             .bind(self.workspace_id)
             .execute(pool)
@@ -441,6 +446,58 @@ async fn patch_delete_and_run_now_follow_creator_or_admin() {
 }
 
 #[tokio::test]
+async fn destroy_soft_deletes_schedule_run_notifications() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let notification_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO notifications (id, workspace_id, receiver_id, entity_name, entity_identifier, \
+         title, sender, data, message_html, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, 'ai_schedule_run', $3, 'Daily report', \
+                 'in_app:ai_schedule:run', \
+                 jsonb_build_object('ai_schedule', jsonb_build_object('schedule_id', $4::text)), \
+                 '<p></p>', now(), now()) RETURNING id",
+    )
+    .bind(scratch.workspace_id)
+    .bind(scratch.user_id)
+    .bind(Uuid::new_v4())
+    .bind(schedule_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let (status, _) = ai_schedule::destroy(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("destroy ok");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let soft_deleted: bool =
+        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM notifications WHERE id = $1")
+            .bind(notification_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(soft_deleted, "notifications follow the schedule soft delete");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn soft_delete_frees_proposal_key_and_list_isolates_workspaces() {
     let pool = pool().await;
     let first = Scratch::new(&pool).await;
@@ -526,11 +583,11 @@ async fn list_rejects_guests() {
 }
 
 #[tokio::test]
-async fn create_enforces_twenty_schedule_limit() {
+async fn create_enforces_hundred_schedule_limit() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;
     let state = state(&pool).await;
-    for _ in 0..20 {
+    for _ in 0..100 {
         let body = json!({
             "name": "Daily",
             "prompt": "Report",
@@ -563,7 +620,7 @@ async fn create_enforces_twenty_schedule_limit() {
     .await
     .expect("limit handled");
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(err["error"].as_str().unwrap().contains("20"));
+    assert!(err["error"].as_str().unwrap().contains("100"));
 
     scratch.purge(&pool).await;
 }
@@ -668,7 +725,7 @@ async fn replay_at_capacity_returns_existing_schedule() {
     let state = state(&pool).await;
 
     let mut first_key = None;
-    for index in 0..20 {
+    for index in 0..100 {
         let key = Uuid::new_v4();
         if index == 0 {
             first_key = Some(key);
@@ -689,7 +746,7 @@ async fn replay_at_capacity_returns_existing_schedule() {
         assert_eq!(status, StatusCode::CREATED);
     }
 
-    // Replaying an existing key at 20/20 must return the original schedule.
+    // Replaying an existing key at 100/100 must return the original schedule.
     let (status, Json(replay)) = ai_schedule::create(
         State(state.clone()),
         AuthUser(scratch.user_id),
@@ -706,7 +763,7 @@ async fn replay_at_capacity_returns_existing_schedule() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(replay["already_exists"], json!(true));
 
-    // A brand-new key at 20/20 still hits the cap.
+    // A brand-new key at 100/100 still hits the cap.
     let (status, Json(err)) = ai_schedule::create(
         State(state.clone()),
         AuthUser(scratch.user_id),
@@ -721,7 +778,7 @@ async fn replay_at_capacity_returns_existing_schedule() {
     .await
     .expect("cap handled");
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(err["error"].as_str().unwrap().contains("20"));
+    assert!(err["error"].as_str().unwrap().contains("100"));
 
     scratch.purge(&pool).await;
 }
