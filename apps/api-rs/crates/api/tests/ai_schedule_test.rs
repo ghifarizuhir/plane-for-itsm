@@ -43,6 +43,20 @@ fn create_body(proposal_key: Uuid) -> Value {
     })
 }
 
+fn structured_body(proposal_key: Uuid) -> Value {
+    json!({
+        "name": "Daily report",
+        "description": "Summarize overdue work items for the team",
+        "how_to": ["Count overdue work items", "List the top five by priority"],
+        "tools": ["count_work_items", "search_work_items"],
+        "expected_output": "A short markdown list with identifiers and owners",
+        "frequency": "daily",
+        "time": "09:00",
+        "timezone": "UTC",
+        "proposal_key": proposal_key,
+    })
+}
+
 struct Scratch {
     slug: String,
     workspace_id: Uuid,
@@ -708,6 +722,153 @@ async fn replay_at_capacity_returns_existing_schedule() {
     .expect("cap handled");
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(err["error"].as_str().unwrap().contains("20"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn create_with_spec_stores_rendered_prompt_and_returns_spec() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let (status, Json(created)) = ai_schedule::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(structured_body(Uuid::new_v4())),
+    )
+    .await
+    .expect("create ok");
+    assert_eq!(status, StatusCode::CREATED);
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (prompt, spec): (String, Value) =
+        sqlx::query_as("SELECT prompt, spec FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        prompt,
+        "Task: Daily report\n\nDescription:\nSummarize overdue work items for the team\n\nSteps:\n1. Count overdue work items\n2. List the top five by priority\n\nExpected output:\nA short markdown list with identifiers and owners\n\nAllowed tools: count_work_items, search_work_items"
+    );
+    assert_eq!(spec["version"], json!(1));
+    assert_eq!(spec["tools"], json!(["count_work_items", "search_work_items"]));
+
+    let (status, Json(detail)) = ai_schedule::detail(
+        State(st),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+    )
+    .await
+    .expect("detail ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        detail["spec"]["description"],
+        json!("Summarize overdue work items for the team")
+    );
+    assert_eq!(detail["spec"]["how_to"][0], json!("Count overdue work items"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn create_rejects_incomplete_spec_and_legacy_keeps_spec_null() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    let (status, Json(err)) = ai_schedule::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "Half",
+            "description": "Only description",
+            "frequency": "daily",
+            "time": "09:00",
+            "timezone": "UTC",
+            "proposal_key": Uuid::new_v4(),
+        })),
+    )
+    .await
+    .expect("create handled");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(err["error"], json!("incomplete schedule spec"));
+
+    let (status, Json(created)) = ai_schedule::create(
+        State(st),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .expect("legacy create ok");
+    assert_eq!(status, StatusCode::CREATED);
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    let spec: Option<Value> = sqlx::query_scalar("SELECT spec FROM ai_schedules WHERE id = $1")
+        .bind(schedule_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(spec.is_none(), "legacy rows keep a NULL spec");
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn resume_recomputes_next_run_for_a_long_recipe() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let long_step = "x".repeat(500);
+    let (status, Json(created)) = ai_schedule::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "Long recipe",
+            "description": "A recipe whose rendered prompt exceeds the legacy 2000 character cap",
+            "how_to": [
+                long_step.clone(),
+                long_step.clone(),
+                long_step.clone(),
+                long_step.clone(),
+                long_step
+            ],
+            "tools": ["list_projects"],
+            "expected_output": "Anything",
+            "frequency": "daily",
+            "time": "09:00",
+            "timezone": "UTC",
+            "proposal_key": Uuid::new_v4(),
+        })),
+    )
+    .await
+    .expect("create ok");
+    assert_eq!(status, StatusCode::CREATED);
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, _) = ai_schedule::patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": false})),
+    )
+    .await
+    .expect("pause ok");
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, Json(body)) = ai_schedule::patch(
+        State(st),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": true})),
+    )
+    .await
+    .expect("resume ok");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["enabled"], json!(true));
 
     scratch.purge(&pool).await;
 }

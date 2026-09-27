@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use ai::schedule::ScheduleProposal;
+use ai::schedule::{ScheduleProposal, ScheduleRecipe, SPEC_PROMPT_MAX};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -37,7 +37,16 @@ pub(crate) async fn workspace_id_for_slug(
 #[derive(serde::Deserialize)]
 pub struct CreateScheduleBody {
     pub name: String,
-    pub prompt: String,
+    #[serde(default)]
+    pub prompt: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub how_to: Option<Vec<String>>,
+    #[serde(default)]
+    pub tools: Option<Vec<String>>,
+    #[serde(default)]
+    pub expected_output: Option<String>,
     pub frequency: String,
     #[serde(default)]
     pub time: Option<String>,
@@ -50,6 +59,105 @@ pub struct CreateScheduleBody {
     pub proposal_key: Uuid,
 }
 
+/// Validated create payload, normalized from either the structured recipe or
+/// the legacy prompt-only shape.
+struct ResolvedSchedule {
+    name: String,
+    prompt: String,
+    spec: Option<Value>,
+    frequency: String,
+    time: String,
+    day_of_week: Option<i16>,
+    day_of_month: Option<i16>,
+    timezone: String,
+}
+
+enum ScheduleInput {
+    Recipe(ScheduleRecipe),
+    Legacy(ScheduleProposal),
+}
+
+impl ScheduleInput {
+    fn next_run_at(&self) -> chrono::DateTime<chrono::Utc> {
+        let proposal = match self {
+            ScheduleInput::Recipe(recipe) => &recipe.proposal,
+            ScheduleInput::Legacy(proposal) => proposal,
+        };
+        proposal.next_occurrence(chrono::Utc::now())
+    }
+}
+
+impl From<ScheduleInput> for ResolvedSchedule {
+    fn from(input: ScheduleInput) -> Self {
+        match input {
+            ScheduleInput::Recipe(recipe) => Self {
+                name: recipe.proposal.name,
+                prompt: recipe.proposal.prompt,
+                spec: serde_json::to_value(&recipe.spec).ok(),
+                frequency: recipe.proposal.frequency,
+                time: recipe.proposal.time,
+                day_of_week: recipe.proposal.day_of_week,
+                day_of_month: recipe.proposal.day_of_month,
+                timezone: recipe.proposal.timezone,
+            },
+            ScheduleInput::Legacy(proposal) => Self {
+                name: proposal.name,
+                prompt: proposal.prompt,
+                spec: None,
+                frequency: proposal.frequency,
+                time: proposal.time,
+                day_of_week: proposal.day_of_week,
+                day_of_month: proposal.day_of_month,
+                timezone: proposal.timezone,
+            },
+        }
+    }
+}
+
+/// Structured when all four spec fields are present, legacy when none are;
+/// anything in between is rejected.
+fn schedule_input(body: &CreateScheduleBody) -> Result<ScheduleInput, String> {
+    let spec_fields = [
+        body.description.is_some(),
+        body.how_to.is_some(),
+        body.tools.is_some(),
+        body.expected_output.is_some(),
+    ];
+    match spec_fields.iter().filter(|present| **present).count() {
+        0 => {
+            let prompt = body
+                .prompt
+                .as_deref()
+                .filter(|prompt| !prompt.trim().is_empty())
+                .ok_or_else(|| "prompt is required".to_string())?;
+            ScheduleProposal::new(
+                &body.name,
+                prompt,
+                &body.frequency,
+                body.time.as_deref(),
+                body.day_of_week,
+                body.day_of_month,
+                body.timezone.as_deref(),
+            )
+            .map(ScheduleInput::Legacy)
+        }
+        4 => ScheduleRecipe::new(
+            &body.name,
+            body.description.as_deref().unwrap_or_default(),
+            body.how_to.as_deref().unwrap_or_default(),
+            body.tools.as_deref().unwrap_or_default(),
+            body.expected_output.as_deref().unwrap_or_default(),
+            &body.frequency,
+            body.time.as_deref(),
+            body.day_of_week,
+            body.day_of_month,
+            body.timezone.as_deref(),
+        )
+        .map(ScheduleInput::Recipe),
+        _ => Err("incomplete schedule spec".to_string()),
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct ScheduleRow {
     id: Uuid,
@@ -57,6 +165,7 @@ struct ScheduleRow {
     created_by_id: Uuid,
     name: String,
     prompt: String,
+    spec: Option<Value>,
     frequency: String,
     time_of_day: String,
     day_of_week: Option<i16>,
@@ -103,6 +212,7 @@ fn schedule_json(row: &ScheduleRow) -> Value {
         "id": row.id,
         "name": row.name,
         "prompt": row.prompt,
+        "spec": row.spec,
         "frequency": row.frequency,
         "time": row.time_of_day,
         "day_of_week": row.day_of_week,
@@ -131,7 +241,7 @@ async fn load_schedule(
     schedule_id: Uuid,
 ) -> Result<Option<ScheduleRow>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT s.id, s.workspace_id, s.created_by_id, s.name, s.prompt, s.frequency, \
+        "SELECT s.id, s.workspace_id, s.created_by_id, s.name, s.prompt, s.spec, s.frequency, \
                 s.time_of_day, s.day_of_week, s.day_of_month, s.timezone, s.enabled, \
                 s.next_run_at, s.created_at \
          FROM ai_schedules s \
@@ -162,7 +272,7 @@ pub async fn list(
         return Ok((StatusCode::OK, Json(json!([]))));
     };
     let rows: Vec<ScheduleRow> = sqlx::query_as(
-        "SELECT id, workspace_id, created_by_id, name, prompt, frequency, time_of_day, \
+        "SELECT id, workspace_id, created_by_id, name, prompt, spec, frequency, time_of_day, \
                 day_of_week, day_of_month, timezone, enabled, next_run_at, created_at \
          FROM ai_schedules WHERE workspace_id = $1 AND deleted_at IS NULL \
          ORDER BY created_at DESC, id",
@@ -217,16 +327,8 @@ pub async fn create(
     let Some(workspace_id) = workspace_id_for_slug(&st.pool, &slug).await? else {
         return Ok(missing());
     };
-    let proposal = match ScheduleProposal::new(
-        &body.name,
-        &body.prompt,
-        &body.frequency,
-        body.time.as_deref(),
-        body.day_of_week,
-        body.day_of_month,
-        body.timezone.as_deref(),
-    ) {
-        Ok(proposal) => proposal,
+    let input = match schedule_input(&body) {
+        Ok(input) => input,
         Err(message) => {
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
         }
@@ -261,25 +363,27 @@ pub async fn create(
         ));
     }
 
-    let next_run_at = proposal.next_occurrence(chrono::Utc::now());
+    let next_run_at = input.next_run_at();
+    let resolved: ResolvedSchedule = input.into();
     let id = Uuid::new_v4();
     let inserted: Option<Uuid> = sqlx::query_scalar(
-        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, frequency, \
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, spec, frequency, \
          time_of_day, day_of_week, day_of_month, timezone, enabled, next_run_at, proposal_key, \
          created_at, updated_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, now(), now()) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, $12, $13, now(), now()) \
          ON CONFLICT (workspace_id, proposal_key) WHERE deleted_at IS NULL DO NOTHING RETURNING id",
     )
     .bind(id)
     .bind(workspace_id)
     .bind(auth.0)
-    .bind(&proposal.name)
-    .bind(&proposal.prompt)
-    .bind(&proposal.frequency)
-    .bind(&proposal.time)
-    .bind(proposal.day_of_week)
-    .bind(proposal.day_of_month)
-    .bind(&proposal.timezone)
+    .bind(&resolved.name)
+    .bind(&resolved.prompt)
+    .bind(&resolved.spec)
+    .bind(&resolved.frequency)
+    .bind(&resolved.time)
+    .bind(resolved.day_of_week)
+    .bind(resolved.day_of_month)
+    .bind(&resolved.timezone)
     .bind(next_run_at)
     .bind(body.proposal_key)
     .fetch_optional(&st.pool)
@@ -361,7 +465,7 @@ pub async fn patch(
         ));
     };
     let next_run_at = if enabled {
-        match ScheduleProposal::new(
+        match ScheduleProposal::with_prompt_limit(
             &row.name,
             &row.prompt,
             &row.frequency,
@@ -369,6 +473,7 @@ pub async fn patch(
             row.day_of_week,
             row.day_of_month,
             Some(&row.timezone),
+            SPEC_PROMPT_MAX,
         ) {
             Ok(proposal) => Some(proposal.next_occurrence(chrono::Utc::now())),
             Err(message) => {
