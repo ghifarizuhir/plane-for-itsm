@@ -9,17 +9,15 @@ import { Badge } from "@plane/propel/badge";
 import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // lib
 import { sanitizeAssistantHtml } from "@/lib/ai-context";
-import { runDurationInSeconds, scheduleStatusLabel, type TAiScheduleRun } from "@/lib/ai-schedule";
+import {
+  RUN_STATUS_BADGE_VARIANTS,
+  runDurationInSeconds,
+  scheduleStatusLabel,
+  type TAiScheduleRun,
+} from "@/lib/ai-schedule";
 
 type Props = {
   runs: TAiScheduleRun[];
-};
-
-const STATUS_BADGE_VARIANTS: Record<TAiScheduleRun["status"], "success" | "danger" | "brand"> = {
-  success: "success",
-  failed: "danger",
-  queued: "brand",
-  running: "brand",
 };
 
 export function ScheduleRunsList({ runs }: Props) {
@@ -34,7 +32,7 @@ export function ScheduleRunsList({ runs }: Props) {
         return (
           <li key={run.id} className="rounded-md border border-subtle bg-layer-2 p-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={STATUS_BADGE_VARIANTS[run.status]} size="sm">
+              <Badge variant={RUN_STATUS_BADGE_VARIANTS[run.status]} size="sm">
                 {scheduleStatusLabel(run.status) ?? run.status}
               </Badge>
               <span className="text-xs text-secondary">{run.trigger === "manual" ? "Manual" : "Scheduled"}</span>
