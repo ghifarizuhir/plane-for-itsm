@@ -31,6 +31,21 @@ impl DueSchedule {
     }
 }
 
+/// Tools a run may use: the validated spec subset, or every read tool for
+/// legacy rows (`spec IS NULL`).
+fn allowed_tools(spec: Option<Value>) -> Result<Vec<String>, String> {
+    match spec {
+        Some(value) => serde_json::from_value::<ai::schedule::ScheduleSpec>(value)
+            .map_err(|error| error.to_string())
+            .and_then(|spec| spec.validated())
+            .map(|spec| spec.tools),
+        None => Ok(ai::schedule::SPEC_TOOLS
+            .iter()
+            .map(|name| name.to_string())
+            .collect()),
+    }
+}
+
 /// Mark runs stuck in queued/running as failed. `running` uses `started_at`
 /// (agent timeout is 180 s, so 15 minutes means genuinely stuck); `queued`
 /// uses a horizon larger than the worst-case serial drain of one tick batch.
@@ -153,6 +168,21 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
         return Ok(());
     };
 
+    let spec_value: Option<Value> = sqlx::query_scalar("SELECT spec FROM ai_schedules WHERE id = $1")
+        .bind(run.schedule_id)
+        .fetch_optional(pool)
+        .await?
+        .flatten();
+    let allowed = match allowed_tools(spec_value) {
+        Ok(allowed) => allowed,
+        Err(error) => {
+            tracing::error!(run_id=%run.id, error=%error, "ai.schedule.run: invalid schedule spec");
+            finish_failed(pool, run.id, "invalid schedule spec").await?;
+            prune_runs(pool, run.schedule_id).await?;
+            return Ok(());
+        }
+    };
+
     let config = ai::resolve_llm_config(pool).await;
     if config.api_key.trim().is_empty() {
         finish_failed(pool, run.id, "AI is not configured for this instance").await?;
@@ -161,7 +191,8 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
     }
 
     let trace = ai::agent::new_trace();
-    let handle = ai::tools::workspace_tools(pool.clone(), run.workspace_id, trace.clone());
+    let allowed_refs: Vec<&str> = allowed.iter().map(String::as_str).collect();
+    let handle = ai::tools::read_tools(pool.clone(), run.workspace_id, trace.clone(), &allowed_refs);
     let started = std::time::Instant::now();
     let result = tokio::time::timeout(
         ai::agent::AGENT_TIMEOUT,
@@ -259,4 +290,49 @@ async fn finish_failed(pool: &PgPool, run_id: Uuid, message: &str) -> anyhow::Re
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_tools;
+    use serde_json::json;
+
+    #[test]
+    fn allowed_tools_legacy_is_all_read_tools() {
+        assert_eq!(
+            allowed_tools(None).unwrap(),
+            vec![
+                "list_projects".to_string(),
+                "count_work_items".to_string(),
+                "search_work_items".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn allowed_tools_uses_validated_spec_subset() {
+        let spec = json!({
+            "version": 1,
+            "description": "d",
+            "how_to": ["step"],
+            "tools": ["search_work_items", "list_projects"],
+            "expected_output": "o"
+        });
+        assert_eq!(
+            allowed_tools(Some(spec)).unwrap(),
+            vec!["list_projects".to_string(), "search_work_items".to_string()]
+        );
+    }
+
+    #[test]
+    fn allowed_tools_rejects_invalid_spec() {
+        let spec = json!({
+            "version": 1,
+            "description": "d",
+            "how_to": [],
+            "tools": [],
+            "expected_output": "o"
+        });
+        assert!(allowed_tools(Some(spec)).is_err());
+    }
 }
