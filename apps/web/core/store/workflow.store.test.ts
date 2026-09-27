@@ -60,15 +60,70 @@ describe("WorkflowStore.map refresh failures", () => {
     service.getWorkflowMap.mockRejectedValueOnce(new Error("boom"));
 
     await expect(store.importWorkItemTypes("acme", "p-1", ["type-1"])).resolves.toBeUndefined();
-    expect(store.mapRefreshError["p-1"]).toBeTruthy();
+    expect(store.mapRefreshError["p-1"]).toBe("refresh_failed");
   });
 
   it("membersihkan flag setelah refresh sukses", async () => {
     const { store } = makeStore();
     store.workflowMap["p-1"] = { types: [] };
-    store.mapRefreshError["p-1"] = "failed";
+    store.mapRefreshError["p-1"] = "refresh_failed";
 
     await store.importWorkItemTypes("acme", "p-1", ["type-1"]);
     expect(store.mapRefreshError["p-1"]).toBeNull();
+  });
+
+  it("refresh basi yang gagal tidak menimpa flag refresh sukses yang lebih baru", async () => {
+    const { store, service } = makeStore();
+    store.workflowMap["p-1"] = { types: [] };
+    const deferreds: { resolve: (map: TWorkflowMap) => void; reject: (error: Error) => void }[] = [];
+    service.getWorkflowMap.mockImplementation(
+      () =>
+        new Promise<TWorkflowMap>((resolve, reject) => {
+          deferreds.push({ resolve, reject });
+        })
+    );
+
+    const first = store.importWorkItemTypes("acme", "p-1", ["type-1"]);
+    const second = store.importWorkItemTypes("acme", "p-1", ["type-1"]);
+    await vi.waitFor(() => expect(deferreds.length).toBe(2));
+    // newer refresh (second) succeeds first; the older one fails afterwards
+    deferreds[1].resolve({ types: [] });
+    await second;
+    deferreds[0].reject(new Error("boom"));
+    await first;
+
+    expect(store.mapRefreshError["p-1"]).toBeNull();
+  });
+
+  it("refresh gagal terbaru tetap menandai flag walau refresh lama sukses", async () => {
+    const { store, service } = makeStore();
+    store.workflowMap["p-1"] = { types: [] };
+    const deferreds: { resolve: (map: TWorkflowMap) => void; reject: (error: Error) => void }[] = [];
+    service.getWorkflowMap.mockImplementation(
+      () =>
+        new Promise<TWorkflowMap>((resolve, reject) => {
+          deferreds.push({ resolve, reject });
+        })
+    );
+
+    const first = store.importWorkItemTypes("acme", "p-1", ["type-1"]);
+    const second = store.importWorkItemTypes("acme", "p-1", ["type-1"]);
+    await vi.waitFor(() => expect(deferreds.length).toBe(2));
+    deferreds[0].resolve({ types: [] });
+    await first;
+    deferreds[1].reject(new Error("boom"));
+    await second;
+
+    expect(store.mapRefreshError["p-1"]).toBe("refresh_failed");
+  });
+
+  it("kegagalan refresh daftar state tidak menelan warning map", async () => {
+    const { store, service, fetchProjectStates } = makeStore();
+    store.workflowMap["p-1"] = { types: [] };
+    fetchProjectStates.mockRejectedValueOnce(new Error("states down"));
+    service.getWorkflowMap.mockRejectedValueOnce(new Error("map down"));
+
+    await expect(store.importWorkItemTypes("acme", "p-1", ["type-1"])).resolves.toBeUndefined();
+    expect(store.mapRefreshError["p-1"]).toBe("refresh_failed");
   });
 });

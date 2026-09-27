@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -41,10 +41,13 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
     workflows,
     workflowStates,
     workflowTransitions,
+    mapRefreshError,
     fetchWorkflows,
     fetchWorkflowStates,
     fetchWorkflowTransitions,
   } = useWorkflow();
+  // projects whose failed map refresh already raised a toast; re-armed when the map recovers
+  const warnedMapFailures = useRef(new Set<string>());
   // derived values
   const states = workflowStates[workflowId];
   const transitions = workflowTransitions[workflowId];
@@ -52,6 +55,8 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   // Capturing the resolved strings keeps the dependency values stable across renders.
   const fetchErrorTitle = t("common.error.label");
   const fetchErrorMessage = t("common.error.message");
+  const mapRefreshWarningTitle = t("common.warning");
+  const mapRefreshWarningMessage = t("workspace_settings.settings.work_item_types.map_refresh_failed");
   const workflowExists = workflows?.some((workflow) => workflow.id === workflowId) ?? false;
   const isWorkflowNotFound = workflows !== undefined && !workflowExists;
 
@@ -102,6 +107,24 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   useEffect(() => {
     loadWorkflows();
   }, [loadWorkflows]);
+
+  // every editor mutation refreshes the affected project workflow maps; if that
+  // refresh failed, board columns can be stale even though the edit landed
+  useEffect(() => {
+    Object.entries(mapRefreshError).forEach(([projectId, failure]) => {
+      if (!failure) {
+        warnedMapFailures.current.delete(projectId);
+        return;
+      }
+      if (warnedMapFailures.current.has(projectId)) return;
+      warnedMapFailures.current.add(projectId);
+      setToast({
+        type: TOAST_TYPE.WARNING,
+        title: mapRefreshWarningTitle,
+        message: mapRefreshWarningMessage,
+      });
+    });
+  }, [mapRefreshError, mapRefreshWarningTitle, mapRefreshWarningMessage]);
 
   const handleRetryEditor = () => {
     loadStates();

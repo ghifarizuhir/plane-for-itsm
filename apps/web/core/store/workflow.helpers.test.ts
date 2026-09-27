@@ -7,8 +7,10 @@ import {
   getSingleWorkItemTypeId,
   getTypeDefaultStateId,
   isTypedState,
+  MAX_WORKFLOW_MAP_FETCH_RETRIES,
   resolveSelectableStateIds,
   resolveStateColumns,
+  shouldRetryWorkflowMapFetch,
 } from "./workflow.helpers";
 
 const mapType: TWorkflowMapType = {
@@ -342,5 +344,14 @@ describe("isTypedState", () => {
 
   it("false bila field mapping tidak ada", () => {
     expect(isTypedState({})).toBe(false);
+  });
+});
+
+describe("shouldRetryWorkflowMapFetch", () => {
+  it("mengizinkan retry selama di bawah budget, lalu berhenti", () => {
+    expect(shouldRetryWorkflowMapFetch(0)).toBe(true);
+    expect(shouldRetryWorkflowMapFetch(1)).toBe(true);
+    expect(shouldRetryWorkflowMapFetch(MAX_WORKFLOW_MAP_FETCH_RETRIES)).toBe(false);
+    expect(shouldRetryWorkflowMapFetch(MAX_WORKFLOW_MAP_FETCH_RETRIES + 1)).toBe(false);
   });
 });

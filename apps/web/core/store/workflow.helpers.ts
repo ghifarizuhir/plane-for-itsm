@@ -18,6 +18,12 @@ export const getTypeDefaultStateId = (
   typeId: string | null | undefined
 ): string | null => findWorkflowMapType(map, typeId)?.default_state_id ?? null;
 
+/** Retry budget for the create form's workflow-map fetch, per project. */
+export const MAX_WORKFLOW_MAP_FETCH_RETRIES = 2;
+
+/** `true` while the attempt count is still below the retry budget. */
+export const shouldRetryWorkflowMapFetch = (attempts: number): boolean => attempts < MAX_WORKFLOW_MAP_FETCH_RETRIES;
+
 type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
 type TRichIssueFilterBag = { richFilters?: TWorkItemFilterExpression };
 

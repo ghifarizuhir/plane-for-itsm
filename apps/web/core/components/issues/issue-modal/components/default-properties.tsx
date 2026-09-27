@@ -35,7 +35,7 @@ import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // store
-import { getTypeDefaultStateId } from "@/store/workflow.helpers";
+import { getTypeDefaultStateId, shouldRetryWorkflowMapFetch } from "@/store/workflow.helpers";
 
 type TIssueDefaultPropertiesProps = {
   control: Control<TIssue>;
@@ -70,6 +70,10 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const [workflowMapRetry, setWorkflowMapRetry] = useState(0);
   // refs
   const requestedWorkflowMaps = useRef(new Set<string>());
+  // per-project retry budget so one failing project cannot spend another's attempts
+  const workflowMapRetryCount = useRef(new Map<string, number>());
+  // pending retry timers, cleared on unmount so a late callback never fires setState
+  const workflowMapRetryTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
   // store hooks
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
@@ -94,11 +98,27 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
     requestedWorkflowMaps.current.add(projectId);
     void fetchWorkflowMap(workspaceSlug, projectId).catch(() => {
       requestedWorkflowMaps.current.delete(projectId);
-      // retry terbatas (maks 2) supaya kegagalan sesaat tidak menghilangkan
-      // dropdown Type sampai modal di-remount
-      if (workflowMapRetry < 2) setTimeout(() => setWorkflowMapRetry((value) => value + 1), 1500);
+      // bounded per-project retry so a transient failure does not hide the Type
+      // dropdown until the modal remounts
+      const attempts = workflowMapRetryCount.current.get(projectId) ?? 0;
+      if (!shouldRetryWorkflowMapFetch(attempts)) return;
+      workflowMapRetryCount.current.set(projectId, attempts + 1);
+      const timer = setTimeout(() => {
+        workflowMapRetryTimers.current.delete(timer);
+        setWorkflowMapRetry((value) => value + 1);
+      }, 1500);
+      workflowMapRetryTimers.current.add(timer);
     });
   }, [fetchWorkflowMap, getWorkflowMap, projectId, workspaceSlug, workflowMapRetry]);
+
+  // clear pending retry timers on unmount; the Set holds handles created above
+  useEffect(() => {
+    const timers = workflowMapRetryTimers.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 

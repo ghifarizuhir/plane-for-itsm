@@ -29,8 +29,8 @@ export interface IWorkflowStore {
   workflowStates: Record<string, TWorkflowState[]>;
   workflowTransitions: Record<string, TWorkflowTransition[]>;
   workflowMap: Record<string, TWorkflowMap>;
-  // pesan kegagalan refresh map per project (dibaca UI untuk toast peringatan)
-  mapRefreshError: Record<string, string | null>;
+  // per-project workflow-map refresh failure (read by the UI to show a warning toast)
+  mapRefreshError: Record<string, "refresh_failed" | null>;
   // fetch actions
   fetchWorkflows(workspaceSlug: string): Promise<TWorkflow[]>;
   fetchWorkflowStates(workspaceSlug: string, workflowId: string): Promise<TWorkflowState[]>;
@@ -75,10 +75,13 @@ export class WorkflowStore implements IWorkflowStore {
   workflowStates: Record<string, TWorkflowState[]> = {};
   workflowTransitions: Record<string, TWorkflowTransition[]> = {};
   workflowMap: Record<string, TWorkflowMap> = {};
-  // pesan kegagalan refresh map per project (dibaca UI untuk toast peringatan)
-  mapRefreshError: Record<string, string | null> = {};
+  // per-project workflow-map refresh failure (read by the UI to show a warning toast)
+  mapRefreshError: Record<string, "refresh_failed" | null> = {};
   // request sequencing so a slow response cannot overwrite a newer workflow map (plain field, not observable)
   private workflowMapRequestId: Record<string, number> = {};
+  // same sequencing for the failure flag: an older failed refresh must not
+  // re-flag a project whose newer refresh already succeeded
+  private mapRefreshRequestId: Record<string, number> = {};
   // services
   private service = new WorkflowService();
   private _rootStore: CoreRootStore;
@@ -293,14 +296,18 @@ export class WorkflowStore implements IWorkflowStore {
       : Object.keys(this.workflowMap);
     await Promise.all(
       targets.map(async (projectId) => {
+        const requestId = (this.mapRefreshRequestId[projectId] ?? 0) + 1;
+        this.mapRefreshRequestId[projectId] = requestId;
         try {
           await this.fetchWorkflowMap(workspaceSlug, projectId);
           runInAction(() => {
-            this.mapRefreshError[projectId] = null;
+            // only the latest refresh for this project may clear the flag
+            if (this.mapRefreshRequestId[projectId] === requestId) this.mapRefreshError[projectId] = null;
           });
         } catch {
           runInAction(() => {
-            this.mapRefreshError[projectId] = "refresh_failed";
+            // and only the latest failed refresh may raise it
+            if (this.mapRefreshRequestId[projectId] === requestId) this.mapRefreshError[projectId] = "refresh_failed";
           });
         }
       })
