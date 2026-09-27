@@ -209,6 +209,7 @@ pub async fn workspace_ai_assistant(
                     &text,
                     Vec::new(),
                     None,
+                    Vec::new(),
                     &conversation,
                     &user_message,
                     &assistant_message,

@@ -28,7 +28,9 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
 use ai::llm::{host_of, resolve_llm_config, LlmError};
 
-pub use ai::agent::{new_trace, pending_action, prompt_from_body, run_agent, AGENT_TIMEOUT};
+pub use ai::agent::{
+    new_trace, pending_action, pending_actions, prompt_from_body, run_agent, AGENT_TIMEOUT,
+};
 
 // Used by the unit tests below only.
 #[cfg(test)]
@@ -42,15 +44,36 @@ pub mod tools {
     pub use ai::tools::*;
 }
 
+/// Metadata entry for every `create_work_item` proposal in this turn: one
+/// server-generated key per proposal so the FE can persist a decision per card.
+pub fn work_item_proposals_metadata(trace: &ToolTrace) -> Vec<Value> {
+    trace
+        .lock()
+        .map(|recorded| {
+            recorded
+                .iter()
+                .filter(|call| call.name == ai::tools::CREATE_WORK_ITEM_NAME)
+                .map(|call| json!({"key": Uuid::new_v4(), "proposal": call.arguments.clone()}))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// 200 response body: raw text, newline-mapped HTML for the chat bubble, the
-/// recorded tool calls, and the last `create_schedule` proposal (if any) for
-/// the FE confirmation card.
-pub fn success_body(text: &str, tool_calls: Vec<Value>, action: Option<Value>) -> Value {
+/// recorded tool calls, the last `create_schedule` proposal (if any), and all
+/// proposals of the turn (including `create_work_item`) for the FE cards.
+pub fn success_body(
+    text: &str,
+    tool_calls: Vec<Value>,
+    action: Option<Value>,
+    pending_actions: Vec<Value>,
+) -> Value {
     json!({
         "response": text,
         "response_html": crate::routes::ai::response_html(text),
         "tool_calls": tool_calls,
         "pending_action": action,
+        "pending_actions": pending_actions,
     })
 }
 
@@ -60,11 +83,12 @@ pub(crate) fn chat_success_body(
     text: &str,
     tool_calls: Vec<Value>,
     action: Option<Value>,
+    pending_actions: Vec<Value>,
     conversation: &ConversationRow,
     user_message: &MessageRow,
     assistant_message: &MessageRow,
 ) -> Value {
-    let mut body = success_body(text, tool_calls, action);
+    let mut body = success_body(text, tool_calls, action, pending_actions);
     body["conversation"] = crate::routes::ai_conversations::conversation_json(conversation);
     body["user_message"] = message_json(user_message);
     body["assistant_message"] = message_json(assistant_message);
@@ -182,11 +206,16 @@ pub async fn workspace_ai_agent(
                 })
                 .unwrap_or_default();
             let action = pending_action(&trace);
+            let actions = pending_actions(&trace);
+            let work_items = work_item_proposals_metadata(&trace);
             let mut metadata = json!({ "is_error": false });
             if let Some(action) = action.as_ref() {
                 metadata["schedule_proposal"] = action["proposal"].clone();
                 metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
                 metadata["schedule_decision"] = json!("pending");
+            }
+            if !work_items.is_empty() {
+                metadata["work_item_proposals"] = json!(work_items);
             }
             // Assistant message + prune + updated_at in ONE transaction. A
             // conversation deleted mid-turn (row gone / FK violation) → 404.
@@ -217,6 +246,7 @@ pub async fn workspace_ai_agent(
                     &text,
                     tool_calls,
                     action,
+                    actions,
                     &conversation,
                     &user_message,
                     &assistant_message,
@@ -291,18 +321,53 @@ mod tests {
 
     #[test]
     fn success_body_maps_newlines_and_keeps_tool_calls() {
-        let body = success_body("line1\nline2", vec![json!({"name": "list_projects"})], None);
+        let body = success_body(
+            "line1\nline2",
+            vec![json!({"name": "list_projects"})],
+            None,
+            vec![],
+        );
         assert_eq!(body["response"], json!("line1\nline2"));
         assert_eq!(body["response_html"], json!("line1<br/>line2"));
         assert_eq!(body["tool_calls"][0]["name"], json!("list_projects"));
         assert_eq!(body["pending_action"], json!(null));
+        assert_eq!(body["pending_actions"], json!([]));
     }
 
     #[test]
     fn success_body_carries_pending_action() {
         let action = json!({"kind": "create_schedule", "proposal": {"frequency": "daily"}});
-        let body = success_body("done", vec![], Some(action.clone()));
+        let body = success_body("done", vec![], Some(action.clone()), vec![action.clone()]);
         assert_eq!(body["pending_action"], action);
+        assert_eq!(body["pending_actions"][0], action);
+    }
+
+    #[test]
+    fn success_body_carries_work_item_pending_actions() {
+        let action = json!({"kind": "create_work_item", "proposal": {"name": "Fix pump"}});
+        let body = success_body("done", vec![], None, vec![action.clone()]);
+        assert_eq!(body["pending_actions"][0], action);
+    }
+
+    #[test]
+    fn work_item_proposals_metadata_assigns_a_key_per_proposal() {
+        let trace = new_trace();
+        record(
+            &trace,
+            ai::tools::CREATE_WORK_ITEM_NAME,
+            &json!({"name": "Fix pump"}),
+        );
+        record(
+            &trace,
+            ai::tools::CREATE_WORK_ITEM_NAME,
+            &json!({"name": "Swap filter"}),
+        );
+        let proposals = work_item_proposals_metadata(&trace);
+        assert_eq!(proposals.len(), 2);
+        assert_ne!(proposals[0]["key"], proposals[1]["key"]);
+        assert_eq!(proposals[0]["proposal"]["name"], json!("Fix pump"));
+        assert_eq!(proposals[1]["proposal"]["name"], json!("Swap filter"));
+        assert!(proposals[0]["key"].as_str().is_some());
     }
 
     #[test]
