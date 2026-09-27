@@ -31,6 +31,7 @@ import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
 // components
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
+import { WorkItemProposalCard } from "./work-item-proposal-card";
 
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
@@ -67,6 +68,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     setHistoryOpen,
     confirmScheduleProposal,
     resolveScheduleProposal,
+    confirmWorkItemProposal,
+    resolveWorkItemProposal,
   } = useAiAssistant();
   const {
     peekIssue,
@@ -126,7 +129,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   if (!config?.has_llm_configured) return null;
 
   const trimmedQuestion = question.trimStart().toLowerCase();
-  const showScheduleHint = trimmedQuestion.startsWith("/") && !trimmedQuestion.startsWith("/schedule");
+  const showSlashHint =
+    trimmedQuestion.startsWith("/") && !trimmedQuestion.startsWith("/schedule") && !trimmedQuestion.startsWith("/task");
 
   return (
     <aside
@@ -315,6 +319,15 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                               onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
                             />
                           )}
+                          {message.workItemProposals?.map((entry) => (
+                            <WorkItemProposalCard
+                              key={entry.key}
+                              proposal={entry.proposal}
+                              decision={message.workItemDecisions?.[entry.key]}
+                              onConfirm={(payload) => confirmWorkItemProposal(message.id, entry.key, payload)}
+                              onCancel={() => resolveWorkItemProposal(message.id, entry.key)}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
@@ -346,17 +359,29 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               {/* composer */}
               <div className="border-t border-subtle px-4 pt-2.5 pb-3">
                 <div className="focus-within:border-accent-primary rounded-lg border border-subtle bg-layer-1 transition-colors">
-                  {showScheduleHint && !isGenerating && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuestion("/schedule ");
-                        composerRef.current?.focus();
-                      }}
-                      className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
-                    >
-                      /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
-                    </button>
+                  {showSlashHint && !isGenerating && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuestion("/schedule ");
+                          composerRef.current?.focus();
+                        }}
+                        className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
+                      >
+                        /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuestion("/task ");
+                          composerRef.current?.focus();
+                        }}
+                        className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
+                      >
+                        /task — <span className="text-tertiary">Create a work item from chat</span>
+                      </button>
+                    </>
                   )}
                   <textarea
                     ref={composerRef}
