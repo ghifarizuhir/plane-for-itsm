@@ -5,6 +5,12 @@ export const findWorkflowMapType = (
   typeId: string | null | undefined
 ): TWorkflowMapType | undefined => (typeId ? map?.types.find((type) => type.type_id === typeId) : undefined);
 
+/** State default satu type dari map, atau `null` bila type/default tidak ada. */
+export const getTypeDefaultStateId = (
+  map: TWorkflowMap | undefined,
+  typeId: string | null | undefined
+): string | null => findWorkflowMapType(map, typeId)?.default_state_id ?? null;
+
 type TLegacyIssueFilterBag = { filters?: IIssueFilterOptions | null };
 
 /**
@@ -44,22 +50,30 @@ export const allowedTargetStateIds = (
 type TSelectableStateIdsOptions = {
   stateIds: string[];
   currentStateId?: string | null;
+  /** Dipakai saat create tanpa type untuk menyaring state mirror bertipe. */
+  getStateById?: (stateId: string) => IState | undefined;
   isForWorkItemCreation?: boolean;
 };
 
 /**
  * State ids yang boleh dipilih di dropdown untuk `mapType`.
  *
- * - Tanpa `mapType` (type tidak ada / map belum termuat) → `stateIds` apa adanya.
- * - Create (`isForWorkItemCreation`) → irisan state type dengan `stateIds`, tanpa filter
+ * - Tanpa `mapType` saat edit (type legacy / map belum termuat) → `stateIds` apa adanya.
+ * - Tanpa `mapType` saat create (belum ada type terpilih) → hanya state legacy/untyped;
+ *   state mirror bertipe akan ditolak backend bila dikirim tanpa `type_id` (`validate_create_refs`).
+ * - Create dengan `mapType` → irisan state type dengan `stateIds`, tanpa filter
  *   transisi (state sekarang belum ada; urutan mengikuti `stateIds`).
- * - Edit → hanya state sekarang + tujuan transisi valid; state sekarang selalu tampil.
+ * - Edit dengan `mapType` → hanya state sekarang + tujuan transisi valid; state sekarang selalu tampil.
  */
 export const resolveSelectableStateIds = (
   mapType: TWorkflowMapType | undefined,
-  { stateIds, currentStateId, isForWorkItemCreation }: TSelectableStateIdsOptions
+  { stateIds, currentStateId, getStateById, isForWorkItemCreation }: TSelectableStateIdsOptions
 ): string[] => {
-  if (!mapType) return stateIds;
+  if (!mapType) {
+    if (isForWorkItemCreation && getStateById)
+      return stateIds.filter((stateId) => !isTypedState(getStateById(stateId) ?? {}));
+    return stateIds;
+  }
   const allowedStateIds = isForWorkItemCreation
     ? mapType.states.map((state) => state.id)
     : allowedTargetStateIds(mapType, currentStateId);

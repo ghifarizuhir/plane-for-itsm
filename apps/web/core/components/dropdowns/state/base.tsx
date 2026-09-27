@@ -103,6 +103,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   const effectiveStateIds = resolveSelectableStateIds(mapType, {
     stateIds,
     currentStateId: isForWorkItemCreation ? currentStateId : (currentStateId ?? value),
+    getStateById,
     isForWorkItemCreation,
   });
   const statesList = effectiveStateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);

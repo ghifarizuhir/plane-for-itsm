@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import type { Control } from "react-hook-form";
 import { Controller, useFormContext } from "react-hook-form";
@@ -35,7 +35,7 @@ import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // store
-import { findWorkflowMapType } from "@/store/workflow.helpers";
+import { getTypeDefaultStateId } from "@/store/workflow.helpers";
 
 type TIssueDefaultPropertiesProps = {
   control: Control<TIssue>;
@@ -67,11 +67,13 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
+  // refs
+  const requestedWorkflowMaps = useRef(new Set<string>());
   // store hooks
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
-  const { getWorkflowMap } = useWorkflow();
+  const { fetchWorkflowMap, getWorkflowMap } = useWorkflow();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
   // form context
@@ -81,6 +83,16 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const typeId = watch("type_id");
   const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
   const workflowMapTypes = workflowMap?.types ?? [];
+
+  // the map is fetched with the project layout, but the create modal can be opened for a
+  // project not visited this session (e.g. cross-project create), so fetch it lazily.
+  // the ref prevents duplicate in-flight requests; the store discards stale responses.
+  useEffect(() => {
+    if (!projectId || !workspaceSlug || getWorkflowMap(projectId) !== undefined) return;
+    if (requestedWorkflowMaps.current.has(projectId)) return;
+    requestedWorkflowMaps.current.add(projectId);
+    void fetchWorkflowMap(workspaceSlug, projectId).catch(() => requestedWorkflowMaps.current.delete(projectId));
+  }, [fetchWorkflowMap, getWorkflowMap, projectId, workspaceSlug]);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -105,9 +117,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 value={value}
                 onChange={(newTypeId) => {
                   onChange(newTypeId);
-                  setValue("state_id", findWorkflowMapType(workflowMap, newTypeId)?.default_state_id ?? null, {
-                    shouldValidate: true,
-                  });
+                  setValue("state_id", getTypeDefaultStateId(workflowMap, newTypeId), { shouldValidate: true });
                   handleFormChange();
                 }}
                 projectId={projectId ?? undefined}

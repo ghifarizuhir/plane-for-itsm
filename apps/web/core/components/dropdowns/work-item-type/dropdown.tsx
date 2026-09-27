@@ -11,7 +11,7 @@ import { Combobox } from "@headlessui/react";
 import { usePopper } from "@plane/hooks";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { ChevronDownOutline, TickOutline } from "@makeplane/propel/icons";
+import { ChevronDownOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 // ui
 import { ComboDropDown } from "@plane/ui";
 // helpers
@@ -51,18 +51,28 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
     value,
   } = props;
   // states
+  const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   // popper-js refs
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null);
   // store hooks
   const { t } = useTranslation();
   const { getWorkflowMap } = useWorkflow();
-  // derived values: only enabled types with a workflow show up in the project workflow map
+  // derived values: the project workflow map exposes types with an attached workflow
+  // (the API filters deleted/workflow presence; is_active is not filtered yet)
   const mapTypes = projectId ? (getWorkflowMap(projectId)?.types ?? []) : [];
   const selectedType = mapTypes.find((type) => type.type_id === value);
+  const options = mapTypes.map((type) => ({
+    value: type.type_id,
+    query: type.type_name,
+    type,
+  }));
+  const filteredOptions =
+    query === "" ? options : options.filter((option) => option.query.toLowerCase().includes(query.toLowerCase()));
   // popper-js init
   const { styles, attributes } = usePopper(referenceElement, popperElement, {
     placement: placement ?? "bottom-start",
@@ -77,11 +87,14 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
     ],
   });
   // dropdown init
-  const { handleClose, handleKeyDown, handleOnClick } = useDropdown({
+  const { handleClose, handleKeyDown, handleOnClick, searchInputKeyDown } = useDropdown({
     dropdownRef,
+    inputRef,
     isOpen,
     onClose,
+    query,
     setIsOpen,
+    setQuery,
   });
 
   const dropdownOnChange = (typeId: string) => {
@@ -153,31 +166,48 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
             modal={false}
           >
             <div className="my-1 w-48 rounded-sm border-[0.5px] border-strong bg-surface-1 px-2 py-2.5 text-11 shadow-raised-200 focus:outline-none">
-              <div className="max-h-48 space-y-1 overflow-y-scroll">
-                {mapTypes.map((type) => (
-                  <Combobox.Option
-                    as="li"
-                    key={type.type_id}
-                    value={type.type_id}
-                    className={({ active, selected }) =>
-                      cn(
-                        "flex w-full cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none",
-                        {
-                          "bg-layer-transparent-hover": active,
-                          "text-primary": selected,
-                          "text-secondary": !selected,
-                        }
-                      )
-                    }
-                  >
-                    {({ selected }) => (
-                      <>
-                        <span className="flex-grow truncate">{type.type_name}</span>
-                        {selected && <TickOutline className="h-3.5 w-3.5 flex-shrink-0" />}
-                      </>
-                    )}
-                  </Combobox.Option>
-                ))}
+              <div className="flex items-center gap-1.5 rounded-sm border border-subtle bg-surface-2 px-2">
+                <SearchOutline className="h-3.5 w-3.5 text-placeholder" />
+                <Combobox.Input
+                  as="input"
+                  ref={inputRef}
+                  className="w-full bg-transparent py-1 text-11 text-secondary placeholder:text-placeholder focus:outline-none"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("common.search.label")}
+                  displayValue={(assigned: any) => assigned?.name}
+                  onKeyDown={searchInputKeyDown}
+                />
+              </div>
+              <div className="mt-2 max-h-48 space-y-1 overflow-y-scroll">
+                {filteredOptions.length > 0 ? (
+                  filteredOptions.map((option) => (
+                    <Combobox.Option
+                      as="li"
+                      key={option.value}
+                      value={option.value}
+                      className={({ active, selected }) =>
+                        cn(
+                          "flex w-full cursor-pointer items-center justify-between gap-2 truncate rounded-sm px-1 py-1.5 select-none",
+                          {
+                            "bg-layer-transparent-hover": active,
+                            "text-primary": selected,
+                            "text-secondary": !selected,
+                          }
+                        )
+                      }
+                    >
+                      {({ selected }) => (
+                        <>
+                          <span className="flex-grow truncate">{option.type.type_name}</span>
+                          {selected && <TickOutline className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />}
+                        </>
+                      )}
+                    </Combobox.Option>
+                  ))
+                ) : (
+                  <p className="px-1.5 py-1 text-placeholder italic">{t("no_matching_results")}</p>
+                )}
               </div>
             </div>
           </Combobox.Options>,

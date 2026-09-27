@@ -5,6 +5,7 @@ import {
   buildTransitionMatrix,
   findWorkflowMapType,
   getSingleWorkItemTypeId,
+  getTypeDefaultStateId,
   isTypedState,
   resolveSelectableStateIds,
   resolveStateColumns,
@@ -24,6 +25,16 @@ const mapType: TWorkflowMapType = {
     { from_state_id: "s-new", to_state_id: "s-progress" },
     { from_state_id: "s-progress", to_state_id: "s-closed" },
   ],
+};
+
+// mirror state bertipe punya `type_id`/`workflow_state_id`; state legacy tidak
+const stateById = (stateId: string): IState | undefined => {
+  const typed = ["s-new", "s-progress", "s-closed"].includes(stateId);
+  return {
+    id: stateId,
+    type_id: typed ? "type-1" : null,
+    workflow_state_id: typed ? `ws-${stateId}` : null,
+  } as IState;
 };
 
 describe("allowedTargetStateIds", () => {
@@ -55,20 +66,36 @@ describe("allowedTargetStateIds", () => {
 describe("resolveSelectableStateIds", () => {
   it.each([
     {
-      label: "map absen → stateIds apa adanya",
+      label: "map absen saat edit → stateIds apa adanya, state bertipe tetap tampil",
       map: undefined,
-      stateIds: ["a", "b"],
-      currentStateId: "a",
+      stateIds: ["legacy", "s-new"],
+      currentStateId: "legacy",
       isForWorkItemCreation: false,
-      expected: ["a", "b"],
+      expected: ["legacy", "s-new"],
     },
     {
-      label: "create tanpa map → stateIds apa adanya",
+      label: "create tanpa map → hanya state untyped",
       map: undefined,
-      stateIds: ["a", "b"],
+      stateIds: ["legacy", "s-new"],
       currentStateId: null,
       isForWorkItemCreation: true,
-      expected: ["a", "b"],
+      expected: ["legacy"],
+    },
+    {
+      label: "create tanpa map dan semua state bertipe → kosong",
+      map: undefined,
+      stateIds: ["s-new", "s-progress"],
+      currentStateId: null,
+      isForWorkItemCreation: true,
+      expected: [],
+    },
+    {
+      label: "create tanpa map dengan current type terpilih → tidak dipaksa tampil bila current bertipe",
+      map: undefined,
+      stateIds: ["legacy", "s-new"],
+      currentStateId: "s-new",
+      isForWorkItemCreation: true,
+      expected: ["legacy"],
     },
     {
       label: "create dengan map → irisan state type, urut stateIds",
@@ -143,18 +170,27 @@ describe("resolveSelectableStateIds", () => {
       expected: [],
     },
   ])("$label", ({ map, stateIds, currentStateId, isForWorkItemCreation, expected }) => {
-    expect(resolveSelectableStateIds(map, { stateIds, currentStateId, isForWorkItemCreation })).toEqual(expected);
+    expect(
+      resolveSelectableStateIds(map, { stateIds, currentStateId, getStateById: stateById, isForWorkItemCreation })
+    ).toEqual(expected);
   });
 
   it("type tidak ada di map → stateIds apa adanya", () => {
     const resolvedMapType = findWorkflowMapType({ types: [mapType] }, "type-lain");
     const stateIds = ["legacy", "s-new"];
-    expect(resolveSelectableStateIds(resolvedMapType, { stateIds, currentStateId: "legacy" })).toEqual(stateIds);
+    expect(
+      resolveSelectableStateIds(resolvedMapType, { stateIds, currentStateId: "legacy", getStateById: stateById })
+    ).toEqual(stateIds);
   });
 
   it("tanpa map mengembalikan referensi stateIds yang sama", () => {
     const stateIds = ["s-new"];
     expect(resolveSelectableStateIds(undefined, { stateIds })).toBe(stateIds);
+  });
+
+  it("create tanpa resolver state mengembalikan stateIds apa adanya", () => {
+    const stateIds = ["legacy", "s-new"];
+    expect(resolveSelectableStateIds(undefined, { stateIds, isForWorkItemCreation: true })).toBe(stateIds);
   });
 });
 
@@ -230,6 +266,27 @@ describe("findWorkflowMapType", () => {
   it("menemukan type dari map", () => {
     expect(findWorkflowMapType({ types: [mapType] }, "type-1")?.type_name).toBe("Incident");
     expect(findWorkflowMapType({ types: [mapType] }, null)).toBeUndefined();
+  });
+});
+
+describe("getTypeDefaultStateId", () => {
+  it("mengembalikan default_state_id saat type ditemukan", () => {
+    expect(getTypeDefaultStateId({ types: [mapType] }, "type-1")).toBe("s-new");
+  });
+
+  it("null saat type ditemukan tapi default_state_id null", () => {
+    const noDefault: TWorkflowMapType = { ...mapType, default_state_id: null };
+    expect(getTypeDefaultStateId({ types: [noDefault] }, "type-1")).toBeNull();
+  });
+
+  it("null saat type tidak ada di map", () => {
+    expect(getTypeDefaultStateId({ types: [mapType] }, "type-lain")).toBeNull();
+    expect(getTypeDefaultStateId({ types: [mapType] }, null)).toBeNull();
+    expect(getTypeDefaultStateId({ types: [mapType] }, undefined)).toBeNull();
+  });
+
+  it("null saat map absen", () => {
+    expect(getTypeDefaultStateId(undefined, "type-1")).toBeNull();
   });
 });
 
