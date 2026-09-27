@@ -377,9 +377,203 @@ impl Tool for CreateSchedule {
     }
 }
 
+pub const CREATE_WORK_ITEM_NAME: &str = "create_work_item";
+
+pub const WORK_ITEM_PROJECT_MAX: usize = 100;
+pub const WORK_ITEM_NAME_MAX: usize = 255;
+pub const WORK_ITEM_DESCRIPTION_MAX: usize = 5000;
+pub const WORK_ITEM_STATE_MAX: usize = 100;
+pub const WORK_ITEM_REFS_MAX: usize = 10;
+pub const WORK_ITEM_REF_MAX: usize = 100;
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct CreateWorkItemArgs {
+    /// Project identifier (e.g. "LTS") or project name the work item belongs to. Required.
+    pub project: String,
+    /// Short work item title (1-255 characters).
+    pub name: String,
+    /// Plain-text description or markdown (max 5000 characters).
+    pub description: Option<String>,
+    /// One of: urgent, high, medium, low, none.
+    pub priority: Option<String>,
+    /// State name to start in, e.g. "In Progress". Omitted means the project default.
+    pub state: Option<String>,
+    /// Assignee display names or emails (max 10).
+    pub assignees: Option<Vec<String>>,
+    /// Label names (max 10).
+    pub labels: Option<Vec<String>>,
+    /// Start date "YYYY-MM-DD".
+    pub start_date: Option<String>,
+    /// Target date "YYYY-MM-DD"; must not be before start_date.
+    pub target_date: Option<String>,
+}
+
+/// Normalized proposal recorded in the trace and rendered as a confirmation card.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkItemProposal {
+    pub project: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub priority: Option<String>,
+    pub state: Option<String>,
+    pub assignees: Vec<String>,
+    pub labels: Vec<String>,
+    pub start_date: Option<String>,
+    pub target_date: Option<String>,
+}
+
+fn bounded_ref_list(
+    values: Option<Vec<String>>,
+    label: &str,
+) -> Result<Vec<String>, ToolExecutionError> {
+    let values = values.unwrap_or_default();
+    if values.len() > WORK_ITEM_REFS_MAX {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "at most {WORK_ITEM_REFS_MAX} {label} are allowed"
+        )));
+    }
+    let mut seen: Vec<String> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "{label} entries must not be empty"
+            )));
+        }
+        if trimmed.chars().count() > WORK_ITEM_REF_MAX {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "{label} entries must be at most {WORK_ITEM_REF_MAX} characters"
+            )));
+        }
+        let key = trimmed.to_ascii_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        out.push(trimmed.to_string());
+    }
+    Ok(out)
+}
+
+fn parse_iso_date(value: &str, label: &str) -> Result<chrono::NaiveDate, ToolExecutionError> {
+    chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
+        .map_err(|_| ToolExecutionError::invalid_args(format!("{label} must be YYYY-MM-DD")))
+}
+
+/// Validate raw tool args into a normalized work item proposal. Human-readable
+/// names (state, assignees, labels) are kept as text; the UI resolves them.
+pub fn work_item_proposal_from_args(
+    args: CreateWorkItemArgs,
+) -> Result<WorkItemProposal, ToolExecutionError> {
+    let project = args.project.trim();
+    if project.is_empty() {
+        return Err(ToolExecutionError::invalid_args("project is required"));
+    }
+    if project.chars().count() > WORK_ITEM_PROJECT_MAX {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "project must be at most {WORK_ITEM_PROJECT_MAX} characters"
+        )));
+    }
+    let name = args.name.trim();
+    if name.is_empty() {
+        return Err(ToolExecutionError::invalid_args("name is required"));
+    }
+    if name.chars().count() > WORK_ITEM_NAME_MAX {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "name must be at most {WORK_ITEM_NAME_MAX} characters"
+        )));
+    }
+    let description = optional_text(args.description.as_deref());
+    if let Some(description) = description.as_ref() {
+        if description.chars().count() > WORK_ITEM_DESCRIPTION_MAX {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "description must be at most {WORK_ITEM_DESCRIPTION_MAX} characters"
+            )));
+        }
+    }
+    let priority = priority_arg(args.priority.as_deref())?;
+    let state = optional_text(args.state.as_deref());
+    if let Some(state) = state.as_ref() {
+        if state.chars().count() > WORK_ITEM_STATE_MAX {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "state must be at most {WORK_ITEM_STATE_MAX} characters"
+            )));
+        }
+    }
+    let assignees = bounded_ref_list(args.assignees, "assignees")?;
+    let labels = bounded_ref_list(args.labels, "labels")?;
+    let start_date = args
+        .start_date
+        .as_deref()
+        .map(|value| parse_iso_date(value, "start_date"))
+        .transpose()?;
+    let target_date = args
+        .target_date
+        .as_deref()
+        .map(|value| parse_iso_date(value, "target_date"))
+        .transpose()?;
+    if let (Some(start_date), Some(target_date)) = (start_date, target_date) {
+        if start_date > target_date {
+            return Err(ToolExecutionError::invalid_args(
+                "start_date must not be after target_date",
+            ));
+        }
+    }
+    Ok(WorkItemProposal {
+        project: project.to_string(),
+        name: name.to_string(),
+        description,
+        priority,
+        state,
+        assignees,
+        labels,
+        start_date: start_date.map(|date| date.to_string()),
+        target_date: target_date.map(|date| date.to_string()),
+    })
+}
+
+pub struct CreateWorkItem {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateWorkItem {
+    const NAME: &'static str = CREATE_WORK_ITEM_NAME;
+    type Args = CreateWorkItemArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose creating one work item in a named project for this workspace. \
+         Only call this when the user clearly asks to create a work item or task \
+         (natural language or a message starting with /task), and only after the \
+         project is known: never guess the project, ask when it is missing or \
+         ambiguous. Fill what you can from the conversation (title, description, \
+         priority, state, assignee names or emails, label names, dates) and leave \
+         the rest out. The user must confirm and may edit every field in the UI \
+         before anything is saved. Never claim the work item exists until they \
+         confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateWorkItemArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = work_item_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("WorkItemProposal serializes"))
+    }
+}
+
 /// Build the production tool server: three read-only tools plus the
-/// `create_schedule` proposal tool, all scoped to one workspace and sharing the
-/// caller's trace handle.
+/// `create_schedule` and `create_work_item` proposal tools, all scoped to one
+/// workspace and sharing the caller's trace handle.
 pub fn workspace_tools(
     pool: PgPool,
     workspace_id: Uuid,
@@ -402,6 +596,9 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
+            trace: trace.clone(),
+        })
+        .tool(CreateWorkItem {
             trace: trace.clone(),
         })
         .run()
@@ -780,5 +977,164 @@ mod tests {
             crate::agent::new_trace(),
             &["list_projects"],
         );
+    }
+
+    fn base_work_item_args() -> CreateWorkItemArgs {
+        CreateWorkItemArgs {
+            project: "LTS".to_string(),
+            name: "Fix pump".to_string(),
+            description: None,
+            priority: None,
+            state: None,
+            assignees: None,
+            labels: None,
+            start_date: None,
+            target_date: None,
+        }
+    }
+
+    #[test]
+    fn create_work_item_normalizes_and_dedupes() {
+        let proposal = work_item_proposal_from_args(CreateWorkItemArgs {
+            project: " LTS ".to_string(),
+            name: " Fix pump ".to_string(),
+            description: Some(" Pump is noisy ".to_string()),
+            priority: Some("URGENT".to_string()),
+            state: Some(" In Progress ".to_string()),
+            assignees: Some(vec![
+                "Budi".to_string(),
+                " budi ".to_string(),
+                "Sari".to_string(),
+            ]),
+            labels: Some(vec!["maintenance".to_string()]),
+            start_date: Some("2026-10-01".to_string()),
+            target_date: Some("2026-10-05".to_string()),
+        })
+        .expect("valid args");
+        assert_eq!(proposal.project, "LTS");
+        assert_eq!(proposal.name, "Fix pump");
+        assert_eq!(proposal.description.as_deref(), Some("Pump is noisy"));
+        assert_eq!(proposal.priority.as_deref(), Some("urgent"));
+        assert_eq!(proposal.state.as_deref(), Some("In Progress"));
+        assert_eq!(
+            proposal.assignees,
+            vec!["Budi".to_string(), "Sari".to_string()]
+        );
+        assert_eq!(proposal.labels, vec!["maintenance".to_string()]);
+        assert_eq!(proposal.start_date.as_deref(), Some("2026-10-01"));
+        assert_eq!(proposal.target_date.as_deref(), Some("2026-10-05"));
+    }
+
+    #[test]
+    fn create_work_item_rejects_bad_args() {
+        let empty_project = work_item_proposal_from_args(CreateWorkItemArgs {
+            project: "  ".to_string(),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(empty_project.to_string().contains("project"));
+
+        let empty_name = work_item_proposal_from_args(CreateWorkItemArgs {
+            name: "  ".to_string(),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(empty_name.to_string().contains("name"));
+
+        let long_name = work_item_proposal_from_args(CreateWorkItemArgs {
+            name: "x".repeat(256),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(long_name.to_string().contains("255"));
+
+        let bad_priority = work_item_proposal_from_args(CreateWorkItemArgs {
+            priority: Some("p0".to_string()),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(bad_priority.to_string().contains("priority"));
+
+        let bad_date = work_item_proposal_from_args(CreateWorkItemArgs {
+            start_date: Some("01-10-2026".to_string()),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(bad_date.to_string().contains("start_date"));
+
+        let reversed = work_item_proposal_from_args(CreateWorkItemArgs {
+            start_date: Some("2026-10-05".to_string()),
+            target_date: Some("2026-10-01".to_string()),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(reversed.to_string().contains("start_date"));
+
+        let too_many = work_item_proposal_from_args(CreateWorkItemArgs {
+            assignees: Some((0..11).map(|index| format!("user-{index}")).collect()),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(too_many.to_string().contains("10"));
+
+        let empty_ref = work_item_proposal_from_args(CreateWorkItemArgs {
+            labels: Some(vec!["  ".to_string()]),
+            ..base_work_item_args()
+        })
+        .unwrap_err();
+        assert!(empty_ref.to_string().contains("labels"));
+    }
+
+    #[tokio::test]
+    async fn create_work_item_tool_records_proposal() {
+        let trace = crate::agent::new_trace();
+        let tool = CreateWorkItem {
+            trace: trace.clone(),
+        };
+        let out = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CreateWorkItemArgs {
+                    project: "LTS".to_string(),
+                    name: "Fix pump".to_string(),
+                    priority: Some("urgent".to_string()),
+                    ..base_work_item_args()
+                },
+            )
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("proposal json");
+        assert_eq!(parsed["project"], json!("LTS"));
+        assert_eq!(parsed["name"], json!("Fix pump"));
+        assert_eq!(parsed["priority"], json!("urgent"));
+        let recorded = trace.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].name, "create_work_item");
+        assert_eq!(recorded[0].arguments["name"], json!("Fix pump"));
+    }
+
+    #[tokio::test]
+    async fn rejected_create_work_item_is_not_traced() {
+        let trace = crate::agent::new_trace();
+        let tool = CreateWorkItem {
+            trace: trace.clone(),
+        };
+        let error = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                CreateWorkItemArgs {
+                    name: "  ".to_string(),
+                    ..base_work_item_args()
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("name"));
+        assert!(trace.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn workspace_tools_builds_a_server_handle_with_create_work_item() {
+        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), crate::agent::new_trace());
     }
 }
