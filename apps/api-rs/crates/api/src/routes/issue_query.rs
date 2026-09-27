@@ -79,7 +79,7 @@ pub(crate) const LIST_SCAN_SELECT_SQL: &str = "SELECT i.id, i.state_id::text AS 
 /// flat visibility (`base.py:266-294`) plus, when present, the complex
 /// `filters` tree (same parse/apply as `list_detail`). Apply errors map to
 /// the DRF-style 400 body via `complex_filter_error_response`.
-fn push_list_where(
+pub fn push_list_where(
     qb: &mut QueryBuilder<Postgres>,
     project_id: uuid::Uuid,
     guest_scoped: bool,
@@ -99,7 +99,7 @@ fn push_list_where(
 }
 
 /// `ComplexFilterError` → 400 body `{"message","code"}` (sama seperti `list_detail`).
-fn complex_filter_error_response(e: ComplexFilterError) -> (StatusCode, Json<Value>) {
+pub fn complex_filter_error_response(e: ComplexFilterError) -> (StatusCode, Json<Value>) {
     (
         StatusCode::BAD_REQUEST,
         Json(json!({"message": e.message, "code": e.code})),
@@ -641,7 +641,7 @@ pub(crate) enum LegacyFilterError {
 /// `ComplexFilterBackend` validation errors: 400 with the `{"message",
 /// "code"}` body (`plane/utils/filters/filter_backend.py`).
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ComplexFilterError {
+pub struct ComplexFilterError {
     pub message: String,
     pub code: String,
 }
@@ -1169,7 +1169,7 @@ pub(crate) const COMPLEX_FILTER_ALLOWLIST: &[&str] = &[
 /// Otherwise the structure is validated (`_validate_structure`,
 /// `max_depth=5` from `default_max_depth`) and every leaf field checked
 /// against the FilterSet (`_validate_fields`).
-pub(crate) fn parse_complex_filter(
+pub fn parse_complex_filter(
     raw: Option<&str>,
 ) -> Result<Option<serde_json::Value>, ComplexFilterError> {
     const MAX_DEPTH: usize = 5;
@@ -1199,8 +1199,10 @@ pub(crate) fn parse_complex_filter(
     }
     validate_filter_node(&value, MAX_DEPTH, 1)?;
     for field in extract_filter_fields(&value) {
-        // Fork ini tidak punya tabel custom property; kondisi `customproperty_*`
-        // (mungkin tersisa dari data lama) di-skip sebagai no-op alih-alih 400.
+        // This fork has no custom property tables; legacy `customproperty_*`
+        // conditions (possibly left over in saved views) are skipped as
+        // no-ops instead of 400ing.
+        // TODO(fork): remove the skip once custom properties land.
         if field.starts_with("customproperty_") {
             continue;
         }
@@ -1587,6 +1589,14 @@ fn complex_bridge_target(base: &str) -> Option<(&'static str, &'static str)> {
 /// `project_id`); otherwise a live-bridge `EXISTS`. Non-empty values coerce
 /// strictly (`UUIDFilter` failure → 400); repeated scalar values resolve to
 /// the LAST, like Django's `QueryDict`.
+/// Renders a UUID leaf lookup, shared by the bridge-backed `*_id` filters
+/// (`assignee`, `label`, `cycle`, `module` → `EXISTS(... b.issue_id = i.id)`)
+/// and the direct issue columns (`created_by_id`, `state_id`, `type_id`,
+/// `project_id`). `suffix` is `in` (CSV pieces → `= ANY($ids)`) or
+/// `""`/`exact` (single value → `=`); empty values degrade to `IS NULL`
+/// (`exact`) or `= ANY('{}'::uuid[])` (`in`), mirroring the FilterSet
+/// `EMPTY_VALUES` handling. A piece that is not a UUID maps to
+/// [`ComplexFilterError::invalid_filterset`] — the handler's 400 path.
 fn apply_complex_uuid_leaf(
     qb: &mut QueryBuilder<Postgres>,
     table: &str,
@@ -2195,6 +2205,7 @@ mod issue_list_tests {
         )
         .unwrap();
         let sql = qb.sql();
+        assert!(sql.contains(" AND ("), "sql: {sql}");
         assert!(sql.contains("i.priority"), "sql: {sql}");
     }
 

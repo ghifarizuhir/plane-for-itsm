@@ -2223,6 +2223,71 @@ async fn workflow_map_hides_inactive_types() {
 }
 
 #[tokio::test]
+async fn workflow_map_hides_epic_types() {
+    let st = app_state().await;
+    let (slug, ws_id, project_id) = make_workspace(&st, "wfepic").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    // Workflow via the handler so the workspace owns a valid row.
+    let (_, wf) = create_workflow(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(WorkflowBody {
+            name: Some("Epic Type Workflow".into()),
+            description: None,
+            is_active: None,
+        }),
+    )
+    .await
+    .expect("workflow");
+    let wf_id = Uuid::parse_str(wf["id"].as_str().unwrap()).unwrap();
+
+    // Epic type, active and linked directly: `is_epic = true` is the only
+    // reason it must stay out of the map (mirrors `p.is_epic = false`).
+    let (type_id,): (Uuid,) = sqlx::query_as(
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
+         level, workflow_id, workspace_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), 'Epic Type', '', '{}', true, false, true, 0, $1, $2, now(), now()) \
+         RETURNING id",
+    )
+    .bind(wf_id)
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("epic type");
+    sqlx::query(
+        "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, level, is_default, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 0, false, now(), now())",
+    )
+    .bind(type_id)
+    .bind(project_id)
+    .bind(ws_id)
+    .execute(&st.pool)
+    .await
+    .expect("epic link");
+
+    let (status, map) = workflow_map(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id)),
+    )
+    .await
+    .expect("map with epic type");
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        map["types"].as_array().unwrap().is_empty(),
+        "type epic tidak boleh muncul di map"
+    );
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
 async fn unlink_cross_workspace_and_switch_with_issues() {
     let st = app_state().await;
     let (slug_a, ws_a, project_a) = make_workspace(&st, "wfxa").await;
