@@ -45,6 +45,190 @@ pub fn validate_state_group(group: &str) -> Result<(), String> {
     }
 }
 
+/// Nama workflow derived dari nama type. Kontrak 1:1: workflow tidak punya
+/// nama sendiri di UI; nama mengikuti type (spec
+/// 2026-09-28-service-management-single-page-design.md).
+pub fn derived_workflow_name(type_name: &str) -> String {
+    format!("{} Workflow", type_name.trim())
+}
+
+/// Nama workflow unik di workspace: `base`, `base (2)`, `base (3)`, ...
+pub async fn unique_workflow_name(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    base: &str,
+) -> Result<String, sqlx::Error> {
+    let mut candidate = base.to_string();
+    let mut index = 1;
+    loop {
+        let (taken,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id = $1 AND name = $2 AND deleted_at IS NULL)",
+        )
+        .bind(workspace_id)
+        .bind(&candidate)
+        .fetch_one(&mut *conn)
+        .await?;
+        if !taken {
+            return Ok(candidate);
+        }
+        index += 1;
+        candidate = format!("{base} ({index})");
+    }
+}
+
+/// Pastikan workflow punya tepat satu default state: tambah `New` (backlog)
+/// bila belum ada state, atau promosikan state paling awal bila default hilang.
+pub async fn ensure_workflow_default_state(
+    conn: &mut sqlx::PgConnection,
+    workflow_id: Uuid,
+    user: Uuid,
+) -> Result<(), sqlx::Error> {
+    let (has_default,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL AND is_default)",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if has_default {
+        return Ok(());
+    }
+    let (has_states,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    if has_states {
+        sqlx::query(
+            "UPDATE workflow_states SET is_default = true, updated_at = now() WHERE id = ( \
+             SELECT id FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL \
+             ORDER BY sequence, id LIMIT 1)",
+        )
+        .bind(workflow_id)
+        .execute(&mut *conn)
+        .await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
+             \"group\", is_default, created_by_id, updated_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, 'New', '', '#60646C', 'new', 15000, 'backlog', true, $2, $2, now(), now())",
+        )
+        .bind(workflow_id)
+        .bind(user)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Workflow milik satu type: adopsi orphan `{Type} Workflow` bila ada, jika
+/// tidak buat baru. Selalu memastikan default state ada dan `is_active`
+/// mengikuti type.
+pub async fn ensure_workflow_for_type(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    type_name: &str,
+    is_active: bool,
+    user: Uuid,
+) -> Result<Uuid, sqlx::Error> {
+    let base = derived_workflow_name(type_name);
+    let orphan: Option<Uuid> = sqlx::query_scalar(
+        "SELECT w.id FROM workflows w \
+         WHERE w.workspace_id = $1 AND w.name = $2 AND w.deleted_at IS NULL \
+           AND NOT EXISTS (SELECT 1 FROM issue_types t WHERE t.workflow_id = w.id AND t.deleted_at IS NULL) \
+         ORDER BY w.created_at, w.id LIMIT 1",
+    )
+    .bind(workspace_id)
+    .bind(&base)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let workflow_id = match orphan {
+        Some(id) => id,
+        None => {
+            let name = unique_workflow_name(&mut *conn, workspace_id, &base).await?;
+            sqlx::query_scalar(
+                "INSERT INTO workflows (id, name, description, is_active, workspace_id, \
+                 created_by_id, updated_by_id, created_at, updated_at) \
+                 VALUES (gen_random_uuid(), $1, '', $2, $3, $4, $4, now(), now()) RETURNING id",
+            )
+            .bind(&name)
+            .bind(is_active)
+            .bind(workspace_id)
+            .bind(user)
+            .fetch_one(&mut *conn)
+            .await?
+        }
+    };
+    ensure_workflow_default_state(&mut *conn, workflow_id, user).await?;
+    sqlx::query("UPDATE workflows SET is_active = $2, updated_at = now() WHERE id = $1 AND is_active <> $2")
+        .bind(workflow_id)
+        .bind(is_active)
+        .execute(&mut *conn)
+        .await?;
+    Ok(workflow_id)
+}
+
+/// Rename workflow ke nama derived type bila nama itu bebas, lalu sync
+/// `is_active`. Nama yang sudah dipakai workflow lain dibiarkan.
+pub async fn sync_type_workflow(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    type_name: &str,
+    is_active: bool,
+    workflow_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    let target = derived_workflow_name(type_name);
+    let (taken,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id = $1 AND name = $2 \
+         AND deleted_at IS NULL AND id <> $3)",
+    )
+    .bind(workspace_id)
+    .bind(&target)
+    .bind(workflow_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE workflows SET name = CASE WHEN $2 AND name <> $3 THEN $3 ELSE name END, \
+         is_active = $4, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .bind(!taken)
+    .bind(&target)
+    .bind(is_active)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Soft-delete workflow beserta state + transition-nya (dipakai delete type).
+pub async fn soft_delete_workflow_cascade(
+    conn: &mut sqlx::PgConnection,
+    workflow_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE workflow_transitions SET deleted_at = now(), updated_at = now() \
+         WHERE workflow_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE workflow_states SET deleted_at = now(), updated_at = now() \
+         WHERE workflow_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query(
+        "UPDATE workflows SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workflow_id)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
 /// Target state (mirror) yang diizinkan dari `current_state`, dihitung murni
 /// dari pasangan `(state_id, workflow_state_id)` dan daftar transisi
 /// `(from_workflow_state_id, to_workflow_state_id)`. Urutan output mengikuti

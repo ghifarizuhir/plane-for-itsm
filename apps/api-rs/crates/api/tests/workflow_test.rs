@@ -5,10 +5,10 @@ use api::routes::v1::work_item_type::{
 };
 use api::routes::workflow::{
     allowed_target_state_ids, create_state, create_transition, create_workflow, delete_state,
-    delete_transition, delete_workflow, list_states, list_transitions, list_workflows,
-    materialize_type_states, patch_state, patch_workflow, retrieve_workflow, unlink_type,
-    validate_name, validate_state_group, workflow_map, TransitionBody, WorkflowBody,
-    WorkflowStateBody,
+    delete_transition, delete_workflow, derived_workflow_name, ensure_workflow_for_type, list_states,
+    list_transitions, list_workflows, materialize_type_states, patch_state, patch_workflow,
+    retrieve_workflow, soft_delete_workflow_cascade, sync_type_workflow, unlink_type, validate_name,
+    validate_state_group, workflow_map, TransitionBody, WorkflowBody, WorkflowStateBody,
 };
 use api::routes::workspace::create;
 use api::state::AppState;
@@ -60,6 +60,12 @@ fn group_error_names_offending_value() {
         validate_state_group("triage").unwrap_err(),
         "\"triage\" is not a valid choice."
     );
+}
+
+#[test]
+fn derived_workflow_name_appends_suffix() {
+    assert_eq!(derived_workflow_name("Incident"), "Incident Workflow");
+    assert_eq!(derived_workflow_name("  Incident  "), "Incident Workflow");
 }
 
 #[test]
@@ -2549,4 +2555,147 @@ async fn unlink_cross_workspace_and_switch_with_issues() {
 
     purge(&st.pool, &slug_b).await;
     purge(&st.pool, &slug_a).await;
+}
+
+#[tokio::test]
+async fn ensure_workflow_for_type_adopts_and_defaults() {
+    let st = app_state().await;
+    let (slug, ws_id, _project_id) = make_workspace(&st, "wfwf").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+    let mut conn = st.pool.acquire().await.expect("conn");
+
+    let first = ensure_workflow_for_type(&mut conn, ws_id, "Incident", true, owner)
+        .await
+        .expect("ensure workflow");
+    let (name,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(first)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("workflow row");
+    assert_eq!(name, "Incident Workflow");
+    let (defaults,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL AND is_default",
+    )
+    .bind(first)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("default state");
+    assert_eq!(defaults, 1);
+
+    // Idempotent: panggilan kedua mengadopsi workflow yang sama (masih orphan).
+    let second = ensure_workflow_for_type(&mut conn, ws_id, "Incident", true, owner)
+        .await
+        .expect("ensure again");
+    assert_eq!(first, second);
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn sync_type_workflow_renames_when_free_and_syncs_active() {
+    let st = app_state().await;
+    let (slug, ws_id, _project_id) = make_workspace(&st, "wfsync").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+    let mut conn = st.pool.acquire().await.expect("conn");
+
+    let incident_wf = ensure_workflow_for_type(&mut conn, ws_id, "Incident", true, owner)
+        .await
+        .expect("incident workflow");
+    sync_type_workflow(&mut conn, ws_id, "Major Incident", false, incident_wf)
+        .await
+        .expect("sync");
+    let (name, active): (String, bool) =
+        sqlx::query_as("SELECT name, is_active FROM workflows WHERE id = $1")
+            .bind(incident_wf)
+            .fetch_one(&mut *conn)
+            .await
+            .expect("workflow row");
+    assert_eq!(name, "Major Incident Workflow");
+    assert!(!active);
+
+    // Nama derived sudah dipakai workflow lain → nama lama dipertahankan.
+    let request_wf = ensure_workflow_for_type(&mut conn, ws_id, "Request", true, owner)
+        .await
+        .expect("request workflow");
+    sync_type_workflow(&mut conn, ws_id, "Major Incident", true, request_wf)
+        .await
+        .expect("sync collision");
+    let (request_name,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(request_wf)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("request row");
+    assert_eq!(request_name, "Request Workflow");
+
+    purge(&st.pool, &slug).await;
+}
+
+#[tokio::test]
+async fn soft_delete_workflow_cascade_clears_states_and_transitions() {
+    let st = app_state().await;
+    let (slug, ws_id, _project_id) = make_workspace(&st, "wfdel").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+    let mut conn = st.pool.acquire().await.expect("conn");
+
+    let workflow_id = ensure_workflow_for_type(&mut conn, ws_id, "Incident", true, owner)
+        .await
+        .expect("workflow");
+    let (_, progress) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("In Progress".into()),
+            group: Some("started".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state");
+    let progress_id = Uuid::parse_str(progress["id"].as_str().unwrap()).unwrap();
+    let (_, states) = list_states(State(st.clone()), AuthUser(owner), Path((slug.clone(), workflow_id)))
+        .await
+        .expect("states");
+    let default_id = Uuid::parse_str(states[0]["id"].as_str().unwrap()).unwrap();
+    let _ = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(default_id),
+            to_state_id: Some(progress_id),
+        }),
+    )
+    .await
+    .expect("transition");
+
+    soft_delete_workflow_cascade(&mut conn, workflow_id)
+        .await
+        .expect("cascade");
+    let (workflow_live, states_live, transitions_live): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM workflows WHERE id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_transitions WHERE workflow_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("cascade counts");
+    assert_eq!(workflow_live, 0);
+    assert_eq!(states_live, 0);
+    assert_eq!(transitions_live, 0);
+
+    purge(&st.pool, &slug).await;
 }
