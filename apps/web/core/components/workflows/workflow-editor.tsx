@@ -9,13 +9,8 @@ import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-// assets
-import emptyModule from "@/app/assets/empty-state/module.svg?url";
-// components
-import { EmptyState } from "@/components/common/empty-state";
 // hooks
 import { useWorkflow } from "@/hooks/store/use-workflow";
-import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { StateList } from "./state-list";
 import { TransitionMatrix } from "./transition-matrix";
@@ -28,24 +23,14 @@ type Props = {
 
 export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   const { workspaceSlug, workflowId } = props;
-  // router
-  const router = useAppRouter();
   // states
   const [statesError, setStatesError] = useState(false);
   const [transitionsError, setTransitionsError] = useState(false);
-  const [workflowsError, setWorkflowsError] = useState(false);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const {
-    workflows,
-    workflowStates,
-    workflowTransitions,
-    mapRefreshError,
-    fetchWorkflows,
-    fetchWorkflowStates,
-    fetchWorkflowTransitions,
-  } = useWorkflow();
+  const { workflowStates, workflowTransitions, mapRefreshError, fetchWorkflowStates, fetchWorkflowTransitions } =
+    useWorkflow();
   // projects whose failed map refresh already raised a toast; re-armed when the map recovers
   const warnedMapFailures = useRef(new Set<string>());
   // derived values
@@ -57,8 +42,6 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
   const fetchErrorMessage = t("common.error.message");
   const mapRefreshWarningTitle = t("common.warning");
   const mapRefreshWarningMessage = t("workspace_settings.settings.work_item_types.map_refresh_failed");
-  const workflowExists = workflows?.some((workflow) => workflow.id === workflowId) ?? false;
-  const isWorkflowNotFound = workflows !== undefined && !workflowExists;
 
   const loadStates = useCallback(() => {
     setStatesError(false);
@@ -84,29 +67,10 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
     });
   }, [workspaceSlug, workflowId, fetchWorkflowTransitions, fetchErrorTitle, fetchErrorMessage]);
 
-  const loadWorkflows = useCallback(() => {
-    if (workflows !== undefined) return;
-    setWorkflowsError(false);
-    void fetchWorkflows(workspaceSlug).catch((error: any) => {
-      setWorkflowsError(true);
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: fetchErrorTitle,
-        message: error?.error ?? fetchErrorMessage,
-      });
-    });
-  }, [workspaceSlug, workflows, fetchWorkflows, fetchErrorTitle, fetchErrorMessage]);
-
   useEffect(() => {
-    // wait until the workflow is known to exist so an unknown deep link never fires 404 fetches
-    if (!workflowExists) return;
     loadStates();
     loadTransitions();
-  }, [workflowExists, loadStates, loadTransitions]);
-
-  useEffect(() => {
-    loadWorkflows();
-  }, [loadWorkflows]);
+  }, [loadStates, loadTransitions]);
 
   // every editor mutation refreshes the affected project workflow maps; if that
   // refresh failed, board columns can be stale even though the edit landed
@@ -131,24 +95,8 @@ export const WorkflowEditor = observer(function WorkflowEditor(props: Props) {
     loadTransitions();
   };
 
-  if (workflows === undefined && workflowsError) {
-    return <WorkflowLoadErrorState onRetry={loadWorkflows} />;
-  }
-
-  if (isWorkflowNotFound) {
-    return (
-      <div className="mt-6 flex h-80 items-center justify-center">
-        <EmptyState
-          image={emptyModule}
-          title={t("workspace_settings.settings.workflows.not_found.title")}
-          description={t("workspace_settings.settings.workflows.not_found.description")}
-          primaryButton={{
-            text: t("common.go_back"),
-            onClick: () => router.push(`/${workspaceSlug}/settings/workflows`),
-          }}
-        />
-      </div>
-    );
+  if (states === undefined && statesError) {
+    return <WorkflowLoadErrorState onRetry={handleRetryEditor} />;
   }
 
   return (

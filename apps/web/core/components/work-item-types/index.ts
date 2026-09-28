@@ -5,5 +5,6 @@
  */
 
 export * from "./root";
+export * from "./detail";
 export * from "./type-form-modal";
 export * from "./delete-type-modal";
