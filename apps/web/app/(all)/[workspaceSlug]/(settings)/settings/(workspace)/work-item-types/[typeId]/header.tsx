@@ -13,13 +13,32 @@ import { Breadcrumbs } from "@plane/ui";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SettingsPageHeader } from "@/components/settings/page-header";
 import { WORKSPACE_SETTINGS_ICONS } from "@/components/settings/workspace/sidebar/item-icon";
+// hooks
+import { useWorkflow } from "@/hooks/store/use-workflow";
 
-export const WorkflowsWorkspaceSettingsHeader = observer(function WorkflowsWorkspaceSettingsHeader() {
+type Props = {
+  workspaceSlug: string;
+  typeId: string;
+};
+
+export const WorkItemTypeDetailWorkspaceSettingsHeader = observer(function WorkItemTypeDetailWorkspaceSettingsHeader(
+  props: Props
+) {
+  const { workspaceSlug, typeId } = props;
   // translation
   const { t } = useTranslation();
+  // store hooks
+  const { workItemTypes } = useWorkflow();
   // derived values
-  const settingsDetails = WORKSPACE_SETTINGS.workflows;
-  const Icon = WORKSPACE_SETTINGS_ICONS.workflows;
+  const settingsDetails = WORKSPACE_SETTINGS.work_item_types;
+  const Icon = WORKSPACE_SETTINGS_ICONS.work_item_types;
+  const type = workItemTypes?.find((item) => item.id === typeId);
+  // keep the crumb informative instead of blank when types are loaded but the id does not exist
+  const typeLabel = type
+    ? type.name
+    : workItemTypes !== undefined
+      ? t("workspace_settings.settings.work_item_types.not_found.title")
+      : undefined;
 
   return (
     <SettingsPageHeader
@@ -31,9 +50,11 @@ export const WorkflowsWorkspaceSettingsHeader = observer(function WorkflowsWorks
                 <BreadcrumbLink
                   label={t(settingsDetails.i18n_label)}
                   icon={<Icon className="size-4 text-tertiary" />}
+                  href={`/${workspaceSlug}/settings/work-item-types`}
                 />
               }
             />
+            {typeLabel && <Breadcrumbs.Item component={<BreadcrumbLink label={typeLabel} />} />}
           </Breadcrumbs>
         </div>
       }

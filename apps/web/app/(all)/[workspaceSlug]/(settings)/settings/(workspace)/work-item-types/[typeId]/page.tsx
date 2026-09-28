@@ -12,38 +12,42 @@ import { useTranslation } from "@plane/i18n";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
-import { WorkflowsRoot } from "@/components/workflows";
+import { WorkItemTypeDetail } from "@/components/work-item-types";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import type { Route } from "./+types/page";
-import { WorkflowsWorkspaceSettingsHeader } from "./header";
+import { WorkItemTypeDetailWorkspaceSettingsHeader } from "./header";
 
-function WorkflowsSettingsPage({ params }: Route.ComponentProps) {
+function WorkItemTypeDetailSettingsPage({ params }: Route.ComponentProps) {
   // router
-  const { workspaceSlug } = params;
+  const { workspaceSlug, typeId } = params;
   // plane hooks
   const { t } = useTranslation();
   // mobx store
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
   const { currentWorkspace } = useWorkspace();
   // derived values
-  const canManageWorkflows = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const canManageWorkItemTypes = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
   const pageTitle = currentWorkspace?.name
-    ? `${currentWorkspace.name} - ${t("workspace_settings.settings.workflows.title")}`
+    ? `${currentWorkspace.name} - ${t("workspace_settings.settings.work_item_types.title")}`
     : undefined;
 
-  if (workspaceUserInfo && !canManageWorkflows) {
+  if (workspaceUserInfo && !canManageWorkItemTypes) {
     return <NotAuthorizedView section="settings" className="h-auto" />;
   }
 
   return (
-    <SettingsContentWrapper header={<WorkflowsWorkspaceSettingsHeader />}>
+    <SettingsContentWrapper
+      header={<WorkItemTypeDetailWorkspaceSettingsHeader workspaceSlug={workspaceSlug} typeId={typeId} />}
+    >
       <PageHead title={pageTitle} />
-      {workspaceSlug && <WorkflowsRoot workspaceSlug={workspaceSlug.toString()} />}
+      {workspaceSlug && typeId && (
+        <WorkItemTypeDetail workspaceSlug={workspaceSlug.toString()} typeId={typeId.toString()} />
+      )}
     </SettingsContentWrapper>
   );
 }
 
-export default observer(WorkflowsSettingsPage);
+export default observer(WorkItemTypeDetailSettingsPage);

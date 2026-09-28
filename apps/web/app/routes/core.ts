@@ -297,12 +297,8 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/work-item-types/page.tsx"
           ),
           route(
-            ":workspaceSlug/settings/workflows",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/workflows/page.tsx"
-          ),
-          route(
-            ":workspaceSlug/settings/workflows/:workflowId",
-            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/workflows/[workflowId]/page.tsx"
+            ":workspaceSlug/settings/work-item-types/:typeId",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/work-item-types/[typeId]/page.tsx"
           ),
         ]),
 
@@ -408,6 +404,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   // API tokens redirect: /:workspaceSlug/settings/api-tokens
   // → /settings/profile/api-tokens
   route(":workspaceSlug/settings/api-tokens", "routes/redirects/core/api-tokens.tsx"),
+
+  // Workflows legacy redirect: /:workspaceSlug/settings/workflows/*
+  // → /:workspaceSlug/settings/work-item-types/
+  route(":workspaceSlug/settings/workflows/*", "routes/redirects/core/workflows.tsx"),
 
   // Inbox redirect: /:workspaceSlug/projects/:projectId/inbox
   // → /:workspaceSlug/projects/:projectId/intake
