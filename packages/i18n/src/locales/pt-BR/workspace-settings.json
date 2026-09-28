@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Tipos de item de trabalho",
         "heading": "Tipos de item de trabalho",
-        "description": "Defina os tipos de item de trabalho de ITSM disponíveis em todo o espaço de trabalho e associe um fluxo de trabalho a cada um.",
+        "description": "Defina os tipos de item de trabalho de ITSM disponíveis em todo o espaço de trabalho. Cada tipo tem seu próprio fluxo de trabalho.",
         "add_type": "Adicionar tipo",
         "empty_state": {
           "title": "Ainda não há tipos de item de trabalho",
-          "description": "Crie tipos Incidente, Problema, Mudança ou Melhoria e associe um fluxo de trabalho."
+          "description": "Crie tipos Incidente, Problema, Mudança ou Melhoria — cada um terá seu próprio fluxo de trabalho."
         },
         "form": {
           "name": "Nome",
           "description": "Descrição",
-          "workflow": "Fluxo de trabalho",
           "active": "Ativo"
         },
         "no_workflow": "Sem fluxo de trabalho",
+        "not_found": {
+          "title": "Tipo de item de trabalho não encontrado",
+          "description": "O tipo de item de trabalho que você procura não existe ou foi excluído."
+        },
+        "detail": {
+          "epic_no_workflow": "Tipos Epic não têm fluxo de trabalho.",
+          "no_workflow": "Este tipo ainda não tem fluxo de trabalho."
+        },
         "attach_workflow_first": "Associe um fluxo de trabalho primeiro",
         "inactive": "Inativo",
         "map_refresh_failed": "O tipo foi salvo, mas não foi possível atualizar a lista de fluxos de trabalho do projeto. Recarregue a página para ver o estado mais recente."
       },
       "workflows": {
-        "title": "Fluxos de trabalho",
-        "heading": "Fluxos de trabalho",
-        "description": "Defina estados e as transições permitidas entre eles para cada tipo de item de trabalho.",
-        "add_workflow": "Adicionar fluxo de trabalho",
-        "delete_confirmation": {
-          "title": "Excluir fluxo de trabalho",
-          "description": "Este fluxo de trabalho será excluído permanentemente. Esta ação não pode ser desfeita."
-        },
-        "not_found": {
-          "title": "Fluxo de trabalho não encontrado",
-          "description": "O fluxo de trabalho que você procura não existe ou foi excluído."
-        },
-        "empty_state": {
-          "title": "Ainda não há fluxos de trabalho",
-          "description": "Crie um fluxo de trabalho e depois adicione estados e transições permitidas."
-        },
         "form": {
-          "name": "Nome",
-          "description": "Descrição",
-          "active": "Ativo"
+          "description": "Descrição"
         },
         "no_states": "Ainda não há estados",
         "states": {

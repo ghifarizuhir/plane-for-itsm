@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Typy pracovných položiek",
         "heading": "Typy pracovných položiek",
-        "description": "Definujte typy pracovných položiek ITSM dostupné v celom pracovnom priestore a ku každému typu priraďte pracovný postup.",
+        "description": "Definujte typy pracovných položiek ITSM dostupné v celom pracovnom priestore. Každý typ má vlastný pracovný postup.",
         "add_type": "Pridať typ",
         "empty_state": {
           "title": "Zatiaľ žiadne typy pracovných položiek",
-          "description": "Vytvorte typy Incident, Problém, Zmena alebo Zlepšenie a priraďte pracovný postup."
+          "description": "Vytvorte typy Incident, Problém, Zmena alebo Zlepšenie — každý získa vlastný pracovný postup."
         },
         "form": {
           "name": "Názov",
           "description": "Popis",
-          "workflow": "Pracovný postup",
           "active": "Aktívne"
         },
         "no_workflow": "Žiadny pracovný postup",
+        "not_found": {
+          "title": "Typ pracovnej položky sa nenašiel",
+          "description": "Typ pracovnej položky, ktorý hľadáte, neexistuje alebo bol odstránený."
+        },
+        "detail": {
+          "epic_no_workflow": "Typy Epik nemajú pracovný postup.",
+          "no_workflow": "Tento typ zatiaľ nemá pracovný postup."
+        },
         "attach_workflow_first": "Najprv priraďte pracovný postup",
         "inactive": "Neaktívny",
         "map_refresh_failed": "Typ bol uložený, ale zoznam pracovných postupov projektu sa nepodarilo obnoviť. Načítajte stránku znova, aby ste videli aktuálny stav."
       },
       "workflows": {
-        "title": "Pracovné postupy",
-        "heading": "Pracovné postupy",
-        "description": "Definujte stavy a povolené prechody medzi nimi pre každý typ pracovnej položky.",
-        "add_workflow": "Pridať pracovný postup",
-        "delete_confirmation": {
-          "title": "Zmazať pracovný postup",
-          "description": "Tento pracovný postup bude natrvalo zmazaný. Túto akciu nie je možné vrátiť späť."
-        },
-        "not_found": {
-          "title": "Pracovný postup sa nenašiel",
-          "description": "Pracovný postup, ktorý hľadáte, neexistuje alebo bol odstránený."
-        },
-        "empty_state": {
-          "title": "Zatiaľ žiadne pracovné postupy",
-          "description": "Vytvorte pracovný postup a potom pridajte stavy a povolené prechody."
-        },
         "form": {
-          "name": "Názov",
-          "description": "Popis",
-          "active": "Aktívne"
+          "description": "Popis"
         },
         "no_states": "Zatiaľ žiadne stavy",
         "states": {

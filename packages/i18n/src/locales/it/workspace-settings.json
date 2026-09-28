@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Tipi di elemento di lavoro",
         "heading": "Tipi di elemento di lavoro",
-        "description": "Definisci i tipi di elemento di lavoro ITSM disponibili in tutto lo spazio di lavoro e associa un flusso di lavoro a ciascuno.",
+        "description": "Definisci i tipi di elemento di lavoro ITSM disponibili in tutto lo spazio di lavoro. Ogni tipo ha il proprio flusso di lavoro.",
         "add_type": "Aggiungi tipo",
         "empty_state": {
           "title": "Nessun tipo di elemento di lavoro ancora",
-          "description": "Crea tipi Incidente, Problema, Cambiamento o Miglioramento e associa un flusso di lavoro."
+          "description": "Crea tipi Incidente, Problema, Cambiamento o Miglioramento — ognuno ha il proprio flusso di lavoro."
         },
         "form": {
           "name": "Nome",
           "description": "Descrizione",
-          "workflow": "Flusso di lavoro",
           "active": "Attivo"
         },
         "no_workflow": "Nessun flusso di lavoro",
+        "not_found": {
+          "title": "Tipo di elemento di lavoro non trovato",
+          "description": "Il tipo di elemento di lavoro cercato non esiste o è stato eliminato."
+        },
+        "detail": {
+          "epic_no_workflow": "I tipi Epic non hanno un flusso di lavoro.",
+          "no_workflow": "Questo tipo non ha ancora un flusso di lavoro."
+        },
         "attach_workflow_first": "Associa prima un flusso di lavoro",
         "inactive": "Inattivo",
         "map_refresh_failed": "Il tipo è stato salvato, ma non è stato possibile aggiornare l'elenco dei flussi di lavoro del progetto. Ricarica la pagina per vedere lo stato più recente."
       },
       "workflows": {
-        "title": "Flussi di lavoro",
-        "heading": "Flussi di lavoro",
-        "description": "Definisci gli stati e le transizioni consentite tra di essi per ogni tipo di elemento di lavoro.",
-        "add_workflow": "Aggiungi flusso di lavoro",
-        "delete_confirmation": {
-          "title": "Elimina flusso di lavoro",
-          "description": "Questo flusso di lavoro verrà eliminato definitivamente. Questa azione non può essere annullata."
-        },
-        "not_found": {
-          "title": "Flusso di lavoro non trovato",
-          "description": "Il flusso di lavoro cercato non esiste o è stato eliminato."
-        },
-        "empty_state": {
-          "title": "Nessun flusso di lavoro ancora",
-          "description": "Crea un flusso di lavoro, poi aggiungi stati e transizioni consentite."
-        },
         "form": {
-          "name": "Nome",
-          "description": "Descrizione",
-          "active": "Attivo"
+          "description": "Descrizione"
         },
         "no_states": "Nessuno stato ancora",
         "states": {

@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "İş öğesi türleri",
         "heading": "İş öğesi türleri",
-        "description": "Çalışma alanı genelinde kullanılabilen ITSM iş öğesi türlerini tanımlayın ve her birine bir iş akışı ekleyin.",
+        "description": "Çalışma alanı genelinde kullanılabilen ITSM iş öğesi türlerini tanımlayın. Her türün kendi iş akışı vardır.",
         "add_type": "Tür ekle",
         "empty_state": {
           "title": "Henüz iş öğesi türü yok",
-          "description": "Olay, Problem, Değişiklik veya İyileştirme türleri oluşturun ve bir iş akışı ekleyin."
+          "description": "Olay, Problem, Değişiklik veya İyileştirme türleri oluşturun — her biri kendi iş akışını alır."
         },
         "form": {
           "name": "Ad",
           "description": "Açıklama",
-          "workflow": "İş akışı",
           "active": "Aktif"
         },
         "no_workflow": "İş akışı yok",
+        "not_found": {
+          "title": "İş öğesi türü bulunamadı",
+          "description": "Aradığınız iş öğesi türü mevcut değil veya silinmiş."
+        },
+        "detail": {
+          "epic_no_workflow": "Epik türlerinin iş akışı yoktur.",
+          "no_workflow": "Bu türün henüz bir iş akışı yok."
+        },
         "attach_workflow_first": "Önce bir iş akışı ekleyin",
         "inactive": "Pasif",
         "map_refresh_failed": "Tür kaydedildi, ancak projenin iş akışı listesi yenilenemedi. En güncel durumu görmek için sayfayı yenileyin."
       },
       "workflows": {
-        "title": "İş akışları",
-        "heading": "İş akışları",
-        "description": "Her iş öğesi türü için durumları ve aralarında izin verilen geçişleri tanımlayın.",
-        "add_workflow": "İş akışı ekle",
-        "delete_confirmation": {
-          "title": "İş akışını sil",
-          "description": "Bu iş akışı kalıcı olarak silinecek. Bu işlem geri alınamaz."
-        },
-        "not_found": {
-          "title": "İş akışı bulunamadı",
-          "description": "Aradığınız iş akışı mevcut değil veya silinmiş."
-        },
-        "empty_state": {
-          "title": "Henüz iş akışı yok",
-          "description": "Bir iş akışı oluşturun, ardından durumları ve izin verilen geçişleri ekleyin."
-        },
         "form": {
-          "name": "Ad",
-          "description": "Açıklama",
-          "active": "Aktif"
+          "description": "Açıklama"
         },
         "no_states": "Henüz durum yok",
         "states": {

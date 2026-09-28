@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Types d’éléments de travail",
         "heading": "Types d’éléments de travail",
-        "description": "Définissez les types d’éléments de travail ITSM disponibles dans l’espace de travail et associez un flux de travail à chacun.",
+        "description": "Définissez les types d’éléments de travail ITSM disponibles dans l’espace de travail. Chaque type a son propre flux de travail.",
         "add_type": "Ajouter un type",
         "empty_state": {
           "title": "Aucun type d’élément de travail pour le moment",
-          "description": "Créez des types Incident, Problème, Changement ou Amélioration et associez un flux de travail."
+          "description": "Créez des types Incident, Problème, Changement ou Amélioration — chacun a son propre flux de travail."
         },
         "form": {
           "name": "Nom",
           "description": "Description",
-          "workflow": "Flux de travail",
           "active": "Actif"
         },
         "no_workflow": "Aucun flux de travail",
+        "not_found": {
+          "title": "Type d’élément de travail introuvable",
+          "description": "Le type d’élément de travail que vous recherchez n’existe pas ou a été supprimé."
+        },
+        "detail": {
+          "epic_no_workflow": "Les types Epic n’ont pas de flux de travail.",
+          "no_workflow": "Ce type n’a pas encore de flux de travail."
+        },
         "attach_workflow_first": "Associez d’abord un flux de travail",
         "inactive": "Inactif",
         "map_refresh_failed": "Le type a été enregistré, mais la liste des flux de travail du projet n’a pas pu être actualisée. Rechargez la page pour voir l’état le plus récent."
       },
       "workflows": {
-        "title": "Flux de travail",
-        "heading": "Flux de travail",
-        "description": "Définissez les états et les transitions autorisées entre eux pour chaque type d’élément de travail.",
-        "add_workflow": "Ajouter un flux de travail",
-        "delete_confirmation": {
-          "title": "Supprimer le flux de travail",
-          "description": "Ce flux de travail sera définitivement supprimé. Cette action est irréversible."
-        },
-        "not_found": {
-          "title": "Flux de travail introuvable",
-          "description": "Le flux de travail que vous recherchez n’existe pas ou a été supprimé."
-        },
-        "empty_state": {
-          "title": "Aucun flux de travail pour le moment",
-          "description": "Créez un flux de travail, puis ajoutez des états et les transitions autorisées."
-        },
         "form": {
-          "name": "Nom",
-          "description": "Description",
-          "active": "Actif"
+          "description": "Description"
         },
         "no_states": "Aucun état pour le moment",
         "states": {

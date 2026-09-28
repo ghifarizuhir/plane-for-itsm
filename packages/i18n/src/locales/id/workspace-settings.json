@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Tipe item kerja",
         "heading": "Tipe item kerja",
-        "description": "Tentukan tipe item kerja ITSM yang tersedia di seluruh ruang kerja dan lampirkan alur kerja ke setiap tipe.",
+        "description": "Tentukan tipe item kerja ITSM yang tersedia di seluruh ruang kerja. Setiap tipe memiliki alur kerja sendiri.",
         "add_type": "Tambah tipe",
         "empty_state": {
           "title": "Belum ada tipe item kerja",
-          "description": "Buat tipe Insiden, Masalah, Perubahan, atau Peningkatan dan lampirkan alur kerja."
+          "description": "Buat tipe Insiden, Masalah, Perubahan, atau Peningkatan — masing-masing mendapatkan alur kerja sendiri."
         },
         "form": {
           "name": "Nama",
           "description": "Deskripsi",
-          "workflow": "Alur kerja",
           "active": "Aktif"
         },
         "no_workflow": "Tidak ada alur kerja",
+        "not_found": {
+          "title": "Tipe item kerja tidak ditemukan",
+          "description": "Tipe item kerja yang Anda cari tidak ada atau telah dihapus."
+        },
+        "detail": {
+          "epic_no_workflow": "Tipe Epik tidak memiliki alur kerja.",
+          "no_workflow": "Tipe ini belum memiliki alur kerja."
+        },
         "attach_workflow_first": "Lampirkan alur kerja terlebih dahulu",
         "inactive": "Tidak aktif",
         "map_refresh_failed": "Tipe telah disimpan, tetapi daftar alur kerja proyek tidak dapat disegarkan. Muat ulang halaman untuk melihat status terbaru."
       },
       "workflows": {
-        "title": "Alur kerja",
-        "heading": "Alur kerja",
-        "description": "Tentukan status dan transisi yang diizinkan di antara status tersebut untuk setiap tipe item kerja.",
-        "add_workflow": "Tambah alur kerja",
-        "delete_confirmation": {
-          "title": "Hapus alur kerja",
-          "description": "Alur kerja ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan."
-        },
-        "not_found": {
-          "title": "Alur kerja tidak ditemukan",
-          "description": "Alur kerja yang Anda cari tidak ada atau telah dihapus."
-        },
-        "empty_state": {
-          "title": "Belum ada alur kerja",
-          "description": "Buat alur kerja, lalu tambahkan status dan transisi yang diizinkan."
-        },
         "form": {
-          "name": "Nama",
-          "description": "Deskripsi",
-          "active": "Aktif"
+          "description": "Deskripsi"
         },
         "no_states": "Belum ada status",
         "states": {

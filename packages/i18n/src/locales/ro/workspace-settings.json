@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Tipuri de activități",
         "heading": "Tipuri de activități",
-        "description": "Definiți tipurile de activități ITSM disponibile în întregul spațiu de lucru și atribuiți un flux de lucru fiecăruia.",
+        "description": "Definiți tipurile de activități ITSM disponibile în întregul spațiu de lucru. Fiecare tip are propriul flux de lucru.",
         "add_type": "Adăugați tip",
         "empty_state": {
           "title": "Încă nu există tipuri de activități",
-          "description": "Creați tipuri Incident, Problemă, Schimbare sau Îmbunătățire și atribuiți un flux de lucru."
+          "description": "Creați tipuri Incident, Problemă, Schimbare sau Îmbunătățire — fiecare primește propriul flux de lucru."
         },
         "form": {
           "name": "Nume",
           "description": "Descriere",
-          "workflow": "Flux de lucru",
           "active": "Activ"
         },
         "no_workflow": "Niciun flux de lucru",
+        "not_found": {
+          "title": "Tipul de activitate nu a fost găsit",
+          "description": "Tipul de activitate căutat nu există sau a fost șters."
+        },
+        "detail": {
+          "epic_no_workflow": "Tipurile Epic nu au flux de lucru.",
+          "no_workflow": "Acest tip nu are încă un flux de lucru."
+        },
         "attach_workflow_first": "Atribuiți mai întâi un flux de lucru",
         "inactive": "Inactiv",
         "map_refresh_failed": "Tipul a fost salvat, dar lista de fluxuri de lucru a proiectului nu a putut fi reîmprospătată. Reîncărcați pagina pentru a vedea starea cea mai recentă."
       },
       "workflows": {
-        "title": "Fluxuri de lucru",
-        "heading": "Fluxuri de lucru",
-        "description": "Definiți stările și tranzițiile permise între ele pentru fiecare tip de activitate.",
-        "add_workflow": "Adăugați flux de lucru",
-        "delete_confirmation": {
-          "title": "Ștergeți fluxul de lucru",
-          "description": "Acest flux de lucru va fi șters definitiv. Această acțiune nu poate fi anulată."
-        },
-        "not_found": {
-          "title": "Fluxul de lucru nu a fost găsit",
-          "description": "Fluxul de lucru căutat nu există sau a fost șters."
-        },
-        "empty_state": {
-          "title": "Încă nu există fluxuri de lucru",
-          "description": "Creați un flux de lucru, apoi adăugați stări și tranziții permise."
-        },
         "form": {
-          "name": "Nume",
-          "description": "Descriere",
-          "active": "Activ"
+          "description": "Descriere"
         },
         "no_states": "Încă nu există stări",
         "states": {

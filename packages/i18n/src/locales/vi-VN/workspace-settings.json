@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Loại mục công việc",
         "heading": "Loại mục công việc",
-        "description": "Xác định các loại mục công việc ITSM có sẵn trên toàn không gian làm việc và đính kèm quy trình làm việc cho từng loại.",
+        "description": "Xác định các loại mục công việc ITSM có sẵn trên toàn không gian làm việc. Mỗi loại có quy trình làm việc riêng.",
         "add_type": "Thêm loại",
         "empty_state": {
           "title": "Chưa có loại mục công việc",
-          "description": "Tạo các loại Sự cố, Vấn đề, Thay đổi hoặc Cải tiến và đính kèm quy trình làm việc."
+          "description": "Tạo các loại Sự cố, Vấn đề, Thay đổi hoặc Cải tiến — mỗi loại sẽ có quy trình làm việc riêng."
         },
         "form": {
           "name": "Tên",
           "description": "Mô tả",
-          "workflow": "Quy trình làm việc",
           "active": "Hoạt động"
         },
         "no_workflow": "Không có quy trình làm việc",
+        "not_found": {
+          "title": "Không tìm thấy loại mục công việc",
+          "description": "Loại mục công việc bạn đang tìm không tồn tại hoặc đã bị xóa."
+        },
+        "detail": {
+          "epic_no_workflow": "Các loại Epic không có quy trình làm việc.",
+          "no_workflow": "Loại này chưa có quy trình làm việc."
+        },
         "attach_workflow_first": "Đính kèm quy trình làm việc trước",
         "inactive": "Không hoạt động",
         "map_refresh_failed": "Loại đã được lưu, nhưng không thể làm mới danh sách quy trình làm việc của dự án. Tải lại trang để xem trạng thái mới nhất."
       },
       "workflows": {
-        "title": "Quy trình làm việc",
-        "heading": "Quy trình làm việc",
-        "description": "Xác định trạng thái và các chuyển đổi được phép giữa chúng cho từng loại mục công việc.",
-        "add_workflow": "Thêm quy trình làm việc",
-        "delete_confirmation": {
-          "title": "Xóa quy trình làm việc",
-          "description": "Quy trình làm việc này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này."
-        },
-        "not_found": {
-          "title": "Không tìm thấy quy trình làm việc",
-          "description": "Quy trình làm việc bạn đang tìm không tồn tại hoặc đã bị xóa."
-        },
-        "empty_state": {
-          "title": "Chưa có quy trình làm việc",
-          "description": "Tạo quy trình làm việc, sau đó thêm trạng thái và chuyển đổi được phép."
-        },
         "form": {
-          "name": "Tên",
-          "description": "Mô tả",
-          "active": "Hoạt động"
+          "description": "Mô tả"
         },
         "no_states": "Chưa có trạng thái",
         "states": {

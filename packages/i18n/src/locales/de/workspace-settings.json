@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Arbeitselementtypen",
         "heading": "Arbeitselementtypen",
-        "description": "Definieren Sie die im gesamten Arbeitsbereich verfügbaren ITSM-Arbeitselementtypen und weisen Sie jedem einen Workflow zu.",
+        "description": "Definieren Sie die im gesamten Arbeitsbereich verfügbaren ITSM-Arbeitselementtypen. Jeder Typ hat seinen eigenen Workflow.",
         "add_type": "Typ hinzufügen",
         "empty_state": {
           "title": "Noch keine Arbeitselementtypen",
-          "description": "Erstellen Sie Typen wie Störung, Problem, Änderung oder Verbesserung und weisen Sie jedem einen Workflow zu."
+          "description": "Erstellen Sie Typen wie Störung, Problem, Änderung oder Verbesserung — jeder erhält seinen eigenen Workflow."
         },
         "form": {
           "name": "Name",
           "description": "Beschreibung",
-          "workflow": "Workflow",
           "active": "Aktiv"
         },
         "no_workflow": "Kein Workflow",
+        "not_found": {
+          "title": "Arbeitselementtyp nicht gefunden",
+          "description": "Der gesuchte Arbeitselementtyp existiert nicht oder wurde gelöscht."
+        },
+        "detail": {
+          "epic_no_workflow": "Epic-Typen haben keinen Workflow.",
+          "no_workflow": "Dieser Typ hat noch keinen Workflow."
+        },
         "attach_workflow_first": "Zuerst einen Workflow zuweisen",
         "inactive": "Inaktiv",
         "map_refresh_failed": "Der Typ wurde gespeichert, aber die Workflowliste des Projekts konnte nicht aktualisiert werden. Laden Sie die Seite neu, um den aktuellen Stand zu sehen."
       },
       "workflows": {
-        "title": "Workflows",
-        "heading": "Workflows",
-        "description": "Definieren Sie Status und die zulässigen Übergänge zwischen ihnen für jeden Arbeitselementtyp.",
-        "add_workflow": "Workflow hinzufügen",
-        "delete_confirmation": {
-          "title": "Workflow löschen",
-          "description": "Dieser Workflow wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
-        },
-        "not_found": {
-          "title": "Workflow nicht gefunden",
-          "description": "Der gesuchte Workflow existiert nicht oder wurde gelöscht."
-        },
-        "empty_state": {
-          "title": "Noch keine Workflows",
-          "description": "Erstellen Sie einen Workflow und fügen Sie dann Status und zulässige Übergänge hinzu."
-        },
         "form": {
-          "name": "Name",
-          "description": "Beschreibung",
-          "active": "Aktiv"
+          "description": "Beschreibung"
         },
         "no_states": "Noch keine Status",
         "states": {

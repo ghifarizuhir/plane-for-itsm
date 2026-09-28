@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "工作项类型",
         "heading": "工作项类型",
-        "description": "定义工作区中可用的 ITSM 工作项类型，并为每种类型附加一个工作流。",
+        "description": "定义工作区中可用的 ITSM 工作项类型。每种类型都有自己的工作流。",
         "add_type": "添加类型",
         "empty_state": {
           "title": "暂无工作项类型",
-          "description": "创建事件、问题、变更或改进类型，并附加工作流。"
+          "description": "创建事件、问题、变更或改进类型 — 每种类型都会获得自己的工作流。"
         },
         "form": {
           "name": "名称",
           "description": "描述",
-          "workflow": "工作流",
           "active": "活动"
         },
         "no_workflow": "无工作流",
+        "not_found": {
+          "title": "工作项类型不存在",
+          "description": "您要查找的工作项类型不存在或已被删除。"
+        },
+        "detail": {
+          "epic_no_workflow": "史诗类型没有工作流。",
+          "no_workflow": "此类型还没有工作流。"
+        },
         "attach_workflow_first": "请先附加工作流",
         "inactive": "不活动",
         "map_refresh_failed": "类型已保存，但无法刷新项目工作流列表。请重新加载页面以查看最新状态。"
       },
       "workflows": {
-        "title": "工作流",
-        "heading": "工作流",
-        "description": "为每种工作项类型定义状态及状态之间允许的流转。",
-        "add_workflow": "添加工作流",
-        "delete_confirmation": {
-          "title": "删除工作流",
-          "description": "此工作流将被永久删除。此操作无法撤销。"
-        },
-        "not_found": {
-          "title": "工作流不存在",
-          "description": "您要查找的工作流不存在或已被删除。"
-        },
-        "empty_state": {
-          "title": "暂无工作流",
-          "description": "创建工作流，然后添加状态和允许的流转。"
-        },
         "form": {
-          "name": "名称",
-          "description": "描述",
-          "active": "活动"
+          "description": "描述"
         },
         "no_states": "暂无状态",
         "states": {

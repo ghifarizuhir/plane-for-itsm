@@ -488,44 +488,33 @@
       "work_item_types": {
         "title": "Typy pracovních položek",
         "heading": "Typy pracovních položek",
-        "description": "Definujte typy pracovních položek ITSM dostupné v celém pracovním prostoru a ke každému typu přiřaďte workflow.",
+        "description": "Definujte typy pracovních položek ITSM dostupné v celém pracovním prostoru. Každý typ má vlastní workflow.",
         "add_type": "Přidat typ",
         "empty_state": {
           "title": "Zatím žádné typy pracovních položek",
-          "description": "Vytvořte typy Incident, Problém, Změna nebo Zlepšení a přiřaďte k nim workflow."
+          "description": "Vytvořte typy Incident, Problém, Změna nebo Zlepšení — každý získá vlastní workflow."
         },
         "form": {
           "name": "Název",
           "description": "Popis",
-          "workflow": "Workflow",
           "active": "Aktivní"
         },
         "no_workflow": "Žádný workflow",
+        "not_found": {
+          "title": "Typ pracovní položky nenalezen",
+          "description": "Typ pracovní položky, který hledáte, neexistuje nebo byl odstraněn."
+        },
+        "detail": {
+          "epic_no_workflow": "Typy Epik nemají workflow.",
+          "no_workflow": "Tento typ zatím nemá workflow."
+        },
         "attach_workflow_first": "Nejprve přiřaďte workflow",
         "inactive": "Neaktivní",
         "map_refresh_failed": "Typ byl uložen, ale seznam pracovních postupů projektu se nepodařilo obnovit. Načtěte stránku znovu, abyste viděli aktuální stav."
       },
       "workflows": {
-        "title": "Workflow",
-        "heading": "Workflow",
-        "description": "Definujte stavy a povolené přechody mezi nimi pro každý typ pracovní položky.",
-        "add_workflow": "Přidat workflow",
-        "delete_confirmation": {
-          "title": "Smazat workflow",
-          "description": "Tento workflow bude trvale smazán. Tuto akci nelze vrátit zpět."
-        },
-        "not_found": {
-          "title": "Workflow nenalezen",
-          "description": "Workflow, který hledáte, neexistuje nebo byl odstraněn."
-        },
-        "empty_state": {
-          "title": "Zatím žádné workflow",
-          "description": "Vytvořte workflow a poté přidejte stavy a povolené přechody."
-        },
         "form": {
-          "name": "Název",
-          "description": "Popis",
-          "active": "Aktivní"
+          "description": "Popis"
         },
         "no_states": "Zatím žádné stavy",
         "states": {
