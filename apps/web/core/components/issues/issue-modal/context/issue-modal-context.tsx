@@ -64,6 +64,8 @@ export type TIssueModalContext = {
   setIsApplyingTemplate: React.Dispatch<React.SetStateAction<boolean>>;
   selectedParentIssue: ISearchIssueResponse | null;
   setSelectedParentIssue: React.Dispatch<React.SetStateAction<ISearchIssueResponse | null>>;
+  selectedServiceIds: string[];
+  setSelectedServiceIds: React.Dispatch<React.SetStateAction<string[]>>;
   issuePropertyValues: TIssuePropertyValues;
   setIssuePropertyValues: React.Dispatch<React.SetStateAction<TIssuePropertyValues>>;
   issuePropertyValueErrors: TIssuePropertyValueErrors;

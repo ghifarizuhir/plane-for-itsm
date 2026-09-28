@@ -4,4 +4,5 @@
  * See the LICENSE file for details.
  */
 
+export * from "./service-multi-select";
 export * from "./service-select";

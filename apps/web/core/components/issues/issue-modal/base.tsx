@@ -21,6 +21,8 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
+import { useService } from "@/hooks/store/use-service";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // services
@@ -75,8 +77,16 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
   const { issues: projectIssues } = useIssues(EIssuesStoreType.PROJECT);
   const { issues: draftIssues } = useIssues(EIssuesStoreType.WORKSPACE_DRAFT);
   const { fetchIssue } = useIssueDetail();
-  const { allowedProjectIds, handleCreateUpdatePropertyValues, handleCreateSubWorkItem } = useIssueModal();
-  const { getProjectByIdentifier } = useProject();
+  const {
+    allowedProjectIds,
+    handleCreateUpdatePropertyValues,
+    handleCreateSubWorkItem,
+    selectedServiceIds,
+    setSelectedServiceIds,
+  } = useIssueModal();
+  const { getProjectById, getProjectByIdentifier } = useProject();
+  const { linkWorkItem, unlinkWorkItem, workItemLinkMap } = useService();
+  const { currentWorkspace } = useWorkspace();
   // current store details
   const { createIssue, updateIssue } = useIssuesActions(storeType);
   // derived values
@@ -124,11 +134,11 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.project_id, data?.id, data?.sourceIssueId, projectId, isOpen, activeProjectId]);
 
-  const addIssueToCycle = async (issue: TIssue, cycleId: string) => {
+  const addIssueToCycle = async (issue: TIssue, targetCycleId: string) => {
     if (!workspaceSlug || !issue.project_id) return;
 
-    await issues.addIssueToCycle(workspaceSlug.toString(), issue.project_id, cycleId, [issue.id]);
-    fetchCycleDetails(workspaceSlug.toString(), issue.project_id, cycleId);
+    await issues.addIssueToCycle(workspaceSlug.toString(), issue.project_id, targetCycleId, [issue.id]);
+    fetchCycleDetails(workspaceSlug.toString(), issue.project_id, targetCycleId);
   };
 
   const addIssueToModule = async (issue: TIssue, moduleIds: string[]) => {
@@ -137,8 +147,35 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     await Promise.all([
       issues.changeModulesInIssue(workspaceSlug.toString(), issue.project_id, issue.id, moduleIds, []),
       ...moduleIds.map(
-        (moduleId) => issue.project_id && fetchModuleDetails(workspaceSlug.toString(), issue.project_id, moduleId)
+        (targetModuleId) =>
+          issue.project_id && fetchModuleDetails(workspaceSlug.toString(), issue.project_id, targetModuleId)
       ),
+    ]);
+  };
+
+  const syncWorkItemServices = async (issue: TIssue, serviceIds: string[]) => {
+    if (!workspaceSlug || !issue.id || !issue.project_id) return;
+    const slug = workspaceSlug.toString();
+    const issueId = issue.id;
+    const targetProjectId = issue.project_id;
+    const existingLinks = Object.values(workItemLinkMap).filter(
+      (link) => link.issue_id === issueId && link.project_id === targetProjectId
+    );
+    const existingServiceIdSet = new Set(existingLinks.map((link) => link.service_id));
+    const selectedServiceIdSet = new Set(serviceIds);
+    const servicesToAdd = serviceIds.filter((serviceId) => !existingServiceIdSet.has(serviceId));
+    const linksToRemove = existingLinks.filter((link) => !selectedServiceIdSet.has(link.service_id));
+    if (servicesToAdd.length === 0 && linksToRemove.length === 0) return;
+    const identifier = getProjectById(targetProjectId)?.identifier;
+    await Promise.all([
+      ...servicesToAdd.map((serviceId) =>
+        linkWorkItem(slug, currentWorkspace?.id ?? "", targetProjectId, serviceId, {
+          id: issueId,
+          identifier: identifier ? `${identifier}-${issue.sequence_id}` : undefined,
+          name: issue.name,
+        })
+      ),
+      ...linksToRemove.map((link) => unlinkWorkItem(slug, currentWorkspace?.id ?? "", targetProjectId, link.id)),
     ]);
   };
 
@@ -153,6 +190,7 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
 
     setActiveProjectId(null);
     setChangesMade(null);
+    setSelectedServiceIds([]);
     onClose();
     handleDuplicateIssueModal(false);
   };
@@ -233,6 +271,20 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
         });
       }
 
+      // link the services chosen in the create form
+      if (!is_draft_issue && selectedServiceIds.length > 0) {
+        try {
+          await syncWorkItemServices(response, selectedServiceIds);
+          setSelectedServiceIds([]);
+        } catch {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: t("error"),
+            message: t("service.detail.link_work_item_error"),
+          });
+        }
+      }
+
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("success"),
@@ -260,20 +312,20 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     }
   };
 
-  const handleCycleChange = async (data: Partial<TIssue> | undefined, payload: Partial<TIssue>) => {
-    if (!workspaceSlug || !data?.project_id || !data?.id) return;
+  const handleCycleChange = async (existingIssue: Partial<TIssue> | undefined, payload: Partial<TIssue>) => {
+    if (!workspaceSlug || !existingIssue?.project_id || !existingIssue?.id) return;
     // return if user is not trying to change the cycle, i.e
     // - cycle_id is not present in payload
     // - cycle_id is the same as the current cycle id
-    if (!("cycle_id" in payload) || isEqual(data?.cycle_id, payload.cycle_id)) return;
+    if (!("cycle_id" in payload) || isEqual(existingIssue?.cycle_id, payload.cycle_id)) return;
 
     const slug = workspaceSlug.toString();
 
     // Removing the cycle
-    const currentCycleId = data?.cycle_id;
+    const currentCycleId = existingIssue?.cycle_id;
     if (currentCycleId && payload.cycle_id === null) {
-      await issues.removeIssueFromCycle(slug, data.project_id, currentCycleId, data.id);
-      fetchCycleDetails(slug, data.project_id, currentCycleId).catch((error) => {
+      await issues.removeIssueFromCycle(slug, existingIssue.project_id, currentCycleId, existingIssue.id);
+      fetchCycleDetails(slug, existingIssue.project_id, currentCycleId).catch((error) => {
         console.error(error);
       });
     }
@@ -281,12 +333,12 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     // Adding the cycle
     const newCycleId = payload.cycle_id;
     if (newCycleId && newCycleId !== "" && (payload.cycle_id !== cycleId || storeType !== EIssuesStoreType.CYCLE)) {
-      await addIssueToCycle(data as TBaseIssue, newCycleId);
+      await addIssueToCycle(existingIssue as TBaseIssue, newCycleId);
     }
   };
 
-  const handleModuleChange = async (data: Partial<TIssue>, payload: Partial<TIssue>) => {
-    if (!workspaceSlug || !data?.project_id || !data?.id) return;
+  const handleModuleChange = async (existingIssue: Partial<TIssue>, payload: Partial<TIssue>) => {
+    if (!workspaceSlug || !existingIssue?.project_id || !existingIssue?.id) return;
     // return if user is not trying to change the module, i.e
     // - module_ids is not present in payload
     // - module_ids is not an array
@@ -294,27 +346,27 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
     if (
       !("module_ids" in payload) ||
       !Array.isArray(payload.module_ids) ||
-      isEqual(data?.module_ids, payload.module_ids)
+      isEqual(existingIssue?.module_ids, payload.module_ids)
     )
       return;
 
-    const updatedModuleIds = xor(data.module_ids, payload.module_ids);
+    const updatedModuleIds = xor(existingIssue.module_ids, payload.module_ids);
     const modulesToAdd: string[] = [];
     const modulesToRemove: string[] = [];
 
-    for (const moduleId of updatedModuleIds) {
-      if (data.module_ids?.includes(moduleId)) {
-        modulesToRemove.push(moduleId);
+    for (const targetModuleId of updatedModuleIds) {
+      if (existingIssue.module_ids?.includes(targetModuleId)) {
+        modulesToRemove.push(targetModuleId);
       } else {
-        modulesToAdd.push(moduleId);
+        modulesToAdd.push(targetModuleId);
       }
     }
     // update modules if there are modules to add or remove
     if (modulesToAdd.length > 0 || modulesToRemove.length > 0) {
       await issues.changeModulesInIssue(
         workspaceSlug.toString(),
-        data.project_id,
-        data.id,
+        existingIssue.project_id,
+        existingIssue.id,
         modulesToAdd,
         modulesToRemove
       );
@@ -339,6 +391,16 @@ export const CreateUpdateIssueModalBase = observer(function CreateUpdateIssueMod
         workspaceSlug: workspaceSlug?.toString(),
         isDraft: isDraft,
       });
+
+      try {
+        await syncWorkItemServices({ ...data, ...payload } as TIssue, selectedServiceIds);
+      } catch {
+        setToast({
+          type: TOAST_TYPE.ERROR,
+          title: t("error"),
+          message: t("service.detail.link_work_item_error"),
+        });
+      }
 
       setToast({
         type: TOAST_TYPE.SUCCESS,

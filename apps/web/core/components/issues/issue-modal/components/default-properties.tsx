@@ -28,9 +28,12 @@ import { WorkItemTypeDropdown } from "@/components/dropdowns/work-item-type/drop
 import { ParentIssuesListModal } from "@/components/issues/parent-issues-list-modal";
 import { IssueLabelSelect } from "@/components/issues/select";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { ServiceMultiSelect } from "@/components/services/select";
 // hooks
+import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useProject } from "@/hooks/store/use-project";
+import { useService } from "@/hooks/store/use-service";
 import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -69,6 +72,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
   const [workflowMapRetry, setWorkflowMapRetry] = useState(0);
   // refs
+  const initializedServiceIssueId = useRef<string | null>(null);
   const requestedWorkflowMaps = useRef(new Set<string>());
   // per-project retry budget so one failing project cannot spend another's attempts
   const workflowMapRetryCount = useRef(new Map<string, number>());
@@ -78,6 +82,8 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
+  const { fetchedMap, workItemLinkMap } = useService();
+  const { selectedServiceIds, setSelectedServiceIds } = useIssueModal();
   const { fetchWorkflowMap, getWorkflowMap } = useWorkflow();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
@@ -119,6 +125,25 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
       timers.clear();
     };
   }, []);
+
+  // clear the chosen services when the create modal switches project
+  useEffect(() => {
+    if (id) return;
+    setSelectedServiceIds([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, id]);
+
+  // seed the edit modal's selection from the existing links once they are fetched
+  useEffect(() => {
+    if (!id || !projectId || !fetchedMap[projectId] || initializedServiceIssueId.current === id) return;
+    initializedServiceIssueId.current = id;
+    setSelectedServiceIds(
+      Object.values(workItemLinkMap)
+        .filter((link) => link.issue_id === id && link.project_id === projectId)
+        .map((link) => link.service_id)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, projectId, fetchedMap, workItemLinkMap]);
 
   const { getIndex } = getTabIndex(ETabIndices.ISSUE_FORM, isMobile);
 
@@ -333,6 +358,19 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
             </div>
           )}
         />
+      )}
+      {!isDraft && workspaceSlug && projectId && (projectDetails?.service_view ?? true) && (
+        <div className="h-7">
+          <ServiceMultiSelect
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            value={selectedServiceIds}
+            onChange={(serviceIds) => {
+              setSelectedServiceIds(serviceIds);
+              handleFormChange();
+            }}
+          />
+        </div>
       )}
       <div className="h-7">
         {parentId ? (
