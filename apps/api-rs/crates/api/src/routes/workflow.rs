@@ -604,6 +604,9 @@ type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 /// melaporkan namanya lewat field constraint saat index itu dilanggar. Error
 /// kelas 23 lain (FK/check) tidak boleh dilabeli "sudah ada". Fallback: kalau
 /// driver tidak mengekspos nama constraint, pakai pemetaan kelas-23 lama.
+// Test fixture: route standalone ditutup (kontrak 1:1), handler
+// create/patch/delete dipakai test integrasi.
+#[allow(dead_code)]
 fn is_duplicate_workflow_name(e: &sqlx::Error) -> bool {
     let Some(db) = e.as_database_error() else {
         return false;
@@ -704,6 +707,7 @@ pub fn workflow_json(row: &WorkflowRow) -> Value {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)] // test fixture: route standalone ditutup (kontrak 1:1).
 pub struct WorkflowBody {
     #[serde(default)]
     pub name: Option<String>,
@@ -758,6 +762,7 @@ pub async fn list_workflows(
 }
 
 /// POST `/api/workspaces/:slug/workflows/`
+#[allow(dead_code)] // test fixture: route standalone ditutup (kontrak 1:1).
 pub async fn create_workflow(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -820,6 +825,7 @@ pub async fn retrieve_workflow(
 }
 
 /// PATCH `/api/workspaces/:slug/workflows/:workflow_id/`
+#[allow(dead_code)] // test fixture: route standalone ditutup (kontrak 1:1).
 pub async fn patch_workflow(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -864,6 +870,7 @@ pub async fn patch_workflow(
 }
 
 /// DELETE `/api/workspaces/:slug/workflows/:workflow_id/`
+#[allow(dead_code)] // test fixture: route standalone ditutup (kontrak 1:1).
 pub async fn delete_workflow(
     State(st): State<AppState>,
     auth: AuthUser,

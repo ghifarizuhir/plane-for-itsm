@@ -654,16 +654,17 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
-        // Work item types + workflows (internal cookie-auth: workspace-level defs + project opt-in).
+        // Work item types + workflows (internal cookie-auth). Sejak kontrak 1:1
+        // (spec 2026-09-28-service-management-single-page-design.md), workflow
+        // dibuat/diubah/dihapus lewat work item type; hanya GET yang di-route.
+        // Handler create/patch/delete tetap ada sebagai fixture test.
         .route(
             "/api/workspaces/:slug/workflows/",
-            get(routes::workflow::list_workflows).post(routes::workflow::create_workflow),
+            get(routes::workflow::list_workflows),
         )
         .route(
             "/api/workspaces/:slug/workflows/:workflow_id/",
-            get(routes::workflow::retrieve_workflow)
-                .patch(routes::workflow::patch_workflow)
-                .delete(routes::workflow::delete_workflow),
+            get(routes::workflow::retrieve_workflow),
         )
         .route(
             "/api/workspaces/:slug/workflows/:workflow_id/states/",

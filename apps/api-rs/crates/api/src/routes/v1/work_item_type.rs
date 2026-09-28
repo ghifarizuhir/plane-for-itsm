@@ -371,54 +371,8 @@ async fn create_type(
 
     let row = reload(st, &ws, row.id)
         .await?
-        .ok_or_else(|| common::errors::AppError::internal())?;
+        .ok_or(common::errors::AppError::internal())?;
     Ok((StatusCode::CREATED, Json(v1_work_item_type_json(&row))))
-}
-
-/// Guard invariant "satu workflow per type per project" untuk jalur link
-/// `project_ids`: `true` bila salah satu `project_ids` sudah punya type hidup
-/// lain yang memakai `workflow_id` (opsional mengecualikan type itu sendiri).
-async fn workflow_link_conflict(
-    pool: &sqlx::PgPool,
-    project_ids: &[uuid::Uuid],
-    workflow_id: uuid::Uuid,
-    exclude_type_id: Option<uuid::Uuid>,
-) -> Result<bool, common::errors::AppError> {
-    for project_id in project_ids {
-        let (conflict,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM project_issue_types pit \
-             JOIN issue_types t ON t.id = pit.issue_type_id \
-             JOIN projects p ON p.id = pit.project_id \
-             WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
-               AND p.deleted_at IS NULL \
-               AND t.workflow_id = $2 AND ($3::uuid IS NULL OR t.id <> $3))",
-        )
-        .bind(project_id)
-        .bind(workflow_id)
-        .bind(exclude_type_id)
-        .fetch_one(pool)
-        .await?;
-        if conflict {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-/// `true` bila `workflow_id` adalah workflow hidup di `workspace_id`.
-async fn workflow_in_workspace(
-    pool: &sqlx::PgPool,
-    workspace_id: uuid::Uuid,
-    workflow_id: uuid::Uuid,
-) -> Result<bool, common::errors::AppError> {
-    let (ok,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM workflows WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(workflow_id)
-    .bind(workspace_id)
-    .fetch_one(pool)
-    .await?;
-    Ok(ok)
 }
 
 /// Insert `project_issue_types` links for types/projects both in `ws`,
@@ -787,34 +741,6 @@ pub async fn import_to_project(
                 .collect()
         })
         .unwrap_or_default();
-    // Guard sebelum link: satu workflow hanya boleh dipakai satu type hidup
-    // per project, baik di dalam batch request maupun terhadap link existing.
-    let (batch_conflict,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT t.workflow_id FROM issue_types t \
-         WHERE t.id = ANY($1) AND t.deleted_at IS NULL AND t.workflow_id IS NOT NULL \
-         GROUP BY t.workflow_id HAVING COUNT(*) > 1)",
-    )
-    .bind(&ids)
-    .fetch_one(&st.pool)
-    .await?;
-    let (project_conflict,): (bool,) = sqlx::query_as(
-        "SELECT EXISTS( \
-           SELECT 1 FROM project_issue_types pit \
-           JOIN issue_types t ON t.id = pit.issue_type_id \
-           WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND t.deleted_at IS NULL \
-             AND t.id <> ALL($2) AND t.workflow_id IS NOT NULL \
-             AND t.workflow_id IN (SELECT workflow_id FROM issue_types WHERE id = ANY($2) \
-               AND deleted_at IS NULL AND workflow_id IS NOT NULL))",
-    )
-    .bind(project_id)
-    .bind(&ids)
-    .fetch_one(&st.pool)
-    .await?;
-    if batch_conflict || project_conflict {
-        return Ok(bad(
-            "Workflow is already enabled for another work item type in this project",
-        ));
-    }
     for id in &ids {
         sqlx::query(
             "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, \
