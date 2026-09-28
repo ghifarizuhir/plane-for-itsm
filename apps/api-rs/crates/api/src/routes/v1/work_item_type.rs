@@ -507,94 +507,30 @@ async fn update_type(
             ));
         }
     }
-    // Workflow: omitted (`None`) = unchanged, `Some(None)` = clear, dan
-    // `Some(Some(wf))` = set/switch. Query ini sekaligus membawa `is_epic`
-    // efektif.
-    let current: Option<(Option<uuid::Uuid>, bool)> = sqlx::query_as(
-        "SELECT workflow_id, is_epic FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    if body.workflow.is_some() {
+        return Ok(bad("Workflows are managed through work item types"));
+    }
+    let current: Option<(Option<uuid::Uuid>, bool, bool, String)> = sqlx::query_as(
+        "SELECT workflow_id, is_epic, is_active, name FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
     .fetch_optional(&st.pool)
     .await?;
-    let Some((current_workflow, current_is_epic)) = current else {
+    let Some((current_workflow, current_is_epic, current_is_active, current_name)) = current else {
         return Ok(missing());
     };
-    let set_workflow = match body.workflow {
-        Some(Some(wf)) => Some(wf),
-        _ => None,
-    };
-    let clear_workflow = matches!(body.workflow, Some(None));
-    let effective_workflow: Option<uuid::Uuid> = match body.workflow {
-        Some(Some(wf)) => Some(wf),
-        Some(None) => None,
-        None => current_workflow,
-    };
-    if body.is_epic.unwrap_or(current_is_epic) && effective_workflow.is_some() {
-        return Ok(bad("Epic types cannot have a workflow"));
-    }
-    if let Some(workflow_id) = set_workflow {
-        if !workflow_in_workspace(&st.pool, ws, workflow_id).await? {
-            return Ok(bad("Workflow does not exist in this workspace"));
-        }
-    }
-    if clear_workflow {
-        let (enabled,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM project_issue_types WHERE issue_type_id = $1 AND deleted_at IS NULL)",
-        )
-        .bind(pk)
-        .fetch_one(&st.pool)
-        .await?;
-        if enabled {
-            return Ok(bad(
-                "Cannot unassign a workflow while the type is enabled in projects",
-            ));
-        }
-    }
-    // Switch workflow pada type yang sudah enabled: guard ke semua project
-    // hidup yang mengaktifkan type ini, lalu materialize setelah UPDATE.
-    let switch_to = match set_workflow {
-        Some(wf) if current_workflow != Some(wf) => Some(wf),
-        _ => None,
-    };
-    let enabled_project_ids: Vec<uuid::Uuid> = if switch_to.is_some() {
-        sqlx::query_scalar(
-            "SELECT pit.project_id FROM project_issue_types pit \
-             WHERE pit.issue_type_id = $1 AND pit.deleted_at IS NULL",
-        )
-        .bind(pk)
-        .fetch_all(&st.pool)
-        .await?
-    } else {
-        Vec::new()
-    };
-    if let Some(wf) = switch_to {
-        if workflow_link_conflict(&st.pool, &enabled_project_ids, wf, Some(pk)).await? {
-            return Ok(bad(
-                "Workflow is already enabled for another work item type in this project",
-            ));
-        }
-        let (has_live_issues,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM issues i JOIN states s ON s.id = i.state_id \
-             WHERE i.type_id = $1 AND i.deleted_at IS NULL AND s.project_id = ANY($2))",
-        )
-        .bind(pk)
-        .bind(&enabled_project_ids)
-        .fetch_one(&st.pool)
-        .await?;
-        if has_live_issues {
-            return Ok(bad(
-                "Cannot change the workflow while the type has live work items",
-            ));
-        }
-    }
-    if let (Some(ids), Some(workflow_id)) = (body.project_ids.as_ref(), effective_workflow) {
-        if workflow_link_conflict(&st.pool, ids, workflow_id, Some(pk)).await? {
-            return Ok(bad(
-                "Workflow is already enabled for another work item type in this project",
-            ));
-        }
-    }
-    // Column-by-column COALESCE so omitted fields are untouched.
+    let effective_is_epic = body.is_epic.unwrap_or(current_is_epic);
+    let effective_is_active = body.is_active.unwrap_or(current_is_active);
+    let effective_name = body
+        .name
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or(current_name.as_str())
+        .to_string();
+
+    let mut tx = st.pool.begin().await?;
+    // Column-by-column COALESCE so omitted fields are untouched; workflow_id
+    // tidak lagi bagian dari payload.
     let updated = sqlx::query(
         "UPDATE issue_types SET \
          name = COALESCE($2, name), \
@@ -603,10 +539,9 @@ async fn update_type(
          is_epic = COALESCE($5, is_epic), \
          is_active = COALESCE($6, is_active), \
          level = COALESCE($7, level), \
-         workflow_id = CASE WHEN $8 THEN NULL ELSE COALESCE($9, workflow_id) END, \
-         external_id = COALESCE($10, external_id), \
-         external_source = COALESCE($11, external_source), \
-         updated_by_id = $12, updated_at = now() \
+         external_id = COALESCE($8, external_id), \
+         external_source = COALESCE($9, external_source), \
+         updated_by_id = $10, updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
@@ -616,32 +551,35 @@ async fn update_type(
     .bind(body.is_epic)
     .bind(body.is_active)
     .bind(body.level.map(|l| l as f64))
-    .bind(clear_workflow)
-    .bind(set_workflow)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(user)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
     if updated.rows_affected() == 0 {
         return Ok(missing());
     }
-    // Materialize union (dedup) dari project yang di-link request dan project
-    // enabled saat workflow pindah; supersede cleanup menangani mirror lama.
-    let mut materialize_ids: Vec<uuid::Uuid> = Vec::new();
-    if let Some(ids) = body.project_ids.as_ref() {
-        let linked = link_projects(st, &ws, pk, user, ids).await?;
-        if effective_workflow.is_some() {
-            materialize_ids.extend(linked);
+    // Workflow mengikuti type: nama derived + is_active. Epic tidak punya.
+    if let Some(workflow_id) = current_workflow {
+        if !effective_is_epic {
+            crate::routes::workflow::sync_type_workflow(
+                &mut tx,
+                ws,
+                &effective_name,
+                effective_is_active,
+                workflow_id,
+            )
+            .await?;
         }
     }
-    if switch_to.is_some() {
-        materialize_ids.extend(enabled_project_ids.iter().copied());
-    }
-    materialize_ids.sort_unstable();
-    materialize_ids.dedup();
-    for pid in &materialize_ids {
-        crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
+    tx.commit().await?;
+
+    // Materialize hanya untuk project yang di-link lewat request ini.
+    if let Some(ids) = body.project_ids.as_ref() {
+        let linked = link_projects(st, &ws, pk, user, ids).await?;
+        for pid in &linked {
+            crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
+        }
     }
     match reload(st, &ws, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),

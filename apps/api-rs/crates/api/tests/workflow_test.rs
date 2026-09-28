@@ -2785,3 +2785,85 @@ async fn create_type_autocreates_workflow_and_rejects_explicit() {
 
     purge(&st.pool, &slug).await;
 }
+
+#[tokio::test]
+async fn update_type_rejects_workflow_and_syncs_derived_name() {
+    let st = app_state().await;
+    let (slug, _ws_id, _project_id) = make_workspace(&st, "wfupdate").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (_, created) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Incident".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create");
+    let type_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    let workflow_id = Uuid::parse_str(created["workflow"].as_str().unwrap()).unwrap();
+
+    // Body `workflow` (null eksplisit) ditolak.
+    let (status, body) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+        Json(V1UpdateWorkItemType {
+            workflow: Some(None),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("reject workflow body");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Workflows are managed through work item types");
+
+    // Rename type → workflow ikut rename.
+    let (status, _) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+        Json(V1UpdateWorkItemType {
+            name: Some("Major Incident".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("rename");
+    assert_eq!(status, StatusCode::OK);
+    let (renamed,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workflow name");
+    assert_eq!(renamed, "Major Incident Workflow");
+
+    // Toggle active → workflow.is_active ikut.
+    let (status, _) = update_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), type_id)),
+        Json(V1UpdateWorkItemType {
+            is_active: Some(false),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("deactivate");
+    assert_eq!(status, StatusCode::OK);
+    let (active,): (bool,) = sqlx::query_as("SELECT is_active FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workflow active");
+    assert!(!active);
+
+    purge(&st.pool, &slug).await;
+}
