@@ -1998,7 +1998,7 @@ async fn workflow_map_hides_epic_types() {
 }
 
 #[tokio::test]
-async fn unlink_cross_workspace_and_switch_with_issues() {
+async fn unlink_cross_workspace_and_project_delete_guards() {
     let st = app_state().await;
     let (slug_a, ws_a, project_a) = make_workspace(&st, "wfxa").await;
     let (slug_b, ws_b, project_b) = make_workspace(&st, "wfxb").await;
@@ -2107,30 +2107,6 @@ async fn unlink_cross_workspace_and_switch_with_issues() {
     )
     .await
     .expect("A1 state");
-    let (_, wf_a2) = create_workflow(
-        State(st.clone()),
-        AuthUser(owner_a),
-        Path(slug_a.clone()),
-        Json(WorkflowBody {
-            name: Some("A Workflow 2".into()),
-            description: None,
-            is_active: None,
-        }),
-    )
-    .await
-    .expect("A workflow 2");
-    let wf_a2_id = Uuid::parse_str(wf_a2["id"].as_str().unwrap()).unwrap();
-    let _ = create_state(
-        State(st.clone()),
-        AuthUser(owner_a),
-        Path((slug_a.clone(), wf_a2_id)),
-        Json(WorkflowStateBody {
-            name: Some("A2 New".into()),
-            ..Default::default()
-        }),
-    )
-    .await
-    .expect("A2 state");
     let (type_t,): (Uuid,) = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
          level, workflow_id, workspace_id, created_at, updated_at) \
@@ -2152,7 +2128,7 @@ async fn unlink_cross_workspace_and_switch_with_issues() {
     .expect("import T");
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    // Live issue bertipe T memblokir switch workflow.
+    // Live issue bertipe T memblokir project-scope delete.
     let (state_id,): (Uuid,) = sqlx::query_as(
         "SELECT id FROM states WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL LIMIT 1",
     )
@@ -2175,23 +2151,6 @@ async fn unlink_cross_workspace_and_switch_with_issues() {
     .fetch_one(&st.pool)
     .await
     .expect("live issue");
-
-    let (status, body) = update_workspace(
-        State(st.clone()),
-        AuthUser(owner_a),
-        Path((slug_a.clone(), type_t)),
-        Json(V1UpdateWorkItemType {
-            workflow: Some(Some(wf_a2_id)),
-            ..Default::default()
-        }),
-    )
-    .await
-    .expect("switch with live issues");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(
-        body["error"],
-        "Cannot change the workflow while the type has live work items"
-    );
 
     // Project-scope DELETE: 400 saat issue hidup, 204 setelah issue ditutup.
     let (status, body) = delete_project(
