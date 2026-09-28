@@ -2867,3 +2867,76 @@ async fn update_type_rejects_workflow_and_syncs_derived_name() {
 
     purge(&st.pool, &slug).await;
 }
+
+#[tokio::test]
+async fn delete_type_cascades_workflow() {
+    let st = app_state().await;
+    let (slug, _ws_id, _project_id) = make_workspace(&st, "wfdel2").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (_, created) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Incident".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create");
+    let type_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    let workflow_id = Uuid::parse_str(created["workflow"].as_str().unwrap()).unwrap();
+
+    let (_, progress) = create_state(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(WorkflowStateBody {
+            name: Some("In Progress".into()),
+            group: Some("started".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("state");
+    let progress_id = Uuid::parse_str(progress["id"].as_str().unwrap()).unwrap();
+    let (_, states) = list_states(State(st.clone()), AuthUser(owner), Path((slug.clone(), workflow_id)))
+        .await
+        .expect("states");
+    let default_id = Uuid::parse_str(states[0]["id"].as_str().unwrap()).unwrap();
+    let _ = create_transition(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), workflow_id)),
+        Json(TransitionBody {
+            from_state_id: Some(default_id),
+            to_state_id: Some(progress_id),
+        }),
+    )
+    .await
+    .expect("transition");
+
+    let (status, _) = delete_workspace(State(st.clone()), AuthUser(owner), Path((slug.clone(), type_id)))
+        .await
+        .expect("delete type");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (workflow_live, states_live, transitions_live): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM workflows WHERE id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_transitions WHERE workflow_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("cascade counts");
+    assert_eq!(workflow_live, 0);
+    assert_eq!(states_live, 0);
+    assert_eq!(transitions_live, 0);
+
+    purge(&st.pool, &slug).await;
+}

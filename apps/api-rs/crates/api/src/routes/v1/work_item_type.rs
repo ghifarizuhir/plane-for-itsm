@@ -252,6 +252,14 @@ pub async fn delete_workspace(
     if linked {
         return Ok(bad("Type is enabled in projects"));
     }
+    let workflow_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT workflow_id FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?
+    .flatten();
+    let mut tx = st.pool.begin().await?;
     let affected = sqlx::query(
         "UPDATE issue_types SET deleted_at = now(), updated_at = now() \
          WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) \
@@ -259,7 +267,7 @@ pub async fn delete_workspace(
     )
     .bind(pk)
     .bind(&slug)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?
     .rows_affected();
     if affected == 0 {
@@ -267,8 +275,13 @@ pub async fn delete_workspace(
     }
     sqlx::query("UPDATE project_issue_types SET deleted_at = now(), updated_at = now() WHERE issue_type_id = $1 AND deleted_at IS NULL")
         .bind(pk)
-        .execute(&st.pool)
+        .execute(&mut *tx)
         .await?;
+    // Workflow dimiliki type: ikut ter-soft-delete beserta states + transitions.
+    if let Some(workflow_id) = workflow_id {
+        crate::routes::workflow::soft_delete_workflow_cascade(&mut tx, workflow_id).await?;
+    }
+    tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 

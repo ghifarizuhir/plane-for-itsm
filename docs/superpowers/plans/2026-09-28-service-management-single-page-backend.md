@@ -553,8 +553,8 @@ async fn soft_delete_workflow_cascade_clears_states_and_transitions() {
         AuthUser(owner),
         Path((slug.clone(), workflow_id)),
         Json(TransitionBody {
-            from_state_id: default_id,
-            to_state_id: progress_id,
+            from_state_id: Some(default_id),
+            to_state_id: Some(progress_id),
         }),
     )
     .await
@@ -1236,8 +1236,8 @@ async fn delete_type_cascades_workflow() {
         AuthUser(owner),
         Path((slug.clone(), workflow_id)),
         Json(TransitionBody {
-            from_state_id: default_id,
-            to_state_id: progress_id,
+            from_state_id: Some(default_id),
+            to_state_id: Some(progress_id),
         }),
     )
     .await
