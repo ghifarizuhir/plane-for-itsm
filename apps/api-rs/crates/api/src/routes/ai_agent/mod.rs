@@ -25,7 +25,7 @@ use crate::routes::ai_conversations::{
 use crate::routes::module::guard_am;
 use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
-use ai::agent::{history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
+use ai::agent::{current_user_context, history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
 use ai::llm::{host_of, resolve_llm_config, LlmError};
 
 pub use ai::agent::{
@@ -154,6 +154,17 @@ pub async fn workspace_ai_agent(
     }
     let task = task_from_body(&body);
     let context = body.get("context").and_then(Value::as_str).unwrap_or("");
+    // Name the signed-in user in the prompt so "me"/"saya" resolves to a person
+    // without asking the user who they are.
+    let current_user: Option<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT display_name, email FROM users WHERE id = $1")
+            .bind(auth.0)
+            .fetch_optional(&st.pool)
+            .await?;
+    let context = match current_user {
+        Some((display_name, email)) => current_user_context(context, display_name.as_deref(), email.as_deref()),
+        None => context.to_string(),
+    };
     let history_rows =
         recent_messages(&st.pool, conversation_id, HISTORY_MESSAGE_LIMIT as i64).await?;
     let history: Vec<HistoryMessage> = history_rows
@@ -163,7 +174,7 @@ pub async fn workspace_ai_agent(
             content: row.content.clone(),
         })
         .collect();
-    let model_prompt = history_prompt(context, &history, prompt);
+    let model_prompt = history_prompt(&context, &history, prompt);
     let title = title_from(prompt);
     // Insert the user message on a pooled connection, then release it before
     // the (up to 180s) LLM call so the pool is not held. A conversation that

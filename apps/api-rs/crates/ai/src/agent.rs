@@ -60,7 +60,9 @@ item or task (natural language or a message starting with /task), propose \
 exactly one work item per create_work_item call. The project must be named by \
 the user: ask when it is missing or ambiguous, and never guess. State names, \
 assignee names or emails, and label names may be human-readable; the UI \
-resolves them. A work item is only created after the user confirms the \
+resolves them. The context may name the signed-in user as Current user; when \
+the user refers to themselves (\"me\", \"saya\"), that is the person to use as \
+the assignee. A work item is only created after the user confirms the \
 proposal card, so never say it is already created.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
@@ -93,6 +95,27 @@ pub const HISTORY_MESSAGE_LIMIT: usize = 8;
 pub struct HistoryMessage {
     pub role: String,
     pub content: String,
+}
+
+/// Append the signed-in user's identity to the FE-supplied context block so the
+/// model can resolve first-person references ("me", "saya") to a person. Blank
+/// parts are ignored; with no usable identity the context is unchanged.
+pub fn current_user_context(context: &str, display_name: Option<&str>, email: Option<&str>) -> String {
+    let name = display_name.map(str::trim).filter(|part| !part.is_empty());
+    let email = email.map(str::trim).filter(|part| !part.is_empty());
+    let identity = match (name, email) {
+        (Some(name), Some(email)) => format!("{name} <{email}>"),
+        (Some(name), None) => name.to_string(),
+        (None, Some(email)) => email.to_string(),
+        (None, None) => return context.to_string(),
+    };
+    let line = format!("Current user: {identity}");
+    let context = context.trim();
+    if context.is_empty() {
+        line
+    } else {
+        format!("{context}\n{line}")
+    }
 }
 
 /// Compose the model prompt from the FE-supplied context block, the stored
@@ -231,6 +254,38 @@ mod tests {
         assert_eq!(actions[0]["proposal"]["name"], json!("Daily"));
         assert_eq!(actions[1]["kind"], json!("create_work_item"));
         assert_eq!(actions[1]["proposal"]["name"], json!("Fix pump"));
+    }
+
+    #[test]
+    fn current_user_context_appends_identity_to_existing_context() {
+        let out = current_user_context(
+            "Work item context:\nWork item: X",
+            Some("Ghifari"),
+            Some("ghifari@example.com"),
+        );
+        assert_eq!(
+            out,
+            "Work item context:\nWork item: X\nCurrent user: Ghifari <ghifari@example.com>"
+        );
+    }
+
+    #[test]
+    fn current_user_context_uses_whichever_identity_part_is_present() {
+        assert_eq!(
+            current_user_context("", Some("Ghifari"), None),
+            "Current user: Ghifari"
+        );
+        assert_eq!(
+            current_user_context("ctx", None, Some("ghifari@example.com")),
+            "ctx\nCurrent user: ghifari@example.com"
+        );
+    }
+
+    #[test]
+    fn current_user_context_without_identity_is_unchanged() {
+        assert_eq!(current_user_context("ctx", None, None), "ctx");
+        assert_eq!(current_user_context("ctx", Some("  "), Some("")), "ctx");
+        assert_eq!(current_user_context("", None, None), "");
     }
 
     #[test]

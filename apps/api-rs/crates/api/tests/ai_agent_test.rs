@@ -725,6 +725,50 @@ async fn agent_turn_persists_both_messages_and_builds_context_from_history() {
 }
 
 #[tokio::test]
+async fn agent_prompt_names_the_signed_in_user() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let (base_url, bodies) = support::spawn_recording_upstream("agent answer").await;
+    set_llm_env(&base_url);
+    let (status, _) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "assign it to me",
+            "context": "Work item context:\nWork item: X",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let sent = bodies.lock().unwrap().clone();
+    let content = sent[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == json!("user"))
+        .and_then(|message| message["content"].as_str())
+        .unwrap();
+    assert!(
+        content.contains(&format!(
+            "Current user: {} <{}@example.invalid>",
+            scratch.slug, scratch.slug
+        )),
+        "the model prompt must name the signed-in user, got: {content}"
+    );
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn agent_requires_a_conversation_and_matching_mode() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;

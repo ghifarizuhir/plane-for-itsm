@@ -249,3 +249,31 @@ key={entry.key} ... />)` di bawah card schedule.
 - Tool baca member/label/state untuk agent (FE yang resolve).
 - Idempotency level DB untuk create issue.
 - Perubahan pada alur/card schedule, worker, atau Django.
+
+## 9. Follow-up: identitas user login di prompt agent
+
+Masalah yang ditemukan saat smoke: user menulis "assignee ke saya", agent
+tidak tahu siapa user yang sedang login sehingga bertanya balik nama/email.
+Context yang dikirim FE tidak pernah memuat identitas user.
+
+Keputusan: identitas disuntik di backend (bukan FE), karena handler
+`workspace_ai_agent` sudah memegang `auth.0` dan pool — lebih otoritatif dan
+tidak butuh plumbing store baru.
+
+- Sebelum `history_prompt`, handler query
+  `SELECT display_name, email FROM users WHERE id = $1` (best-effort: user
+  tidak ketemu → context dibiarkan apa adanya).
+- Helper murni `ai::agent::current_user_context(context, display_name, email)`
+  menambahkan baris `Current user: Nama <email>` di akhir context; bagian
+  kosong/null diabaikan (nama saja, email saja, atau tidak ada → context
+  tidak berubah).
+- PREAMBLE ditambah satu kalimat: context bisa memuat "Current user"; saat
+  user menyebut diri sendiri ("me", "saya"), itulah orang yang dipakai
+  sebagai assignee.
+- FE tidak berubah: card sudah me-resolve nama/email → member UUID lewat
+  `matchAssignees`.
+- Scheduled run tidak berubah (worker memakai prompt sendiri).
+
+Testing: unit `crates/ai` (append, partial identity, tanpa identity) dan
+integrasi `ai_agent_test::agent_prompt_names_the_signed_in_user` (fake
+upstream menangkap prompt dan memastikan baris Current user ada).
