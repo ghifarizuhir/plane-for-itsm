@@ -1640,45 +1640,42 @@ async fn import_materializes_and_unlink_guards() {
 }
 
 #[tokio::test]
-async fn workflow_switch_guard_and_map_details() {
+async fn type_workflow_lifecycle_syncs_name_active_and_delete() {
     let st = app_state().await;
-    let (slug, ws_id, project_id) = make_workspace(&st, "wfswitch").await;
+    let (slug, _ws_id, project_id) = make_workspace(&st, "wflife").await;
     let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
         .bind(&slug)
         .fetch_one(&st.pool)
         .await
         .expect("owner");
 
-    // Workflow A: New (default) → In Progress.
-    let (_, wf_a) = create_workflow(
+    // Create type via API → workflow derived + default state.
+    let (status, created) = create_workspace(
         State(st.clone()),
         AuthUser(owner),
         Path(slug.clone()),
-        Json(WorkflowBody {
-            name: Some("Workflow A".into()),
-            description: None,
-            is_active: None,
-        }),
-    )
-    .await
-    .expect("workflow A");
-    let wf_a_id = Uuid::parse_str(wf_a["id"].as_str().unwrap()).unwrap();
-    let (_, a_new) = create_state(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), wf_a_id)),
-        Json(WorkflowStateBody {
-            name: Some("New".into()),
+        Json(V1CreateWorkItemType {
+            name: Some("Incident".into()),
             ..Default::default()
         }),
     )
     .await
-    .expect("A New");
-    let a_new_id = Uuid::parse_str(a_new["id"].as_str().unwrap()).unwrap();
-    let (_, a_progress) = create_state(
+    .expect("create type");
+    assert_eq!(status, StatusCode::CREATED);
+    let type_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    let workflow_id = Uuid::parse_str(created["workflow"].as_str().unwrap()).unwrap();
+    let (name,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workflow name");
+    assert_eq!(name, "Incident Workflow");
+
+    // Tambah state + transisi lalu import ke project; cek detail workflow-map.
+    let (_, progress) = create_state(
         State(st.clone()),
         AuthUser(owner),
-        Path((slug.clone(), wf_a_id)),
+        Path((slug.clone(), workflow_id)),
         Json(WorkflowStateBody {
             name: Some("In Progress".into()),
             group: Some("started".into()),
@@ -1686,81 +1683,33 @@ async fn workflow_switch_guard_and_map_details() {
         }),
     )
     .await
-    .expect("A In Progress");
-    let a_progress_id = Uuid::parse_str(a_progress["id"].as_str().unwrap()).unwrap();
-    let (status, _) = create_transition(
+    .expect("state");
+    let progress_id = Uuid::parse_str(progress["id"].as_str().unwrap()).unwrap();
+    let (_, states) = list_states(State(st.clone()), AuthUser(owner), Path((slug.clone(), workflow_id)))
+        .await
+        .expect("states");
+    let default_id = Uuid::parse_str(states[0]["id"].as_str().unwrap()).unwrap();
+    let _ = create_transition(
         State(st.clone()),
         AuthUser(owner),
-        Path((slug.clone(), wf_a_id)),
+        Path((slug.clone(), workflow_id)),
         Json(TransitionBody {
-            from_state_id: Some(a_new_id),
-            to_state_id: Some(a_progress_id),
+            from_state_id: Some(default_id),
+            to_state_id: Some(progress_id),
         }),
     )
     .await
-    .expect("A transition");
+    .expect("transition");
     assert_eq!(status, StatusCode::CREATED);
-
-    // Workflow B: satu state.
-    let (_, wf_b) = create_workflow(
-        State(st.clone()),
-        AuthUser(owner),
-        Path(slug.clone()),
-        Json(WorkflowBody {
-            name: Some("Workflow B".into()),
-            description: None,
-            is_active: None,
-        }),
-    )
-    .await
-    .expect("workflow B");
-    let wf_b_id = Uuid::parse_str(wf_b["id"].as_str().unwrap()).unwrap();
-    let _ = create_state(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), wf_b_id)),
-        Json(WorkflowStateBody {
-            name: Some("Open".into()),
-            ..Default::default()
-        }),
-    )
-    .await
-    .expect("B Open");
-
-    // Type T (workflow A) + U (workflow B), lalu enable keduanya.
-    let (type_t,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
-         level, workflow_id, workspace_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), 'Type T', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
-         RETURNING id",
-    )
-    .bind(wf_a_id)
-    .bind(ws_id)
-    .fetch_one(&st.pool)
-    .await
-    .expect("type T");
-    let (type_u,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
-         level, workflow_id, workspace_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), 'Type U', '', '{}', false, false, true, 0, $1, $2, now(), now()) \
-         RETURNING id",
-    )
-    .bind(wf_b_id)
-    .bind(ws_id)
-    .fetch_one(&st.pool)
-    .await
-    .expect("type U");
     let (status, _) = import_to_project(
         State(st.clone()),
         AuthUser(owner),
         Path((slug.clone(), project_id)),
-        Json(json!({"work_item_types": [type_t, type_u]})),
+        Json(json!({"work_item_types": [type_id]})),
     )
     .await
-    .expect("import both");
+    .expect("import");
     assert_eq!(status, StatusCode::NO_CONTENT);
-
-    // workflow-map T: 2 state, default = mirror "New", 1 transisi mirror ids.
     let (status, map) = workflow_map(
         State(st.clone()),
         AuthUser(owner),
@@ -1769,217 +1718,84 @@ async fn workflow_switch_guard_and_map_details() {
     .await
     .expect("map");
     assert_eq!(status, StatusCode::OK);
-    let types = map["types"].as_array().unwrap();
-    assert_eq!(types.len(), 2);
-    let type_t_str = type_t.to_string();
-    let t_entry = types
-        .iter()
-        .find(|t| t["type_id"] == type_t_str)
-        .expect("T entry");
-    let t_states = t_entry["states"].as_array().unwrap();
-    assert_eq!(t_states.len(), 2);
-    let new_mirror = t_states.iter().find(|s| s["name"] == "New").unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let progress_mirror = t_states
-        .iter()
-        .find(|s| s["name"] == "In Progress")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    assert_eq!(t_entry["default_state_id"], new_mirror);
-    let transitions = t_entry["transitions"].as_array().unwrap();
-    assert_eq!(transitions.len(), 1);
-    assert_eq!(transitions[0]["from_state_id"], new_mirror);
-    assert_eq!(transitions[0]["to_state_id"], progress_mirror);
+    assert_eq!(map["types"][0]["type_name"], "Incident");
+    assert_eq!(map["types"][0]["states"].as_array().unwrap().len(), 2);
+    assert_eq!(map["types"][0]["transitions"].as_array().unwrap().len(), 1);
 
-    // Switch U ke A ditolak: A sudah dipakai T di project ini.
-    let (status, body) = update_workspace(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), type_u)),
-        Json(V1UpdateWorkItemType {
-            workflow: Some(Some(wf_a_id)),
-            ..Default::default()
-        }),
-    )
-    .await
-    .expect("switch U to A");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(
-        body["error"],
-        "Workflow is already enabled for another work item type in this project"
-    );
-    let (u_workflow,): (Option<Uuid>,) =
-        sqlx::query_as("SELECT workflow_id FROM issue_types WHERE id = $1")
-            .bind(type_u)
-            .fetch_one(&st.pool)
-            .await
-            .expect("U workflow");
-    assert_eq!(
-        u_workflow,
-        Some(wf_b_id),
-        "switch yang ditolak tidak boleh mengubah workflow"
-    );
-
-    // Bebaskan B (belum ada issue) agar T boleh pindah; mirror U hilang.
-    let (status, _) = unlink_type(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), project_id, type_u)),
-    )
-    .await
-    .expect("unlink U");
-    assert_eq!(status, StatusCode::NO_CONTENT);
-
-    // Switch T ke B: tidak ada type lain memakai B di project → 200 + sync.
+    // Rename type → workflow ikut rename.
     let (status, _) = update_workspace(
         State(st.clone()),
         AuthUser(owner),
-        Path((slug.clone(), type_t)),
+        Path((slug.clone(), type_id)),
         Json(V1UpdateWorkItemType {
-            workflow: Some(Some(wf_b_id)),
+            name: Some("Major Incident".into()),
             ..Default::default()
         }),
     )
     .await
-    .expect("switch T to B");
+    .expect("rename");
     assert_eq!(status, StatusCode::OK);
+    let (renamed,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("renamed workflow");
+    assert_eq!(renamed, "Major Incident Workflow");
 
-    let (old_live, old_total): (i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*) FILTER (WHERE deleted_at IS NULL), COUNT(*) FROM states \
-         WHERE project_id = $1 AND type_id = $2 AND workflow_state_id IN ($3, $4)",
-    )
-    .bind(project_id)
-    .bind(type_t)
-    .bind(a_new_id)
-    .bind(a_progress_id)
-    .fetch_one(&st.pool)
-    .await
-    .expect("old mirrors");
-    assert_eq!(old_live, 0, "mirror workflow A harus soft-deleted");
-    assert_eq!(old_total, 2, "baris lama tetap ada sebagai soft-deleted");
-
-    let (b_live, b_default): (i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COUNT(*) FILTER (WHERE \"default\") FROM states \
-         WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(type_t)
-    .fetch_one(&st.pool)
-    .await
-    .expect("B mirrors");
-    assert_eq!(b_live, 1, "mirror workflow B harus hidup");
-    assert_eq!(b_default, 1);
-
-    // Issue bertipe U (walau link U sudah lepas) memblokir unlink & delete.
-    let (state_id,): (Uuid,) = sqlx::query_as(
-        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL ORDER BY sequence LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_one(&st.pool)
-    .await
-    .expect("state");
-    sqlx::query(
-        "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
-         sort_order, sequence_id, state_id, type_id, project_id, workspace_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), 'Typed work', '<p></p>', '{}', 'none', true, \
-         65535, (SELECT COALESCE(MAX(sequence_id), 0) + 1000 FROM issues WHERE project_id = $2), \
-         $1, $4, $2, $3, now(), now())",
-    )
-    .bind(state_id)
-    .bind(project_id)
-    .bind(ws_id)
-    .bind(type_u)
-    .execute(&st.pool)
-    .await
-    .expect("issue with type U");
-
-    let (status, body) = unlink_type(
+    // Deactivate type → workflow.is_active ikut + map menyembunyikan type.
+    let (status, _) = update_workspace(
         State(st.clone()),
         AuthUser(owner),
-        Path((slug.clone(), project_id, type_u)),
-    )
-    .await
-    .expect("unlink in use");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Type is in use by work items");
-
-    let (status, body) = delete_workspace(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), type_u)),
-    )
-    .await
-    .expect("delete in use");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Type is in use by work items");
-
-    // Workflow milik workspace lain / tidak ada tidak boleh dipakai.
-    let (foreign_slug, _foreign_ws_id, _foreign_project_id) = make_workspace(&st, "wfown").await;
-    let (foreign_owner,): (Uuid,) =
-        sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
-            .bind(&foreign_slug)
-            .fetch_one(&st.pool)
-            .await
-            .expect("foreign owner");
-    let (_, foreign_wf) = create_workflow(
-        State(st.clone()),
-        AuthUser(foreign_owner),
-        Path(foreign_slug.clone()),
-        Json(WorkflowBody {
-            name: Some("Foreign Workflow".into()),
-            description: None,
-            is_active: None,
-        }),
-    )
-    .await
-    .expect("foreign workflow");
-    let foreign_wf_id = Uuid::parse_str(foreign_wf["id"].as_str().unwrap()).unwrap();
-
-    let (status, body) = update_workspace(
-        State(st.clone()),
-        AuthUser(owner),
-        Path((slug.clone(), type_u)),
+        Path((slug.clone(), type_id)),
         Json(V1UpdateWorkItemType {
-            workflow: Some(Some(foreign_wf_id)),
+            is_active: Some(false),
             ..Default::default()
         }),
     )
     .await
-    .expect("switch to foreign workflow");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Workflow does not exist in this workspace");
-
-    let (status, body) = create_workspace(
+    .expect("deactivate");
+    assert_eq!(status, StatusCode::OK);
+    let (active,): (bool,) = sqlx::query_as("SELECT is_active FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workflow active");
+    assert!(!active);
+    let (_, map) = workflow_map(
         State(st.clone()),
         AuthUser(owner),
-        Path(slug.clone()),
-        Json(V1CreateWorkItemType {
-            name: Some("Foreign WF Type".into()),
-            workflow: Some(Uuid::new_v4()),
-            ..Default::default()
-        }),
+        Path((slug.clone(), project_id)),
     )
     .await
-    .expect("create with missing workflow");
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Workflow does not exist in this workspace");
-    let (ghost_types,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 AND name = 'Foreign WF Type' AND deleted_at IS NULL",
+    .expect("map inactive");
+    assert!(map["types"].as_array().unwrap().is_empty());
+
+    // Delete type (detach dulu) → workflow + states + transitions soft-delete.
+    let (status, _) = delete_project(
+        State(st.clone()),
+        AuthUser(owner),
+        Path((slug.clone(), project_id, type_id)),
     )
-    .bind(ws_id)
+    .await
+    .expect("detach");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = delete_workspace(State(st.clone()), AuthUser(owner), Path((slug.clone(), type_id)))
+        .await
+        .expect("delete type");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (workflow_live, states_live, transitions_live): (i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM workflows WHERE id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL), \
+                (SELECT COUNT(*) FROM workflow_transitions WHERE workflow_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(workflow_id)
     .fetch_one(&st.pool)
     .await
-    .expect("ghost type rows");
-    assert_eq!(
-        ghost_types, 0,
-        "create dengan workflow invalid tidak boleh INSERT"
-    );
+    .expect("cascade counts");
+    assert_eq!(workflow_live, 0);
+    assert_eq!(states_live, 0);
+    assert_eq!(transitions_live, 0);
 
-    purge(&st.pool, &foreign_slug).await;
     purge(&st.pool, &slug).await;
 }
 
