@@ -9,7 +9,6 @@ import { API_BASE_URL } from "@plane/constants";
 import type {
   TWorkflow,
   TWorkflowMap,
-  TWorkflowPayload,
   TWorkflowState,
   TWorkflowStatePayload,
   TWorkflowTransition,
@@ -26,30 +25,6 @@ export class WorkflowService extends APIService {
 
   async getWorkflows(workspaceSlug: string): Promise<TWorkflow[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/workflows/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async createWorkflow(workspaceSlug: string, data: TWorkflowPayload): Promise<TWorkflow> {
-    return this.post(`/api/workspaces/${workspaceSlug}/workflows/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async updateWorkflow(workspaceSlug: string, workflowId: string, data: Partial<TWorkflowPayload>): Promise<TWorkflow> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/workflows/${workflowId}/`, data)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async deleteWorkflow(workspaceSlug: string, workflowId: string): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/workflows/${workflowId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

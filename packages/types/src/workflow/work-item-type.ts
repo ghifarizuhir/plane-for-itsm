@@ -26,6 +26,5 @@ export type TWorkItemTypePayload = {
   name?: string;
   description?: string;
   is_active?: boolean;
-  workflow?: string | null;
   project_ids?: string[];
 };

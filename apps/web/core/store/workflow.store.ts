@@ -10,7 +10,6 @@ import { action, makeObservable, observable, runInAction } from "mobx";
 import type {
   TWorkflow,
   TWorkflowMap,
-  TWorkflowPayload,
   TWorkflowState,
   TWorkflowStatePayload,
   TWorkflowTransition,
@@ -38,9 +37,6 @@ export interface IWorkflowStore {
   fetchWorkItemTypes(workspaceSlug: string): Promise<TWorkItemType[]>;
   fetchWorkflowMap(workspaceSlug: string, projectId: string): Promise<TWorkflowMap>;
   // crud actions
-  createWorkflow(workspaceSlug: string, data: TWorkflowPayload): Promise<TWorkflow>;
-  updateWorkflow(workspaceSlug: string, workflowId: string, data: Partial<TWorkflowPayload>): Promise<TWorkflow>;
-  deleteWorkflow(workspaceSlug: string, workflowId: string): Promise<void>;
   createWorkflowState(workspaceSlug: string, workflowId: string, data: TWorkflowStatePayload): Promise<TWorkflowState>;
   updateWorkflowState(
     workspaceSlug: string,
@@ -103,9 +99,6 @@ export class WorkflowStore implements IWorkflowStore {
       fetchWorkItemTypes: action,
       fetchWorkflowMap: action,
       // crud actions
-      createWorkflow: action,
-      updateWorkflow: action,
-      deleteWorkflow: action,
       createWorkflowState: action,
       updateWorkflowState: action,
       deleteWorkflowState: action,
@@ -125,33 +118,6 @@ export class WorkflowStore implements IWorkflowStore {
       this.workflows = workflows;
     });
     return workflows;
-  };
-
-  createWorkflow = async (workspaceSlug: string, data: TWorkflowPayload) => {
-    const workflow = await this.service.createWorkflow(workspaceSlug, data);
-    runInAction(() => {
-      this.workflows = [...(this.workflows ?? []), workflow];
-    });
-    return workflow;
-  };
-
-  updateWorkflow = async (workspaceSlug: string, workflowId: string, data: Partial<TWorkflowPayload>) => {
-    const workflow = await this.service.updateWorkflow(workspaceSlug, workflowId, data);
-    runInAction(() => {
-      this.workflows = this.workflows?.map((item) => (item.id === workflowId ? workflow : item));
-    });
-    await this.refreshWorkflowMaps(workspaceSlug);
-    return workflow;
-  };
-
-  deleteWorkflow = async (workspaceSlug: string, workflowId: string) => {
-    await this.service.deleteWorkflow(workspaceSlug, workflowId);
-    runInAction(() => {
-      this.workflows = this.workflows?.filter((item) => item.id !== workflowId);
-      delete this.workflowStates[workflowId];
-      delete this.workflowTransitions[workflowId];
-    });
-    await this.refreshWorkflowMaps(workspaceSlug);
   };
 
   fetchWorkflowStates = async (workspaceSlug: string, workflowId: string) => {
