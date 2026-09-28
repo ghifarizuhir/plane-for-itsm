@@ -2699,3 +2699,89 @@ async fn soft_delete_workflow_cascade_clears_states_and_transitions() {
 
     purge(&st.pool, &slug).await;
 }
+
+#[tokio::test]
+async fn create_type_autocreates_workflow_and_rejects_explicit() {
+    let st = app_state().await;
+    let (slug, _ws_id, _project_id) = make_workspace(&st, "wfcreate").await;
+    let (owner,): (Uuid,) = sqlx::query_as("SELECT owner_id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("owner");
+
+    let (status, created) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Incident".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create type");
+    assert_eq!(status, StatusCode::CREATED);
+    let ws_id: Uuid = sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workspace id");
+    let workflow_id = Uuid::parse_str(created["workflow"].as_str().expect("workflow id")).unwrap();
+    let (name,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
+        .bind(workflow_id)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workflow row");
+    assert_eq!(name, "Incident Workflow");
+    let (defaults,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM workflow_states WHERE workflow_id = $1 AND deleted_at IS NULL AND is_default",
+    )
+    .bind(workflow_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("default state");
+    assert_eq!(defaults, 1);
+
+    // Body `workflow` eksplisit ditolak dan tidak meninggalkan type orphan.
+    let (status, body) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Problem".into()),
+            workflow: Some(workflow_id),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("reject explicit workflow");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Workflows are managed through work item types");
+    let (problem_types,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 AND name = 'Problem' AND deleted_at IS NULL",
+    )
+    .bind(ws_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("rejected type rows");
+    assert_eq!(problem_types, 0);
+
+    // Epic tetap tanpa workflow.
+    let (status, epic) = create_workspace(
+        State(st.clone()),
+        AuthUser(owner),
+        Path(slug.clone()),
+        Json(V1CreateWorkItemType {
+            name: Some("Epic Thing".into()),
+            is_epic: Some(true),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("create epic");
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(epic["workflow"].is_null());
+
+    purge(&st.pool, &slug).await;
+}

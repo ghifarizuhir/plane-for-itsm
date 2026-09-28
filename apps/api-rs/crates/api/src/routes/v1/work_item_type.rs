@@ -304,18 +304,28 @@ async fn create_type(
     if body.is_epic.unwrap_or(false) && body.workflow.is_some() {
         return Ok(bad("Epic types cannot have a workflow"));
     }
-    // Guard sebelum INSERT agar create yang konflik tidak meninggalkan type
-    // orphan tanpa link.
-    if let Some(workflow_id) = body.workflow {
-        if !workflow_in_workspace(&st.pool, ws, workflow_id).await? {
-            return Ok(bad("Workflow does not exist in this workspace"));
-        }
-        if workflow_link_conflict(&st.pool, &link_ids, workflow_id, None).await? {
-            return Ok(bad(
-                "Workflow is already enabled for another work item type in this project",
-            ));
-        }
+    if body.workflow.is_some() {
+        return Ok(bad("Workflows are managed through work item types"));
     }
+    let is_epic = body.is_epic.unwrap_or(false);
+    let is_active = body.is_active.unwrap_or(true);
+    let mut tx = st.pool.begin().await?;
+    // Type non-epic memiliki tepat satu workflow; dibuat/diadopsi dalam
+    // transaksi yang sama supaya create yang gagal tidak meninggalkan orphan.
+    let workflow_id: Option<uuid::Uuid> = if is_epic {
+        None
+    } else {
+        Some(
+            crate::routes::workflow::ensure_workflow_for_type(
+                &mut tx,
+                ws,
+                name,
+                is_active,
+                user,
+            )
+            .await?,
+        )
+    };
     let row: V1WorkItemTypeRow = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
          is_active, level, workflow_id, external_id, external_source, workspace_id, created_by_id, \
@@ -329,22 +339,21 @@ async fn create_type(
     .bind(name)
     .bind(body.description.clone().unwrap_or_default())
     .bind(body.logo_props.clone().unwrap_or_else(|| json!({})))
-    .bind(body.is_epic.unwrap_or(false))
-    .bind(body.is_active.unwrap_or(true))
+    .bind(is_epic)
+    .bind(is_active)
     .bind(body.level.unwrap_or(0) as f64)
-    .bind(body.workflow)
+    .bind(workflow_id)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(ws)
     .bind(user)
-    .fetch_one(&st.pool)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let linked = link_projects(st, &ws, row.id, user, &link_ids).await?;
-    if row.workflow.is_some() {
-        for pid in &linked {
-            crate::routes::workflow::materialize_type_states(&st.pool, *pid, row.id).await?;
-        }
+    for pid in &linked {
+        crate::routes::workflow::materialize_type_states(&st.pool, *pid, row.id).await?;
     }
 
     let row = reload(st, &ws, row.id)

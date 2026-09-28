@@ -823,6 +823,11 @@ async fn create_type_autocreates_workflow_and_rejects_explicit() {
     .await
     .expect("create type");
     assert_eq!(status, StatusCode::CREATED);
+    let ws_id: Uuid = sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await
+        .expect("workspace id");
     let workflow_id = Uuid::parse_str(created["workflow"].as_str().expect("workflow id")).unwrap();
     let (name,): (String,) = sqlx::query_as("SELECT name FROM workflows WHERE id = $1")
         .bind(workflow_id)
@@ -855,8 +860,9 @@ async fn create_type_autocreates_workflow_and_rejects_explicit() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "Workflows are managed through work item types");
     let (problem_types,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issue_types WHERE name = 'Problem' AND deleted_at IS NULL",
+        "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 AND name = 'Problem' AND deleted_at IS NULL",
     )
+    .bind(ws_id)
     .fetch_one(&st.pool)
     .await
     .expect("rejected type rows");
