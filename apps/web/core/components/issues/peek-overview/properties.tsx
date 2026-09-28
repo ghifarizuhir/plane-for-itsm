@@ -17,6 +17,7 @@ import {
   ModuleOutline,
   ParentOutline,
   PriorityOutline,
+  ServerOutline,
   StartDateOutline,
   StateOutline,
   UserOutline,
@@ -37,6 +38,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 // plane web components
 import { IssueParentSelectRoot } from "@/components/issues/parent-select-root";
+import { ServiceSelect } from "@/components/services/select/service-select";
 import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
@@ -207,6 +209,18 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               projectId={projectId}
               issueId={issueId}
               issueOperations={issueOperations}
+              disabled={disabled}
+            />
+          </SidebarPropertyListItem>
+        )}
+
+        {(projectDetails?.service_view ?? true) && (
+          <SidebarPropertyListItem icon={ServerOutline} label={t("service.title")}>
+            <ServiceSelect
+              className="w-full grow"
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              issueId={issueId}
               disabled={disabled}
             />
           </SidebarPropertyListItem>
