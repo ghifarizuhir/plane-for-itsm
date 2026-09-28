@@ -10,7 +10,6 @@ import {
   ExportOutline,
   MembersOutline,
   WebhooksOutline,
-  WorkflowsOutline,
   WorkItemsOutline,
 } from "@makeplane/propel/icons";
 // plane imports
@@ -23,5 +22,4 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   export: ExportOutline,
   webhooks: WebhooksOutline,
   work_item_types: WorkItemsOutline,
-  workflows: WorkflowsOutline,
 };
