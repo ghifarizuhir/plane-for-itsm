@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import Link from "next/link";
 import { DeleteOutline, EditOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
@@ -13,21 +14,24 @@ import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 
 type Props = {
+  workspaceSlug: string;
   type: TWorkItemType;
-  workflowName?: string;
-  isWorkflowsLoading: boolean;
   onEdit: () => void;
   onDelete: () => void;
 };
 
 export const TypeListItem = observer(function TypeListItem(props: Props) {
-  const { type, workflowName, isWorkflowsLoading, onEdit, onDelete } = props;
+  const { workspaceSlug, type, onEdit, onDelete } = props;
   // plane hooks
   const { t } = useTranslation();
+  // derived values
+  const workflowLabel = type.workflow
+    ? `${type.name} Workflow`
+    : t("workspace_settings.settings.work_item_types.no_workflow");
 
   return (
     <div className="group flex items-center justify-between gap-4 px-4 py-3">
-      <div className="flex min-w-0 flex-col">
+      <Link href={`/${workspaceSlug}/settings/work-item-types/${type.id}`} className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2">
           <p className="truncate text-13 font-medium text-primary">{type.name}</p>
           {type.is_epic && (
@@ -45,12 +49,8 @@ export const TypeListItem = observer(function TypeListItem(props: Props) {
           </span>
         </div>
         {type.description && <p className="mt-0.5 truncate text-11 text-secondary">{type.description}</p>}
-        <p className="mt-0.5 text-11 text-placeholder">
-          {isWorkflowsLoading
-            ? t("common.loading")
-            : (workflowName ?? t("workspace_settings.settings.work_item_types.no_workflow"))}
-        </p>
-      </div>
+        <p className="mt-0.5 text-11 text-placeholder">{workflowLabel}</p>
+      </Link>
       <CustomMenu ellipsis ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}>
         <CustomMenu.MenuItem onClick={onEdit}>
           <span className="flex items-center justify-start gap-2">

@@ -114,8 +114,6 @@ export const WorkItemTypeDetail = observer(function WorkItemTypeDetail(props: Pr
         workspaceSlug={workspaceSlug}
         isOpen={isFormOpen}
         typeId={type.id}
-        // TODO(Task 5): drop once TypeFormModal no longer takes isWorkflowsLoading.
-        isWorkflowsLoading={false}
         onClose={() => setIsFormOpen(false)}
       />
       <div className="mt-6 flex items-start justify-between gap-4 rounded-lg border border-subtle p-5">

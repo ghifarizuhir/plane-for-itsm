@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { TWorkItemType } from "@plane/types";
 // ui
 import { Spinner } from "@plane/ui";
 // components
@@ -17,6 +18,7 @@ import { SettingsHeading } from "@/components/settings/heading";
 import { WorkflowLoadErrorState } from "@/components/workflows/workflow-load-error-state";
 // hooks
 import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { DeleteTypeModal } from "./delete-type-modal";
 import { TypeFormModal } from "./type-form-modal";
@@ -28,16 +30,17 @@ type Props = {
 
 export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Props) {
   const { workspaceSlug } = props;
+  // router
+  const router = useAppRouter();
   // states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [deletingTypeId, setDeletingTypeId] = useState<string | null>(null);
-  const [isWorkflowsLoading, setIsWorkflowsLoading] = useState(true);
   const [hasFetchError, setHasFetchError] = useState(false);
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { workItemTypes, workflows, fetchWorkItemTypes, fetchWorkflows } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
   // derived values
   // `t` is rebuilt on every render by `useTranslation`, so depending on it directly would re-run the effect endlessly.
   // Capturing the resolved strings keeps the dependency values stable across renders.
@@ -46,22 +49,23 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
 
   const loadData = useCallback(() => {
     setHasFetchError(false);
-    setIsWorkflowsLoading(true);
-    void Promise.all([fetchWorkItemTypes(workspaceSlug), fetchWorkflows(workspaceSlug)])
-      .catch((error: any) => {
-        setHasFetchError(true);
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: fetchErrorTitle,
-          message: error?.error ?? fetchErrorMessage,
-        });
-      })
-      .finally(() => setIsWorkflowsLoading(false));
-  }, [workspaceSlug, fetchWorkItemTypes, fetchWorkflows, fetchErrorTitle, fetchErrorMessage]);
+    void fetchWorkItemTypes(workspaceSlug).catch((error: any) => {
+      setHasFetchError(true);
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: fetchErrorTitle,
+        message: error?.error ?? fetchErrorMessage,
+      });
+    });
+  }, [workspaceSlug, fetchWorkItemTypes, fetchErrorTitle, fetchErrorMessage]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleCreated = (type: TWorkItemType) => {
+    router.push(`/${workspaceSlug}/settings/work-item-types/${type.id}`);
+  };
 
   return (
     <>
@@ -69,11 +73,11 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
         workspaceSlug={workspaceSlug}
         isOpen={isFormOpen}
         typeId={editingTypeId}
-        isWorkflowsLoading={isWorkflowsLoading}
         onClose={() => {
           setIsFormOpen(false);
           setEditingTypeId(null);
         }}
+        onSuccess={handleCreated}
       />
       <DeleteTypeModal
         workspaceSlug={workspaceSlug}
@@ -97,7 +101,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
           </Button>
         }
       />
-      {hasFetchError && (workItemTypes === undefined || workflows === undefined) ? (
+      {hasFetchError && workItemTypes === undefined ? (
         <div className="mt-6">
           <WorkflowLoadErrorState onRetry={loadData} />
         </div>
@@ -119,9 +123,8 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
           {workItemTypes.map((type) => (
             <TypeListItem
               key={type.id}
+              workspaceSlug={workspaceSlug}
               type={type}
-              workflowName={workflows?.find((workflow) => workflow.id === type.workflow)?.name}
-              isWorkflowsLoading={isWorkflowsLoading}
               onEdit={() => {
                 setEditingTypeId(type.id);
                 setIsFormOpen(true);

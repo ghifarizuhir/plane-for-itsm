@@ -14,9 +14,9 @@ import { Switch } from "@makeplane/propel/components/switch";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TWorkItemTypePayload } from "@plane/types";
+import type { TWorkItemType, TWorkItemTypePayload } from "@plane/types";
 // ui
-import { CustomSelect, EModalPosition, EModalWidth, ModalCore, TextArea } from "@plane/ui";
+import { EModalPosition, EModalWidth, ModalCore, TextArea } from "@plane/ui";
 // hooks
 import { useWorkflow } from "@/hooks/store/use-workflow";
 
@@ -24,21 +24,20 @@ type Props = {
   workspaceSlug: string;
   isOpen: boolean;
   typeId: string | null;
-  isWorkflowsLoading: boolean;
   onClose: () => void;
+  onSuccess?: (type: TWorkItemType) => void;
 };
 
 const defaultValues: TWorkItemTypePayload = {
   name: "",
   description: "",
-  workflow: null,
   is_active: true,
 };
 
 export const TypeFormModal = observer(function TypeFormModal(props: Props) {
-  const { workspaceSlug, isOpen, typeId, isWorkflowsLoading, onClose } = props;
+  const { workspaceSlug, isOpen, typeId, onClose, onSuccess } = props;
   // store hooks
-  const { workItemTypes, workflows, createWorkItemType, updateWorkItemType } = useWorkflow();
+  const { workItemTypes, createWorkItemType, updateWorkItemType } = useWorkflow();
   // plane hooks
   const { t } = useTranslation();
   // derived values
@@ -58,7 +57,6 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
         ? {
             name: type.name,
             description: type.description,
-            workflow: type.workflow,
             is_active: type.is_active,
           }
         : defaultValues
@@ -74,8 +72,12 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
     const isEdit = Boolean(typeId);
 
     try {
-      if (typeId) await updateWorkItemType(workspaceSlug, typeId, formData);
-      else await createWorkItemType(workspaceSlug, formData);
+      if (typeId) {
+        await updateWorkItemType(workspaceSlug, typeId, formData);
+      } else {
+        const created = await createWorkItemType(workspaceSlug, formData);
+        onSuccess?.(created);
+      }
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
@@ -153,58 +155,22 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                 )}
               />
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-13 font-medium">
-                  {t("workspace_settings.settings.work_item_types.form.workflow")}
-                </span>
-                <Controller
-                  control={control}
-                  name="workflow"
-                  render={({ field: { value, onChange } }) => (
-                    <CustomSelect
-                      value={value}
-                      onChange={onChange}
-                      input
-                      className="w-56"
-                      label={
-                        <span className="truncate text-13">
-                          {isWorkflowsLoading
-                            ? t("common.loading")
-                            : (workflows?.find((workflow) => workflow.id === value)?.name ??
-                              t("workspace_settings.settings.work_item_types.no_workflow"))}
-                        </span>
-                      }
-                    >
-                      <CustomSelect.Option value={null}>
-                        {t("workspace_settings.settings.work_item_types.no_workflow")}
-                      </CustomSelect.Option>
-                      {workflows?.map((workflow) => (
-                        <CustomSelect.Option key={workflow.id} value={workflow.id}>
-                          {workflow.name}
-                        </CustomSelect.Option>
-                      ))}
-                    </CustomSelect>
-                  )}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-13 font-medium">
-                  {t("workspace_settings.settings.work_item_types.form.active")}
-                </span>
-                <Controller
-                  control={control}
-                  name="is_active"
-                  render={({ field: { value, onChange } }) => (
-                    <Switch
-                      size="sm"
-                      checked={value ?? false}
-                      onCheckedChange={onChange}
-                      aria-label={t("workspace_settings.settings.work_item_types.form.active")}
-                    />
-                  )}
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-13 font-medium">
+                {t("workspace_settings.settings.work_item_types.form.active")}
+              </span>
+              <Controller
+                control={control}
+                name="is_active"
+                render={({ field: { value, onChange } }) => (
+                  <Switch
+                    size="sm"
+                    checked={value ?? false}
+                    onCheckedChange={onChange}
+                    aria-label={t("workspace_settings.settings.work_item_types.form.active")}
+                  />
+                )}
+              />
             </div>
           </div>
         </div>
