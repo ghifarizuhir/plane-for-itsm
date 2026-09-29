@@ -691,6 +691,19 @@ pub async fn create_issue(
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
+    // Queue Jev triage suggestions. A Redis hiccup must never fail the create;
+    // the worker sweep backfills missed jobs.
+    if let Ok(mut redis) = st.redis_client().await {
+        if let Err(error) = common::stream::push_job(
+            &mut redis,
+            "ai.intake.triage",
+            json!({ "intake_issue_id": row.id }),
+        )
+        .await
+        {
+            tracing::warn!(intake_issue_id=%row.id, error=%error, "ai.intake.triage: push failed");
+        }
+    }
     let issue_id = issue.id;
     // Django `create` (`intake/base.py:330`) returns 200 (not 201) with the
     // full `IntakeIssueDetailSerializer`.
