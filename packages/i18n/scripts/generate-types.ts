@@ -83,7 +83,7 @@ function main(): void {
   const jsonFiles = fs
     .readdirSync(localesDir)
     .filter((file) => file.endsWith(".json"))
-    .sort();
+    .toSorted();
 
   if (jsonFiles.length === 0) {
     console.error(`Error: No JSON files found in ${localesDir}`);
@@ -133,7 +133,7 @@ function main(): void {
   }
 
   // Detect path conflicts
-  const sortedKeys = [...allKeys].sort();
+  const sortedKeys = [...allKeys].toSorted();
   const pathConflicts = detectPathConflicts(sortedKeys);
 
   if (pathConflicts.length > 0) {
@@ -149,7 +149,8 @@ function main(): void {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  // Generate the output file
+  // Generate the output file. The trailing `;` stays on the last union
+  // member line so the output is oxfmt-clean (`check:format` runs on it).
   const keyLines = sortedKeys.map((key) => `  | "${key}"`).join("\n");
   const output = `${COPYRIGHT_HEADER}
 
@@ -158,8 +159,7 @@ function main(): void {
 // Run: pnpm run generate:types
 
 export type TTranslationKeys =
-${keyLines}
-  ;
+${keyLines};
 `;
 
   fs.writeFileSync(outputFile, output, "utf-8");
