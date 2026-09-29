@@ -9,6 +9,8 @@ import { makeObservable, observable, runInAction, action } from "mobx";
 import type {
   TInboxIssue,
   TInboxIssueStatus,
+  TInboxIssueTriageField,
+  TInboxIssueTriageSuggestion,
   EInboxIssueSource,
   TIssue,
   TInboxDuplicateIssueDetails,
@@ -31,10 +33,15 @@ export interface IInboxIssueStore {
   duplicate_to: string | undefined;
   created_by: string | undefined;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined;
+  triageSuggestion: TInboxIssueTriageSuggestion | null;
+  triageSuggestionFetched: boolean;
   // actions
   updateInboxIssueStatus: (status: TInboxIssueStatus) => Promise<void>; // accept, decline
   updateInboxIssueDuplicateTo: (issueId: string) => Promise<void>; // connecting the inbox issue to the project existing issue
   updateInboxIssueSnoozeTill: (date: Date | undefined) => Promise<void>; // snooze the issue
+  fetchTriageSuggestion: () => Promise<void>;
+  applyTriageSuggestion: (fields: TInboxIssueTriageField[]) => Promise<void>;
+  dismissTriageSuggestion: (fields: TInboxIssueTriageField[]) => Promise<void>;
   updateIssue: (issue: Partial<TIssue>) => Promise<void>; // updating the issue
   updateProjectIssue: (issue: Partial<TIssue>) => Promise<void>; // updating the issue
   fetchIssueActivity: () => Promise<void>; // fetching the issue activity
@@ -51,6 +58,8 @@ export class InboxIssueStore implements IInboxIssueStore {
   duplicate_to: string | undefined;
   created_by: string | undefined;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined = undefined;
+  triageSuggestion: TInboxIssueTriageSuggestion | null = null;
+  triageSuggestionFetched: boolean = false;
   workspaceSlug: string;
   projectId: string;
   // services
@@ -86,10 +95,15 @@ export class InboxIssueStore implements IInboxIssueStore {
       duplicate_issue_detail: observable,
       created_by: observable,
       source: observable,
+      triageSuggestion: observable,
+      triageSuggestionFetched: observable,
       // actions
       updateInboxIssueStatus: action,
       updateInboxIssueDuplicateTo: action,
       updateInboxIssueSnoozeTill: action,
+      fetchTriageSuggestion: action,
+      applyTriageSuggestion: action,
+      dismissTriageSuggestion: action,
       updateIssue: action,
       updateProjectIssue: action,
       fetchIssueActivity: action,
@@ -214,6 +228,50 @@ export class InboxIssueStore implements IInboxIssueStore {
         set(this, "snoozed_till", previousData.snoozed_till);
       });
     }
+  };
+
+  fetchTriageSuggestion = async () => {
+    if (!this.issue.id) return;
+    try {
+      const suggestion = await this.inboxIssueService.retrieveTriageSuggestion(
+        this.workspaceSlug,
+        this.projectId,
+        this.issue.id
+      );
+      runInAction(() => {
+        set(this, "triageSuggestion", suggestion);
+        set(this, "triageSuggestionFetched", true);
+      });
+    } catch {
+      runInAction(() => set(this, "triageSuggestionFetched", true));
+    }
+  };
+
+  applyTriageSuggestion = async (fields: TInboxIssueTriageField[]) => {
+    if (!this.issue.id) return;
+    const suggestion = await this.inboxIssueService.applyTriageSuggestion(
+      this.workspaceSlug,
+      this.projectId,
+      this.issue.id,
+      fields
+    );
+    runInAction(() => {
+      set(this, "triageSuggestion", suggestion);
+      if (suggestion?.severity && suggestion.applied_fields.includes("severity")) {
+        set(this.issue, "priority", suggestion.severity.priority);
+      }
+    });
+  };
+
+  dismissTriageSuggestion = async (fields: TInboxIssueTriageField[]) => {
+    if (!this.issue.id) return;
+    const suggestion = await this.inboxIssueService.dismissTriageSuggestion(
+      this.workspaceSlug,
+      this.projectId,
+      this.issue.id,
+      fields
+    );
+    runInAction(() => set(this, "triageSuggestion", suggestion));
   };
 
   updateIssue = async (issue: Partial<TIssue>) => {

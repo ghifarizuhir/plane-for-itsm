@@ -98,6 +98,32 @@ export type TInboxDuplicateIssueDetails = {
   name: string;
 };
 
+export type TInboxIssueTriageField = "category" | "severity" | "needs_human";
+
+export type TInboxIssueTriageStatus = "pending" | "ready" | "failed";
+
+export type TInboxIssueTriageSuggestion = {
+  id: string;
+  status: TInboxIssueTriageStatus;
+  model: string | null;
+  category: {
+    type_id: string | null;
+    label: string;
+    confidence: number;
+    probabilities: Record<string, number>;
+  } | null;
+  severity: {
+    priority: TIssuePriorities;
+    score: number;
+    confidence: number;
+    probabilities: Partial<Record<TIssuePriorities, number>>;
+  } | null;
+  needs_human: { probability: number } | null;
+  applied_fields: TInboxIssueTriageField[];
+  dismissed_fields: TInboxIssueTriageField[];
+  created_at: string;
+};
+
 export type TInboxIssuePaginationInfo = TPaginationInfo & {
   total_results: number;
 };

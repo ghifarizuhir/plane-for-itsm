@@ -6,7 +6,13 @@
 
 // plane imports
 import { API_BASE_URL } from "@plane/constants";
-import type { TInboxIssue, TIssue, TInboxIssueWithPagination } from "@plane/types";
+import type {
+  TInboxIssue,
+  TInboxIssueTriageField,
+  TInboxIssueTriageSuggestion,
+  TIssue,
+  TInboxIssueWithPagination,
+} from "@plane/types";
 import { EInboxIssueSource } from "@plane/types";
 // helpers
 // services
@@ -71,6 +77,52 @@ export class InboxIssueService extends APIService {
       issue: data,
     })
       .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async retrieveTriageSuggestion(
+    workspaceSlug: string,
+    projectId: string,
+    inboxIssueId: string
+  ): Promise<TInboxIssueTriageSuggestion | null> {
+    return this.get(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/triage-suggestion/`
+    )
+      .then((response) => response?.data?.data ?? null)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async applyTriageSuggestion(
+    workspaceSlug: string,
+    projectId: string,
+    inboxIssueId: string,
+    fields: TInboxIssueTriageField[]
+  ): Promise<TInboxIssueTriageSuggestion> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/triage-suggestion/apply/`,
+      { fields }
+    )
+      .then((response) => response?.data?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async dismissTriageSuggestion(
+    workspaceSlug: string,
+    projectId: string,
+    inboxIssueId: string,
+    fields: TInboxIssueTriageField[]
+  ): Promise<TInboxIssueTriageSuggestion> {
+    return this.post(
+      `/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/triage-suggestion/dismiss/`,
+      { fields }
+    )
+      .then((response) => response?.data?.data)
       .catch((error) => {
         throw error?.response?.data;
       });
