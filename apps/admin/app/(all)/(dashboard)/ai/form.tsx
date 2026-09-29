@@ -34,6 +34,7 @@ export function InstanceAIForm(props: IInstanceAIForm) {
     defaultValues: {
       LLM_API_KEY: config["LLM_API_KEY"],
       LLM_MODEL: config["LLM_MODEL"],
+      LLM_DECISION_MODEL: config["LLM_DECISION_MODEL"],
     },
   });
 
@@ -58,6 +59,20 @@ export function InstanceAIForm(props: IInstanceAIForm) {
       ),
       placeholder: "gpt-4o-mini",
       error: Boolean(errors.LLM_MODEL),
+      required: false,
+    },
+    {
+      key: "LLM_DECISION_MODEL",
+      type: "text",
+      label: "Decision model",
+      description: (
+        <>
+          System One model at your LLM base URL, used for intake triage suggestions. Leave empty to disable. On
+          OpenRouter use <code>typesafe/jev-1.13</code>.
+        </>
+      ),
+      placeholder: "typesafe/jev-1.13",
+      error: Boolean(errors.LLM_DECISION_MODEL),
       required: false,
     },
     {
