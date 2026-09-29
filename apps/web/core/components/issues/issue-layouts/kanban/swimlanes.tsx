@@ -298,9 +298,9 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
   const { projectId } = useParams();
   // derived values
   const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
-  // typed state columns only apply to a `state` axis; other axes keep their own grouping
-  const groupTypeId = group_by === "state" ? workItemTypeId : null;
-  const subGroupTypeId = sub_group_by === "state" ? workItemTypeId : null;
+  // typed state columns only apply to a state/workflow axis; other axes keep their own grouping
+  const groupTypeId = group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null;
+  const subGroupTypeId = sub_group_by === "state" || sub_group_by === "workflow_state" ? workItemTypeId : null;
   const groupByList = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,

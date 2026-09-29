@@ -54,7 +54,7 @@ import { renderFormattedDate, getFileURL } from "@plane/utils";
 import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
-import { findWorkflowMapType, resolveStateColumns } from "@/store/workflow.helpers";
+import { findWorkflowMapType, resolveWorkflowStateColumns } from "@/store/workflow.helpers";
 // constants
 import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
 // components
@@ -246,21 +246,21 @@ const getStateColumns = ({ projectId, typeId }: TGetColumns): IGroupByColumn[] |
   const { getProjectStates, projectStates } = store.state;
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
-  // typed states come from the project workflow map: sequence + label are workspace-owned
+  // typed state columns come from the project workflow map: sequence + label are workspace-owned
   const workflowMap = projectId ? store.workflow.getWorkflowMap(projectId) : undefined;
   const mapType = findWorkflowMapType(workflowMap, typeId);
-  const states = resolveStateColumns(_states, mapType);
-  // map project states to group by columns
-  return states.map((state) => ({
+  const columns = resolveWorkflowStateColumns(_states, mapType, workflowMap);
+  // map state columns to group by columns
+  return columns.map(({ state, label }) => ({
     id: state.id,
-    name: state.name,
+    name: label,
     icon: (
       <div className="size-4 rounded-full">
         <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} percentage={state.order} />
       </div>
     ),
-    // type_id ikut payload supaya header "+" create form membuka type yang benar
-    payload: { state_id: state.id, ...(mapType ? { type_id: mapType.type_id } : {}) },
+    // type_id ikut payload supaya header "+"/quick-add membuat item bertipe benar
+    payload: { state_id: state.id, ...(state.type_id ? { type_id: state.type_id } : {}) },
   }));
 };
 

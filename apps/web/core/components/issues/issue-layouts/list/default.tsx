@@ -99,7 +99,7 @@ export const List = observer(function List(props: IList) {
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
     projectId,
-    typeId: group_by === "state" ? workItemTypeId : null,
+    typeId: group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null,
   });
 
   // Enable Auto Scroll for Main Kanban
@@ -176,7 +176,7 @@ export const List = observer(function List(props: IList) {
                     handleCollapsedGroups={handleCollapsedGroups}
                     collapsedGroups={collapsedGroups}
                     isEpic={isEpic}
-                    workItemTypeId={group_by === "state" ? workItemTypeId : null}
+                    workItemTypeId={group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null}
                   />
                 ))}
               </div>
