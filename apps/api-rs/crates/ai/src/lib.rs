@@ -7,5 +7,6 @@ pub mod decision;
 pub mod llm;
 pub mod schedule;
 pub mod tools;
+pub mod triage;
 
 pub use llm::{host_of, resolve_llm_config, response_html, LlmConfig, LlmError};
