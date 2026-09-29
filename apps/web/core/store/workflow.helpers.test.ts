@@ -528,10 +528,9 @@ describe("resolveWorkflowStateColumns", () => {
 
 describe("getWorkItemTypeIds", () => {
   it("mengumpulkan semua type id dari richFilters", () => {
-    expect(getWorkItemTypeIds({ richFilters: { and: [{ type_id__in: "t-1,t-2" }] } }).toSorted()).toEqual([
-      "t-1",
-      "t-2",
-    ]);
+    expect(new Set(getWorkItemTypeIds({ richFilters: { and: [{ type_id__in: "t-1,t-2" }] } }))).toEqual(
+      new Set(["t-1", "t-2"])
+    );
   });
 
   it("membaca bentuk legacy filters.issue_type dan input kosong", () => {

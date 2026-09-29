@@ -174,7 +174,7 @@ export const resolveEffectiveDisplayFilters = (
 ): IIssueDisplayFilterOptions | undefined => {
   if (!displayFilters) return displayFilters;
   const typed = hasTypedWorkflows(workflowMap);
-  const resolveAxis = (axis: TIssueGroupByOptions): TIssueGroupByOptions => {
+  const resolveAxis = (axis: TIssueGroupByOptions | undefined): TIssueGroupByOptions | undefined => {
     if (axis !== "state" || !typed) return axis;
     return singleTypeId ? "workflow_state" : "state_detail.group";
   };
@@ -206,10 +206,9 @@ export const resolveWorkflowStateColumns = (
     used.add(state.id);
   }
   for (const type of workflowMap?.types ?? []) {
-    // oxlint-disable-next-line unicorn/no-array-sort -- filter() already copies the array
-    const typedStates = projectStates
-      .filter((state) => state.type_id === type.type_id)
-      .toSorted((a, b) => a.sequence - b.sequence);
+    const typedStates = projectStates.filter((state) => state.type_id === type.type_id);
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; filter() already copies the array
+    typedStates.sort((a, b) => a.sequence - b.sequence);
     for (const state of typedStates) {
       if (used.has(state.id)) continue;
       used.add(state.id);
