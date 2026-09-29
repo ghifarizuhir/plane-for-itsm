@@ -13,6 +13,7 @@ export type TIssueLayouts = "list" | "kanban" | "calendar" | "spreadsheet" | "ga
 
 export type TIssueGroupByOptions =
   | "state"
+  | "workflow_state"
   | "priority"
   | "labels"
   | "created_by"
