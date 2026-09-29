@@ -115,8 +115,13 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const [intersectionElement, setIntersectionElement] = useState<HTMLDivElement | null>(null);
 
-  const { workflowDisabledSource, isWorkflowDropDisabled, handleWorkFlowState, getIsWorkflowWorkItemCreationDisabled } =
-    useWorkFlowFDragNDrop(group_by);
+  const {
+    workflowDisabledSource,
+    isWorkflowDropDisabled,
+    handleWorkFlowState,
+    getIsWorkflowWorkItemCreationDisabled,
+    workflowDropErrorMessage,
+  } = useWorkFlowFDragNDrop(group_by);
   const isWorkflowIssueCreationDisabled = getIsWorkflowWorkItemCreationDisabled(group.id);
 
   const groupIssueCount = getGroupIssueCount(group.id, undefined, false) ?? 0;
@@ -224,11 +229,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           if (!source || !destination) return;
 
           if (isWorkflowDropDisabled || group.isDropDisabled) {
-            if (group.dropErrorMessage)
+            const workflowDropError = workflowDropErrorMessage ?? group.dropErrorMessage;
+            if (workflowDropError)
               setToast({
                 type: TOAST_TYPE.WARNING,
                 title: t("common.warning"),
-                message: group.dropErrorMessage,
+                message: workflowDropError,
               });
             return;
           }
