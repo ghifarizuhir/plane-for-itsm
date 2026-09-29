@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Označiť ako duplikát",
       "move": "Presunúť {value} do pracovných položiek projektu"
     },
+    "triage": {
+      "title": "Návrh triáže",
+      "pending": "Prebieha klasifikácia tejto pracovnej položky…",
+      "suggested_by": "Navrhnuté modelom {model}",
+      "category": "Kategória",
+      "severity": "Závažnosť",
+      "needs_human": "Vyžaduje človeka",
+      "yes": "Áno",
+      "no": "Nie",
+      "apply": "Použiť",
+      "dismiss": "Zamietnuť",
+      "applied": "Použité",
+      "dismissed": "Zamietnuté",
+      "disclaimer": "Len návrhy. Pred použitím skontrolujte.",
+      "error_title": "Návrh sa nepodarilo aktualizovať",
+      "error_message": "Skúste to znova."
+    },
     "source": {
       "in-app": "v aplikácii"
     },

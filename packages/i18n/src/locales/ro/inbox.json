@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Marchează ca duplicat",
       "move": "Mută {value} în activitățile proiectului"
     },
+    "triage": {
+      "title": "Sugestie de triere",
+      "pending": "Se clasifică această activitate…",
+      "suggested_by": "Sugerat de {model}",
+      "category": "Categorie",
+      "severity": "Gravitate",
+      "needs_human": "Necesită intervenție umană",
+      "yes": "Da",
+      "no": "Nu",
+      "apply": "Aplică",
+      "dismiss": "Respinge",
+      "applied": "Aplicat",
+      "dismissed": "Respins",
+      "disclaimer": "Doar sugestii. Verificați înainte de a aplica.",
+      "error_title": "Sugestia nu a putut fi actualizată",
+      "error_message": "Încercați din nou."
+    },
     "source": {
       "in-app": "în aplicație"
     },

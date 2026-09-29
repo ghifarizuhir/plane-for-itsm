@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Oznacz jako duplikat",
       "move": "Przenieś {value} do elementów pracy projektu"
     },
+    "triage": {
+      "title": "Sugestia triażu",
+      "pending": "Klasyfikowanie tego elementu pracy…",
+      "suggested_by": "Zasugerowane przez {model}",
+      "category": "Kategoria",
+      "severity": "Dotkliwość",
+      "needs_human": "Wymaga człowieka",
+      "yes": "Tak",
+      "no": "Nie",
+      "apply": "Zastosuj",
+      "dismiss": "Odrzuć",
+      "applied": "Zastosowano",
+      "dismissed": "Odrzucono",
+      "disclaimer": "Tylko sugestie. Sprawdź przed zastosowaniem.",
+      "error_title": "Nie można zaktualizować sugestii",
+      "error_message": "Spróbuj ponownie."
+    },
     "source": {
       "in-app": "w aplikacji"
     },

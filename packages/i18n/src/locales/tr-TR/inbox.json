@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Kopya olarak işaretle",
       "move": "{value} proje iş öğelerine taşı"
     },
+    "triage": {
+      "title": "Triyaj önerisi",
+      "pending": "Bu iş öğesi sınıflandırılıyor…",
+      "suggested_by": "{model} tarafından önerildi",
+      "category": "Kategori",
+      "severity": "Şiddet",
+      "needs_human": "İnsan müdahalesi gerekiyor",
+      "yes": "Evet",
+      "no": "Hayır",
+      "apply": "Uygula",
+      "dismiss": "Reddet",
+      "applied": "Uygulandı",
+      "dismissed": "Reddedildi",
+      "disclaimer": "Yalnızca öneriler. Uygulamadan önce inceleyin.",
+      "error_title": "Öneri güncellenemedi",
+      "error_message": "Lütfen tekrar deneyin."
+    },
     "source": {
       "in-app": "uygulama içi"
     },

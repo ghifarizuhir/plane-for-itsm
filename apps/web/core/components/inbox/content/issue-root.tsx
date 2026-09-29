@@ -33,6 +33,7 @@ import { IntakeWorkItemVersionService } from "@/services/inbox";
 import type { IInboxIssueStore } from "@/store/inbox/inbox-issue.store";
 // local imports
 import { InboxIssueContentProperties } from "./issue-properties";
+import { InboxIssueTriageSuggestion } from "./triage-suggestion";
 // services init
 const intakeWorkItemVersionService = new IntakeWorkItemVersionService();
 
@@ -206,6 +207,8 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
           disabled={!isEditable}
         />
       </div>
+
+      <InboxIssueTriageSuggestion inboxIssue={inboxIssue} />
 
       <div className="py-4">
         <InboxIssueContentProperties

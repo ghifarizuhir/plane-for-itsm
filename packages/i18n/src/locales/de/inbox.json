@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Als Duplikat markieren",
       "move": "{value} in die Arbeitselemente des Projekts verschieben"
     },
+    "triage": {
+      "title": "Triage-Vorschlag",
+      "pending": "Dieses Arbeitselement wird klassifiziert…",
+      "suggested_by": "Vorgeschlagen von {model}",
+      "category": "Kategorie",
+      "severity": "Schweregrad",
+      "needs_human": "Manuelle Prüfung erforderlich",
+      "yes": "Ja",
+      "no": "Nein",
+      "apply": "Übernehmen",
+      "dismiss": "Verwerfen",
+      "applied": "Übernommen",
+      "dismissed": "Verworfen",
+      "disclaimer": "Nur Vorschläge. Vor dem Übernehmen prüfen.",
+      "error_title": "Vorschlag konnte nicht aktualisiert werden",
+      "error_message": "Bitte erneut versuchen."
+    },
     "source": {
       "in-app": "in der App"
     },

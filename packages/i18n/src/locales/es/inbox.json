@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Marcar como duplicado",
       "move": "Mover {value} a elementos de trabajo del proyecto"
     },
+    "triage": {
+      "title": "Sugerencia de triaje",
+      "pending": "Clasificando este elemento de trabajo…",
+      "suggested_by": "Sugerido por {model}",
+      "category": "Categoría",
+      "severity": "Gravedad",
+      "needs_human": "Requiere intervención humana",
+      "yes": "Sí",
+      "no": "No",
+      "apply": "Aplicar",
+      "dismiss": "Descartar",
+      "applied": "Aplicado",
+      "dismissed": "Descartado",
+      "disclaimer": "Solo sugerencias. Revise antes de aplicar.",
+      "error_title": "No se pudo actualizar la sugerencia",
+      "error_message": "Inténtelo de nuevo."
+    },
     "source": {
       "in-app": "en-app"
     },

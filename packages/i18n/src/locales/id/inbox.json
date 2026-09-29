@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Tandai sebagai duplikat",
       "move": "Pindahkan {value} ke item kerja proyek"
     },
+    "triage": {
+      "title": "Saran triase",
+      "pending": "Mengklasifikasikan item kerja ini…",
+      "suggested_by": "Disarankan oleh {model}",
+      "category": "Kategori",
+      "severity": "Tingkat keparahan",
+      "needs_human": "Perlu ditangani manusia",
+      "yes": "Ya",
+      "no": "Tidak",
+      "apply": "Terapkan",
+      "dismiss": "Abaikan",
+      "applied": "Diterapkan",
+      "dismissed": "Diabaikan",
+      "disclaimer": "Hanya saran. Tinjau sebelum menerapkan.",
+      "error_title": "Tidak dapat memperbarui saran",
+      "error_message": "Silakan coba lagi."
+    },
     "source": {
       "in-app": "dalam aplikasi"
     },

@@ -49,6 +49,23 @@
       "mark_as_duplicate": "중복으로 표시",
       "move": "{value}을(를) 프로젝트 작업 항목으로 이동"
     },
+    "triage": {
+      "title": "트리아지 제안",
+      "pending": "이 작업 항목을 분류하는 중…",
+      "suggested_by": "{model}의 제안",
+      "category": "카테고리",
+      "severity": "심각도",
+      "needs_human": "사람의 처리 필요",
+      "yes": "예",
+      "no": "아니요",
+      "apply": "적용",
+      "dismiss": "무시",
+      "applied": "적용됨",
+      "dismissed": "무시됨",
+      "disclaimer": "제안일 뿐입니다. 적용하기 전에 검토하세요.",
+      "error_title": "제안을 업데이트하지 못했습니다",
+      "error_message": "다시 시도해 주세요."
+    },
     "source": {
       "in-app": "앱 내"
     },

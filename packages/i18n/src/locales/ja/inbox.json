@@ -49,6 +49,23 @@
       "mark_as_duplicate": "重複としてマーク",
       "move": "{value}をプロジェクトの作業項目に移動"
     },
+    "triage": {
+      "title": "トリアージの提案",
+      "pending": "この作業項目を分類しています……",
+      "suggested_by": "{model}による提案",
+      "category": "カテゴリ",
+      "severity": "重大度",
+      "needs_human": "人間の対応が必要",
+      "yes": "はい",
+      "no": "いいえ",
+      "apply": "適用",
+      "dismiss": "却下",
+      "applied": "適用済み",
+      "dismissed": "却下済み",
+      "disclaimer": "提案のみです。適用前に確認してください。",
+      "error_title": "提案を更新できませんでした",
+      "error_message": "もう一度お試しください。"
+    },
     "source": {
       "in-app": "アプリ内"
     },

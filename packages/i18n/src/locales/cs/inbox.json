@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Označit jako duplikát",
       "move": "Přesunout {value} do pracovních položek projektu"
     },
+    "triage": {
+      "title": "Návrh třídění",
+      "pending": "Klasifikuji tuto pracovní položku…",
+      "suggested_by": "Navrženo modelem {model}",
+      "category": "Kategorie",
+      "severity": "Závažnost",
+      "needs_human": "Vyžaduje člověka",
+      "yes": "Ano",
+      "no": "Ne",
+      "apply": "Použít",
+      "dismiss": "Zamítnout",
+      "applied": "Použito",
+      "dismissed": "Zamítnuto",
+      "disclaimer": "Pouze návrhy. Před použitím zkontrolujte.",
+      "error_title": "Návrh se nepodařilo aktualizovat",
+      "error_message": "Zkuste to prosím znovu."
+    },
     "source": {
       "in-app": "v aplikaci"
     },

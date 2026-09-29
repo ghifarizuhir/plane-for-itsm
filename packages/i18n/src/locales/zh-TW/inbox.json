@@ -49,6 +49,23 @@
       "mark_as_duplicate": "標記為重複",
       "move": "將 {value} 移至專案工作事項"
     },
+    "triage": {
+      "title": "分診建議",
+      "pending": "正在分類此工作事項…",
+      "suggested_by": "由 {model} 建議",
+      "category": "類別",
+      "severity": "嚴重程度",
+      "needs_human": "需要人工處理",
+      "yes": "是",
+      "no": "否",
+      "apply": "套用",
+      "dismiss": "忽略",
+      "applied": "已套用",
+      "dismissed": "已忽略",
+      "disclaimer": "僅供建議。套用前請檢查。",
+      "error_title": "無法更新建議",
+      "error_message": "請重試。"
+    },
     "source": {
       "in-app": "應用程式內"
     },

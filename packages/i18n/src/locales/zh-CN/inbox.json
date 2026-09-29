@@ -49,6 +49,23 @@
       "mark_as_duplicate": "标记为重复",
       "move": "将 {value} 移至项目工作项"
     },
+    "triage": {
+      "title": "分诊建议",
+      "pending": "正在分类此工作项…",
+      "suggested_by": "由 {model} 建议",
+      "category": "类别",
+      "severity": "严重程度",
+      "needs_human": "需要人工处理",
+      "yes": "是",
+      "no": "否",
+      "apply": "应用",
+      "dismiss": "忽略",
+      "applied": "已应用",
+      "dismissed": "已忽略",
+      "disclaimer": "仅供建议。应用前请检查。",
+      "error_title": "无法更新建议",
+      "error_message": "请重试。"
+    },
     "source": {
       "in-app": "应用内"
     },

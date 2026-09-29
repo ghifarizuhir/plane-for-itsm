@@ -49,6 +49,23 @@
       "mark_as_duplicate": "Đánh dấu là trùng lặp",
       "move": "Di chuyển {value} đến mục công việc dự án"
     },
+    "triage": {
+      "title": "Gợi ý phân loại",
+      "pending": "Đang phân loại mục công việc này…",
+      "suggested_by": "Được gợi ý bởi {model}",
+      "category": "Danh mục",
+      "severity": "Mức độ nghiêm trọng",
+      "needs_human": "Cần người xử lý",
+      "yes": "Có",
+      "no": "Không",
+      "apply": "Áp dụng",
+      "dismiss": "Bỏ qua",
+      "applied": "Đã áp dụng",
+      "dismissed": "Đã bỏ qua",
+      "disclaimer": "Chỉ là gợi ý. Vui lòng xem lại trước khi áp dụng.",
+      "error_title": "Không thể cập nhật gợi ý",
+      "error_message": "Vui lòng thử lại."
+    },
     "source": {
       "in-app": "Trong ứng dụng"
     },
