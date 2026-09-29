@@ -114,7 +114,8 @@ export class ProjectIssuesFilter extends IssueFilterHelperStore implements IProj
     const filteredRouteParams: Partial<Record<TIssueParams, string | boolean>> = this.computedFilteredParams(
       userFilters?.richFilters,
       userFilters?.displayFilters,
-      filteredParams
+      filteredParams,
+      this.rootIssueStore.rootStore.workflow.getWorkflowMap(projectId)
     );
 
     return filteredRouteParams;

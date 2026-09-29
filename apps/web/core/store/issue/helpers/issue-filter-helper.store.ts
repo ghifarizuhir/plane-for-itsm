@@ -24,12 +24,14 @@ import type {
   TIssueParams,
   TStaticViewTypes,
   TWorkItemFilterExpression,
+  TWorkflowMap,
 } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
 // helpers
 import { getComputedDisplayFilters, getComputedDisplayProperties } from "@plane/utils";
 // lib
 import { storage } from "@/lib/local-storage";
+import { getSingleWorkItemTypeId, resolveEffectiveDisplayFilters } from "@/store/workflow.helpers";
 
 interface ILocalStoreIssueFilters {
   key: EIssuesStoreType;
@@ -52,7 +54,8 @@ export interface IIssueFilterHelperStore {
   computedFilteredParams(
     richFilters: TWorkItemFilterExpression,
     displayFilters: IIssueDisplayFilterOptions | undefined,
-    acceptableParamsByLayout: TIssueParams[]
+    acceptableParamsByLayout: TIssueParams[],
+    workflowMap?: TWorkflowMap
   ): Partial<Record<TIssueParams, string | boolean>>;
   computedFilters(filters: IIssueFilterOptions): IIssueFilterOptions;
   getFilterConditionBasedOnViews: (
@@ -92,15 +95,23 @@ export class IssueFilterHelperStore implements IIssueFilterHelperStore {
   computedFilteredParams = (
     richFilters: TWorkItemFilterExpression,
     displayFilters: IIssueDisplayFilterOptions | undefined,
-    acceptableParamsByLayout: TIssueParams[]
+    acceptableParamsByLayout: TIssueParams[],
+    workflowMap?: TWorkflowMap
   ): Partial<Record<TIssueParams, string | boolean>> => {
+    const effectiveDisplayFilters = resolveEffectiveDisplayFilters(
+      displayFilters,
+      workflowMap,
+      getSingleWorkItemTypeId({ richFilters })
+    );
     const computedDisplayFilters: Partial<Record<TIssueParams, undefined | string[] | boolean | string>> = {
-      group_by: displayFilters?.group_by ? EIssueGroupByToServerOptions[displayFilters.group_by] : undefined,
-      sub_group_by: displayFilters?.sub_group_by
-        ? EIssueGroupByToServerOptions[displayFilters.sub_group_by]
+      group_by: effectiveDisplayFilters?.group_by
+        ? EIssueGroupByToServerOptions[effectiveDisplayFilters.group_by]
         : undefined,
-      order_by: displayFilters?.order_by || undefined,
-      sub_issue: displayFilters?.sub_issue ?? true,
+      sub_group_by: effectiveDisplayFilters?.sub_group_by
+        ? EIssueGroupByToServerOptions[effectiveDisplayFilters.sub_group_by]
+        : undefined,
+      order_by: effectiveDisplayFilters?.order_by || undefined,
+      sub_issue: effectiveDisplayFilters?.sub_issue ?? true,
     };
 
     const issueFiltersParams: Partial<Record<TIssueParams, boolean | string>> = {};
