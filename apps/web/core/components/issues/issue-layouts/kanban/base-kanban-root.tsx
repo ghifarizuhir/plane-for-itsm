@@ -19,10 +19,12 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useUserPermissions } from "@/hooks/store/user";
+import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // store
+import { getSingleWorkItemTypeId, resolveEffectiveDisplayFilters } from "@/store/workflow.helpers";
 // ui
 // types
 import { DeleteIssueModal } from "../../delete-issue-modal";
@@ -90,10 +92,15 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   const displayFilters = issuesFilter?.issueFilters?.displayFilters;
   const displayProperties = issuesFilter?.issueFilters?.displayProperties;
 
-  const sub_group_by = displayFilters?.sub_group_by;
-  const group_by = displayFilters?.group_by;
+  const { getWorkflowMap } = useWorkflow();
+  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
+  const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
+  const effectiveDisplayFilters = resolveEffectiveDisplayFilters(displayFilters, workflowMap, workItemTypeId);
 
-  const orderBy = displayFilters?.order_by;
+  const sub_group_by = effectiveDisplayFilters?.sub_group_by;
+  const group_by = effectiveDisplayFilters?.group_by;
+
+  const orderBy = effectiveDisplayFilters?.order_by;
 
   useEffect(() => {
     fetchIssues("init-loader", { canGroup: true, perPageCount: sub_group_by ? 10 : 30 }, viewId);
@@ -105,7 +112,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
         fetchNextIssues(groupId, subgroupId);
       }
     },
-    [fetchNextIssues]
+    [fetchNextIssues, issues]
   );
 
   const groupedIssueIds = issues?.groupedIssueIds;
@@ -130,9 +137,11 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   const handleOnDrop = useGroupIssuesDragNDrop(storeType, orderBy, group_by, sub_group_by);
 
   const canEditProperties = useCallback(
-    (projectId: string | undefined) => {
+    (projectIdToCheck: string | undefined) => {
       const isEditingAllowedBasedOnProject =
-        canEditPropertiesBasedOnProject && projectId ? canEditPropertiesBasedOnProject(projectId) : isEditingAllowed;
+        canEditPropertiesBasedOnProject && projectIdToCheck
+          ? canEditPropertiesBasedOnProject(projectIdToCheck)
+          : isEditingAllowed;
 
       return enableInlineEditing && isEditingAllowedBasedOnProject;
     },

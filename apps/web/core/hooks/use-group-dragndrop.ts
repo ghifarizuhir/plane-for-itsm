@@ -5,6 +5,7 @@
  */
 
 import { useParams } from "next/navigation";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, TIssue, TIssueGroupByOptions, TIssueOrderByOptions } from "@plane/types";
 import type { GroupDropLocation } from "@/components/issues/issue-layouts/utils";
@@ -34,6 +35,7 @@ export const useGroupIssuesDragNDrop = (
   subGroupBy?: TIssueGroupByOptions
 ) => {
   const { workspaceSlug } = useParams();
+  const { t } = useTranslation();
 
   const {
     issue: { getIssueById },
@@ -94,7 +96,7 @@ export const useGroupIssuesDragNDrop = (
       delete data[moduleKey];
     }
 
-    updateIssue && updateIssue(projectId, issueId, data).catch(() => setToast(errorToastProps));
+    if (updateIssue) updateIssue(projectId, issueId, data).catch(() => setToast(errorToastProps));
   };
 
   const handleOnDrop = async (source: GroupDropLocation, destination: GroupDropLocation) => {
@@ -105,6 +107,16 @@ export const useGroupIssuesDragNDrop = (
       destination.id === source.id
     )
       return;
+
+    // state group view has no concrete state to move to; keep the drop a no-op with a hint
+    if (groupBy === "state_detail.group" && source.groupId !== destination.groupId) {
+      setToast({
+        type: TOAST_TYPE.INFO,
+        title: t("common.warning"),
+        message: t("common.state_change_requires_workflow_state_grouping"),
+      });
+      return;
+    }
 
     await handleGroupDragDrop(
       source,
