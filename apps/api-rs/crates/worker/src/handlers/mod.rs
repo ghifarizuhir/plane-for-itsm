@@ -4,6 +4,7 @@ pub mod email;
 pub mod export;
 pub mod file_asset;
 pub mod issue_automation;
+pub mod intake_triage;
 pub mod webhook;
 
 use serde_json::Value;
@@ -45,7 +46,10 @@ pub async fn dispatch_with_pool(
 /// Stream jobs this build is allowed to execute. Everything else beat may
 /// enqueue stays disabled until validated individually.
 pub fn is_enabled_job(name: &str) -> bool {
-    matches!(name, "ai.schedule.tick" | "ai.schedule.run")
+    matches!(
+        name,
+        "ai.schedule.tick" | "ai.schedule.run" | "ai.intake.triage" | "ai.intake.triage.sweep"
+    )
 }
 
 /// Read one stream entry and dispatch the allowlisted AI schedule jobs.
@@ -70,6 +74,8 @@ pub async fn handle_by_id(
             Ok(())
         }
         "ai.schedule.run" => ai_schedule::run(pool, payload).await,
+        "ai.intake.triage" => intake_triage::classify(pool, payload).await,
+        "ai.intake.triage.sweep" => intake_triage::sweep(pool, redis).await,
         _ => {
             tracing::error!(job=%job, id=%id, "enabled job has no dispatch arm");
             Ok(())
@@ -82,9 +88,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_ai_schedule_jobs_are_enabled() {
+    fn only_validated_jobs_are_enabled() {
         assert!(is_enabled_job("ai.schedule.tick"));
         assert!(is_enabled_job("ai.schedule.run"));
+        assert!(is_enabled_job("ai.intake.triage"));
+        assert!(is_enabled_job("ai.intake.triage.sweep"));
         assert!(!is_enabled_job("email.notification"));
         assert!(!is_enabled_job("issue.archive"));
         assert!(!is_enabled_job(""));

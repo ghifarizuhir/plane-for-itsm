@@ -114,7 +114,26 @@ async fn main() {
             .unwrap();
     }
 
+    // Every minute: AI intake triage sweep — backfill/retry unclassified items.
+    {
+        let r = redis.clone();
+        sched
+            .add(
+                tokio_cron_scheduler::Job::new_async("0 * * * * *", move |_, _| {
+                    let mut rr = r.clone();
+                    Box::pin(async move {
+                        let _ =
+                            common::stream::push_job(&mut rr, "ai.intake.triage.sweep", json!({}))
+                                .await;
+                    })
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
     sched.start().await.unwrap();
-    tracing::info!("beat scheduler started with 11 jobs");
+    tracing::info!("beat scheduler started with 12 jobs");
     tokio::signal::ctrl_c().await.unwrap();
 }
