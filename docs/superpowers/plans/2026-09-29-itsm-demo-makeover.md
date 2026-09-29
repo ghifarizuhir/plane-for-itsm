@@ -423,3 +423,17 @@ Expected: 4 baris untuk kasus baru dengan kategori Incident/Service Request/Prob
 
 Run: `docker exec plane-for-itsm-plane-db-1 psql -U plane -d plane -c "DELETE FROM api_tokens WHERE token='itsm-makeover-20260929';"`
 Laporkan ke user: ringkasan perubahan + sisa manual (jika ada state default yang menolak dihapus di Task 5).
+
+---
+
+## Catatan eksekusi (deviasi dari plan, 2026-09-29)
+
+1. Body import types = `{"work_item_types": [...]}` (bukan `type_ids`).
+2. Skrip sempat membuat duplikat type `Change`; Change lama di-unlink, Change baru dipakai (keputusan user).
+3. States ternyata 24 (project + mirror workflow per-type), bukan 16. Akhir: rename-only via project API + workflow API (`workflow_states` + auto-sync ke mirror); TIDAK ada destroy (keputusan user). Duplikat tetap ada tapi bernama Indonesia.
+4. State `Triage` protected (`is_triage=false` filter) — tetap bernama "Triage".
+5. Validasi typed: issue bertype HARUS memakai state dari workflow type-nya. Workflow SR & Change yang tadinya 1 state dilengkapi (Siap Dikerjakan/Selesai/Ditutup) via workflow API.
+6. Seq 8 (VPN) sudah ter-accept + ter-rename saat skrip jalan (aksi manual di UI); skrip menangani via fallback direct-PATCH.
+7. Tiket "Reset API key" memakai state Baru (bukan Triase) — Triage bukan bagian workflow SR.
+8. Service `prepaid-*`/`Web API`/`Svc B` milik project lain; link dialihkan ke Payment/API Gateway; Svc B tidak disentuh.
+9. Hasil akhir: 9 tiket (type terisi semua), 4 intake pending terklasifikasi Jev, 5 label aktif, 1 cycle aktif, 3 module. Query verifikasi Jev yang benar memakai join `intake_triage_suggestions -> intake_issues -> issues` (kolomnya `intake_issue_id`, bukan `issue_id`).
