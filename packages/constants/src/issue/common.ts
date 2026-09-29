@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+/* oxlint-disable no-duplicate-enum-values -- server keys intentionally alias (state/workflow_state, project/team_project) */
+
 import type {
   TIssueGroupByOptions,
   TIssueOrderByOptions,
@@ -26,6 +28,7 @@ export type TIssueFilterPriorityObject = {
 
 export enum EIssueGroupByToServerOptions {
   "state" = "state_id",
+  "workflow_state" = "state_id",
   "priority" = "priority",
   "labels" = "labels__id",
   "state_detail.group" = "state__group",
@@ -35,7 +38,6 @@ export enum EIssueGroupByToServerOptions {
   "target_date" = "target_date",
   "project" = "project_id",
   "created_by" = "created_by",
-  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   "team_project" = "project_id",
 }
 
@@ -115,6 +117,7 @@ export const ISSUE_GROUP_BY_OPTIONS: {
   titleTranslationKey: string;
 }[] = [
   { key: "state", titleTranslationKey: "common.states" },
+  { key: "workflow_state", titleTranslationKey: "common.workflow_states" },
   { key: "state_detail.group", titleTranslationKey: "common.state_groups" },
   { key: "priority", titleTranslationKey: "common.priority" },
   { key: "team_project", titleTranslationKey: "common.team_project" }, // required this on team issues
