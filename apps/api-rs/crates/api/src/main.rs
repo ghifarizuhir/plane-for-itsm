@@ -858,6 +858,18 @@ async fn main() {
                 .delete(routes::intake::destroy_issue),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/triage-suggestion/",
+            get(routes::intake::get_triage_suggestion),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/triage-suggestion/apply/",
+            post(routes::intake::apply_triage_suggestion),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-issues/:pk/triage-suggestion/dismiss/",
+            post(routes::intake::dismiss_triage_suggestion),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/inbox-issues/",
             get(routes::intake::list_issues).post(routes::intake::create_issue),
         )

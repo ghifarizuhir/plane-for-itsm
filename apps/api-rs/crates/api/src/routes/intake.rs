@@ -1813,3 +1813,275 @@ mod inbox_patch_tests {
         let _ = super::patch_issue;
     }
 }
+
+// ============================================================================
+// AI triage suggestions (Jev).
+// ============================================================================
+
+const TRIAGE_FIELDS: [&str; 3] = ["category", "severity", "needs_human"];
+const TRIAGE_APPLY_FIELDS: [&str; 1] = ["severity"];
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TriageFieldsBody {
+    #[serde(default)]
+    pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct TriageRow {
+    id: uuid::Uuid,
+    status: String,
+    model: Option<String>,
+    answers: Option<Value>,
+    category_type_id: Option<uuid::Uuid>,
+    category_label: Option<String>,
+    category_confidence: Option<f64>,
+    severity_priority: Option<String>,
+    severity_score: Option<f64>,
+    severity_confidence: Option<f64>,
+    needs_human: Option<f64>,
+    applied_fields: Vec<String>,
+    dismissed_fields: Vec<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn fetch_triage_row(
+    pool: &sqlx::PgPool,
+    row_id: uuid::Uuid,
+) -> Result<Option<TriageRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, status, model, answers, category_type_id, category_label, \
+                category_confidence, severity_priority, severity_score, severity_confidence, \
+                needs_human, applied_fields, dismissed_fields, created_at \
+         FROM intake_triage_suggestions WHERE intake_issue_id = $1",
+    )
+    .bind(row_id)
+    .fetch_optional(pool)
+    .await
+}
+
+/// `probabilities` dari jawaban mentah; level Score dipetakan dari indeks
+/// (`"0".."4"`) ke nama priority lewat `level_names`.
+fn probability_json(value: &Value, level_names: Option<&[&str]>) -> Value {
+    let mut out = serde_json::Map::new();
+    if let Some(map) = value.get("probabilities").and_then(Value::as_object) {
+        for (key, raw) in map {
+            let label = level_names
+                .and_then(|names| key.parse::<usize>().ok().and_then(|index| names.get(index)))
+                .map(|name| name.to_string())
+                .unwrap_or_else(|| key.clone());
+            out.insert(label, json!(raw.as_f64().unwrap_or(0.0)));
+        }
+    }
+    Value::Object(out)
+}
+
+fn triage_json(row: &TriageRow) -> Value {
+    let ready = row.status == "ready";
+    let empty = json!({});
+    let answers = row.answers.as_ref().unwrap_or(&empty);
+    let category = if ready {
+        row.category_label.as_ref().map(|label| {
+            json!({
+                "type_id": row.category_type_id,
+                "label": label,
+                "confidence": row.category_confidence,
+                "probabilities": answers
+                    .get("category")
+                    .map(|value| probability_json(value, None))
+                    .unwrap_or_else(|| json!({})),
+            })
+        })
+    } else {
+        None
+    };
+    let severity = if ready {
+        row.severity_priority.as_ref().map(|priority| {
+            json!({
+                "priority": priority,
+                "score": row.severity_score,
+                "confidence": row.severity_confidence,
+                "probabilities": answers
+                    .get("severity")
+                    .map(|value| probability_json(value, Some(&ai::triage::SEVERITY_LEVELS[..])))
+                    .unwrap_or_else(|| json!({})),
+            })
+        })
+    } else {
+        None
+    };
+    let needs_human = if ready {
+        row.needs_human
+            .map(|probability| json!({"probability": probability}))
+    } else {
+        None
+    };
+    json!({
+        "id": row.id,
+        "status": row.status,
+        "model": row.model,
+        "category": category,
+        "severity": severity,
+        "needs_human": needs_human,
+        "applied_fields": row.applied_fields,
+        "dismissed_fields": row.dismissed_fields,
+        "created_at": row.created_at,
+    })
+}
+
+fn triage_bad_request(message: &str) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(json!({"error": message})))
+}
+
+/// GET `.../intake-issues/:pk/triage-suggestion/` — `data` = row pending/ready,
+/// `null` untuk missing/failed.
+pub async fn get_triage_suggestion(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
+        return Ok(missing());
+    };
+    let row = fetch_triage_row(&st.pool, scope.row_id).await?;
+    match row {
+        Some(row) if row.status == "pending" || row.status == "ready" => {
+            Ok((StatusCode::OK, Json(json!({"data": triage_json(&row)}))))
+        }
+        _ => Ok((StatusCode::OK, Json(json!({"data": null})))),
+    }
+}
+
+/// POST `.../triage-suggestion/apply/` — v1 hanya `severity` (menulis
+/// `issues.priority`), idempotent.
+pub async fn apply_triage_suggestion(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
+    Json(body): Json<TriageFieldsBody>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
+        return Ok(missing());
+    };
+    let Some(row) = fetch_triage_row(&st.pool, scope.row_id).await? else {
+        return Ok(missing());
+    };
+    if row.status != "ready" {
+        return Ok(triage_bad_request("Triage suggestion is not ready"));
+    }
+    if body.fields.is_empty() || body.fields.iter().any(|f| !TRIAGE_FIELDS.contains(&f.as_str())) {
+        return Ok(triage_bad_request("Invalid triage fields"));
+    }
+    if body
+        .fields
+        .iter()
+        .any(|field| row.dismissed_fields.contains(field))
+    {
+        return Ok(triage_bad_request("Triage field was dismissed"));
+    }
+    if body
+        .fields
+        .iter()
+        .any(|field| !TRIAGE_APPLY_FIELDS.contains(&field.as_str()))
+    {
+        return Ok(triage_bad_request("Only severity can be applied"));
+    }
+    if let Some(priority) = &row.severity_priority {
+        if !row.applied_fields.iter().any(|field| field == "severity") {
+            let mut tx = st.pool.begin().await?;
+            sqlx::query(
+                "UPDATE issues SET priority = $1, updated_at = now(), updated_by_id = $2 \
+                 WHERE id = $3 AND deleted_at IS NULL",
+            )
+            .bind(priority)
+            .bind(auth.0)
+            .bind(scope.issue_id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query(
+                "UPDATE intake_triage_suggestions \
+                 SET applied_fields = array_append(applied_fields, 'severity'), updated_at = now() \
+                 WHERE id = $1",
+            )
+            .bind(row.id)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+        }
+    }
+    let refreshed = fetch_triage_row(&st.pool, scope.row_id).await?.unwrap_or(row);
+    Ok((StatusCode::OK, Json(json!({"data": triage_json(&refreshed)}))))
+}
+
+/// POST `.../triage-suggestion/dismiss/` — tandai field diabaikan; idempotent.
+pub async fn dismiss_triage_suggestion(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+        String,
+        uuid::Uuid,
+        uuid::Uuid,
+    )>,
+    Json(body): Json<TriageFieldsBody>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    let Some(scope) = resolve_inbox_row(&st.pool, &slug, project_id, pk).await? else {
+        return Ok(missing());
+    };
+    let Some(row) = fetch_triage_row(&st.pool, scope.row_id).await? else {
+        return Ok(missing());
+    };
+    if row.status != "ready" {
+        return Ok(triage_bad_request("Triage suggestion is not ready"));
+    }
+    if body.fields.is_empty() || body.fields.iter().any(|f| !TRIAGE_FIELDS.contains(&f.as_str())) {
+        return Ok(triage_bad_request("Invalid triage fields"));
+    }
+    if body
+        .fields
+        .iter()
+        .any(|field| row.applied_fields.contains(field))
+    {
+        return Ok(triage_bad_request("Triage field was already applied"));
+    }
+    let mut merged = row.dismissed_fields.clone();
+    for field in &body.fields {
+        if !merged.contains(field) {
+            merged.push(field.clone());
+        }
+    }
+    sqlx::query(
+        "UPDATE intake_triage_suggestions SET dismissed_fields = $2, updated_at = now() WHERE id = $1",
+    )
+    .bind(row.id)
+    .bind(&merged)
+    .execute(&st.pool)
+    .await?;
+    let refreshed = fetch_triage_row(&st.pool, scope.row_id).await?.unwrap_or(row);
+    Ok((StatusCode::OK, Json(json!({"data": triage_json(&refreshed)}))))
+}
