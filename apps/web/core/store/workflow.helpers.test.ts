@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { IIssueFilters, IState, TWorkflowMapType } from "@plane/types";
+import type { IIssueFilters, IState, TWorkflowMap, TWorkflowMapType } from "@plane/types";
 import {
   allowedTargetStateIds,
   buildTransitionMatrix,
   findWorkflowMapType,
   getSingleWorkItemTypeId,
   getTypeDefaultStateId,
+  getWorkItemTypeIds,
   isTypedState,
   MAX_WORKFLOW_MAP_FETCH_RETRIES,
+  resolveEffectiveDisplayFilters,
   resolveSelectableStateIds,
   resolveStateColumns,
+  resolveWorkflowStateColumns,
   shouldRetryWorkflowMapFetch,
 } from "./workflow.helpers";
 
@@ -353,5 +356,187 @@ describe("shouldRetryWorkflowMapFetch", () => {
     expect(shouldRetryWorkflowMapFetch(1)).toBe(true);
     expect(shouldRetryWorkflowMapFetch(MAX_WORKFLOW_MAP_FETCH_RETRIES)).toBe(false);
     expect(shouldRetryWorkflowMapFetch(MAX_WORKFLOW_MAP_FETCH_RETRIES + 1)).toBe(false);
+  });
+});
+
+const typedMapType = (typeId: string, typeName: string, stateId: string, name: string): TWorkflowMapType => ({
+  type_id: typeId,
+  type_name: typeName,
+  workflow_id: `wf-${typeId}`,
+  default_state_id: stateId,
+  states: [{ id: stateId, name, color: "#000000", group: "backlog", sequence: 1, is_default: true }],
+  transitions: [],
+});
+
+const compositeWorkflowMap: TWorkflowMap = {
+  types: [
+    {
+      ...typedMapType("type-p", "Problem", "p-1", "Baru"),
+      states: [
+        { id: "p-1", name: "Baru", color: "#111111", group: "backlog", sequence: 1, is_default: true },
+        { id: "p-2", name: "Investigasi", color: "#222222", group: "started", sequence: 2, is_default: false },
+      ],
+    },
+    {
+      ...typedMapType("type-c", "Change", "c-1", "Baru"),
+      states: [{ id: "c-1", name: "Baru", color: "#333333", group: "backlog", sequence: 1, is_default: true }],
+    },
+  ],
+};
+
+const compositeProjectStates: IState[] = [
+  {
+    id: "l-1",
+    name: "Baru",
+    color: "#000000",
+    group: "backlog",
+    description: "",
+    sequence: 5,
+    workspace_id: "w",
+    project_id: "p",
+  },
+  {
+    id: "p-1",
+    name: "Baru",
+    color: "#111111",
+    group: "backlog",
+    description: "",
+    sequence: 1,
+    workspace_id: "w",
+    project_id: "p",
+    type_id: "type-p",
+    workflow_state_id: "ws-p-1",
+  },
+  {
+    id: "p-2",
+    name: "Investigasi",
+    color: "#222222",
+    group: "started",
+    description: "",
+    sequence: 2,
+    workspace_id: "w",
+    project_id: "p",
+    type_id: "type-p",
+    workflow_state_id: "ws-p-2",
+  },
+  {
+    id: "c-1",
+    name: "Baru",
+    color: "#333333",
+    group: "backlog",
+    description: "",
+    sequence: 1,
+    workspace_id: "w",
+    project_id: "p",
+    type_id: "type-c",
+    workflow_state_id: "ws-c-1",
+  },
+  {
+    id: "z-1",
+    name: "Ghost",
+    color: "#444444",
+    group: "started",
+    description: "",
+    sequence: 9,
+    workspace_id: "w",
+    project_id: "p",
+    type_id: "type-z",
+    workflow_state_id: "ws-z-1",
+  },
+] as IState[];
+
+describe("resolveEffectiveDisplayFilters", () => {
+  it("project tanpa typed workflow tidak berubah", () => {
+    const filters = { group_by: "state" as const, sub_group_by: null };
+    expect(resolveEffectiveDisplayFilters(filters, undefined, null)).toEqual(filters);
+    expect(resolveEffectiveDisplayFilters(filters, { types: [] }, "type-p")).toEqual(filters);
+  });
+
+  it("mixed typed workflow: state → state_detail.group", () => {
+    const result = resolveEffectiveDisplayFilters(
+      { group_by: "state", sub_group_by: null },
+      compositeWorkflowMap,
+      null
+    );
+    expect(result?.group_by).toBe("state_detail.group");
+  });
+
+  it("satu type: state → workflow_state", () => {
+    const result = resolveEffectiveDisplayFilters(
+      { group_by: "state", sub_group_by: null },
+      compositeWorkflowMap,
+      "type-p"
+    );
+    expect(result?.group_by).toBe("workflow_state");
+  });
+
+  it("nilai workflow_state dan state_detail.group eksplisit dipertahankan", () => {
+    expect(
+      resolveEffectiveDisplayFilters({ group_by: "workflow_state", sub_group_by: null }, compositeWorkflowMap, null)
+        ?.group_by
+    ).toBe("workflow_state");
+    expect(
+      resolveEffectiveDisplayFilters({ group_by: "state_detail.group", sub_group_by: null }, compositeWorkflowMap, null)
+        ?.group_by
+    ).toBe("state_detail.group");
+  });
+
+  it("menghapus sub_group_by yang menjadi sama dengan group_by efektif", () => {
+    const result = resolveEffectiveDisplayFilters(
+      { group_by: "state", sub_group_by: "state_detail.group" },
+      compositeWorkflowMap,
+      null
+    );
+    expect(result?.group_by).toBe("state_detail.group");
+    expect(result?.sub_group_by).toBeNull();
+  });
+
+  it("undefined tetap undefined", () => {
+    expect(resolveEffectiveDisplayFilters(undefined, compositeWorkflowMap, null)).toBeUndefined();
+  });
+});
+
+describe("resolveWorkflowStateColumns", () => {
+  it("single type memakai kolom type itu dengan label polos", () => {
+    const columns = resolveWorkflowStateColumns(
+      compositeProjectStates,
+      compositeWorkflowMap.types[0],
+      compositeWorkflowMap
+    );
+    expect(columns.map((column) => [column.state.id, column.label])).toEqual([
+      ["p-1", "Baru"],
+      ["p-2", "Investigasi"],
+    ]);
+  });
+
+  it("mixed: legacy dulu, lalu per type urut sequence, label komposit", () => {
+    const columns = resolveWorkflowStateColumns(compositeProjectStates, undefined, compositeWorkflowMap);
+    expect(columns.map((column) => [column.state.id, column.label])).toEqual([
+      ["l-1", "Baru"],
+      ["p-1", "Problem · Baru"],
+      ["p-2", "Problem · Investigasi"],
+      ["c-1", "Change · Baru"],
+      ["z-1", "Ghost"],
+    ]);
+  });
+
+  it("tanpa typed workflow mengembalikan label polos apa adanya", () => {
+    const columns = resolveWorkflowStateColumns(compositeProjectStates, undefined, { types: [] });
+    expect(columns.map((column) => column.label)).toEqual(["Baru", "Baru", "Investigasi", "Baru", "Ghost"]);
+  });
+});
+
+describe("getWorkItemTypeIds", () => {
+  it("mengumpulkan semua type id dari richFilters", () => {
+    expect(getWorkItemTypeIds({ richFilters: { and: [{ type_id__in: "t-1,t-2" }] } }).toSorted()).toEqual([
+      "t-1",
+      "t-2",
+    ]);
+  });
+
+  it("membaca bentuk legacy filters.issue_type dan input kosong", () => {
+    expect(getWorkItemTypeIds({ filters: { issue_type: ["t-9"] } })).toEqual(["t-9"]);
+    expect(getWorkItemTypeIds(undefined)).toEqual([]);
+    expect(getWorkItemTypeIds({ richFilters: {} })).toEqual([]);
   });
 });

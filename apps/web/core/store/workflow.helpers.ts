@@ -1,7 +1,9 @@
 import type {
+  IIssueDisplayFilterOptions,
   IIssueFilterOptions,
   IIssueFilters,
   IState,
+  TIssueGroupByOptions,
   TWorkItemFilterExpression,
   TWorkflowMap,
   TWorkflowMapType,
@@ -155,4 +157,81 @@ export const buildTransitionMatrix = (
         exists: existing.has(`${from.id}:${to.id}`),
       }))
   );
+};
+
+/** Project punya minimal satu type ber-workflow di workflow map. */
+export const hasTypedWorkflows = (map: TWorkflowMap | undefined): boolean => (map?.types?.length ?? 0) > 0;
+
+/**
+ * Nilai grouping efektif: nilai `state` legacy di-resolve runtime supaya view
+ * lama tetap valid. Typed project + mixed → 5 state group; typed project +
+ * satu type → workflow_state; non-typed → apa adanya.
+ */
+export const resolveEffectiveDisplayFilters = (
+  displayFilters: IIssueDisplayFilterOptions | undefined,
+  workflowMap: TWorkflowMap | undefined,
+  singleTypeId: string | null | undefined
+): IIssueDisplayFilterOptions | undefined => {
+  if (!displayFilters) return displayFilters;
+  const typed = hasTypedWorkflows(workflowMap);
+  const resolveAxis = (axis: TIssueGroupByOptions): TIssueGroupByOptions => {
+    if (axis !== "state" || !typed) return axis;
+    return singleTypeId ? "workflow_state" : "state_detail.group";
+  };
+  const group_by = resolveAxis(displayFilters.group_by);
+  let sub_group_by = resolveAxis(displayFilters.sub_group_by);
+  if (group_by && sub_group_by && group_by === sub_group_by) sub_group_by = null;
+  return { ...displayFilters, group_by, sub_group_by };
+};
+
+export type TWorkflowStateColumn = { state: IState; label: string };
+
+/**
+ * Kolom state untuk grouping `workflow_state`: satu type memakai mirror type
+ * itu (label polos); mixed menggabungkan legacy (label polos) lalu state per
+ * type (label `{type_name} · {state_name}`), urut sequence.
+ */
+export const resolveWorkflowStateColumns = (
+  projectStates: IState[],
+  mapType: TWorkflowMapType | undefined,
+  workflowMap: TWorkflowMap | undefined
+): TWorkflowStateColumn[] => {
+  if (mapType) return resolveStateColumns(projectStates, mapType).map((state) => ({ state, label: state.name }));
+  if (!hasTypedWorkflows(workflowMap)) return projectStates.map((state) => ({ state, label: state.name }));
+  const columns: TWorkflowStateColumn[] = [];
+  const used = new Set<string>();
+  for (const state of projectStates) {
+    if (isTypedState(state)) continue;
+    columns.push({ state, label: state.name });
+    used.add(state.id);
+  }
+  for (const type of workflowMap?.types ?? []) {
+    // oxlint-disable-next-line unicorn/no-array-sort -- filter() already copies the array
+    const typedStates = projectStates
+      .filter((state) => state.type_id === type.type_id)
+      .toSorted((a, b) => a.sequence - b.sequence);
+    for (const state of typedStates) {
+      if (used.has(state.id)) continue;
+      used.add(state.id);
+      columns.push({ state, label: `${type.type_name} · ${state.name}` });
+    }
+  }
+  for (const state of projectStates) {
+    if (!used.has(state.id)) columns.push({ state, label: state.name });
+  }
+  return columns;
+};
+
+/** Semua type id yang sedang difilter (rich maupun legacy). */
+export const getWorkItemTypeIds = (
+  issueFilters: TLegacyIssueFilterBag | TRichIssueFilterBag | IIssueFilters | null | undefined
+): string[] => {
+  if (!issueFilters) return [];
+  const ids = new Set<string>();
+  if ("filters" in issueFilters) {
+    (issueFilters.filters?.issue_type ?? []).forEach((typeId) => ids.add(typeId));
+    return [...ids];
+  }
+  collectTypeIds((issueFilters as TRichIssueFilterBag).richFilters, ids);
+  return [...ids];
 };
