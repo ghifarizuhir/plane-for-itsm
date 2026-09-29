@@ -86,6 +86,18 @@ Catatan: halaman kosong bila fitur intake dimatikan (`inbox_view === false`).
 
 ---
 
+### Saran triage AI (Rust-only)
+
+- `GET /api/workspaces/:slug/projects/:project_id/intake-issues/:pk/triage-suggestion/`
+- `POST .../triage-suggestion/apply/` (v1: `{"fields":["severity"]}` → `issues.priority`)
+- `POST .../triage-suggestion/dismiss/` (field: `category`, `severity`, `needs_human`)
+
+Diisi worker `ai.intake.triage` (push saat create + sweep beat tiap menit) memakai
+`LLM_DECISION_MODEL` (Jev/System One di `{LLM_BASE_URL}/systemone`). Row `failed`
+tidak dikembalikan (`data: null`). Tidak ada counterpart Django.
+
+---
+
 ## Changelog
 
 | Date       | Change                                                                          |
