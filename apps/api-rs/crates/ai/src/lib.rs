@@ -3,6 +3,7 @@
 //! `crates/worker` (scheduled runs).
 
 pub mod agent;
+pub mod decision;
 pub mod llm;
 pub mod schedule;
 pub mod tools;

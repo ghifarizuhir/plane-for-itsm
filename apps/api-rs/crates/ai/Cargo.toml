@@ -8,6 +8,7 @@ common = { path = "../common" }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 rig = { workspace = true }
+reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -50,6 +50,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "common",
+ "reqwest 0.12.28",
  "rig",
  "schemars 1.2.2",
  "serde",
