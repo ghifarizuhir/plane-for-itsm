@@ -1867,6 +1867,116 @@ pub async fn messages_list(
     ))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MessageCreate {
+    pub body: String,
+    pub client_id: Option<String>,
+}
+
+async fn valid_mention_members(
+    pool: &PgPool,
+    workspace_id: Uuid,
+    candidates: &[Uuid],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    sqlx::query_scalar(
+        "SELECT member_id FROM workspace_members \
+         WHERE workspace_id = $1 AND member_id = ANY($2) \
+         AND is_active = true AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(candidates)
+    .fetch_all(pool)
+    .await
+}
+
+/// One `notifications` row per mentioned workspace member (author excluded),
+/// shaped like `ai_schedule_run` so the existing card/mentioned filters work.
+async fn insert_mention_notifications(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    room: &WarRoomRow,
+    actor: Uuid,
+    workspace_slug: &str,
+    mentions: &[Uuid],
+) -> Result<(), sqlx::Error> {
+    for receiver in mentions {
+        if *receiver == actor {
+            continue;
+        }
+        sqlx::query(
+            "INSERT INTO notifications (id, workspace_id, project_id, receiver_id, entity_name, \
+             entity_identifier, title, sender, data, message_html, created_at, updated_at, \
+             created_by_id, triggered_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, 'war_room', $4, $5, \
+                     'in_app:war_room:mentioned', $6, '<p></p>', now(), now(), $7, $7)",
+        )
+        .bind(room.workspace_id)
+        .bind(room.project_id)
+        .bind(receiver)
+        .bind(room.id)
+        .bind(&room.name)
+        .bind(serde_json::json!({
+            "war_room": {
+                "id": room.id,
+                "project_id": room.project_id,
+                "workspace_slug": workspace_slug,
+                "name": room.name,
+                "sequence_id": room.sequence_id,
+            }
+        }))
+        .bind(actor)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+pub async fn messages_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<MessageCreate>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let body_text = body.body.trim().to_string();
+    if body_text.is_empty() {
+        return Ok(bad_request("Invalid body"));
+    }
+    let mentioned =
+        valid_mention_members(&st.pool, room.workspace_id, &parse_mentions(&body_text)).await?;
+    let message_id = Uuid::new_v4();
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO war_room_messages (id, workspace_id, project_id, war_room_id, author_id, \
+         body, mentions, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now(), $5, $5)",
+    )
+    .bind(message_id)
+    .bind(room.workspace_id)
+    .bind(project_id)
+    .bind(room.id)
+    .bind(auth.0)
+    .bind(&body_text)
+    .bind(serde_json::json!(mentioned))
+    .execute(&mut *tx)
+    .await?;
+    insert_mention_notifications(&mut tx, &room, auth.0, &slug, &mentioned).await?;
+    tx.commit().await?;
+
+    let row = fetch_message(&st.pool, room.id, message_id)
+        .await?
+        .expect("message just inserted");
+    let mut data = message_json(&row);
+    data["client_id"] = serde_json::json!(body.client_id);
+    publish_war_room_event(&st, room.id, "message.created", data.clone()).await;
+    Ok((StatusCode::CREATED, Json(data)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
