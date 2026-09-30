@@ -23,6 +23,8 @@ import { env } from "@/env";
 import { HocusPocusServerManager } from "@/hocuspocus";
 // redis
 import { redisManager } from "@/redis";
+// services
+import { warRoomRelay } from "@/services/war-room-relay.service";
 
 export class Server {
   private app: Express;
@@ -43,6 +45,8 @@ export class Server {
     try {
       await redisManager.initialize();
       logger.info("SERVER: Redis setup completed");
+      await warRoomRelay.initialize();
+      logger.info("SERVER: War room relay setup completed");
       const manager = HocusPocusServerManager.getInstance();
       this.hocuspocusServer = await manager.initialize();
       logger.info("SERVER: HocusPocus setup completed");
@@ -108,6 +112,9 @@ export class Server {
       this.hocuspocusServer.closeConnections();
       logger.info("SERVER: HocusPocus connections closed gracefully.");
     }
+
+    await warRoomRelay.destroy();
+    logger.info("SERVER: War room relay closed gracefully.");
 
     await redisManager.disconnect();
     logger.info("SERVER: Redis connection closed gracefully.");

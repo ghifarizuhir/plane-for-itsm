@@ -7,6 +7,8 @@
 process.env.API_BASE_URL = "http://localhost:8000";
 process.env.LIVE_SERVER_SECRET_KEY = "test-secret";
 
+import { describe, expect, it } from "vitest";
+
 const { WarRoomRelay } = await import("@/services/war-room-relay.service");
 
 type FakeSocket = {
