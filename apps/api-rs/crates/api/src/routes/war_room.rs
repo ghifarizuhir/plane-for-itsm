@@ -803,6 +803,182 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(detail)))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PatchWarRoom {
+    pub name: Option<String>,
+    pub severity: Option<String>,
+    pub status: Option<String>,
+    pub description_html: Option<String>,
+    pub notes_html: Option<String>,
+}
+
+pub async fn detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(room) = fetch_room(&st.pool, project_id, pk).await? else {
+        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+    };
+    let detail = room_detail_json(&st.pool, &room).await?;
+    Ok((StatusCode::OK, Json(detail)))
+}
+
+pub async fn patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<PatchWarRoom>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(current) = fetch_room(&st.pool, project_id, pk).await? else {
+        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+    };
+    if current.status == "archived" {
+        return Ok((StatusCode::CONFLICT, Json(serde_json::json!({"error": "room_archived"}))));
+    }
+    let name = body.name.clone().unwrap_or_else(|| current.name.clone());
+    if name.trim().is_empty() {
+        return Ok(bad_request("Invalid name"));
+    }
+    let severity = body.severity.clone().unwrap_or_else(|| current.severity.clone());
+    if let Err(e) = validate_enum("severity", &severity, WAR_ROOM_SEVERITIES) {
+        return Ok(bad_request(e));
+    }
+    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    if let Err(e) = validate_enum("status", &status, WAR_ROOM_STATUSES) {
+        return Ok(bad_request(e));
+    }
+    if status != current.status && !status_transition_allowed(&current.status, &status) {
+        return Ok(bad_request("invalid_status_transition"));
+    }
+    let description_html = body
+        .description_html
+        .clone()
+        .unwrap_or_else(|| current.description_html.clone());
+    let notes_html = body.notes_html.clone().unwrap_or_else(|| current.notes_html.clone());
+    let resolved_at = match status.as_str() {
+        "resolved" => current.resolved_at.or(Some(chrono::Utc::now())),
+        "active" | "monitoring" => None,
+        _ => current.resolved_at,
+    };
+    sqlx::query(
+        "UPDATE war_rooms SET name = $1, severity = $2, status = $3, description_html = $4, \
+         notes_html = $5, resolved_at = $6, updated_at = now(), updated_by_id = $7 WHERE id = $8",
+    )
+    .bind(&name)
+    .bind(&severity)
+    .bind(&status)
+    .bind(&description_html)
+    .bind(&notes_html)
+    .bind(resolved_at)
+    .bind(auth.0)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+
+    if severity != current.severity {
+        record_event(
+            &st.pool,
+            &current,
+            auth.0,
+            "room.severity_changed",
+            serde_json::json!({ "from": current.severity, "to": severity }),
+        )
+        .await?;
+    }
+    if status != current.status {
+        record_event(
+            &st.pool,
+            &current,
+            auth.0,
+            "room.status_changed",
+            serde_json::json!({ "from": current.status, "to": status }),
+        )
+        .await?;
+        let specific = match status.as_str() {
+            "resolved" => Some("room.resolved"),
+            "active" if current.status == "resolved" => Some("room.reopened"),
+            "archived" => Some("room.archived"),
+            _ => None,
+        };
+        if let Some(event_type) = specific {
+            record_event(&st.pool, &current, auth.0, event_type, serde_json::json!({})).await?;
+        }
+    }
+    let row = fetch_room(&st.pool, project_id, pk)
+        .await?
+        .expect("room just updated");
+    let detail = room_detail_json(&st.pool, &row).await?;
+    Ok((StatusCode::OK, Json(detail)))
+}
+
+pub async fn destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE war_room_messages SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE war_room_runbook_items SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE war_room_participants SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE war_room_services SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE war_room_issues SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE war_rooms SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
