@@ -533,6 +533,26 @@ pub fn status_transition_allowed(from: &str, to: &str) -> bool {
     transitions_allowed(from).contains(&to)
 }
 
+/// Extract unique user ids from `@{uuid}` tokens. Invalid tokens are ignored.
+/// Mentions are stored raw here; the handler filters them to workspace members.
+pub fn parse_mentions(body: &str) -> Vec<Uuid> {
+    let mut mentions: Vec<Uuid> = Vec::new();
+    let mut rest = body;
+    while let Some(start) = rest.find("@{") {
+        let after = &rest[start + 2..];
+        let Some(end) = after.find('}') else {
+            break;
+        };
+        if let Ok(user_id) = Uuid::parse_str(&after[..end]) {
+            if !mentions.contains(&user_id) {
+                mentions.push(user_id);
+            }
+        }
+        rest = &after[end + 1..];
+    }
+    mentions
+}
+
 /// Built-in runbook per work item type name (lowercased, trimmed).
 /// Returns `(template_key, title)` pairs.
 pub fn runbook_template(type_name: Option<&str>) -> Vec<(&'static str, &'static str)> {
@@ -1694,5 +1714,21 @@ mod tests {
         assert!(is_active_status("monitoring"));
         assert!(!is_active_status("resolved"));
         assert!(!is_active_status("archived"));
+    }
+
+    #[test]
+    fn mentions_parse_valid_uuids_only_once() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let body = format!(
+            "hey @{{{a}}} and @{{{b}}} and @{{{a}}} bad @{{nope}} tail @{{"
+        );
+        assert_eq!(parse_mentions(&body), vec![a, b]);
+    }
+
+    #[test]
+    fn mentions_parse_empty_when_none() {
+        assert!(parse_mentions("no mentions here").is_empty());
+        assert!(parse_mentions("").is_empty());
     }
 }
