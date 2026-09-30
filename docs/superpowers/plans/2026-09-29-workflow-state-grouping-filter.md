@@ -130,11 +130,11 @@ dan `ISSUE_FILTER_DEFAULT_DATA`:
 
 String baru:
 
-| Key                                                    | `en`                                                   | `id`                                                      |
-| ------------------------------------------------------ | ------------------------------------------------------ | --------------------------------------------------------- |
-| `common.workflow_states`                               | `Workflow states`                                      | `Workflow state`                                          |
-| `common.state_change_requires_workflow_state_grouping` | `Switch to "Workflow states" grouping to change state` | `Ganti grouping ke "Workflow state" untuk mengubah state` |
-| `common.workflow_state_wrong_type`                     | `Target state belongs to a different work item type`   | `State tujuan milik work item type lain`                  |
+| Key                                                    | `en`                                                     | `id`                                                                         |
+| ------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `common.workflow_states`                               | `Workflow states`                                        | `Status alur kerja`                                                          |
+| `common.state_change_requires_workflow_state_grouping` | `Switch to the Workflow states grouping to change state` | `Ganti ke pengelompokan berdasarkan status alur kerja untuk mengubah status` |
+| `common.workflow_state_wrong_type`                     | `Target state belongs to a different work item type`     | `Status tujuan milik tipe item kerja yang berbeda`                           |
 
 Wajib baca dan ikuti skill `translate` sebelum menyentuh file locale (istilah do-not-translate, plural CLDR, register per locale). Tambahkan ketiga key di namespace `common` (`workflow_states` dekat `states`/`state_groups`; dua key pesan dekat `warning`) untuk **semua** locale: `cs, de, en, es, fr, id, it, ja, ka-ge, ko, pl, pt-BR, ro, ru, sk, tr-TR, ua, vi-VN, zh-CN, zh-TW`.
 

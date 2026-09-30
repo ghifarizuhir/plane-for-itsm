@@ -10,4 +10,5 @@ export * from "./sony-logo";
 export * from "./zerodha-logo";
 export * from "./plane-lockup";
 export * from "./plane-logo";
+export * from "./plane-logo-boxed";
 export * from "./plane-wordmark";

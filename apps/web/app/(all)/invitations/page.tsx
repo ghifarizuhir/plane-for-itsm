@@ -15,7 +15,7 @@ import { ROLE } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // types
 import { Button } from "@plane/propel/button";
-import { PlaneLogo } from "@plane/propel/icons";
+import { PlaneLogoBoxed } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceMemberInvitation } from "@plane/types";
 import { truncateText } from "@plane/utils";
@@ -64,7 +64,7 @@ function UserInvitationsPage() {
     }
   };
 
-  const submitInvitations = () => {
+  const submitInvitations = async () => {
     if (invitationsRespond.length === 0) {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -76,36 +76,32 @@ function UserInvitationsPage() {
 
     setIsJoiningWorkspaces(true);
 
-    workspaceService
-      .joinWorkspaces({ invitations: invitationsRespond })
-      .then(() => {
-        mutate(USER_WORKSPACES_LIST);
-        const firstInviteId = invitationsRespond[0];
-        const redirectWorkspace = invitations?.find((i) => i.id === firstInviteId)?.workspace;
-        updateUserProfile({ last_workspace_id: redirectWorkspace?.id })
-          .then(() => {
-            setIsJoiningWorkspaces(false);
-            fetchWorkspaces().then(() => {
-              router.push(`/${redirectWorkspace?.slug}`);
-            });
-          })
-          .catch(() => {
-            setToast({
-              type: TOAST_TYPE.ERROR,
-              title: t("error"),
-              message: t("something_went_wrong_please_try_again"),
-            });
-            setIsJoiningWorkspaces(false);
-          });
-      })
-      .catch((_err) => {
+    try {
+      await workspaceService.joinWorkspaces({ invitations: invitationsRespond });
+      await mutate(USER_WORKSPACES_LIST);
+      const firstInviteId = invitationsRespond[0];
+      const redirectWorkspace = invitations?.find((i) => i.id === firstInviteId)?.workspace;
+      try {
+        await updateUserProfile({ last_workspace_id: redirectWorkspace?.id });
+        await fetchWorkspaces();
+        router.push(`/${redirectWorkspace?.slug}`);
+      } catch {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("error"),
           message: t("something_went_wrong_please_try_again"),
         });
+      } finally {
         setIsJoiningWorkspaces(false);
+      }
+    } catch {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: t("something_went_wrong_please_try_again"),
       });
+      setIsJoiningWorkspaces(false);
+    }
   };
 
   return (
@@ -117,7 +113,7 @@ function UserInvitationsPage() {
             href="/"
             className="absolute top-1/2 left-5 z-10 grid -translate-y-1/2 place-items-center px-3 sm:top-12 sm:left-1/2 sm:-translate-x-[15px] sm:translate-y-0 sm:px-0 sm:py-5 md:left-1/3"
           >
-            <PlaneLogo className="h-9 w-auto text-primary" />
+            <PlaneLogoBoxed className="h-9 w-9" />
           </Link>
           <div className="absolute top-1/4 right-4 -translate-y-1/2 text-13 text-primary sm:fixed sm:top-12 sm:right-16 sm:translate-y-0 sm:py-5">
             {currentUser?.email}
@@ -134,28 +130,31 @@ function UserInvitationsPage() {
                     const isSelected = invitationsRespond.includes(invitation.id);
 
                     return (
-                      <div
+                      <button
                         key={invitation.id}
-                        className={`flex cursor-pointer items-center gap-2 rounded-sm border px-3.5 py-5 ${
+                        type="button"
+                        className={`flex w-full cursor-pointer items-center gap-2 rounded-sm border px-3.5 py-5 text-left ${
                           isSelected ? "border-accent-strong" : "border-subtle hover:bg-layer-1"
                         }`}
                         onClick={() => handleInvitation(invitation, isSelected ? "withdraw" : "accepted")}
                       >
-                        <div className="flex-shrink-0">
+                        <span className="flex-shrink-0">
                           <WorkspaceLogo
                             logo={invitation.workspace.logo_url}
                             name={invitation.workspace.name}
                             classNames="size-9 flex-shrink-0"
                           />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-13 font-medium">{truncateText(invitation.workspace.name, 30)}</div>
-                          <p className="text-11 text-secondary">{ROLE[invitation.role]}</p>
-                        </div>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-13 font-medium">
+                            {truncateText(invitation.workspace.name, 30)}
+                          </span>
+                          <span className="block text-11 text-secondary">{ROLE[invitation.role]}</span>
+                        </span>
                         <span className={`flex-shrink-0 ${isSelected ? "text-accent-primary" : "text-secondary"}`}>
                           <TickCircleOutline className="h-5 w-5" />
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

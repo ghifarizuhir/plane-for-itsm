@@ -71,7 +71,7 @@ export function AuthHeaderBase(props: TAuthHeaderBase) {
       <PageHead title={pageTitle + " - Terraline"} />
       <div className="sticky top-0 flex w-full flex-shrink-0 items-center justify-between gap-6">
         <Link href="/">
-          <PlaneLockup height={20} width={95} className="text-primary" />
+          <PlaneLockup height={20} width={81} className="text-primary" />
         </Link>
         {additionalAction}
       </div>

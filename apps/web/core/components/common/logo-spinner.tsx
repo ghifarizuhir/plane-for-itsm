@@ -4,16 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { PlaneLogo } from "@plane/propel/icons";
+import { PlaneLogoBoxed } from "@plane/propel/icons";
 
 export function LogoSpinner() {
   return (
     <div className="flex items-center justify-center">
-      <PlaneLogo
-        role="status"
-        aria-label="Loading"
-        className="terraline-logo-spinner h-6 w-auto text-primary sm:h-11"
-      />
+      <PlaneLogoBoxed role="status" aria-label="Loading" className="terraline-logo-spinner h-6 w-6 sm:h-11 sm:w-11" />
     </div>
   );
 }
