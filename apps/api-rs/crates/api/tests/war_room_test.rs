@@ -6,11 +6,11 @@
 
 use api::middleware::auth::AuthUser;
 use api::routes::war_room::{
-    create, detail, destroy, events_list, issues_create, issues_destroy, list,
-    participants_create, participants_destroy, participants_patch, patch, runbook_create,
-    runbook_patch, services_create, services_destroy, summary, CreateWarRoom, EventsParams,
-    LinkIssues, LinkServices, ListParams, ParticipantCreate, ParticipantPatch, PatchWarRoom,
-    RunbookCreate, RunbookPatch,
+    create, destroy, detail, events_list, issues_create, issues_destroy, list, participants_create,
+    participants_destroy, participants_patch, patch, runbook_create, runbook_patch,
+    services_create, services_destroy, summary, CreateWarRoom, EventsParams, LinkIssues,
+    LinkServices, ListParams, ParticipantCreate, ParticipantPatch, PatchWarRoom, RunbookCreate,
+    RunbookPatch,
 };
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -78,7 +78,13 @@ async fn insert_workspace_member(pool: &PgPool, user_id: Uuid, workspace_id: Uui
     .expect("scratch workspace member");
 }
 
-async fn insert_project_member(pool: &PgPool, user_id: Uuid, project_id: Uuid, workspace_id: Uuid, role: i16) {
+async fn insert_project_member(
+    pool: &PgPool,
+    user_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    role: i16,
+) {
     sqlx::query(
         "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, is_active, \
          view_props, default_props, sort_order, preferences, created_at, updated_at) \
@@ -163,10 +169,23 @@ impl Scratch {
         .await
         .expect("scratch issue type");
 
-        Self { slug, workspace_id, user_id, project_id, state_id, type_id, extra_users: Vec::new() }
+        Self {
+            slug,
+            workspace_id,
+            user_id,
+            project_id,
+            state_id,
+            type_id,
+            extra_users: Vec::new(),
+        }
     }
 
-    async fn add_actor(&mut self, pool: &PgPool, ws_role: Option<i16>, project_role: Option<i16>) -> Uuid {
+    async fn add_actor(
+        &mut self,
+        pool: &PgPool,
+        ws_role: Option<i16>,
+        project_role: Option<i16>,
+    ) -> Uuid {
         let user_id = Uuid::new_v4();
         let username = format!("{}-{}", self.slug, &user_id.simple().to_string()[..8]);
         insert_user(pool, user_id, &username).await;
@@ -181,12 +200,12 @@ impl Scratch {
     }
 
     async fn insert_issue(&self, pool: &PgPool, assignee: Option<Uuid>) -> Uuid {
-        let issue_id: Uuid = sqlx::query_scalar(
+        let (issue_id, sequence_id): (Uuid, i32) = sqlx::query_as(
             "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
              sort_order, sequence_id, state_id, type_id, project_id, workspace_id, created_at, updated_at) \
              VALUES (gen_random_uuid(), 'QRIS timeout massal', '<p></p>', '{}', 'urgent', false, \
              65535, (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM issues WHERE project_id = $3), \
-             $1, $2, $3, $4, now(), now()) RETURNING id",
+             $1, $2, $3, $4, now(), now()) RETURNING id, sequence_id",
         )
         .bind(self.state_id)
         .bind(self.type_id)
@@ -195,6 +214,23 @@ impl Scratch {
         .fetch_one(pool)
         .await
         .expect("scratch issue");
+        // Keep the DB-wide `issue_sequences` invariant (checked by
+        // `issue_create_test::every_active_issue_has_a_matching_sequence_row`,
+        // which runs in a parallel test binary): every active issue needs its
+        // counter row.
+        sqlx::query(
+            "INSERT INTO issue_sequences (id, sequence, issue_id, project_id, workspace_id, \
+             created_by_id, deleted, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, now(), now())",
+        )
+        .bind(sequence_id)
+        .bind(issue_id)
+        .bind(self.project_id)
+        .bind(self.workspace_id)
+        .bind(self.user_id)
+        .execute(pool)
+        .await
+        .expect("scratch issue sequence");
         if let Some(user_id) = assignee {
             sqlx::query(
                 "INSERT INTO issue_assignees (id, assignee_id, issue_id, project_id, workspace_id, \
@@ -228,6 +264,13 @@ impl Scratch {
     }
 
     async fn cleanup(&self, pool: &PgPool) {
+        // No cascade on issue_sequences: delete counter rows first so the
+        // project delete below is not blocked by its FK.
+        sqlx::query("DELETE FROM issue_sequences WHERE project_id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
         sqlx::query("DELETE FROM workspaces WHERE id = $1")
             .bind(self.workspace_id)
             .execute(pool)
@@ -270,7 +313,10 @@ async fn create_seeds_defaults_runbook_and_sequence() {
     assert_eq!(body["name"], "QRIS timeout massal");
     assert_eq!(body["severity"], "sev1");
     assert_eq!(body["status"], "active");
-    assert!(body["primary_issue"]["identifier"].as_str().unwrap().ends_with("-1"));
+    assert!(body["primary_issue"]["identifier"]
+        .as_str()
+        .unwrap()
+        .ends_with("-1"));
     assert_eq!(body["services"].as_array().unwrap().len(), 1);
     assert_eq!(body["participants"].as_array().unwrap().len(), 2);
     assert_eq!(body["runbook_items"].as_array().unwrap().len(), 5);
@@ -457,7 +503,9 @@ async fn status_transitions_freeze_and_reopen() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(RunbookCreate { title: "No write when archived".into() }),
+        Json(RunbookCreate {
+            title: "No write when archived".into(),
+        }),
     )
     .await
     .expect("archived write");
@@ -481,7 +529,9 @@ async fn links_are_idempotent_and_primary_is_rejected() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(LinkServices { service_ids: vec![service_id] }),
+        Json(LinkServices {
+            service_ids: vec![service_id],
+        }),
     )
     .await
     .expect("link service");
@@ -492,7 +542,9 @@ async fn links_are_idempotent_and_primary_is_rejected() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(LinkServices { service_ids: vec![service_id] }),
+        Json(LinkServices {
+            service_ids: vec![service_id],
+        }),
     )
     .await
     .expect("relink service");
@@ -502,7 +554,9 @@ async fn links_are_idempotent_and_primary_is_rejected() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(LinkIssues { issue_ids: vec![issue_id] }),
+        Json(LinkIssues {
+            issue_ids: vec![issue_id],
+        }),
     )
     .await
     .expect("link primary");
@@ -513,7 +567,9 @@ async fn links_are_idempotent_and_primary_is_rejected() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(LinkIssues { issue_ids: vec![other_issue] }),
+        Json(LinkIssues {
+            issue_ids: vec![other_issue],
+        }),
     )
     .await
     .expect("link other");
@@ -564,7 +620,10 @@ async fn participants_keep_single_commander() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(ParticipantCreate { member_id: teammate, role: None }),
+        Json(ParticipantCreate {
+            member_id: teammate,
+            role: None,
+        }),
     )
     .await
     .expect("add participant");
@@ -576,7 +635,9 @@ async fn participants_keep_single_commander() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk, participant_id)),
-        Json(ParticipantPatch { role: "commander".into() }),
+        Json(ParticipantPatch {
+            role: "commander".into(),
+        }),
     )
     .await
     .expect("promote commander");
@@ -623,7 +684,10 @@ async fn runbook_toggle_records_events() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk, item_id)),
-        Json(RunbookPatch { title: None, is_done: Some(true) }),
+        Json(RunbookPatch {
+            title: None,
+            is_done: Some(true),
+        }),
     )
     .await
     .expect("mark done");
@@ -635,7 +699,10 @@ async fn runbook_toggle_records_events() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk, item_id)),
-        Json(RunbookPatch { title: None, is_done: Some(false) }),
+        Json(RunbookPatch {
+            title: None,
+            is_done: Some(false),
+        }),
     )
     .await
     .expect("reopen item");
@@ -647,7 +714,10 @@ async fn runbook_toggle_records_events() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Query(EventsParams { before_id: None, limit: None }),
+        Query(EventsParams {
+            before_id: None,
+            limit: None,
+        }),
     )
     .await
     .expect("events");
@@ -666,7 +736,9 @@ async fn runbook_toggle_records_events() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(RunbookCreate { title: "Custom check".into() }),
+        Json(RunbookCreate {
+            title: "Custom check".into(),
+        }),
     )
     .await
     .expect("add item");
@@ -771,7 +843,11 @@ async fn list_filters_and_summary_counts() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id)),
-        Query(ListParams { status: None, severity: None, q: Some("WR".into()) }),
+        Query(ListParams {
+            status: None,
+            severity: None,
+            q: Some("WR".into()),
+        }),
     )
     .await
     .expect("list by incident identifier");
@@ -794,7 +870,11 @@ async fn list_filters_and_summary_counts() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id)),
-        Query(ListParams { status: Some("bogus".into()), severity: None, q: None }),
+        Query(ListParams {
+            status: Some("bogus".into()),
+            severity: None,
+            q: None,
+        }),
     )
     .await
     .expect("invalid status filter");
