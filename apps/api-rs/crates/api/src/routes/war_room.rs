@@ -1370,6 +1370,148 @@ pub async fn participants_destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RunbookCreate {
+    pub title: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RunbookPatch {
+    pub title: Option<String>,
+    pub is_done: Option<bool>,
+}
+
+async fn runbook_item_by_id(
+    pool: &PgPool,
+    room_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<RunbookItemRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, title, sort_order, is_done, done_by_id, done_at, template_key \
+         FROM war_room_runbook_items WHERE id = $1 AND war_room_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(item_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn runbook_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<RunbookCreate>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let title = body.title.trim();
+    if title.is_empty() {
+        return Ok(bad_request("Invalid title"));
+    }
+    let max_order: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sort_order), 0) FROM war_room_runbook_items \
+         WHERE war_room_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(room.id)
+    .fetch_one(&st.pool)
+    .await?;
+    let item_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO war_room_runbook_items (id, workspace_id, project_id, war_room_id, title, \
+         sort_order, is_done, template_key, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, false, NULL, now(), now(), $7, $7)",
+    )
+    .bind(item_id)
+    .bind(room.workspace_id)
+    .bind(project_id)
+    .bind(room.id)
+    .bind(title)
+    .bind(max_order + 65535.0)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await?;
+    let row = runbook_item_by_id(&st.pool, room.id, item_id)
+        .await?
+        .expect("runbook item just inserted");
+    Ok((StatusCode::CREATED, Json(runbook_item_json(&row))))
+}
+
+pub async fn runbook_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, item_id)): Path<(String, Uuid, Uuid, Uuid)>,
+    Json(body): Json<RunbookPatch>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let Some(current) = runbook_item_by_id(&st.pool, room.id, item_id).await? else {
+        return Ok(missing());
+    };
+    let title = match body.title.clone() {
+        Some(t) if t.trim().is_empty() => return Ok(bad_request("Invalid title")),
+        Some(t) => t,
+        None => current.title.clone(),
+    };
+    let is_done = body.is_done.unwrap_or(current.is_done);
+    let (done_by_id, done_at) = if is_done {
+        (Some(auth.0), Some(chrono::Utc::now()))
+    } else {
+        (None, None)
+    };
+    sqlx::query(
+        "UPDATE war_room_runbook_items SET title = $1, is_done = $2, done_by_id = $3, \
+         done_at = $4, updated_at = now(), updated_by_id = $5 WHERE id = $6 AND war_room_id = $7",
+    )
+    .bind(&title)
+    .bind(is_done)
+    .bind(done_by_id)
+    .bind(done_at)
+    .bind(auth.0)
+    .bind(item_id)
+    .bind(room.id)
+    .execute(&st.pool)
+    .await?;
+    if is_done != current.is_done {
+        let event_type = if is_done { "runbook.item_done" } else { "runbook.item_reopened" };
+        record_event(
+            &st.pool,
+            &room,
+            auth.0,
+            event_type,
+            serde_json::json!({ "item_id": item_id, "title": title }),
+        )
+        .await?;
+    }
+    let row = runbook_item_by_id(&st.pool, room.id, item_id)
+        .await?
+        .expect("runbook item just updated");
+    Ok((StatusCode::OK, Json(runbook_item_json(&row))))
+}
+
+pub async fn runbook_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, item_id)): Path<(String, Uuid, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    sqlx::query(
+        "UPDATE war_room_runbook_items SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND war_room_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(item_id)
+    .bind(room.id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
