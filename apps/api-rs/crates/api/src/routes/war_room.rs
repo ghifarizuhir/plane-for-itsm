@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use redis::AsyncCommands;
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -637,10 +638,11 @@ pub async fn record_event(
     actor: Uuid,
     event_type: &str,
     payload: Value,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
+) -> Result<WarRoomEventRow, sqlx::Error> {
+    sqlx::query_as(
         "INSERT INTO war_room_events (id, workspace_id, project_id, war_room_id, actor_id, \
-         event_type, payload, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())",
+         event_type, payload, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now()) \
+         RETURNING id, actor_id, event_type, payload, created_at",
     )
     .bind(room.workspace_id)
     .bind(room.project_id)
@@ -648,9 +650,52 @@ pub async fn record_event(
     .bind(actor)
     .bind(event_type)
     .bind(payload)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .fetch_one(pool)
+    .await
+}
+
+/// Realtime channel consumed by `apps/live` (`war-room-relay.service.ts`).
+pub const WAR_ROOM_CHANNEL: &str = "war-room:events";
+
+/// Best-effort realtime publish; a Redis hiccup must never fail the write.
+pub async fn publish_war_room_event(st: &AppState, room_id: Uuid, kind: &str, data: Value) {
+    let payload = serde_json::json!({ "room_id": room_id, "kind": kind, "data": data });
+    match st.redis_client().await {
+        Ok(mut conn) => {
+            let result: Result<i64, redis::RedisError> =
+                conn.publish(WAR_ROOM_CHANNEL, payload.to_string()).await;
+            if let Err(error) = result {
+                tracing::warn!(room_id=%room_id, kind, error=%error, "war room publish failed");
+            }
+        }
+        Err(error) => {
+            tracing::warn!(room_id=%room_id, kind, error=%error, "war room redis unavailable");
+        }
+    }
+}
+
+/// Insert an activity row, then publish `activity.created` plus a
+/// `room.changed` hint with the affected sections (`reasons` may be empty).
+pub async fn record_and_publish(
+    st: &AppState,
+    room: &WarRoomRow,
+    actor: Uuid,
+    event_type: &str,
+    payload: Value,
+    reasons: &[&str],
+) -> Result<WarRoomEventRow, sqlx::Error> {
+    let row = record_event(&st.pool, room, actor, event_type, payload).await?;
+    publish_war_room_event(st, room.id, "activity.created", event_json(&row)).await;
+    if !reasons.is_empty() {
+        publish_war_room_event(
+            st,
+            room.id,
+            "room.changed",
+            serde_json::json!({ "reasons": reasons }),
+        )
+        .await;
+    }
+    Ok(row)
 }
 
 async fn record_event_tx(
@@ -862,6 +907,13 @@ pub async fn create(
         .await?;
     }
     tx.commit().await?;
+    publish_war_room_event(
+        &st,
+        room_id,
+        "room.changed",
+        serde_json::json!({ "reasons": ["created"] }),
+    )
+    .await;
 
     let row = fetch_room(&st.pool, project_id, room_id)
         .await?
@@ -968,22 +1020,24 @@ pub async fn patch(
     .await?;
 
     if severity != current.severity {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &current,
             auth.0,
             "room.severity_changed",
             serde_json::json!({ "from": current.severity, "to": severity }),
+            &["severity"],
         )
         .await?;
     }
     if status != current.status {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &current,
             auth.0,
             "room.status_changed",
             serde_json::json!({ "from": current.status, "to": status }),
+            &["status"],
         )
         .await?;
         let specific = match status.as_str() {
@@ -993,15 +1047,25 @@ pub async fn patch(
             _ => None,
         };
         if let Some(event_type) = specific {
-            record_event(
-                &st.pool,
-                &current,
-                auth.0,
-                event_type,
-                serde_json::json!({}),
-            )
-            .await?;
+            record_and_publish(&st, &current, auth.0, event_type, serde_json::json!({}), &[])
+                .await?;
         }
+    }
+    let mut detail_reasons: Vec<&str> = Vec::new();
+    if name != current.name || description_html != current.description_html {
+        detail_reasons.push("details");
+    }
+    if notes_html != current.notes_html {
+        detail_reasons.push("notes");
+    }
+    if !detail_reasons.is_empty() {
+        publish_war_room_event(
+            &st,
+            current.id,
+            "room.changed",
+            serde_json::json!({ "reasons": detail_reasons }),
+        )
+        .await;
     }
     let row = fetch_room(&st.pool, project_id, pk)
         .await?
@@ -1068,6 +1132,13 @@ pub async fn destroy(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    publish_war_room_event(
+        &st,
+        pk,
+        "room.changed",
+        serde_json::json!({ "reasons": ["deleted"] }),
+    )
+    .await;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
@@ -1146,12 +1217,13 @@ pub async fn services_create(
         linked += result.rows_affected();
     }
     if linked > 0 {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &room,
             auth.0,
             "service.linked",
             serde_json::json!({ "service_ids": body.service_ids }),
+            &["links"],
         )
         .await?;
     }
@@ -1180,12 +1252,13 @@ pub async fn services_destroy(
     .execute(&st.pool)
     .await?;
     if result.rows_affected() > 0 {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &room,
             auth.0,
             "service.unlinked",
             serde_json::json!({ "service_id": service_id }),
+            &["links"],
         )
         .await?;
     }
@@ -1235,12 +1308,13 @@ pub async fn issues_create(
         linked += result.rows_affected();
     }
     if linked > 0 {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &room,
             auth.0,
             "issue.linked",
             serde_json::json!({ "issue_ids": body.issue_ids }),
+            &["links"],
         )
         .await?;
     }
@@ -1269,12 +1343,13 @@ pub async fn issues_destroy(
     .execute(&st.pool)
     .await?;
     if result.rows_affected() > 0 {
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &room,
             auth.0,
             "issue.unlinked",
             serde_json::json!({ "issue_id": issue_id }),
+            &["links"],
         )
         .await?;
     }
@@ -1358,12 +1433,13 @@ pub async fn participants_create(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    record_event(
-        &st.pool,
+    record_and_publish(
+        &st,
         &room,
         auth.0,
         "participant.joined",
         serde_json::json!({ "member_id": body.member_id, "role": role }),
+        &["participants"],
     )
     .await?;
     let row = sqlx::query_as::<_, ParticipantRow>(
@@ -1420,14 +1496,15 @@ pub async fn participants_patch(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    record_event(
-        &st.pool,
+    record_and_publish(
+        &st,
         &room,
         auth.0,
         "participant.role_changed",
         serde_json::json!({
             "member_id": current.member_id, "from": current.role, "to": body.role
         }),
+        &["participants"],
     )
     .await?;
     let row = participant_by_id(&st.pool, room.id, participant_id)
@@ -1457,12 +1534,13 @@ pub async fn participants_destroy(
     .bind(room.id)
     .execute(&st.pool)
     .await?;
-    record_event(
-        &st.pool,
+    record_and_publish(
+        &st,
         &room,
         auth.0,
         "participant.left",
         serde_json::json!({ "member_id": current.member_id }),
+        &["participants"],
     )
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
@@ -1530,6 +1608,13 @@ pub async fn runbook_create(
     .bind(auth.0)
     .execute(&st.pool)
     .await?;
+    publish_war_room_event(
+        &st,
+        room.id,
+        "room.changed",
+        serde_json::json!({ "reasons": ["runbook"] }),
+    )
+    .await;
     let row = runbook_item_by_id(&st.pool, room.id, item_id)
         .await?
         .expect("runbook item just inserted");
@@ -1579,12 +1664,13 @@ pub async fn runbook_patch(
         } else {
             "runbook.item_reopened"
         };
-        record_event(
-            &st.pool,
+        record_and_publish(
+            &st,
             &room,
             auth.0,
             event_type,
             serde_json::json!({ "item_id": item_id, "title": title }),
+            &["runbook"],
         )
         .await?;
     }
@@ -1611,6 +1697,13 @@ pub async fn runbook_destroy(
     .bind(room.id)
     .execute(&st.pool)
     .await?;
+    publish_war_room_event(
+        &st,
+        room.id,
+        "room.changed",
+        serde_json::json!({ "reasons": ["runbook"] }),
+    )
+    .await;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
