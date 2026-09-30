@@ -203,6 +203,10 @@ impl Scratch {
     }
 
     async fn insert_issue(&self, pool: &PgPool, assignee: Option<Uuid>) -> Uuid {
+        // Both rows in one transaction: the DB-wide `issue_sequences`
+        // invariant (checked by a parallel test binary) must never observe
+        // the issue without its counter row.
+        let mut tx = pool.begin().await.expect("scratch tx");
         let (issue_id, sequence_id): (Uuid, i32) = sqlx::query_as(
             "INSERT INTO issues (id, name, description_html, description_json, priority, is_draft, \
              sort_order, sequence_id, state_id, type_id, project_id, workspace_id, created_at, updated_at) \
@@ -214,7 +218,7 @@ impl Scratch {
         .bind(self.type_id)
         .bind(self.project_id)
         .bind(self.workspace_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *tx)
         .await
         .expect("scratch issue");
         // Keep the DB-wide `issue_sequences` invariant (checked by
@@ -231,9 +235,10 @@ impl Scratch {
         .bind(self.project_id)
         .bind(self.workspace_id)
         .bind(self.user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .expect("scratch issue sequence");
+        tx.commit().await.expect("scratch commit");
         if let Some(user_id) = assignee {
             sqlx::query(
                 "INSERT INTO issue_assignees (id, assignee_id, issue_id, project_id, workspace_id, \
