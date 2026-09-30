@@ -1550,6 +1550,7 @@ pub async fn events_list(
     .bind(pk)
     .bind(cursor.as_ref().map(|c| c.0))
     .bind(cursor.as_ref().map(|c| c.1))
+    .bind(limit)
     .fetch_all(&st.pool)
     .await?;
     Ok((

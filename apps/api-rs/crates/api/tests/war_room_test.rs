@@ -334,3 +334,489 @@ async fn create_conflicts_when_active_room_exists() {
 
     scratch.cleanup(&st.pool).await;
 }
+
+async fn create_room(st: &AppState, scratch: &Scratch, issue_id: Uuid) -> Value {
+    let (status, Json(body)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Json(CreateWarRoom {
+            name: None,
+            primary_issue_id: issue_id,
+            severity: None,
+            description_html: None,
+            service_ids: None,
+        }),
+    )
+    .await
+    .expect("create room");
+    assert_eq!(status, StatusCode::CREATED);
+    body
+}
+
+fn room_id(body: &Value) -> Uuid {
+    Uuid::parse_str(body["id"].as_str().unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn status_transitions_freeze_and_reopen() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+    let room = create_room(&st, &scratch, issue_id).await;
+    let pk = room_id(&room);
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: Some("sev2".into()),
+            status: Some("resolved".into()),
+            description_html: None,
+            notes_html: Some("<p>Rollback done</p>".into()),
+        }),
+    )
+    .await
+    .expect("resolve");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "resolved");
+    assert_eq!(body["severity"], "sev2");
+    assert!(body["resolved_at"].is_string());
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("monitoring".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("invalid transition");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "invalid_status_transition");
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("active".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("reopen");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "active");
+    assert!(body["resolved_at"].is_null());
+
+    let (status, _) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("archived".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("archive");
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("active".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("archived terminal");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "room_archived");
+
+    let (status, Json(body)) = runbook_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(RunbookCreate { title: "No write when archived".into() }),
+    )
+    .await
+    .expect("archived write");
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "room_archived");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn links_are_idempotent_and_primary_is_rejected() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+    let other_issue = scratch.insert_issue(&st.pool, None).await;
+    let service_id = scratch.insert_service(&st.pool, "QRIS Processor").await;
+    let room = create_room(&st, &scratch, issue_id).await;
+    let pk = room_id(&room);
+
+    let (status, Json(body)) = services_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(LinkServices { service_ids: vec![service_id] }),
+    )
+    .await
+    .expect("link service");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["linked"], 1);
+
+    let (_, Json(body)) = services_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(LinkServices { service_ids: vec![service_id] }),
+    )
+    .await
+    .expect("relink service");
+    assert_eq!(body["linked"], 0);
+
+    let (status, Json(body)) = issues_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(LinkIssues { issue_ids: vec![issue_id] }),
+    )
+    .await
+    .expect("link primary");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "primary_issue_not_linkable");
+
+    let (status, Json(body)) = issues_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(LinkIssues { issue_ids: vec![other_issue] }),
+    )
+    .await
+    .expect("link other");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["linked"], 1);
+
+    let (status, Json(body)) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["issues"].as_array().unwrap().len(), 1);
+
+    let (status, _) = issues_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, other_issue)),
+    )
+    .await
+    .expect("unlink");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (status, _) = services_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, service_id)),
+    )
+    .await
+    .expect("unlink service");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn participants_keep_single_commander() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let teammate = scratch.add_actor(&st.pool, Some(15), Some(15)).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+    let room = create_room(&st, &scratch, issue_id).await;
+    let pk = room_id(&room);
+
+    let (status, Json(body)) = participants_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(ParticipantCreate { member_id: teammate, role: None }),
+    )
+    .await
+    .expect("add participant");
+    assert_eq!(status, StatusCode::CREATED);
+    let participant_id = Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
+    assert_eq!(body["role"], "responder");
+
+    let (status, Json(body)) = participants_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, participant_id)),
+        Json(ParticipantPatch { role: "commander".into() }),
+    )
+    .await
+    .expect("promote commander");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["role"], "commander");
+
+    let (_, Json(body)) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+    )
+    .await
+    .expect("detail");
+    let roles: Vec<&str> = body["participants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["role"].as_str().unwrap())
+        .collect();
+    assert_eq!(roles.iter().filter(|r| **r == "commander").count(), 1);
+
+    let (status, _) = participants_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, participant_id)),
+    )
+    .await
+    .expect("leave");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn runbook_toggle_records_events() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+    let room = create_room(&st, &scratch, issue_id).await;
+    let pk = room_id(&room);
+    let item_id = Uuid::parse_str(room["runbook_items"][0]["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(body)) = runbook_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, item_id)),
+        Json(RunbookPatch { title: None, is_done: Some(true) }),
+    )
+    .await
+    .expect("mark done");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_done"], true);
+    assert!(body["done_by_id"].is_string());
+
+    let (status, Json(body)) = runbook_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk, item_id)),
+        Json(RunbookPatch { title: None, is_done: Some(false) }),
+    )
+    .await
+    .expect("reopen item");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["is_done"], false);
+    assert!(body["done_by_id"].is_null());
+
+    let (status, Json(events)) = events_list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Query(EventsParams { before_id: None, limit: None }),
+    )
+    .await
+    .expect("events");
+    assert_eq!(status, StatusCode::OK);
+    let types: Vec<&str> = events
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["event_type"].as_str().unwrap())
+        .collect();
+    assert!(types.contains(&"runbook.item_done"));
+    assert!(types.contains(&"runbook.item_reopened"));
+    assert!(types.contains(&"room.created"));
+
+    let (status, Json(body)) = runbook_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(RunbookCreate { title: "Custom check".into() }),
+    )
+    .await
+    .expect("add item");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["title"], "Custom check");
+    assert!(body["template_key"].is_null());
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn access_gates_deny_guest_writes_and_non_members() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let guest = scratch.add_actor(&st.pool, Some(5), Some(5)).await;
+    let outsider = scratch.add_actor(&st.pool, None, None).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+    let room = create_room(&st, &scratch, issue_id).await;
+    let pk = room_id(&room);
+
+    let (status, _) = detail(
+        State(st.clone()),
+        AuthUser(guest),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+    )
+    .await
+    .expect("guest read");
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(guest),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("monitoring".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("guest write");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(body["error"].is_string());
+
+    let (status, _) = detail(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path((scratch.slug.clone(), scratch.project_id, pk)),
+    )
+    .await
+    .expect("outsider read");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn list_filters_and_summary_counts() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_a = scratch.insert_issue(&st.pool, None).await;
+    let issue_b = scratch.insert_issue(&st.pool, None).await;
+    let room_a = create_room(&st, &scratch, issue_a).await;
+    let pk_a = room_id(&room_a);
+    let _room_b = create_room(&st, &scratch, issue_b).await;
+
+    let (status, _) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk_a)),
+        Json(PatchWarRoom {
+            name: None,
+            severity: None,
+            status: Some("resolved".into()),
+            description_html: None,
+            notes_html: None,
+        }),
+    )
+    .await
+    .expect("resolve room a");
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, Json(body)) = list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(ListParams {
+            status: Some("active,monitoring".into()),
+            severity: None,
+            q: None,
+        }),
+    )
+    .await
+    .expect("list active");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(body[0]["sequence_id"], 2);
+
+    let (status, Json(body)) = list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(ListParams { status: None, severity: None, q: Some("WR".into()) }),
+    )
+    .await
+    .expect("list by incident identifier");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 2);
+
+    let (status, Json(body)) = summary(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+    )
+    .await
+    .expect("summary");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["active"], 1);
+    assert_eq!(body["sev1_2"], 1);
+    assert_eq!(body["resolved_7d"], 1);
+
+    let (status, _) = list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(ListParams { status: Some("bogus".into()), severity: None, q: None }),
+    )
+    .await
+    .expect("invalid status filter");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, _) = destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk_a)),
+    )
+    .await
+    .expect("destroy");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (status, _) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, pk_a)),
+    )
+    .await
+    .expect("detail after destroy");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.cleanup(&st.pool).await;
+}
