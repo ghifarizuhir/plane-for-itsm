@@ -74,6 +74,7 @@ export const getStateGroupFilterConfig =
 export type TCreateStateFilterParams = TCreateFilterConfigParams &
   IFilterIconConfig<IState> & {
     states: IState[];
+    getOptionLabel?: (state: IState) => string;
   };
 
 /**
@@ -86,7 +87,7 @@ export const getStateMultiSelectConfig = (params: TCreateStateFilterParams, sing
     {
       items: params.states,
       getId: (state) => state.id,
-      getLabel: (state) => state.name,
+      getLabel: (state) => (params.getOptionLabel ? params.getOptionLabel(state) : state.name),
       getValue: (state) => state.id,
       getIconData: (state) => state,
     },

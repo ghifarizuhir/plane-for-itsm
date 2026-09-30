@@ -9,10 +9,12 @@ import {
   getWorkItemTypeIds,
   isTypedState,
   MAX_WORKFLOW_MAP_FETCH_RETRIES,
+  pruneStateFilterValues,
   resolveEffectiveDisplayFilters,
   resolveSelectableStateIds,
   resolveStateColumns,
   resolveWorkflowStateColumns,
+  scopeStateIdsForTypes,
   shouldRetryWorkflowMapFetch,
 } from "./workflow.helpers";
 
@@ -537,5 +539,48 @@ describe("getWorkItemTypeIds", () => {
     expect(getWorkItemTypeIds({ filters: { issue_type: ["t-9"] } })).toEqual(["t-9"]);
     expect(getWorkItemTypeIds(undefined)).toEqual([]);
     expect(getWorkItemTypeIds({ richFilters: {} })).toEqual([]);
+  });
+});
+
+const compositeStateTypeById = (stateId: string) =>
+  ({
+    "l-1": { type_id: null },
+    "p-1": { type_id: "type-p" },
+    "c-1": { type_id: "type-c" },
+  })[stateId];
+
+describe("scopeStateIdsForTypes", () => {
+  it("tanpa selected type mengembalikan apa adanya", () => {
+    expect(scopeStateIdsForTypes(["l-1", "p-1"], [], compositeStateTypeById)).toEqual(["l-1", "p-1"]);
+  });
+
+  it("menyaring ke state milik type terpilih dan membuang legacy", () => {
+    expect(scopeStateIdsForTypes(["l-1", "p-1", "c-1"], ["type-p"], compositeStateTypeById)).toEqual(["p-1"]);
+  });
+
+  it("undefined tetap undefined", () => {
+    expect(scopeStateIdsForTypes(undefined, ["type-p"], compositeStateTypeById)).toBeUndefined();
+  });
+});
+
+describe("pruneStateFilterValues", () => {
+  it("membuang state yang tidak diizinkan dari state_id__in", () => {
+    expect(
+      pruneStateFilterValues({ and: [{ state_id__in: "s-1,s-2" }, { priority__in: "urgent" }] }, new Set(["s-2"]))
+    ).toEqual({ and: [{ state_id__in: "s-2" }, { priority__in: "urgent" }] });
+  });
+
+  it("menghapus condition state yang kosong dan menormalkan grup kosong", () => {
+    expect(pruneStateFilterValues({ and: [{ state_id__in: "s-1" }] }, new Set(["s-9"]))).toEqual({});
+  });
+
+  it("menangani state_id__exact dan field lain yang tidak disentuh", () => {
+    expect(
+      pruneStateFilterValues({ and: [{ state_id__exact: "s-1" }, { state_group__in: "backlog" }] }, new Set([]))
+    ).toEqual({ and: [{ state_group__in: "backlog" }] });
+  });
+
+  it("undefined tetap undefined", () => {
+    expect(pruneStateFilterValues(undefined, new Set(["s-1"]))).toBeUndefined();
   });
 });

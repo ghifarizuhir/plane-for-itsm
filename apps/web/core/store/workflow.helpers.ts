@@ -234,3 +234,73 @@ export const getWorkItemTypeIds = (
   collectTypeIds((issueFilters as TRichIssueFilterBag).richFilters, ids);
   return [...ids];
 };
+
+/** Saring state ids ke type terpilih; legacy (tanpa type) dibuang saat type difilter. */
+export const scopeStateIdsForTypes = (
+  stateIds: string[] | undefined,
+  selectedTypeIds: readonly string[],
+  getStateById: (stateId: string) => Partial<Pick<IState, "type_id">> | undefined
+): string[] | undefined => {
+  if (!stateIds || selectedTypeIds.length === 0) return stateIds;
+  const allowed = new Set(selectedTypeIds);
+  return stateIds.filter((stateId) => {
+    const typeId = getStateById(stateId)?.type_id;
+    return typeId ? allowed.has(typeId) : false;
+  });
+};
+
+const pruneStateCondition = (
+  condition: Record<string, unknown>,
+  allowedStateIds: ReadonlySet<string>
+): Record<string, unknown> => {
+  const next: Record<string, unknown> = { ...condition };
+  for (const key of ["state_id", "state_id__exact", "state_id__in"]) {
+    if (!(key in next)) continue;
+    const raw = next[key];
+    if (key === "state_id__in") {
+      const values = (Array.isArray(raw) ? raw : String(raw).split(","))
+        .map((value) => String(value).trim())
+        .filter((value) => value.length > 0 && allowedStateIds.has(value));
+      if (values.length > 0) next[key] = values.join(",");
+      else delete next[key];
+    } else {
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      if (value == null || !allowedStateIds.has(String(value))) delete next[key];
+    }
+  }
+  return next;
+};
+
+const pruneFilterNode = (node: unknown, allowedStateIds: ReadonlySet<string>): unknown => {
+  if (Array.isArray(node)) return node.map((child) => pruneFilterNode(child, allowedStateIds));
+  if (node && typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (key === "and" || key === "or") {
+        const children = (Array.isArray(value) ? value : [])
+          .map((child) => pruneFilterNode(child, allowedStateIds))
+          .filter((child) => typeof child === "object" && child !== null && Object.keys(child as object).length > 0);
+        if (children.length > 0) next[key] = children;
+        continue;
+      }
+      if (key === "not") {
+        const child = pruneFilterNode(value, allowedStateIds);
+        if (typeof child === "object" && child !== null && Object.keys(child as object).length > 0) next[key] = child;
+        continue;
+      }
+      next[key] = value;
+    }
+    return pruneStateCondition(next, allowedStateIds);
+  }
+  return node;
+};
+
+/** Buang nilai filter state yang tidak lagi valid (mis. setelah filter type berubah). */
+export const pruneStateFilterValues = (
+  expression: TWorkItemFilterExpression | undefined,
+  allowedStateIds: ReadonlySet<string>
+): TWorkItemFilterExpression | undefined => {
+  if (!expression) return expression;
+  return (pruneFilterNode(expression, allowedStateIds) ?? {}) as TWorkItemFilterExpression;
+};
