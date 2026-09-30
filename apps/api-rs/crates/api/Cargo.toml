@@ -40,4 +40,5 @@ chrono-tz = "0.10.4"
 
 [dev-dependencies]
 chrono = { workspace = true }
+futures = "0.3"
 uuid = { workspace = true }
