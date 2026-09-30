@@ -24,6 +24,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { IssueSubscription } from "./subscription";
+import { IssueWarRoomButton } from "@/components/war-rooms/issue-war-room-button";
 
 type Props = {
   workspaceSlug: string;
@@ -150,6 +151,7 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
             <Tooltip label={t("common.actions.copy_link")} disabled={isMobile}>
               <IconButton variant="secondary" size="lg" onClick={handleCopyText} icon={LinkOutline} />
             </Tooltip>
+            <IssueWarRoomButton workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
             <WorkItemDetailQuickActions
               parentRef={parentRef}
               issue={issue}

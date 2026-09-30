@@ -5,6 +5,7 @@
  */
 
 export * from "./create/create-war-room-modal";
+export * from "./issue-war-room-button";
 export * from "./list/war-room-load-error-state";
 export * from "./list/war-room-search-input";
 export * from "./list/war-room-summary-chips";
