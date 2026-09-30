@@ -28,7 +28,7 @@ Basis yang sudah ada dan dipakai ulang:
 8. **Create**: modal ringkas — incident utama, name (auto dari incident), severity (auto), services terdampak (default dari link incident), deskripsi.
 9. **Chat**: teks + `@mention` + edit/hapus pesan sendiri + indikator online/typing; riwayat di DB; attachment fase 2.
 10. **Peta**: service terdampak + tetangga 1 hop (dua arah), read-only, klik node → detail service.
-11. **Izin**: semua member project bisa lihat/chat/join/centang runbook; aksi kunci (status, severity, peserta, link, notes/runbook edit, resolve, archive) commander + project/workspace admin.
+11. **Izin**: tanpa gate khusus — semua member project (`gate_writer`) bisa melakukan semua aksi (status, severity, peserta, link, notes/runbook edit, resolve, archive, delete); guest hanya baca (`gate_member`). Role peserta (`commander/comms/scribe/responder`) hanya label koordinasi, bukan izin. Gate commander/admin ditunda ke iterasi berikutnya. Pengecualian bukan-izin: edit/hapus pesan chat tetap hanya oleh penulis pesan (aturan kepemilikan produk, bukan gate role).
 12. **Runbook**: template bawaan per tipe work item, auto-seed saat create, item bisa ditambah/diubah/dicentang di room.
 13. **Notes**: satu dokumen rich-text pinned, autosave, last-write-wins (bukan kolaboratif). Ditempatkan sebagai tab di panel konteks (mockup v2).
 14. **Identifier**: `WR-n` sequence per project (pola `issue_sequences`/advisory lock issue).
@@ -67,7 +67,7 @@ Index: `(project_id, status) WHERE deleted_at IS NULL`, `(primary_issue_id)`, pa
 
 **`war_room_issues`** — sama seperti di atas dengan `issue_id` FK `issues(id)` CASCADE (work item tambahan; incident utama tetap di `war_rooms.primary_issue_id`).
 
-**`war_room_participants`** — `id`, `workspace_id`, `project_id`, `war_room_id` FK CASCADE, `member_id` FK `users(id)` CASCADE, `role` varchar(20) CHECK `commander/comms/scribe/responder`, `joined_at` timestamptz NOT NULL DEFAULT now(), audit + `deleted_at`. Partial unique `(war_room_id, member_id) WHERE deleted_at IS NULL` dan `(war_room_id) WHERE role = 'commander' AND deleted_at IS NULL` (tepat satu commander).
+**`war_room_participants`** — `id`, `workspace_id`, `project_id`, `war_room_id` FK CASCADE, `member_id` FK `users(id)` CASCADE, `role` varchar(20) CHECK `commander/comms/scribe/responder`, `joined_at` timestamptz NOT NULL DEFAULT now(), audit + `deleted_at`. Partial unique `(war_room_id, member_id) WHERE deleted_at IS NULL` dan `(war_room_id) WHERE role = 'commander' AND deleted_at IS NULL` (maksimum satu commander). Role peserta adalah **label koordinasi**, bukan gate izin — semua member bisa mengubahnya.
 
 **`war_room_messages`** — `id`, `workspace_id`, `project_id`, `war_room_id` FK CASCADE, `author_id` FK `users(id)` ON DELETE SET NULL, `body` text NOT NULL, `mentions` jsonb NOT NULL DEFAULT '[]' (array user id), `edited_at` timestamptz NULL, audit + `deleted_at`. Index `(war_room_id, created_at DESC) WHERE deleted_at IS NULL`.
 
@@ -90,22 +90,22 @@ Tipe event: `room.created`, `room.status_changed`, `room.severity_changed`, `roo
 
 Tipe lain → tanpa item (room tetap bisa; item ditambah manual). Teks disimpan sebagai baris saat create (`template_key` = slug item), UI copy EN.
 
-**Delete semantics**: soft delete room = soft delete room + participants + messages + runbook items + links (satu transaksi) — event feed tetap tersimpan. Delete = project admin.
+**Delete semantics**: soft delete room = soft delete room + participants + messages + runbook items + links (satu transaksi) — event feed tetap tersimpan. Delete = member mana pun (`gate_writer`).
 
 ### 2. API (session auth, `/api/`)
 
-Prefix: `workspaces/:slug/projects/:project_id/war-rooms/`. `:pk` = uuid room. Reuse helper RBAC: `fetch_project_member_role`, `is_workspace_admin`, `project_gate_allows`; helper baru lokal `gate_commander(pool, user, slug, project_id, room_id)` = member project DAN (project admin+ ATAU participant room dengan role `commander`).
+Prefix: `workspaces/:slug/projects/:project_id/war-rooms/`. `:pk` = uuid room. Tidak ada gate izin khusus: read memakai `gate_member` (member project termasuk guest, atau workspace admin), semua write memakai `gate_writer` (project role Admin/Member, atau workspace admin) — helper existing di `routes/service.rs:129-159`.
 
 **Room**
 
-| Method | Path                  | Body / Query                                                                            | Permission    | Respons                         |
-| ------ | --------------------- | --------------------------------------------------------------------------------------- | ------------- | ------------------------------- |
-| GET    | `/war-rooms/`         | `status` (csv), `severity` (csv), `q`                                                   | member        | array list item                 |
-| GET    | `/war-rooms/summary/` | —                                                                                       | member        | `{active, sev1_2, resolved_7d}` |
-| POST   | `/war-rooms/`         | `name?`, `primary_issue_id` (wajib), `severity?`, `description_html?`, `service_ids?[]` | member        | 201 detail                      |
-| GET    | `/war-rooms/:pk/`     | —                                                                                       | member        | detail lengkap                  |
-| PATCH  | `/war-rooms/:pk/`     | `name?`, `severity?`, `status?`, `description_html?`, `notes_html?`                     | commander     | 200 detail                      |
-| DELETE | `/war-rooms/:pk/`     | —                                                                                       | project admin | 204                             |
+| Method | Path                  | Body / Query                                                                            | Permission | Respons                         |
+| ------ | --------------------- | --------------------------------------------------------------------------------------- | ---------- | ------------------------------- |
+| GET    | `/war-rooms/`         | `status` (csv), `severity` (csv), `q`                                                   | member     | array list item                 |
+| GET    | `/war-rooms/summary/` | —                                                                                       | member     | `{active, sev1_2, resolved_7d}` |
+| POST   | `/war-rooms/`         | `name?`, `primary_issue_id` (wajib), `severity?`, `description_html?`, `service_ids?[]` | member     | 201 detail                      |
+| GET    | `/war-rooms/:pk/`     | —                                                                                       | member     | detail lengkap                  |
+| PATCH  | `/war-rooms/:pk/`     | `name?`, `severity?`, `status?`, `description_html?`, `notes_html?`                     | member     | 200 detail                      |
+| DELETE | `/war-rooms/:pk/`     | —                                                                                       | member     | 204                             |
 
 List item: `id, sequence_id, name, severity, status, primary_issue {id, identifier, name, priority, state_group}, services[{id,name,status}], participants[{id, display_name, avatar_url, role}], service_count, participant_count, message_count, started_at, resolved_at, last_activity_at`. Default sort: status group (active, monitoring, resolved, archived), severity asc, `started_at` desc. `q` match nama room + identifier/nama incident. Respons list berupa array penuh (mengikuti `GET services/`, tanpa pagination di MVP; pagination jadi follow-up bila volume room sudah besar).
 
@@ -115,25 +115,25 @@ PATCH status memakai transition map: `active ↔ monitoring`, `active|monitoring
 
 **Sub-resource**
 
-| Method | Path                                 | Body                                          | Permission                                      |
-| ------ | ------------------------------------ | --------------------------------------------- | ----------------------------------------------- | ------ |
-| POST   | `/:pk/services/`                     | `{service_ids: []}` (idempotent)              | commander                                       |
-| DELETE | `/:pk/services/:service_id/`         | —                                             | commander                                       |
-| POST   | `/:pk/issues/`                       | `{issue_ids: []}` (idempotent, bukan primary) | commander                                       |
-| DELETE | `/:pk/issues/:issue_id/`             | —                                             | commander                                       |
-| POST   | `/:pk/participants/`                 | `{member_id, role?}`                          | commander (member: self join, role `responder`) |
-| PATCH  | `/:pk/participants/:participant_id/` | `{role}`                                      | commander                                       |
-| DELETE | `/:pk/participants/:participant_id/` | —                                             | commander atau self (leave)                     |
-| POST   | `/:pk/runbook-items/`                | `{title}`                                     | commander                                       |
-| PATCH  | `/:pk/runbook-items/:item_id/`       | `{title?, is_done?}`                          | member (is_done), commander (title)             |
-| DELETE | `/:pk/runbook-items/:item_id/`       | —                                             | commander                                       |
-| POST   | `/:pk/messages/`                     | `{body, client_id?}`                          | member (room belum archived)                    |
-| PATCH  | `/:pk/messages/:message_id/`         | `{body}`                                      | author                                          |
-| DELETE | `/:pk/messages/:message_id/`         | —                                             | author atau admin                               |
-| GET    | `/:pk/messages/`                     | `?before=<created_at                          | id>&limit=50`                                   | member |
-| GET    | `/:pk/events/`                       | `?before_id=&limit=50`                        | member                                          |
+| Method | Path                                 | Body                                          | Permission          |
+| ------ | ------------------------------------ | --------------------------------------------- | ------------------- |
+| POST   | `/:pk/services/`                     | `{service_ids: []}` (idempotent)              | member              |
+| DELETE | `/:pk/services/:service_id/`         | —                                             | member              |
+| POST   | `/:pk/issues/`                       | `{issue_ids: []}` (idempotent, bukan primary) | member              |
+| DELETE | `/:pk/issues/:issue_id/`             | —                                             | member              |
+| POST   | `/:pk/participants/`                 | `{member_id, role?}`                          | member (self join)  |
+| PATCH  | `/:pk/participants/:participant_id/` | `{role}`                                      | member              |
+| DELETE | `/:pk/participants/:participant_id/` | —                                             | member              |
+| POST   | `/:pk/runbook-items/`                | `{title}`                                     | member              |
+| PATCH  | `/:pk/runbook-items/:item_id/`       | `{title?, is_done?}`                          | member              |
+| DELETE | `/:pk/runbook-items/:item_id/`       | —                                             | member              |
+| POST   | `/:pk/messages/`                     | `{body, client_id?}`                          | member (room aktif) |
+| PATCH  | `/:pk/messages/:message_id/`         | `{body}`                                      | penulis pesan       |
+| DELETE | `/:pk/messages/:message_id/`         | —                                             | penulis pesan       |
+| GET    | `/:pk/messages/`                     | `?before=<created_at\|id>&limit=50`           | member              |
+| GET    | `/:pk/events/`                       | `?before_id=&limit=50`                        | member              |
 
-Guard participant: commander terakhir tidak boleh di-demote/di-remove/leave (400 `last_commander`); self join dua kali idempotent. Archived room bersifat terminal: PATCH status dari `archived` tidak diizinkan, dan chat/link/runbook/participant write ditolak 409 `room_archived`. `POST /:pk/issues/` menolak `primary_issue_id` dengan 400 `primary_issue_not_linkable` (incident utama tidak boleh muncul dua kali sebagai link biasa).
+Self join idempotent. Archived room bersifat terminal: PATCH status dari `archived` tidak diizinkan, dan chat/link/runbook/participant write ditolak 409 `room_archived`. `POST /:pk/issues/` menolak `primary_issue_id` dengan 400 `primary_issue_not_linkable` (incident utama tidak boleh muncul dua kali sebagai link biasa).
 
 `mentions jsonb`: server mem-parse token `@{user_id}` di `body`, memvalidasi user adalah member workspace, mengisi `mentions`, dan membuat row `notifications` untuk tiap mentioned (kecuali author).
 
@@ -193,15 +193,15 @@ Halaman di `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[pro
 
 **Room page** (`war-rooms/room/`, layout mockup v2):
 
-- **Header**: back, `WR-n` + nama (inline edit commander), severity picker, status control (dropdown transition), timer `HH:MM:SS` (berhenti di `resolved_at`), avatar online + `+N`, tombol **Join** (non-participant), **Resolve** (modal konfirmasi + catatan resolve → append `notes_html`), menu `⋯` (Edit details, Archive, Delete admin).
+- **Header**: back, `WR-n` + nama (inline edit), severity picker, status control (dropdown transition), timer `HH:MM:SS` (berhenti di `resolved_at`), avatar online + `+N`, tombol **Join** (non-participant), **Resolve** (modal konfirmasi + catatan resolve → append `notes_html`), menu `⋯` (Edit details, Archive, Delete).
 - **Peta blast radius** (`service-map.tsx`): kalkulasi di client — services terdampak + tetangga 1 hop dua arah dari `getGraphData(projectId)`; reuse canvas read-only hasil refactor (lihat bawah); node diklik membuka detail service di tab baru; tombol collapse; empty state "No affected services yet" + Add services.
-- **Chat** (`chat-panel.tsx`, `message-item.tsx`, `chat-composer.tsx`): daftar pesan grouped by author/time, mention chip, item menu (edit/hapus sesuai izin), pagination "Load older" saat scroll atas, indicator `X typing…` + dot online, composer `@` autocomplete member project, Enter kirim, Shift+Enter baris baru, optimistic send + banner reconnect saat WS putus.
+- **Chat** (`chat-panel.tsx`, `message-item.tsx`, `chat-composer.tsx`): daftar pesan grouped by author/time, mention chip, item menu edit/hapus untuk pesan sendiri, pagination "Load older" saat scroll atas, indicator `X typing…` + dot online, composer `@` autocomplete member project, Enter kirim, Shift+Enter baris baru, optimistic send + banner reconnect saat WS putus.
 - **Panel konteks** (`context-panel.tsx`, tab; tab terakhir diingat per user via `localStorage`):
-  - **Notes** (default): editor rich-text (`@plane/editor` non-collab), autosave debounce 1 detik ke `notes_html`, label "Edited Xm ago"; read-only bila archived atau non-commander? — edit untuk commander/admin, member lain read-only.
+  - **Notes** (default): editor rich-text (`@plane/editor` non-collab), autosave debounce 1 detik ke `notes_html`, label "Edited Xm ago"; read-only bila archived, selain itu semua member bisa edit.
   - **Work items**: incident utama pinned (badge "Primary incident") + link items; tambah via `ExistingIssuesListModal` single/multi; unlink; klik → peek work item.
-  - **Runbook**: progress bar `x/y`, checkbox toggle (member), tambah item inline (commander), edit/hapus via hover menu (commander), auto-scroll item selesai.
+  - **Runbook**: progress bar `x/y`, checkbox toggle, tambah/edit/hapus item inline (semua member), auto-scroll item selesai.
   - **Activity**: feed event kronologis (aktor + waktu + deskripsi), live append dari `activity.created`.
-  - **People**: daftar peserta + role dropdown (commander), Join/Leave, indikator online, role labels (Incident Commander, Comms, Scribe, Responder).
+  - **People**: daftar peserta + role dropdown (semua member bisa ubah), Join/Leave, indikator online, role labels (Incident Commander, Comms, Scribe, Responder).
 - **Refactor graph**: ekstrak canvas presentational `apps/web/core/components/services/graph/service-graph-canvas.tsx` (props: nodes, edges, health, `readOnly`, `onNodeClick`); `service-graph.tsx` (editor halaman Services) memakai canvas + logika edit existing; war room memakai canvas read-only.
 
 **Sidebar**: item **War rooms** di `apps/web/core/components/workspace/sidebar/project-navigation.tsx` (pola services `:113-120`) dan `apps/web/core/components/navigation/use-navigation-items.ts` (`:75-78`); badge jumlah active dari summary store bila sudah difetch (tidak ada fetch khusus sidebar).
@@ -212,7 +212,7 @@ Halaman di `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[pro
 
 ### 5. Testing
 
-- **Rust** (`apps/api-rs/crates/api/tests/war_room_test.rs`, scratch workspace seri `--test-threads=1` bila memakai purge): create validasi (incident se-project, 409 duplicate active, default severity/name, sequence increment, seed runbook per tipe, participants awal), transition status (resolve/reopen/archive + resolved_at), permission matrix (member vs commander vs admin), participant last-commander guard, messages (pagination, edit/delete izin, parse mention + notification row), links idempotent, list filter/summary, publish Redis diuji dengan subscriber `redis` di test stack (bila tidak tersedia, assert payload builder + smoke manual).
+- **Rust** (`apps/api-rs/crates/api/tests/war_room_test.rs`, scratch workspace seri `--test-threads=1` bila memakai purge): create validasi (incident se-project, 409 duplicate active, default severity/name, sequence increment, seed runbook per tipe, participants awal), transition status (resolve/reopen/archive + resolved_at), akses (non-member ditolak, guest write ditolak, member penuh), messages (pagination, edit/delete, parse mention + notification row), links idempotent, list filter/summary, publish Redis diuji dengan subscriber `redis` di test stack (bila tidak tersedia, assert payload builder + smoke manual).
 - **Web vitest**: store (apply event dedupe/reconcile, unread), blast-radius helper, mention tokenizer, timer format, single-select modal behavior, create-form default mapping.
 - **Live**: typecheck/lint + smoke manual dua browser (chat realtime, typing/presence, reconnect).
 - **E2E smoke** (per `AGENTS.md`): migrate via boot api-rs → `docker compose -f docker-compose-local.yml up -d --build api worker beat-worker` (detached, log ke file) → `curl /health` → `pnpm --filter=live build && systemctl --user restart plane-live.service` → `curl /live/health/` → `pnpm --filter=web build && systemctl --user restart plane-web-prod.service` → buka room, kirim pesan dari dua sesi, resolve, cek notifikasi mention.
@@ -237,7 +237,7 @@ Feature ini besar; plan akan dipecah menjadi fase berurutan yang masing-masing b
 ## Edge cases
 
 - **Incident dihapus/archived**: room tetap ada (FK CASCADE hanya untuk hard delete; soft delete issue tidak menyentuh room). UI incident chip menampilkan state archived.
-- **Commander terakhir**: demote/remove/leave ditolak 400 `last_commander`; reassign harus menunjuk commander baru dulu (PATCH participant lama → role lain setelah participant baru jadi commander? aturan: set commander baru dalam transaksi yang sama, lalu demote lama).
+- **Role peserta**: partial unique menjaga maksimum satu commander; siapa pun boleh mengubah role, dan room tanpa commander valid (label koordinasi saja).
 - **Services terdampak dihapus**: link di-soft-delete; peta otomatis kehilangan node (fallback empty state).
 - **Dua create bersamaan untuk incident sama**: unique index partial menolak; handler menangkap unique violation → 409.
 - **Message dikirim saat archived**: 409 `room_archived`.
@@ -249,7 +249,7 @@ Feature ini besar; plan akan dipecah menjadi fase berurutan yang masing-masing b
 
 ## Peta modul & file
 
-- **Migrasi/API**: `apps/api-rs/migrations/0011_war_rooms.sql`, `apps/api-rs/crates/api/src/routes/war_room.rs` (+ daftar di `routes/mod.rs`/`main.rs`), helper RBAC lokal, publish Redis memakai `AppState::redis_client()`, `apps/api-rs/crates/api/tests/war_room_test.rs`.
+- **Migrasi/API**: `apps/api-rs/migrations/0011_war_rooms.sql`, `apps/api-rs/crates/api/src/routes/war_room.rs` (+ daftar di `routes/mod.rs`/`main.rs`), gate `gate_member`/`gate_writer` existing, publish Redis memakai `AppState::redis_client()`, `apps/api-rs/crates/api/tests/war_room_test.rs`.
 - **Live**: `apps/live/src/controllers/war-room.controller.ts` + registrasi `apps/live/src/controllers/index.ts`; subscriber Redis (pola `extensions/redis.ts`).
 - **Web**: `apps/web/app/routes/core.ts`, halaman di `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/**`, komponen `apps/web/core/components/war-rooms/**`, refactor `apps/web/core/components/services/graph/service-graph-canvas.tsx`, store `apps/web/core/store/war-room.store.ts` (+ `root.store.ts`), service `apps/web/core/services/war-room.service.ts`, hook `apps/web/core/hooks/use-war-room-socket.ts`, entry work item `issues/issue-detail/issue-detail-quick-actions.tsx`, notifikasi `workspace-notifications/sidebar/notification-card/item.tsx`, sidebar `workspace/sidebar/project-navigation.tsx` + `navigation/use-navigation-items.ts`.
 - **Shared**: `packages/types/src/war-room/**`, `packages/constants/src/war-room.ts` (+ barrel), `packages/i18n/src/locales/**`.
@@ -258,7 +258,7 @@ Feature ini besar; plan akan dipecah menjadi fase berurutan yang masing-masing b
 
 - **Live server menyentuh jalur baru** (WS non-Hocuspocus): auth & fan-out harus diuji smoke dua browser; risiko utama regresi ada batas (controller baru, tidak mengubah collaboration).
 - **Refactor graph** menyentuh halaman Services: canvas diekstrak tanpa mengubah perilaku editor; jaga test/smoke halaman Services.
-- **Beban query list** (services/participants/message_count per row): pakai subquery agregat; pagination default 50 bila perlu — diukur saat implementasi.
+- **Beban query list** (services/participants/message_count per row): pakai subquery agregat; ukur saat implementasi, pagination jadi follow-up bila volume besar.
 - **Chat tanpa pemangkasan riwayat**: index `(room_id, created_at DESC)`; retensi dicatat sebagai follow-up.
 - **Kontrak notifikasi mention** menumpang tabel existing; pastikan filter mentioned (`sender ILIKE '%mentioned%'`) dan kartu notifikasi tidak menyembunyikan row (guard `issue_activity`).
 
@@ -266,6 +266,7 @@ Feature ini besar; plan akan dipecah menjadi fase berurutan yang masing-masing b
 
 ## Changelog
 
-| Date       | Change                                                                                                                                    |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-30 | init — hasil brainstorming: project-level entity, Approach 1 realtime, layout Map First, 7 panel, lifecycle/izin/runbook/notes, WR-number |
+| Date       | Change                                                                                                                                                             |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-09-30 | init — hasil brainstorming: project-level entity, Approach 1 realtime, layout Map First, 7 panel, lifecycle/izin/runbook/notes, WR-number                          |
+| 2026-09-30 | revisi izin (keputusan ulang user) — tanpa gate commander/admin: semua member boleh semua aksi; role peserta jadi label koordinasi; guard `last_commander` dihapus |
