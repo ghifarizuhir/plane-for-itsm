@@ -54,6 +54,10 @@ import type { IServiceStore } from "./service.store";
 import { ServicesStore } from "./service.store";
 import type { IServiceFilterStore } from "./service_filter.store";
 import { ServiceFilterStore } from "./service_filter.store";
+import type { IWarRoomStore } from "./war-room.store";
+import { WarRoomStore } from "./war-room.store";
+import type { IWarRoomFilterStore } from "./war-room_filter.store";
+import { WarRoomFilterStore } from "./war-room_filter.store";
 import type { IMultipleSelectStore } from "./multiple_select.store";
 import { MultipleSelectStore } from "./multiple_select.store";
 import type { IWorkspaceNotificationStore } from "./notifications/workspace-notifications.store";
@@ -92,6 +96,8 @@ export class CoreRootStore {
   moduleFilter: IModuleFilterStore;
   service: IServiceStore;
   serviceFilter: IServiceFilterStore;
+  warRoom: IWarRoomStore;
+  warRoomFilter: IWarRoomFilterStore;
   projectView: IProjectViewStore;
   globalView: IGlobalViewStore;
   issue: IIssueRootStore;
@@ -134,6 +140,8 @@ export class CoreRootStore {
     this.moduleFilter = new ModuleFilterStore(this);
     this.service = new ServicesStore(this);
     this.serviceFilter = new ServiceFilterStore(this);
+    this.warRoom = new WarRoomStore(this);
+    this.warRoomFilter = new WarRoomFilterStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);
@@ -174,6 +182,8 @@ export class CoreRootStore {
     this.moduleFilter = new ModuleFilterStore(this);
     this.service = new ServicesStore(this);
     this.serviceFilter = new ServiceFilterStore(this);
+    this.warRoom = new WarRoomStore(this);
+    this.warRoomFilter = new WarRoomFilterStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);
