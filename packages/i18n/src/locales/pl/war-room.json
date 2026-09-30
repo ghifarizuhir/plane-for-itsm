@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Pokoje kryzysowe",
+    "add": "Utwórz pokój kryzysowy",
+    "open": "Otwórz pokój kryzysowy",
+    "load_error": {
+      "title": "Nie można wczytać pokoi kryzysowych",
+      "description": "Wystąpił błąd podczas wczytywania pokoi kryzysowych. Spróbuj ponownie.",
+      "retry": "Ponów"
+    },
+    "tabs": {
+      "active": "Aktywne",
+      "resolved": "Rozwiązane",
+      "all": "Wszystkie"
+    },
+    "search": {
+      "placeholder": "Szukaj pokoi kryzysowych"
+    },
+    "summary": {
+      "active": "{count} aktywnych",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} rozwiązanych w 7 dni"
+    },
+    "status_values": {
+      "active": "Aktywny",
+      "monitoring": "Monitorowany",
+      "resolved": "Rozwiązany",
+      "archived": "Zarchiwizowany"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Dowódca incydentu",
+      "comms": "Komunikacja",
+      "scribe": "Protokolant",
+      "responder": "Wykonawca"
+    },
+    "fields": {
+      "primary_incident": "Główny incydent",
+      "affected_services": "Dotknięte usługi",
+      "participants": "Uczestnicy",
+      "messages": "Wiadomości",
+      "started": "Rozpoczęto",
+      "elapsed": "Upłynął czas"
+    },
+    "empty_state": {
+      "title": "Brak pokoi kryzysowych",
+      "description": "Otwórz pokój kryzysowy, aby koordynować reakcję na incydent.",
+      "no_matches": {
+        "title": "Brak pasujących pokoi kryzysowych",
+        "description": "Żaden pokój kryzysowy nie odpowiada bieżącym filtrom. Dostosuj lub wyczyść filtry."
+      }
+    },
+    "create": {
+      "title": "Utwórz pokój kryzysowy",
+      "incident": "Główny incydent",
+      "select_incident": "Wybierz incydent",
+      "incident_selected": "Wybrano incydent",
+      "incident_required": "Wybierz główny incydent, aby kontynuować.",
+      "name": "Nazwa",
+      "name_placeholder": "Nazwa pokoju kryzysowego",
+      "severity": "Waga",
+      "severity_auto": "Z priorytetu incydentu",
+      "services": "Dotknięte usługi",
+      "description": "Opis",
+      "submit": "Utwórz pokój kryzysowy",
+      "duplicate_title": "Aktywny pokój kryzysowy już istnieje",
+      "duplicate_description": "Dla tego incydentu istnieje już aktywny pokój kryzysowy.",
+      "open_existing": "Otwórz pokój kryzysowy"
+    },
+    "detail": {
+      "not_found_title": "Pokój kryzysowy nie istnieje",
+      "not_found_description": "Pokój kryzysowy, którego szukasz, nie istnieje lub został usunięty.",
+      "view_other_rooms": "Zobacz inne pokoje kryzysowe",
+      "back": "Wróć do pokoi kryzysowych"
+    }
+  }
+}

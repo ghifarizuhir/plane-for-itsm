@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "作战室",
+    "add": "创建作战室",
+    "open": "打开作战室",
+    "load_error": {
+      "title": "无法加载作战室",
+      "description": "加载作战室时出错。请重试。",
+      "retry": "重试"
+    },
+    "tabs": {
+      "active": "进行中",
+      "resolved": "已解决",
+      "all": "全部"
+    },
+    "search": {
+      "placeholder": "搜索作战室"
+    },
+    "summary": {
+      "active": "进行中 {count} 个",
+      "sev1_2": "SEV1–2 {count} 个",
+      "resolved_7d": "7 天内已解决 {count} 个"
+    },
+    "status_values": {
+      "active": "进行中",
+      "monitoring": "监控中",
+      "resolved": "已解决",
+      "archived": "已归档"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "事件指挥官",
+      "comms": "通讯负责人",
+      "scribe": "记录员",
+      "responder": "响应人员"
+    },
+    "fields": {
+      "primary_incident": "主要事件",
+      "affected_services": "受影响的服务",
+      "participants": "参与者",
+      "messages": "消息",
+      "started": "开始时间",
+      "elapsed": "已用时间"
+    },
+    "empty_state": {
+      "title": "暂无作战室",
+      "description": "打开作战室以协调事件响应。",
+      "no_matches": {
+        "title": "没有匹配的作战室",
+        "description": "没有作战室符合当前筛选条件。请调整或清除筛选条件。"
+      }
+    },
+    "create": {
+      "title": "创建作战室",
+      "incident": "主要事件",
+      "select_incident": "选择事件",
+      "incident_selected": "已选择事件",
+      "incident_required": "请选择主要事件以继续。",
+      "name": "名称",
+      "name_placeholder": "作战室名称",
+      "severity": "严重级别",
+      "severity_auto": "来自事件优先级",
+      "services": "受影响的服务",
+      "description": "描述",
+      "submit": "创建作战室",
+      "duplicate_title": "已存在处于活动状态的作战室",
+      "duplicate_description": "此事件已存在处于活动状态的作战室。",
+      "open_existing": "打开作战室"
+    },
+    "detail": {
+      "not_found_title": "作战室不存在",
+      "not_found_description": "您查找的作战室不存在或已被删除。",
+      "view_other_rooms": "查看其他作战室",
+      "back": "返回作战室"
+    }
+  }
+}

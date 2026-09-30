@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "War Rooms",
+    "add": "War Room erstellen",
+    "open": "War Room öffnen",
+    "load_error": {
+      "title": "War Rooms konnten nicht geladen werden",
+      "description": "Beim Laden der War Rooms ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+      "retry": "Erneut versuchen"
+    },
+    "tabs": {
+      "active": "Aktiv",
+      "resolved": "Gelöst",
+      "all": "Alle"
+    },
+    "search": {
+      "placeholder": "War Rooms suchen"
+    },
+    "summary": {
+      "active": "{count} aktiv",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} in 7 Tagen gelöst"
+    },
+    "status_values": {
+      "active": "Aktiv",
+      "monitoring": "Überwacht",
+      "resolved": "Gelöst",
+      "archived": "Archiviert"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Einsatzleiter",
+      "comms": "Kommunikation",
+      "scribe": "Protokollant",
+      "responder": "Einsatzkraft"
+    },
+    "fields": {
+      "primary_incident": "Primäre Störung",
+      "affected_services": "Betroffene Services",
+      "participants": "Teilnehmer",
+      "messages": "Nachrichten",
+      "started": "Gestartet",
+      "elapsed": "Vergangene Zeit"
+    },
+    "empty_state": {
+      "title": "Noch keine War Rooms",
+      "description": "Öffnen Sie einen War Room, um die Reaktion auf Störungen zu koordinieren.",
+      "no_matches": {
+        "title": "Keine passenden War Rooms",
+        "description": "Keine War Rooms entsprechen den aktuellen Filtern. Passen Sie die Filter an oder entfernen Sie sie."
+      }
+    },
+    "create": {
+      "title": "War Room erstellen",
+      "incident": "Primäre Störung",
+      "select_incident": "Störung auswählen",
+      "incident_selected": "Störung ausgewählt",
+      "incident_required": "Wählen Sie die primäre Störung aus, um fortzufahren.",
+      "name": "Name",
+      "name_placeholder": "Name des War Rooms",
+      "severity": "Schweregrad",
+      "severity_auto": "Aus Störungs-Priorität",
+      "services": "Betroffene Services",
+      "description": "Beschreibung",
+      "submit": "War Room erstellen",
+      "duplicate_title": "Ein aktiver War Room existiert bereits",
+      "duplicate_description": "Für diese Störung existiert bereits ein aktiver War Room.",
+      "open_existing": "War Room öffnen"
+    },
+    "detail": {
+      "not_found_title": "War Room existiert nicht",
+      "not_found_description": "Der gesuchte War Room existiert nicht oder wurde gelöscht.",
+      "view_other_rooms": "Andere War Rooms ansehen",
+      "back": "Zurück zu War Rooms"
+    }
+  }
+}

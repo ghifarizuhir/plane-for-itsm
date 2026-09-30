@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Krizové místnosti",
+    "add": "Vytvořit krizovou místnost",
+    "open": "Otevřít krizovou místnost",
+    "load_error": {
+      "title": "Krizové místnosti se nepodařilo načíst",
+      "description": "Při načítání krizových místností došlo k chybě. Zkuste to prosím znovu.",
+      "retry": "Zkusit znovu"
+    },
+    "tabs": {
+      "active": "Aktivní",
+      "resolved": "Vyřešené",
+      "all": "Vše"
+    },
+    "search": {
+      "placeholder": "Hledat krizové místnosti"
+    },
+    "summary": {
+      "active": "{count} aktivních",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} vyřešených za 7 dní"
+    },
+    "status_values": {
+      "active": "Aktivní",
+      "monitoring": "Sledovaná",
+      "resolved": "Vyřešená",
+      "archived": "Archivovaná"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Velitel incidentu",
+      "comms": "Komunikace",
+      "scribe": "Zapisovatel",
+      "responder": "Zasahující"
+    },
+    "fields": {
+      "primary_incident": "Primární incident",
+      "affected_services": "Ovlivněné služby",
+      "participants": "Účastníci",
+      "messages": "Zprávy",
+      "started": "Zahájeno",
+      "elapsed": "Uplynulý čas"
+    },
+    "empty_state": {
+      "title": "Zatím žádné krizové místnosti",
+      "description": "Otevřete krizovou místnost pro koordinaci reakce na incident.",
+      "no_matches": {
+        "title": "Žádné odpovídající krizové místnosti",
+        "description": "Žádná krizová místnost neodpovídá aktuálním filtrům. Upravte nebo vymažte filtry."
+      }
+    },
+    "create": {
+      "title": "Vytvořit krizovou místnost",
+      "incident": "Primární incident",
+      "select_incident": "Vybrat incident",
+      "incident_selected": "Incident vybrán",
+      "incident_required": "Pokračujte výběrem primárního incidentu.",
+      "name": "Název",
+      "name_placeholder": "Název krizové místnosti",
+      "severity": "Závažnost",
+      "severity_auto": "Podle priority incidentu",
+      "services": "Ovlivněné služby",
+      "description": "Popis",
+      "submit": "Vytvořit krizovou místnost",
+      "duplicate_title": "Aktivní krizová místnost již existuje",
+      "duplicate_description": "Pro tento incident již existuje aktivní krizová místnost.",
+      "open_existing": "Otevřít krizovou místnost"
+    },
+    "detail": {
+      "not_found_title": "Krizová místnost neexistuje",
+      "not_found_description": "Hledaná krizová místnost neexistuje nebo byla smazána.",
+      "view_other_rooms": "Zobrazit další krizové místnosti",
+      "back": "Zpět na krizové místnosti"
+    }
+  }
+}

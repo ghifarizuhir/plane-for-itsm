@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Kriz odaları",
+    "add": "Kriz odası oluştur",
+    "open": "Kriz odasını aç",
+    "load_error": {
+      "title": "Kriz odaları yüklenemedi",
+      "description": "Kriz odaları yüklenirken bir hata oluştu. Lütfen tekrar deneyin.",
+      "retry": "Tekrar dene"
+    },
+    "tabs": {
+      "active": "Aktif",
+      "resolved": "Çözüldü",
+      "all": "Tümü"
+    },
+    "search": {
+      "placeholder": "Kriz odası ara"
+    },
+    "summary": {
+      "active": "{count} aktif",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} son 7 günde çözüldü"
+    },
+    "status_values": {
+      "active": "Aktif",
+      "monitoring": "İzleniyor",
+      "resolved": "Çözüldü",
+      "archived": "Arşivlendi"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Olay komutanı",
+      "comms": "İletişim sorumlusu",
+      "scribe": "Kayıt sorumlusu",
+      "responder": "Müdahale sorumlusu"
+    },
+    "fields": {
+      "primary_incident": "Birincil olay",
+      "affected_services": "Etkilenen hizmetler",
+      "participants": "Katılımcılar",
+      "messages": "Mesajlar",
+      "started": "Başladı",
+      "elapsed": "Geçen süre"
+    },
+    "empty_state": {
+      "title": "Henüz kriz odası yok",
+      "description": "Olaya müdahaleyi koordine etmek için bir kriz odası açın.",
+      "no_matches": {
+        "title": "Eşleşen kriz odası bulunamadı",
+        "description": "Geçerli filtrelerle eşleşen kriz odası yok. Filtreleri değiştirin veya temizleyin."
+      }
+    },
+    "create": {
+      "title": "Kriz odası oluştur",
+      "incident": "Birincil olay",
+      "select_incident": "Olay seç",
+      "incident_selected": "Olay seçildi",
+      "incident_required": "Devam etmek için birincil olayı seçin.",
+      "name": "Ad",
+      "name_placeholder": "Kriz odası adı",
+      "severity": "Önem derecesi",
+      "severity_auto": "Olay önceliğinden",
+      "services": "Etkilenen hizmetler",
+      "description": "Açıklama",
+      "submit": "Kriz odası oluştur",
+      "duplicate_title": "Etkin bir kriz odası zaten var",
+      "duplicate_description": "Bu olay için zaten etkin bir kriz odası var.",
+      "open_existing": "Kriz odasını aç"
+    },
+    "detail": {
+      "not_found_title": "Kriz odası mevcut değil",
+      "not_found_description": "Aradığınız kriz odası mevcut değil veya silinmiş.",
+      "view_other_rooms": "Diğer kriz odalarını görüntüle",
+      "back": "Kriz odalarına dön"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "상황실",
+    "add": "상황실 생성",
+    "open": "상황실 열기",
+    "load_error": {
+      "title": "상황실을 불러오지 못했습니다",
+      "description": "상황실을 불러오는 중 오류가 발생했습니다. 다시 시도하세요.",
+      "retry": "다시 시도"
+    },
+    "tabs": {
+      "active": "활성",
+      "resolved": "해결됨",
+      "all": "전체"
+    },
+    "search": {
+      "placeholder": "상황실 검색"
+    },
+    "summary": {
+      "active": "활성 {count}개",
+      "sev1_2": "SEV1–2 {count}개",
+      "resolved_7d": "7일 이내 해결 {count}개"
+    },
+    "status_values": {
+      "active": "활성",
+      "monitoring": "모니터링 중",
+      "resolved": "해결됨",
+      "archived": "보관됨"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "인시던트 커맨더",
+      "comms": "커뮤니케이션 담당",
+      "scribe": "기록 담당",
+      "responder": "대응 담당"
+    },
+    "fields": {
+      "primary_incident": "주요 인시던트",
+      "affected_services": "영향받는 서비스",
+      "participants": "참여자",
+      "messages": "메시지",
+      "started": "시작",
+      "elapsed": "경과 시간"
+    },
+    "empty_state": {
+      "title": "아직 상황실이 없습니다",
+      "description": "상황실을 열어 인시던트 대응을 조율하세요.",
+      "no_matches": {
+        "title": "일치하는 상황실이 없습니다",
+        "description": "현재 필터와 일치하는 상황실이 없습니다. 필터를 조정하거나 지우세요."
+      }
+    },
+    "create": {
+      "title": "상황실 생성",
+      "incident": "주요 인시던트",
+      "select_incident": "인시던트 선택",
+      "incident_selected": "인시던트가 선택됨",
+      "incident_required": "계속하려면 주요 인시던트를 선택하세요.",
+      "name": "이름",
+      "name_placeholder": "상황실 이름",
+      "severity": "심각도",
+      "severity_auto": "인시던트 우선순위에서",
+      "services": "영향받는 서비스",
+      "description": "설명",
+      "submit": "상황실 생성",
+      "duplicate_title": "활성 상황실이 이미 있습니다",
+      "duplicate_description": "이 인시던트에 대한 활성 상황실이 이미 있습니다.",
+      "open_existing": "상황실 열기"
+    },
+    "detail": {
+      "not_found_title": "상황실이 존재하지 않습니다",
+      "not_found_description": "찾는 상황실이 존재하지 않거나 삭제되었습니다.",
+      "view_other_rooms": "다른 상황실 보기",
+      "back": "상황실로 돌아가기"
+    }
+  }
+}

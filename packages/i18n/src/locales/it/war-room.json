@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Sale di crisi",
+    "add": "Crea sala di crisi",
+    "open": "Apri sala di crisi",
+    "load_error": {
+      "title": "Impossibile caricare le sale di crisi",
+      "description": "Si è verificato un errore durante il caricamento delle sale di crisi. Riprova.",
+      "retry": "Riprova"
+    },
+    "tabs": {
+      "active": "Attive",
+      "resolved": "Risolte",
+      "all": "Tutte"
+    },
+    "search": {
+      "placeholder": "Cerca sale di crisi"
+    },
+    "summary": {
+      "active": "{count} attive",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} risolte in 7 giorni"
+    },
+    "status_values": {
+      "active": "Attiva",
+      "monitoring": "Monitorata",
+      "resolved": "Risolta",
+      "archived": "Archiviata"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Responsabile dell'incidente",
+      "comms": "Comunicazioni",
+      "scribe": "Verbalizzante",
+      "responder": "Operatore"
+    },
+    "fields": {
+      "primary_incident": "Incidente principale",
+      "affected_services": "Servizi interessati",
+      "participants": "Partecipanti",
+      "messages": "Messaggi",
+      "started": "Avviata",
+      "elapsed": "Trascorso"
+    },
+    "empty_state": {
+      "title": "Ancora nessuna sala di crisi",
+      "description": "Apri una sala di crisi per coordinare la risposta all'incidente.",
+      "no_matches": {
+        "title": "Nessuna sala di crisi corrispondente",
+        "description": "Nessuna sala di crisi corrisponde ai filtri attuali. Modifica o cancella i filtri."
+      }
+    },
+    "create": {
+      "title": "Crea sala di crisi",
+      "incident": "Incidente principale",
+      "select_incident": "Seleziona incidente",
+      "incident_selected": "Incidente selezionato",
+      "incident_required": "Seleziona l'incidente principale per continuare.",
+      "name": "Nome",
+      "name_placeholder": "Nome della sala di crisi",
+      "severity": "Gravità",
+      "severity_auto": "Dalla priorità dell'incidente",
+      "services": "Servizi interessati",
+      "description": "Descrizione",
+      "submit": "Crea sala di crisi",
+      "duplicate_title": "Esiste già una sala di crisi attiva",
+      "duplicate_description": "Esiste già una sala di crisi attiva per questo incidente.",
+      "open_existing": "Apri sala di crisi"
+    },
+    "detail": {
+      "not_found_title": "La sala di crisi non esiste",
+      "not_found_description": "La sala di crisi cercata non esiste o è stata eliminata.",
+      "view_other_rooms": "Vedi altre sale di crisi",
+      "back": "Torna alle sale di crisi"
+    }
+  }
+}

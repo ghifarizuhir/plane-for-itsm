@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "War rooms",
+    "add": "Create war room",
+    "open": "Open war room",
+    "load_error": {
+      "title": "Couldn't load war rooms",
+      "description": "Something went wrong while fetching war rooms. Please try again.",
+      "retry": "Retry"
+    },
+    "tabs": {
+      "active": "Active",
+      "resolved": "Resolved",
+      "all": "All"
+    },
+    "search": {
+      "placeholder": "Search war rooms"
+    },
+    "summary": {
+      "active": "{count} active",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} resolved in 7d"
+    },
+    "status_values": {
+      "active": "Active",
+      "monitoring": "Monitoring",
+      "resolved": "Resolved",
+      "archived": "Archived"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Incident Commander",
+      "comms": "Comms",
+      "scribe": "Scribe",
+      "responder": "Responder"
+    },
+    "fields": {
+      "primary_incident": "Primary incident",
+      "affected_services": "Affected services",
+      "participants": "Participants",
+      "messages": "Messages",
+      "started": "Started",
+      "elapsed": "Elapsed"
+    },
+    "empty_state": {
+      "title": "No war rooms yet",
+      "description": "Open a war room to coordinate incident response.",
+      "no_matches": {
+        "title": "No matching war rooms",
+        "description": "No war rooms match the current filters. Try adjusting or clearing them."
+      }
+    },
+    "create": {
+      "title": "Create war room",
+      "incident": "Primary incident",
+      "select_incident": "Select incident",
+      "incident_selected": "Incident selected",
+      "incident_required": "Select the primary incident to continue",
+      "name": "Name",
+      "name_placeholder": "War room name",
+      "severity": "Severity",
+      "severity_auto": "From incident priority",
+      "services": "Affected services",
+      "description": "Description",
+      "submit": "Create war room",
+      "duplicate_title": "Active war room already exists",
+      "duplicate_description": "An active war room already exists for this incident.",
+      "open_existing": "Open war room"
+    },
+    "detail": {
+      "not_found_title": "War room does not exist",
+      "not_found_description": "The war room you are looking for does not exist or has been deleted.",
+      "view_other_rooms": "View other war rooms",
+      "back": "Back to war rooms"
+    }
+  }
+}

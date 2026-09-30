@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Salles de crise",
+    "add": "Créer une salle de crise",
+    "open": "Ouvrir la salle de crise",
+    "load_error": {
+      "title": "Impossible de charger les salles de crise",
+      "description": "Une erreur s'est produite lors du chargement des salles de crise. Veuillez réessayer.",
+      "retry": "Réessayer"
+    },
+    "tabs": {
+      "active": "Actives",
+      "resolved": "Résolues",
+      "all": "Toutes"
+    },
+    "search": {
+      "placeholder": "Rechercher des salles de crise"
+    },
+    "summary": {
+      "active": "{count} actives",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} résolues en 7 jours"
+    },
+    "status_values": {
+      "active": "Active",
+      "monitoring": "En suivi",
+      "resolved": "Résolue",
+      "archived": "Archivée"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Chef d'incident",
+      "comms": "Communications",
+      "scribe": "Secrétaire",
+      "responder": "Intervenant"
+    },
+    "fields": {
+      "primary_incident": "Incident principal",
+      "affected_services": "Services concernés",
+      "participants": "Participants",
+      "messages": "Messages",
+      "started": "Démarrée",
+      "elapsed": "Écoulé"
+    },
+    "empty_state": {
+      "title": "Aucune salle de crise pour le moment",
+      "description": "Ouvrez une salle de crise pour coordonner la réponse à l'incident.",
+      "no_matches": {
+        "title": "Aucune salle de crise correspondante",
+        "description": "Aucune salle de crise ne correspond aux filtres actuels. Modifiez ou effacez les filtres."
+      }
+    },
+    "create": {
+      "title": "Créer une salle de crise",
+      "incident": "Incident principal",
+      "select_incident": "Sélectionner un incident",
+      "incident_selected": "Incident sélectionné",
+      "incident_required": "Sélectionnez l'incident principal pour continuer.",
+      "name": "Nom",
+      "name_placeholder": "Nom de la salle de crise",
+      "severity": "Gravité",
+      "severity_auto": "Selon la priorité de l'incident",
+      "services": "Services concernés",
+      "description": "Description",
+      "submit": "Créer une salle de crise",
+      "duplicate_title": "Une salle de crise active existe déjà",
+      "duplicate_description": "Une salle de crise active existe déjà pour cet incident.",
+      "open_existing": "Ouvrir la salle de crise"
+    },
+    "detail": {
+      "not_found_title": "La salle de crise n'existe pas",
+      "not_found_description": "La salle de crise que vous recherchez n'existe pas ou a été supprimée.",
+      "view_other_rooms": "Voir les autres salles de crise",
+      "back": "Retour aux salles de crise"
+    }
+  }
+}

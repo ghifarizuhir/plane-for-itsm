@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "ウォールーム",
+    "add": "ウォールームを作成",
+    "open": "ウォールームを開く",
+    "load_error": {
+      "title": "ウォールームを読み込めませんでした",
+      "description": "ウォールームの読み込み中にエラーが発生しました。もう一度お試しください。",
+      "retry": "再試行"
+    },
+    "tabs": {
+      "active": "アクティブ",
+      "resolved": "解決済み",
+      "all": "すべて"
+    },
+    "search": {
+      "placeholder": "ウォールームを検索"
+    },
+    "summary": {
+      "active": "{count}件がアクティブ",
+      "sev1_2": "{count}件がSEV1–2",
+      "resolved_7d": "{count}件が7日以内に解決"
+    },
+    "status_values": {
+      "active": "アクティブ",
+      "monitoring": "監視中",
+      "resolved": "解決済み",
+      "archived": "アーカイブ済み"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "インシデントコマンダー",
+      "comms": "コミュニケーション担当",
+      "scribe": "記録担当",
+      "responder": "対応担当"
+    },
+    "fields": {
+      "primary_incident": "主要インシデント",
+      "affected_services": "影響を受けるサービス",
+      "participants": "参加者",
+      "messages": "メッセージ",
+      "started": "開始",
+      "elapsed": "経過時間"
+    },
+    "empty_state": {
+      "title": "まだウォールームがありません",
+      "description": "ウォールームを開いてインシデント対応を調整しましょう。",
+      "no_matches": {
+        "title": "一致するウォールームがありません",
+        "description": "現在のフィルターに一致するウォールームはありません。フィルターを調整またはクリアしてください。"
+      }
+    },
+    "create": {
+      "title": "ウォールームを作成",
+      "incident": "主要インシデント",
+      "select_incident": "インシデントを選択",
+      "incident_selected": "インシデントが選択されました",
+      "incident_required": "続行するには主要インシデントを選択してください。",
+      "name": "名前",
+      "name_placeholder": "ウォールーム名",
+      "severity": "重要度",
+      "severity_auto": "インシデントの優先度から",
+      "services": "影響を受けるサービス",
+      "description": "説明",
+      "submit": "ウォールームを作成",
+      "duplicate_title": "アクティブなウォールームは既に存在します",
+      "duplicate_description": "このインシデントには既にアクティブなウォールームが存在します。",
+      "open_existing": "ウォールームを開く"
+    },
+    "detail": {
+      "not_found_title": "ウォールームが存在しません",
+      "not_found_description": "お探しのウォールームは存在しないか、削除されました。",
+      "view_other_rooms": "他のウォールームを見る",
+      "back": "ウォールームに戻る"
+    }
+  }
+}

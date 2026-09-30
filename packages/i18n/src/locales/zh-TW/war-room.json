@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "作戰室",
+    "add": "建立作戰室",
+    "open": "開啟作戰室",
+    "load_error": {
+      "title": "無法載入作戰室",
+      "description": "載入作戰室時發生錯誤。請重試。",
+      "retry": "重試"
+    },
+    "tabs": {
+      "active": "進行中",
+      "resolved": "已解決",
+      "all": "全部"
+    },
+    "search": {
+      "placeholder": "搜尋作戰室"
+    },
+    "summary": {
+      "active": "進行中 {count} 個",
+      "sev1_2": "SEV1–2 {count} 個",
+      "resolved_7d": "7 天內已解決 {count} 個"
+    },
+    "status_values": {
+      "active": "進行中",
+      "monitoring": "監控中",
+      "resolved": "已解決",
+      "archived": "已封存"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "事件指揮官",
+      "comms": "通訊負責人",
+      "scribe": "記錄員",
+      "responder": "回應人員"
+    },
+    "fields": {
+      "primary_incident": "主要事件",
+      "affected_services": "受影響的服務",
+      "participants": "參與者",
+      "messages": "訊息",
+      "started": "開始時間",
+      "elapsed": "已用時間"
+    },
+    "empty_state": {
+      "title": "尚無作戰室",
+      "description": "開啟作戰室以協調事件回應。",
+      "no_matches": {
+        "title": "沒有相符的作戰室",
+        "description": "沒有作戰室符合目前的篩選條件。請調整或清除篩選條件。"
+      }
+    },
+    "create": {
+      "title": "建立作戰室",
+      "incident": "主要事件",
+      "select_incident": "選擇事件",
+      "incident_selected": "已選擇事件",
+      "incident_required": "請選擇主要事件以繼續。",
+      "name": "名稱",
+      "name_placeholder": "作戰室名稱",
+      "severity": "嚴重級別",
+      "severity_auto": "來自事件優先順序",
+      "services": "受影響的服務",
+      "description": "描述",
+      "submit": "建立作戰室",
+      "duplicate_title": "已存在處於作用中的作戰室",
+      "duplicate_description": "此事件已存在處於作用中的作戰室。",
+      "open_existing": "開啟作戰室"
+    },
+    "detail": {
+      "not_found_title": "作戰室不存在",
+      "not_found_description": "您尋找的作戰室不存在或已被刪除。",
+      "view_other_rooms": "檢視其他作戰室",
+      "back": "返回作戰室"
+    }
+  }
+}

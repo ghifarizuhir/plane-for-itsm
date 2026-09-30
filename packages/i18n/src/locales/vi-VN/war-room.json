@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Phòng ứng phó sự cố",
+    "add": "Tạo phòng ứng phó sự cố",
+    "open": "Mở phòng ứng phó sự cố",
+    "load_error": {
+      "title": "Không thể tải phòng ứng phó sự cố",
+      "description": "Đã xảy ra lỗi khi tải phòng ứng phó sự cố. Vui lòng thử lại.",
+      "retry": "Thử lại"
+    },
+    "tabs": {
+      "active": "Đang hoạt động",
+      "resolved": "Đã giải quyết",
+      "all": "Tất cả"
+    },
+    "search": {
+      "placeholder": "Tìm kiếm phòng ứng phó sự cố"
+    },
+    "summary": {
+      "active": "{count} đang hoạt động",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} đã giải quyết trong 7 ngày"
+    },
+    "status_values": {
+      "active": "Đang hoạt động",
+      "monitoring": "Đang theo dõi",
+      "resolved": "Đã giải quyết",
+      "archived": "Đã lưu trữ"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Chỉ huy sự cố",
+      "comms": "Truyền thông",
+      "scribe": "Thư ký",
+      "responder": "Người ứng phó"
+    },
+    "fields": {
+      "primary_incident": "Sự cố chính",
+      "affected_services": "Dịch vụ bị ảnh hưởng",
+      "participants": "Người tham gia",
+      "messages": "Tin nhắn",
+      "started": "Bắt đầu",
+      "elapsed": "Đã trôi qua"
+    },
+    "empty_state": {
+      "title": "Chưa có phòng ứng phó sự cố",
+      "description": "Mở phòng ứng phó sự cố để điều phối phản ứng sự cố.",
+      "no_matches": {
+        "title": "Không có phòng ứng phó sự cố phù hợp",
+        "description": "Không có phòng ứng phó sự cố nào khớp với bộ lọc hiện tại. Hãy điều chỉnh hoặc xóa bộ lọc."
+      }
+    },
+    "create": {
+      "title": "Tạo phòng ứng phó sự cố",
+      "incident": "Sự cố chính",
+      "select_incident": "Chọn sự cố",
+      "incident_selected": "Đã chọn sự cố",
+      "incident_required": "Chọn sự cố chính để tiếp tục.",
+      "name": "Tên",
+      "name_placeholder": "Tên phòng ứng phó sự cố",
+      "severity": "Mức độ nghiêm trọng",
+      "severity_auto": "Từ mức độ ưu tiên của sự cố",
+      "services": "Dịch vụ bị ảnh hưởng",
+      "description": "Mô tả",
+      "submit": "Tạo phòng ứng phó sự cố",
+      "duplicate_title": "Đã tồn tại phòng ứng phó sự cố đang hoạt động",
+      "duplicate_description": "Đã tồn tại phòng ứng phó sự cố đang hoạt động cho sự cố này.",
+      "open_existing": "Mở phòng ứng phó sự cố"
+    },
+    "detail": {
+      "not_found_title": "Phòng ứng phó sự cố không tồn tại",
+      "not_found_description": "Phòng ứng phó sự cố bạn tìm không tồn tại hoặc đã bị xóa.",
+      "view_other_rooms": "Xem các phòng ứng phó sự cố khác",
+      "back": "Quay lại các phòng ứng phó sự cố"
+    }
+  }
+}

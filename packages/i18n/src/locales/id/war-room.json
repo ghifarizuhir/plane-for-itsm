@@ -1,0 +1,82 @@
+{
+  "war_room": {
+    "title": "Ruang perang",
+    "add": "Buat ruang perang",
+    "open": "Buka ruang perang",
+    "load_error": {
+      "title": "Ruang perang tidak dapat dimuat",
+      "description": "Terjadi kesalahan saat memuat ruang perang. Silakan coba lagi.",
+      "retry": "Coba lagi"
+    },
+    "tabs": {
+      "active": "Aktif",
+      "resolved": "Terselesaikan",
+      "all": "Semua"
+    },
+    "search": {
+      "placeholder": "Cari ruang perang"
+    },
+    "summary": {
+      "active": "{count} aktif",
+      "sev1_2": "{count} SEV1–2",
+      "resolved_7d": "{count} terselesaikan dalam 7 hari"
+    },
+    "status_values": {
+      "active": "Aktif",
+      "monitoring": "Dipantau",
+      "resolved": "Terselesaikan",
+      "archived": "Diarsipkan"
+    },
+    "severity_values": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "roles": {
+      "commander": "Komandan Insiden",
+      "comms": "Komunikasi",
+      "scribe": "Pencatat",
+      "responder": "Penanggap"
+    },
+    "fields": {
+      "primary_incident": "Insiden utama",
+      "affected_services": "Layanan yang terdampak",
+      "participants": "Peserta",
+      "messages": "Pesan",
+      "started": "Dimulai",
+      "elapsed": "Berjalan"
+    },
+    "empty_state": {
+      "title": "Belum ada ruang perang",
+      "description": "Buka ruang perang untuk mengoordinasikan respons insiden.",
+      "no_matches": {
+        "title": "Tidak ada ruang perang yang cocok",
+        "description": "Tidak ada ruang perang yang sesuai dengan filter saat ini. Sesuaikan atau hapus filter."
+      }
+    },
+    "create": {
+      "title": "Buat ruang perang",
+      "incident": "Insiden utama",
+      "select_incident": "Pilih insiden",
+      "incident_selected": "Insiden dipilih",
+      "incident_required": "Pilih insiden utama untuk melanjutkan.",
+      "name": "Nama",
+      "name_placeholder": "Nama ruang perang",
+      "severity": "Tingkat keparahan",
+      "severity_auto": "Dari prioritas insiden",
+      "services": "Layanan yang terdampak",
+      "description": "Deskripsi",
+      "submit": "Buat ruang perang",
+      "duplicate_title": "Ruang perang aktif sudah ada",
+      "duplicate_description": "Ruang perang aktif sudah ada untuk insiden ini.",
+      "open_existing": "Buka ruang perang"
+    },
+    "detail": {
+      "not_found_title": "Ruang perang tidak ada",
+      "not_found_description": "Ruang perang yang Anda cari tidak ada atau telah dihapus.",
+      "view_other_rooms": "Lihat ruang perang lain",
+      "back": "Kembali ke ruang perang"
+    }
+  }
+}
