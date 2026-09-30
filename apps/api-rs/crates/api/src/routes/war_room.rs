@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{middleware::auth::AuthUser, routes::project::deny, state::AppState};
 
-use super::service::{bad_request, gate_member, validate_enum};
+use super::service::{bad_request, gate_member, gate_writer, validate_enum};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct WarRoomRow {
@@ -522,6 +522,285 @@ pub fn runbook_template(type_name: Option<&str>) -> Vec<(&'static str, &'static 
         ],
         _ => vec![],
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateWarRoom {
+    pub name: Option<String>,
+    pub primary_issue_id: Uuid,
+    pub severity: Option<String>,
+    pub description_html: Option<String>,
+    pub service_ids: Option<Vec<Uuid>>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct IssueSummaryRow {
+    pub id: Uuid,
+    pub name: String,
+    pub priority: String,
+    pub type_name: Option<String>,
+}
+
+async fn fetch_issue_summary(
+    pool: &PgPool,
+    project_id: Uuid,
+    issue_id: Uuid,
+) -> Result<Option<IssueSummaryRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT i.id, i.name, i.priority, t.name AS type_name \
+         FROM issues i LEFT JOIN issue_types t ON t.id = i.type_id AND t.deleted_at IS NULL \
+         WHERE i.id = $1 AND i.project_id = $2 AND i.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn issue_assignees(pool: &PgPool, issue_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT assignee_id FROM issue_assignees \
+         WHERE issue_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC",
+    )
+    .bind(issue_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn record_event(
+    pool: &PgPool,
+    room: &WarRoomRow,
+    actor: Uuid,
+    event_type: &str,
+    payload: Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO war_room_events (id, workspace_id, project_id, war_room_id, actor_id, \
+         event_type, payload, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())",
+    )
+    .bind(room.workspace_id)
+    .bind(room.project_id)
+    .bind(room.id)
+    .bind(actor)
+    .bind(event_type)
+    .bind(payload)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+async fn record_event_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    room: &WarRoomRow,
+    actor: Uuid,
+    event_type: &str,
+    payload: Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO war_room_events (id, workspace_id, project_id, war_room_id, actor_id, \
+         event_type, payload, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())",
+    )
+    .bind(room.workspace_id)
+    .bind(room.project_id)
+    .bind(room.id)
+    .bind(actor)
+    .bind(event_type)
+    .bind(payload)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Json(body): Json<CreateWarRoom>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(issue) = fetch_issue_summary(&st.pool, project_id, body.primary_issue_id).await? else {
+        return Ok(bad_request("Invalid primary_issue_id - object does not exist."));
+    };
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM war_rooms WHERE project_id = $1 AND primary_issue_id = $2 \
+         AND status IN ('active','monitoring') AND deleted_at IS NULL LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(body.primary_issue_id)
+    .fetch_optional(&st.pool)
+    .await?;
+    if let Some(existing_id) = existing {
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "active_war_room_exists", "war_room_id": existing_id
+            })),
+        ));
+    }
+    let name = body
+        .name
+        .clone()
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| issue.name.clone());
+    let severity = body
+        .severity
+        .clone()
+        .unwrap_or_else(|| severity_from_priority(&issue.priority).to_string());
+    if let Err(e) = validate_enum("severity", &severity, WAR_ROOM_SEVERITIES) {
+        return Ok(bad_request(e));
+    }
+    let service_ids = body.service_ids.clone().unwrap_or_default();
+    if !service_ids.is_empty() {
+        let valid: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM services WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(&service_ids)
+        .fetch_one(&st.pool)
+        .await?;
+        if valid as usize != service_ids.len() {
+            return Ok(bad_request("Invalid service_ids - object does not exist."));
+        }
+    }
+    let assignees = issue_assignees(&st.pool, body.primary_issue_id).await?;
+    let room_id = Uuid::new_v4();
+
+    let mut tx = st.pool.begin().await?;
+    sqlx::query("SELECT id FROM projects WHERE id = $1 FOR UPDATE")
+        .bind(project_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let sequence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM war_rooms WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let workspace_id: Uuid = sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO war_rooms (id, workspace_id, project_id, sequence_id, name, description_html, \
+         notes_html, severity, status, primary_issue_id, started_at, created_at, updated_at, \
+         created_by_id, updated_by_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, '', $7, 'active', $8, now(), now(), now(), $9, $9)",
+    )
+    .bind(room_id)
+    .bind(workspace_id)
+    .bind(project_id)
+    .bind(sequence)
+    .bind(&name)
+    .bind(body.description_html.clone().unwrap_or_default())
+    .bind(&severity)
+    .bind(body.primary_issue_id)
+    .bind(auth.0)
+    .execute(&mut *tx)
+    .await?;
+
+    let room = WarRoomRow {
+        id: room_id,
+        workspace_id,
+        project_id,
+        sequence_id: sequence,
+        name: name.clone(),
+        description_html: body.description_html.clone().unwrap_or_default(),
+        notes_html: String::new(),
+        severity: severity.clone(),
+        status: "active".to_string(),
+        primary_issue_id: body.primary_issue_id,
+        started_at: chrono::Utc::now(),
+        resolved_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        created_by_id: Some(auth.0),
+        updated_by_id: Some(auth.0),
+    };
+
+    let mut initial_participants: Vec<(Uuid, &str)> = vec![(auth.0, "commander")];
+    for assignee in assignees {
+        if assignee != auth.0 {
+            initial_participants.push((assignee, "responder"));
+        }
+    }
+    for (member_id, role) in &initial_participants {
+        sqlx::query(
+            "INSERT INTO war_room_participants (id, workspace_id, project_id, war_room_id, \
+             member_id, role, joined_at, created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now(), now(), $6, $6) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(room_id)
+        .bind(*member_id)
+        .bind(*role)
+        .bind(auth.0)
+        .execute(&mut *tx)
+        .await?;
+    }
+    for service_id in &service_ids {
+        sqlx::query(
+            "INSERT INTO war_room_services (id, workspace_id, project_id, war_room_id, service_id, \
+             created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), $5, $5) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(room_id)
+        .bind(service_id)
+        .bind(auth.0)
+        .execute(&mut *tx)
+        .await?;
+    }
+    let mut sort_order = 0.0_f64;
+    for (template_key, title) in runbook_template(issue.type_name.as_deref()) {
+        sort_order += 65535.0;
+        sqlx::query(
+            "INSERT INTO war_room_runbook_items (id, workspace_id, project_id, war_room_id, title, \
+             sort_order, is_done, template_key, created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, $6, now(), now(), $7, $7)",
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(room_id)
+        .bind(title)
+        .bind(sort_order)
+        .bind(template_key)
+        .bind(auth.0)
+        .execute(&mut *tx)
+        .await?;
+    }
+    record_event_tx(
+        &mut tx,
+        &room,
+        auth.0,
+        "room.created",
+        serde_json::json!({
+            "name": name, "severity": severity, "primary_issue_id": body.primary_issue_id
+        }),
+    )
+    .await?;
+    for (member_id, role) in &initial_participants {
+        record_event_tx(
+            &mut tx,
+            &room,
+            auth.0,
+            "participant.joined",
+            serde_json::json!({ "member_id": member_id, "role": role }),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+
+    let row = fetch_room(&st.pool, project_id, room_id)
+        .await?
+        .expect("room just inserted");
+    let detail = room_detail_json(&st.pool, &row).await?;
+    Ok((StatusCode::CREATED, Json(detail)))
 }
 
 #[cfg(test)]
