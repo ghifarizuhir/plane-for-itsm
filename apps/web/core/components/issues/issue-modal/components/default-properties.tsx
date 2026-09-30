@@ -33,6 +33,7 @@ import { ServiceMultiSelect } from "@/components/services/select";
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useProject } from "@/hooks/store/use-project";
+import { useProjectState } from "@/hooks/store/use-project-state";
 import { useService } from "@/hooks/store/use-service";
 import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -85,6 +86,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const { fetchedMap, workItemLinkMap } = useService();
   const { selectedServiceIds, setSelectedServiceIds } = useIssueModal();
   const { fetchWorkflowMap, getWorkflowMap } = useWorkflow();
+  const { getStateById } = useProjectState();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
   // form context
@@ -92,6 +94,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   // derived values
   const projectDetails = getProjectById(projectId);
   const typeId = watch("type_id");
+  const selectedStateId = watch("state_id");
   const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
   const workflowMapTypes = workflowMap?.types ?? [];
 
@@ -125,6 +128,14 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
       timers.clear();
     };
   }, []);
+
+  // a quick-add column can prefill a typed state without its type (e.g. composite
+  // workflow state column); derive the type so create never sends an invalid pair
+  useEffect(() => {
+    if (id || typeId || !selectedStateId) return;
+    const derivedTypeId = getStateById(selectedStateId)?.type_id;
+    if (derivedTypeId) setValue("type_id", derivedTypeId, { shouldValidate: true });
+  }, [id, typeId, selectedStateId, getStateById, setValue]);
 
   // clear the chosen services when the create modal switches project
   useEffect(() => {
