@@ -38,6 +38,7 @@ type Props = {
   workspaceLevelToggle?: boolean;
   shouldHideIssue?: (issue: ISearchIssueResponse) => boolean;
   selectedWorkItemIds?: string[];
+  selectionMode?: "multiple" | "single";
   workItemSearchServiceCallback?: (params: TProjectIssuesSearchParams) => Promise<ISearchIssueResponse[]>;
 };
 
@@ -56,6 +57,7 @@ export function ExistingIssuesListModal(props: Props) {
     workspaceLevelToggle = false,
     shouldHideIssue,
     selectedWorkItemIds,
+    selectionMode = "multiple",
     workItemSearchServiceCallback,
   } = props;
   // states
@@ -79,6 +81,14 @@ export function ExistingIssuesListModal(props: Props) {
     hasInitializedSelection.current = false;
   };
 
+  const submitIssues = async (issuesToSubmit: ISearchIssueResponse[]) => {
+    setIsSubmitting(true);
+
+    await handleOnSubmit(issuesToSubmit).finally(() => setIsSubmitting(false));
+
+    handleClose();
+  };
+
   const onSubmit = async () => {
     if (selectedIssues.length === 0) {
       setToast({
@@ -90,11 +100,19 @@ export function ExistingIssuesListModal(props: Props) {
       return;
     }
 
-    setIsSubmitting(true);
+    await submitIssues(selectedIssues);
+  };
 
-    await handleOnSubmit(selectedIssues).finally(() => setIsSubmitting(false));
-
-    handleClose();
+  const handleSelectIssue = (issue: ISearchIssueResponse | null) => {
+    if (issue === null) return;
+    if (selectionMode === "single") {
+      if (isSubmitting) return;
+      void submitIssues([issue]);
+      return;
+    }
+    if (selectedIssues.some((i) => i.id === issue.id))
+      setSelectedIssues((prevData) => prevData.filter((i) => i.id !== issue.id));
+    else setSelectedIssues((prevData) => [...prevData, issue]);
   };
 
   const handleSearch = () => {
@@ -129,23 +147,17 @@ export function ExistingIssuesListModal(props: Props) {
     }
   }, [isOpen, issues, selectedWorkItemIds]);
 
+  // handleSearch is defined inline on purpose; adding it to deps would refetch on every render.
   useEffect(() => {
     handleSearch();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchTerm, isOpen, isWorkspaceLevel, projectId, workspaceSlug]);
 
   const filteredIssues = issues.filter((issue) => !shouldHideIssue?.(issue));
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
-      <Combobox
-        as="div"
-        onChange={(val: ISearchIssueResponse | null) => {
-          if (val === null) return;
-          if (selectedIssues.some((i) => i.id === val.id))
-            setSelectedIssues((prevData) => prevData.filter((i) => i.id !== val.id));
-          else setSelectedIssues((prevData) => [...prevData, val]);
-        }}
-      >
+      <Combobox as="div" onChange={handleSelectIssue}>
         <div className="relative m-1">
           <SearchOutline
             className="text-opacity-40 pointer-events-none absolute top-3.5 left-4 h-5 w-5 text-primary"
@@ -161,36 +173,37 @@ export function ExistingIssuesListModal(props: Props) {
         </div>
 
         <div className="flex flex-col-reverse gap-4 p-2 text-13 text-secondary sm:flex-row sm:items-center sm:justify-between">
-          {selectedIssues.length > 0 ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              {selectedIssues.map((issue) => (
-                <div
-                  key={issue.id}
-                  className="flex items-center gap-1 rounded-md border border-subtle bg-layer-1 py-1 pl-2 text-11 whitespace-nowrap text-primary"
-                >
-                  <IssueIdentifier
-                    projectId={issue.project_id}
-                    issueTypeId={issue.type_id}
-                    projectIdentifier={issue.project__identifier}
-                    issueSequenceId={issue.sequence_id}
-                    size="xs"
-                    variant="secondary"
-                  />
-                  <button
-                    type="button"
-                    className="group p-1"
-                    onClick={() => setSelectedIssues((prevData) => prevData.filter((i) => i.id !== issue.id))}
+          {selectionMode === "multiple" &&
+            (selectedIssues.length > 0 ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {selectedIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className="flex items-center gap-1 rounded-md border border-subtle bg-layer-1 py-1 pl-2 text-11 whitespace-nowrap text-primary"
                   >
-                    <CloseOutline className="h-3 w-3 text-secondary group-hover:text-primary" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="w-min rounded-md border border-subtle bg-layer-1 p-2 text-11 whitespace-nowrap">
-              {t("issue.select.empty")}
-            </div>
-          )}
+                    <IssueIdentifier
+                      projectId={issue.project_id}
+                      issueTypeId={issue.type_id}
+                      projectIdentifier={issue.project__identifier}
+                      issueSequenceId={issue.sequence_id}
+                      size="xs"
+                      variant="secondary"
+                    />
+                    <button
+                      type="button"
+                      className="group p-1"
+                      onClick={() => setSelectedIssues((prevData) => prevData.filter((i) => i.id !== issue.id))}
+                    >
+                      <CloseOutline className="h-3 w-3 text-secondary group-hover:text-primary" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="w-min rounded-md border border-subtle bg-layer-1 p-2 text-11 whitespace-nowrap">
+                {t("issue.select.empty")}
+              </div>
+            ))}
           {workspaceLevelToggle && (
             <Tooltip label="Toggle workspace level search" disabled={isMobile}>
               <div
@@ -268,7 +281,7 @@ export function ExistingIssuesListModal(props: Props) {
                         }
                       >
                         <div className="flex items-center gap-2 truncate">
-                          <input type="checkbox" checked={selected} readOnly />
+                          {selectionMode === "multiple" && <input type="checkbox" checked={selected} readOnly />}
                           <span
                             className="block h-1.5 w-1.5 flex-shrink-0 rounded-full"
                             style={{
@@ -312,27 +325,33 @@ export function ExistingIssuesListModal(props: Props) {
         </Combobox.Options>
       </Combobox>
       <div className="flex items-center justify-between p-3">
-        <Button
-          variant="link"
-          onClick={handleSelectIssues}
-          disabled={filteredIssues.length === 0}
-          className={filteredIssues.length === 0 ? "p-0" : ""}
-        >
-          {selectedIssues.length === issues.length ? t("issue.select.deselect_all") : t("issue.select.select_all")}
-        </Button>
+        {selectionMode === "multiple" ? (
+          <Button
+            variant="link"
+            onClick={handleSelectIssues}
+            disabled={filteredIssues.length === 0}
+            className={filteredIssues.length === 0 ? "p-0" : ""}
+          >
+            {selectedIssues.length === issues.length ? t("issue.select.deselect_all") : t("issue.select.select_all")}
+          </Button>
+        ) : (
+          <span />
+        )}
         <div className="flex items-center justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>
             {t("common.cancel")}
           </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={onSubmit}
-            loading={isSubmitting}
-            disabled={isSubmitting || selectedIssues.length === 0}
-          >
-            {isSubmitting ? t("common.adding") : t("issue.select.add_selected")}
-          </Button>
+          {selectionMode === "multiple" && (
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={onSubmit}
+              loading={isSubmitting}
+              disabled={isSubmitting || selectedIssues.length === 0}
+            >
+              {isSubmitting ? t("common.adding") : t("issue.select.add_selected")}
+            </Button>
+          )}
         </div>
       </div>
     </ModalCore>
