@@ -11,6 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import {
+  AlertOctagonOutline,
   CyclesOutline,
   IntakeOutline,
   ModuleOutline,
@@ -119,6 +120,17 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         // temporary: always visible until the backend ships service_view
         shouldRender: project?.service_view ?? true,
         sortOrder: 4,
+      },
+      {
+        i18n_key: "sidebar.war_rooms",
+        key: "war-rooms",
+        name: "War rooms",
+        href: `/${workspaceSlug}/projects/${projectId}/war-rooms`,
+        icon: AlertOctagonOutline,
+        // guest hanya baca; item tetap tampil untuk guest
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: true,
+        sortOrder: 4.5,
       },
       {
         i18n_key: "sidebar.views",
