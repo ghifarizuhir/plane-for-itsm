@@ -1977,6 +1977,87 @@ pub async fn messages_create(
     Ok((StatusCode::CREATED, Json(data)))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct MessagePatch {
+    pub body: String,
+}
+
+pub async fn messages_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, message_id)): Path<(String, Uuid, Uuid, Uuid)>,
+    Json(body): Json<MessagePatch>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let Some(current) = fetch_message(&st.pool, room.id, message_id).await? else {
+        return Ok(missing());
+    };
+    if current.author_id != Some(auth.0) {
+        return Ok(deny());
+    }
+    let body_text = body.body.trim().to_string();
+    if body_text.is_empty() {
+        return Ok(bad_request("Invalid body"));
+    }
+    // Mentions are re-parsed so chips stay correct, but edits never create
+    // new notifications (avoids mention-spam on every edit).
+    let mentioned =
+        valid_mention_members(&st.pool, room.workspace_id, &parse_mentions(&body_text)).await?;
+    sqlx::query(
+        "UPDATE war_room_messages SET body = $1, mentions = $2, edited_at = now(), \
+         updated_at = now(), updated_by_id = $3 \
+         WHERE id = $4 AND war_room_id = $5 AND deleted_at IS NULL",
+    )
+    .bind(&body_text)
+    .bind(serde_json::json!(mentioned))
+    .bind(auth.0)
+    .bind(message_id)
+    .bind(room.id)
+    .execute(&st.pool)
+    .await?;
+    let row = fetch_message(&st.pool, room.id, message_id)
+        .await?
+        .expect("message just updated");
+    publish_war_room_event(&st, room.id, "message.updated", message_json(&row)).await;
+    Ok((StatusCode::OK, Json(message_json(&row))))
+}
+
+pub async fn messages_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, message_id)): Path<(String, Uuid, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let Some(current) = fetch_message(&st.pool, room.id, message_id).await? else {
+        return Ok((StatusCode::NO_CONTENT, Json(Value::Null)));
+    };
+    if current.author_id != Some(auth.0) {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE war_room_messages SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND war_room_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(message_id)
+    .bind(room.id)
+    .execute(&st.pool)
+    .await?;
+    publish_war_room_event(
+        &st,
+        room.id,
+        "message.deleted",
+        serde_json::json!({ "id": message_id, "war_room_id": room.id }),
+    )
+    .await;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
