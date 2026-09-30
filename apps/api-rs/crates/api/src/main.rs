@@ -736,6 +736,60 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/service-issues/:pk/",
             delete(routes::service::issue_destroy),
         )
+        // War rooms (ITSM incident command rooms). Session auth;
+        // project-scoped. Reads = any active member (incl. guest), writes =
+        // project ADMIN/MEMBER. Real-time relay lives in apps/live (phase 2).
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/",
+            get(routes::war_room::list).post(routes::war_room::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/summary/",
+            get(routes::war_room::summary),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/",
+            get(routes::war_room::detail)
+                .patch(routes::war_room::patch)
+                .delete(routes::war_room::destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/services/",
+            post(routes::war_room::services_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/services/:service_id/",
+            delete(routes::war_room::services_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/issues/",
+            post(routes::war_room::issues_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/issues/:issue_id/",
+            delete(routes::war_room::issues_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/participants/",
+            post(routes::war_room::participants_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/participants/:participant_id/",
+            patch(routes::war_room::participants_patch)
+                .delete(routes::war_room::participants_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/runbook-items/",
+            post(routes::war_room::runbook_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/runbook-items/:item_id/",
+            patch(routes::war_room::runbook_patch).delete(routes::war_room::runbook_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/events/",
+            get(routes::war_room::events_list),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror

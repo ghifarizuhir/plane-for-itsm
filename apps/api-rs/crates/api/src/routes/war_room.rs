@@ -1512,6 +1512,52 @@ pub async fn runbook_destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct EventsParams {
+    pub before_id: Option<Uuid>,
+    pub limit: Option<i64>,
+}
+
+pub async fn events_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Query(params): Query<EventsParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(_room) = fetch_room(&st.pool, project_id, pk).await? else {
+        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+    };
+    let cursor: Option<(chrono::DateTime<chrono::Utc>, Uuid)> = match params.before_id {
+        Some(before_id) => {
+            sqlx::query_as("SELECT created_at, id FROM war_room_events WHERE id = $1 AND war_room_id = $2")
+                .bind(before_id)
+                .bind(pk)
+                .fetch_optional(&st.pool)
+                .await?
+        }
+        None => None,
+    };
+    let limit = params.limit.unwrap_or(50).clamp(1, 200);
+    let rows: Vec<WarRoomEventRow> = sqlx::query_as(
+        "SELECT e.id, e.actor_id, e.event_type, e.payload, e.created_at FROM war_room_events e \
+         WHERE e.war_room_id = $1 \
+         AND ($2::timestamptz IS NULL OR (e.created_at, e.id) < ($2::timestamptz, $3::uuid)) \
+         ORDER BY e.created_at DESC, e.id DESC LIMIT $4",
+    )
+    .bind(pk)
+    .bind(cursor.as_ref().map(|c| c.0))
+    .bind(cursor.as_ref().map(|c| c.1))
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(event_json).collect())),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
