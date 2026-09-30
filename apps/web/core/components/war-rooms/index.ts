@@ -12,3 +12,6 @@ export * from "./list/war-room-view-header";
 export * from "./list/war-rooms-board";
 export * from "./list/war-rooms-board-row";
 export * from "./list/war-rooms-list-view";
+export * from "./room/detail-header";
+export * from "./room/room-overview";
+export * from "./room/root";
