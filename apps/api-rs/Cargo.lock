@@ -128,6 +128,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "common",
+ "futures",
  "hex",
  "hmac",
  "jsonwebtoken",
