@@ -10,7 +10,11 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{middleware::auth::AuthUser, routes::project::{deny, missing}, state::AppState};
+use crate::{
+    middleware::auth::AuthUser,
+    routes::project::{deny, missing},
+    state::AppState,
+};
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin};
 use super::service::{bad_request, gate_member, gate_writer, validate_enum};
@@ -136,7 +140,11 @@ pub fn event_json(r: &WarRoomEventRow) -> Value {
     })
 }
 
-async fn fetch_room(pool: &PgPool, project_id: Uuid, pk: Uuid) -> Result<Option<WarRoomRow>, sqlx::Error> {
+async fn fetch_room(
+    pool: &PgPool,
+    project_id: Uuid,
+    pk: Uuid,
+) -> Result<Option<WarRoomRow>, sqlx::Error> {
     sqlx::query_as(&format!(
         "{WAR_ROOM_SELECT} WHERE r.id = $1 AND r.project_id = $2 AND r.deleted_at IS NULL"
     ))
@@ -171,7 +179,10 @@ async fn room_issues(pool: &PgPool, room_id: Uuid) -> Result<Vec<LinkedIssueRow>
     .await
 }
 
-pub async fn room_participants(pool: &PgPool, room_id: Uuid) -> Result<Vec<ParticipantRow>, sqlx::Error> {
+pub async fn room_participants(
+    pool: &PgPool,
+    room_id: Uuid,
+) -> Result<Vec<ParticipantRow>, sqlx::Error> {
     sqlx::query_as(
         "SELECT p.id, p.member_id, p.role, p.joined_at, u.display_name, \
          CASE WHEN u.avatar_asset_id IS NOT NULL \
@@ -184,7 +195,10 @@ pub async fn room_participants(pool: &PgPool, room_id: Uuid) -> Result<Vec<Parti
     .await
 }
 
-pub async fn room_runbook(pool: &PgPool, room_id: Uuid) -> Result<Vec<RunbookItemRow>, sqlx::Error> {
+pub async fn room_runbook(
+    pool: &PgPool,
+    room_id: Uuid,
+) -> Result<Vec<RunbookItemRow>, sqlx::Error> {
     sqlx::query_as(
         "SELECT id, title, sort_order, is_done, done_by_id, done_at, template_key \
          FROM war_room_runbook_items WHERE war_room_id = $1 AND deleted_at IS NULL \
@@ -204,7 +218,11 @@ async fn message_count(pool: &PgPool, room_id: Uuid) -> Result<i64, sqlx::Error>
     .await
 }
 
-async fn primary_issue_json(pool: &PgPool, project_id: Uuid, issue_id: Uuid) -> Result<Option<Value>, sqlx::Error> {
+async fn primary_issue_json(
+    pool: &PgPool,
+    project_id: Uuid,
+    issue_id: Uuid,
+) -> Result<Option<Value>, sqlx::Error> {
     let row: Option<(Uuid, String, String, String, Option<String>)> = sqlx::query_as(
         "SELECT i.id, p.identifier || '-' || i.sequence_id, i.name, i.priority, s.\"group\" \
          FROM issues i JOIN projects p ON p.id = i.project_id \
@@ -254,7 +272,12 @@ pub struct ListParams {
 fn parse_csv(value: &Option<String>) -> Vec<String> {
     value
         .as_deref()
-        .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .map(|v| {
+            v.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -287,9 +310,22 @@ pub async fn list(
             return Ok(bad_request(e));
         }
     }
-    let q = params.q.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
-    let status_filter = if statuses.is_empty() { None } else { Some(statuses) };
-    let severity_filter = if severities.is_empty() { None } else { Some(severities) };
+    let q = params
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let status_filter = if statuses.is_empty() {
+        None
+    } else {
+        Some(statuses)
+    };
+    let severity_filter = if severities.is_empty() {
+        None
+    } else {
+        Some(severities)
+    };
 
     let rooms: Vec<WarRoomRow> = sqlx::query_as(&format!(
         "{WAR_ROOM_SELECT} WHERE r.project_id = $1 AND r.deleted_at IS NULL \
@@ -325,7 +361,10 @@ pub async fn list(
         .map(|(room_id, id, name, status)| (room_id, RoomServiceRow { id, name, status }))
         .collect::<Vec<_>>(),
     );
-    let primary_issues: HashMap<Uuid, Value> = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Option<String>)>(
+    let primary_issues: HashMap<Uuid, Value> = sqlx::query_as::<
+        _,
+        (Uuid, Uuid, String, String, String, Option<String>),
+    >(
         "SELECT r.id, i.id, p.identifier || '-' || i.sequence_id, i.name, i.priority, s.\"group\" \
          FROM war_rooms r JOIN issues i ON i.id = r.primary_issue_id \
          JOIN projects p ON p.id = i.project_id \
@@ -336,15 +375,17 @@ pub async fn list(
     .fetch_all(&st.pool)
     .await?
     .into_iter()
-    .map(|(room_id, issue_id, identifier, name, priority, state_group)| {
-        (
-            room_id,
-            serde_json::json!({
-                "id": issue_id, "identifier": identifier, "name": name,
-                "priority": priority, "state_group": state_group,
-            }),
-        )
-    })
+    .map(
+        |(room_id, issue_id, identifier, name, priority, state_group)| {
+            (
+                room_id,
+                serde_json::json!({
+                    "id": issue_id, "identifier": identifier, "name": name,
+                    "priority": priority, "state_group": state_group,
+                }),
+            )
+        },
+    )
     .collect();
     let participants: HashMap<Uuid, Vec<ParticipantRow>> = rooms_by_room_id(
         sqlx::query_as(
@@ -383,21 +424,22 @@ pub async fn list(
     .await?
     .into_iter()
     .collect();
-    let last_activity: HashMap<Uuid, chrono::DateTime<chrono::Utc>> = sqlx::query_as::<_, (Uuid, Option<chrono::DateTime<chrono::Utc>>)>(
-        "SELECT room_id, MAX(ts) FROM ( \
+    let last_activity: HashMap<Uuid, chrono::DateTime<chrono::Utc>> =
+        sqlx::query_as::<_, (Uuid, Option<chrono::DateTime<chrono::Utc>>)>(
+            "SELECT room_id, MAX(ts) FROM ( \
             SELECT war_room_id AS room_id, MAX(created_at) AS ts FROM war_room_messages \
             WHERE war_room_id = ANY($1) AND deleted_at IS NULL GROUP BY war_room_id \
             UNION ALL \
             SELECT war_room_id, MAX(created_at) FROM war_room_events \
             WHERE war_room_id = ANY($1) GROUP BY war_room_id \
          ) x GROUP BY room_id",
-    )
-    .bind(&room_ids)
-    .fetch_all(&st.pool)
-    .await?
-    .into_iter()
-    .filter_map(|(room_id, ts)| ts.map(|t| (room_id, t)))
-    .collect();
+        )
+        .bind(&room_ids)
+        .fetch_all(&st.pool)
+        .await?
+        .into_iter()
+        .filter_map(|(room_id, ts)| ts.map(|t| (room_id, t)))
+        .collect();
 
     let items: Vec<Value> = rooms
         .iter()
@@ -410,7 +452,8 @@ pub async fn list(
             json["participants"] = Value::Array(parts.iter().map(participant_json).collect());
             json["service_count"] = serde_json::json!(svc.len());
             json["participant_count"] = serde_json::json!(parts.len());
-            json["message_count"] = serde_json::json!(message_counts.get(&r.id).copied().unwrap_or(0));
+            json["message_count"] =
+                serde_json::json!(message_counts.get(&r.id).copied().unwrap_or(0));
             json["last_activity_at"] = serde_json::json!(last_activity.get(&r.id));
             json
         })
@@ -621,8 +664,11 @@ pub async fn create(
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    let Some(issue) = fetch_issue_summary(&st.pool, project_id, body.primary_issue_id).await? else {
-        return Ok(bad_request("Invalid primary_issue_id - object does not exist."));
+    let Some(issue) = fetch_issue_summary(&st.pool, project_id, body.primary_issue_id).await?
+    else {
+        return Ok(bad_request(
+            "Invalid primary_issue_id - object does not exist.",
+        ));
     };
     let existing: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM war_rooms WHERE project_id = $1 AND primary_issue_id = $2 \
@@ -822,7 +868,10 @@ pub async fn detail(
         return Ok(deny());
     }
     let Some(room) = fetch_room(&st.pool, project_id, pk).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "War room not found"})),
+        ));
     };
     let detail = room_detail_json(&st.pool, &room).await?;
     Ok((StatusCode::OK, Json(detail)))
@@ -838,20 +887,32 @@ pub async fn patch(
         return Ok(deny());
     }
     let Some(current) = fetch_room(&st.pool, project_id, pk).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "War room not found"})),
+        ));
     };
     if current.status == "archived" {
-        return Ok((StatusCode::CONFLICT, Json(serde_json::json!({"error": "room_archived"}))));
+        return Ok((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "room_archived"})),
+        ));
     }
     let name = body.name.clone().unwrap_or_else(|| current.name.clone());
     if name.trim().is_empty() {
         return Ok(bad_request("Invalid name"));
     }
-    let severity = body.severity.clone().unwrap_or_else(|| current.severity.clone());
+    let severity = body
+        .severity
+        .clone()
+        .unwrap_or_else(|| current.severity.clone());
     if let Err(e) = validate_enum("severity", &severity, WAR_ROOM_SEVERITIES) {
         return Ok(bad_request(e));
     }
-    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    let status = body
+        .status
+        .clone()
+        .unwrap_or_else(|| current.status.clone());
     if let Err(e) = validate_enum("status", &status, WAR_ROOM_STATUSES) {
         return Ok(bad_request(e));
     }
@@ -862,7 +923,10 @@ pub async fn patch(
         .description_html
         .clone()
         .unwrap_or_else(|| current.description_html.clone());
-    let notes_html = body.notes_html.clone().unwrap_or_else(|| current.notes_html.clone());
+    let notes_html = body
+        .notes_html
+        .clone()
+        .unwrap_or_else(|| current.notes_html.clone());
     let resolved_at = match status.as_str() {
         "resolved" => current.resolved_at.or(Some(chrono::Utc::now())),
         "active" | "monitoring" => None,
@@ -909,7 +973,14 @@ pub async fn patch(
             _ => None,
         };
         if let Some(event_type) = specific {
-            record_event(&st.pool, &current, auth.0, event_type, serde_json::json!({})).await?;
+            record_event(
+                &st.pool,
+                &current,
+                auth.0,
+                event_type,
+                serde_json::json!({}),
+            )
+            .await?;
         }
     }
     let row = fetch_room(&st.pool, project_id, pk)
@@ -1064,7 +1135,10 @@ pub async fn services_create(
         )
         .await?;
     }
-    Ok((StatusCode::CREATED, Json(serde_json::json!({ "linked": linked }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "linked": linked })),
+    ))
 }
 
 pub async fn services_destroy(
@@ -1150,7 +1224,10 @@ pub async fn issues_create(
         )
         .await?;
     }
-    Ok((StatusCode::CREATED, Json(serde_json::json!({ "linked": linked }))))
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "linked": linked })),
+    ))
 }
 
 pub async fn issues_destroy(
@@ -1227,7 +1304,8 @@ pub async fn participants_create(
     if let Err(e) = validate_enum("role", &role, PARTICIPANT_ROLES) {
         return Ok(bad_request(e));
     }
-    let project_role = fetch_project_member_role(&st.pool, body.member_id, &slug, project_id).await?;
+    let project_role =
+        fetch_project_member_role(&st.pool, body.member_id, &slug, project_id).await?;
     let ws_admin = is_workspace_admin(&st.pool, body.member_id, &slug).await?;
     if project_role.is_none() && !ws_admin {
         return Ok(bad_request("Invalid member_id - not a project member."));
@@ -1476,7 +1554,11 @@ pub async fn runbook_patch(
     .execute(&st.pool)
     .await?;
     if is_done != current.is_done {
-        let event_type = if is_done { "runbook.item_done" } else { "runbook.item_reopened" };
+        let event_type = if is_done {
+            "runbook.item_done"
+        } else {
+            "runbook.item_reopened"
+        };
         record_event(
             &st.pool,
             &room,
@@ -1528,15 +1610,20 @@ pub async fn events_list(
         return Ok(deny());
     }
     let Some(_room) = fetch_room(&st.pool, project_id, pk).await? else {
-        return Ok((StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "War room not found"}))));
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "War room not found"})),
+        ));
     };
     let cursor: Option<(chrono::DateTime<chrono::Utc>, Uuid)> = match params.before_id {
         Some(before_id) => {
-            sqlx::query_as("SELECT created_at, id FROM war_room_events WHERE id = $1 AND war_room_id = $2")
-                .bind(before_id)
-                .bind(pk)
-                .fetch_optional(&st.pool)
-                .await?
+            sqlx::query_as(
+                "SELECT created_at, id FROM war_room_events WHERE id = $1 AND war_room_id = $2",
+            )
+            .bind(before_id)
+            .bind(pk)
+            .fetch_optional(&st.pool)
+            .await?
         }
         None => None,
     };
