@@ -1,3 +1,459 @@
+use std::collections::HashMap;
+
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
+use serde::Deserialize;
+use serde_json::Value;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::{middleware::auth::AuthUser, routes::project::deny, state::AppState};
+
+use super::service::{bad_request, gate_member, validate_enum};
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WarRoomRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub project_id: Uuid,
+    pub sequence_id: i64,
+    pub name: String,
+    pub description_html: String,
+    pub notes_html: String,
+    pub severity: String,
+    pub status: String,
+    pub primary_issue_id: Uuid,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub resolved_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by_id: Option<Uuid>,
+    pub updated_by_id: Option<Uuid>,
+}
+
+const WAR_ROOM_SELECT: &str = "SELECT r.id, r.workspace_id, r.project_id, r.sequence_id, \
+    r.name, r.description_html, r.notes_html, r.severity, r.status, r.primary_issue_id, \
+    r.started_at, r.resolved_at, r.created_at, r.updated_at, r.created_by_id, r.updated_by_id \
+    FROM war_rooms r";
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct RoomServiceRow {
+    id: Uuid,
+    name: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct LinkedIssueRow {
+    id: Uuid,
+    identifier: String,
+    name: String,
+    priority: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ParticipantRow {
+    pub id: Uuid,
+    pub member_id: Uuid,
+    pub role: String,
+    pub joined_at: chrono::DateTime<chrono::Utc>,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct RunbookItemRow {
+    pub id: Uuid,
+    pub title: String,
+    pub sort_order: f64,
+    pub is_done: bool,
+    pub done_by_id: Option<Uuid>,
+    pub done_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub template_key: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WarRoomEventRow {
+    pub id: Uuid,
+    pub actor_id: Option<Uuid>,
+    pub event_type: String,
+    pub payload: Value,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub fn room_base_json(r: &WarRoomRow) -> Value {
+    serde_json::json!({
+        "id": r.id,
+        "workspace_id": r.workspace_id,
+        "project_id": r.project_id,
+        "sequence_id": r.sequence_id,
+        "name": r.name,
+        "description_html": r.description_html,
+        "notes_html": r.notes_html,
+        "severity": r.severity,
+        "status": r.status,
+        "primary_issue_id": r.primary_issue_id,
+        "started_at": r.started_at,
+        "resolved_at": r.resolved_at,
+        "created_at": r.created_at,
+        "updated_at": r.updated_at,
+        "created_by": r.created_by_id,
+    })
+}
+
+fn service_json(r: &RoomServiceRow) -> Value {
+    serde_json::json!({ "id": r.id, "name": r.name, "status": r.status })
+}
+
+fn linked_issue_json(r: &LinkedIssueRow) -> Value {
+    serde_json::json!({
+        "id": r.id, "identifier": r.identifier, "name": r.name, "priority": r.priority
+    })
+}
+
+pub fn participant_json(r: &ParticipantRow) -> Value {
+    serde_json::json!({
+        "id": r.id, "member_id": r.member_id, "role": r.role, "joined_at": r.joined_at,
+        "display_name": r.display_name, "avatar_url": r.avatar_url,
+    })
+}
+
+pub fn runbook_item_json(r: &RunbookItemRow) -> Value {
+    serde_json::json!({
+        "id": r.id, "title": r.title, "sort_order": r.sort_order, "is_done": r.is_done,
+        "done_by_id": r.done_by_id, "done_at": r.done_at, "template_key": r.template_key,
+    })
+}
+
+pub fn event_json(r: &WarRoomEventRow) -> Value {
+    serde_json::json!({
+        "id": r.id, "actor_id": r.actor_id, "event_type": r.event_type,
+        "payload": r.payload, "created_at": r.created_at,
+    })
+}
+
+async fn fetch_room(pool: &PgPool, project_id: Uuid, pk: Uuid) -> Result<Option<WarRoomRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{WAR_ROOM_SELECT} WHERE r.id = $1 AND r.project_id = $2 AND r.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn room_services(pool: &PgPool, room_id: Uuid) -> Result<Vec<RoomServiceRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT s.id, s.name, s.status FROM war_room_services l \
+         JOIN services s ON s.id = l.service_id \
+         WHERE l.war_room_id = $1 AND l.deleted_at IS NULL AND s.deleted_at IS NULL \
+         ORDER BY s.name ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn room_issues(pool: &PgPool, room_id: Uuid) -> Result<Vec<LinkedIssueRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT i.id, p.identifier || '-' || i.sequence_id AS identifier, i.name, i.priority \
+         FROM war_room_issues l JOIN issues i ON i.id = l.issue_id \
+         JOIN projects p ON p.id = i.project_id \
+         WHERE l.war_room_id = $1 AND l.deleted_at IS NULL AND i.deleted_at IS NULL \
+         ORDER BY l.created_at ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn room_participants(pool: &PgPool, room_id: Uuid) -> Result<Vec<ParticipantRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT p.id, p.member_id, p.role, p.joined_at, u.display_name, \
+         CASE WHEN u.avatar_asset_id IS NOT NULL \
+           THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS avatar_url \
+         FROM war_room_participants p JOIN users u ON u.id = p.member_id \
+         WHERE p.war_room_id = $1 AND p.deleted_at IS NULL ORDER BY p.joined_at ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn room_runbook(pool: &PgPool, room_id: Uuid) -> Result<Vec<RunbookItemRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id, title, sort_order, is_done, done_by_id, done_at, template_key \
+         FROM war_room_runbook_items WHERE war_room_id = $1 AND deleted_at IS NULL \
+         ORDER BY sort_order ASC, created_at ASC",
+    )
+    .bind(room_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn message_count(pool: &PgPool, room_id: Uuid) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM war_room_messages WHERE war_room_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(room_id)
+    .fetch_one(pool)
+    .await
+}
+
+async fn primary_issue_json(pool: &PgPool, project_id: Uuid, issue_id: Uuid) -> Result<Option<Value>, sqlx::Error> {
+    let row: Option<(Uuid, String, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT i.id, p.identifier || '-' || i.sequence_id, i.name, i.priority, s.\"group\" \
+         FROM issues i JOIN projects p ON p.id = i.project_id \
+         LEFT JOIN states s ON s.id = i.state_id \
+         WHERE i.id = $1 AND i.project_id = $2 AND i.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(id, identifier, name, priority, state_group)| {
+        serde_json::json!({
+            "id": id, "identifier": identifier, "name": name,
+            "priority": priority, "state_group": state_group,
+        })
+    }))
+}
+
+pub async fn room_detail_json(pool: &PgPool, room: &WarRoomRow) -> Result<Value, sqlx::Error> {
+    let services = room_services(pool, room.id).await?;
+    let issues = room_issues(pool, room.id).await?;
+    let participants = room_participants(pool, room.id).await?;
+    let runbook = room_runbook(pool, room.id).await?;
+    let messages = message_count(pool, room.id).await?;
+    let primary_issue = primary_issue_json(pool, room.project_id, room.primary_issue_id).await?;
+    let mut json = room_base_json(room);
+    json["primary_issue"] = primary_issue.unwrap_or(Value::Null);
+    json["services"] = Value::Array(services.iter().map(service_json).collect());
+    json["issues"] = Value::Array(issues.iter().map(linked_issue_json).collect());
+    json["participants"] = Value::Array(participants.iter().map(participant_json).collect());
+    json["runbook_items"] = Value::Array(runbook.iter().map(runbook_item_json).collect());
+    json["counts"] = serde_json::json!({ "messages": messages });
+    Ok(json)
+}
+
+// ---------------------------------------------------------------------------
+// List + summary
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct ListParams {
+    pub status: Option<String>,
+    pub severity: Option<String>,
+    pub q: Option<String>,
+}
+
+fn parse_csv(value: &Option<String>) -> Vec<String> {
+    value
+        .as_deref()
+        .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+fn rooms_by_room_id<T>(rows: Vec<(Uuid, T)>) -> HashMap<Uuid, Vec<T>> {
+    let mut map: HashMap<Uuid, Vec<T>> = HashMap::new();
+    for (room_id, value) in rows {
+        map.entry(room_id).or_default().push(value);
+    }
+    map
+}
+
+pub async fn list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Query(params): Query<ListParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let statuses = parse_csv(&params.status);
+    for s in &statuses {
+        if let Err(e) = validate_enum("status", s, WAR_ROOM_STATUSES) {
+            return Ok(bad_request(e));
+        }
+    }
+    let severities = parse_csv(&params.severity);
+    for s in &severities {
+        if let Err(e) = validate_enum("severity", s, WAR_ROOM_SEVERITIES) {
+            return Ok(bad_request(e));
+        }
+    }
+    let q = params.q.as_deref().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string);
+    let status_filter = if statuses.is_empty() { None } else { Some(statuses) };
+    let severity_filter = if severities.is_empty() { None } else { Some(severities) };
+
+    let rooms: Vec<WarRoomRow> = sqlx::query_as(&format!(
+        "{WAR_ROOM_SELECT} WHERE r.project_id = $1 AND r.deleted_at IS NULL \
+         AND ($2::text[] IS NULL OR r.status = ANY($2)) \
+         AND ($3::text[] IS NULL OR r.severity = ANY($3)) \
+         AND ($4::text IS NULL OR r.name ILIKE '%' || $4 || '%' OR EXISTS ( \
+            SELECT 1 FROM issues i JOIN projects p ON p.id = i.project_id \
+            WHERE i.id = r.primary_issue_id \
+              AND (i.name ILIKE '%' || $4 || '%' OR (p.identifier || '-' || i.sequence_id) ILIKE '%' || $4 || '%') \
+         )) \
+         ORDER BY array_position(ARRAY['active','monitoring','resolved','archived'], r.status), \
+                  r.severity ASC, r.started_at DESC"
+    ))
+    .bind(project_id)
+    .bind(&status_filter)
+    .bind(&severity_filter)
+    .bind(&q)
+    .fetch_all(&st.pool)
+    .await?;
+
+    let room_ids: Vec<Uuid> = rooms.iter().map(|r| r.id).collect();
+    let services: HashMap<Uuid, Vec<RoomServiceRow>> = rooms_by_room_id(
+        sqlx::query_as::<_, (Uuid, Uuid, String, String)>(
+            "SELECT l.war_room_id, s.id, s.name, s.status FROM war_room_services l \
+             JOIN services s ON s.id = l.service_id \
+             WHERE l.war_room_id = ANY($1) AND l.deleted_at IS NULL AND s.deleted_at IS NULL \
+             ORDER BY s.name ASC",
+        )
+        .bind(&room_ids)
+        .fetch_all(&st.pool)
+        .await?
+        .into_iter()
+        .map(|(room_id, id, name, status)| (room_id, RoomServiceRow { id, name, status }))
+        .collect::<Vec<_>>(),
+    );
+    let primary_issues: HashMap<Uuid, Value> = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, Option<String>)>(
+        "SELECT r.id, i.id, p.identifier || '-' || i.sequence_id, i.name, i.priority, s.\"group\" \
+         FROM war_rooms r JOIN issues i ON i.id = r.primary_issue_id \
+         JOIN projects p ON p.id = i.project_id \
+         LEFT JOIN states s ON s.id = i.state_id \
+         WHERE r.id = ANY($1) AND i.deleted_at IS NULL",
+    )
+    .bind(&room_ids)
+    .fetch_all(&st.pool)
+    .await?
+    .into_iter()
+    .map(|(room_id, issue_id, identifier, name, priority, state_group)| {
+        (
+            room_id,
+            serde_json::json!({
+                "id": issue_id, "identifier": identifier, "name": name,
+                "priority": priority, "state_group": state_group,
+            }),
+        )
+    })
+    .collect();
+    let participants: HashMap<Uuid, Vec<ParticipantRow>> = rooms_by_room_id(
+        sqlx::query_as(
+            "SELECT p.war_room_id, p.id, p.member_id, p.role, p.joined_at, u.display_name, \
+             CASE WHEN u.avatar_asset_id IS NOT NULL \
+               THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS avatar_url \
+             FROM war_room_participants p JOIN users u ON u.id = p.member_id \
+             WHERE p.war_room_id = ANY($1) AND p.deleted_at IS NULL ORDER BY p.joined_at ASC",
+        )
+        .bind(&room_ids)
+        .fetch_all(&st.pool)
+        .await?
+        .into_iter()
+        .map(|row: ParticipantListRow| {
+            let room_id = row.war_room_id;
+            (
+                room_id,
+                ParticipantRow {
+                    id: row.id,
+                    member_id: row.member_id,
+                    role: row.role,
+                    joined_at: row.joined_at,
+                    display_name: row.display_name,
+                    avatar_url: row.avatar_url,
+                },
+            )
+        })
+        .collect::<Vec<_>>(),
+    );
+    let message_counts: HashMap<Uuid, i64> = sqlx::query_as::<_, (Uuid, i64)>(
+        "SELECT war_room_id, COUNT(*) FROM war_room_messages \
+         WHERE war_room_id = ANY($1) AND deleted_at IS NULL GROUP BY war_room_id",
+    )
+    .bind(&room_ids)
+    .fetch_all(&st.pool)
+    .await?
+    .into_iter()
+    .collect();
+    let last_activity: HashMap<Uuid, chrono::DateTime<chrono::Utc>> = sqlx::query_as::<_, (Uuid, Option<chrono::DateTime<chrono::Utc>>)>(
+        "SELECT room_id, MAX(ts) FROM ( \
+            SELECT war_room_id AS room_id, MAX(created_at) AS ts FROM war_room_messages \
+            WHERE war_room_id = ANY($1) AND deleted_at IS NULL GROUP BY war_room_id \
+            UNION ALL \
+            SELECT war_room_id, MAX(created_at) FROM war_room_events \
+            WHERE war_room_id = ANY($1) GROUP BY war_room_id \
+         ) x GROUP BY room_id",
+    )
+    .bind(&room_ids)
+    .fetch_all(&st.pool)
+    .await?
+    .into_iter()
+    .filter_map(|(room_id, ts)| ts.map(|t| (room_id, t)))
+    .collect();
+
+    let items: Vec<Value> = rooms
+        .iter()
+        .map(|r| {
+            let svc = services.get(&r.id).cloned().unwrap_or_default();
+            let parts = participants.get(&r.id).cloned().unwrap_or_default();
+            let mut json = room_base_json(r);
+            json["primary_issue"] = primary_issues.get(&r.id).cloned().unwrap_or(Value::Null);
+            json["services"] = Value::Array(svc.iter().map(service_json).collect());
+            json["participants"] = Value::Array(parts.iter().map(participant_json).collect());
+            json["service_count"] = serde_json::json!(svc.len());
+            json["participant_count"] = serde_json::json!(parts.len());
+            json["message_count"] = serde_json::json!(message_counts.get(&r.id).copied().unwrap_or(0));
+            json["last_activity_at"] = serde_json::json!(last_activity.get(&r.id));
+            json
+        })
+        .collect();
+    Ok((StatusCode::OK, Json(Value::Array(items))))
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct ParticipantListRow {
+    war_room_id: Uuid,
+    id: Uuid,
+    member_id: Uuid,
+    role: String,
+    joined_at: chrono::DateTime<chrono::Utc>,
+    display_name: Option<String>,
+    avatar_url: Option<String>,
+}
+
+pub async fn summary(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let row: (i64, i64, i64) = sqlx::query_as(
+        "SELECT \
+           COUNT(*) FILTER (WHERE status IN ('active','monitoring')), \
+           COUNT(*) FILTER (WHERE status IN ('active','monitoring') AND severity IN ('sev1','sev2')), \
+           COUNT(*) FILTER (WHERE status = 'resolved' AND resolved_at >= now() - interval '7 days') \
+         FROM war_rooms WHERE project_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "active": row.0, "sev1_2": row.1, "resolved_7d": row.2
+        })),
+    ))
+}
+
 /// Allowed `status` values (`packages/types/src/war-room/core.ts`).
 pub const WAR_ROOM_STATUSES: &[&str] = &["active", "monitoring", "resolved", "archived"];
 /// Allowed `severity` values.

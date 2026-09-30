@@ -198,7 +198,7 @@ pub struct PatchService {
     pub position: Option<Option<Value>>,
 }
 
-fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
+pub(crate) fn bad_request(msg: impl Into<String>) -> (StatusCode, Json<Value>) {
     (
         StatusCode::BAD_REQUEST,
         Json(json!({ "error": msg.into() })),
