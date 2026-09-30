@@ -126,7 +126,7 @@ fn service_json(row: &ServiceRow) -> Value {
 // Gates + request bodies
 // ---------------------------------------------------------------------------
 
-async fn gate_member(
+pub(crate) async fn gate_member(
     pool: &sqlx::PgPool,
     user: Uuid,
     slug: &str,
@@ -141,7 +141,7 @@ async fn gate_member(
     ))
 }
 
-async fn gate_writer(
+pub(crate) async fn gate_writer(
     pool: &sqlx::PgPool,
     user: Uuid,
     slug: &str,

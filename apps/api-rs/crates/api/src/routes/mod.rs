@@ -49,6 +49,7 @@ pub mod users_me;
 pub mod v1;
 pub mod versions;
 pub mod view;
+pub mod war_room;
 pub mod webhook;
 pub mod work_item;
 pub mod workflow;
