@@ -10,8 +10,9 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{middleware::auth::AuthUser, routes::project::deny, state::AppState};
+use crate::{middleware::auth::AuthUser, routes::project::{deny, missing}, state::AppState};
 
+use super::issue_common::{fetch_project_member_role, is_workspace_admin};
 use super::service::{bad_request, gate_member, gate_writer, validate_enum};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -1180,6 +1181,192 @@ pub async fn issues_destroy(
         )
         .await?;
     }
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParticipantCreate {
+    pub member_id: Uuid,
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParticipantPatch {
+    pub role: String,
+}
+
+async fn participant_by_id(
+    pool: &PgPool,
+    room_id: Uuid,
+    participant_id: Uuid,
+) -> Result<Option<ParticipantRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT p.id, p.member_id, p.role, p.joined_at, u.display_name, \
+         CASE WHEN u.avatar_asset_id IS NOT NULL \
+           THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS avatar_url \
+         FROM war_room_participants p JOIN users u ON u.id = p.member_id \
+         WHERE p.id = $1 AND p.war_room_id = $2 AND p.deleted_at IS NULL",
+    )
+    .bind(participant_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn participants_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<ParticipantCreate>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let role = body.role.clone().unwrap_or_else(|| "responder".to_string());
+    if let Err(e) = validate_enum("role", &role, PARTICIPANT_ROLES) {
+        return Ok(bad_request(e));
+    }
+    let project_role = fetch_project_member_role(&st.pool, body.member_id, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, body.member_id, &slug).await?;
+    if project_role.is_none() && !ws_admin {
+        return Ok(bad_request("Invalid member_id - not a project member."));
+    }
+    let mut tx = st.pool.begin().await?;
+    if role == "commander" {
+        sqlx::query(
+            "UPDATE war_room_participants SET role = 'responder', updated_at = now(), updated_by_id = $1 \
+             WHERE war_room_id = $2 AND role = 'commander' AND member_id != $3 AND deleted_at IS NULL",
+        )
+        .bind(auth.0)
+        .bind(room.id)
+        .bind(body.member_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query(
+        "INSERT INTO war_room_participants (id, workspace_id, project_id, war_room_id, member_id, \
+         role, joined_at, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now(), now(), $6, $6) \
+         ON CONFLICT (war_room_id, member_id) WHERE deleted_at IS NULL \
+         DO UPDATE SET role = EXCLUDED.role, updated_at = now(), updated_by_id = $6",
+    )
+    .bind(room.workspace_id)
+    .bind(project_id)
+    .bind(room.id)
+    .bind(body.member_id)
+    .bind(&role)
+    .bind(auth.0)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    record_event(
+        &st.pool,
+        &room,
+        auth.0,
+        "participant.joined",
+        serde_json::json!({ "member_id": body.member_id, "role": role }),
+    )
+    .await?;
+    let row = sqlx::query_as::<_, ParticipantRow>(
+        "SELECT p.id, p.member_id, p.role, p.joined_at, u.display_name, \
+         CASE WHEN u.avatar_asset_id IS NOT NULL \
+           THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS avatar_url \
+         FROM war_room_participants p JOIN users u ON u.id = p.member_id \
+         WHERE p.war_room_id = $1 AND p.member_id = $2 AND p.deleted_at IS NULL",
+    )
+    .bind(room.id)
+    .bind(body.member_id)
+    .fetch_one(&st.pool)
+    .await?;
+    Ok((StatusCode::CREATED, Json(participant_json(&row))))
+}
+
+pub async fn participants_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, participant_id)): Path<(String, Uuid, Uuid, Uuid)>,
+    Json(body): Json<ParticipantPatch>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    if let Err(e) = validate_enum("role", &body.role, PARTICIPANT_ROLES) {
+        return Ok(bad_request(e));
+    }
+    let current = participant_by_id(&st.pool, room.id, participant_id).await?;
+    let Some(current) = current else {
+        return Ok(missing());
+    };
+    let mut tx = st.pool.begin().await?;
+    if body.role == "commander" {
+        sqlx::query(
+            "UPDATE war_room_participants SET role = 'responder', updated_at = now(), updated_by_id = $1 \
+             WHERE war_room_id = $2 AND role = 'commander' AND id != $3 AND deleted_at IS NULL",
+        )
+        .bind(auth.0)
+        .bind(room.id)
+        .bind(participant_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    sqlx::query(
+        "UPDATE war_room_participants SET role = $1, updated_at = now(), updated_by_id = $2 \
+         WHERE id = $3 AND war_room_id = $4 AND deleted_at IS NULL",
+    )
+    .bind(&body.role)
+    .bind(auth.0)
+    .bind(participant_id)
+    .bind(room.id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    record_event(
+        &st.pool,
+        &room,
+        auth.0,
+        "participant.role_changed",
+        serde_json::json!({
+            "member_id": current.member_id, "from": current.role, "to": body.role
+        }),
+    )
+    .await?;
+    let row = participant_by_id(&st.pool, room.id, participant_id)
+        .await?
+        .expect("participant just updated");
+    Ok((StatusCode::OK, Json(participant_json(&row))))
+}
+
+pub async fn participants_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, participant_id)): Path<(String, Uuid, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let current = participant_by_id(&st.pool, room.id, participant_id).await?;
+    let Some(current) = current else {
+        return Ok((StatusCode::NO_CONTENT, Json(Value::Null)));
+    };
+    sqlx::query(
+        "UPDATE war_room_participants SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND war_room_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(participant_id)
+    .bind(room.id)
+    .execute(&st.pool)
+    .await?;
+    record_event(
+        &st.pool,
+        &room,
+        auth.0,
+        "participant.left",
+        serde_json::json!({ "member_id": current.member_id }),
+    )
+    .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
