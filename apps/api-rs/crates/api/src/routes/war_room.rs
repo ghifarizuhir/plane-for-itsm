@@ -979,6 +979,210 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct LinkServices {
+    pub service_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LinkIssues {
+    pub issue_ids: Vec<Uuid>,
+}
+
+async fn room_for_write(
+    st: &AppState,
+    slug: &str,
+    project_id: Uuid,
+    pk: Uuid,
+    user: Uuid,
+) -> Result<Result<WarRoomRow, (StatusCode, Json<Value>)>, common::errors::AppError> {
+    if !gate_writer(&st.pool, user, slug, project_id).await? {
+        return Ok(Err(deny()));
+    }
+    let Some(room) = fetch_room(&st.pool, project_id, pk).await? else {
+        return Ok(Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "War room not found"})),
+        )));
+    };
+    if room.status == "archived" {
+        return Ok(Err((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": "room_archived"})),
+        )));
+    }
+    Ok(Ok(room))
+}
+
+pub async fn services_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<LinkServices>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    if !body.service_ids.is_empty() {
+        let valid: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM services WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(&body.service_ids)
+        .fetch_one(&st.pool)
+        .await?;
+        if valid as usize != body.service_ids.len() {
+            return Ok(bad_request("Invalid service_ids - object does not exist."));
+        }
+    }
+    let mut linked = 0_u64;
+    for service_id in &body.service_ids {
+        let result = sqlx::query(
+            "INSERT INTO war_room_services (id, workspace_id, project_id, war_room_id, service_id, \
+             created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), $5, $5) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(room.workspace_id)
+        .bind(project_id)
+        .bind(room.id)
+        .bind(service_id)
+        .bind(auth.0)
+        .execute(&st.pool)
+        .await?;
+        linked += result.rows_affected();
+    }
+    if linked > 0 {
+        record_event(
+            &st.pool,
+            &room,
+            auth.0,
+            "service.linked",
+            serde_json::json!({ "service_ids": body.service_ids }),
+        )
+        .await?;
+    }
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "linked": linked }))))
+}
+
+pub async fn services_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, service_id)): Path<(String, Uuid, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let result = sqlx::query(
+        "UPDATE war_room_services SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND service_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(room.id)
+    .bind(project_id)
+    .bind(service_id)
+    .execute(&st.pool)
+    .await?;
+    if result.rows_affected() > 0 {
+        record_event(
+            &st.pool,
+            &room,
+            auth.0,
+            "service.unlinked",
+            serde_json::json!({ "service_id": service_id }),
+        )
+        .await?;
+    }
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+pub async fn issues_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<LinkIssues>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    if body.issue_ids.contains(&room.primary_issue_id) {
+        return Ok(bad_request("primary_issue_not_linkable"));
+    }
+    if !body.issue_ids.is_empty() {
+        let valid: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM issues WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(project_id)
+        .bind(&body.issue_ids)
+        .fetch_one(&st.pool)
+        .await?;
+        if valid as usize != body.issue_ids.len() {
+            return Ok(bad_request("Invalid issue_ids - object does not exist."));
+        }
+    }
+    let mut linked = 0_u64;
+    for issue_id in &body.issue_ids {
+        let result = sqlx::query(
+            "INSERT INTO war_room_issues (id, workspace_id, project_id, war_room_id, issue_id, \
+             created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), $5, $5) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(room.workspace_id)
+        .bind(project_id)
+        .bind(room.id)
+        .bind(issue_id)
+        .bind(auth.0)
+        .execute(&st.pool)
+        .await?;
+        linked += result.rows_affected();
+    }
+    if linked > 0 {
+        record_event(
+            &st.pool,
+            &room,
+            auth.0,
+            "issue.linked",
+            serde_json::json!({ "issue_ids": body.issue_ids }),
+        )
+        .await?;
+    }
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "linked": linked }))))
+}
+
+pub async fn issues_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk, issue_id)): Path<(String, Uuid, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let room = match room_for_write(&st, &slug, project_id, pk, auth.0).await? {
+        Ok(room) => room,
+        Err(response) => return Ok(response),
+    };
+    let result = sqlx::query(
+        "UPDATE war_room_issues SET deleted_at = now(), updated_at = now() \
+         WHERE war_room_id = $1 AND project_id = $2 AND issue_id = $3 AND deleted_at IS NULL",
+    )
+    .bind(room.id)
+    .bind(project_id)
+    .bind(issue_id)
+    .execute(&st.pool)
+    .await?;
+    if result.rows_affected() > 0 {
+        record_event(
+            &st.pool,
+            &room,
+            auth.0,
+            "issue.unlinked",
+            serde_json::json!({ "issue_id": issue_id }),
+        )
+        .await?;
+    }
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
