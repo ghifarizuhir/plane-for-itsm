@@ -192,6 +192,14 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
+          // War Rooms List
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/war-rooms",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(list)/page.tsx"
+            ),
+          ]),
+
           // View Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/views/(detail)/layout.tsx", [
             route(
