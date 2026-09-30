@@ -1666,6 +1666,114 @@ pub async fn events_list(
     ))
 }
 
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WarRoomMessageRow {
+    pub id: Uuid,
+    pub war_room_id: Uuid,
+    pub author_id: Option<Uuid>,
+    pub body: String,
+    pub mentions: Value,
+    pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+const MESSAGE_SELECT: &str = "SELECT m.id, m.war_room_id, m.author_id, m.body, m.mentions, \
+    m.edited_at, m.created_at, u.display_name, \
+    CASE WHEN u.avatar_asset_id IS NOT NULL \
+      THEN '/api/assets/v2/static/' || u.avatar_asset_id::text || '/' ELSE u.avatar END AS avatar_url \
+    FROM war_room_messages m LEFT JOIN users u ON u.id = m.author_id";
+
+pub fn message_json(r: &WarRoomMessageRow) -> Value {
+    serde_json::json!({
+        "id": r.id,
+        "war_room_id": r.war_room_id,
+        "author_id": r.author_id,
+        "author": r.author_id.map(|id| serde_json::json!({
+            "id": id, "display_name": r.display_name, "avatar_url": r.avatar_url,
+        })),
+        "body": r.body,
+        "mentions": r.mentions,
+        "edited_at": r.edited_at,
+        "created_at": r.created_at,
+    })
+}
+
+async fn fetch_message(
+    pool: &PgPool,
+    room_id: Uuid,
+    message_id: Uuid,
+) -> Result<Option<WarRoomMessageRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{MESSAGE_SELECT} WHERE m.id = $1 AND m.war_room_id = $2 AND m.deleted_at IS NULL"
+    ))
+    .bind(message_id)
+    .bind(room_id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessagesParams {
+    pub before_id: Option<Uuid>,
+    pub limit: Option<i64>,
+}
+
+/// Chat pages are returned oldest → newest inside the page (client renders
+/// directly); `before_id` walks backwards with the first id of the page.
+pub async fn messages_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Query(params): Query<MessagesParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let Some(_room) = fetch_room(&st.pool, project_id, pk).await? else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "War room not found"})),
+        ));
+    };
+    let cursor: Option<(chrono::DateTime<chrono::Utc>, Uuid)> = match params.before_id {
+        Some(before_id) => {
+            sqlx::query_as(
+                "SELECT created_at, id FROM war_room_messages \
+                 WHERE id = $1 AND war_room_id = $2 AND deleted_at IS NULL",
+            )
+            .bind(before_id)
+            .bind(pk)
+            .fetch_optional(&st.pool)
+            .await?
+        }
+        None => None,
+    };
+    let limit = params.limit.unwrap_or(50).clamp(1, 200);
+    let mut rows: Vec<WarRoomMessageRow> = sqlx::query_as(&format!(
+        "{MESSAGE_SELECT} WHERE m.war_room_id = $1 \
+         AND ($2::timestamptz IS NULL OR (m.created_at, m.id) < ($2::timestamptz, $3::uuid)) \
+         AND m.deleted_at IS NULL \
+         ORDER BY m.created_at DESC, m.id DESC LIMIT $4"
+    ))
+    .bind(pk)
+    .bind(cursor.as_ref().map(|c| c.0))
+    .bind(cursor.as_ref().map(|c| c.1))
+    .bind(limit)
+    .fetch_all(&st.pool)
+    .await?;
+    rows.reverse();
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(message_json).collect())),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
