@@ -790,6 +790,14 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/events/",
             get(routes::war_room::events_list),
         )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/messages/",
+            get(routes::war_room::messages_list).post(routes::war_room::messages_create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/messages/:message_id/",
+            patch(routes::war_room::messages_patch).delete(routes::war_room::messages_destroy),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror
