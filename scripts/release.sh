@@ -22,10 +22,10 @@ docker build -f "$ROOT/apps/proxy/Dockerfile.ce" -t "plane-proxy:$VERSION" -t pl
 docker build -f "$ROOT/apps/api-rs/Dockerfile.rs" -t "plane-api-rs:$VERSION" -t plane-api-rs:stable "$ROOT/apps/api-rs"
 docker build -f "$ROOT/apps/api/Dockerfile.api" -t "plane-migrator:$VERSION" -t plane-migrator:stable "$ROOT/apps/api"
 
-# 2. Pin + pull infra images
-docker pull postgres:15.7-alpine
-docker pull valkey/valkey:7.2.11-alpine
-docker pull minio/minio:latest
+# 2. Pin infra images (pull only if not cached; docker.io minio is deprecated)
+for img in postgres:15.7-alpine valkey/valkey:7.2.11-alpine minio/minio:latest; do
+  docker image inspect "$img" >/dev/null 2>&1 || docker pull "$img"
+done
 
 # 3. Save per-service tars (worker/beat reuse plane-api-rs image)
 declare -A TARS=(
