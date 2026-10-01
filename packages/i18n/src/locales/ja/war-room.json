@@ -77,6 +77,156 @@
       "not_found_description": "お探しのウォールームは存在しないか、削除されました。",
       "view_other_rooms": "他のウォールームを見る",
       "back": "ウォールームに戻る"
+    },
+    "header": {
+      "rename_placeholder": "ウォールーム名",
+      "more_actions": "その他の操作",
+      "edit_details": "詳細を編集",
+      "archive": "アーカイブ",
+      "delete": "削除",
+      "resolve": "解決",
+      "reopen": "再オープン",
+      "join": "参加",
+      "leave": "退出",
+      "status_control": "ステータスを変更",
+      "severity_control": "重要度を変更",
+      "online": "オンライン {count} 人",
+      "you": "自分"
+    },
+    "archived_notice": "このウォールームはアーカイブ済みのため読み取り専用です。",
+    "resolve_modal": {
+      "title": "ウォールームを解決",
+      "description": "このインシデントを解決済みにします。タイマーが停止し、レビュー用にルームは残ります。",
+      "note_label": "解決メモ",
+      "note_placeholder": "メモ用に解決内容を要約（任意）",
+      "confirm": "解決"
+    },
+    "archive_modal": {
+      "title": "ウォールームをアーカイブ",
+      "description": "アーカイブ済みのルームは読み取り専用で最終状態です。「すべて」タブに表示され続けます。",
+      "confirm": "アーカイブ"
+    },
+    "delete_modal": {
+      "title": "ウォールームを削除",
+      "description": "ウォールーム、チャット、ランブック、リンクを完全に削除します。アクティビティ履歴は残ります。",
+      "confirm": "ウォールームを削除"
+    },
+    "edit_details_modal": {
+      "title": "ウォールームの詳細を編集",
+      "name": "名前",
+      "description": "説明",
+      "save": "変更を保存"
+    },
+    "map": {
+      "title": "影響を受けるサービス",
+      "empty_title": "影響を受けるサービスはまだありません",
+      "empty_description": "サービスをリンクすると影響範囲が表示されます。",
+      "add_services": "サービスを追加",
+      "collapse": "マップを折りたたむ",
+      "expand": "マップを展開",
+      "affected_legend": "影響あり",
+      "neighbor_legend": "依存関係",
+      "link_failed": "影響を受けるサービスを更新できませんでした。もう一度お試しください。"
+    },
+    "chat": {
+      "title": "チャット",
+      "load_older": "古いメッセージを読み込む",
+      "composer_placeholder": "ルームにメッセージを送信。@ でメンション。",
+      "send": "送信",
+      "empty_title": "メッセージはまだありません",
+      "empty_description": "ここで対応の調整を始めましょう。",
+      "typing_single": "{name} が入力中…",
+      "typing_multiple": "{count} 人が入力中…",
+      "reconnect_banner": "再接続中…メッセージが遅れる場合があります。",
+      "edited": "編集済み",
+      "deleted": "このメッセージは削除されました",
+      "edit": "メッセージを編集",
+      "delete": "メッセージを削除",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "new_messages": "新着 {count} 件",
+      "send_failed": "メッセージを送信できませんでした。",
+      "load_failed": "メッセージを読み込めませんでした。もう一度お試しください。",
+      "mentions_empty": "メンバーが見つかりません"
+    },
+    "notes": {
+      "placeholder": "意思決定、時系列、フォローアップを記録…",
+      "saving": "保存中…",
+      "saved": "保存済み",
+      "edited_at": "{time}に編集",
+      "read_only": "アーカイブ済みルームのメモは読み取り専用です。",
+      "save_failed": "メモを保存できませんでした。もう一度お試しください。"
+    },
+    "context_tabs": {
+      "notes": "メモ",
+      "work_items": "作業項目",
+      "runbook": "ランブック",
+      "activity": "アクティビティ",
+      "people": "メンバー"
+    },
+    "work_items": {
+      "primary_badge": "主要インシデント",
+      "add": "作業項目をリンク",
+      "unlink": "リンク解除",
+      "empty_title": "リンクされた作業項目がありません",
+      "empty_description": "関連する作業項目をリンクしてコンテキストを一か所にまとめましょう。",
+      "link_failed": "リンクされた作業項目を更新できませんでした。もう一度お試しください。",
+      "unlink_failed": "作業項目のリンクを解除できませんでした。もう一度お試しください。"
+    },
+    "runbook": {
+      "progress": "{done}/{total} 完了",
+      "add_placeholder": "手順を追加して Enter を押す",
+      "empty_title": "ランブックの手順がありません",
+      "empty_description": "対応チェックリストを追跡する手順を追加しましょう。",
+      "mark_done": "完了にする",
+      "mark_undone": "未完了に戻す",
+      "edit": "編集",
+      "delete": "削除",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "update_failed": "ランブックを更新できませんでした。もう一度お試しください。"
+    },
+    "activity": {
+      "empty_title": "アクティビティはまだありません",
+      "empty_description": "ステータス変更、リンク、ランブックの更新がここに表示されます。",
+      "load_older": "古いアクティビティを読み込む",
+      "load_failed": "アクティビティを読み込めませんでした。もう一度お試しください。",
+      "actor_unknown": "誰か",
+      "events": {
+        "room_created": "がウォールームを作成しました",
+        "status_changed": "がステータスを {from} から {to} に変更しました",
+        "severity_changed": "が重要度を {from} から {to} に変更しました",
+        "resolved": "がウォールームを解決しました",
+        "reopened": "がウォールームを再オープンしました",
+        "archived": "がウォールームをアーカイブしました",
+        "participant_joined": "がルームに参加しました",
+        "participant_left": "がルームを退出しました",
+        "participant_role_changed": "が {target} の役割を {from} から {to} に変更しました",
+        "service_linked": "が {services} をリンクしました",
+        "service_unlinked": "が {service} のリンクを解除しました",
+        "issue_linked": "が {issues} をリンクしました",
+        "issue_unlinked": "が {issue} のリンクを解除しました",
+        "runbook_item_done": "が「{title}」を完了しました",
+        "runbook_item_reopened": "が「{title}」を再オープンしました",
+        "unknown": "がルームを更新しました"
+      }
+    },
+    "people": {
+      "add": "参加者を追加",
+      "join": "参加",
+      "leave": "退出",
+      "role": "役割",
+      "online": "オンライン",
+      "empty_title": "参加者はまだいません",
+      "empty_description": "ルームに参加するか、対応者を追加して調整しましょう。",
+      "update_failed": "参加者を更新できませんでした。もう一度お試しください。",
+      "join_failed": "ウォールームに参加できませんでした。もう一度お試しください。",
+      "leave_failed": "ウォールームを退出できませんでした。もう一度お試しください。"
+    },
+    "errors": {
+      "room_archived": "このウォールームはアーカイブ済みのため変更できません。",
+      "forbidden": "その操作を行う権限がありません。",
+      "generic": "問題が発生しました。もう一度お試しください。"
     }
   }
 }

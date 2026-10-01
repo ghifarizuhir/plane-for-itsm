@@ -77,6 +77,156 @@
       "not_found_description": "Krízová miestnosť, ktorú hľadáte, neexistuje alebo bola odstránená.",
       "view_other_rooms": "Zobraziť ďalšie krízové miestnosti",
       "back": "Späť na krízové miestnosti"
+    },
+    "header": {
+      "rename_placeholder": "Názov krízovej miestnosti",
+      "more_actions": "Ďalšie akcie",
+      "edit_details": "Upraviť podrobnosti",
+      "archive": "Archivovať",
+      "delete": "Zmazať",
+      "resolve": "Vyriešiť",
+      "reopen": "Znova otvoriť",
+      "join": "Pripojiť sa",
+      "leave": "Opustiť",
+      "status_control": "Zmeniť stav",
+      "severity_control": "Zmeniť závažnosť",
+      "online": "{count} online",
+      "you": "Vy"
+    },
+    "archived_notice": "Táto krízová miestnosť je archivovaná a len na čítanie.",
+    "resolve_modal": {
+      "title": "Vyriešiť krízovú miestnosť",
+      "description": "Označiť tento incident ako vyriešený. Časovač sa zastaví a miestnosť zostane k dispozícii na preskúmanie.",
+      "note_label": "Poznámka k vyriešeniu",
+      "note_placeholder": "Zhrňte riešenie do poznámok (voliteľné)",
+      "confirm": "Vyriešiť"
+    },
+    "archive_modal": {
+      "title": "Archivovať krízovú miestnosť",
+      "description": "Archivované miestnosti sú len na čítanie a konečné. Zostávajú viditeľné na karte Všetko.",
+      "confirm": "Archivovať"
+    },
+    "delete_modal": {
+      "title": "Zmazať krízovú miestnosť",
+      "description": "Tým sa natrvalo odstráni krízová miestnosť, jej chat, runbook a väzby. Záznam aktivít bude zachovaný.",
+      "confirm": "Zmazať krízovú miestnosť"
+    },
+    "edit_details_modal": {
+      "title": "Upraviť podrobnosti krízovej miestnosti",
+      "name": "Názov",
+      "description": "Popis",
+      "save": "Uložiť zmeny"
+    },
+    "map": {
+      "title": "Zasiahnuté služby",
+      "empty_title": "Zatiaľ žiadne zasiahnuté služby",
+      "empty_description": "Prepojte služby, aby ste videli polomer dopadu.",
+      "add_services": "Pridať služby",
+      "collapse": "Zbaliť mapu",
+      "expand": "Rozbaliť mapu",
+      "affected_legend": "Zasiahnutá",
+      "neighbor_legend": "Závislosť",
+      "link_failed": "Zasiahnuté služby sa nepodarilo aktualizovať. Skúste to znova."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Načítať staršie správy",
+      "composer_placeholder": "Správa do miestnosti. Použite @ na zmienku.",
+      "send": "Odoslať",
+      "empty_title": "Zatiaľ žiadne správy",
+      "empty_description": "Začnite tu koordinovať reakciu.",
+      "typing_single": "{name} píše…",
+      "typing_multiple": "{count} píše…",
+      "reconnect_banner": "Opätovné pripájanie… správy sa môžu oneskoriť.",
+      "edited": "upravené",
+      "deleted": "Táto správa bola zmazaná",
+      "edit": "Upraviť správu",
+      "delete": "Zmazať správu",
+      "save": "Uložiť",
+      "cancel": "Zrušiť",
+      "new_messages": "Nových: {count}",
+      "send_failed": "Správu sa nepodarilo odoslať.",
+      "load_failed": "Správy sa nepodarilo načítať. Skúste to znova.",
+      "mentions_empty": "Nenašli sa žiadni členovia"
+    },
+    "notes": {
+      "placeholder": "Zaznamenávajte rozhodnutia, časovú os a ďalšie kroky…",
+      "saving": "Ukladanie…",
+      "saved": "Uložené",
+      "edited_at": "Upravené {time}",
+      "read_only": "Poznámky archivovaných miestností sú len na čítanie.",
+      "save_failed": "Poznámky sa nepodarilo uložiť. Skúste to znova."
+    },
+    "context_tabs": {
+      "notes": "Poznámky",
+      "work_items": "Pracovné položky",
+      "runbook": "Runbook",
+      "activity": "Aktivita",
+      "people": "Ľudia"
+    },
+    "work_items": {
+      "primary_badge": "Primárny incident",
+      "add": "Prepojiť pracovné položky",
+      "unlink": "Odobrať väzbu",
+      "empty_title": "Žiadne prepojené pracovné položky",
+      "empty_description": "Prepojte súvisiace pracovné položky, aby ste udržali kontext na jednom mieste.",
+      "link_failed": "Prepojené položky sa nepodarilo aktualizovať. Skúste to znova.",
+      "unlink_failed": "Väzbu sa nepodarilo odobrať. Skúste to znova."
+    },
+    "runbook": {
+      "progress": "Hotovo {done}/{total}",
+      "add_placeholder": "Pridajte krok a stlačte Enter",
+      "empty_title": "Žiadne kroky runbooku",
+      "empty_description": "Pridajte kroky na sledovanie kontrolného zoznamu reakcie.",
+      "mark_done": "Označiť ako hotové",
+      "mark_undone": "Označiť ako nehotové",
+      "edit": "Upraviť",
+      "delete": "Zmazať",
+      "save": "Uložiť",
+      "cancel": "Zrušiť",
+      "update_failed": "Runbook sa nepodarilo aktualizovať. Skúste to znova."
+    },
+    "activity": {
+      "empty_title": "Zatiaľ žiadna aktivita",
+      "empty_description": "Zmeny stavu, väzby a aktualizácie runbooku sa objavia tu.",
+      "load_older": "Načítať staršiu aktivitu",
+      "load_failed": "Aktivitu sa nepodarilo načítať. Skúste to znova.",
+      "actor_unknown": "Niekto",
+      "events": {
+        "room_created": "vytvoril(a) krízovú miestnosť",
+        "status_changed": "zmenil(a) stav z {from} na {to}",
+        "severity_changed": "zmenil(a) závažnosť z {from} na {to}",
+        "resolved": "vyriešil(a) krízovú miestnosť",
+        "reopened": "znova otvoril(a) krízovú miestnosť",
+        "archived": "archivoval(a) krízovú miestnosť",
+        "participant_joined": "sa pripojil(a) k miestnosti",
+        "participant_left": "opustil(a) miestnosť",
+        "participant_role_changed": "zmenil(a) rolu {target} z {from} na {to}",
+        "service_linked": "prepojil(a) {services}",
+        "service_unlinked": "odobral(a) väzbu {service}",
+        "issue_linked": "prepojil(a) {issues}",
+        "issue_unlinked": "odobral(a) väzbu {issue}",
+        "runbook_item_done": "dokončil(a) „{title}“",
+        "runbook_item_reopened": "znova otvoril(a) „{title}“",
+        "unknown": "aktualizoval(a) miestnosť"
+      }
+    },
+    "people": {
+      "add": "Pridať účastníka",
+      "join": "Pripojiť sa",
+      "leave": "Opustiť",
+      "role": "Rola",
+      "online": "Online",
+      "empty_title": "Zatiaľ žiadni účastníci",
+      "empty_description": "Pripojte sa k miestnosti alebo pridajte reagujúcich na koordináciu.",
+      "update_failed": "Účastníkov sa nepodarilo aktualizovať. Skúste to znova.",
+      "join_failed": "Ku krízovej miestnosti sa nepodarilo pripojiť. Skúste to znova.",
+      "leave_failed": "Krízovú miestnosť sa nepodarilo opustiť. Skúste to znova."
+    },
+    "errors": {
+      "room_archived": "Táto krízová miestnosť je archivovaná a nedá sa zmeniť.",
+      "forbidden": "Na to nemáte oprávnenie.",
+      "generic": "Niečo sa pokazilo. Skúste to znova."
     }
   }
 }

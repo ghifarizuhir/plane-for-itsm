@@ -77,6 +77,156 @@
       "not_found_description": "Ruang perang yang Anda cari tidak ada atau telah dihapus.",
       "view_other_rooms": "Lihat ruang perang lain",
       "back": "Kembali ke ruang perang"
+    },
+    "header": {
+      "rename_placeholder": "Nama ruang perang",
+      "more_actions": "Tindakan lainnya",
+      "edit_details": "Ubah detail",
+      "archive": "Arsipkan",
+      "delete": "Hapus",
+      "resolve": "Selesaikan",
+      "reopen": "Buka kembali",
+      "join": "Gabung",
+      "leave": "Keluar",
+      "status_control": "Ubah status",
+      "severity_control": "Ubah tingkat",
+      "online": "{count} online",
+      "you": "Anda"
+    },
+    "archived_notice": "Ruang perang ini telah diarsipkan dan hanya-baca.",
+    "resolve_modal": {
+      "title": "Selesaikan ruang perang",
+      "description": "Tandai insiden ini sebagai selesai. Penghitung waktu berhenti dan ruang tetap tersedia untuk ditinjau.",
+      "note_label": "Catatan penyelesaian",
+      "note_placeholder": "Ringkas penyelesaian untuk catatan (opsional)",
+      "confirm": "Selesaikan"
+    },
+    "archive_modal": {
+      "title": "Arsipkan ruang perang",
+      "description": "Ruang yang diarsipkan bersifat hanya-baca dan final. Ruang tetap terlihat di tab Semua.",
+      "confirm": "Arsipkan"
+    },
+    "delete_modal": {
+      "title": "Hapus ruang perang",
+      "description": "Tindakan ini menghapus permanen ruang perang, percakapan, runbook, dan tautannya. Umpan aktivitas tetap disimpan.",
+      "confirm": "Hapus ruang perang"
+    },
+    "edit_details_modal": {
+      "title": "Ubah detail ruang perang",
+      "name": "Nama",
+      "description": "Deskripsi",
+      "save": "Simpan perubahan"
+    },
+    "map": {
+      "title": "Layanan terdampak",
+      "empty_title": "Belum ada layanan terdampak",
+      "empty_description": "Tautkan layanan untuk melihat radius dampak.",
+      "add_services": "Tambah layanan",
+      "collapse": "Ciutkan peta",
+      "expand": "Bentangkan peta",
+      "affected_legend": "Terdampak",
+      "neighbor_legend": "Dependensi",
+      "link_failed": "Tidak dapat memperbarui layanan terdampak. Silakan coba lagi."
+    },
+    "chat": {
+      "title": "Percakapan",
+      "load_older": "Muat pesan lama",
+      "composer_placeholder": "Kirim pesan ke ruangan. Gunakan @ untuk menyebut.",
+      "send": "Kirim",
+      "empty_title": "Belum ada pesan",
+      "empty_description": "Mulai koordinasikan respons di sini.",
+      "typing_single": "{name} sedang mengetik…",
+      "typing_multiple": "{count} orang sedang mengetik…",
+      "reconnect_banner": "Menyambungkan ulang… pesan mungkin tertunda.",
+      "edited": "diedit",
+      "deleted": "Pesan ini telah dihapus",
+      "edit": "Ubah pesan",
+      "delete": "Hapus pesan",
+      "save": "Simpan",
+      "cancel": "Batal",
+      "new_messages": "{count} baru",
+      "send_failed": "Tidak dapat mengirim pesan.",
+      "load_failed": "Tidak dapat memuat pesan. Silakan coba lagi.",
+      "mentions_empty": "Tidak ada anggota ditemukan"
+    },
+    "notes": {
+      "placeholder": "Catat keputusan, kronologi, dan tindak lanjut…",
+      "saving": "Menyimpan…",
+      "saved": "Tersimpan",
+      "edited_at": "Diedit {time}",
+      "read_only": "Catatan hanya-baca untuk ruang yang diarsipkan.",
+      "save_failed": "Tidak dapat menyimpan catatan. Silakan coba lagi."
+    },
+    "context_tabs": {
+      "notes": "Catatan",
+      "work_items": "Item kerja",
+      "runbook": "Runbook",
+      "activity": "Aktivitas",
+      "people": "Orang"
+    },
+    "work_items": {
+      "primary_badge": "Insiden utama",
+      "add": "Tautkan item kerja",
+      "unlink": "Lepas tautan",
+      "empty_title": "Tidak ada item kerja tertaut",
+      "empty_description": "Tautkan item kerja terkait agar konteks tetap di satu tempat.",
+      "link_failed": "Tidak dapat memperbarui item kerja tertaut. Silakan coba lagi.",
+      "unlink_failed": "Tidak dapat melepas tautan item kerja. Silakan coba lagi."
+    },
+    "runbook": {
+      "progress": "{done}/{total} selesai",
+      "add_placeholder": "Tambah langkah lalu tekan Enter",
+      "empty_title": "Belum ada langkah runbook",
+      "empty_description": "Tambah langkah untuk melacak daftar periksa respons.",
+      "mark_done": "Tandai selesai",
+      "mark_undone": "Tandai belum selesai",
+      "edit": "Ubah",
+      "delete": "Hapus",
+      "save": "Simpan",
+      "cancel": "Batal",
+      "update_failed": "Tidak dapat memperbarui runbook. Silakan coba lagi."
+    },
+    "activity": {
+      "empty_title": "Belum ada aktivitas",
+      "empty_description": "Perubahan status, tautan, dan pembaruan runbook muncul di sini.",
+      "load_older": "Muat aktivitas lama",
+      "load_failed": "Tidak dapat memuat aktivitas. Silakan coba lagi.",
+      "actor_unknown": "Seseorang",
+      "events": {
+        "room_created": "membuat ruang perang",
+        "status_changed": "mengubah status dari {from} menjadi {to}",
+        "severity_changed": "mengubah tingkat dari {from} menjadi {to}",
+        "resolved": "menyelesaikan ruang perang",
+        "reopened": "membuka kembali ruang perang",
+        "archived": "mengarsipkan ruang perang",
+        "participant_joined": "bergabung ke ruangan",
+        "participant_left": "keluar dari ruangan",
+        "participant_role_changed": "mengubah peran {target} dari {from} menjadi {to}",
+        "service_linked": "menautkan {services}",
+        "service_unlinked": "melepas tautan {service}",
+        "issue_linked": "menautkan {issues}",
+        "issue_unlinked": "melepas tautan {issue}",
+        "runbook_item_done": "menyelesaikan “{title}”",
+        "runbook_item_reopened": "membuka kembali “{title}”",
+        "unknown": "memperbarui ruangan"
+      }
+    },
+    "people": {
+      "add": "Tambah peserta",
+      "join": "Gabung",
+      "leave": "Keluar",
+      "role": "Peran",
+      "online": "Online",
+      "empty_title": "Belum ada peserta",
+      "empty_description": "Gabung ke ruangan atau tambah responder untuk berkoordinasi.",
+      "update_failed": "Tidak dapat memperbarui peserta. Silakan coba lagi.",
+      "join_failed": "Tidak dapat bergabung ke ruang perang. Silakan coba lagi.",
+      "leave_failed": "Tidak dapat keluar dari ruang perang. Silakan coba lagi."
+    },
+    "errors": {
+      "room_archived": "Ruang perang ini telah diarsipkan dan tidak dapat diubah.",
+      "forbidden": "Anda tidak memiliki izin untuk melakukan itu.",
+      "generic": "Terjadi kesalahan. Silakan coba lagi."
     }
   }
 }

@@ -77,6 +77,156 @@
       "not_found_description": "您查找的作战室不存在或已被删除。",
       "view_other_rooms": "查看其他作战室",
       "back": "返回作战室"
+    },
+    "header": {
+      "rename_placeholder": "作战室名称",
+      "more_actions": "更多操作",
+      "edit_details": "编辑详情",
+      "archive": "归档",
+      "delete": "删除",
+      "resolve": "解决",
+      "reopen": "重新打开",
+      "join": "加入",
+      "leave": "离开",
+      "status_control": "更改状态",
+      "severity_control": "更改严重级别",
+      "online": "{count} 人在线",
+      "you": "您"
+    },
+    "archived_notice": "此作战室已归档，为只读状态。",
+    "resolve_modal": {
+      "title": "解决作战室",
+      "description": "将此事件标记为已解决。计时器将停止，作战室保留以供复盘。",
+      "note_label": "解决说明",
+      "note_placeholder": "为备注总结解决情况（可选）",
+      "confirm": "解决"
+    },
+    "archive_modal": {
+      "title": "归档作战室",
+      "description": "已归档的作战室为只读且为最终状态，仍会显示在“全部”选项卡中。",
+      "confirm": "归档"
+    },
+    "delete_modal": {
+      "title": "删除作战室",
+      "description": "这将永久删除作战室及其聊天、Runbook 和关联。活动记录将被保留。",
+      "confirm": "删除作战室"
+    },
+    "edit_details_modal": {
+      "title": "编辑作战室详情",
+      "name": "名称",
+      "description": "描述",
+      "save": "保存更改"
+    },
+    "map": {
+      "title": "受影响的服务",
+      "empty_title": "暂无受影响的服务",
+      "empty_description": "关联服务以查看影响范围。",
+      "add_services": "添加服务",
+      "collapse": "折叠地图",
+      "expand": "展开地图",
+      "affected_legend": "受影响",
+      "neighbor_legend": "依赖",
+      "link_failed": "无法更新受影响的服务，请重试。"
+    },
+    "chat": {
+      "title": "聊天",
+      "load_older": "加载更早的消息",
+      "composer_placeholder": "向作战室发送消息，使用 @ 提及成员。",
+      "send": "发送",
+      "empty_title": "暂无消息",
+      "empty_description": "在此开始协调响应。",
+      "typing_single": "{name} 正在输入…",
+      "typing_multiple": "{count} 人正在输入…",
+      "reconnect_banner": "正在重新连接…消息可能会延迟。",
+      "edited": "已编辑",
+      "deleted": "此消息已被删除",
+      "edit": "编辑消息",
+      "delete": "删除消息",
+      "save": "保存",
+      "cancel": "取消",
+      "new_messages": "{count} 条新消息",
+      "send_failed": "无法发送消息。",
+      "load_failed": "无法加载消息，请重试。",
+      "mentions_empty": "未找到成员"
+    },
+    "notes": {
+      "placeholder": "记录决策、时间线和后续事项…",
+      "saving": "保存中…",
+      "saved": "已保存",
+      "edited_at": "{time}前编辑",
+      "read_only": "已归档作战室的备注为只读。",
+      "save_failed": "无法保存备注，请重试。"
+    },
+    "context_tabs": {
+      "notes": "备注",
+      "work_items": "工作项",
+      "runbook": "Runbook",
+      "activity": "动态",
+      "people": "人员"
+    },
+    "work_items": {
+      "primary_badge": "主要事件",
+      "add": "关联工作项",
+      "unlink": "取消关联",
+      "empty_title": "暂无关联的工作项",
+      "empty_description": "关联相关工作项，将上下文集中在一处。",
+      "link_failed": "无法更新关联的工作项，请重试。",
+      "unlink_failed": "无法取消工作项关联，请重试。"
+    },
+    "runbook": {
+      "progress": "已完成 {done}/{total}",
+      "add_placeholder": "添加步骤并按 Enter",
+      "empty_title": "暂无 Runbook 步骤",
+      "empty_description": "添加步骤以跟踪响应清单。",
+      "mark_done": "标记为完成",
+      "mark_undone": "标记为未完成",
+      "edit": "编辑",
+      "delete": "删除",
+      "save": "保存",
+      "cancel": "取消",
+      "update_failed": "无法更新 Runbook，请重试。"
+    },
+    "activity": {
+      "empty_title": "暂无动态",
+      "empty_description": "状态变更、关联和 Runbook 更新将显示在这里。",
+      "load_older": "加载更早的动态",
+      "load_failed": "无法加载动态，请重试。",
+      "actor_unknown": "有人",
+      "events": {
+        "room_created": "创建了作战室",
+        "status_changed": "将状态从 {from} 更改为 {to}",
+        "severity_changed": "将严重级别从 {from} 更改为 {to}",
+        "resolved": "解决了作战室",
+        "reopened": "重新打开了作战室",
+        "archived": "归档了作战室",
+        "participant_joined": "加入了作战室",
+        "participant_left": "离开了作战室",
+        "participant_role_changed": "将 {target} 的角色从 {from} 更改为 {to}",
+        "service_linked": "关联了 {services}",
+        "service_unlinked": "取消关联了 {service}",
+        "issue_linked": "关联了 {issues}",
+        "issue_unlinked": "取消关联了 {issue}",
+        "runbook_item_done": "完成了“{title}”",
+        "runbook_item_reopened": "重新打开了“{title}”",
+        "unknown": "更新了作战室"
+      }
+    },
+    "people": {
+      "add": "添加参与者",
+      "join": "加入",
+      "leave": "离开",
+      "role": "角色",
+      "online": "在线",
+      "empty_title": "暂无参与者",
+      "empty_description": "加入作战室或添加响应人员以进行协调。",
+      "update_failed": "无法更新参与者，请重试。",
+      "join_failed": "无法加入作战室，请重试。",
+      "leave_failed": "无法离开作战室，请重试。"
+    },
+    "errors": {
+      "room_archived": "此作战室已归档，无法更改。",
+      "forbidden": "您没有执行此操作的权限。",
+      "generic": "出现错误，请重试。"
     }
   }
 }

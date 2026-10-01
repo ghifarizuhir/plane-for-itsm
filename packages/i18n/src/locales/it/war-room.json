@@ -77,6 +77,156 @@
       "not_found_description": "La sala di crisi cercata non esiste o è stata eliminata.",
       "view_other_rooms": "Vedi altre sale di crisi",
       "back": "Torna alle sale di crisi"
+    },
+    "header": {
+      "rename_placeholder": "Nome della sala di crisi",
+      "more_actions": "Altre azioni",
+      "edit_details": "Modifica dettagli",
+      "archive": "Archivia",
+      "delete": "Elimina",
+      "resolve": "Risolvi",
+      "reopen": "Riapri",
+      "join": "Partecipa",
+      "leave": "Esci",
+      "status_control": "Cambia stato",
+      "severity_control": "Cambia gravità",
+      "online": "{count} online",
+      "you": "Lei"
+    },
+    "archived_notice": "Questa sala di crisi è archiviata e di sola lettura.",
+    "resolve_modal": {
+      "title": "Risolvi la sala di crisi",
+      "description": "Contrassegna questo incidente come risolto. Il timer si ferma e la sala resta disponibile per la revisione.",
+      "note_label": "Nota di risoluzione",
+      "note_placeholder": "Riepiloga la risoluzione per le note (facoltativo)",
+      "confirm": "Risolvi"
+    },
+    "archive_modal": {
+      "title": "Archivia la sala di crisi",
+      "description": "Le sale archiviate sono di sola lettura e definitive. Restano visibili nella scheda Tutte.",
+      "confirm": "Archivia"
+    },
+    "delete_modal": {
+      "title": "Elimina la sala di crisi",
+      "description": "Questo rimuove definitivamente la sala di crisi, la chat, il runbook e i collegamenti. Il registro attività viene conservato.",
+      "confirm": "Elimina la sala di crisi"
+    },
+    "edit_details_modal": {
+      "title": "Modifica i dettagli della sala di crisi",
+      "name": "Nome",
+      "description": "Descrizione",
+      "save": "Salva modifiche"
+    },
+    "map": {
+      "title": "Servizi interessati",
+      "empty_title": "Ancora nessun servizio interessato",
+      "empty_description": "Collega i servizi per vedere il raggio d'impatto.",
+      "add_services": "Aggiungi servizi",
+      "collapse": "Comprimi mappa",
+      "expand": "Espandi mappa",
+      "affected_legend": "Interessato",
+      "neighbor_legend": "Dipendenza",
+      "link_failed": "Impossibile aggiornare i servizi interessati. Riprova."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Carica messaggi precedenti",
+      "composer_placeholder": "Invia un messaggio alla sala. Usa @ per menzionare.",
+      "send": "Invia",
+      "empty_title": "Ancora nessun messaggio",
+      "empty_description": "Inizia a coordinare la risposta qui.",
+      "typing_single": "{name} sta scrivendo…",
+      "typing_multiple": "{count} persone stanno scrivendo…",
+      "reconnect_banner": "Riconnessione in corso… i messaggi potrebbero subire ritardi.",
+      "edited": "modificato",
+      "deleted": "Questo messaggio è stato eliminato",
+      "edit": "Modifica messaggio",
+      "delete": "Elimina messaggio",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "new_messages": "{count} nuovi",
+      "send_failed": "Impossibile inviare il messaggio.",
+      "load_failed": "Impossibile caricare i messaggi. Riprova.",
+      "mentions_empty": "Nessun membro trovato"
+    },
+    "notes": {
+      "placeholder": "Annota decisioni, cronologia e follow-up…",
+      "saving": "Salvataggio…",
+      "saved": "Salvato",
+      "edited_at": "Modificato {time}",
+      "read_only": "Le note sono di sola lettura per le sale archiviate.",
+      "save_failed": "Impossibile salvare le note. Riprova."
+    },
+    "context_tabs": {
+      "notes": "Note",
+      "work_items": "Elementi di lavoro",
+      "runbook": "Runbook",
+      "activity": "Attività",
+      "people": "Persone"
+    },
+    "work_items": {
+      "primary_badge": "Incidente principale",
+      "add": "Collega elementi di lavoro",
+      "unlink": "Scollega",
+      "empty_title": "Nessun elemento di lavoro collegato",
+      "empty_description": "Collega gli elementi di lavoro correlati per tenere il contesto in un unico posto.",
+      "link_failed": "Impossibile aggiornare gli elementi collegati. Riprova.",
+      "unlink_failed": "Impossibile scollegare l'elemento di lavoro. Riprova."
+    },
+    "runbook": {
+      "progress": "{done}/{total} completati",
+      "add_placeholder": "Aggiungi un passo e premi Invio",
+      "empty_title": "Nessun passo del runbook",
+      "empty_description": "Aggiungi passi per tenere traccia della checklist di risposta.",
+      "mark_done": "Segna come completato",
+      "mark_undone": "Segna come non completato",
+      "edit": "Modifica",
+      "delete": "Elimina",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "update_failed": "Impossibile aggiornare il runbook. Riprova."
+    },
+    "activity": {
+      "empty_title": "Ancora nessuna attività",
+      "empty_description": "Modifiche di stato, collegamenti e aggiornamenti del runbook appaiono qui.",
+      "load_older": "Carica attività precedenti",
+      "load_failed": "Impossibile caricare l'attività. Riprova.",
+      "actor_unknown": "Qualcuno",
+      "events": {
+        "room_created": "ha creato la sala di crisi",
+        "status_changed": "ha cambiato lo stato da {from} a {to}",
+        "severity_changed": "ha cambiato la gravità da {from} a {to}",
+        "resolved": "ha risolto la sala di crisi",
+        "reopened": "ha riaperto la sala di crisi",
+        "archived": "ha archiviato la sala di crisi",
+        "participant_joined": "è entrato nella sala",
+        "participant_left": "ha lasciato la sala",
+        "participant_role_changed": "ha cambiato il ruolo di {target} da {from} a {to}",
+        "service_linked": "ha collegato {services}",
+        "service_unlinked": "ha scollegato {service}",
+        "issue_linked": "ha collegato {issues}",
+        "issue_unlinked": "ha scollegato {issue}",
+        "runbook_item_done": "ha completato «{title}»",
+        "runbook_item_reopened": "ha riaperto «{title}»",
+        "unknown": "ha aggiornato la sala"
+      }
+    },
+    "people": {
+      "add": "Aggiungi partecipante",
+      "join": "Partecipa",
+      "leave": "Esci",
+      "role": "Ruolo",
+      "online": "Online",
+      "empty_title": "Ancora nessun partecipante",
+      "empty_description": "Partecipa alla sala o aggiungi i responsabili per coordinare.",
+      "update_failed": "Impossibile aggiornare i partecipanti. Riprova.",
+      "join_failed": "Impossibile partecipare alla sala di crisi. Riprova.",
+      "leave_failed": "Impossibile uscire dalla sala di crisi. Riprova."
+    },
+    "errors": {
+      "room_archived": "Questa sala di crisi è archiviata e non può essere modificata.",
+      "forbidden": "Non hai l'autorizzazione per farlo.",
+      "generic": "Qualcosa è andato storto. Riprova."
     }
   }
 }

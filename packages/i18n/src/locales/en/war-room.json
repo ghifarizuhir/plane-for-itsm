@@ -77,6 +77,156 @@
       "not_found_description": "The war room you are looking for does not exist or has been deleted.",
       "view_other_rooms": "View other war rooms",
       "back": "Back to war rooms"
+    },
+    "header": {
+      "rename_placeholder": "War room name",
+      "more_actions": "More actions",
+      "edit_details": "Edit details",
+      "archive": "Archive",
+      "delete": "Delete",
+      "resolve": "Resolve",
+      "reopen": "Reopen",
+      "join": "Join",
+      "leave": "Leave",
+      "status_control": "Change status",
+      "severity_control": "Change severity",
+      "online": "{count} online",
+      "you": "You"
+    },
+    "archived_notice": "This war room is archived and read-only.",
+    "resolve_modal": {
+      "title": "Resolve war room",
+      "description": "Mark this incident as resolved. The timer stops and the room stays available for review.",
+      "note_label": "Resolution note",
+      "note_placeholder": "Summarize the resolution for the notes (optional)",
+      "confirm": "Resolve"
+    },
+    "archive_modal": {
+      "title": "Archive war room",
+      "description": "Archived rooms are read-only and terminal. They stay visible in the All tab.",
+      "confirm": "Archive"
+    },
+    "delete_modal": {
+      "title": "Delete war room",
+      "description": "This permanently removes the war room, its chat, runbook and links. The activity feed is kept.",
+      "confirm": "Delete war room"
+    },
+    "edit_details_modal": {
+      "title": "Edit war room details",
+      "name": "Name",
+      "description": "Description",
+      "save": "Save changes"
+    },
+    "map": {
+      "title": "Affected services",
+      "empty_title": "No affected services yet",
+      "empty_description": "Link services to see the blast radius.",
+      "add_services": "Add services",
+      "collapse": "Collapse map",
+      "expand": "Expand map",
+      "affected_legend": "Affected",
+      "neighbor_legend": "Dependency",
+      "link_failed": "Couldn't update affected services. Please try again."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Load older messages",
+      "composer_placeholder": "Message the room. Use @ to mention.",
+      "send": "Send",
+      "empty_title": "No messages yet",
+      "empty_description": "Start coordinating the response here.",
+      "typing_single": "{name} is typing…",
+      "typing_multiple": "{count} people are typing…",
+      "reconnect_banner": "Reconnecting… messages may be delayed.",
+      "edited": "edited",
+      "deleted": "This message was deleted",
+      "edit": "Edit message",
+      "delete": "Delete message",
+      "save": "Save",
+      "cancel": "Cancel",
+      "new_messages": "{count} new",
+      "send_failed": "Couldn't send the message.",
+      "load_failed": "Couldn't load messages. Please try again.",
+      "mentions_empty": "No members found"
+    },
+    "notes": {
+      "placeholder": "Capture decisions, timeline, and follow-ups…",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "edited_at": "Edited {time}",
+      "read_only": "Notes are read-only for archived rooms.",
+      "save_failed": "Couldn't save the notes. Please try again."
+    },
+    "context_tabs": {
+      "notes": "Notes",
+      "work_items": "Work items",
+      "runbook": "Runbook",
+      "activity": "Activity",
+      "people": "People"
+    },
+    "work_items": {
+      "primary_badge": "Primary incident",
+      "add": "Link work items",
+      "unlink": "Unlink",
+      "empty_title": "No linked work items",
+      "empty_description": "Link related work items to keep context in one place.",
+      "link_failed": "Couldn't update linked work items. Please try again.",
+      "unlink_failed": "Couldn't unlink the work item. Please try again."
+    },
+    "runbook": {
+      "progress": "{done}/{total} done",
+      "add_placeholder": "Add a step and press Enter",
+      "empty_title": "No runbook steps",
+      "empty_description": "Add steps to track the response checklist.",
+      "mark_done": "Mark as done",
+      "mark_undone": "Mark as not done",
+      "edit": "Edit step",
+      "delete": "Delete step",
+      "save": "Save",
+      "cancel": "Cancel",
+      "update_failed": "Couldn't update the runbook. Please try again."
+    },
+    "activity": {
+      "empty_title": "No activity yet",
+      "empty_description": "Status changes, links and runbook updates appear here.",
+      "load_older": "Load older activity",
+      "load_failed": "Couldn't load activity. Please try again.",
+      "actor_unknown": "Someone",
+      "events": {
+        "room_created": "created the war room",
+        "status_changed": "changed status from {from} to {to}",
+        "severity_changed": "changed severity from {from} to {to}",
+        "resolved": "resolved the war room",
+        "reopened": "reopened the war room",
+        "archived": "archived the war room",
+        "participant_joined": "joined the room",
+        "participant_left": "left the room",
+        "participant_role_changed": "changed {target}'s role from {from} to {to}",
+        "service_linked": "linked {services}",
+        "service_unlinked": "unlinked {service}",
+        "issue_linked": "linked {issues}",
+        "issue_unlinked": "unlinked {issue}",
+        "runbook_item_done": "completed “{title}”",
+        "runbook_item_reopened": "reopened “{title}”",
+        "unknown": "updated the room"
+      }
+    },
+    "people": {
+      "add": "Add participant",
+      "join": "Join",
+      "leave": "Leave",
+      "role": "Role",
+      "online": "Online",
+      "empty_title": "No participants yet",
+      "empty_description": "Join the room or add responders to coordinate.",
+      "update_failed": "Couldn't update participants. Please try again.",
+      "join_failed": "Couldn't join the war room. Please try again.",
+      "leave_failed": "Couldn't leave the war room. Please try again."
+    },
+    "errors": {
+      "room_archived": "This war room is archived and can't be changed.",
+      "forbidden": "You don't have permission to do that.",
+      "generic": "Something went wrong. Please try again."
     }
   }
 }

@@ -77,6 +77,156 @@
       "not_found_description": "찾는 상황실이 존재하지 않거나 삭제되었습니다.",
       "view_other_rooms": "다른 상황실 보기",
       "back": "상황실로 돌아가기"
+    },
+    "header": {
+      "rename_placeholder": "상황실 이름",
+      "more_actions": "추가 작업",
+      "edit_details": "세부 정보 편집",
+      "archive": "보관",
+      "delete": "삭제",
+      "resolve": "해결",
+      "reopen": "다시 열기",
+      "join": "참가",
+      "leave": "나가기",
+      "status_control": "상태 변경",
+      "severity_control": "심각도 변경",
+      "online": "온라인 {count}명",
+      "you": "나"
+    },
+    "archived_notice": "이 상황실은 보관되어 읽기 전용입니다.",
+    "resolve_modal": {
+      "title": "상황실 해결",
+      "description": "이 인시던트를 해결됨으로 표시합니다. 타이머가 중지되고 검토를 위해 룸이 유지됩니다.",
+      "note_label": "해결 메모",
+      "note_placeholder": "메모용으로 해결 내용을 요약합니다(선택 사항)",
+      "confirm": "해결"
+    },
+    "archive_modal": {
+      "title": "상황실 보관",
+      "description": "보관된 룸은 읽기 전용이며 최종 상태입니다. 전체 탭에 계속 표시됩니다.",
+      "confirm": "보관"
+    },
+    "delete_modal": {
+      "title": "상황실 삭제",
+      "description": "상황실, 채팅, 런북 및 링크가 영구적으로 삭제됩니다. 활동 피드는 유지됩니다.",
+      "confirm": "상황실 삭제"
+    },
+    "edit_details_modal": {
+      "title": "상황실 세부 정보 편집",
+      "name": "이름",
+      "description": "설명",
+      "save": "변경 내용 저장"
+    },
+    "map": {
+      "title": "영향받는 서비스",
+      "empty_title": "아직 영향받는 서비스가 없습니다",
+      "empty_description": "서비스를 연결하면 영향 범위를 볼 수 있습니다.",
+      "add_services": "서비스 추가",
+      "collapse": "맵 접기",
+      "expand": "맵 펼치기",
+      "affected_legend": "영향받음",
+      "neighbor_legend": "종속성",
+      "link_failed": "영향받는 서비스를 업데이트하지 못했습니다. 다시 시도하십시오."
+    },
+    "chat": {
+      "title": "채팅",
+      "load_older": "이전 메시지 불러오기",
+      "composer_placeholder": "룸에 메시지를 보냅니다. @를 사용해 멘션합니다.",
+      "send": "보내기",
+      "empty_title": "아직 메시지가 없습니다",
+      "empty_description": "여기에서 대응을 조율하십시오.",
+      "typing_single": "{name}님이 입력 중…",
+      "typing_multiple": "{count}명이 입력 중…",
+      "reconnect_banner": "다시 연결 중… 메시지가 지연될 수 있습니다.",
+      "edited": "편집됨",
+      "deleted": "이 메시지는 삭제되었습니다",
+      "edit": "메시지 편집",
+      "delete": "메시지 삭제",
+      "save": "저장",
+      "cancel": "취소",
+      "new_messages": "새 메시지 {count}개",
+      "send_failed": "메시지를 보내지 못했습니다.",
+      "load_failed": "메시지를 불러오지 못했습니다. 다시 시도하십시오.",
+      "mentions_empty": "멤버를 찾을 수 없습니다"
+    },
+    "notes": {
+      "placeholder": "결정 사항, 타임라인, 후속 조치를 기록…",
+      "saving": "저장 중…",
+      "saved": "저장됨",
+      "edited_at": "{time}에 편집됨",
+      "read_only": "보관된 룸의 메모는 읽기 전용입니다.",
+      "save_failed": "메모를 저장하지 못했습니다. 다시 시도하십시오."
+    },
+    "context_tabs": {
+      "notes": "메모",
+      "work_items": "작업 항목",
+      "runbook": "런북",
+      "activity": "활동",
+      "people": "인원"
+    },
+    "work_items": {
+      "primary_badge": "주요 인시던트",
+      "add": "작업 항목 연결",
+      "unlink": "연결 해제",
+      "empty_title": "연결된 작업 항목이 없습니다",
+      "empty_description": "관련 작업 항목을 연결해 컨텍스트를 한곳에 유지하십시오.",
+      "link_failed": "연결된 작업 항목을 업데이트하지 못했습니다. 다시 시도하십시오.",
+      "unlink_failed": "작업 항목 연결을 해제하지 못했습니다. 다시 시도하십시오."
+    },
+    "runbook": {
+      "progress": "{done}/{total} 완료",
+      "add_placeholder": "단계를 추가하고 Enter를 누릅니다",
+      "empty_title": "런북 단계가 없습니다",
+      "empty_description": "대응 체크리스트를 추적할 단계를 추가하십시오.",
+      "mark_done": "완료로 표시",
+      "mark_undone": "미완료로 표시",
+      "edit": "편집",
+      "delete": "삭제",
+      "save": "저장",
+      "cancel": "취소",
+      "update_failed": "런북을 업데이트하지 못했습니다. 다시 시도하십시오."
+    },
+    "activity": {
+      "empty_title": "아직 활동이 없습니다",
+      "empty_description": "상태 변경, 연결, 런북 업데이트가 여기에 표시됩니다.",
+      "load_older": "이전 활동 불러오기",
+      "load_failed": "활동을 불러오지 못했습니다. 다시 시도하십시오.",
+      "actor_unknown": "누군가",
+      "events": {
+        "room_created": "님이 상황실을 만들었습니다",
+        "status_changed": "님이 상태를 {from}에서 {to}(으)로 변경했습니다",
+        "severity_changed": "님이 심각도를 {from}에서 {to}(으)로 변경했습니다",
+        "resolved": "님이 상황실을 해결했습니다",
+        "reopened": "님이 상황실을 다시 열었습니다",
+        "archived": "님이 상황실을 보관했습니다",
+        "participant_joined": "님이 룸에 참가했습니다",
+        "participant_left": "님이 룸을 나갔습니다",
+        "participant_role_changed": "님이 {target}님의 역할을 {from}에서 {to}(으)로 변경했습니다",
+        "service_linked": "님이 {services}을(를) 연결했습니다",
+        "service_unlinked": "님이 {service} 연결을 해제했습니다",
+        "issue_linked": "님이 {issues}을(를) 연결했습니다",
+        "issue_unlinked": "님이 {issue} 연결을 해제했습니다",
+        "runbook_item_done": "님이 “{title}”을(를) 완료했습니다",
+        "runbook_item_reopened": "님이 “{title}”을(를) 다시 열었습니다",
+        "unknown": "님이 룸을 업데이트했습니다"
+      }
+    },
+    "people": {
+      "add": "참가자 추가",
+      "join": "참가",
+      "leave": "나가기",
+      "role": "역할",
+      "online": "온라인",
+      "empty_title": "아직 참가자가 없습니다",
+      "empty_description": "룸에 참가하거나 대응자를 추가해 조율하십시오.",
+      "update_failed": "참가자를 업데이트하지 못했습니다. 다시 시도하십시오.",
+      "join_failed": "상황실에 참가하지 못했습니다. 다시 시도하십시오.",
+      "leave_failed": "상황실을 나가지 못했습니다. 다시 시도하십시오."
+    },
+    "errors": {
+      "room_archived": "이 상황실은 보관되어 변경할 수 없습니다.",
+      "forbidden": "해당 작업을 수행할 권한이 없습니다.",
+      "generic": "문제가 발생했습니다. 다시 시도하십시오."
     }
   }
 }

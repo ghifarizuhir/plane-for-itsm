@@ -77,6 +77,156 @@
       "not_found_description": "Phòng ứng phó sự cố bạn tìm không tồn tại hoặc đã bị xóa.",
       "view_other_rooms": "Xem các phòng ứng phó sự cố khác",
       "back": "Quay lại các phòng ứng phó sự cố"
+    },
+    "header": {
+      "rename_placeholder": "Tên phòng ứng phó",
+      "more_actions": "Thao tác khác",
+      "edit_details": "Chỉnh sửa chi tiết",
+      "archive": "Lưu trữ",
+      "delete": "Xóa",
+      "resolve": "Giải quyết",
+      "reopen": "Mở lại",
+      "join": "Tham gia",
+      "leave": "Rời đi",
+      "status_control": "Đổi trạng thái",
+      "severity_control": "Đổi mức độ",
+      "online": "{count} đang trực tuyến",
+      "you": "Bạn"
+    },
+    "archived_notice": "Phòng ứng phó này đã lưu trữ và chỉ đọc.",
+    "resolve_modal": {
+      "title": "Giải quyết phòng ứng phó",
+      "description": "Đánh dấu sự cố này là đã giải quyết. Bộ hẹn giờ sẽ dừng và phòng vẫn khả dụng để xem lại.",
+      "note_label": "Ghi chú giải quyết",
+      "note_placeholder": "Tóm tắt cách giải quyết cho ghi chú (không bắt buộc)",
+      "confirm": "Giải quyết"
+    },
+    "archive_modal": {
+      "title": "Lưu trữ phòng ứng phó",
+      "description": "Phòng đã lưu trữ chỉ đọc và là trạng thái cuối. Phòng vẫn hiển thị trong tab Tất cả.",
+      "confirm": "Lưu trữ"
+    },
+    "delete_modal": {
+      "title": "Xóa phòng ứng phó",
+      "description": "Thao tác này xóa vĩnh viễn phòng ứng phó, cuộc trò chuyện, runbook và các liên kết. Luồng hoạt động được giữ lại.",
+      "confirm": "Xóa phòng ứng phó"
+    },
+    "edit_details_modal": {
+      "title": "Chỉnh sửa chi tiết phòng ứng phó",
+      "name": "Tên",
+      "description": "Mô tả",
+      "save": "Lưu thay đổi"
+    },
+    "map": {
+      "title": "Dịch vụ bị ảnh hưởng",
+      "empty_title": "Chưa có dịch vụ bị ảnh hưởng",
+      "empty_description": "Liên kết dịch vụ để xem phạm vi ảnh hưởng.",
+      "add_services": "Thêm dịch vụ",
+      "collapse": "Thu gọn bản đồ",
+      "expand": "Mở rộng bản đồ",
+      "affected_legend": "Bị ảnh hưởng",
+      "neighbor_legend": "Phụ thuộc",
+      "link_failed": "Không thể cập nhật dịch vụ bị ảnh hưởng. Vui lòng thử lại."
+    },
+    "chat": {
+      "title": "Trò chuyện",
+      "load_older": "Tải tin nhắn cũ hơn",
+      "composer_placeholder": "Nhắn tin cho phòng. Dùng @ để nhắc đến.",
+      "send": "Gửi",
+      "empty_title": "Chưa có tin nhắn",
+      "empty_description": "Bắt đầu điều phối ứng phó tại đây.",
+      "typing_single": "{name} đang nhập…",
+      "typing_multiple": "{count} người đang nhập…",
+      "reconnect_banner": "Đang kết nối lại… tin nhắn có thể bị trễ.",
+      "edited": "đã sửa",
+      "deleted": "Tin nhắn này đã bị xóa",
+      "edit": "Sửa tin nhắn",
+      "delete": "Xóa tin nhắn",
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "new_messages": "{count} mới",
+      "send_failed": "Không thể gửi tin nhắn.",
+      "load_failed": "Không thể tải tin nhắn. Vui lòng thử lại.",
+      "mentions_empty": "Không tìm thấy thành viên"
+    },
+    "notes": {
+      "placeholder": "Ghi lại quyết định, mốc thời gian và việc tiếp theo…",
+      "saving": "Đang lưu…",
+      "saved": "Đã lưu",
+      "edited_at": "Đã sửa {time}",
+      "read_only": "Ghi chú của phòng đã lưu trữ chỉ đọc.",
+      "save_failed": "Không thể lưu ghi chú. Vui lòng thử lại."
+    },
+    "context_tabs": {
+      "notes": "Ghi chú",
+      "work_items": "Hạng mục công việc",
+      "runbook": "Runbook",
+      "activity": "Hoạt động",
+      "people": "Mọi người"
+    },
+    "work_items": {
+      "primary_badge": "Sự cố chính",
+      "add": "Liên kết hạng mục công việc",
+      "unlink": "Gỡ liên kết",
+      "empty_title": "Chưa có hạng mục công việc được liên kết",
+      "empty_description": "Liên kết các hạng mục liên quan để giữ ngữ cảnh ở một nơi.",
+      "link_failed": "Không thể cập nhật các hạng mục đã liên kết. Vui lòng thử lại.",
+      "unlink_failed": "Không thể gỡ liên kết hạng mục. Vui lòng thử lại."
+    },
+    "runbook": {
+      "progress": "Đã xong {done}/{total}",
+      "add_placeholder": "Thêm bước rồi nhấn Enter",
+      "empty_title": "Chưa có bước runbook",
+      "empty_description": "Thêm bước để theo dõi danh sách kiểm tra ứng phó.",
+      "mark_done": "Đánh dấu đã xong",
+      "mark_undone": "Đánh dấu chưa xong",
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa",
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "update_failed": "Không thể cập nhật runbook. Vui lòng thử lại."
+    },
+    "activity": {
+      "empty_title": "Chưa có hoạt động",
+      "empty_description": "Thay đổi trạng thái, liên kết và cập nhật runbook sẽ hiện ở đây.",
+      "load_older": "Tải hoạt động cũ hơn",
+      "load_failed": "Không thể tải hoạt động. Vui lòng thử lại.",
+      "actor_unknown": "Ai đó",
+      "events": {
+        "room_created": "đã tạo phòng ứng phó",
+        "status_changed": "đã đổi trạng thái từ {from} thành {to}",
+        "severity_changed": "đã đổi mức độ từ {from} thành {to}",
+        "resolved": "đã giải quyết phòng ứng phó",
+        "reopened": "đã mở lại phòng ứng phó",
+        "archived": "đã lưu trữ phòng ứng phó",
+        "participant_joined": "đã tham gia phòng",
+        "participant_left": "đã rời phòng",
+        "participant_role_changed": "đã đổi vai trò của {target} từ {from} thành {to}",
+        "service_linked": "đã liên kết {services}",
+        "service_unlinked": "đã gỡ liên kết {service}",
+        "issue_linked": "đã liên kết {issues}",
+        "issue_unlinked": "đã gỡ liên kết {issue}",
+        "runbook_item_done": "đã hoàn thành “{title}”",
+        "runbook_item_reopened": "đã mở lại “{title}”",
+        "unknown": "đã cập nhật phòng"
+      }
+    },
+    "people": {
+      "add": "Thêm người tham gia",
+      "join": "Tham gia",
+      "leave": "Rời đi",
+      "role": "Vai trò",
+      "online": "Trực tuyến",
+      "empty_title": "Chưa có người tham gia",
+      "empty_description": "Tham gia phòng hoặc thêm người ứng phó để điều phối.",
+      "update_failed": "Không thể cập nhật người tham gia. Vui lòng thử lại.",
+      "join_failed": "Không thể tham gia phòng ứng phó. Vui lòng thử lại.",
+      "leave_failed": "Không thể rời phòng ứng phó. Vui lòng thử lại."
+    },
+    "errors": {
+      "room_archived": "Phòng ứng phó này đã lưu trữ và không thể thay đổi.",
+      "forbidden": "Bạn không có quyền thực hiện việc này.",
+      "generic": "Đã xảy ra lỗi. Vui lòng thử lại."
     }
   }
 }

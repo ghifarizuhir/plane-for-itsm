@@ -77,6 +77,156 @@
       "not_found_description": "Aradığınız kriz odası mevcut değil veya silinmiş.",
       "view_other_rooms": "Diğer kriz odalarını görüntüle",
       "back": "Kriz odalarına dön"
+    },
+    "header": {
+      "rename_placeholder": "Kriz odası adı",
+      "more_actions": "Diğer işlemler",
+      "edit_details": "Ayrıntıları düzenle",
+      "archive": "Arşivle",
+      "delete": "Sil",
+      "resolve": "Çöz",
+      "reopen": "Yeniden aç",
+      "join": "Katıl",
+      "leave": "Ayrıl",
+      "status_control": "Durumu değiştir",
+      "severity_control": "Önem derecesini değiştir",
+      "online": "{count} çevrimiçi",
+      "you": "Siz"
+    },
+    "archived_notice": "Bu kriz odası arşivlendi ve salt okunur.",
+    "resolve_modal": {
+      "title": "Kriz odasını çöz",
+      "description": "Bu olayı çözüldü olarak işaretleyin. Zamanlayıcı durur ve oda inceleme için kullanılabilir kalır.",
+      "note_label": "Çözüm notu",
+      "note_placeholder": "Notlar için çözümü özetleyin (isteğe bağlı)",
+      "confirm": "Çöz"
+    },
+    "archive_modal": {
+      "title": "Kriz odasını arşivle",
+      "description": "Arşivlenen odalar salt okunur ve nihaidir. Tümü sekmesinde görünmeye devam eder.",
+      "confirm": "Arşivle"
+    },
+    "delete_modal": {
+      "title": "Kriz odasını sil",
+      "description": "Bu işlem kriz odasını, sohbetini, runbook'unu ve bağlantılarını kalıcı olarak kaldırır. Etkinlik akışı saklanır.",
+      "confirm": "Kriz odasını sil"
+    },
+    "edit_details_modal": {
+      "title": "Kriz odası ayrıntılarını düzenle",
+      "name": "Ad",
+      "description": "Açıklama",
+      "save": "Değişiklikleri kaydet"
+    },
+    "map": {
+      "title": "Etkilenen hizmetler",
+      "empty_title": "Henüz etkilenen hizmet yok",
+      "empty_description": "Etki alanını görmek için hizmet bağlayın.",
+      "add_services": "Hizmet ekle",
+      "collapse": "Haritayı daralt",
+      "expand": "Haritayı genişlet",
+      "affected_legend": "Etkilenen",
+      "neighbor_legend": "Bağımlılık",
+      "link_failed": "Etkilenen hizmetler güncellenemedi. Lütfen tekrar deneyin."
+    },
+    "chat": {
+      "title": "Sohbet",
+      "load_older": "Eski mesajları yükle",
+      "composer_placeholder": "Odaya mesaj gönderin. Bahsetmek için @ kullanın.",
+      "send": "Gönder",
+      "empty_title": "Henüz mesaj yok",
+      "empty_description": "Yanıt koordinasyonuna buradan başlayın.",
+      "typing_single": "{name} yazıyor…",
+      "typing_multiple": "{count} kişi yazıyor…",
+      "reconnect_banner": "Yeniden bağlanılıyor… mesajlar gecikebilir.",
+      "edited": "düzenlendi",
+      "deleted": "Bu mesaj silindi",
+      "edit": "Mesajı düzenle",
+      "delete": "Mesajı sil",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "new_messages": "{count} yeni",
+      "send_failed": "Mesaj gönderilemedi.",
+      "load_failed": "Mesajlar yüklenemedi. Lütfen tekrar deneyin.",
+      "mentions_empty": "Üye bulunamadı"
+    },
+    "notes": {
+      "placeholder": "Kararları, zaman çizelgesini ve takip işlerini kaydedin…",
+      "saving": "Kaydediliyor…",
+      "saved": "Kaydedildi",
+      "edited_at": "{time} düzenlendi",
+      "read_only": "Arşivlenen odaların notları salt okunurdur.",
+      "save_failed": "Notlar kaydedilemedi. Lütfen tekrar deneyin."
+    },
+    "context_tabs": {
+      "notes": "Notlar",
+      "work_items": "İş öğeleri",
+      "runbook": "Runbook",
+      "activity": "Etkinlik",
+      "people": "Kişiler"
+    },
+    "work_items": {
+      "primary_badge": "Birincil olay",
+      "add": "İş öğelerini bağla",
+      "unlink": "Bağlantıyı kaldır",
+      "empty_title": "Bağlı iş öğesi yok",
+      "empty_description": "Bağlamı tek yerde tutmak için ilgili iş öğelerini bağlayın.",
+      "link_failed": "Bağlı öğeler güncellenemedi. Lütfen tekrar deneyin.",
+      "unlink_failed": "İş öğesinin bağlantısı kaldırılamadı. Lütfen tekrar deneyin."
+    },
+    "runbook": {
+      "progress": "{done}/{total} tamamlandı",
+      "add_placeholder": "Adım ekleyip Enter'a basın",
+      "empty_title": "Runbook adımı yok",
+      "empty_description": "Yanıt denetim listesini izlemek için adım ekleyin.",
+      "mark_done": "Tamamlandı olarak işaretle",
+      "mark_undone": "Tamamlanmadı olarak işaretle",
+      "edit": "Düzenle",
+      "delete": "Sil",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "update_failed": "Runbook güncellenemedi. Lütfen tekrar deneyin."
+    },
+    "activity": {
+      "empty_title": "Henüz etkinlik yok",
+      "empty_description": "Durum değişiklikleri, bağlantılar ve runbook güncellemeleri burada görünür.",
+      "load_older": "Eski etkinlikleri yükle",
+      "load_failed": "Etkinlik yüklenemedi. Lütfen tekrar deneyin.",
+      "actor_unknown": "Biri",
+      "events": {
+        "room_created": "kriz odasını oluşturdu",
+        "status_changed": "durumu {from} konumundan {to} konumuna değiştirdi",
+        "severity_changed": "önem derecesini {from} konumundan {to} konumuna değiştirdi",
+        "resolved": "kriz odasını çözdü",
+        "reopened": "kriz odasını yeniden açtı",
+        "archived": "kriz odasını arşivledi",
+        "participant_joined": "odaya katıldı",
+        "participant_left": "odadan ayrıldı",
+        "participant_role_changed": "{target} adlı kişinin rolünü {from} konumundan {to} konumuna değiştirdi",
+        "service_linked": "{services} hizmetini bağladı",
+        "service_unlinked": "{service} hizmetinin bağlantısını kaldırdı",
+        "issue_linked": "{issues} öğesini bağladı",
+        "issue_unlinked": "{issue} öğesinin bağlantısını kaldırdı",
+        "runbook_item_done": "“{title}” adımını tamamladı",
+        "runbook_item_reopened": "“{title}” adımını yeniden açtı",
+        "unknown": "odayı güncelledi"
+      }
+    },
+    "people": {
+      "add": "Katılımcı ekle",
+      "join": "Katıl",
+      "leave": "Ayrıl",
+      "role": "Rol",
+      "online": "Çevrimiçi",
+      "empty_title": "Henüz katılımcı yok",
+      "empty_description": "Odaya katılın veya koordinasyon için yanıt verenleri ekleyin.",
+      "update_failed": "Katılımcılar güncellenemedi. Lütfen tekrar deneyin.",
+      "join_failed": "Kriz odasına katılınamadı. Lütfen tekrar deneyin.",
+      "leave_failed": "Kriz odasından ayrılınamadı. Lütfen tekrar deneyin."
+    },
+    "errors": {
+      "room_archived": "Bu kriz odası arşivlendi ve değiştirilemez.",
+      "forbidden": "Bunu yapma izniniz yok.",
+      "generic": "Bir şeyler yanlış gitti. Lütfen tekrar deneyin."
     }
   }
 }

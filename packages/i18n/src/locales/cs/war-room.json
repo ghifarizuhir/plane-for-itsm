@@ -77,6 +77,156 @@
       "not_found_description": "Hledaná krizová místnost neexistuje nebo byla smazána.",
       "view_other_rooms": "Zobrazit další krizové místnosti",
       "back": "Zpět na krizové místnosti"
+    },
+    "header": {
+      "rename_placeholder": "Název krizové místnosti",
+      "more_actions": "Další akce",
+      "edit_details": "Upravit podrobnosti",
+      "archive": "Archivovat",
+      "delete": "Smazat",
+      "resolve": "Vyřešit",
+      "reopen": "Znovu otevřít",
+      "join": "Připojit se",
+      "leave": "Opustit",
+      "status_control": "Změnit stav",
+      "severity_control": "Změnit závažnost",
+      "online": "{count} online",
+      "you": "Vy"
+    },
+    "archived_notice": "Tato krizová místnost je archivována a pouze ke čtení.",
+    "resolve_modal": {
+      "title": "Vyřešit krizovou místnost",
+      "description": "Označit tento incident jako vyřešený. Časovač se zastaví a místnost zůstane k dispozici k přezkoumání.",
+      "note_label": "Poznámka k vyřešení",
+      "note_placeholder": "Shrňte řešení do poznámek (volitelné)",
+      "confirm": "Vyřešit"
+    },
+    "archive_modal": {
+      "title": "Archivovat krizovou místnost",
+      "description": "Archivované místnosti jsou pouze ke čtení a konečné. Zůstávají viditelné na kartě Vše.",
+      "confirm": "Archivovat"
+    },
+    "delete_modal": {
+      "title": "Smazat krizovou místnost",
+      "description": "Tím se trvale odstraní krizová místnost, její chat, runbook a vazby. Záznam aktivit bude zachován.",
+      "confirm": "Smazat krizovou místnost"
+    },
+    "edit_details_modal": {
+      "title": "Upravit podrobnosti krizové místnosti",
+      "name": "Název",
+      "description": "Popis",
+      "save": "Uložit změny"
+    },
+    "map": {
+      "title": "Zasažené služby",
+      "empty_title": "Zatím žádné zasažené služby",
+      "empty_description": "Propojte služby, abyste viděli poloměr dopadu.",
+      "add_services": "Přidat služby",
+      "collapse": "Sbalit mapu",
+      "expand": "Rozbalit mapu",
+      "affected_legend": "Zasažená",
+      "neighbor_legend": "Závislost",
+      "link_failed": "Zasažené služby se nepodařilo aktualizovat. Zkuste to znovu."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Načíst starší zprávy",
+      "composer_placeholder": "Zpráva do místnosti. Použijte @ pro zmínku.",
+      "send": "Odeslat",
+      "empty_title": "Zatím žádné zprávy",
+      "empty_description": "Začněte zde koordinovat reakci.",
+      "typing_single": "{name} píše…",
+      "typing_multiple": "{count} píše…",
+      "reconnect_banner": "Opětovné připojování… zprávy se mohou zpozdit.",
+      "edited": "upraveno",
+      "deleted": "Tato zpráva byla smazána",
+      "edit": "Upravit zprávu",
+      "delete": "Smazat zprávu",
+      "save": "Uložit",
+      "cancel": "Zrušit",
+      "new_messages": "Nových: {count}",
+      "send_failed": "Zprávu se nepodařilo odeslat.",
+      "load_failed": "Zprávy se nepodařilo načíst. Zkuste to znovu.",
+      "mentions_empty": "Nebyli nalezeni žádní členové"
+    },
+    "notes": {
+      "placeholder": "Zaznamenávejte rozhodnutí, časovou osu a další kroky…",
+      "saving": "Ukládání…",
+      "saved": "Uloženo",
+      "edited_at": "Upraveno {time}",
+      "read_only": "Poznámky archivovaných místností jsou pouze ke čtení.",
+      "save_failed": "Poznámky se nepodařilo uložit. Zkuste to znovu."
+    },
+    "context_tabs": {
+      "notes": "Poznámky",
+      "work_items": "Pracovní položky",
+      "runbook": "Runbook",
+      "activity": "Aktivita",
+      "people": "Lidé"
+    },
+    "work_items": {
+      "primary_badge": "Primární incident",
+      "add": "Propojit pracovní položky",
+      "unlink": "Odebrat vazbu",
+      "empty_title": "Žádné propojené pracovní položky",
+      "empty_description": "Propojte související pracovní položky, abyste udrželi kontext na jednom místě.",
+      "link_failed": "Propojené položky se nepodařilo aktualizovat. Zkuste to znovu.",
+      "unlink_failed": "Vazbu se nepodařilo odebrat. Zkuste to znovu."
+    },
+    "runbook": {
+      "progress": "Hotovo {done}/{total}",
+      "add_placeholder": "Přidejte krok a stiskněte Enter",
+      "empty_title": "Žádné kroky runbooku",
+      "empty_description": "Přidejte kroky pro sledování kontrolního seznamu reakce.",
+      "mark_done": "Označit jako hotové",
+      "mark_undone": "Označit jako nehotové",
+      "edit": "Upravit",
+      "delete": "Smazat",
+      "save": "Uložit",
+      "cancel": "Zrušit",
+      "update_failed": "Runbook se nepodařilo aktualizovat. Zkuste to znovu."
+    },
+    "activity": {
+      "empty_title": "Zatím žádná aktivita",
+      "empty_description": "Změny stavu, vazby a aktualizace runbooku se objeví zde.",
+      "load_older": "Načíst starší aktivitu",
+      "load_failed": "Aktivitu se nepodařilo načíst. Zkuste to znovu.",
+      "actor_unknown": "Někdo",
+      "events": {
+        "room_created": "vytvořil(a) krizovou místnost",
+        "status_changed": "změnil(a) stav z {from} na {to}",
+        "severity_changed": "změnil(a) závažnost z {from} na {to}",
+        "resolved": "vyřešil(a) krizovou místnost",
+        "reopened": "znovu otevřel(a) krizovou místnost",
+        "archived": "archivoval(a) krizovou místnost",
+        "participant_joined": "se připojil(a) k místnosti",
+        "participant_left": "opustil(a) místnost",
+        "participant_role_changed": "změnil(a) roli {target} z {from} na {to}",
+        "service_linked": "propojil(a) {services}",
+        "service_unlinked": "odebral(a) vazbu {service}",
+        "issue_linked": "propojil(a) {issues}",
+        "issue_unlinked": "odebral(a) vazbu {issue}",
+        "runbook_item_done": "dokončil(a) „{title}“",
+        "runbook_item_reopened": "znovu otevřel(a) „{title}“",
+        "unknown": "aktualizoval(a) místnost"
+      }
+    },
+    "people": {
+      "add": "Přidat účastníka",
+      "join": "Připojit se",
+      "leave": "Opustit",
+      "role": "Role",
+      "online": "Online",
+      "empty_title": "Zatím žádní účastníci",
+      "empty_description": "Připojte se k místnosti nebo přidejte reagující pro koordinaci.",
+      "update_failed": "Účastníky se nepodařilo aktualizovat. Zkuste to znovu.",
+      "join_failed": "Ke krizové místnosti se nepodařilo připojit. Zkuste to znovu.",
+      "leave_failed": "Krizovou místnost se nepodařilo opustit. Zkuste to znovu."
+    },
+    "errors": {
+      "room_archived": "Tato krizová místnost je archivována a nelze ji změnit.",
+      "forbidden": "K tomu nemáte oprávnění.",
+      "generic": "Něco se pokazilo. Zkuste to znovu."
     }
   }
 }

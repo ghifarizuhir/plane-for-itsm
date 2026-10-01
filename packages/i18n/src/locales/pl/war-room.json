@@ -77,6 +77,156 @@
       "not_found_description": "Pokój kryzysowy, którego szukasz, nie istnieje lub został usunięty.",
       "view_other_rooms": "Zobacz inne pokoje kryzysowe",
       "back": "Wróć do pokoi kryzysowych"
+    },
+    "header": {
+      "rename_placeholder": "Nazwa pokoju kryzysowego",
+      "more_actions": "Więcej akcji",
+      "edit_details": "Edytuj szczegóły",
+      "archive": "Archiwizuj",
+      "delete": "Usuń",
+      "resolve": "Zakończ",
+      "reopen": "Wznów",
+      "join": "Dołącz",
+      "leave": "Opuść",
+      "status_control": "Zmień status",
+      "severity_control": "Zmień krytyczność",
+      "online": "{count} online",
+      "you": "Ty"
+    },
+    "archived_notice": "Ten pokój kryzysowy jest zarchiwizowany i tylko do odczytu.",
+    "resolve_modal": {
+      "title": "Zakończ pokój kryzysowy",
+      "description": "Oznacz ten incydent jako rozwiązany. Licznik zatrzyma się, a pokój pozostanie dostępny do przeglądu.",
+      "note_label": "Notatka o rozwiązaniu",
+      "note_placeholder": "Podsumuj rozwiązanie do notatek (opcjonalnie)",
+      "confirm": "Zakończ"
+    },
+    "archive_modal": {
+      "title": "Archiwizuj pokój kryzysowy",
+      "description": "Zarchiwizowane pokoje są tylko do odczytu i ostateczne. Pozostają widoczne na karcie Wszystkie.",
+      "confirm": "Archiwizuj"
+    },
+    "delete_modal": {
+      "title": "Usuń pokój kryzysowy",
+      "description": "Spowoduje to trwałe usunięcie pokoju kryzysowego, jego czatu, runbooka i powiązań. Kanał aktywności zostanie zachowany.",
+      "confirm": "Usuń pokój kryzysowy"
+    },
+    "edit_details_modal": {
+      "title": "Edytuj szczegóły pokoju kryzysowego",
+      "name": "Nazwa",
+      "description": "Opis",
+      "save": "Zapisz zmiany"
+    },
+    "map": {
+      "title": "Usługi dotknięte",
+      "empty_title": "Brak dotkniętych usług",
+      "empty_description": "Powiąż usługi, aby zobaczyć promień wpływu.",
+      "add_services": "Dodaj usługi",
+      "collapse": "Zwiń mapę",
+      "expand": "Rozwiń mapę",
+      "affected_legend": "Dotknięta",
+      "neighbor_legend": "Zależność",
+      "link_failed": "Nie można zaktualizować dotkniętych usług. Spróbuj ponownie."
+    },
+    "chat": {
+      "title": "Czat",
+      "load_older": "Wczytaj starsze wiadomości",
+      "composer_placeholder": "Wiadomość do pokoju. Użyj @, aby wspomnieć.",
+      "send": "Wyślij",
+      "empty_title": "Brak wiadomości",
+      "empty_description": "Zacznij koordynować reakcję tutaj.",
+      "typing_single": "{name} pisze…",
+      "typing_multiple": "{count} pisze…",
+      "reconnect_banner": "Ponowne łączenie… wiadomości mogą być opóźnione.",
+      "edited": "edytowano",
+      "deleted": "Ta wiadomość została usunięta",
+      "edit": "Edytuj wiadomość",
+      "delete": "Usuń wiadomość",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "new_messages": "Nowych: {count}",
+      "send_failed": "Nie można wysłać wiadomości.",
+      "load_failed": "Nie można wczytać wiadomości. Spróbuj ponownie.",
+      "mentions_empty": "Nie znaleziono członków"
+    },
+    "notes": {
+      "placeholder": "Zapisuj decyzje, oś czasu i dalsze kroki…",
+      "saving": "Zapisywanie…",
+      "saved": "Zapisano",
+      "edited_at": "Edytowano {time}",
+      "read_only": "Notatki zarchiwizowanych pokoi są tylko do odczytu.",
+      "save_failed": "Nie można zapisać notatek. Spróbuj ponownie."
+    },
+    "context_tabs": {
+      "notes": "Notatki",
+      "work_items": "Elementy pracy",
+      "runbook": "Runbook",
+      "activity": "Aktywność",
+      "people": "Osoby"
+    },
+    "work_items": {
+      "primary_badge": "Główny incydent",
+      "add": "Powiąż elementy pracy",
+      "unlink": "Usuń powiązanie",
+      "empty_title": "Brak powiązanych elementów pracy",
+      "empty_description": "Powiąż powiązane elementy pracy, aby zachować kontekst w jednym miejscu.",
+      "link_failed": "Nie można zaktualizować powiązanych elementów. Spróbuj ponownie.",
+      "unlink_failed": "Nie można usunąć powiązania. Spróbuj ponownie."
+    },
+    "runbook": {
+      "progress": "{done}/{total} ukończono",
+      "add_placeholder": "Dodaj krok i naciśnij Enter",
+      "empty_title": "Brak kroków runbooka",
+      "empty_description": "Dodaj kroki, aby śledzić listę kontrolną reakcji.",
+      "mark_done": "Oznacz jako ukończony",
+      "mark_undone": "Oznacz jako nieukończony",
+      "edit": "Edytuj",
+      "delete": "Usuń",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "update_failed": "Nie można zaktualizować runbooka. Spróbuj ponownie."
+    },
+    "activity": {
+      "empty_title": "Brak aktywności",
+      "empty_description": "Zmiany statusu, powiązania i aktualizacje runbooka pojawią się tutaj.",
+      "load_older": "Wczytaj starszą aktywność",
+      "load_failed": "Nie można wczytać aktywności. Spróbuj ponownie.",
+      "actor_unknown": "Ktoś",
+      "events": {
+        "room_created": "utworzył(a) pokój kryzysowy",
+        "status_changed": "zmienił(a) status z {from} na {to}",
+        "severity_changed": "zmienił(a) krytyczność z {from} na {to}",
+        "resolved": "zakończył(a) pokój kryzysowy",
+        "reopened": "wznowił(a) pokój kryzysowy",
+        "archived": "zarchiwizował(a) pokój kryzysowy",
+        "participant_joined": "dołączył(a) do pokoju",
+        "participant_left": "opuścił(a) pokój",
+        "participant_role_changed": "zmienił(a) rolę {target} z {from} na {to}",
+        "service_linked": "powiązał(a) {services}",
+        "service_unlinked": "usunął(ęła) powiązanie {service}",
+        "issue_linked": "powiązał(a) {issues}",
+        "issue_unlinked": "usunął(ęła) powiązanie {issue}",
+        "runbook_item_done": "ukończył(a) „{title}”",
+        "runbook_item_reopened": "wznowił(a) „{title}”",
+        "unknown": "zaktualizował(a) pokój"
+      }
+    },
+    "people": {
+      "add": "Dodaj uczestnika",
+      "join": "Dołącz",
+      "leave": "Opuść",
+      "role": "Rola",
+      "online": "Online",
+      "empty_title": "Brak uczestników",
+      "empty_description": "Dołącz do pokoju lub dodaj reagujących, aby koordynować.",
+      "update_failed": "Nie można zaktualizować uczestników. Spróbuj ponownie.",
+      "join_failed": "Nie można dołączyć do pokoju kryzysowego. Spróbuj ponownie.",
+      "leave_failed": "Nie można opuścić pokoju kryzysowego. Spróbuj ponownie."
+    },
+    "errors": {
+      "room_archived": "Ten pokój kryzysowy jest zarchiwizowany i nie można go zmienić.",
+      "forbidden": "Brak uprawnień do wykonania tej czynności.",
+      "generic": "Coś poszło nie tak. Spróbuj ponownie."
     }
   }
 }

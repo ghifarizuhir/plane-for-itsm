@@ -77,6 +77,156 @@
       "not_found_description": "Der gesuchte War Room existiert nicht oder wurde gelöscht.",
       "view_other_rooms": "Andere War Rooms ansehen",
       "back": "Zurück zu War Rooms"
+    },
+    "header": {
+      "rename_placeholder": "Name des War Rooms",
+      "more_actions": "Weitere Aktionen",
+      "edit_details": "Details bearbeiten",
+      "archive": "Archivieren",
+      "delete": "Löschen",
+      "resolve": "Abschließen",
+      "reopen": "Erneut öffnen",
+      "join": "Beitreten",
+      "leave": "Verlassen",
+      "status_control": "Status ändern",
+      "severity_control": "Schweregrad ändern",
+      "online": "{count} online",
+      "you": "Sie"
+    },
+    "archived_notice": "Dieser War Room ist archiviert und schreibgeschützt.",
+    "resolve_modal": {
+      "title": "War Room abschließen",
+      "description": "Diesen Incident als behoben markieren. Der Timer stoppt, der Room bleibt zur Nachbereitung verfügbar.",
+      "note_label": "Notiz zum Abschluss",
+      "note_placeholder": "Zusammenfassung des Abschlusses für die Notizen (optional)",
+      "confirm": "Abschließen"
+    },
+    "archive_modal": {
+      "title": "War Room archivieren",
+      "description": "Archivierte Rooms sind schreibgeschützt und endgültig. Sie bleiben im Tab „Alle“ sichtbar.",
+      "confirm": "Archivieren"
+    },
+    "delete_modal": {
+      "title": "War Room löschen",
+      "description": "Dadurch werden War Room, Chat, Runbook und Verknüpfungen endgültig entfernt. Der Aktivitätsverlauf bleibt erhalten.",
+      "confirm": "War Room löschen"
+    },
+    "edit_details_modal": {
+      "title": "War-Room-Details bearbeiten",
+      "name": "Name",
+      "description": "Beschreibung",
+      "save": "Änderungen speichern"
+    },
+    "map": {
+      "title": "Betroffene Services",
+      "empty_title": "Noch keine betroffenen Services",
+      "empty_description": "Services verknüpfen, um den Wirkungsradius zu sehen.",
+      "add_services": "Services hinzufügen",
+      "collapse": "Karte einklappen",
+      "expand": "Karte ausklappen",
+      "affected_legend": "Betroffen",
+      "neighbor_legend": "Abhängigkeit",
+      "link_failed": "Betroffene Services konnten nicht aktualisiert werden. Bitte erneut versuchen."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Ältere Nachrichten laden",
+      "composer_placeholder": "Nachricht an den Room senden. @ für Erwähnungen verwenden.",
+      "send": "Senden",
+      "empty_title": "Noch keine Nachrichten",
+      "empty_description": "Hier die Reaktion koordinieren.",
+      "typing_single": "{name} schreibt…",
+      "typing_multiple": "{count} Personen schreiben…",
+      "reconnect_banner": "Verbindung wird wiederhergestellt… Nachrichten können verzögert sein.",
+      "edited": "bearbeitet",
+      "deleted": "Diese Nachricht wurde gelöscht",
+      "edit": "Nachricht bearbeiten",
+      "delete": "Nachricht löschen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "new_messages": "{count} neu",
+      "send_failed": "Nachricht konnte nicht gesendet werden.",
+      "load_failed": "Nachrichten konnten nicht geladen werden. Bitte erneut versuchen.",
+      "mentions_empty": "Keine Mitglieder gefunden"
+    },
+    "notes": {
+      "placeholder": "Entscheidungen, Zeitachse und Folgemaßnahmen festhalten…",
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert",
+      "edited_at": "Bearbeitet {time}",
+      "read_only": "Notizen sind für archivierte Rooms schreibgeschützt.",
+      "save_failed": "Notizen konnten nicht gespeichert werden. Bitte erneut versuchen."
+    },
+    "context_tabs": {
+      "notes": "Notizen",
+      "work_items": "Arbeitselemente",
+      "runbook": "Runbook",
+      "activity": "Aktivität",
+      "people": "Personen"
+    },
+    "work_items": {
+      "primary_badge": "Primärer Incident",
+      "add": "Arbeitselemente verknüpfen",
+      "unlink": "Verknüpfung entfernen",
+      "empty_title": "Keine verknüpften Arbeitselemente",
+      "empty_description": "Zugehörige Arbeitselemente verknüpfen, um den Kontext an einem Ort zu behalten.",
+      "link_failed": "Verknüpfte Arbeitselemente konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+      "unlink_failed": "Verknüpfung konnte nicht entfernt werden. Bitte erneut versuchen."
+    },
+    "runbook": {
+      "progress": "{done}/{total} erledigt",
+      "add_placeholder": "Schritt hinzufügen und Enter drücken",
+      "empty_title": "Keine Runbook-Schritte",
+      "empty_description": "Schritte hinzufügen, um die Reaktions-Checkliste zu verfolgen.",
+      "mark_done": "Als erledigt markieren",
+      "mark_undone": "Als nicht erledigt markieren",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "update_failed": "Runbook konnte nicht aktualisiert werden. Bitte erneut versuchen."
+    },
+    "activity": {
+      "empty_title": "Noch keine Aktivität",
+      "empty_description": "Statusänderungen, Verknüpfungen und Runbook-Updates erscheinen hier.",
+      "load_older": "Ältere Aktivitäten laden",
+      "load_failed": "Aktivität konnte nicht geladen werden. Bitte erneut versuchen.",
+      "actor_unknown": "Jemand",
+      "events": {
+        "room_created": "hat den War Room erstellt",
+        "status_changed": "hat den Status von {from} in {to} geändert",
+        "severity_changed": "hat den Schweregrad von {from} in {to} geändert",
+        "resolved": "hat den War Room abgeschlossen",
+        "reopened": "hat den War Room erneut geöffnet",
+        "archived": "hat den War Room archiviert",
+        "participant_joined": "ist dem Room beigetreten",
+        "participant_left": "hat den Room verlassen",
+        "participant_role_changed": "hat die Rolle von {target} von {from} in {to} geändert",
+        "service_linked": "hat {services} verknüpft",
+        "service_unlinked": "hat die Verknüpfung von {service} entfernt",
+        "issue_linked": "hat {issues} verknüpft",
+        "issue_unlinked": "hat die Verknüpfung von {issue} entfernt",
+        "runbook_item_done": "hat „{title}“ abgeschlossen",
+        "runbook_item_reopened": "hat „{title}“ erneut geöffnet",
+        "unknown": "hat den Room aktualisiert"
+      }
+    },
+    "people": {
+      "add": "Teilnehmer hinzufügen",
+      "join": "Beitreten",
+      "leave": "Verlassen",
+      "role": "Rolle",
+      "online": "Online",
+      "empty_title": "Noch keine Teilnehmer",
+      "empty_description": "Dem Room beitreten oder Responder hinzufügen, um zu koordinieren.",
+      "update_failed": "Teilnehmer konnten nicht aktualisiert werden. Bitte erneut versuchen.",
+      "join_failed": "Dem War Room konnte nicht beigetreten werden. Bitte erneut versuchen.",
+      "leave_failed": "Der War Room konnte nicht verlassen werden. Bitte erneut versuchen."
+    },
+    "errors": {
+      "room_archived": "Dieser War Room ist archiviert und kann nicht geändert werden.",
+      "forbidden": "Dafür fehlt Ihnen die Berechtigung.",
+      "generic": "Etwas ist schiefgelaufen. Bitte erneut versuchen."
     }
   }
 }

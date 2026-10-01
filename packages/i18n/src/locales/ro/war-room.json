@@ -77,6 +77,156 @@
       "not_found_description": "Camera de criză pe care o căutați nu există sau a fost ștearsă.",
       "view_other_rooms": "Vezi alte camere de criză",
       "back": "Înapoi la camerele de criză"
+    },
+    "header": {
+      "rename_placeholder": "Numele camerei de criză",
+      "more_actions": "Mai multe acțiuni",
+      "edit_details": "Editează detaliile",
+      "archive": "Arhivează",
+      "delete": "Șterge",
+      "resolve": "Rezolvă",
+      "reopen": "Redeschide",
+      "join": "Alătură-te",
+      "leave": "Părăsește",
+      "status_control": "Schimbă starea",
+      "severity_control": "Schimbă gravitatea",
+      "online": "{count} online",
+      "you": "Dvs."
+    },
+    "archived_notice": "Această cameră de criză este arhivată și este doar în citire.",
+    "resolve_modal": {
+      "title": "Rezolvă camera de criză",
+      "description": "Marchează acest incident ca rezolvat. Cronometrul se oprește, iar camera rămâne disponibilă pentru analiză.",
+      "note_label": "Notă de rezolvare",
+      "note_placeholder": "Rezumă rezolvarea pentru note (opțional)",
+      "confirm": "Rezolvă"
+    },
+    "archive_modal": {
+      "title": "Arhivează camera de criză",
+      "description": "Camerele arhivate sunt doar în citire și definitive. Rămân vizibile în fila Toate.",
+      "confirm": "Arhivează"
+    },
+    "delete_modal": {
+      "title": "Șterge camera de criză",
+      "description": "Aceasta elimină definitiv camera de criză, chatul, runbook-ul și legăturile sale. Jurnalul de activitate este păstrat.",
+      "confirm": "Șterge camera de criză"
+    },
+    "edit_details_modal": {
+      "title": "Editează detaliile camerei de criză",
+      "name": "Nume",
+      "description": "Descriere",
+      "save": "Salvează modificările"
+    },
+    "map": {
+      "title": "Servicii afectate",
+      "empty_title": "Încă niciun serviciu afectat",
+      "empty_description": "Leagă servicii pentru a vedea raza de impact.",
+      "add_services": "Adaugă servicii",
+      "collapse": "Restrânge harta",
+      "expand": "Extinde harta",
+      "affected_legend": "Afectat",
+      "neighbor_legend": "Dependență",
+      "link_failed": "Serviciile afectate nu au putut fi actualizate. Încearcă din nou."
+    },
+    "chat": {
+      "title": "Chat",
+      "load_older": "Încarcă mesaje mai vechi",
+      "composer_placeholder": "Mesaj către cameră. Folosește @ pentru a menționa.",
+      "send": "Trimite",
+      "empty_title": "Încă niciun mesaj",
+      "empty_description": "Începe coordonarea răspunsului aici.",
+      "typing_single": "{name} scrie…",
+      "typing_multiple": "{count} scriu…",
+      "reconnect_banner": "Reconectare… mesajele pot întârzia.",
+      "edited": "editat",
+      "deleted": "Acest mesaj a fost șters",
+      "edit": "Editează mesajul",
+      "delete": "Șterge mesajul",
+      "save": "Salvează",
+      "cancel": "Anulează",
+      "new_messages": "{count} noi",
+      "send_failed": "Mesajul nu a putut fi trimis.",
+      "load_failed": "Mesajele nu au putut fi încărcate. Încearcă din nou.",
+      "mentions_empty": "Niciun membru găsit"
+    },
+    "notes": {
+      "placeholder": "Notează decizii, cronologie și pași următori…",
+      "saving": "Se salvează…",
+      "saved": "Salvat",
+      "edited_at": "Editat {time}",
+      "read_only": "Notele camerelor arhivate sunt doar în citire.",
+      "save_failed": "Notele nu au putut fi salvate. Încearcă din nou."
+    },
+    "context_tabs": {
+      "notes": "Note",
+      "work_items": "Elemente de lucru",
+      "runbook": "Runbook",
+      "activity": "Activitate",
+      "people": "Persoane"
+    },
+    "work_items": {
+      "primary_badge": "Incident principal",
+      "add": "Leagă elemente de lucru",
+      "unlink": "Dezleagă",
+      "empty_title": "Niciun element de lucru legat",
+      "empty_description": "Leagă elementele de lucru asociate pentru a păstra contextul într-un singur loc.",
+      "link_failed": "Elementele legate nu au putut fi actualizate. Încearcă din nou.",
+      "unlink_failed": "Legătura nu a putut fi eliminată. Încearcă din nou."
+    },
+    "runbook": {
+      "progress": "{done}/{total} finalizate",
+      "add_placeholder": "Adaugă un pas și apasă Enter",
+      "empty_title": "Niciun pas de runbook",
+      "empty_description": "Adaugă pași pentru a urmări lista de verificare.",
+      "mark_done": "Marchează ca finalizat",
+      "mark_undone": "Marchează ca nefinalizat",
+      "edit": "Editează",
+      "delete": "Șterge",
+      "save": "Salvează",
+      "cancel": "Anulează",
+      "update_failed": "Runbook-ul nu a putut fi actualizat. Încearcă din nou."
+    },
+    "activity": {
+      "empty_title": "Încă nicio activitate",
+      "empty_description": "Schimbările de stare, legăturile și actualizările runbook-ului apar aici.",
+      "load_older": "Încarcă activitate mai veche",
+      "load_failed": "Activitatea nu a putut fi încărcată. Încearcă din nou.",
+      "actor_unknown": "Cineva",
+      "events": {
+        "room_created": "a creat camera de criză",
+        "status_changed": "a schimbat starea din {from} în {to}",
+        "severity_changed": "a schimbat gravitatea din {from} în {to}",
+        "resolved": "a rezolvat camera de criză",
+        "reopened": "a redeschis camera de criză",
+        "archived": "a arhivat camera de criză",
+        "participant_joined": "s-a alăturat camerei",
+        "participant_left": "a părăsit camera",
+        "participant_role_changed": "a schimbat rolul lui {target} din {from} în {to}",
+        "service_linked": "a legat {services}",
+        "service_unlinked": "a dezlegat {service}",
+        "issue_linked": "a legat {issues}",
+        "issue_unlinked": "a dezlegat {issue}",
+        "runbook_item_done": "a finalizat „{title}”",
+        "runbook_item_reopened": "a redeschis „{title}”",
+        "unknown": "a actualizat camera"
+      }
+    },
+    "people": {
+      "add": "Adaugă participant",
+      "join": "Alătură-te",
+      "leave": "Părăsește",
+      "role": "Rol",
+      "online": "Online",
+      "empty_title": "Încă niciun participant",
+      "empty_description": "Alătură-te camerei sau adaugă responsabili pentru coordonare.",
+      "update_failed": "Participanții nu au putut fi actualizați. Încearcă din nou.",
+      "join_failed": "Alăturarea la camera de criză a eșuat. Încearcă din nou.",
+      "leave_failed": "Părăsirea camerei de criză a eșuat. Încearcă din nou."
+    },
+    "errors": {
+      "room_archived": "Această cameră de criză este arhivată și nu poate fi modificată.",
+      "forbidden": "Nu ai permisiunea să faci asta.",
+      "generic": "Ceva nu a mers bine. Încearcă din nou."
     }
   }
 }
