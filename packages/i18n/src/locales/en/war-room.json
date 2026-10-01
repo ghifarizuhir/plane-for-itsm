@@ -3,6 +3,10 @@
     "title": "War rooms",
     "add": "Create war room",
     "open": "Open war room",
+    "notification": {
+      "mention": "{name} mentioned you in {room}",
+      "dismiss": "Dismiss"
+    },
     "load_error": {
       "title": "Couldn't load war rooms",
       "description": "Something went wrong while fetching war rooms. Please try again.",

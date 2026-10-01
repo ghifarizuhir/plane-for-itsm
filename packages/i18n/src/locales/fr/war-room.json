@@ -3,6 +3,10 @@
     "title": "Salles de crise",
     "add": "Créer une salle de crise",
     "open": "Ouvrir la salle de crise",
+    "notification": {
+      "mention": "{name} vous a mentionné dans {room}",
+      "dismiss": "Fermer"
+    },
     "load_error": {
       "title": "Impossible de charger les salles de crise",
       "description": "Une erreur s'est produite lors du chargement des salles de crise. Veuillez réessayer.",

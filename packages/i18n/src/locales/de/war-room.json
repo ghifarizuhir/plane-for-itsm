@@ -3,6 +3,10 @@
     "title": "War Rooms",
     "add": "War Room erstellen",
     "open": "War Room öffnen",
+    "notification": {
+      "mention": "{name} hat Sie in {room} erwähnt",
+      "dismiss": "Schließen"
+    },
     "load_error": {
       "title": "War Rooms konnten nicht geladen werden",
       "description": "Beim Laden der War Rooms ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",

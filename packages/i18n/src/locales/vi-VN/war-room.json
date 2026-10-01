@@ -3,6 +3,10 @@
     "title": "Phòng ứng phó sự cố",
     "add": "Tạo phòng ứng phó sự cố",
     "open": "Mở phòng ứng phó sự cố",
+    "notification": {
+      "mention": "{name} đã nhắc đến bạn trong {room}",
+      "dismiss": "Đóng"
+    },
     "load_error": {
       "title": "Không thể tải phòng ứng phó sự cố",
       "description": "Đã xảy ra lỗi khi tải phòng ứng phó sự cố. Vui lòng thử lại.",

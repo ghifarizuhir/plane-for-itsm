@@ -3,6 +3,10 @@
     "title": "Kriz odaları",
     "add": "Kriz odası oluştur",
     "open": "Kriz odasını aç",
+    "notification": {
+      "mention": "{name} sizi {room} odasında etiketledi",
+      "dismiss": "Kapat"
+    },
     "load_error": {
       "title": "Kriz odaları yüklenemedi",
       "description": "Kriz odaları yüklenirken bir hata oluştu. Lütfen tekrar deneyin.",

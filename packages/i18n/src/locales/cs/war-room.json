@@ -3,6 +3,10 @@
     "title": "Krizové místnosti",
     "add": "Vytvořit krizovou místnost",
     "open": "Otevřít krizovou místnost",
+    "notification": {
+      "mention": "Zmínka od {name} v {room}",
+      "dismiss": "Zavřít"
+    },
     "load_error": {
       "title": "Krizové místnosti se nepodařilo načíst",
       "description": "Při načítání krizových místností došlo k chybě. Zkuste to prosím znovu.",

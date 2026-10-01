@@ -3,6 +3,10 @@
     "title": "Pokoje kryzysowe",
     "add": "Utwórz pokój kryzysowy",
     "open": "Otwórz pokój kryzysowy",
+    "notification": {
+      "mention": "Wzmianka od {name} w {room}",
+      "dismiss": "Zamknij"
+    },
     "load_error": {
       "title": "Nie można wczytać pokoi kryzysowych",
       "description": "Wystąpił błąd podczas wczytywania pokoi kryzysowych. Spróbuj ponownie.",

@@ -3,6 +3,10 @@
     "title": "상황실",
     "add": "상황실 생성",
     "open": "상황실 열기",
+    "notification": {
+      "mention": "{name}님이 {room}에서 회원님을 멘션했습니다",
+      "dismiss": "닫기"
+    },
     "load_error": {
       "title": "상황실을 불러오지 못했습니다",
       "description": "상황실을 불러오는 중 오류가 발생했습니다. 다시 시도하세요.",

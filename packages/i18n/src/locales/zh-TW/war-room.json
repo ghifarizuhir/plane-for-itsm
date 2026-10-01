@@ -3,6 +3,10 @@
     "title": "作戰室",
     "add": "建立作戰室",
     "open": "開啟作戰室",
+    "notification": {
+      "mention": "{name} 在 {room} 中提到了您",
+      "dismiss": "關閉"
+    },
     "load_error": {
       "title": "無法載入作戰室",
       "description": "載入作戰室時發生錯誤。請重試。",

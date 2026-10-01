@@ -3,6 +3,10 @@
     "title": "Krízové miestnosti",
     "add": "Vytvoriť krízovú miestnosť",
     "open": "Otvoriť krízovú miestnosť",
+    "notification": {
+      "mention": "Zmienka od {name} v {room}",
+      "dismiss": "Zavrieť"
+    },
     "load_error": {
       "title": "Krízové miestnosti sa nepodarilo načítať",
       "description": "Pri načítaní krízových miestností došlo k chybe. Skúste to prosím znova.",

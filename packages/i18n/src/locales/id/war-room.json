@@ -3,6 +3,10 @@
     "title": "Ruang perang",
     "add": "Buat ruang perang",
     "open": "Buka ruang perang",
+    "notification": {
+      "mention": "{name} menyebut Anda di {room}",
+      "dismiss": "Tutup"
+    },
     "load_error": {
       "title": "Ruang perang tidak dapat dimuat",
       "description": "Terjadi kesalahan saat memuat ruang perang. Silakan coba lagi.",

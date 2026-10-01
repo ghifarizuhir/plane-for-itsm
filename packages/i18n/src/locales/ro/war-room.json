@@ -3,6 +3,10 @@
     "title": "Camere de criză",
     "add": "Creează cameră de criză",
     "open": "Deschide camera de criză",
+    "notification": {
+      "mention": "Mențiune de la {name} în {room}",
+      "dismiss": "Închide"
+    },
     "load_error": {
       "title": "Camerele de criză nu au putut fi încărcate",
       "description": "A apărut o eroare la încărcarea camerelor de criză. Vă rugăm să încercați din nou.",

@@ -3,6 +3,10 @@
     "title": "作战室",
     "add": "创建作战室",
     "open": "打开作战室",
+    "notification": {
+      "mention": "{name} 在 {room} 中提到了您",
+      "dismiss": "关闭"
+    },
     "load_error": {
       "title": "无法加载作战室",
       "description": "加载作战室时出错。请重试。",
