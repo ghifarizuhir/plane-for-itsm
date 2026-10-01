@@ -41,6 +41,8 @@ test-results/
 # Caches and build artifacts
 .cache/
 **/.cache/
+target/
+**/target/
 storybook-static/
 *storybook.log
 *.tsbuildinfo
