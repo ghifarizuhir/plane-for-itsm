@@ -10,8 +10,6 @@ import { logger } from "@plane/logger";
 import { APIService } from "@/services/api.service";
 
 export class WarRoomService extends APIService {
-  
-
   /**
    * Reuse the REST detail endpoint as the membership gate: 200 = the cookie's
    * user can read the room (guest included), 403/404 = reject the socket.

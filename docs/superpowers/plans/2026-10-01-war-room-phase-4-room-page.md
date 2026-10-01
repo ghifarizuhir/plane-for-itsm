@@ -1246,6 +1246,20 @@ import type {
 } from "@plane/types";
 ```
 
+Also update the existing `makeDetail` fixture to seed one participant and one runbook item (the mutation tests below need a baseline to update):
+
+```ts
+const makeDetail = (overrides: Partial<IWarRoom> = {}): IWarRoom =>
+  ({
+    ...makeRoom(),
+    issues: [],
+    participants: [makeParticipant()],
+    runbook_items: [makeRunbookItem()],
+    counts: { messages: 0 },
+    ...overrides,
+  }) as unknown as IWarRoom;
+```
+
 Append these describes:
 
 ```ts
@@ -2281,7 +2295,7 @@ export const useWarRoomSocket = ({
       const socket = new WebSocket(url);
       socketRef.current = socket;
 
-      socket.onopen = () => {
+      const handleOpen = () => {
         if (disposed) {
           socket.close();
           return;
@@ -2293,7 +2307,7 @@ export const useWarRoomSocket = ({
         }, HEARTBEAT_INTERVAL_MS);
       };
 
-      socket.onmessage = (message) => {
+      const handleMessage = (message: MessageEvent) => {
         try {
           const event = JSON.parse(message.data as string) as TWarRoomSocketEvent;
           if (event?.kind) onEventRef.current(event);
@@ -2302,7 +2316,7 @@ export const useWarRoomSocket = ({
         }
       };
 
-      socket.onclose = (event) => {
+      const handleClose = (event: CloseEvent) => {
         clearTimers();
         socketRef.current = null;
         if (disposed) return;
@@ -2316,9 +2330,14 @@ export const useWarRoomSocket = ({
         reconnectTimerRef.current = setTimeout(connect, delay);
       };
 
-      socket.onerror = () => {
+      const handleError = () => {
         socket.close();
       };
+
+      socket.addEventListener("open", handleOpen);
+      socket.addEventListener("message", handleMessage);
+      socket.addEventListener("close", handleClose);
+      socket.addEventListener("error", handleError);
     };
 
     connect();
@@ -2893,7 +2912,7 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
     const toRemove = affectedServiceIds.filter((serviceId) => !next.has(serviceId));
     try {
       if (toAdd.length > 0) await addServices(workspaceSlug, projectId, room.id, toAdd);
-      for (const serviceId of toRemove) await removeService(workspaceSlug, projectId, room.id, serviceId);
+      await Promise.all(toRemove.map((serviceId) => removeService(workspaceSlug, projectId, room.id, serviceId)));
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -3151,7 +3170,11 @@ import type { IWarRoomMessage } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
 // helpers
-import { parseMessageSegments, shouldShowMessageHeader } from "@/services/war-room.helpers";
+import {
+  parseMessageSegments,
+  shouldShowMessageHeader,
+  type TWarRoomMessageSegment,
+} from "@/services/war-room.helpers";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useWarRoom } from "@/hooks/store/use-war-room";
@@ -3189,6 +3212,15 @@ export const WarRoomMessageItem = observer(function WarRoomMessageItem({
   const authorName =
     message.author?.display_name ?? (message.author_id ? getUserDetails(message.author_id)?.display_name : null);
   const segments = parseMessageSegments(message.body);
+  // Content-based keys: stable across renders and unique within one message
+  // (`no-array-index-key` forbids the map index in keys).
+  const seenKeys = new Map<string, number>();
+  const keyForSegment = (segment: TWarRoomMessageSegment): string => {
+    const base = segment.type === "mention" ? `mention-${segment.user_id}` : `text-${segment.value}`;
+    const count = (seenKeys.get(base) ?? 0) + 1;
+    seenKeys.set(base, count);
+    return `${base}-${count}`;
+  };
 
   const handleSave = async () => {
     const body = editValue.trim();
@@ -3271,13 +3303,13 @@ export const WarRoomMessageItem = observer(function WarRoomMessageItem({
           </div>
         ) : (
           <p className="text-13 break-words whitespace-pre-wrap text-primary">
-            {segments.map((segment, index) =>
+            {segments.map((segment) =>
               segment.type === "mention" ? (
-                <span key={index} className="rounded-xs bg-accent-subtle px-1 text-accent-primary">
+                <span key={keyForSegment(segment)} className="rounded-xs bg-accent-subtle px-1 text-accent-primary">
                   @{getUserDetails(segment.user_id)?.display_name ?? segment.user_id}
                 </span>
               ) : (
-                <span key={index}>{segment.value}</span>
+                <span key={keyForSegment(segment)}>{segment.value}</span>
               )
             )}
             {message.edited_at && <span className="ml-1 text-10 text-tertiary">({t("war_room.chat.edited")})</span>}
@@ -4004,6 +4036,7 @@ export const WarRoomRunbook = observer(function WarRoomRunbook({ workspaceSlug, 
                       if (event.key === "Enter") void handleSaveTitle(item.id);
                       if (event.key === "Escape") setEditingId(null);
                     }}
+                    // oxlint-disable-next-line eslint-plugin-jsx-a11y/no-autofocus -- inline edit input should take focus
                     autoFocus
                     className="min-w-0 flex-1 rounded-sm border border-subtle bg-surface-1 px-1.5 py-0.5 text-13 text-primary outline-none focus:border-strong"
                   />
@@ -4442,7 +4475,7 @@ export const WarRoomPeople = observer(function WarRoomPeople({ workspaceSlug, pr
                     label={
                       <span className="text-11 text-secondary">{t(WAR_ROOM_ROLE_LABEL_KEYS[participant.role])}</span>
                     }
-                    onChange={(role) => void handleRoleChange(participant, role as TWarRoomParticipantRole)}
+                    onChange={(role: TWarRoomParticipantRole) => void handleRoleChange(participant, role)}
                     noChevron
                   >
                     {WAR_ROOM_PARTICIPANT_ROLES.map((role) => (
@@ -4808,6 +4841,10 @@ import { RichTextEditor } from "@/components/editor/rich-text";
 import { SERVICE_DESCRIPTION_DISABLED_EXTENSIONS } from "@/services/service.helpers";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
+// services
+import { WorkspaceService } from "@/services/workspace.service";
+
+const workspaceService = new WorkspaceService();
 
 type Props = {
   isOpen: boolean;
@@ -4868,6 +4905,12 @@ export const WarRoomEditDetailsModal = observer(function WarRoomEditDetailsModal
             onChange={(_json: object, html: string) => setDescriptionHtml(html)}
             placeholder={t("war_room.edit_details_modal.description")}
             containerClassName="min-h-24 rounded-md border border-subtle"
+            searchMentionCallback={async (payload) =>
+              await workspaceService.searchEntity(workspaceSlug, {
+                ...payload,
+                project_id: projectId,
+              })
+            }
             uploadFile={async () => {
               throw new Error("File upload is disabled for war room descriptions.");
             }}
@@ -5098,6 +5141,7 @@ export const WarRoomHeader = observer(function WarRoomHeader({ workspaceSlug, pr
               setIsEditingName(false);
             }
           }}
+          // oxlint-disable-next-line eslint-plugin-jsx-a11y/no-autofocus -- inline name edit should take focus
           autoFocus
           maxLength={255}
           className="min-w-40 max-w-72 flex-1 rounded-sm border border-subtle bg-surface-1 px-1.5 py-0.5 text-14 font-medium text-primary outline-none focus:border-strong"
@@ -5123,7 +5167,7 @@ export const WarRoomHeader = observer(function WarRoomHeader({ workspaceSlug, pr
               {t(WAR_ROOM_SEVERITY_CONFIG[room.severity].label_key)}
             </span>
           }
-          onChange={(severity) => void handleSeverityChange(severity as TWarRoomSeverity)}
+          onChange={(severity: TWarRoomSeverity) => void handleSeverityChange(severity)}
           noChevron
         >
           {WAR_ROOM_SEVERITIES.map((severity) => (
