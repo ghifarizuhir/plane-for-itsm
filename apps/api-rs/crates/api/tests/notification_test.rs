@@ -77,7 +77,7 @@ fn rejects_non_bool_preference_value() {
 }
 
 #[tokio::test]
-async fn list_includes_schedule_run_notifications() {
+async fn list_includes_known_entity_types() {
     let pool = pool().await;
     let slug = format!("ntf-{}", Uuid::new_v4().simple());
     let user_id = Uuid::new_v4();
@@ -120,6 +120,18 @@ async fn list_includes_schedule_run_notifications() {
             "in_app:ai_schedule:run",
             json!({"ai_schedule": {"schedule_id": schedule_id.to_string(), "run_id": run_id.to_string()}}),
         ),
+        (
+            "war_room",
+            "Checkout down",
+            "in_app:war_room:mentioned",
+            json!({"war_room": {
+                "id": Uuid::new_v4().to_string(),
+                "project_id": Uuid::new_v4().to_string(),
+                "workspace_slug": slug.clone(),
+                "name": "Checkout down",
+                "sequence_id": 1,
+            }}),
+        ),
         ("mystery", "Hidden", "in_app:other", json!({})),
     ] {
         sqlx::query(
@@ -160,6 +172,39 @@ async fn list_includes_schedule_run_notifications() {
         names.contains(&"ai_schedule_run"),
         "schedule run notifications must be listed"
     );
+    // Mention-carrying senders surface under `mentioned=true`, not the default list.
+    assert!(
+        !names.contains(&"war_room"),
+        "war room mentions belong to the mentions filter"
+    );
+    assert!(!names.contains(&"mystery"), "unknown entity types stay hidden");
+
+    let mut mentioned = HashMap::<String, String>::new();
+    mentioned.insert("mentioned".to_string(), "true".to_string());
+    let (status, Json(rows)) = notification::list(
+        State(state.clone()),
+        AuthUser(user_id),
+        Path(slug.clone()),
+        Query(mentioned),
+    )
+    .await
+    .expect("mentioned list ok");
+    assert_eq!(status, StatusCode::OK);
+    let names: Vec<&str> = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["entity_name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"war_room"),
+        "war room mention notifications must be listed under the mentions filter"
+    );
+    assert!(!names.contains(&"issue"), "non-mention issues stay out of the mentions filter");
+    assert!(
+        !names.contains(&"ai_schedule_run"),
+        "non-mention schedule runs stay out of the mentions filter"
+    );
     assert!(!names.contains(&"mystery"), "unknown entity types stay hidden");
 
     let Json(counts) = notification::unread(State(state.clone()), AuthUser(user_id), Path(slug.clone()))
@@ -167,7 +212,10 @@ async fn list_includes_schedule_run_notifications() {
         .expect("unread ok");
     // The unread badge intentionally counts every entity_name (pre-existing
     // behaviour); only the list filter hides unknown types.
+    // The unread badge counts by sender: non-mention rows in the total,
+    // war room rows (sender `in_app:war_room:mentioned`) in the mentions badge.
     assert_eq!(counts["total_unread_notifications_count"], json!(3));
+    assert_eq!(counts["mention_unread_notifications_count"], json!(1));
 
     sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
         .bind(workspace_id)
