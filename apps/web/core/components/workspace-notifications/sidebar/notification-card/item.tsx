@@ -6,9 +6,12 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
+import { useRouter } from "next/navigation";
 import { CalendarOutline, ClockOutline } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
+import { getWarRoomLink } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { Badge } from "@plane/propel/badge";
 import { Row } from "@plane/ui";
 import { cn, calculateTimeAgo, renderFormattedDate, renderFormattedTime, getFileURL } from "@plane/utils";
@@ -19,6 +22,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // lib
 import { isScheduleRunNotification, scheduleRunNotificationText, scheduleStatusLabel } from "@/lib/ai-schedule";
+import { isWarRoomNotification } from "@/lib/war-room-notification";
 // local imports
 import { NotificationContent } from "./content";
 import { NotificationOption } from "./options";
@@ -35,6 +39,9 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const { asJson: notification, markNotificationAsRead } = useNotification(notificationId);
   const { getIsIssuePeeked, setPeekIssue } = useIssueDetail();
   const { getWorkspaceBySlug } = useWorkspace();
+  // router
+  const router = useRouter();
+  const { t } = useTranslation();
   // states
   const [isSnoozeStateModalOpen, setIsSnoozeStateModalOpen] = useState(false);
   const [customSnoozeModal, setCustomSnoozeModal] = useState(false);
@@ -44,6 +51,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const issueId = notification?.data?.issue?.id || undefined;
   const workspace = getWorkspaceBySlug(workspaceSlug);
   const scheduleRun = isScheduleRunNotification(notification?.data) ? notification?.data?.ai_schedule : undefined;
+  const warRoom = isWarRoomNotification(notification?.data) ? notification?.data?.war_room : undefined;
 
   const notificationField = notification?.data?.issue_activity?.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
@@ -62,6 +70,12 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
       }
     }
 
+    // war room mentions open the room page itself
+    if (warRoom) {
+      router.push(getWarRoomLink(workspaceSlug, warRoom.project_id, warRoom.id));
+      return;
+    }
+
     // schedule runs render their output in the right pane; nothing else to do
     if (scheduleRun) return;
 
@@ -72,7 +86,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   };
 
   if (!workspaceSlug || !notificationId || !notification?.id || !workspace?.id) return <></>;
-  if (!scheduleRun && (!notificationField || !projectId)) return <></>;
+  if (!scheduleRun && !warRoom && (!notificationField || !projectId)) return <></>;
 
   return (
     <Row
@@ -109,6 +123,17 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
             <div className="line-clamp-1 w-full truncate overflow-hidden text-body-xs-medium break-all whitespace-normal text-primary">
               {scheduleRun ? (
                 <span className="font-medium text-primary">{scheduleRun.name}</span>
+              ) : warRoom ? (
+                <span className="font-medium text-primary">
+                  {t("war_room.notification.mention", {
+                    name: notificationTriggeredBy?.is_bot
+                      ? notificationTriggeredBy.first_name
+                      : notificationTriggeredBy?.display_name ||
+                        notificationTriggeredBy?.first_name ||
+                        t("war_room.activity.actor_unknown"),
+                    room: warRoom.name,
+                  })}
+                </span>
               ) : (
                 <NotificationContent
                   notification={notification}
@@ -141,6 +166,8 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
                     <span className="truncate text-danger-primary">{scheduleRun.error}</span>
                   )}
                 </span>
+              ) : warRoom ? (
+                <span>WR-{warRoom.sequence_id}</span>
               ) : (
                 <>
                   {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
