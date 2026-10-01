@@ -121,7 +121,8 @@ export const serializeMentionTokens = (body: string, mentions: TWarRoomMention[]
   let output = body;
   const ordered = [...mentions]
     .filter((mention) => mention.display_name !== "")
-    .toSorted((a, b) => b.display_name.length - a.display_name.length);
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; the spread above already copies the array
+    .sort((a, b) => b.display_name.length - a.display_name.length);
   for (const mention of ordered) {
     output = output.split(`@${mention.display_name}`).join(`@{${mention.id}}`);
   }

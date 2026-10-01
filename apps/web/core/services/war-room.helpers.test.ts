@@ -114,14 +114,17 @@ describe("getBlastRadius", () => {
     const dependencies = [makeDependency("a", "b"), makeDependency("c", "a"), makeDependency("b", "x")];
     const result = getBlastRadius(["a"], dependencies);
     expect(result.affectedIds).toEqual(["a"]);
-    expect(result.neighborIds.toSorted()).toEqual(["b", "c"]);
-    expect(result.includedIds.toSorted()).toEqual(["a", "b", "c"]);
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; the spread copies the array
+    expect([...result.neighborIds].sort()).toEqual(["b", "c"]);
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; the spread copies the array
+    expect([...result.includedIds].sort()).toEqual(["a", "b", "c"]);
   });
 
   it("does not mark an affected service as its own neighbor", () => {
     const result = getBlastRadius(["a", "b"], [makeDependency("a", "b")]);
     expect(result.neighborIds).toEqual([]);
-    expect(result.includedIds.toSorted()).toEqual(["a", "b"]);
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; the spread copies the array
+    expect([...result.includedIds].sort()).toEqual(["a", "b"]);
   });
 });
 

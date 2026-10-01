@@ -115,7 +115,7 @@ export class WarRoomService extends APIService {
   }
 
   async deleteWarRoom(workspaceSlug: string, projectId: string, warRoomId: string): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/`).catch((error) => {
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/`).catch((error) => {
       throw toWarRoomError(error);
     });
   }
@@ -134,11 +134,9 @@ export class WarRoomService extends APIService {
   }
 
   async removeService(workspaceSlug: string, projectId: string, warRoomId: string, serviceId: string): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/services/${serviceId}/`).catch(
-      (error) => {
-        throw toWarRoomError(error);
-      }
-    );
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/services/${serviceId}/`).catch((error) => {
+      throw toWarRoomError(error);
+    });
   }
 
   async addIssues(
@@ -155,7 +153,7 @@ export class WarRoomService extends APIService {
   }
 
   async removeIssue(workspaceSlug: string, projectId: string, warRoomId: string, issueId: string): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/issues/${issueId}/`).catch((error) => {
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/issues/${issueId}/`).catch((error) => {
       throw toWarRoomError(error);
     });
   }
@@ -193,7 +191,7 @@ export class WarRoomService extends APIService {
     warRoomId: string,
     participantId: string
   ): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/participants/${participantId}/`).catch(
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/participants/${participantId}/`).catch(
       (error) => {
         throw toWarRoomError(error);
       }
@@ -228,7 +226,7 @@ export class WarRoomService extends APIService {
   }
 
   async deleteRunbookItem(workspaceSlug: string, projectId: string, warRoomId: string, itemId: string): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/runbook-items/${itemId}/`).catch(
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/runbook-items/${itemId}/`).catch(
       (error) => {
         throw toWarRoomError(error);
       }
@@ -276,11 +274,9 @@ export class WarRoomService extends APIService {
   }
 
   async deleteMessage(workspaceSlug: string, projectId: string, warRoomId: string, messageId: string): Promise<void> {
-    return this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/messages/${messageId}/`).catch(
-      (error) => {
-        throw toWarRoomError(error);
-      }
-    );
+    await this.delete(`${this.roomPath(workspaceSlug, projectId, warRoomId)}/messages/${messageId}/`).catch((error) => {
+      throw toWarRoomError(error);
+    });
   }
 
   async getEvents(
