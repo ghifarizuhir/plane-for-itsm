@@ -47,23 +47,34 @@ export const WarRoomContextPanel = observer(function WarRoomContextPanel({
   const { storedValue, setValue } = useLocalStorage<TContextTab>(`war-room-context-tab-${room.id}`, "notes");
   // derived values
   const activeTab = CONTEXT_TABS.some((tab) => tab.key === storedValue) ? storedValue : "notes";
+  const tabBadges: Partial<Record<TContextTab, string>> = {
+    work_items: room.issues.length > 0 ? String(room.issues.length) : "",
+    runbook:
+      room.runbook_items.length > 0
+        ? `${room.runbook_items.filter((item) => item.is_done).length}/${room.runbook_items.length}`
+        : "",
+    people: room.participants.length > 0 ? String(room.participants.length) : "",
+  };
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-1">
-      <div className="flex shrink-0 items-center gap-1 border-b border-subtle px-2 pt-1.5">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-subtle px-2 py-1.5">
         {CONTEXT_TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setValue(tab.key)}
             className={cn(
-              "rounded-t-sm border-b-2 px-2 py-1 text-11 font-medium transition-colors",
+              "flex shrink-0 items-center gap-1 rounded-sm px-2 py-1 font-code text-10 font-medium tracking-[0.08em] uppercase transition-colors",
               activeTab === tab.key
-                ? "border-accent-primary text-primary"
-                : "border-transparent text-tertiary hover:text-secondary"
+                ? "bg-layer-1 text-primary"
+                : "text-tertiary hover:bg-layer-transparent-hover hover:text-secondary"
             )}
           >
             {t(tab.label_key)}
+            {tabBadges[tab.key] && (
+              <span className="font-code text-9 text-tertiary tabular-nums">{tabBadges[tab.key]}</span>
+            )}
           </button>
         ))}
       </div>

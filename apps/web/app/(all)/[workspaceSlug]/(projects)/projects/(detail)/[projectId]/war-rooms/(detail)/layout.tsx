@@ -5,18 +5,14 @@
  */
 
 import { Outlet } from "react-router";
-// components
-import { AppHeader } from "@/components/core/app-header";
-import { ContentWrapper } from "@/components/core/content-wrapper";
-import { WarRoomDetailHeader } from "@/components/war-rooms";
+
+/**
+ * War rooms are incident command surfaces: they render in their own browser tab
+ * and take over the viewport. `fullscreen` tells the workspace and project
+ * layouts above to skip the top navigation, app rail and project sidebars.
+ */
+export const handle = { fullscreen: true };
 
 export default function ProjectWarRoomDetailLayout() {
-  return (
-    <>
-      <AppHeader header={<WarRoomDetailHeader />} />
-      <ContentWrapper>
-        <Outlet />
-      </ContentWrapper>
-    </>
-  );
+  return <Outlet />;
 }

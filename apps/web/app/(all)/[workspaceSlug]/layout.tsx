@@ -10,19 +10,26 @@ import { WorkspaceContentWrapper } from "@/components/workspace/content-wrapper"
 import { AppRailVisibilityProvider } from "@/lib/app-rail";
 import { GlobalModals } from "@/components/common/modal/global";
 import { WorkspaceAuthWrapper } from "@/layouts/auth-layout/workspace-wrapper";
+import { useFullscreenRoute } from "@/hooks/use-fullscreen-route";
 import type { Route } from "./+types/layout";
 
 export default function WorkspaceLayout(props: Route.ComponentProps) {
   const { workspaceSlug } = props.params;
+  // fullscreen routes (war rooms) render without the top navigation and app rail
+  const isFullscreen = useFullscreenRoute();
 
   return (
     <AuthenticationWrapper>
       <WorkspaceAuthWrapper>
         <AppRailVisibilityProvider>
-          <WorkspaceContentWrapper>
-            <GlobalModals workspaceSlug={workspaceSlug} />
+          <GlobalModals workspaceSlug={workspaceSlug} />
+          {isFullscreen ? (
             <Outlet />
-          </WorkspaceContentWrapper>
+          ) : (
+            <WorkspaceContentWrapper>
+              <Outlet />
+            </WorkspaceContentWrapper>
+          )}
         </AppRailVisibilityProvider>
       </WorkspaceAuthWrapper>
     </AuthenticationWrapper>

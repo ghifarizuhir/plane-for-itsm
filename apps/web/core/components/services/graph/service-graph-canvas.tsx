@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -55,8 +55,11 @@ export function ServiceGraphCanvas({
 }: TServiceGraphCanvasProps) {
   // plane hooks
   const { t, currentLocale } = useTranslation();
+  // states
+  const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
   // refs
   const fitDone = useRef(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   // derived values
   const highlighted = useMemo(() => new Set(highlightedServiceIds ?? []), [highlightedServiceIds]);
 
@@ -169,32 +172,48 @@ export function ServiceGraphCanvas({
     [onNodeClick]
   );
 
+  // Fit the graph the first time the canvas actually has dimensions. The war room
+  // mounts this inside an off-screen drawer below xl, so `onInit` alone would fit
+  // against a 0x0 viewport and never retry.
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node || !instance) return;
+    const fit = () => {
+      if (fitDone.current) return;
+      const { width, height } = node.getBoundingClientRect();
+      if (width === 0 || height === 0) return;
+      fitDone.current = true;
+      instance.fitView();
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [instance]);
+
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={readOnly ? undefined : handleConnect}
-      onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
-      onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
-      onNodeClick={handleNodeClick}
-      nodesDraggable={!readOnly}
-      nodesConnectable={!readOnly}
-      edgesFocusable={!readOnly}
-      elementsSelectable={!readOnly}
-      deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
-      onInit={(instance: ReactFlowInstance) => {
-        if (!fitDone.current) {
-          fitDone.current = true;
-          instance.fitView();
-        }
-      }}
-    >
-      <Background />
-      <Controls />
-      {!readOnly && <MiniMap />}
-    </ReactFlow>
+    <div ref={wrapperRef} className="h-full w-full">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={readOnly ? undefined : handleConnect}
+        onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
+        onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
+        onNodeClick={handleNodeClick}
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        edgesFocusable={!readOnly}
+        elementsSelectable={!readOnly}
+        deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
+        onInit={setInstance}
+      >
+        <Background />
+        <Controls />
+        {!readOnly && <MiniMap />}
+      </ReactFlow>
+    </div>
   );
 }

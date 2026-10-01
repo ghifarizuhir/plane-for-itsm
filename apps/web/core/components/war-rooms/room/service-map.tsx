@@ -4,11 +4,10 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IService, IServiceHealthSnapshot, IWarRoom, TServiceGraphData } from "@plane/types";
 // components
@@ -41,8 +40,6 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
     useService();
   const { addServices, removeService } = useWarRoom();
   const { currentWorkspace } = useWorkspace();
-  // states
-  const [isCollapsed, setIsCollapsed] = useState(false);
   // derived values
   const workspaceId = currentWorkspace?.id;
   const affectedServiceIds = useMemo(() => room.services.map((service) => service.id), [room.services]);
@@ -98,51 +95,53 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-1">
-      <div className="flex items-center justify-between gap-2 border-b border-subtle px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="shrink-0 text-11 font-medium tracking-wide text-tertiary uppercase">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-subtle px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-code text-10 font-medium tracking-[0.14em] text-tertiary uppercase">
             {t("war_room.map.title")}
           </span>
-          <span className="hidden items-center gap-1 text-10 text-secondary sm:flex">
-            <span className="h-2 w-2 rounded-full bg-danger-primary" />
-            {t("war_room.map.affected_legend")}
-          </span>
-          <span className="hidden items-center gap-1 text-10 text-tertiary sm:flex">
-            <span className="h-2 w-2 rounded-full bg-layer-3" />
-            {t("war_room.map.neighbor_legend")}
+          <span className="font-code text-10 text-secondary">
+            {affectedServiceIds.length} {t("war_room.map.affected_legend")}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex items-center gap-1 text-10 text-secondary">
+              <span className="size-1.5 rounded-full bg-danger-primary" />
+              {t("war_room.map.affected_legend")}
+            </span>
+            <span className="flex items-center gap-1 text-10 text-tertiary">
+              <span className="size-1.5 rounded-full bg-layer-3" />
+              {t("war_room.map.neighbor_legend")}
+            </span>
+          </div>
           {canWrite && (
-            <ServiceMultiSelect
-              workspaceSlug={workspaceSlug}
-              projectId={projectId}
-              value={affectedServiceIds}
-              onChange={(serviceIds) => void handleServicesChange(serviceIds)}
-            />
+            <div className="shrink-0">
+              <ServiceMultiSelect
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                value={affectedServiceIds}
+                onChange={(serviceIds) => void handleServicesChange(serviceIds)}
+              />
+            </div>
           )}
-          <Button variant="secondary" size="sm" onClick={() => setIsCollapsed((value) => !value)}>
-            {isCollapsed ? t("war_room.map.expand") : t("war_room.map.collapse")}
-          </Button>
         </div>
       </div>
-      {!isCollapsed && (
-        <div className="min-h-0 flex-1">
-          {graphData.services.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-              <p className="text-13 font-medium text-primary">{t("war_room.map.empty_title")}</p>
-              <p className="text-12 text-secondary">{t("war_room.map.empty_description")}</p>
-            </div>
-          ) : (
-            <ServiceGraphCanvas
-              graphData={graphData}
-              readOnly
-              highlightedServiceIds={blastRadius.affectedIds}
-              onNodeClick={handleNodeClick}
-            />
-          )}
-        </div>
-      )}
+      <div className="min-h-0 flex-1">
+        {graphData.services.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+            <p className="text-13 font-medium text-primary">{t("war_room.map.empty_title")}</p>
+            <p className="text-12 text-secondary">{t("war_room.map.empty_description")}</p>
+          </div>
+        ) : (
+          <ServiceGraphCanvas
+            graphData={graphData}
+            readOnly
+            highlightedServiceIds={blastRadius.affectedIds}
+            onNodeClick={handleNodeClick}
+          />
+        )}
+      </div>
     </div>
   );
 });

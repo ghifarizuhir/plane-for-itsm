@@ -7,11 +7,18 @@
 import { observer } from "mobx-react";
 import { Outlet } from "react-router";
 import { ProjectsAppPowerKProvider } from "@/components/power-k/projects-app-provider";
+// hooks
+import { useFullscreenRoute } from "@/hooks/use-fullscreen-route";
 // plane web components
 import { ProjectAppSidebar } from "./_sidebar";
 import { ExtendedProjectSidebar } from "./extended-project-sidebar";
 
 function WorkspaceLayout() {
+  // fullscreen routes (war rooms) take over the viewport, sidebars included
+  const isFullscreen = useFullscreenRoute();
+
+  if (isFullscreen) return <Outlet />;
+
   return (
     <>
       <ProjectsAppPowerKProvider />

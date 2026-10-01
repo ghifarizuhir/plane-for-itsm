@@ -138,9 +138,14 @@ export const WarRoomChat = observer(function WarRoomChat({
 
   return (
     <div className="flex h-full w-full flex-col bg-surface-1">
-      <div className="flex items-center justify-between border-b border-subtle px-3 py-1.5">
-        <span className="text-11 font-medium tracking-wide text-tertiary uppercase">{t("war_room.chat.title")}</span>
-        <span className="truncate text-10 text-tertiary">
+      <div className="flex items-center justify-between gap-2 border-b border-subtle px-3 py-2">
+        <div className="flex shrink-0 items-baseline gap-2">
+          <span className="font-code text-10 font-medium tracking-[0.14em] text-tertiary uppercase">
+            {t("war_room.chat.title")}
+          </span>
+          <span className="font-code text-10 text-tertiary tabular-nums">{messages.length}</span>
+        </div>
+        <span className="min-w-0 truncate text-10 text-accent-primary">
           {typingNames.length === 1
             ? t("war_room.chat.typing_single", { name: typingNames[0] })
             : typingNames.length > 1

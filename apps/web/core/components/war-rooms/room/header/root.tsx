@@ -9,19 +9,22 @@ import { observer } from "mobx-react";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { AvatarGroup } from "@makeplane/propel/components/avatar-group";
+import { GridOutline } from "@makeplane/propel/icons";
 import {
   EUserPermissions,
   EUserPermissionsLevel,
   WAR_ROOM_SEVERITIES,
   WAR_ROOM_SEVERITY_CONFIG,
+  WAR_ROOM_STATUS_CONFIG,
   getWarRoomLink,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { IconButton } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWarRoom, TWarRoomSeverity, TWarRoomStatus } from "@plane/types";
 import { CustomMenu, CustomSelect } from "@plane/ui";
-import { getFileURL } from "@plane/utils";
+import { cn, getFileURL } from "@plane/utils";
 // components
 import { WarRoomConfirmModal } from "./confirm-modal";
 import { WarRoomEditDetailsModal } from "./edit-details-modal";
@@ -39,11 +42,20 @@ type Props = {
   projectId: string;
   room: IWarRoom;
   canWrite: boolean;
+  isMapOpen: boolean;
+  onToggleMap: () => void;
 };
 
 type TDialog = "resolve" | "archive" | "delete" | "edit" | null;
 
-export const WarRoomHeader = observer(function WarRoomHeader({ workspaceSlug, projectId, room, canWrite }: Props) {
+export const WarRoomHeader = observer(function WarRoomHeader({
+  workspaceSlug,
+  projectId,
+  room,
+  canWrite,
+  isMapOpen,
+  onToggleMap,
+}: Props) {
   // router
   const router = useAppRouter();
   // plane hooks
@@ -183,113 +195,150 @@ export const WarRoomHeader = observer(function WarRoomHeader({ workspaceSlug, pr
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-subtle bg-surface-1 px-3 py-2">
-      <span className="shrink-0 text-12 font-medium text-tertiary">WR-{room.sequence_id}</span>
-      {isEditingName ? (
-        <input
-          value={nameValue}
-          onChange={(event) => setNameValue(event.target.value)}
-          onBlur={() => void handleNameSave()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void handleNameSave();
-            if (event.key === "Escape") {
-              setNameValue(room.name);
-              setIsEditingName(false);
-            }
-          }}
-          // oxlint-disable-next-line eslint-plugin-jsx-a11y/no-autofocus -- inline name edit should take focus
-          autoFocus
-          maxLength={255}
-          className="max-w-72 min-w-40 flex-1 rounded-sm border border-subtle bg-surface-1 px-1.5 py-0.5 text-14 font-medium text-primary outline-none focus:border-strong"
-        />
-      ) : (
-        <button
-          type="button"
-          disabled={!canManage}
-          onClick={() => setIsEditingName(true)}
-          className="max-w-72 min-w-0 truncate text-left text-14 font-medium text-primary hover:underline disabled:hover:no-underline"
-          title={room.name}
-        >
-          {room.name}
-        </button>
-      )}
-      {canManage ? (
-        <CustomSelect
-          value={room.severity}
-          label={
+    <header className="relative shrink-0 border-b border-subtle bg-surface-1">
+      {/* Severity rail: the room's threat level, always visible at the very top. */}
+      <span
+        aria-hidden="true"
+        className={cn("absolute inset-x-0 top-0 h-[2px]", WAR_ROOM_SEVERITY_CONFIG[room.severity].rail, {
+          "animate-pulse": isRunning,
+        })}
+      />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pt-3 pb-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <IconButton
+            variant="ghost"
+            size="sm"
+            className={cn("shrink-0 xl:hidden", { "bg-layer-1 text-primary": isMapOpen })}
+            icon={GridOutline}
+            aria-label={t("war_room.map.title")}
+            onClick={onToggleMap}
+          />
+          <span className="shrink-0 rounded-xs border border-subtle px-1.5 py-0.5 font-code text-10 font-medium tracking-[0.14em] text-secondary">
+            WR-{room.sequence_id}
+          </span>
+          {isEditingName ? (
+            <input
+              value={nameValue}
+              onChange={(event) => setNameValue(event.target.value)}
+              onBlur={() => void handleNameSave()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void handleNameSave();
+                if (event.key === "Escape") {
+                  setNameValue(room.name);
+                  setIsEditingName(false);
+                }
+              }}
+              // oxlint-disable-next-line eslint-plugin-jsx-a11y/no-autofocus -- inline name edit should take focus
+              autoFocus
+              maxLength={255}
+              className="max-w-72 min-w-40 flex-1 rounded-sm border border-subtle bg-surface-1 px-1.5 py-0.5 text-16 font-semibold text-primary outline-none focus:border-strong"
+            />
+          ) : (
+            <button
+              type="button"
+              disabled={!canManage}
+              onClick={() => setIsEditingName(true)}
+              className="max-w-72 min-w-0 truncate text-left text-16 font-semibold text-primary hover:underline disabled:hover:no-underline"
+              title={room.name}
+            >
+              {room.name}
+            </button>
+          )}
+          {canManage ? (
+            <CustomSelect
+              value={room.severity}
+              label={
+                <span
+                  className={`rounded-full px-2 py-0.5 text-11 font-medium ${WAR_ROOM_SEVERITY_CONFIG[room.severity].pill}`}
+                >
+                  {t(WAR_ROOM_SEVERITY_CONFIG[room.severity].label_key)}
+                </span>
+              }
+              onChange={(severity: TWarRoomSeverity) => void handleSeverityChange(severity)}
+              noChevron
+            >
+              {WAR_ROOM_SEVERITIES.map((severity) => (
+                <CustomSelect.Option key={severity} value={severity}>
+                  {t(WAR_ROOM_SEVERITY_CONFIG[severity].label_key)}
+                </CustomSelect.Option>
+              ))}
+            </CustomSelect>
+          ) : (
             <span
-              className={`rounded-full px-2 py-0.5 text-11 font-medium ${WAR_ROOM_SEVERITY_CONFIG[room.severity].pill}`}
+              className={`shrink-0 rounded-full px-2 py-0.5 text-11 font-medium ${WAR_ROOM_SEVERITY_CONFIG[room.severity].pill}`}
             >
               {t(WAR_ROOM_SEVERITY_CONFIG[room.severity].label_key)}
             </span>
-          }
-          onChange={(severity: TWarRoomSeverity) => void handleSeverityChange(severity)}
-          noChevron
-        >
-          {WAR_ROOM_SEVERITIES.map((severity) => (
-            <CustomSelect.Option key={severity} value={severity}>
-              {t(WAR_ROOM_SEVERITY_CONFIG[severity].label_key)}
-            </CustomSelect.Option>
-          ))}
-        </CustomSelect>
-      ) : (
-        <span
-          className={`rounded-full px-2 py-0.5 text-11 font-medium ${WAR_ROOM_SEVERITY_CONFIG[room.severity].pill}`}
-        >
-          {t(WAR_ROOM_SEVERITY_CONFIG[room.severity].label_key)}
-        </span>
-      )}
-      <WarRoomStatusControl
-        status={room.status}
-        disabled={!canManage}
-        onChange={(status) => void handleStatusChange(status)}
-      />
-      <span className="text-12 text-tertiary tabular-nums">{elapsed}</span>
-      <div className="flex items-center gap-1">
-        {onlineParticipants.length > 0 && (
-          <AvatarGroup size="xs">
-            {visibleOnline.map((participant) => (
-              <Avatar
-                key={participant.id}
-                src={participant.avatar_url ? getFileURL(participant.avatar_url) : undefined}
-                alt={participant.display_name ?? ""}
-                fallback={participant.display_name?.[0]?.toUpperCase()}
-              />
-            ))}
-            {overflowOnline > 0 && <Avatar alt={`+${overflowOnline}`} fallback={`+${overflowOnline}`} />}
-          </AvatarGroup>
-        )}
-        <span className="text-10 text-tertiary">
-          {t("war_room.header.online", { count: onlineParticipants.length })}
-        </span>
-      </div>
-      <div className="ml-auto flex items-center gap-2">
-        {canManage && !selfParticipant && (
-          <Button variant="secondary" size="sm" onClick={() => void handleJoin()}>
-            {t("war_room.header.join")}
-          </Button>
-        )}
-        {canManage && selfParticipant && (
-          <Button variant="tertiary" size="sm" onClick={() => void handleLeave()}>
-            {t("war_room.header.leave")}
-          </Button>
-        )}
-        {canManage && isRunning && (
-          <Button variant="primary" size="sm" onClick={() => setDialog("resolve")}>
-            {t("war_room.header.resolve")}
-          </Button>
-        )}
-        {canManage && (
-          <CustomMenu ellipsis placement="bottom-end">
-            <CustomMenu.MenuItem onClick={() => setDialog("edit")}>
-              {t("war_room.header.edit_details")}
-            </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={() => setDialog("archive")}>
-              {t("war_room.header.archive")}
-            </CustomMenu.MenuItem>
-            <CustomMenu.MenuItem onClick={() => setDialog("delete")}>{t("war_room.header.delete")}</CustomMenu.MenuItem>
-          </CustomMenu>
-        )}
+          )}
+          <WarRoomStatusControl
+            status={room.status}
+            disabled={!canManage}
+            onChange={(status) => void handleStatusChange(status)}
+          />
+        </div>
+
+        {/* Ops timer: the room's heartbeat. */}
+        <div className="order-last flex w-full items-center justify-center gap-2 md:order-none md:w-auto">
+          <span
+            aria-hidden="true"
+            className={cn("size-1.5 rounded-full", WAR_ROOM_STATUS_CONFIG[room.status].rail, {
+              "animate-pulse": isRunning,
+            })}
+          />
+          <span className="font-code text-20 font-medium text-primary tabular-nums">{elapsed}</span>
+          <span className="font-code text-9 tracking-[0.18em] text-tertiary uppercase">
+            {t("war_room.fields.elapsed")}
+          </span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-1">
+            {onlineParticipants.length > 0 && (
+              <AvatarGroup size="xs">
+                {visibleOnline.map((participant) => (
+                  <Avatar
+                    key={participant.id}
+                    src={participant.avatar_url ? getFileURL(participant.avatar_url) : undefined}
+                    alt={participant.display_name ?? ""}
+                    fallback={participant.display_name?.[0]?.toUpperCase()}
+                  />
+                ))}
+                {overflowOnline > 0 && <Avatar alt={`+${overflowOnline}`} fallback={`+${overflowOnline}`} />}
+              </AvatarGroup>
+            )}
+            <span className="hidden text-10 text-tertiary sm:block">
+              {t("war_room.header.online", { count: onlineParticipants.length })}
+            </span>
+          </div>
+          {canManage && !selfParticipant && (
+            <Button variant="secondary" size="sm" onClick={() => void handleJoin()}>
+              {t("war_room.header.join")}
+            </Button>
+          )}
+          {canManage && selfParticipant && (
+            <Button variant="tertiary" size="sm" onClick={() => void handleLeave()}>
+              {t("war_room.header.leave")}
+            </Button>
+          )}
+          {canManage && isRunning && (
+            <Button variant="primary" size="sm" onClick={() => setDialog("resolve")}>
+              {t("war_room.header.resolve")}
+            </Button>
+          )}
+          {canManage && (
+            <CustomMenu ellipsis placement="bottom-end">
+              <CustomMenu.MenuItem onClick={() => setDialog("edit")}>
+                {t("war_room.header.edit_details")}
+              </CustomMenu.MenuItem>
+              <CustomMenu.MenuItem onClick={() => setDialog("archive")}>
+                {t("war_room.header.archive")}
+              </CustomMenu.MenuItem>
+              <CustomMenu.MenuItem onClick={() => setDialog("delete")}>
+                {t("war_room.header.delete")}
+              </CustomMenu.MenuItem>
+            </CustomMenu>
+          )}
+        </div>
       </div>
 
       <WarRoomResolveModal
@@ -330,6 +379,6 @@ export const WarRoomHeader = observer(function WarRoomHeader({ workspaceSlug, pr
           onSave={(data) => void handleEditDetails(data)}
         />
       )}
-    </div>
+    </header>
   );
 });

@@ -14,6 +14,7 @@ import { TabNavigationRoot } from "@/components/navigation/tab-navigation-root";
 import { AppSidebarToggleButton } from "@/components/sidebar/sidebar-toggle-button";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useFullscreenRoute } from "@/hooks/use-fullscreen-route";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
 // layouts
 import { ProjectAuthWrapper } from "@/layouts/auth-layout/project-wrapper";
@@ -27,10 +28,12 @@ function ProjectLayout({ params }: Route.ComponentProps) {
   const { sidebarCollapsed } = useAppTheme();
   // preferences
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
+  // fullscreen routes (war rooms) hide the project tab navigation row
+  const isFullscreen = useFullscreenRoute();
 
   return (
     <>
-      {projectPreferences.navigationMode === "TABBED" && (
+      {!isFullscreen && projectPreferences.navigationMode === "TABBED" && (
         <div className="z-20">
           <Row className="flex h-header w-full items-center gap-2 border-b border-subtle bg-surface-1">
             <div className="flex h-full w-full items-center gap-2 divide-x divide-subtle">

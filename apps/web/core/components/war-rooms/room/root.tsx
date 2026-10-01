@@ -4,13 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import type { TWarRoomSocketEvent } from "@plane/types";
+import type { IWarRoom, TWarRoomConnectionStatus, TWarRoomSocketEvent } from "@plane/types";
+import { cn } from "@plane/utils";
 // components
 import { WarRoomChat } from "./chat/root";
 import { WarRoomContextPanel } from "./context/root";
@@ -28,17 +29,62 @@ type Props = {
   warRoomId: string;
 };
 
+/** Bottom telemetry strip: connection, presence and room counters in one glance. */
+function WarRoomStatusBar({
+  connectionStatus,
+  room,
+  onlineCount,
+}: {
+  connectionStatus: TWarRoomConnectionStatus;
+  room: IWarRoom;
+  onlineCount: number;
+}) {
+  const { t } = useTranslation();
+  const isLive = connectionStatus === "connected";
+  const isSyncing = connectionStatus === "reconnecting" || connectionStatus === "connecting";
+
+  return (
+    <div className="flex h-7 shrink-0 items-center gap-3 border-t border-subtle bg-layer-1 px-3 font-code text-10 tracking-[0.12em] text-tertiary uppercase">
+      <span className="flex items-center gap-1.5">
+        <span
+          className={cn("size-1.5 rounded-full", {
+            "bg-success-primary": isLive,
+            "animate-pulse bg-warning-primary": isSyncing,
+            "bg-layer-3": !isLive && !isSyncing,
+          })}
+        />
+        {t("war_room.header.online", { count: onlineCount })}
+      </span>
+      <span aria-hidden className="bg-subtle h-3 w-px" />
+      <span>
+        {room.counts.messages} {t("war_room.fields.messages")}
+      </span>
+      <span aria-hidden className="bg-subtle h-3 w-px" />
+      <span>
+        {room.participants.length} {t("war_room.fields.participants")}
+      </span>
+      <span className="ml-auto hidden sm:block">
+        {t("war_room.fields.started")}{" "}
+        {new Date(room.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+      </span>
+    </div>
+  );
+}
+
 export const WarRoomRoot = observer(function WarRoomRoot({ workspaceSlug, projectId, warRoomId }: Props) {
   // router
   const router = useAppRouter();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getWarRoomDetailById, detailErrorMap, fetchWarRoomDetail, applySocketEvent } = useWarRoom();
+  const { getWarRoomDetailById, detailErrorMap, fetchWarRoomDetail, applySocketEvent, getOnlineUserIds } = useWarRoom();
   const { allowPermissions } = useUserPermissions();
+  // states
+  const [isMapOpen, setIsMapOpen] = useState(false);
   // derived values
   const room = getWarRoomDetailById(warRoomId);
   const hasError = detailErrorMap[warRoomId];
+  const onlineCount = room ? getOnlineUserIds(room.id).length : 0;
 
   useEffect(() => {
     if (room || hasError) return;
@@ -85,31 +131,61 @@ export const WarRoomRoot = observer(function WarRoomRoot({ workspaceSlug, projec
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <WarRoomHeader workspaceSlug={workspaceSlug} projectId={projectId} room={room} canWrite={canWrite} />
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface-1">
+      <WarRoomHeader
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        room={room}
+        canWrite={canWrite}
+        isMapOpen={isMapOpen}
+        onToggleMap={() => setIsMapOpen((value) => !value)}
+      />
       {canWrite === false && room.status === "archived" && (
         <div className="border-b border-subtle bg-layer-1 px-3 py-1.5 text-11 text-secondary">
           {t("war_room.archived_notice")}
         </div>
       )}
-      <div className="h-[42%] min-h-[200px] shrink-0 border-b border-subtle">
-        <WarRoomServiceMap workspaceSlug={workspaceSlug} projectId={projectId} room={room} canWrite={canWrite} />
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="min-h-[240px] flex-1 border-b border-subtle lg:min-h-0 lg:border-r lg:border-b-0">
-          <WarRoomChat
-            workspaceSlug={workspaceSlug}
-            projectId={projectId}
-            room={room}
-            canWrite={canWrite}
-            connectionStatus={status}
-            sendTyping={sendTyping}
+
+      <div className="relative flex min-h-0 flex-1">
+        {isMapOpen && (
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={() => setIsMapOpen(false)}
+            className="fixed inset-0 z-30 cursor-default bg-backdrop xl:hidden"
           />
-        </div>
-        <div className="min-h-[240px] flex-1 lg:min-h-0 lg:w-[420px] lg:flex-none">
-          <WarRoomContextPanel workspaceSlug={workspaceSlug} projectId={projectId} room={room} canWrite={canWrite} />
+        )}
+
+        {/* Blast radius: static column from xl, slide-over drawer below it. */}
+        <aside
+          className={cn(
+            "z-40 flex min-h-0 flex-col border-subtle bg-surface-1",
+            "max-xl:shadow-2xl max-xl:fixed max-xl:inset-y-0 max-xl:left-0 max-xl:w-[min(88vw,360px)] max-xl:border-r max-xl:transition-transform max-xl:duration-200",
+            isMapOpen ? "max-xl:translate-x-0" : "max-xl:-translate-x-full",
+            "xl:relative xl:z-auto xl:w-[340px] xl:shrink-0 xl:translate-x-0 xl:border-r"
+          )}
+        >
+          <WarRoomServiceMap workspaceSlug={workspaceSlug} projectId={projectId} room={room} canWrite={canWrite} />
+        </aside>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:flex-row">
+          <div className="min-h-0 min-w-0 flex-1">
+            <WarRoomChat
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              room={room}
+              canWrite={canWrite}
+              connectionStatus={status}
+              sendTyping={sendTyping}
+            />
+          </div>
+          <div className="h-[42%] min-h-[280px] shrink-0 border-t border-subtle lg:h-auto lg:min-h-0 lg:w-[400px] lg:border-t-0 lg:border-l">
+            <WarRoomContextPanel workspaceSlug={workspaceSlug} projectId={projectId} room={room} canWrite={canWrite} />
+          </div>
         </div>
       </div>
+
+      <WarRoomStatusBar connectionStatus={status} room={room} onlineCount={onlineCount} />
     </div>
   );
 });
