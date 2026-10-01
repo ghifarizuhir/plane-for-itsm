@@ -22,9 +22,11 @@ import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-propert
 import { useNotificationPreview } from "@/hooks/use-notification-preview";
 // lib
 import { isScheduleRunNotification } from "@/lib/ai-schedule";
+import { isWarRoomNotification } from "@/lib/war-room-notification";
 // local imports
 import { InboxContentRoot } from "../inbox/content";
 import { ScheduleRunInboxDetail } from "./schedule-run-detail";
+import { WarRoomInboxDetail } from "./war-room-detail";
 
 type NotificationsRootProps = {
   workspaceSlug?: string;
@@ -48,6 +50,9 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
   const { asJson: selectedNotification } = useNotification(currentSelectedNotificationId);
   const selectedScheduleRun = isScheduleRunNotification(selectedNotification?.data)
     ? selectedNotification?.data?.ai_schedule
+    : undefined;
+  const selectedWarRoom = isWarRoomNotification(selectedNotification?.data)
+    ? selectedNotification.data.war_room
     : undefined;
 
   // fetching workspace work item properties
@@ -102,6 +107,12 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
             <ScheduleRunInboxDetail
               workspaceSlug={workspace_slug}
               scheduleRun={selectedScheduleRun}
+              embedRemoveCurrentNotification={embedRemoveCurrentNotification}
+            />
+          ) : selectedWarRoom && workspace_slug ? (
+            <WarRoomInboxDetail
+              workspaceSlug={workspace_slug}
+              warRoom={selectedWarRoom}
               embedRemoveCurrentNotification={embedRemoveCurrentNotification}
             />
           ) : is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
