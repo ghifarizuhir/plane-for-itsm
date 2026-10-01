@@ -36,6 +36,14 @@ export type TNotificationScheduleRun = {
   error?: string | null;
 };
 
+export type TNotificationWarRoom = {
+  id: string;
+  project_id: string;
+  workspace_slug: string;
+  name: string;
+  sequence_id: number;
+};
+
 export type TNotificationData = {
   issue?: TNotificationIssueLite | undefined;
   issue_activity?: {
@@ -48,6 +56,7 @@ export type TNotificationData = {
     old_value: string | undefined;
   };
   ai_schedule?: TNotificationScheduleRun | undefined;
+  war_room?: TNotificationWarRoom | undefined;
 };
 
 export type TNotification = {
