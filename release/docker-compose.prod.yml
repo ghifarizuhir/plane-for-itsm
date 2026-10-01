@@ -1,0 +1,144 @@
+services:
+  plane-db:
+    image: postgres:15.7-alpine
+    restart: always
+    command: postgres -c 'max_connections=100'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    env_file:
+      - .env.prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-plane} -d ${POSTGRES_DB:-plane}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  plane-redis:
+    image: valkey/valkey:7.2.11-alpine
+    restart: always
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  plane-minio:
+    image: minio/minio:latest
+    restart: always
+    command: server /export --console-address ":9090"
+    volumes:
+      - uploads:/export
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
+
+  api:
+    image: plane-api-rs:${RELEASE_VERSION:-stable}
+    restart: always
+    command: /usr/local/bin/api
+    env_file:
+      - .env.prod
+    environment:
+      PORT: 8000
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+
+  worker:
+    image: plane-api-rs:${RELEASE_VERSION:-stable}
+    restart: always
+    command: /usr/local/bin/worker
+    env_file:
+      - .env.prod
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+
+  beat-worker:
+    image: plane-api-rs:${RELEASE_VERSION:-stable}
+    restart: always
+    command: /usr/local/bin/beat
+    env_file:
+      - .env.prod
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgres://plane:plane@plane-db:5432/plane
+      REDIS_URL: redis://plane-redis:6379
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+
+  migrator:
+    image: plane-migrator:${RELEASE_VERSION:-stable}
+    restart: "no"
+    command: ./bin/docker-entrypoint-migrator.sh
+    env_file:
+      - .env.prod
+    depends_on:
+      plane-db:
+        condition: service_healthy
+      plane-redis:
+        condition: service_healthy
+
+  web:
+    image: plane-web:${RELEASE_VERSION:-stable}
+    restart: always
+    depends_on:
+      - api
+
+  admin:
+    image: plane-admin:${RELEASE_VERSION:-stable}
+    restart: always
+    depends_on:
+      - api
+      - web
+
+  space:
+    image: plane-space:${RELEASE_VERSION:-stable}
+    restart: always
+    depends_on:
+      - api
+      - web
+
+  live:
+    image: plane-live:${RELEASE_VERSION:-stable}
+    restart: always
+
+  proxy:
+    image: plane-proxy:${RELEASE_VERSION:-stable}
+    restart: always
+    ports:
+      - ${LISTEN_HTTP_PORT:-80}:80
+      - ${LISTEN_HTTPS_PORT:-443}:443
+    environment:
+      FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+    depends_on:
+      - web
+      - api
+      - space
+      - admin
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

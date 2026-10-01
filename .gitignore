@@ -41,6 +41,10 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 
+# Offline release bundles (built tars, never commit)
+release/*/tars/
+release/*/.env.prod
+
 # Vercel
 .vercel
 
