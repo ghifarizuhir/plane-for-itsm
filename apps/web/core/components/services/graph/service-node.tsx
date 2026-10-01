@@ -18,17 +18,24 @@ export type TServiceNodeData = {
   criticalityLabel: string;
   health: TServiceHealth;
   incidents: IServiceIncident[];
+  /** Blast-radius map: dependency neighbors are dimmed. */
+  dimmed?: boolean;
 };
 
 export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
   const service = (data as TServiceNodeData | undefined)?.service;
   if (!service) return null;
-  const { statusLabel, criticalityLabel, health, incidents } = data as TServiceNodeData;
+  const { statusLabel, criticalityLabel, health, incidents, dimmed } = data as TServiceNodeData;
   const state = health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
 
   return (
-    <div className="shadow-sm relative w-[220px] overflow-hidden rounded-md border border-subtle bg-surface-1 px-3 py-2">
+    <div
+      className={cn(
+        "shadow-sm relative w-[220px] overflow-hidden rounded-md border border-subtle bg-surface-1 px-3 py-2",
+        dimmed && "opacity-60"
+      )}
+    >
       <Handle type="target" position={Position.Left} className="!bg-surface-2" />
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
       {incidents.length > 0 && (

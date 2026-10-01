@@ -4,44 +4,27 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import {
-  Background,
-  Controls,
-  MiniMap,
-  ReactFlow,
-  useEdgesState,
-  useNodesState,
-  type Connection,
-  type Edge,
-  type Node,
-  type ReactFlowInstance,
-} from "@xyflow/react";
-// oxlint-disable-next-line import/no-unassigned-import
-import "@xyflow/react/dist/style.css";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IService, TServiceGraphData } from "@plane/types";
+import type { TServiceGraphData } from "@plane/types";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 // components
-import { ServiceNode } from "./service-node";
-import { getLayoutedElements } from "./use-graph-layout";
-
-const nodeTypes = { service: ServiceNode };
+import { ServiceGraphCanvas } from "./service-graph-canvas";
 
 export const ServiceGraph = observer(function ServiceGraph() {
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
-  const { t, currentLocale } = useTranslation();
+  const { t } = useTranslation();
   // store hooks
   const { getGraphData, addDependency, removeDependency, updateNodePosition, updateService } = useService();
   const { currentWorkspace } = useWorkspace();
@@ -51,87 +34,11 @@ export const ServiceGraph = observer(function ServiceGraph() {
   const workspaceId = currentWorkspace?.id;
   // states
   const [isReLayouting, setIsReLayouting] = useState(false);
-  const fitDone = useRef(false);
 
   const graphData: TServiceGraphData = pid ? getGraphData(pid) : { services: [], dependencies: [], health: {} };
 
-  const { nodes: layoutNodes, edges: layoutEdges } = useMemo(
-    () => getLayoutedElements(graphData.services, graphData.dependencies),
-    [graphData.dependencies, graphData.services]
-  );
-
-  const translatedNodes = useMemo(
-    () =>
-      layoutNodes.map((node) => {
-        const service = (node.data as { service?: IService } | undefined)?.service;
-        if (!service) return node;
-        const health = graphData.health[service.id];
-        return {
-          ...node,
-          data: {
-            ...(node.data as Record<string, unknown>),
-            service,
-            statusLabel: t(`service.status_values.${service.status}`),
-            criticalityLabel: t(`service.criticality_values.${service.criticality}`),
-            health: health?.health ?? "unknown",
-            incidents: health?.incidents ?? [],
-          },
-        };
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
-    [layoutNodes, currentLocale, graphData.health]
-  );
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges);
-
-  useEffect(() => {
-    setNodes((prev) => {
-      if (
-        prev.length === translatedNodes.length &&
-        prev.every((node, i) => {
-          const next = translatedNodes[i];
-          if (node.id !== next?.id) return false;
-          const prevData = node.data as
-            | { statusLabel?: string; criticalityLabel?: string; health?: string; incidents?: unknown[] }
-            | undefined;
-          const nextData = next?.data as
-            | { statusLabel?: string; criticalityLabel?: string; health?: string; incidents?: unknown[] }
-            | undefined;
-          return (
-            prevData?.statusLabel === nextData?.statusLabel &&
-            prevData?.criticalityLabel === nextData?.criticalityLabel &&
-            prevData?.health === nextData?.health &&
-            (prevData?.incidents?.length ?? 0) === (nextData?.incidents?.length ?? 0)
-          );
-        })
-      )
-        return prev;
-      const selectedById = new Map(prev.map((node) => [node.id, node.selected]));
-      return translatedNodes.map((node) =>
-        selectedById.has(node.id) ? { ...node, selected: selectedById.get(node.id) } : node
-      );
-    });
-    setEdges((prev) => {
-      if (prev.length === layoutEdges.length && prev.every((edge, i) => edge.id === layoutEdges[i]?.id)) return prev;
-      const selectedById = new Map(prev.map((edge) => [edge.id, edge.selected]));
-      return layoutEdges.map((edge) =>
-        selectedById.has(edge.id) ? { ...edge, selected: selectedById.get(edge.id) } : edge
-      );
-    });
-  }, [translatedNodes, layoutEdges, setNodes, setEdges]);
-
-  const onConnect = useCallback(
-    async (connection: Connection) => {
-      const { source, target } = connection;
-      if (!source || !target) {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Could not create dependency. Both services must be selected.",
-        });
-        return;
-      }
+  const handleConnect = useCallback(
+    async (source: string, target: string) => {
       if (!slug || !workspaceId || !pid) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -153,42 +60,38 @@ export const ServiceGraph = observer(function ServiceGraph() {
     [addDependency, pid, slug, workspaceId]
   );
 
-  const onEdgesDelete = useCallback(
-    async (deleted: Edge[]) => {
+  const handleEdgeDelete = useCallback(
+    (dependencyId: string) => {
       if (!slug || !workspaceId || !pid) return;
-      try {
-        await Promise.all(deleted.map((edge) => removeDependency(slug, workspaceId, pid, edge.id)));
-      } catch {
+      void removeDependency(slug, workspaceId, pid, dependencyId).catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
           message: "Could not delete dependency. Please try again.",
         });
-      }
+      });
     },
     [pid, removeDependency, slug, workspaceId]
   );
 
-  const onNodeDragStop = useCallback(
-    async (_event: unknown, node: Node) => {
+  const handleNodeDragStop = useCallback(
+    (serviceId: string, position: { x: number; y: number }) => {
       if (!slug || !workspaceId || !pid) return;
-      try {
-        await updateNodePosition(slug, workspaceId, pid, node.id, node.position);
-      } catch {
+      void updateNodePosition(slug, workspaceId, pid, serviceId, position).catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
           message: "Could not save node position. Please try again.",
         });
-      }
+      });
     },
     [pid, slug, updateNodePosition, workspaceId]
   );
 
-  const onNodeClick = useCallback(
-    (_event: unknown, node: Node) => {
+  const handleNodeClick = useCallback(
+    (serviceId: string) => {
       if (!slug || !pid) return;
-      router.push(`/${slug}/projects/${pid}/services/${node.id}`);
+      router.push(`/${slug}/projects/${pid}/services/${serviceId}`);
     },
     [pid, router, slug]
   );
@@ -222,28 +125,13 @@ export const ServiceGraph = observer(function ServiceGraph() {
         </Button>
       </div>
       <div className="min-h-0 flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          onNodeDragStop={onNodeDragStop}
-          onNodeClick={onNodeClick}
-          onInit={(instance: ReactFlowInstance) => {
-            if (!fitDone.current) {
-              fitDone.current = true;
-              instance.fitView();
-            }
-          }}
-          deleteKeyCode={["Backspace", "Delete"]}
-        >
-          <Background />
-          <Controls />
-          <MiniMap />
-        </ReactFlow>
+        <ServiceGraphCanvas
+          graphData={graphData}
+          onConnect={handleConnect}
+          onEdgeDelete={handleEdgeDelete}
+          onNodeDragStop={handleNodeDragStop}
+          onNodeClick={handleNodeClick}
+        />
       </div>
     </div>
   );
