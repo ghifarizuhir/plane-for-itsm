@@ -85,3 +85,11 @@ export const getWarRoomLink = (workspaceSlug: string, projectId: string, warRoom
   warRoomId
     ? `/${workspaceSlug}/projects/${projectId}/war-rooms/${warRoomId}`
     : `/${workspaceSlug}/projects/${projectId}/war-rooms`;
+
+/** Server-enforced transition map (`war_room.rs::transitions_allowed`); `archived` is terminal. */
+export const WAR_ROOM_STATUS_TRANSITIONS: Record<TWarRoomStatus, TWarRoomStatus[]> = {
+  active: ["monitoring", "resolved", "archived"],
+  monitoring: ["active", "resolved", "archived"],
+  resolved: ["active", "archived"],
+  archived: [],
+};
