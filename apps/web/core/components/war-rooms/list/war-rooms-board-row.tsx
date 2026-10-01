@@ -11,14 +11,18 @@ import { useParams } from "next/navigation";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
 import { AvatarGroup } from "@makeplane/propel/components/avatar-group";
+import { ArrowExpandOutline } from "@makeplane/propel/icons";
 import { WAR_ROOM_SEVERITY_CONFIG, WAR_ROOM_STATUS_CONFIG, getWarRoomLink } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { cn, getFileURL } from "@plane/utils";
 // helpers
 import { formatElapsed, getWarRoomIncidentLink, isActiveWarRoomStatus } from "@/services/war-room.helpers";
 // hooks
-import { useAppRouter } from "@/hooks/use-app-router";
 import { useWarRoom } from "@/hooks/store/use-war-room";
+
+const openWarRoomInNewTab = (href: string) => {
+  window.open(href, "_blank", "noopener,noreferrer");
+};
 
 type Props = {
   warRoomId: string;
@@ -27,7 +31,6 @@ type Props = {
 export const WarRoomsBoardRow = observer(function WarRoomsBoardRow({ warRoomId }: Props) {
   // router
   const { workspaceSlug } = useParams();
-  const router = useAppRouter();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -61,11 +64,11 @@ export const WarRoomsBoardRow = observer(function WarRoomsBoardRow({ warRoomId }
       // oxlint-disable-next-line eslint-plugin-jsx-a11y/prefer-tag-over-role
       role="link"
       tabIndex={0}
-      onClick={() => router.push(warRoomLink)}
+      onClick={() => openWarRoomInNewTab(warRoomLink)}
       onKeyDown={(e) => {
-        if (e.key === "Enter") router.push(warRoomLink);
+        if (e.key === "Enter") openWarRoomInNewTab(warRoomLink);
       }}
-      className="relative flex cursor-pointer items-center gap-3 border-b border-subtle px-3 py-2.5 transition-colors hover:bg-layer-transparent-hover"
+      className="group/row relative flex cursor-pointer items-center gap-3 border-b border-subtle px-3 py-2.5 transition-colors hover:bg-layer-transparent-hover"
     >
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", severityConfig.rail)} />
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -74,6 +77,8 @@ export const WarRoomsBoardRow = observer(function WarRoomsBoardRow({ warRoomId }
         {room.primary_issue && workspaceSlug && (
           <Link
             href={getWarRoomIncidentLink(workspaceSlug.toString(), room.primary_issue.identifier)}
+            target="_blank"
+            rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="hidden shrink-0 rounded-xs border border-subtle px-1.5 py-0.5 text-10 text-secondary hover:text-primary sm:block"
           >
@@ -121,6 +126,9 @@ export const WarRoomsBoardRow = observer(function WarRoomsBoardRow({ warRoomId }
         {elapsed}
       </span>
       <span className="hidden w-[48px] shrink-0 text-right text-11 text-tertiary xl:block">{room.message_count}</span>
+      <span className="hidden shrink-0 text-tertiary opacity-0 transition-opacity group-hover/row:opacity-100 md:block">
+        <ArrowExpandOutline className="size-3.5" />
+      </span>
     </div>
   );
 });
