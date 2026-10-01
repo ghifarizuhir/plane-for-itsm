@@ -17,7 +17,7 @@ Halaman utama kerja per project: lihat, filter, dan kelola work items (Issue) da
 - Bulk: `apps/web/core/components/issues/bulk-operations/root.tsx:9` + `hooks/use-bulk-operation-status`; aksi store `project/issue.store.ts:50` (`removeBulkIssues`, `TBulkOperationsPayload`).
 - Working: 5 layout + spreadsheet columns (state/priority/assignee/label/cycle/module/estimate/dates/link/attachment/sub-issue), filter multi-facet, display-properties/group/order, quick-add, update inline, peek detail, bulk edit/delete/archive.
 - Stub: —
-- Missing (ITSM fork): tidak ada — overlay ITSM (incident/priority SLA, war room) belum ada di kode; ide diparkir di [`_backlog.md`](./_backlog.md).
+- Missing (ITSM fork): incident/priority SLA belum ada di kode; **war room sudah ada** — lihat [`war-rooms.md`](./war-rooms.md); ide incident diparkir di [`_backlog.md`](./_backlog.md).
 
 ### Store (MobX)
 

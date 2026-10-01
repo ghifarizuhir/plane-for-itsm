@@ -46,12 +46,13 @@ features/
 
 ## Page Inventory — ITSM (future, bukan actual)
 
-| Page                                               | File                   | Status              | Catatan                                                                                                   |
-| -------------------------------------------------- | ---------------------- | ------------------- | --------------------------------------------------------------------------------------------------------- |
-| CMDB / Service Map                                 | [`cmdb.md`](./cmdb.md) | 📝 Proposal (Draft) | Proposal pertama — dari Terra actual, butuh 3 tabel Postgres baru (+ migrasi sqlx + handler Rust)         |
-| Incident, Problem, Change, Request, Knowledge, ... | —                      | 💡 Backlog          | Diparkir di [`_backlog.md`](./_backlog.md) — jangan buat `features/<page>.md` sampai implementasi dimulai |
+| Page                                               | File                             | Status              | Catatan                                                                                                   |
+| -------------------------------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------- |
+| CMDB / Service Map                                 | [`cmdb.md`](./cmdb.md)           | 📝 Proposal (Draft) | Proposal pertama — dari Terra actual, butuh 3 tabel Postgres baru (+ migrasi sqlx + handler Rust)         |
+| War Rooms                                          | [`war-rooms.md`](./war-rooms.md) | ✅ Doc done         | Project page `:projectId/war-rooms`; realtime via `apps/live`; tabel `war_rooms` (api-rs)                 |
+| Incident, Problem, Change, Request, Knowledge, ... | —                                | 💡 Backlog          | Diparkir di [`_backlog.md`](./_backlog.md) — jangan buat `features/<page>.md` sampai implementasi dimulai |
 
-> `cmdb.md` adalah pengecualian pertama aturan "jangan buat file sebelum ada kode" — ditulis sebagai proposal berlandaskan audit Terra actual (bukan klaim docs). Proposal ITSM lain tetap diparkir di `_backlog.md`.
+> `cmdb.md` adalah proposal pertama (sebelum ada kode). `war-rooms.md` mengikuti aturan normal: ditulis setelah Fase 1–4 diimplementasikan. Proposal ITSM lain tetap diparkir di [`_backlog.md`](./_backlog.md).
 
 ## Shared Concerns
 
@@ -203,6 +204,7 @@ Berlaku cross-folder (`design/`, `features/`, `ui/`):
 
 ## Changelog
 
-| Date       | Change                                                 |
-| ---------- | ------------------------------------------------------ |
-| 2026-09-03 | fork init — adaptasi dari terra `features/README.md:1` |
+| Date       | Change                                                     |
+| ---------- | ---------------------------------------------------------- |
+| 2026-09-03 | fork init — adaptasi dari terra `features/README.md:1`     |
+| 2026-10-01 | tambah `war-rooms.md` ke inventory ITSM (Fase 1–4 shipped) |

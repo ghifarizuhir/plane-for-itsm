@@ -4,7 +4,7 @@
 
 ## ITSM Proposals (ex-`features/incidents.md` + `features/services.md` — ringkas)
 
-- **Incident Management** (referensi: `terra/docs/features/incidents.md:1`): list `:workspaceSlug/projects/:projectId/incidents` + detail `:id` — kolom Priority/State/Created + War Room (`isWarRoom`)/Detection Source bila jadi ITSM; reuse `Issue` + `IssueType` vs tabel baru (belum diputuskan); export CSV cap 5000.
+- **Incident Management** (referensi: `terra/docs/features/incidents.md:1`): list `:workspaceSlug/projects/:projectId/incidents` + detail `:id` — kolom Priority/State/Created + War Room (`isWarRoom`)/Detection Source bila jadi ITSM; reuse `Issue` + `IssueType` vs tabel baru (belum diputuskan); export CSV cap 5000. — **War room sudah diimplementasikan** (route `:workspaceSlug/projects/:projectId/war-rooms`, tabel `war_rooms`, chat realtime; lihat [`war-rooms.md`](./war-rooms.md)).
 - **Service Map / CI** → punya proposal doc [`cmdb.md`](./cmdb.md) (2026-09-03, dari Terra actual): route `:workspaceSlug/configuration-items` + `:ciId` — butuh 3 tabel Postgres baru (`ConfigurationItem` + `CIDependency` + `ProjectCILink`, belum ada; via migrasi sqlx + handler Rust, skema referensi `plane/db/models/`); filter Kind/Env/Status; graph `@xyflow/react` Phase 2. Open: scope workspace vs project, ID sequence, env/role lookup.
 - **Problem+RCA / Change+goals / Request / Knowledge / Improvement / Asset**: belum ada model/route/store — propose menyusul setelah Incident + Service Map terbukti.
 
