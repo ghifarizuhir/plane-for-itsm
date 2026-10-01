@@ -136,3 +136,69 @@ export type TWarRoomUpdatePayload = {
   description_html?: string;
   notes_html?: string;
 };
+
+export type TWarRoomMessageCreatePayload = {
+  body: string;
+  client_id?: string;
+};
+
+export type TWarRoomMessageUpdatePayload = {
+  body: string;
+};
+
+export type TWarRoomMessagesParams = {
+  before_id?: string;
+  limit?: number;
+};
+
+export type TWarRoomEventsParams = {
+  before_id?: string;
+  limit?: number;
+};
+
+export type TWarRoomParticipantCreatePayload = {
+  member_id: string;
+  role?: TWarRoomParticipantRole;
+};
+
+export type TWarRoomParticipantUpdatePayload = {
+  role: TWarRoomParticipantRole;
+};
+
+export type TWarRoomRunbookCreatePayload = {
+  title: string;
+};
+
+export type TWarRoomRunbookUpdatePayload = {
+  title?: string;
+  is_done?: boolean;
+};
+
+export type TWarRoomLinkServicesPayload = {
+  service_ids: string[];
+};
+
+export type TWarRoomLinkIssuesPayload = {
+  issue_ids: string[];
+};
+
+export type TWarRoomLinkResponse = {
+  linked: number;
+};
+
+/**
+ * Browser-facing relay envelope from `apps/live` (`{kind, data}`). Mirrors the
+ * frozen Phase 2 contract; `pong` is answered to app-level pings.
+ */
+export type TWarRoomSocketEvent =
+  | { kind: "message.created"; data: IWarRoomMessage }
+  | { kind: "message.updated"; data: IWarRoomMessage }
+  | { kind: "message.deleted"; data: { id: string; war_room_id: string } }
+  | { kind: "activity.created"; data: IWarRoomEvent }
+  | { kind: "room.changed"; data: { reasons: string[] } }
+  | { kind: "typing"; data: { user_id: string; is_typing: boolean } }
+  | { kind: "presence.joined"; data: { user_id: string; name: string } }
+  | { kind: "presence.left"; data: { user_id: string; name: string } }
+  | { kind: "pong"; data?: undefined };
+
+export type TWarRoomConnectionStatus = "connecting" | "connected" | "reconnecting" | "disabled";
