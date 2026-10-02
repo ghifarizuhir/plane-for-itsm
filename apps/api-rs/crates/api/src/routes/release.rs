@@ -22,8 +22,14 @@ use super::service::{bad_request, deserialize_present, validate_enum};
 use super::workflow::validate_name;
 
 /// Allowed `releases.status` values (spec §Model data).
-pub const RELEASE_STATUSES: &[&str] =
-    &["draft", "planned", "in_review", "approved", "released", "cancelled"];
+pub const RELEASE_STATUSES: &[&str] = &[
+    "draft",
+    "planned",
+    "in_review",
+    "approved",
+    "released",
+    "cancelled",
+];
 
 type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 
@@ -169,7 +175,9 @@ pub async fn create(
     let version = match body.version.as_deref().map(str::trim) {
         None | Some("") => None,
         Some(v) if v.chars().count() > 100 => {
-            return Ok(bad_request("Ensure version has no more than 100 characters."))
+            return Ok(bad_request(
+                "Ensure version has no more than 100 characters.",
+            ))
         }
         Some(v) => Some(v.to_string()),
     };
@@ -344,7 +352,10 @@ pub async fn patch(
         Some(None) => None,
         None => current.version.clone(),
     };
-    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    let status = body
+        .status
+        .clone()
+        .unwrap_or_else(|| current.status.clone());
     if let Err(e) = validate_enum("status", &status, RELEASE_STATUSES) {
         return Ok(bad_request(e));
     }

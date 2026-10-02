@@ -487,9 +487,7 @@ async fn patch_release_updates_and_clears_optional_fields() {
             version: Some(None),
             description_html: None,
             status: Some("planned".into()),
-            target_date: Some(Some(
-                chrono::NaiveDate::from_ymd_opt(2026, 11, 1).unwrap(),
-            )),
+            target_date: Some(Some(chrono::NaiveDate::from_ymd_opt(2026, 11, 1).unwrap())),
         }),
     )
     .await
