@@ -835,6 +835,14 @@ async fn main() {
             "/api/workspaces/:slug/review-requests/:request_id/withdraw/",
             post(routes::review::withdraw_request),
         )
+        .route(
+            "/api/workspaces/:slug/review-sessions/",
+            get(routes::review::list_sessions).post(routes::review::create_session),
+        )
+        .route(
+            "/api/workspaces/:slug/review-sessions/:session_id/",
+            get(routes::review::session_detail).patch(routes::review::patch_session),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror

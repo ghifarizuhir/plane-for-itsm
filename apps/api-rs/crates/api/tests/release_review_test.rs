@@ -8,8 +8,9 @@ use api::routes::release::{
     CreateRelease, LinkChanges, ListParams, PatchRelease,
 };
 use api::routes::review::{
-    list_requests, request_detail, submit_request, withdraw_request, RequestListParams,
-    SubmitRequest,
+    create_session, list_requests, list_sessions, patch_session, request_detail, session_detail,
+    submit_request, withdraw_request, CreateSession, PatchSession, RequestListParams,
+    SessionListParams, SubmitRequest,
 };
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -956,6 +957,204 @@ async fn request_detail_history_and_withdraw() {
         body["error"],
         "Only pending or scheduled requests can be withdrawn"
     );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+fn session_body(board: &str, project_id: Option<Uuid>, title: &str) -> CreateSession {
+    CreateSession {
+        board_type: Some(board.to_string()),
+        project_id,
+        title: Some(title.to_string()),
+        scheduled_at: Some(chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc)),
+        location: Some("Ruang Rapat 3".to_string()),
+        minutes: None,
+    }
+}
+
+fn no_session_filters(board: &str, project_id: Option<Uuid>) -> SessionListParams {
+    SessionListParams {
+        board_type: board.to_string(),
+        project_id,
+        status: None,
+    }
+}
+
+#[tokio::test]
+async fn create_session_requires_board_scope_admin() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+
+    let (status, Json(body)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Mingguan")),
+    )
+    .await
+    .expect("create tcb session");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["board_type"], "tcb");
+    assert_eq!(body["status"], "scheduled");
+    assert_eq!(body["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+
+    let member = scratch.add_actor(&st.pool, Some(15)).await;
+    let (status, _) = create_session(
+        State(st.clone()),
+        AuthUser(member),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Ilegal")),
+    )
+    .await
+    .expect("member create");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, Json(body)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "   ")),
+    )
+    .await
+    .expect("blank title");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "title is required");
+
+    let (status, _) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("rcb", Some(scratch.project_id), "RCB Ilegal")),
+    )
+    .await
+    .expect("rcb with project");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, Json(body)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("rcb", None, "RCB Bulanan")),
+    )
+    .await
+    .expect("create rcb session");
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(body["project_id"].is_null());
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn session_list_filters_and_patch() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Mingguan")),
+    )
+    .await
+    .expect("create tcb session");
+    create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("rcb", None, "RCB Bulanan")),
+    )
+    .await
+    .expect("create rcb session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    let (_, Json(tcb)) = list_sessions(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(no_session_filters("tcb", Some(scratch.project_id))),
+    )
+    .await
+    .expect("list tcb");
+    assert_eq!(tcb.as_array().unwrap().len(), 1);
+
+    let (_, Json(rcb)) = list_sessions(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(no_session_filters("rcb", None)),
+    )
+    .await
+    .expect("list rcb");
+    assert_eq!(rcb.as_array().unwrap().len(), 1);
+
+    let (status, Json(body)) = patch_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(PatchSession {
+            title: Some("TCB Mingguan (revisi)".into()),
+            scheduled_at: None,
+            location: None,
+            minutes: Some("Agenda: review 3 change.".into()),
+        }),
+    )
+    .await
+    .expect("patch session");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "TCB Mingguan (revisi)");
+    assert_eq!(body["minutes"], "Agenda: review 3 change.");
+
+    let (status, _) = patch_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), Uuid::new_v4())),
+        Json(PatchSession::default()),
+    )
+    .await
+    .expect("missing patch");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn session_detail_reads_scope() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Detail")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    let (status, Json(body)) = session_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["title"], "TCB Detail");
+    assert_eq!(body["items"].as_array().unwrap().len(), 0);
+    assert_eq!(body["participants"].as_array().unwrap().len(), 0);
+
+    let outsider = scratch.add_actor(&st.pool, Some(15)).await;
+    let (status, _) = session_detail(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("outsider detail");
+    assert_eq!(status, StatusCode::FORBIDDEN);
 
     scratch.cleanup(&st.pool).await;
 }

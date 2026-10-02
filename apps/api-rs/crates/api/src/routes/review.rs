@@ -472,6 +472,359 @@ pub async fn withdraw_request(
     Ok((StatusCode::OK, Json(request_json(&row))))
 }
 
+// ---------------------------------------------------------------------------
+// Review sessions
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ReviewSessionRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub board_type: String,
+    pub project_id: Option<Uuid>,
+    pub title: String,
+    pub scheduled_at: DateTime<Utc>,
+    pub status: String,
+    pub minutes: String,
+    pub location: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub created_by_id: Option<Uuid>,
+    pub item_count: i64,
+    pub participant_count: i64,
+    pub pending_outcome_count: i64,
+}
+
+pub(crate) const SESSION_SELECT: &str = "SELECT s.id, s.workspace_id, s.board_type, s.project_id, \
+    s.title, s.scheduled_at, s.status, s.minutes, s.location, s.completed_at, s.cancelled_at, \
+    s.created_at, s.updated_at, s.created_by_id, \
+    (SELECT COUNT(*) FROM review_session_items i WHERE i.session_id = s.id AND i.deleted_at IS NULL) AS item_count, \
+    (SELECT COUNT(*) FROM review_session_participants p WHERE p.session_id = s.id AND p.deleted_at IS NULL) AS participant_count, \
+    (SELECT COUNT(*) FROM review_session_items i WHERE i.session_id = s.id AND i.deleted_at IS NULL AND i.outcome IS NULL) AS pending_outcome_count \
+    FROM review_sessions s";
+
+pub(crate) fn session_json(row: &ReviewSessionRow) -> Value {
+    json!({
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "board_type": row.board_type,
+        "project_id": row.project_id,
+        "title": row.title,
+        "scheduled_at": row.scheduled_at,
+        "status": row.status,
+        "minutes": row.minutes,
+        "location": row.location,
+        "completed_at": row.completed_at,
+        "cancelled_at": row.cancelled_at,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "created_by": row.created_by_id,
+        "counts": {
+            "items": row.item_count,
+            "participants": row.participant_count,
+            "pending_outcome": row.pending_outcome_count,
+        },
+    })
+}
+
+pub(crate) async fn session_in_workspace(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    session_id: Uuid,
+) -> Result<Option<ReviewSessionRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{SESSION_SELECT} WHERE s.id = $1 \
+         AND s.workspace_id = (SELECT id FROM workspaces WHERE slug = $2 AND deleted_at IS NULL) \
+         AND s.deleted_at IS NULL"
+    ))
+    .bind(session_id)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+}
+
+pub(crate) async fn gate_session_read(
+    st: &AppState,
+    user: Uuid,
+    slug: &str,
+    session: &ReviewSessionRow,
+) -> Result<bool, sqlx::Error> {
+    if session.board_type == "tcb" {
+        match session.project_id {
+            Some(project_id) => gate_project_member(&st.pool, user, slug, project_id).await,
+            None => Ok(false),
+        }
+    } else {
+        gate_ws_member(&st.pool, user, slug).await
+    }
+}
+
+pub(crate) async fn can_manage_session(
+    st: &AppState,
+    user: Uuid,
+    slug: &str,
+    session: &ReviewSessionRow,
+) -> Result<bool, sqlx::Error> {
+    if session.created_by_id == Some(user) {
+        return Ok(true);
+    }
+    let admin = if session.board_type == "tcb" {
+        match session.project_id {
+            Some(project_id) => gate_project_admin(&st.pool, user, slug, project_id).await?,
+            None => false,
+        }
+    } else {
+        gate_ws_admin(&st.pool, user, slug).await?
+    };
+    if admin {
+        return Ok(true);
+    }
+    let participant: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM review_session_participants WHERE session_id = $1 \
+         AND user_id = $2 AND role IN ('chair', 'secretary') AND deleted_at IS NULL)",
+    )
+    .bind(session.id)
+    .bind(user)
+    .fetch_one(&st.pool)
+    .await?;
+    Ok(participant)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSession {
+    pub board_type: Option<String>,
+    pub project_id: Option<Uuid>,
+    pub title: Option<String>,
+    pub scheduled_at: Option<DateTime<Utc>>,
+    pub location: Option<String>,
+    pub minutes: Option<String>,
+}
+
+/// POST `/api/workspaces/:slug/review-sessions/`
+pub async fn create_session(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<CreateSession>,
+) -> R {
+    let board = body.board_type.clone().unwrap_or_default();
+    if let Err(e) = validate_enum("board_type", &board, BOARD_TYPES) {
+        return Ok(bad_request(e));
+    }
+    let title = match validate_name(body.title.as_deref().unwrap_or(""), "title") {
+        Ok(title) => title,
+        Err(e) => return Ok(bad_request(e)),
+    };
+    let Some(scheduled_at) = body.scheduled_at else {
+        return Ok(bad_request("scheduled_at is required"));
+    };
+    let location = body
+        .location
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let workspace_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
+    )
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(workspace_id) = workspace_id else {
+        return Ok(missing());
+    };
+    let project_id = if board == "tcb" {
+        let Some(project_id) = body.project_id else {
+            return Ok(bad_request("project_id is required for TCB"));
+        };
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+             WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL AND w.deleted_at IS NULL)",
+        )
+        .bind(project_id)
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await?;
+        if !exists {
+            return Ok(bad_request("Invalid project_id - object does not exist."));
+        }
+        if !gate_project_admin(&st.pool, auth.0, &slug, project_id).await? {
+            return Ok(deny());
+        }
+        Some(project_id)
+    } else {
+        if body.project_id.is_some() {
+            return Ok(bad_request("project_id is not allowed for RCB"));
+        }
+        if !gate_ws_admin(&st.pool, auth.0, &slug).await? {
+            return Ok(deny());
+        }
+        None
+    };
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO review_sessions (id, workspace_id, board_type, project_id, title, \
+         scheduled_at, status, minutes, location, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7, $8, now(), now(), $9, $9)",
+    )
+    .bind(id)
+    .bind(workspace_id)
+    .bind(&board)
+    .bind(project_id)
+    .bind(&title)
+    .bind(scheduled_at)
+    .bind(body.minutes.clone().unwrap_or_default())
+    .bind(&location)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await?;
+    let row = session_in_workspace(&st.pool, &slug, id)
+        .await?
+        .expect("session just inserted");
+    Ok((StatusCode::CREATED, Json(session_json(&row))))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionListParams {
+    pub board_type: String,
+    pub project_id: Option<Uuid>,
+    pub status: Option<String>,
+}
+
+/// GET `/api/workspaces/:slug/review-sessions/`
+pub async fn list_sessions(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(params): Query<SessionListParams>,
+) -> R {
+    if let Err(e) = validate_enum("board_type", &params.board_type, BOARD_TYPES) {
+        return Ok(bad_request(e));
+    }
+    if let Some(status) = params.status.as_deref() {
+        if let Err(e) = validate_enum("status", status, SESSION_STATUSES) {
+            return Ok(bad_request(e));
+        }
+    }
+    if params.board_type == "tcb" {
+        let Some(project_id) = params.project_id else {
+            return Ok(bad_request("project_id is required for TCB"));
+        };
+        if !gate_project_member(&st.pool, auth.0, &slug, project_id).await? {
+            return Ok(deny());
+        }
+    } else if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<ReviewSessionRow> = sqlx::query_as(&format!(
+        "{SESSION_SELECT} WHERE s.workspace_id = (SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL) \
+         AND s.board_type = $2 AND s.deleted_at IS NULL \
+         AND ($3::uuid IS NULL OR s.project_id = $3) \
+         AND ($4::text IS NULL OR s.status = $4) \
+         ORDER BY s.scheduled_at DESC"
+    ))
+    .bind(&slug)
+    .bind(&params.board_type)
+    .bind(params.project_id)
+    .bind(&params.status)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(session_json).collect())),
+    ))
+}
+
+/// GET `/api/workspaces/:slug/review-sessions/:session_id/`
+pub async fn session_detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+) -> R {
+    let Some(row) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &row).await? {
+        return Ok(deny());
+    }
+    let mut value = session_json(&row);
+    value["items"] = json!([]);
+    value["participants"] = json!([]);
+    Ok((StatusCode::OK, Json(value)))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchSession {
+    pub title: Option<String>,
+    pub scheduled_at: Option<DateTime<Utc>>,
+    pub location: Option<String>,
+    pub minutes: Option<String>,
+}
+
+/// PATCH `/api/workspaces/:slug/review-sessions/:session_id/`
+pub async fn patch_session(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+    Json(body): Json<PatchSession>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status == "cancelled" {
+        return Ok(bad_request("Session is cancelled"));
+    }
+    if session.status == "completed"
+        && (body.title.is_some() || body.scheduled_at.is_some() || body.location.is_some())
+    {
+        return Ok(bad_request("Session is completed"));
+    }
+    let title = match body.title.as_deref() {
+        Some(raw) => match validate_name(raw, "title") {
+            Ok(title) => title,
+            Err(e) => return Ok(bad_request(e)),
+        },
+        None => session.title.clone(),
+    };
+    let scheduled_at = body.scheduled_at.unwrap_or(session.scheduled_at);
+    let location = match body.location.as_deref() {
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        None => session.location.clone(),
+    };
+    let minutes = body.minutes.clone().unwrap_or_else(|| session.minutes.clone());
+    sqlx::query(
+        "UPDATE review_sessions SET title = $1, scheduled_at = $2, location = $3, minutes = $4, \
+         updated_at = now(), updated_by_id = $5 WHERE id = $6 AND deleted_at IS NULL",
+    )
+    .bind(&title)
+    .bind(scheduled_at)
+    .bind(&location)
+    .bind(&minutes)
+    .bind(auth.0)
+    .bind(session_id)
+    .execute(&st.pool)
+    .await?;
+    let row = session_in_workspace(&st.pool, &slug, session_id)
+        .await?
+        .expect("session just updated");
+    Ok((StatusCode::OK, Json(session_json(&row))))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
