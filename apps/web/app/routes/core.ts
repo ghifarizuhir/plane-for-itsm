@@ -218,6 +218,25 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
+          // Testing Control (TCB board)
+          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(list)/layout.tsx", [
+            route(
+              ":workspaceSlug/projects/:projectId/testing-control",
+              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(list)/page.tsx"
+            ),
+          ]),
+
+          // Testing Control Session Detail
+          layout(
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(detail)/layout.tsx",
+            [
+              route(
+                ":workspaceSlug/projects/:projectId/testing-control/sessions/:sessionId",
+                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(detail)/sessions/[sessionId]/page.tsx"
+              ),
+            ]
+          ),
+
           // War Room Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(detail)/layout.tsx", [
             route(

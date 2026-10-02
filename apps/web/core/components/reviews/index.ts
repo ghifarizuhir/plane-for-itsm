@@ -10,6 +10,7 @@ export * from "./session/session-detail-breadcrumbs";
 export * from "./session/session-detail-header";
 export * from "./session/session-participants";
 export * from "./session/workspace-member-select";
+export * from "./testing-control/testing-control-header";
 export * from "./session-status-pill";
 export * from "./submit-review-modal";
 export * from "./tcb-status-badge";

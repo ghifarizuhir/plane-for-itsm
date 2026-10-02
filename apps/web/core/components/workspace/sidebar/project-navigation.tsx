@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import {
   AlertOctagonOutline,
+  CheckDoneOutline,
   CyclesOutline,
   IntakeOutline,
   ModuleOutline,
@@ -29,6 +30,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
+import { useWorkflow } from "@/hooks/store/use-workflow";
 
 export type TNavigationItem = {
   name: string;
@@ -66,6 +68,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     : undefined;
   const workItem = workItemId ? getIssueById(workItemId) : undefined;
   const project = getPartialProjectById(projectId);
+  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+
+  useEffect(() => {
+    if (workItemTypes) return;
+    void fetchWorkItemTypes(workspaceSlug).catch(() => undefined);
+  }, [workItemTypes, fetchWorkItemTypes, workspaceSlug]);
+
+  const hasChangeType =
+    workItemTypes?.some((type) => type.name.toLowerCase() === "change" && type.project_ids?.includes(projectId)) ??
+    false;
   // handlers
   const handleProjectClick = () => {
     if (window.innerWidth < 768) {
@@ -133,6 +145,16 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 4.5,
       },
       {
+        i18n_key: "sidebar.testing_control",
+        key: "testing-control",
+        name: "Testing control",
+        href: `/${workspaceSlug}/projects/${projectId}/testing-control`,
+        icon: CheckDoneOutline,
+        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+        shouldRender: hasChangeType,
+        sortOrder: 4.75,
+      },
+      {
         i18n_key: "sidebar.views",
         key: "views",
         name: "Views",
@@ -163,7 +185,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 7,
       },
     ],
-    [project]
+    [project, hasChangeType]
   );
 
   // memoized navigation items and adding additional navigation items
