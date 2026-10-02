@@ -22,9 +22,11 @@ import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-propert
 import { useNotificationPreview } from "@/hooks/use-notification-preview";
 // lib
 import { isScheduleRunNotification } from "@/lib/ai-schedule";
+import { isReviewRequestNotification, isReviewSessionNotification } from "@/lib/review-notification";
 import { isWarRoomNotification } from "@/lib/war-room-notification";
 // local imports
 import { InboxContentRoot } from "../inbox/content";
+import { ReviewInboxDetail } from "./review-detail";
 import { ScheduleRunInboxDetail } from "./schedule-run-detail";
 import { WarRoomInboxDetail } from "./war-room-detail";
 
@@ -53,6 +55,12 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
     : undefined;
   const selectedWarRoom = isWarRoomNotification(selectedNotification?.data)
     ? selectedNotification.data.war_room
+    : undefined;
+  const selectedReviewRequest = isReviewRequestNotification(selectedNotification?.data)
+    ? selectedNotification?.data?.review_request
+    : undefined;
+  const selectedReviewSession = isReviewSessionNotification(selectedNotification?.data)
+    ? selectedNotification?.data?.review_session
     : undefined;
 
   // fetching workspace work item properties
@@ -113,6 +121,13 @@ export const NotificationsRoot = observer(function NotificationsRoot({ workspace
             <WarRoomInboxDetail
               workspaceSlug={workspace_slug}
               warRoom={selectedWarRoom}
+              embedRemoveCurrentNotification={embedRemoveCurrentNotification}
+            />
+          ) : (selectedReviewRequest || selectedReviewSession) && workspace_slug ? (
+            <ReviewInboxDetail
+              workspaceSlug={workspace_slug}
+              reviewRequest={selectedReviewRequest}
+              reviewSession={selectedReviewSession}
               embedRemoveCurrentNotification={embedRemoveCurrentNotification}
             />
           ) : is_inbox_issue === true && workspace_slug && project_id && issue_id ? (
