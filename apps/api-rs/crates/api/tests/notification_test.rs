@@ -132,6 +132,35 @@ async fn list_includes_known_entity_types() {
                 "sequence_id": 1,
             }}),
         ),
+        (
+            "review_request",
+            "Review requested",
+            "in_app:review:agenda_added",
+            json!({"review_request": {
+                "id": Uuid::new_v4().to_string(),
+                "board_type": "tcb",
+                "project_id": Uuid::new_v4().to_string(),
+                "workspace_slug": slug.clone(),
+                "status": "scheduled",
+                "subject_label": "CHG-1 Fix checkout",
+                "session_id": Uuid::new_v4().to_string(),
+                "session_title": "Weekly TCB",
+                "scheduled_at": "2026-10-05T09:00:00Z",
+            }}),
+        ),
+        (
+            "review_session",
+            "Review scheduled",
+            "in_app:review:session_scheduled",
+            json!({"review_session": {
+                "id": Uuid::new_v4().to_string(),
+                "board_type": "tcb",
+                "project_id": Uuid::new_v4().to_string(),
+                "workspace_slug": slug.clone(),
+                "title": "Weekly TCB",
+                "scheduled_at": "2026-10-05T09:00:00Z",
+            }}),
+        ),
         ("mystery", "Hidden", "in_app:other", json!({})),
     ] {
         sqlx::query(
@@ -172,12 +201,23 @@ async fn list_includes_known_entity_types() {
         names.contains(&"ai_schedule_run"),
         "schedule run notifications must be listed"
     );
+    assert!(
+        names.contains(&"review_request"),
+        "review request notifications must be listed"
+    );
+    assert!(
+        names.contains(&"review_session"),
+        "review session notifications must be listed"
+    );
     // Mention-carrying senders surface under `mentioned=true`, not the default list.
     assert!(
         !names.contains(&"war_room"),
         "war room mentions belong to the mentions filter"
     );
-    assert!(!names.contains(&"mystery"), "unknown entity types stay hidden");
+    assert!(
+        !names.contains(&"mystery"),
+        "unknown entity types stay hidden"
+    );
 
     let mut mentioned = HashMap::<String, String>::new();
     mentioned.insert("mentioned".to_string(), "true".to_string());
@@ -200,21 +240,36 @@ async fn list_includes_known_entity_types() {
         names.contains(&"war_room"),
         "war room mention notifications must be listed under the mentions filter"
     );
-    assert!(!names.contains(&"issue"), "non-mention issues stay out of the mentions filter");
+    assert!(
+        !names.contains(&"issue"),
+        "non-mention issues stay out of the mentions filter"
+    );
     assert!(
         !names.contains(&"ai_schedule_run"),
         "non-mention schedule runs stay out of the mentions filter"
     );
-    assert!(!names.contains(&"mystery"), "unknown entity types stay hidden");
+    assert!(
+        !names.contains(&"review_request"),
+        "review requests are not mention notifications"
+    );
+    assert!(
+        !names.contains(&"review_session"),
+        "review sessions are not mention notifications"
+    );
+    assert!(
+        !names.contains(&"mystery"),
+        "unknown entity types stay hidden"
+    );
 
-    let Json(counts) = notification::unread(State(state.clone()), AuthUser(user_id), Path(slug.clone()))
-        .await
-        .expect("unread ok");
+    let Json(counts) =
+        notification::unread(State(state.clone()), AuthUser(user_id), Path(slug.clone()))
+            .await
+            .expect("unread ok");
     // The unread badge intentionally counts every entity_name (pre-existing
     // behaviour); only the list filter hides unknown types.
     // The unread badge counts by sender: non-mention rows in the total,
     // war room rows (sender `in_app:war_room:mentioned`) in the mentions badge.
-    assert_eq!(counts["total_unread_notifications_count"], json!(3));
+    assert_eq!(counts["total_unread_notifications_count"], json!(5));
     assert_eq!(counts["mention_unread_notifications_count"], json!(1));
 
     sqlx::query("DELETE FROM notifications WHERE workspace_id = $1")
