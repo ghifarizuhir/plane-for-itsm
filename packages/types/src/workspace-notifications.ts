@@ -5,6 +5,7 @@
  */
 
 import type { ENotificationFilterType } from "./enums";
+import type { TReviewBoardType, TReviewOutcome } from "./review";
 import type { IUserLite } from "./users";
 
 // filters
@@ -44,6 +45,28 @@ export type TNotificationWarRoom = {
   sequence_id: number;
 };
 
+export type TNotificationReviewRequest = {
+  id: string;
+  board_type: TReviewBoardType;
+  project_id: string | null;
+  workspace_slug: string;
+  status: "pending" | "scheduled" | "decided";
+  subject_label: string;
+  session_id?: string;
+  session_title?: string;
+  scheduled_at?: string;
+  outcome?: TReviewOutcome;
+};
+
+export type TNotificationReviewSession = {
+  id: string;
+  board_type: TReviewBoardType;
+  project_id: string | null;
+  workspace_slug: string;
+  title: string;
+  scheduled_at: string;
+};
+
 export type TNotificationData = {
   issue?: TNotificationIssueLite | undefined;
   issue_activity?: {
@@ -57,6 +80,8 @@ export type TNotificationData = {
   };
   ai_schedule?: TNotificationScheduleRun | undefined;
   war_room?: TNotificationWarRoom | undefined;
+  review_request?: TNotificationReviewRequest | undefined;
+  review_session?: TNotificationReviewSession | undefined;
 };
 
 export type TNotification = {
