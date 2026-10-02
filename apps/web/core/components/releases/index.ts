@@ -1,5 +1,6 @@
 export * from "./create-release-modal";
 export * from "./delete-release-modal";
+export * from "./detail";
 export * from "./release-board-row";
 export * from "./release-form";
 export * from "./release-load-error-state";
