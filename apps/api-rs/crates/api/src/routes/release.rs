@@ -422,6 +422,118 @@ pub async fn destroy(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct LinkChanges {
+    pub issue_ids: Vec<Uuid>,
+}
+
+/// GET `/api/workspaces/:slug/releases/:pk/changes/`
+pub async fn changes_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    if release_in_workspace(&st.pool, &slug, pk).await?.is_none() {
+        return Ok(missing());
+    }
+    let rows: Vec<ReleaseChangeRow> = sqlx::query_as(&format!(
+        "{CHANGE_SELECT} WHERE rc.release_id = $1 AND rc.deleted_at IS NULL ORDER BY rc.created_at ASC"
+    ))
+    .bind(pk)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(change_json).collect())),
+    ))
+}
+
+/// POST `/api/workspaces/:slug/releases/:pk/changes/`
+pub async fn changes_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<LinkChanges>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(release) = release_in_workspace(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    let mut ids = body.issue_ids.clone();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(bad_request("Invalid issue_ids - object does not exist."));
+    }
+    let valid: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id = i.project_id \
+         WHERE i.id = ANY($1) AND i.deleted_at IS NULL AND p.deleted_at IS NULL \
+         AND p.workspace_id = $2",
+    )
+    .bind(&ids)
+    .bind(release.workspace_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if valid as usize != ids.len() {
+        return Ok(bad_request("Invalid issue_ids - object does not exist."));
+    }
+    for issue_id in &ids {
+        sqlx::query(
+            "INSERT INTO release_changes (id, workspace_id, release_id, issue_id, project_id, \
+             created_at, updated_at, created_by_id, updated_by_id) \
+             SELECT gen_random_uuid(), $1, $2, i.id, i.project_id, now(), now(), $3, $3 \
+             FROM issues i JOIN projects p ON p.id = i.project_id \
+             WHERE i.id = $4 AND p.workspace_id = $1 AND i.deleted_at IS NULL \
+             AND NOT EXISTS (SELECT 1 FROM release_changes rc WHERE rc.release_id = $2 \
+                             AND rc.issue_id = i.id AND rc.deleted_at IS NULL)",
+        )
+        .bind(release.workspace_id)
+        .bind(pk)
+        .bind(auth.0)
+        .bind(issue_id)
+        .execute(&st.pool)
+        .await?;
+    }
+    let rows: Vec<ReleaseChangeRow> = sqlx::query_as(&format!(
+        "{CHANGE_SELECT} WHERE rc.release_id = $1 AND rc.deleted_at IS NULL ORDER BY rc.created_at ASC"
+    ))
+    .bind(pk)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Value::Array(rows.iter().map(change_json).collect())),
+    ))
+}
+
+/// DELETE `/api/workspaces/:slug/releases/:pk/changes/:issue_id/`
+pub async fn changes_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk, issue_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE release_changes rc SET deleted_at = now(), updated_at = now() \
+         FROM releases r JOIN workspaces w ON w.id = r.workspace_id \
+         WHERE rc.release_id = r.id AND r.id = $1 AND w.slug = $2 \
+         AND rc.issue_id = $3 AND rc.deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(&slug)
+    .bind(issue_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

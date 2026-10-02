@@ -812,6 +812,14 @@ async fn main() {
                 .patch(routes::release::patch)
                 .delete(routes::release::destroy),
         )
+        .route(
+            "/api/workspaces/:slug/releases/:pk/changes/",
+            get(routes::release::changes_list).post(routes::release::changes_create),
+        )
+        .route(
+            "/api/workspaces/:slug/releases/:pk/changes/:issue_id/",
+            delete(routes::release::changes_destroy),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror

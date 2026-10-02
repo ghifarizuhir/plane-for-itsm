@@ -4,7 +4,8 @@
 
 use api::middleware::auth::AuthUser;
 use api::routes::release::{
-    create, destroy, detail, list, patch, CreateRelease, ListParams, PatchRelease,
+    changes_create, changes_destroy, changes_list, create, destroy, detail, list, patch,
+    CreateRelease, LinkChanges, ListParams, PatchRelease,
 };
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -587,6 +588,167 @@ async fn destroy_release_guards_active_review_and_permissions() {
     .await
     .expect("list after delete");
     assert_eq!(all.as_array().unwrap().len(), 0);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn detail_includes_linked_changes() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis dengan change")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+    changes_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(LinkChanges {
+            issue_ids: vec![issue_id],
+        }),
+    )
+    .await
+    .expect("link change");
+
+    let (status, Json(body)) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["changes"].as_array().unwrap().len(), 1);
+    assert!(body["changes"][0]["issue_identifier"]
+        .as_str()
+        .unwrap()
+        .ends_with("-1"));
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn link_changes_requires_same_workspace_and_dedupes() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let other = Scratch::new(&st.pool).await;
+    let issue_a = scratch.insert_issue(&st.pool).await;
+    let issue_b = scratch.insert_issue(&st.pool).await;
+    let foreign_issue = other.insert_issue(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis bundling")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+
+    let (status, Json(body)) = changes_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(LinkChanges {
+            issue_ids: vec![issue_a, issue_b, issue_a],
+        }),
+    )
+    .await
+    .expect("link changes");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body.as_array().unwrap().len(), 2);
+
+    let (status, Json(body)) = changes_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(LinkChanges {
+            issue_ids: vec![issue_a],
+        }),
+    )
+    .await
+    .expect("idempotent link");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body.as_array().unwrap().len(), 2);
+
+    let (status, Json(body)) = changes_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(LinkChanges {
+            issue_ids: vec![foreign_issue],
+        }),
+    )
+    .await
+    .expect("foreign issue");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid issue_ids - object does not exist.");
+
+    scratch.cleanup(&st.pool).await;
+    other.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn changes_destroy_unlinks() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis unlink")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+    changes_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(LinkChanges {
+            issue_ids: vec![issue_id],
+        }),
+    )
+    .await
+    .expect("link");
+
+    let (status, _) = changes_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid, issue_id)),
+    )
+    .await
+    .expect("unlink");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, Json(body)) = changes_list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("list changes");
+    assert_eq!(body.as_array().unwrap().len(), 0);
+
+    let (status, _) = changes_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid, issue_id)),
+    )
+    .await
+    .expect("idempotent unlink");
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     scratch.cleanup(&st.pool).await;
 }
