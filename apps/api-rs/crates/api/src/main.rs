@@ -843,6 +843,14 @@ async fn main() {
             "/api/workspaces/:slug/review-sessions/:session_id/",
             get(routes::review::session_detail).patch(routes::review::patch_session),
         )
+        .route(
+            "/api/workspaces/:slug/review-sessions/:session_id/participants/",
+            get(routes::review::participants_list).post(routes::review::participants_create),
+        )
+        .route(
+            "/api/workspaces/:slug/review-sessions/:session_id/participants/:participant_id/",
+            patch(routes::review::participants_patch).delete(routes::review::participants_destroy),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror

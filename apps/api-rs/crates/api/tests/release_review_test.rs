@@ -8,9 +8,10 @@ use api::routes::release::{
     CreateRelease, LinkChanges, ListParams, PatchRelease,
 };
 use api::routes::review::{
-    create_session, list_requests, list_sessions, patch_session, request_detail, session_detail,
-    submit_request, withdraw_request, CreateSession, PatchSession, RequestListParams,
-    SessionListParams, SubmitRequest,
+    create_session, list_requests, list_sessions, participants_create, participants_destroy,
+    participants_list, participants_patch, patch_session, request_detail, session_detail,
+    submit_request, withdraw_request, CreateSession, ParticipantCreate, ParticipantPatch,
+    PatchSession, RequestListParams, SessionListParams, SubmitRequest,
 };
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -1155,6 +1156,136 @@ async fn session_detail_reads_scope() {
     .await
     .expect("outsider detail");
     assert_eq!(status, StatusCode::FORBIDDEN);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+fn participant_body(user_id: Uuid, role: Option<&str>) -> ParticipantCreate {
+    ParticipantCreate {
+        user_id,
+        role: role.map(str::to_string),
+        attendance: None,
+    }
+}
+
+#[tokio::test]
+async fn participants_add_list_patch_remove_and_notify() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15)).await;
+
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Peserta")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    let (status, Json(body)) = participants_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(participant_body(member, Some("secretary"))),
+    )
+    .await
+    .expect("add participant");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["role"], "secretary");
+    assert_eq!(body["attendance"], "invited");
+
+    let notified: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE receiver_id = $1 \
+         AND sender = 'in_app:review:session_scheduled' AND deleted_at IS NULL",
+    )
+    .bind(member)
+    .fetch_one(&st.pool)
+    .await
+    .expect("count notifications");
+    assert_eq!(notified, 1);
+
+    let (status, Json(body)) = participants_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(participant_body(member, Some("member"))),
+    )
+    .await
+    .expect("upsert participant");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["role"], "member");
+
+    let (_, Json(list)) = participants_list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("list participants");
+    assert_eq!(list.as_array().unwrap().len(), 1);
+
+    let participant_id: Uuid = list[0]["id"].as_str().unwrap().parse().unwrap();
+    let (status, Json(body)) = participants_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id, participant_id)),
+        Json(ParticipantPatch {
+            role: None,
+            attendance: Some("present".into()),
+        }),
+    )
+    .await
+    .expect("patch participant");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["attendance"], "present");
+
+    let (status, _) = participants_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id, participant_id)),
+    )
+    .await
+    .expect("remove participant");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, Json(list)) = participants_list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("list after remove");
+    assert_eq!(list.as_array().unwrap().len(), 0);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn participant_requires_workspace_member() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Non-member")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    let (status, Json(body)) = participants_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(participant_body(Uuid::new_v4(), None)),
+    )
+    .await
+    .expect("foreign participant");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid user_id - not a workspace member.");
 
     scratch.cleanup(&st.pool).await;
 }

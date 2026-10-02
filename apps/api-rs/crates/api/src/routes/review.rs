@@ -751,7 +751,11 @@ pub async fn session_detail(
     }
     let mut value = session_json(&row);
     value["items"] = json!([]);
-    value["participants"] = json!([]);
+    let participants = participants_for_session(&st.pool, session_id).await?;
+    value["participants"] = json!(participants
+        .iter()
+        .map(participant_json)
+        .collect::<Vec<_>>());
     Ok((StatusCode::OK, Json(value)))
 }
 
@@ -823,6 +827,321 @@ pub async fn patch_session(
         .await?
         .expect("session just updated");
     Ok((StatusCode::OK, Json(session_json(&row))))
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/// One `notifications` row, shaped like the war-room helper
+/// (`war_room.rs:1897-1934`). Skips self-notification.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn insert_review_notification(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    project_id: Option<Uuid>,
+    receiver_id: Uuid,
+    actor: Uuid,
+    entity_name: &str,
+    entity_identifier: Uuid,
+    title: &str,
+    sender: &str,
+    data: Value,
+) -> Result<(), sqlx::Error> {
+    if receiver_id == actor {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO notifications (id, workspace_id, project_id, receiver_id, entity_name, \
+         entity_identifier, title, sender, data, message_html, created_at, updated_at, \
+         created_by_id, triggered_by_id) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, '<p></p>', now(), now(), $9, $9)",
+    )
+    .bind(workspace_id)
+    .bind(project_id)
+    .bind(receiver_id)
+    .bind(entity_name)
+    .bind(entity_identifier)
+    .bind(title)
+    .bind(sender)
+    .bind(data)
+    .bind(actor)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Participants
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ParticipantRow {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub role: String,
+    pub attendance: String,
+    pub created_at: DateTime<Utc>,
+    pub display_name: String,
+    pub email: Option<String>,
+}
+
+const PARTICIPANT_SELECT: &str = "SELECT p.id, p.user_id, p.role, p.attendance, p.created_at, \
+    COALESCE(u.display_name, u.username) AS display_name, u.email \
+    FROM review_session_participants p JOIN users u ON u.id = p.user_id";
+
+fn participant_json(row: &ParticipantRow) -> Value {
+    json!({
+        "id": row.id,
+        "user_id": row.user_id,
+        "role": row.role,
+        "attendance": row.attendance,
+        "created_at": row.created_at,
+        "display_name": row.display_name,
+        "email": row.email,
+    })
+}
+
+pub(crate) async fn participants_for_session(
+    pool: &sqlx::PgPool,
+    session_id: Uuid,
+) -> Result<Vec<ParticipantRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{PARTICIPANT_SELECT} WHERE p.session_id = $1 AND p.deleted_at IS NULL \
+         ORDER BY p.created_at ASC"
+    ))
+    .bind(session_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn participant_by_id(
+    pool: &sqlx::PgPool,
+    session_id: Uuid,
+    participant_id: Uuid,
+) -> Result<Option<ParticipantRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{PARTICIPANT_SELECT} WHERE p.id = $1 AND p.session_id = $2 AND p.deleted_at IS NULL"
+    ))
+    .bind(participant_id)
+    .bind(session_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn participant_by_user(
+    pool: &sqlx::PgPool,
+    session_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<ParticipantRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{PARTICIPANT_SELECT} WHERE p.user_id = $1 AND p.session_id = $2 AND p.deleted_at IS NULL"
+    ))
+    .bind(user_id)
+    .bind(session_id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParticipantCreate {
+    pub user_id: Uuid,
+    pub role: Option<String>,
+    pub attendance: Option<String>,
+}
+
+/// POST `/api/workspaces/:slug/review-sessions/:session_id/participants/`
+pub async fn participants_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+    Json(body): Json<ParticipantCreate>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    let role = body.role.clone().unwrap_or_else(|| "member".to_string());
+    if let Err(e) = validate_enum("role", &role, PARTICIPANT_ROLES) {
+        return Ok(bad_request(e));
+    }
+    let attendance = body
+        .attendance
+        .clone()
+        .unwrap_or_else(|| "invited".to_string());
+    if let Err(e) = validate_enum("attendance", &attendance, ATTENDANCE_VALUES) {
+        return Ok(bad_request(e));
+    }
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_members wm JOIN workspaces w ON w.id = wm.workspace_id \
+         WHERE w.slug = $1 AND wm.member_id = $2 AND wm.is_active = true AND wm.deleted_at IS NULL \
+         AND w.deleted_at IS NULL)",
+    )
+    .bind(&slug)
+    .bind(body.user_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if !is_member {
+        return Ok(bad_request("Invalid user_id - not a workspace member."));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO review_session_participants (id, workspace_id, session_id, user_id, role, \
+         attendance, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, now(), now(), $6, $6) \
+         ON CONFLICT (session_id, user_id) WHERE deleted_at IS NULL \
+         DO UPDATE SET role = EXCLUDED.role, attendance = EXCLUDED.attendance, \
+         updated_at = now(), updated_by_id = $6",
+    )
+    .bind(session.workspace_id)
+    .bind(session.id)
+    .bind(body.user_id)
+    .bind(&role)
+    .bind(&attendance)
+    .bind(auth.0)
+    .execute(&mut *tx)
+    .await?;
+    insert_review_notification(
+        &mut tx,
+        session.workspace_id,
+        session.project_id,
+        body.user_id,
+        auth.0,
+        "review_session",
+        session.id,
+        &format!("You are scheduled for {}", session.title),
+        "in_app:review:session_scheduled",
+        json!({
+            "review_session": {
+                "id": session.id,
+                "board_type": session.board_type,
+                "project_id": session.project_id,
+                "workspace_slug": slug,
+                "title": session.title,
+                "scheduled_at": session.scheduled_at,
+            }
+        }),
+    )
+    .await?;
+    tx.commit().await?;
+    let row = participant_by_user(&st.pool, session.id, body.user_id)
+        .await?
+        .expect("participant just inserted");
+    Ok((StatusCode::CREATED, Json(participant_json(&row))))
+}
+
+/// GET `/api/workspaces/:slug/review-sessions/:session_id/participants/`
+pub async fn participants_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    let rows = participants_for_session(&st.pool, session.id).await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(participant_json).collect())),
+    ))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ParticipantPatch {
+    pub role: Option<String>,
+    pub attendance: Option<String>,
+}
+
+/// PATCH `/api/workspaces/:slug/review-sessions/:session_id/participants/:participant_id/`
+pub async fn participants_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id, participant_id)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<ParticipantPatch>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if body.role.is_none() && body.attendance.is_none() {
+        return Ok(bad_request("Nothing to update"));
+    }
+    if let Some(role) = body.role.as_deref() {
+        if let Err(e) = validate_enum("role", role, PARTICIPANT_ROLES) {
+            return Ok(bad_request(e));
+        }
+    }
+    if let Some(attendance) = body.attendance.as_deref() {
+        if let Err(e) = validate_enum("attendance", attendance, ATTENDANCE_VALUES) {
+            return Ok(bad_request(e));
+        }
+    }
+    let Some(_current) = participant_by_id(&st.pool, session.id, participant_id).await? else {
+        return Ok(missing());
+    };
+    let role = body.role.clone().unwrap_or_else(|| "member".to_string());
+    let attendance = body
+        .attendance
+        .clone()
+        .unwrap_or_else(|| "invited".to_string());
+    sqlx::query(
+        "UPDATE review_session_participants SET role = COALESCE($1, role), \
+         attendance = COALESCE($2, attendance), updated_at = now(), updated_by_id = $3 \
+         WHERE id = $4 AND session_id = $5 AND deleted_at IS NULL",
+    )
+    .bind(body.role.as_ref().map(|_| role))
+    .bind(body.attendance.as_ref().map(|_| attendance))
+    .bind(auth.0)
+    .bind(participant_id)
+    .bind(session.id)
+    .execute(&st.pool)
+    .await?;
+    let row = participant_by_id(&st.pool, session.id, participant_id)
+        .await?
+        .expect("participant just updated");
+    Ok((StatusCode::OK, Json(participant_json(&row))))
+}
+
+/// DELETE `/api/workspaces/:slug/review-sessions/:session_id/participants/:participant_id/`
+pub async fn participants_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id, participant_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE review_session_participants SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND session_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(participant_id)
+    .bind(session.id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
 #[cfg(test)]
