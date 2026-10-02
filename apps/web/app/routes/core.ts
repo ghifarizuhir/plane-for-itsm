@@ -90,6 +90,19 @@ export const coreRoutes: RouteConfigEntry[] = [
           ),
         ]),
 
+        // Release Control (RCB board)
+        layout("./(all)/[workspaceSlug]/(projects)/release-control/(list)/layout.tsx", [
+          route(":workspaceSlug/release-control", "./(all)/[workspaceSlug]/(projects)/release-control/(list)/page.tsx"),
+        ]),
+
+        // Release Control Session Detail
+        layout("./(all)/[workspaceSlug]/(projects)/release-control/(detail)/layout.tsx", [
+          route(
+            ":workspaceSlug/release-control/sessions/:sessionId",
+            "./(all)/[workspaceSlug]/(projects)/release-control/(detail)/sessions/[sessionId]/page.tsx"
+          ),
+        ]),
+
         // Notifications
         layout("./(all)/[workspaceSlug]/(projects)/notifications/layout.tsx", [
           route(":workspaceSlug/notifications", "./(all)/[workspaceSlug]/(projects)/notifications/page.tsx"),

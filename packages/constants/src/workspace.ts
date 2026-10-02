@@ -227,6 +227,13 @@ export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS: Record<string, IWorkspa
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname, url) => pathname.includes(url),
   },
+  release_control: {
+    key: "release_control",
+    labelTranslationKey: "sidebar.release_control",
+    href: `/release-control/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname, url) => pathname.includes(url),
+  },
 };
 
 export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
@@ -234,6 +241,7 @@ export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebar
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS["analytics"],
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS["archives"],
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS["releases"],
+  WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS["release_control"],
 ];
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspaceSidebarNavigationItem> = {
