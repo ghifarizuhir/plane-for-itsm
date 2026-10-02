@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Oczekujący",
+      "scheduled": "Zaplanowany",
+      "decided": "Rozstrzygnięty",
+      "withdrawn": "Wycofany"
+    },
+    "session_status_values": {
+      "scheduled": "Zaplanowana",
+      "completed": "Zakończona",
+      "cancelled": "Anulowana"
+    },
+    "outcome_values": {
+      "approved": "Zatwierdzona",
+      "rejected": "Odrzucona",
+      "approved_with_notes": "Zatwierdzona z uwagami",
+      "deferred": "Odroczona"
+    },
+    "participant_role_values": {
+      "chair": "Przewodniczący",
+      "secretary": "Sekretarz",
+      "member": "Członek"
+    },
+    "attendance_values": {
+      "invited": "Zaproszony",
+      "present": "Obecny",
+      "absent": "Nieobecny"
+    },
+    "queue_tab": "Kolejka",
+    "sessions_tab": "Posiedzenia",
+    "load_error": {
+      "title": "Nie można wczytać komitetu",
+      "description": "Podczas pobierania danych przeglądu wystąpił błąd.",
+      "retry": "Ponów próbę"
+    },
+    "empty_queue": {
+      "title": "Nic nie czeka na przegląd",
+      "description": "Przesłane wnioski pojawią się tutaj."
+    },
+    "empty_sessions": {
+      "title": "Brak posiedzeń",
+      "description": "Zaplanuj posiedzenie, aby przejrzeć oczekujące wnioski."
+    },
+    "no_matches": {
+      "title": "Brak pasujących wniosków",
+      "description": "Spróbuj innego wyszukiwania lub wyczyść filtry."
+    },
+    "request": {
+      "submitted": "Zmiana przesłana do TCB.",
+      "withdrawn": "Wniosek wycofany.",
+      "submit_failed": "Nie można przesłać wniosku. Spróbuj ponownie.",
+      "withdraw_failed": "Nie można wycofać wniosku. Spróbuj ponownie.",
+      "submission_note": "Notatka do zgłoszenia"
+    },
+    "tcb": {
+      "badge_pending": "TCB oczekujące",
+      "badge_scheduled": "TCB zaplanowane",
+      "badge_decided": "TCB rozstrzygnięte",
+      "badge_withdrawn": "TCB wycofane"
+    },
+    "sessions": {
+      "add": "Zaplanuj posiedzenie",
+      "edit": "Edytuj posiedzenie",
+      "title_label": "Tytuł posiedzenia",
+      "scheduled_at": "Data i godzina",
+      "location": "Miejsce",
+      "minutes": "Protokół",
+      "minutes_placeholder": "Wpisz tutaj protokół ze spotkania",
+      "complete": "Zakończ posiedzenie",
+      "cancel": "Anuluj posiedzenie",
+      "complete_failed": "Nie można zakończyć posiedzenia. Spróbuj ponownie.",
+      "cancel_failed": "Nie można anulować posiedzenia. Spróbuj ponownie.",
+      "created": "Posiedzenie zaplanowane.",
+      "updated": "Posiedzenie zaktualizowane.",
+      "completed": "Posiedzenie zakończone.",
+      "cancelled": "Posiedzenie anulowane.",
+      "create_failed": "Nie można zaplanować posiedzenia. Spróbuj ponownie.",
+      "update_failed": "Nie można zaktualizować posiedzenia. Spróbuj ponownie.",
+      "empty_items": "Porządek obrad jest pusty. Dodaj oczekujące wnioski, aby je przejrzeć.",
+      "agenda": "Porządek obrad",
+      "pending_outcome": "Oczekujące decyzje: {count}"
+    },
+    "items": {
+      "add": "Dodaj do porządku obrad",
+      "add_confirm": "Dodaj wnioski",
+      "remove": "Usuń z porządku obrad",
+      "remove_failed": "Nie można usunąć wniosku. Spróbuj ponownie.",
+      "add_failed": "Nie można dodać wniosków. Spróbuj ponownie.",
+      "outcome_label": "Decyzja",
+      "note_label": "Notatka do decyzji",
+      "save": "Zapisz decyzję",
+      "save_failed": "Nie można zapisać decyzji. Spróbuj ponownie."
+    },
+    "participants": {
+      "add": "Dodaj uczestnika",
+      "role": "Rola",
+      "attendance": "Obecność",
+      "remove": "Usuń",
+      "add_failed": "Nie można dodać uczestnika. Spróbuj ponownie.",
+      "update_failed": "Nie można zaktualizować uczestnika. Spróbuj ponownie.",
+      "remove_failed": "Nie można usunąć uczestnika. Spróbuj ponownie.",
+      "empty": "Brak uczestników."
+    },
+    "notification": {
+      "agenda_added": "{subject} dodano do {session}",
+      "decided": "Decyzja przeglądowa dla {subject}: {outcome}",
+      "session_scheduled": "Zostałeś zaproszony na {session}",
+      "open": "Otwórz komitet",
+      "dismiss": "Odrzuć"
+    }
+  }
+}

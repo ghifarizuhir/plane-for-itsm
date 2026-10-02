@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Versiones",
+    "add": "Agregar versión",
+    "edit": "Editar versión",
+    "delete": "Eliminar versión",
+    "search_placeholder": "Buscar versiones",
+    "all_statuses": "Todos los estados",
+    "actions": {
+      "create": "Crear",
+      "save": "Guardar"
+    },
+    "empty_state": {
+      "title": "Aún no hay versiones",
+      "description": "Cree una versión para agrupar cambios para la revisión del RCB.",
+      "no_matches": {
+        "title": "Sin versiones coincidentes",
+        "description": "Pruebe otra búsqueda o borre los filtros."
+      }
+    },
+    "load_error": {
+      "title": "No se pudieron cargar las versiones",
+      "description": "Ocurrió un error al obtener las versiones.",
+      "retry": "Reintentar"
+    },
+    "fields": {
+      "name": "Nombre de la versión",
+      "version": "Versión",
+      "status": "Estado",
+      "target_date": "Fecha objetivo",
+      "description": "Descripción",
+      "changes": "Cambios",
+      "review_history": "Historial de revisiones"
+    },
+    "status_values": {
+      "draft": "Borrador",
+      "planned": "Planificada",
+      "in_review": "En revisión",
+      "approved": "Aprobada",
+      "released": "Publicada",
+      "cancelled": "Cancelada"
+    },
+    "changes": {
+      "add": "Agregar cambios",
+      "empty": "Aún no hay cambios vinculados.",
+      "unlink": "Quitar",
+      "link_failed": "No se pudieron vincular los cambios. Inténtelo de nuevo.",
+      "unlink_failed": "No se pudo quitar el cambio. Inténtelo de nuevo.",
+      "scope_warning": "Esta versión está en revisión. Los cambios de alcance son visibles para el comité.",
+      "tcb_badge": {
+        "pending": "TCB pendiente",
+        "scheduled": "TCB programada",
+        "decided": "TCB decidida",
+        "withdrawn": "TCB retirada"
+      }
+    },
+    "review": {
+      "submit": "Enviar al RCB",
+      "resubmit": "Enviar de nuevo",
+      "withdraw": "Retirar",
+      "note_label": "Nota de envío",
+      "note_placeholder": "Resuma la preparación, los riesgos y el plan de reversión",
+      "empty_history": "Aún no hay solicitudes de revisión.",
+      "submitted": "Versión enviada al RCB.",
+      "withdrawn": "Solicitud de revisión retirada.",
+      "submit_failed": "No se pudo enviar la versión. Inténtelo de nuevo.",
+      "withdraw_failed": "No se pudo retirar la solicitud. Inténtelo de nuevo."
+    },
+    "delete_modal": {
+      "title": "Eliminar versión",
+      "description": "¿Seguro que desea eliminar esta versión? Los cambios agrupados se desvincularán."
+    },
+    "toast": {
+      "created": "Versión creada correctamente.",
+      "updated": "Versión actualizada correctamente.",
+      "deleted": "Versión eliminada correctamente."
+    },
+    "errors": {
+      "create_failed": "No se pudo crear la versión. Inténtelo de nuevo.",
+      "update_failed": "No se pudo actualizar la versión. Inténtelo de nuevo.",
+      "delete_failed": "No se pudo eliminar la versión. Inténtelo de nuevo.",
+      "active_review": "Esta versión tiene una solicitud de revisión activa. Retírela primero.",
+      "version_too_long": "La versión no debe superar los 100 caracteres."
+    }
+  }
+}

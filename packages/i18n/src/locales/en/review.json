@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Pending",
+      "scheduled": "Scheduled",
+      "decided": "Decided",
+      "withdrawn": "Withdrawn"
+    },
+    "session_status_values": {
+      "scheduled": "Scheduled",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "outcome_values": {
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "approved_with_notes": "Approved with notes",
+      "deferred": "Deferred"
+    },
+    "participant_role_values": {
+      "chair": "Chair",
+      "secretary": "Secretary",
+      "member": "Member"
+    },
+    "attendance_values": {
+      "invited": "Invited",
+      "present": "Present",
+      "absent": "Absent"
+    },
+    "queue_tab": "Queue",
+    "sessions_tab": "Sessions",
+    "load_error": {
+      "title": "Couldn't load the board",
+      "description": "Something went wrong while fetching review data.",
+      "retry": "Retry"
+    },
+    "empty_queue": {
+      "title": "Nothing waiting for review",
+      "description": "Submitted requests will appear here."
+    },
+    "empty_sessions": {
+      "title": "No sessions yet",
+      "description": "Schedule a session to review pending requests."
+    },
+    "no_matches": {
+      "title": "No matching requests",
+      "description": "Try a different search or clear the filters."
+    },
+    "request": {
+      "submitted": "Change submitted to TCB.",
+      "withdrawn": "Request withdrawn.",
+      "submit_failed": "Could not submit the request. Please try again.",
+      "withdraw_failed": "Could not withdraw the request. Please try again.",
+      "submission_note": "Submission note"
+    },
+    "tcb": {
+      "badge_pending": "TCB pending",
+      "badge_scheduled": "TCB scheduled",
+      "badge_decided": "TCB decided",
+      "badge_withdrawn": "TCB withdrawn"
+    },
+    "sessions": {
+      "add": "Schedule session",
+      "edit": "Edit session",
+      "title_label": "Session title",
+      "scheduled_at": "Date and time",
+      "location": "Location",
+      "minutes": "Minutes",
+      "minutes_placeholder": "Write the meeting minutes here",
+      "complete": "Complete session",
+      "cancel": "Cancel session",
+      "complete_failed": "Could not complete the session. Please try again.",
+      "cancel_failed": "Could not cancel the session. Please try again.",
+      "created": "Session scheduled.",
+      "updated": "Session updated.",
+      "completed": "Session completed.",
+      "cancelled": "Session cancelled.",
+      "create_failed": "Could not schedule the session. Please try again.",
+      "update_failed": "Could not update the session. Please try again.",
+      "empty_items": "The agenda is empty. Add pending requests to review them.",
+      "agenda": "Agenda",
+      "pending_outcome": "Pending decisions: {count}"
+    },
+    "items": {
+      "add": "Add to agenda",
+      "add_confirm": "Add requests",
+      "remove": "Remove from agenda",
+      "remove_failed": "Could not remove the request. Please try again.",
+      "add_failed": "Could not add the requests. Please try again.",
+      "outcome_label": "Decision",
+      "note_label": "Decision note",
+      "save": "Record decision",
+      "save_failed": "Could not record the decision. Please try again."
+    },
+    "participants": {
+      "add": "Add participant",
+      "role": "Role",
+      "attendance": "Attendance",
+      "remove": "Remove",
+      "add_failed": "Could not add the participant. Please try again.",
+      "update_failed": "Could not update the participant. Please try again.",
+      "remove_failed": "Could not remove the participant. Please try again.",
+      "empty": "No participants yet."
+    },
+    "notification": {
+      "agenda_added": "{subject} was added to {session}",
+      "decided": "{subject} review decision: {outcome}",
+      "session_scheduled": "You are scheduled for {session}",
+      "open": "Open board",
+      "dismiss": "Dismiss"
+    }
+  }
+}

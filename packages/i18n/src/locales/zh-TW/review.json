@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "待定",
+      "scheduled": "已排定",
+      "decided": "已決定",
+      "withdrawn": "已撤回"
+    },
+    "session_status_values": {
+      "scheduled": "已排定",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "outcome_values": {
+      "approved": "已核准",
+      "rejected": "已拒絕",
+      "approved_with_notes": "附帶意見核准",
+      "deferred": "已延期"
+    },
+    "participant_role_values": {
+      "chair": "主席",
+      "secretary": "秘書",
+      "member": "成員"
+    },
+    "attendance_values": {
+      "invited": "已邀請",
+      "present": "出席",
+      "absent": "缺席"
+    },
+    "queue_tab": "佇列",
+    "sessions_tab": "會議",
+    "load_error": {
+      "title": "無法載入委員會",
+      "description": "取得審查資料時發生錯誤。",
+      "retry": "重試"
+    },
+    "empty_queue": {
+      "title": "尚無等待審查的事項",
+      "description": "已提交的請求將顯示於此。"
+    },
+    "empty_sessions": {
+      "title": "尚無會議",
+      "description": "安排會議以審查待定的請求。"
+    },
+    "no_matches": {
+      "title": "沒有相符的請求",
+      "description": "請嘗試其他搜尋條件或清除篩選。"
+    },
+    "request": {
+      "submitted": "變更已提交至 TCB。",
+      "withdrawn": "請求已撤回。",
+      "submit_failed": "無法提交請求，請重試。",
+      "withdraw_failed": "無法撤回請求，請重試。",
+      "submission_note": "提交說明"
+    },
+    "tcb": {
+      "badge_pending": "TCB 待定",
+      "badge_scheduled": "TCB 已排定",
+      "badge_decided": "TCB 已決定",
+      "badge_withdrawn": "TCB 已撤回"
+    },
+    "sessions": {
+      "add": "安排會議",
+      "edit": "編輯會議",
+      "title_label": "會議標題",
+      "scheduled_at": "日期時間",
+      "location": "地點",
+      "minutes": "會議記錄",
+      "minutes_placeholder": "請在此填寫會議記錄",
+      "complete": "完成會議",
+      "cancel": "取消會議",
+      "complete_failed": "無法完成會議，請重試。",
+      "cancel_failed": "無法取消會議，請重試。",
+      "created": "會議已安排。",
+      "updated": "會議已更新。",
+      "completed": "會議已完成。",
+      "cancelled": "會議已取消。",
+      "create_failed": "無法安排會議，請重試。",
+      "update_failed": "無法更新會議，請重試。",
+      "empty_items": "議程為空，請新增待定的請求以進行審查。",
+      "agenda": "議程",
+      "pending_outcome": "待定決定：{count} 項"
+    },
+    "items": {
+      "add": "新增至議程",
+      "add_confirm": "新增請求",
+      "remove": "從議程移除",
+      "remove_failed": "無法移除請求，請重試。",
+      "add_failed": "無法新增請求，請重試。",
+      "outcome_label": "決定",
+      "note_label": "決定說明",
+      "save": "記錄決定",
+      "save_failed": "無法記錄決定，請重試。"
+    },
+    "participants": {
+      "add": "新增與會人",
+      "role": "角色",
+      "attendance": "出席狀況",
+      "remove": "移除",
+      "add_failed": "無法新增與會人，請重試。",
+      "update_failed": "無法更新與會人，請重試。",
+      "remove_failed": "無法移除與會人，請重試。",
+      "empty": "尚無與會人。"
+    },
+    "notification": {
+      "agenda_added": "{subject} 已新增至 {session}",
+      "decided": "{subject} 的審查決定：{outcome}",
+      "session_scheduled": "您已排定參加 {session}",
+      "open": "開啟委員會",
+      "dismiss": "關閉"
+    }
+  }
+}

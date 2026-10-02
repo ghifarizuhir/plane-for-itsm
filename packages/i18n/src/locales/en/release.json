@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Releases",
+    "add": "Add release",
+    "edit": "Edit release",
+    "delete": "Delete release",
+    "search_placeholder": "Search releases",
+    "all_statuses": "All statuses",
+    "actions": {
+      "create": "Create",
+      "save": "Save"
+    },
+    "empty_state": {
+      "title": "No releases yet",
+      "description": "Create a release to bundle changes for RCB review.",
+      "no_matches": {
+        "title": "No matching releases",
+        "description": "Try a different search or clear the filters."
+      }
+    },
+    "load_error": {
+      "title": "Couldn't load releases",
+      "description": "Something went wrong while fetching releases.",
+      "retry": "Retry"
+    },
+    "fields": {
+      "name": "Release name",
+      "version": "Version",
+      "status": "Status",
+      "target_date": "Target date",
+      "description": "Description",
+      "changes": "Changes",
+      "review_history": "Review history"
+    },
+    "status_values": {
+      "draft": "Draft",
+      "planned": "Planned",
+      "in_review": "In review",
+      "approved": "Approved",
+      "released": "Released",
+      "cancelled": "Cancelled"
+    },
+    "changes": {
+      "add": "Add changes",
+      "empty": "No changes linked yet.",
+      "unlink": "Remove",
+      "link_failed": "Could not link changes. Please try again.",
+      "unlink_failed": "Could not remove the change. Please try again.",
+      "scope_warning": "This release is under review. Scope changes are visible to the board.",
+      "tcb_badge": {
+        "pending": "TCB pending",
+        "scheduled": "TCB scheduled",
+        "decided": "TCB decided",
+        "withdrawn": "TCB withdrawn"
+      }
+    },
+    "review": {
+      "submit": "Submit to RCB",
+      "resubmit": "Submit again",
+      "withdraw": "Withdraw",
+      "note_label": "Submission note",
+      "note_placeholder": "Summarize readiness, risks and rollback plan",
+      "empty_history": "No review requests yet.",
+      "submitted": "Release submitted to RCB.",
+      "withdrawn": "Review request withdrawn.",
+      "submit_failed": "Could not submit the release. Please try again.",
+      "withdraw_failed": "Could not withdraw the request. Please try again."
+    },
+    "delete_modal": {
+      "title": "Delete release",
+      "description": "Are you sure you want to delete this release? Bundled changes will be unlinked."
+    },
+    "toast": {
+      "created": "Release created successfully.",
+      "updated": "Release updated successfully.",
+      "deleted": "Release deleted successfully."
+    },
+    "errors": {
+      "create_failed": "Release could not be created. Please try again.",
+      "update_failed": "Release could not be updated. Please try again.",
+      "delete_failed": "Release could not be deleted. Please try again.",
+      "active_review": "This release has an active review request. Withdraw it first.",
+      "version_too_long": "Ensure version has no more than 100 characters."
+    }
+  }
+}

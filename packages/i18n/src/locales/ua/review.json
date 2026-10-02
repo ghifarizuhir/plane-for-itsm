@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Очікує",
+      "scheduled": "Заплановано",
+      "decided": "Вирішено",
+      "withdrawn": "Відкликано"
+    },
+    "session_status_values": {
+      "scheduled": "Заплановано",
+      "completed": "Завершено",
+      "cancelled": "Скасовано"
+    },
+    "outcome_values": {
+      "approved": "Схвалено",
+      "rejected": "Відхилено",
+      "approved_with_notes": "Схвалено із зауваженнями",
+      "deferred": "Відкладено"
+    },
+    "participant_role_values": {
+      "chair": "Голова",
+      "secretary": "Секретар",
+      "member": "Учасник"
+    },
+    "attendance_values": {
+      "invited": "Запрошено",
+      "present": "Присутній",
+      "absent": "Відсутній"
+    },
+    "queue_tab": "Черга",
+    "sessions_tab": "Засідання",
+    "load_error": {
+      "title": "Не вдалося завантажити комітет",
+      "description": "Під час завантаження даних розгляду сталася помилка.",
+      "retry": "Повторити"
+    },
+    "empty_queue": {
+      "title": "Нічого не чекає розгляду",
+      "description": "Надіслані запити з'являться тут."
+    },
+    "empty_sessions": {
+      "title": "Засідань поки немає",
+      "description": "Заплануйте засідання, щоб розглянути запити в очікуванні."
+    },
+    "no_matches": {
+      "title": "Відповідних запитів немає",
+      "description": "Спробуйте інший пошук або скиньте фільтри."
+    },
+    "request": {
+      "submitted": "Зміну надіслано до TCB.",
+      "withdrawn": "Запит відкликано.",
+      "submit_failed": "Не вдалося надіслати запит. Повторіть спробу.",
+      "withdraw_failed": "Не вдалося відкликати запит. Повторіть спробу.",
+      "submission_note": "Примітка до надсилання"
+    },
+    "tcb": {
+      "badge_pending": "TCB очікує",
+      "badge_scheduled": "TCB заплановано",
+      "badge_decided": "TCB вирішено",
+      "badge_withdrawn": "TCB відкликано"
+    },
+    "sessions": {
+      "add": "Запланувати засідання",
+      "edit": "Змінити засідання",
+      "title_label": "Назва засідання",
+      "scheduled_at": "Дата і час",
+      "location": "Місце",
+      "minutes": "Протокол",
+      "minutes_placeholder": "Напишіть тут протокол зустрічі",
+      "complete": "Завершити засідання",
+      "cancel": "Скасувати засідання",
+      "complete_failed": "Не вдалося завершити засідання. Повторіть спробу.",
+      "cancel_failed": "Не вдалося скасувати засідання. Повторіть спробу.",
+      "created": "Засідання заплановано.",
+      "updated": "Засідання оновлено.",
+      "completed": "Засідання завершено.",
+      "cancelled": "Засідання скасовано.",
+      "create_failed": "Не вдалося запланувати засідання. Повторіть спробу.",
+      "update_failed": "Не вдалося оновити засідання. Повторіть спробу.",
+      "empty_items": "Порядок денний порожній. Додайте запити в очікуванні, щоб їх розглянути.",
+      "agenda": "Порядок денний",
+      "pending_outcome": "Очікують рішень: {count}"
+    },
+    "items": {
+      "add": "Додати до порядку денного",
+      "add_confirm": "Додати запити",
+      "remove": "Прибрати з порядку денного",
+      "remove_failed": "Не вдалося прибрати запит. Повторіть спробу.",
+      "add_failed": "Не вдалося додати запити. Повторіть спробу.",
+      "outcome_label": "Рішення",
+      "note_label": "Примітка до рішення",
+      "save": "Записати рішення",
+      "save_failed": "Не вдалося записати рішення. Повторіть спробу."
+    },
+    "participants": {
+      "add": "Додати учасника",
+      "role": "Роль",
+      "attendance": "Відвідуваність",
+      "remove": "Прибрати",
+      "add_failed": "Не вдалося додати учасника. Повторіть спробу.",
+      "update_failed": "Не вдалося оновити учасника. Повторіть спробу.",
+      "remove_failed": "Не вдалося прибрати учасника. Повторіть спробу.",
+      "empty": "Учасників поки немає."
+    },
+    "notification": {
+      "agenda_added": "{subject} додано до {session}",
+      "decided": "Рішення за розглядом {subject}: {outcome}",
+      "session_scheduled": "Вас запрошено на {session}",
+      "open": "Відкрити комітет",
+      "dismiss": "Закрити"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "릴리스",
+    "add": "릴리스 추가",
+    "edit": "릴리스 수정",
+    "delete": "릴리스 삭제",
+    "search_placeholder": "릴리스 검색",
+    "all_statuses": "모든 상태",
+    "actions": {
+      "create": "만들기",
+      "save": "저장"
+    },
+    "empty_state": {
+      "title": "아직 릴리스가 없습니다",
+      "description": "RCB 검토를 위해 변경 사항을 묶을 릴리스를 만드세요.",
+      "no_matches": {
+        "title": "일치하는 릴리스가 없습니다",
+        "description": "다른 검색어를 사용하거나 필터를 지우세요."
+      }
+    },
+    "load_error": {
+      "title": "릴리스를 불러오지 못했습니다",
+      "description": "릴리스를 가져오는 중 오류가 발생했습니다.",
+      "retry": "다시 시도"
+    },
+    "fields": {
+      "name": "릴리스 이름",
+      "version": "버전",
+      "status": "상태",
+      "target_date": "목표일",
+      "description": "설명",
+      "changes": "변경 사항",
+      "review_history": "검토 기록"
+    },
+    "status_values": {
+      "draft": "초안",
+      "planned": "계획됨",
+      "in_review": "검토 중",
+      "approved": "승인됨",
+      "released": "출시됨",
+      "cancelled": "취소됨"
+    },
+    "changes": {
+      "add": "변경 사항 추가",
+      "empty": "연결된 변경 사항이 아직 없습니다.",
+      "unlink": "제거",
+      "link_failed": "변경 사항을 연결하지 못했습니다. 다시 시도하세요.",
+      "unlink_failed": "변경 사항을 제거하지 못했습니다. 다시 시도하세요.",
+      "scope_warning": "이 릴리스는 검토 중입니다. 범위 변경은 위원회에 표시됩니다.",
+      "tcb_badge": {
+        "pending": "TCB 대기 중",
+        "scheduled": "TCB 예정됨",
+        "decided": "TCB 결정됨",
+        "withdrawn": "TCB 철회됨"
+      }
+    },
+    "review": {
+      "submit": "RCB에 제출",
+      "resubmit": "다시 제출",
+      "withdraw": "철회",
+      "note_label": "제출 메모",
+      "note_placeholder": "준비 상태, 위험 및 롤백 계획을 요약하세요",
+      "empty_history": "아직 검토 요청이 없습니다.",
+      "submitted": "릴리스가 RCB에 제출되었습니다.",
+      "withdrawn": "검토 요청이 철회되었습니다.",
+      "submit_failed": "릴리스를 제출하지 못했습니다. 다시 시도하세요.",
+      "withdraw_failed": "요청을 철회하지 못했습니다. 다시 시도하세요."
+    },
+    "delete_modal": {
+      "title": "릴리스 삭제",
+      "description": "이 릴리스를 삭제하시겠습니까? 묶인 변경 사항의 연결이 해제됩니다."
+    },
+    "toast": {
+      "created": "릴리스가 만들어졌습니다.",
+      "updated": "릴리스가 업데이트되었습니다.",
+      "deleted": "릴리스가 삭제되었습니다."
+    },
+    "errors": {
+      "create_failed": "릴리스를 만들지 못했습니다. 다시 시도하세요.",
+      "update_failed": "릴리스를 업데이트하지 못했습니다. 다시 시도하세요.",
+      "delete_failed": "릴리스를 삭제하지 못했습니다. 다시 시도하세요.",
+      "active_review": "이 릴리스에 활성 검토 요청이 있습니다. 먼저 철회하세요.",
+      "version_too_long": "버전은 100자를 초과할 수 없습니다."
+    }
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "În așteptare",
+      "scheduled": "Programată",
+      "decided": "Decisă",
+      "withdrawn": "Retrasă"
+    },
+    "session_status_values": {
+      "scheduled": "Programată",
+      "completed": "Finalizată",
+      "cancelled": "Anulată"
+    },
+    "outcome_values": {
+      "approved": "Aprobată",
+      "rejected": "Respinsă",
+      "approved_with_notes": "Aprobată cu observații",
+      "deferred": "Amânată"
+    },
+    "participant_role_values": {
+      "chair": "Președinție",
+      "secretary": "Secretariat",
+      "member": "Membru"
+    },
+    "attendance_values": {
+      "invited": "Invitat",
+      "present": "Prezent",
+      "absent": "Absent"
+    },
+    "queue_tab": "Coadă",
+    "sessions_tab": "Ședințe",
+    "load_error": {
+      "title": "Comitetul nu a putut fi încărcat",
+      "description": "A apărut o eroare la preluarea datelor de revizuire.",
+      "retry": "Reîncercați"
+    },
+    "empty_queue": {
+      "title": "Nimic în așteptarea revizuirii",
+      "description": "Cererile trimise vor apărea aici."
+    },
+    "empty_sessions": {
+      "title": "Nicio ședință încă",
+      "description": "Programați o ședință pentru a examina cererile în așteptare."
+    },
+    "no_matches": {
+      "title": "Nicio cerere potrivită",
+      "description": "Încercați o altă căutare sau ștergeți filtrele."
+    },
+    "request": {
+      "submitted": "Modificarea a fost trimisă la TCB.",
+      "withdrawn": "Cererea a fost retrasă.",
+      "submit_failed": "Cererea nu a putut fi trimisă. Încercați din nou.",
+      "withdraw_failed": "Cererea nu a putut fi retrasă. Încercați din nou.",
+      "submission_note": "Nota de trimitere"
+    },
+    "tcb": {
+      "badge_pending": "TCB în așteptare",
+      "badge_scheduled": "TCB programată",
+      "badge_decided": "TCB decisă",
+      "badge_withdrawn": "TCB retrasă"
+    },
+    "sessions": {
+      "add": "Programați ședința",
+      "edit": "Editați ședința",
+      "title_label": "Titlul ședinței",
+      "scheduled_at": "Data și ora",
+      "location": "Locația",
+      "minutes": "Procesul-verbal",
+      "minutes_placeholder": "Scrieți aici procesul-verbal al ședinței",
+      "complete": "Finalizați ședința",
+      "cancel": "Anulați ședința",
+      "complete_failed": "Ședința nu a putut fi finalizată. Încercați din nou.",
+      "cancel_failed": "Ședința nu a putut fi anulată. Încercați din nou.",
+      "created": "Ședința a fost programată.",
+      "updated": "Ședința a fost actualizată.",
+      "completed": "Ședința a fost finalizată.",
+      "cancelled": "Ședința a fost anulată.",
+      "create_failed": "Ședința nu a putut fi programată. Încercați din nou.",
+      "update_failed": "Ședința nu a putut fi actualizată. Încercați din nou.",
+      "empty_items": "Ordinea de zi este goală. Adăugați cereri în așteptare pentru a le examina.",
+      "agenda": "Ordinea de zi",
+      "pending_outcome": "Decizii în așteptare: {count}"
+    },
+    "items": {
+      "add": "Adăugați la ordinea de zi",
+      "add_confirm": "Adăugați cereri",
+      "remove": "Eliminați de pe ordinea de zi",
+      "remove_failed": "Cererea nu a putut fi eliminată. Încercați din nou.",
+      "add_failed": "Cererile nu au putut fi adăugate. Încercați din nou.",
+      "outcome_label": "Decizia",
+      "note_label": "Nota deciziei",
+      "save": "Înregistrați decizia",
+      "save_failed": "Decizia nu a putut fi înregistrată. Încercați din nou."
+    },
+    "participants": {
+      "add": "Adăugați participant",
+      "role": "Rolul",
+      "attendance": "Prezența",
+      "remove": "Eliminați",
+      "add_failed": "Participantul nu a putut fi adăugat. Încercați din nou.",
+      "update_failed": "Participantul nu a putut fi actualizat. Încercați din nou.",
+      "remove_failed": "Participantul nu a putut fi eliminat. Încercați din nou.",
+      "empty": "Niciun participant încă."
+    },
+    "notification": {
+      "agenda_added": "{subject} a fost adăugat la {session}",
+      "decided": "Decizia de revizuire pentru {subject}: {outcome}",
+      "session_scheduled": "Sunteți convocat la {session}",
+      "open": "Deschideți comitetul",
+      "dismiss": "Ignorați"
+    }
+  }
+}

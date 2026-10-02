@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "대기 중",
+      "scheduled": "예정됨",
+      "decided": "결정됨",
+      "withdrawn": "철회됨"
+    },
+    "session_status_values": {
+      "scheduled": "예정됨",
+      "completed": "완료됨",
+      "cancelled": "취소됨"
+    },
+    "outcome_values": {
+      "approved": "승인됨",
+      "rejected": "거부됨",
+      "approved_with_notes": "조건부 승인됨",
+      "deferred": "연기됨"
+    },
+    "participant_role_values": {
+      "chair": "의장",
+      "secretary": "서기",
+      "member": "위원"
+    },
+    "attendance_values": {
+      "invited": "초대됨",
+      "present": "참석",
+      "absent": "불참"
+    },
+    "queue_tab": "대기열",
+    "sessions_tab": "세션",
+    "load_error": {
+      "title": "위원회를 불러오지 못했습니다",
+      "description": "검토 데이터를 가져오는 중 오류가 발생했습니다.",
+      "retry": "다시 시도"
+    },
+    "empty_queue": {
+      "title": "검토 대기 중인 항목이 없습니다",
+      "description": "제출된 요청이 여기에 표시됩니다."
+    },
+    "empty_sessions": {
+      "title": "아직 세션이 없습니다",
+      "description": "대기 중인 요청을 검토하려면 세션을 계획하세요."
+    },
+    "no_matches": {
+      "title": "일치하는 요청이 없습니다",
+      "description": "다른 검색어를 사용하거나 필터를 지우세요."
+    },
+    "request": {
+      "submitted": "변경 사항이 TCB에 제출되었습니다.",
+      "withdrawn": "요청이 철회되었습니다.",
+      "submit_failed": "요청을 제출하지 못했습니다. 다시 시도하세요.",
+      "withdraw_failed": "요청을 철회하지 못했습니다. 다시 시도하세요.",
+      "submission_note": "제출 메모"
+    },
+    "tcb": {
+      "badge_pending": "TCB 대기 중",
+      "badge_scheduled": "TCB 예정됨",
+      "badge_decided": "TCB 결정됨",
+      "badge_withdrawn": "TCB 철회됨"
+    },
+    "sessions": {
+      "add": "세션 계획",
+      "edit": "세션 수정",
+      "title_label": "세션 제목",
+      "scheduled_at": "날짜 및 시간",
+      "location": "장소",
+      "minutes": "회의록",
+      "minutes_placeholder": "회의록을 여기에 작성하세요",
+      "complete": "세션 완료",
+      "cancel": "세션 취소",
+      "complete_failed": "세션을 완료하지 못했습니다. 다시 시도하세요.",
+      "cancel_failed": "세션을 취소하지 못했습니다. 다시 시도하세요.",
+      "created": "세션이 계획되었습니다.",
+      "updated": "세션이 업데이트되었습니다.",
+      "completed": "세션이 완료되었습니다.",
+      "cancelled": "세션이 취소되었습니다.",
+      "create_failed": "세션을 계획하지 못했습니다. 다시 시도하세요.",
+      "update_failed": "세션을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "empty_items": "안건이 비어 있습니다. 검토할 대기 중인 요청을 추가하세요.",
+      "agenda": "안건",
+      "pending_outcome": "대기 중인 결정: {count}건"
+    },
+    "items": {
+      "add": "안건에 추가",
+      "add_confirm": "요청 추가",
+      "remove": "안건에서 제거",
+      "remove_failed": "요청을 제거하지 못했습니다. 다시 시도하세요.",
+      "add_failed": "요청을 추가하지 못했습니다. 다시 시도하세요.",
+      "outcome_label": "결정",
+      "note_label": "결정 메모",
+      "save": "결정 기록",
+      "save_failed": "결정을 기록하지 못했습니다. 다시 시도하세요."
+    },
+    "participants": {
+      "add": "참가자 추가",
+      "role": "역할",
+      "attendance": "출석",
+      "remove": "제거",
+      "add_failed": "참가자를 추가하지 못했습니다. 다시 시도하세요.",
+      "update_failed": "참가자를 업데이트하지 못했습니다. 다시 시도하세요.",
+      "remove_failed": "참가자를 제거하지 못했습니다. 다시 시도하세요.",
+      "empty": "아직 참가자가 없습니다."
+    },
+    "notification": {
+      "agenda_added": "{subject}이(가) {session}에 추가되었습니다",
+      "decided": "{subject} 검토 결정: {outcome}",
+      "session_scheduled": "{session}에 예정되어 있습니다",
+      "open": "위원회 열기",
+      "dismiss": "닫기"
+    }
+  }
+}

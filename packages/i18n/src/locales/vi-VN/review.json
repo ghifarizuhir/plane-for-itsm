@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Đang chờ",
+      "scheduled": "Đã lên lịch",
+      "decided": "Đã quyết định",
+      "withdrawn": "Đã rút"
+    },
+    "session_status_values": {
+      "scheduled": "Đã lên lịch",
+      "completed": "Đã hoàn thành",
+      "cancelled": "Đã hủy"
+    },
+    "outcome_values": {
+      "approved": "Đã phê duyệt",
+      "rejected": "Đã từ chối",
+      "approved_with_notes": "Phê duyệt kèm ghi chú",
+      "deferred": "Đã hoãn"
+    },
+    "participant_role_values": {
+      "chair": "Chủ trì",
+      "secretary": "Thư ký",
+      "member": "Thành viên"
+    },
+    "attendance_values": {
+      "invited": "Được mời",
+      "present": "Có mặt",
+      "absent": "Vắng mặt"
+    },
+    "queue_tab": "Hàng đợi",
+    "sessions_tab": "Phiên họp",
+    "load_error": {
+      "title": "Không tải được hội đồng",
+      "description": "Đã xảy ra lỗi khi tải dữ liệu rà soát.",
+      "retry": "Thử lại"
+    },
+    "empty_queue": {
+      "title": "Không có gì chờ rà soát",
+      "description": "Các yêu cầu đã gửi sẽ hiện ở đây."
+    },
+    "empty_sessions": {
+      "title": "Chưa có phiên họp nào",
+      "description": "Lên lịch một phiên họp để rà soát các yêu cầu đang chờ."
+    },
+    "no_matches": {
+      "title": "Không có yêu cầu phù hợp",
+      "description": "Hãy thử tìm kiếm khác hoặc xóa bộ lọc."
+    },
+    "request": {
+      "submitted": "Thay đổi đã được gửi lên TCB.",
+      "withdrawn": "Đã rút yêu cầu.",
+      "submit_failed": "Không thể gửi yêu cầu. Vui lòng thử lại.",
+      "withdraw_failed": "Không thể rút yêu cầu. Vui lòng thử lại.",
+      "submission_note": "Ghi chú gửi"
+    },
+    "tcb": {
+      "badge_pending": "TCB đang chờ",
+      "badge_scheduled": "TCB đã lên lịch",
+      "badge_decided": "TCB đã quyết định",
+      "badge_withdrawn": "TCB đã rút"
+    },
+    "sessions": {
+      "add": "Lên lịch phiên họp",
+      "edit": "Sửa phiên họp",
+      "title_label": "Tiêu đề phiên họp",
+      "scheduled_at": "Ngày giờ",
+      "location": "Địa điểm",
+      "minutes": "Biên bản",
+      "minutes_placeholder": "Viết biên bản cuộc họp tại đây",
+      "complete": "Hoàn thành phiên họp",
+      "cancel": "Hủy phiên họp",
+      "complete_failed": "Không thể hoàn thành phiên họp. Vui lòng thử lại.",
+      "cancel_failed": "Không thể hủy phiên họp. Vui lòng thử lại.",
+      "created": "Đã lên lịch phiên họp.",
+      "updated": "Đã cập nhật phiên họp.",
+      "completed": "Đã hoàn thành phiên họp.",
+      "cancelled": "Đã hủy phiên họp.",
+      "create_failed": "Không thể lên lịch phiên họp. Vui lòng thử lại.",
+      "update_failed": "Không thể cập nhật phiên họp. Vui lòng thử lại.",
+      "empty_items": "Chương trình họp đang trống. Hãy thêm các yêu cầu đang chờ để rà soát.",
+      "agenda": "Chương trình họp",
+      "pending_outcome": "Quyết định đang chờ: {count}"
+    },
+    "items": {
+      "add": "Thêm vào chương trình họp",
+      "add_confirm": "Thêm yêu cầu",
+      "remove": "Gỡ khỏi chương trình họp",
+      "remove_failed": "Không thể gỡ yêu cầu. Vui lòng thử lại.",
+      "add_failed": "Không thể thêm yêu cầu. Vui lòng thử lại.",
+      "outcome_label": "Quyết định",
+      "note_label": "Ghi chú quyết định",
+      "save": "Ghi nhận quyết định",
+      "save_failed": "Không thể ghi nhận quyết định. Vui lòng thử lại."
+    },
+    "participants": {
+      "add": "Thêm người tham gia",
+      "role": "Vai trò",
+      "attendance": "Điểm danh",
+      "remove": "Gỡ",
+      "add_failed": "Không thể thêm người tham gia. Vui lòng thử lại.",
+      "update_failed": "Không thể cập nhật người tham gia. Vui lòng thử lại.",
+      "remove_failed": "Không thể gỡ người tham gia. Vui lòng thử lại.",
+      "empty": "Chưa có người tham gia nào."
+    },
+    "notification": {
+      "agenda_added": "{subject} đã được thêm vào {session}",
+      "decided": "Quyết định rà soát cho {subject}: {outcome}",
+      "session_scheduled": "Bạn được mời tham gia {session}",
+      "open": "Mở hội đồng",
+      "dismiss": "Bỏ qua"
+    }
+  }
+}

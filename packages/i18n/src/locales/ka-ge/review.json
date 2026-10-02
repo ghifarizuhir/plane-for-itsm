@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "მოლოდინში",
+      "scheduled": "დაგეგმილი",
+      "decided": "გადაწყვეტილი",
+      "withdrawn": "გამოხმობილი"
+    },
+    "session_status_values": {
+      "scheduled": "დაგეგმილი",
+      "completed": "დასრულებული",
+      "cancelled": "გაუქმებული"
+    },
+    "outcome_values": {
+      "approved": "დამტკიცებული",
+      "rejected": "უარყოფილი",
+      "approved_with_notes": "დამტკიცებული შენიშვნებით",
+      "deferred": "გადადებული"
+    },
+    "participant_role_values": {
+      "chair": "თავმჯდომარე",
+      "secretary": "მდივანი",
+      "member": "წევრი"
+    },
+    "attendance_values": {
+      "invited": "მოწვეული",
+      "present": "ესწრება",
+      "absent": "არ ესწრება"
+    },
+    "queue_tab": "რიგი",
+    "sessions_tab": "სხდომები",
+    "load_error": {
+      "title": "საბჭოს ჩატვირთვა ვერ მოხერხდა",
+      "description": "განხილვის მონაცემების მიღებისას შეცდომა მოხდა.",
+      "retry": "Retry"
+    },
+    "empty_queue": {
+      "title": "განხილვის მოლოდინში არაფერია",
+      "description": "გაგზავნილი მოთხოვნები აქ გამოჩნდება."
+    },
+    "empty_sessions": {
+      "title": "სხდომები ჯერ არ არის",
+      "description": "დაგეგმეთ სხდომა მომლოდინე მოთხოვნების განსახილველად."
+    },
+    "no_matches": {
+      "title": "შესაბამისი მოთხოვნები არ არის",
+      "description": "სცადეთ სხვა ძიება ან გაასუფთავეთ ფილტრები."
+    },
+    "request": {
+      "submitted": "ცვლილება TCB-ში გაიგზავნა.",
+      "withdrawn": "მოთხოვნა გამოხმობილია.",
+      "submit_failed": "მოთხოვნის გაგზავნა ვერ მოხერხდა. სცადეთ ისევ.",
+      "withdraw_failed": "მოთხოვნის გამოხმობა ვერ მოხერხდა. სცადეთ ისევ.",
+      "submission_note": "გაგზავნის შენიშვნა"
+    },
+    "tcb": {
+      "badge_pending": "TCB მოლოდინში",
+      "badge_scheduled": "TCB დაგეგმილი",
+      "badge_decided": "TCB გადაწყვეტილი",
+      "badge_withdrawn": "TCB გამოხმობილი"
+    },
+    "sessions": {
+      "add": "სხდომის დაგეგმვა",
+      "edit": "სხდომის რედაქტირება",
+      "title_label": "სხდომის სათაური",
+      "scheduled_at": "თარიღი და დრო",
+      "location": "ადგილი",
+      "minutes": "ოქმი",
+      "minutes_placeholder": "შეხვედრის ოქმი აქ დაწერეთ",
+      "complete": "სხდომის დასრულება",
+      "cancel": "სხდომის გაუქმება",
+      "complete_failed": "სხდომის დასრულება ვერ მოხერხდა. სცადეთ ისევ.",
+      "cancel_failed": "სხდომის გაუქმება ვერ მოხერხდა. სცადეთ ისევ.",
+      "created": "სხდომა დაიგეგმა.",
+      "updated": "სხდომა განახლდა.",
+      "completed": "სხდომა დასრულდა.",
+      "cancelled": "სხდომა გაუქმდა.",
+      "create_failed": "სხდომის დაგეგმვა ვერ მოხერხდა. სცადეთ ისევ.",
+      "update_failed": "სხდომის განახლება ვერ მოხერხდა. სცადეთ ისევ.",
+      "empty_items": "დღის წესრიგი ცარიელია. განსახილველად დაამატეთ მომლოდინე მოთხოვნები.",
+      "agenda": "დღის წესრიგი",
+      "pending_outcome": "მომლოდინე გადაწყვეტილებები: {count}"
+    },
+    "items": {
+      "add": "დღის წესრიგში დამატება",
+      "add_confirm": "მოთხოვნების დამატება",
+      "remove": "დღის წესრიგიდან მოხსნა",
+      "remove_failed": "მოთხოვნის მოხსნა ვერ მოხერხდა. სცადეთ ისევ.",
+      "add_failed": "მოთხოვნების დამატება ვერ მოხერხდა. სცადეთ ისევ.",
+      "outcome_label": "გადაწყვეტილება",
+      "note_label": "გადაწყვეტილების შენიშვნა",
+      "save": "გადაწყვეტილების ჩაწერა",
+      "save_failed": "გადაწყვეტილების ჩაწერა ვერ მოხერხდა. სცადეთ ისევ."
+    },
+    "participants": {
+      "add": "მონაწილის დამატება",
+      "role": "როლი",
+      "attendance": "დასწრება",
+      "remove": "მოხსნა",
+      "add_failed": "მონაწილის დამატება ვერ მოხერხდა. სცადეთ ისევ.",
+      "update_failed": "მონაწილის განახლება ვერ მოხერხდა. სცადეთ ისევ.",
+      "remove_failed": "მონაწილის მოხსნა ვერ მოხერხდა. სცადეთ ისევ.",
+      "empty": "მონაწილეები ჯერ არ არიან."
+    },
+    "notification": {
+      "agenda_added": "{subject} დაემატა {session}-ს",
+      "decided": "{subject}-ის განხილვის გადაწყვეტილება: {outcome}",
+      "session_scheduled": "თქვენ {session}-ზე ხართ დაგეგმილი",
+      "open": "საბჭოს გახსნა",
+      "dismiss": "დახურვა"
+    }
+  }
+}

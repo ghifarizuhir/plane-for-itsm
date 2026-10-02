@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Pendente",
+      "scheduled": "Agendada",
+      "decided": "Decidida",
+      "withdrawn": "Retirada"
+    },
+    "session_status_values": {
+      "scheduled": "Agendada",
+      "completed": "Concluída",
+      "cancelled": "Cancelada"
+    },
+    "outcome_values": {
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "approved_with_notes": "Aprovada com notas",
+      "deferred": "Adiada"
+    },
+    "participant_role_values": {
+      "chair": "Presidência",
+      "secretary": "Secretaria",
+      "member": "Membro"
+    },
+    "attendance_values": {
+      "invited": "Convidado",
+      "present": "Presente",
+      "absent": "Ausente"
+    },
+    "queue_tab": "Fila",
+    "sessions_tab": "Sessões",
+    "load_error": {
+      "title": "Não foi possível carregar o comitê",
+      "description": "Ocorreu um erro ao buscar os dados de revisão.",
+      "retry": "Tentar novamente"
+    },
+    "empty_queue": {
+      "title": "Nada aguardando revisão",
+      "description": "As solicitações enviadas aparecerão aqui."
+    },
+    "empty_sessions": {
+      "title": "Nenhuma sessão ainda",
+      "description": "Agende uma sessão para revisar as solicitações pendentes."
+    },
+    "no_matches": {
+      "title": "Nenhuma solicitação correspondente",
+      "description": "Tente outra pesquisa ou limpe os filtros."
+    },
+    "request": {
+      "submitted": "Mudança enviada ao TCB.",
+      "withdrawn": "Solicitação retirada.",
+      "submit_failed": "Não foi possível enviar a solicitação. Tente novamente.",
+      "withdraw_failed": "Não foi possível retirar a solicitação. Tente novamente.",
+      "submission_note": "Nota de envio"
+    },
+    "tcb": {
+      "badge_pending": "TCB pendente",
+      "badge_scheduled": "TCB agendada",
+      "badge_decided": "TCB decidida",
+      "badge_withdrawn": "TCB retirada"
+    },
+    "sessions": {
+      "add": "Agendar sessão",
+      "edit": "Editar sessão",
+      "title_label": "Título da sessão",
+      "scheduled_at": "Data e hora",
+      "location": "Local",
+      "minutes": "Ata",
+      "minutes_placeholder": "Escreva aqui a ata da reunião",
+      "complete": "Concluir sessão",
+      "cancel": "Cancelar sessão",
+      "complete_failed": "Não foi possível concluir a sessão. Tente novamente.",
+      "cancel_failed": "Não foi possível cancelar a sessão. Tente novamente.",
+      "created": "Sessão agendada.",
+      "updated": "Sessão atualizada.",
+      "completed": "Sessão concluída.",
+      "cancelled": "Sessão cancelada.",
+      "create_failed": "Não foi possível agendar a sessão. Tente novamente.",
+      "update_failed": "Não foi possível atualizar a sessão. Tente novamente.",
+      "empty_items": "A pauta está vazia. Adicione solicitações pendentes para revisá-las.",
+      "agenda": "Pauta",
+      "pending_outcome": "Decisões pendentes: {count}"
+    },
+    "items": {
+      "add": "Adicionar à pauta",
+      "add_confirm": "Adicionar solicitações",
+      "remove": "Remover da pauta",
+      "remove_failed": "Não foi possível remover a solicitação. Tente novamente.",
+      "add_failed": "Não foi possível adicionar as solicitações. Tente novamente.",
+      "outcome_label": "Decisão",
+      "note_label": "Nota de decisão",
+      "save": "Registrar decisão",
+      "save_failed": "Não foi possível registrar a decisão. Tente novamente."
+    },
+    "participants": {
+      "add": "Adicionar participante",
+      "role": "Função",
+      "attendance": "Presença",
+      "remove": "Remover",
+      "add_failed": "Não foi possível adicionar o participante. Tente novamente.",
+      "update_failed": "Não foi possível atualizar o participante. Tente novamente.",
+      "remove_failed": "Não foi possível remover o participante. Tente novamente.",
+      "empty": "Nenhum participante ainda."
+    },
+    "notification": {
+      "agenda_added": "{subject} foi adicionado a {session}",
+      "decided": "Decisão de revisão de {subject}: {outcome}",
+      "session_scheduled": "Você foi convocado para {session}",
+      "open": "Abrir o comitê",
+      "dismiss": "Dispensar"
+    }
+  }
+}

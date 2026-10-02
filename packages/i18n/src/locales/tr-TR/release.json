@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Sürümler",
+    "add": "Sürüm ekle",
+    "edit": "Sürümü düzenle",
+    "delete": "Sürümü sil",
+    "search_placeholder": "Sürümlerde ara",
+    "all_statuses": "Tüm durumlar",
+    "actions": {
+      "create": "Oluştur",
+      "save": "Kaydet"
+    },
+    "empty_state": {
+      "title": "Henüz sürüm yok",
+      "description": "RCB incelemesi için değişiklikleri gruplamak üzere bir sürüm oluşturun.",
+      "no_matches": {
+        "title": "Eşleşen sürüm yok",
+        "description": "Farklı bir arama deneyin veya filtreleri temizleyin."
+      }
+    },
+    "load_error": {
+      "title": "Sürümler yüklenemedi",
+      "description": "Sürümler alınırken bir hata oluştu.",
+      "retry": "Tekrar dene"
+    },
+    "fields": {
+      "name": "Sürüm adı",
+      "version": "Sürüm",
+      "status": "Durum",
+      "target_date": "Hedef tarih",
+      "description": "Açıklama",
+      "changes": "Değişiklikler",
+      "review_history": "İnceleme geçmişi"
+    },
+    "status_values": {
+      "draft": "Taslak",
+      "planned": "Planlandı",
+      "in_review": "İnceleniyor",
+      "approved": "Onaylandı",
+      "released": "Yayınlandı",
+      "cancelled": "İptal edildi"
+    },
+    "changes": {
+      "add": "Değişiklik ekle",
+      "empty": "Henüz bağlı değişiklik yok.",
+      "unlink": "Kaldır",
+      "link_failed": "Değişiklikler bağlanamadı. Lütfen tekrar deneyin.",
+      "unlink_failed": "Değişiklik kaldırılamadı. Lütfen tekrar deneyin.",
+      "scope_warning": "Bu sürüm inceleniyor. Kapsam değişiklikleri kurul tarafından görülebilir.",
+      "tcb_badge": {
+        "pending": "TCB bekliyor",
+        "scheduled": "TCB planlandı",
+        "decided": "TCB karar verdi",
+        "withdrawn": "TCB geri çekildi"
+      }
+    },
+    "review": {
+      "submit": "RCB'ye gönder",
+      "resubmit": "Yeniden gönder",
+      "withdraw": "Geri çek",
+      "note_label": "Gönderim notu",
+      "note_placeholder": "Hazırlığı, riskleri ve geri alma planını özetleyin",
+      "empty_history": "Henüz inceleme isteği yok.",
+      "submitted": "Sürüm RCB'ye gönderildi.",
+      "withdrawn": "İnceleme isteği geri çekildi.",
+      "submit_failed": "Sürüm gönderilemedi. Lütfen tekrar deneyin.",
+      "withdraw_failed": "İstek geri çekilemedi. Lütfen tekrar deneyin."
+    },
+    "delete_modal": {
+      "title": "Sürümü sil",
+      "description": "Bu sürümü silmek istediğinizden emin misiniz? Gruplanan değişikliklerin bağlantısı kaldırılacak."
+    },
+    "toast": {
+      "created": "Sürüm başarıyla oluşturuldu.",
+      "updated": "Sürüm başarıyla güncellendi.",
+      "deleted": "Sürüm başarıyla silindi."
+    },
+    "errors": {
+      "create_failed": "Sürüm oluşturulamadı. Lütfen tekrar deneyin.",
+      "update_failed": "Sürüm güncellenemedi. Lütfen tekrar deneyin.",
+      "delete_failed": "Sürüm silinemedi. Lütfen tekrar deneyin.",
+      "active_review": "Bu sürümün etkin bir inceleme isteği var. Önce onu geri çekin.",
+      "version_too_long": "Sürüm en fazla 100 karakter olabilir."
+    }
+  }
+}

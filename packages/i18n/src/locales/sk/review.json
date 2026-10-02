@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Čaká",
+      "scheduled": "Naplánované",
+      "decided": "Rozhodnuté",
+      "withdrawn": "Stiahnuté"
+    },
+    "session_status_values": {
+      "scheduled": "Naplánované",
+      "completed": "Dokončené",
+      "cancelled": "Zrušené"
+    },
+    "outcome_values": {
+      "approved": "Schválené",
+      "rejected": "Zamietnuté",
+      "approved_with_notes": "Schválené s poznámkami",
+      "deferred": "Odložené"
+    },
+    "participant_role_values": {
+      "chair": "Predseda",
+      "secretary": "Zapisovateľ",
+      "member": "Člen"
+    },
+    "attendance_values": {
+      "invited": "Pozvaný",
+      "present": "Prítomný",
+      "absent": "Neprítomný"
+    },
+    "queue_tab": "Poradie",
+    "sessions_tab": "Zasadnutia",
+    "load_error": {
+      "title": "Komisiu sa nepodarilo načítať",
+      "description": "Pri načítaní údajov revízie došlo k chybe.",
+      "retry": "Opakovať"
+    },
+    "empty_queue": {
+      "title": "Nič nečaká na revíziu",
+      "description": "Odoslané žiadosti sa objavia tu."
+    },
+    "empty_sessions": {
+      "title": "Zatiaľ žiadne zasadnutia",
+      "description": "Naplánujte zasadnutie, aby ste prerokovali čakajúce žiadosti."
+    },
+    "no_matches": {
+      "title": "Žiadne zodpovedajúce žiadosti",
+      "description": "Skúste iné hľadanie alebo vymažte filtre."
+    },
+    "request": {
+      "submitted": "Zmena odoslaná do TCB.",
+      "withdrawn": "Žiadosť stiahnutá.",
+      "submit_failed": "Žiadosť sa nepodarilo odoslať. Skúste to prosím znova.",
+      "withdraw_failed": "Žiadosť sa nepodarilo stiahnuť. Skúste to prosím znova.",
+      "submission_note": "Poznámka k odoslaniu"
+    },
+    "tcb": {
+      "badge_pending": "TCB čaká",
+      "badge_scheduled": "TCB naplánované",
+      "badge_decided": "TCB rozhodnuté",
+      "badge_withdrawn": "TCB stiahnuté"
+    },
+    "sessions": {
+      "add": "Naplánovať zasadnutie",
+      "edit": "Upraviť zasadnutie",
+      "title_label": "Názov zasadnutia",
+      "scheduled_at": "Dátum a čas",
+      "location": "Miesto",
+      "minutes": "Zápisnica",
+      "minutes_placeholder": "Sem napíšte zápisnicu zo schôdze",
+      "complete": "Dokončiť zasadnutie",
+      "cancel": "Zrušiť zasadnutie",
+      "complete_failed": "Zasadnutie sa nepodarilo dokončiť. Skúste to prosím znova.",
+      "cancel_failed": "Zasadnutie sa nepodarilo zrušiť. Skúste to prosím znova.",
+      "created": "Zasadnutie naplánované.",
+      "updated": "Zasadnutie aktualizované.",
+      "completed": "Zasadnutie dokončené.",
+      "cancelled": "Zasadnutie zrušené.",
+      "create_failed": "Zasadnutie sa nepodarilo naplánovať. Skúste to prosím znova.",
+      "update_failed": "Zasadnutie sa nepodarilo aktualizovať. Skúste to prosím znova.",
+      "empty_items": "Program je prázdny. Pridajte čakajúce žiadosti na prerokovanie.",
+      "agenda": "Program",
+      "pending_outcome": "Čakajúce rozhodnutia: {count}"
+    },
+    "items": {
+      "add": "Pridať do programu",
+      "add_confirm": "Pridať žiadosti",
+      "remove": "Odobrať z programu",
+      "remove_failed": "Žiadosť sa nepodarilo odobrať. Skúste to prosím znova.",
+      "add_failed": "Žiadosti sa nepodarilo pridať. Skúste to prosím znova.",
+      "outcome_label": "Rozhodnutie",
+      "note_label": "Poznámka k rozhodnutiu",
+      "save": "Zaznamenať rozhodnutie",
+      "save_failed": "Rozhodnutie sa nepodarilo zaznamenať. Skúste to prosím znova."
+    },
+    "participants": {
+      "add": "Pridať účastníka",
+      "role": "Rola",
+      "attendance": "Účasť",
+      "remove": "Odobrať",
+      "add_failed": "Účastníka sa nepodarilo pridať. Skúste to prosím znova.",
+      "update_failed": "Účastníka sa nepodarilo aktualizovať. Skúste to prosím znova.",
+      "remove_failed": "Účastníka sa nepodarilo odobrať. Skúste to prosím znova.",
+      "empty": "Zatiaľ žiadni účastníci."
+    },
+    "notification": {
+      "agenda_added": "{subject} pridané do {session}",
+      "decided": "Rozhodnutie revízie pre {subject}: {outcome}",
+      "session_scheduled": "Ste pozvaní na {session}",
+      "open": "Otvoriť komisiu",
+      "dismiss": "Zavrieť"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Vydání",
+    "add": "Přidat vydání",
+    "edit": "Upravit vydání",
+    "delete": "Smazat vydání",
+    "search_placeholder": "Hledat vydání",
+    "all_statuses": "Všechny stavy",
+    "actions": {
+      "create": "Vytvořit",
+      "save": "Uložit"
+    },
+    "empty_state": {
+      "title": "Zatím žádná vydání",
+      "description": "Vytvořte vydání, abyste seskupili změny pro revizi RCB.",
+      "no_matches": {
+        "title": "Žádná odpovídající vydání",
+        "description": "Zkuste jiné hledání nebo vymažte filtry."
+      }
+    },
+    "load_error": {
+      "title": "Vydání se nepodařilo načíst",
+      "description": "Při načítání vydání došlo k chybě.",
+      "retry": "Opakovat"
+    },
+    "fields": {
+      "name": "Název vydání",
+      "version": "Verze",
+      "status": "Stav",
+      "target_date": "Cílové datum",
+      "description": "Popis",
+      "changes": "Změny",
+      "review_history": "Historie revizí"
+    },
+    "status_values": {
+      "draft": "Koncept",
+      "planned": "Naplánováno",
+      "in_review": "V revizi",
+      "approved": "Schváleno",
+      "released": "Vydáno",
+      "cancelled": "Zrušeno"
+    },
+    "changes": {
+      "add": "Přidat změny",
+      "empty": "Zatím nejsou propojeny žádné změny.",
+      "unlink": "Odebrat",
+      "link_failed": "Změny se nepodařilo propojit. Zkuste to prosím znovu.",
+      "unlink_failed": "Změnu se nepodařilo odebrat. Zkuste to prosím znovu.",
+      "scope_warning": "Toto vydání je v revizi. Změny rozsahu jsou viditelné pro komisi.",
+      "tcb_badge": {
+        "pending": "TCB čeká",
+        "scheduled": "TCB naplánováno",
+        "decided": "TCB rozhodnuto",
+        "withdrawn": "TCB staženo"
+      }
+    },
+    "review": {
+      "submit": "Odeslat do RCB",
+      "resubmit": "Odeslat znovu",
+      "withdraw": "Stáhnout",
+      "note_label": "Poznámka k odeslání",
+      "note_placeholder": "Shrňte připravenost, rizika a plán vrácení",
+      "empty_history": "Zatím žádné žádosti o revizi.",
+      "submitted": "Vydání odesláno do RCB.",
+      "withdrawn": "Žádost o revizi stažena.",
+      "submit_failed": "Vydání se nepodařilo odeslat. Zkuste to prosím znovu.",
+      "withdraw_failed": "Žádost se nepodařilo stáhnout. Zkuste to prosím znovu."
+    },
+    "delete_modal": {
+      "title": "Smazat vydání",
+      "description": "Opravdu chcete smazat toto vydání? Seskupené změny budou odpojeny."
+    },
+    "toast": {
+      "created": "Vydání vytvořeno.",
+      "updated": "Vydání aktualizováno.",
+      "deleted": "Vydání smazáno."
+    },
+    "errors": {
+      "create_failed": "Vydání se nepodařilo vytvořit. Zkuste to prosím znovu.",
+      "update_failed": "Vydání se nepodařilo aktualizovat. Zkuste to prosím znovu.",
+      "delete_failed": "Vydání se nepodařilo smazat. Zkuste to prosím znovu.",
+      "active_review": "Toto vydání má aktivní žádost o revizi. Nejprve ji stáhněte.",
+      "version_too_long": "Verze nesmí mít více než 100 znaků."
+    }
+  }
+}

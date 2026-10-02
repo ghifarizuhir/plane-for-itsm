@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Bekliyor",
+      "scheduled": "Planlandı",
+      "decided": "Karar verildi",
+      "withdrawn": "Geri çekildi"
+    },
+    "session_status_values": {
+      "scheduled": "Planlandı",
+      "completed": "Tamamlandı",
+      "cancelled": "İptal edildi"
+    },
+    "outcome_values": {
+      "approved": "Onaylandı",
+      "rejected": "Reddedildi",
+      "approved_with_notes": "Notlarla onaylandı",
+      "deferred": "Ertelendi"
+    },
+    "participant_role_values": {
+      "chair": "Başkan",
+      "secretary": "Sekreter",
+      "member": "Üye"
+    },
+    "attendance_values": {
+      "invited": "Davetli",
+      "present": "Katıldı",
+      "absent": "Katılmadı"
+    },
+    "queue_tab": "Kuyruk",
+    "sessions_tab": "Oturumlar",
+    "load_error": {
+      "title": "Kurul yüklenemedi",
+      "description": "İnceleme verileri alınırken bir hata oluştu.",
+      "retry": "Tekrar dene"
+    },
+    "empty_queue": {
+      "title": "İnceleme bekleyen bir şey yok",
+      "description": "Gönderilen istekler burada görünecek."
+    },
+    "empty_sessions": {
+      "title": "Henüz oturum yok",
+      "description": "Bekleyen istekleri incelemek için bir oturum planlayın."
+    },
+    "no_matches": {
+      "title": "Eşleşen istek yok",
+      "description": "Farklı bir arama deneyin veya filtreleri temizleyin."
+    },
+    "request": {
+      "submitted": "Değişiklik TCB'ye gönderildi.",
+      "withdrawn": "İstek geri çekildi.",
+      "submit_failed": "İstek gönderilemedi. Lütfen tekrar deneyin.",
+      "withdraw_failed": "İstek geri çekilemedi. Lütfen tekrar deneyin.",
+      "submission_note": "Gönderim notu"
+    },
+    "tcb": {
+      "badge_pending": "TCB bekliyor",
+      "badge_scheduled": "TCB planlandı",
+      "badge_decided": "TCB karar verdi",
+      "badge_withdrawn": "TCB geri çekildi"
+    },
+    "sessions": {
+      "add": "Oturum planla",
+      "edit": "Oturumu düzenle",
+      "title_label": "Oturum başlığı",
+      "scheduled_at": "Tarih ve saat",
+      "location": "Konum",
+      "minutes": "Tutanak",
+      "minutes_placeholder": "Toplantı tutanağını buraya yazın",
+      "complete": "Oturumu tamamla",
+      "cancel": "Oturumu iptal et",
+      "complete_failed": "Oturum tamamlanamadı. Lütfen tekrar deneyin.",
+      "cancel_failed": "Oturum iptal edilemedi. Lütfen tekrar deneyin.",
+      "created": "Oturum planlandı.",
+      "updated": "Oturum güncellendi.",
+      "completed": "Oturum tamamlandı.",
+      "cancelled": "Oturum iptal edildi.",
+      "create_failed": "Oturum planlanamadı. Lütfen tekrar deneyin.",
+      "update_failed": "Oturum güncellenemedi. Lütfen tekrar deneyin.",
+      "empty_items": "Gündem boş. İncelemek için bekleyen istekler ekleyin.",
+      "agenda": "Gündem",
+      "pending_outcome": "Bekleyen kararlar: {count}"
+    },
+    "items": {
+      "add": "Gündeme ekle",
+      "add_confirm": "İstekleri ekle",
+      "remove": "Gündemden çıkar",
+      "remove_failed": "İstek çıkarılamadı. Lütfen tekrar deneyin.",
+      "add_failed": "İstekler eklenemedi. Lütfen tekrar deneyin.",
+      "outcome_label": "Karar",
+      "note_label": "Karar notu",
+      "save": "Kararı kaydet",
+      "save_failed": "Karar kaydedilemedi. Lütfen tekrar deneyin."
+    },
+    "participants": {
+      "add": "Katılımcı ekle",
+      "role": "Rol",
+      "attendance": "Katılım",
+      "remove": "Kaldır",
+      "add_failed": "Katılımcı eklenemedi. Lütfen tekrar deneyin.",
+      "update_failed": "Katılımcı güncellenemedi. Lütfen tekrar deneyin.",
+      "remove_failed": "Katılımcı kaldırılamadı. Lütfen tekrar deneyin.",
+      "empty": "Henüz katılımcı yok."
+    },
+    "notification": {
+      "agenda_added": "{subject}, {session} oturumuna eklendi",
+      "decided": "{subject} inceleme kararı: {outcome}",
+      "session_scheduled": "{session} oturumuna davetlisiniz",
+      "open": "Kurulu aç",
+      "dismiss": "Kapat"
+    }
+  }
+}

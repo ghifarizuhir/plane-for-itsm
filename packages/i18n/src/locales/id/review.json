@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Menunggu",
+      "scheduled": "Terjadwal",
+      "decided": "Diputuskan",
+      "withdrawn": "Ditarik"
+    },
+    "session_status_values": {
+      "scheduled": "Terjadwal",
+      "completed": "Selesai",
+      "cancelled": "Dibatalkan"
+    },
+    "outcome_values": {
+      "approved": "Disetujui",
+      "rejected": "Ditolak",
+      "approved_with_notes": "Disetujui dengan catatan",
+      "deferred": "Ditunda"
+    },
+    "participant_role_values": {
+      "chair": "Ketua",
+      "secretary": "Notulis",
+      "member": "Anggota"
+    },
+    "attendance_values": {
+      "invited": "Diundang",
+      "present": "Hadir",
+      "absent": "Tidak hadir"
+    },
+    "queue_tab": "Antrean",
+    "sessions_tab": "Sesi",
+    "load_error": {
+      "title": "Board tidak dapat dimuat",
+      "description": "Terjadi kesalahan saat memuat data review.",
+      "retry": "Coba lagi"
+    },
+    "empty_queue": {
+      "title": "Tidak ada yang menunggu review",
+      "description": "Pengajuan yang masuk akan tampil di sini."
+    },
+    "empty_sessions": {
+      "title": "Belum ada sesi",
+      "description": "Jadwalkan sesi untuk mereview pengajuan yang menunggu."
+    },
+    "no_matches": {
+      "title": "Tidak ada pengajuan yang cocok",
+      "description": "Coba pencarian lain atau hapus filter."
+    },
+    "request": {
+      "submitted": "Perubahan diajukan ke TCB.",
+      "withdrawn": "Pengajuan ditarik.",
+      "submit_failed": "Pengajuan tidak dapat dikirim. Silakan coba lagi.",
+      "withdraw_failed": "Pengajuan tidak dapat ditarik. Silakan coba lagi.",
+      "submission_note": "Catatan pengajuan"
+    },
+    "tcb": {
+      "badge_pending": "TCB menunggu",
+      "badge_scheduled": "TCB terjadwal",
+      "badge_decided": "TCB diputuskan",
+      "badge_withdrawn": "TCB ditarik"
+    },
+    "sessions": {
+      "add": "Jadwalkan sesi",
+      "edit": "Ubah sesi",
+      "title_label": "Judul sesi",
+      "scheduled_at": "Tanggal dan waktu",
+      "location": "Lokasi",
+      "minutes": "Notulen",
+      "minutes_placeholder": "Tulis notulen rapat di sini",
+      "complete": "Selesaikan sesi",
+      "cancel": "Batalkan sesi",
+      "complete_failed": "Sesi tidak dapat diselesaikan. Silakan coba lagi.",
+      "cancel_failed": "Sesi tidak dapat dibatalkan. Silakan coba lagi.",
+      "created": "Sesi dijadwalkan.",
+      "updated": "Sesi diperbarui.",
+      "completed": "Sesi selesai.",
+      "cancelled": "Sesi dibatalkan.",
+      "create_failed": "Sesi tidak dapat dijadwalkan. Silakan coba lagi.",
+      "update_failed": "Sesi tidak dapat diperbarui. Silakan coba lagi.",
+      "empty_items": "Agenda masih kosong. Tambahkan pengajuan yang menunggu untuk direview.",
+      "agenda": "Agenda",
+      "pending_outcome": "Keputusan menunggu: {count}"
+    },
+    "items": {
+      "add": "Tambah ke agenda",
+      "add_confirm": "Tambah pengajuan",
+      "remove": "Hapus dari agenda",
+      "remove_failed": "Pengajuan tidak dapat dihapus. Silakan coba lagi.",
+      "add_failed": "Pengajuan tidak dapat ditambahkan. Silakan coba lagi.",
+      "outcome_label": "Keputusan",
+      "note_label": "Catatan keputusan",
+      "save": "Catat keputusan",
+      "save_failed": "Keputusan tidak dapat dicatat. Silakan coba lagi."
+    },
+    "participants": {
+      "add": "Tambah peserta",
+      "role": "Peran",
+      "attendance": "Kehadiran",
+      "remove": "Hapus",
+      "add_failed": "Peserta tidak dapat ditambahkan. Silakan coba lagi.",
+      "update_failed": "Peserta tidak dapat diperbarui. Silakan coba lagi.",
+      "remove_failed": "Peserta tidak dapat dihapus. Silakan coba lagi.",
+      "empty": "Belum ada peserta."
+    },
+    "notification": {
+      "agenda_added": "{subject} ditambahkan ke {session}",
+      "decided": "Keputusan review untuk {subject}: {outcome}",
+      "session_scheduled": "Anda dijadwalkan untuk {session}",
+      "open": "Buka board",
+      "dismiss": "Abaikan"
+    }
+  }
+}

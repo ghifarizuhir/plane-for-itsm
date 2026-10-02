@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "リリース",
+    "add": "リリースを追加",
+    "edit": "リリースを編集",
+    "delete": "リリースを削除",
+    "search_placeholder": "リリースを検索",
+    "all_statuses": "すべてのステータス",
+    "actions": {
+      "create": "作成",
+      "save": "保存"
+    },
+    "empty_state": {
+      "title": "リリースはまだありません",
+      "description": "RCBレビューに向けて変更をまとめるリリースを作成します。",
+      "no_matches": {
+        "title": "一致するリリースがありません",
+        "description": "別の条件で検索するか、フィルターをクリアしてください。"
+      }
+    },
+    "load_error": {
+      "title": "リリースを読み込めませんでした",
+      "description": "リリースの取得中にエラーが発生しました。",
+      "retry": "再試行"
+    },
+    "fields": {
+      "name": "リリース名",
+      "version": "バージョン",
+      "status": "ステータス",
+      "target_date": "目標日",
+      "description": "説明",
+      "changes": "変更",
+      "review_history": "レビュー履歴"
+    },
+    "status_values": {
+      "draft": "下書き",
+      "planned": "計画済み",
+      "in_review": "レビュー中",
+      "approved": "承認済み",
+      "released": "リリース済み",
+      "cancelled": "キャンセル済み"
+    },
+    "changes": {
+      "add": "変更を追加",
+      "empty": "リンクされた変更はまだありません。",
+      "unlink": "削除",
+      "link_failed": "変更をリンクできませんでした。もう一度お試しください。",
+      "unlink_failed": "変更を削除できませんでした。もう一度お試しください。",
+      "scope_warning": "このリリースはレビュー中です。スコープの変更はボードに表示されます。",
+      "tcb_badge": {
+        "pending": "TCB 保留中",
+        "scheduled": "TCB 予定済み",
+        "decided": "TCB 決定済み",
+        "withdrawn": "TCB 取下げ済み"
+      }
+    },
+    "review": {
+      "submit": "RCBに提出",
+      "resubmit": "再提出",
+      "withdraw": "取下げ",
+      "note_label": "提出メモ",
+      "note_placeholder": "準備状況、リスク、ロールバック計画をまとめてください",
+      "empty_history": "レビュー依頼はまだありません。",
+      "submitted": "リリースをRCBに提出しました。",
+      "withdrawn": "レビュー依頼を取下げました。",
+      "submit_failed": "リリースを提出できませんでした。もう一度お試しください。",
+      "withdraw_failed": "依頼を取下げることができませんでした。もう一度お試しください。"
+    },
+    "delete_modal": {
+      "title": "リリースを削除",
+      "description": "このリリースを削除してもよろしいですか。まとめられた変更のリンクは解除されます。"
+    },
+    "toast": {
+      "created": "リリースを作成しました。",
+      "updated": "リリースを更新しました。",
+      "deleted": "リリースを削除しました。"
+    },
+    "errors": {
+      "create_failed": "リリースを作成できませんでした。もう一度お試しください。",
+      "update_failed": "リリースを更新できませんでした。もう一度お試しください。",
+      "delete_failed": "リリースを削除できませんでした。もう一度お試しください。",
+      "active_review": "このリリースには有効なレビュー依頼があります。先に取下げてください。",
+      "version_too_long": "バージョンは100文字以内で入力してください。"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Bản phát hành",
+    "add": "Thêm bản phát hành",
+    "edit": "Sửa bản phát hành",
+    "delete": "Xóa bản phát hành",
+    "search_placeholder": "Tìm kiếm bản phát hành",
+    "all_statuses": "Tất cả trạng thái",
+    "actions": {
+      "create": "Tạo",
+      "save": "Lưu"
+    },
+    "empty_state": {
+      "title": "Chưa có bản phát hành nào",
+      "description": "Tạo bản phát hành để gom các thay đổi cho buổi rà soát RCB.",
+      "no_matches": {
+        "title": "Không có bản phát hành phù hợp",
+        "description": "Hãy thử tìm kiếm khác hoặc xóa bộ lọc."
+      }
+    },
+    "load_error": {
+      "title": "Không tải được bản phát hành",
+      "description": "Đã xảy ra lỗi khi tải bản phát hành.",
+      "retry": "Thử lại"
+    },
+    "fields": {
+      "name": "Tên bản phát hành",
+      "version": "Phiên bản",
+      "status": "Trạng thái",
+      "target_date": "Ngày mục tiêu",
+      "description": "Mô tả",
+      "changes": "Thay đổi",
+      "review_history": "Lịch sử rà soát"
+    },
+    "status_values": {
+      "draft": "Nháp",
+      "planned": "Đã lên kế hoạch",
+      "in_review": "Đang rà soát",
+      "approved": "Đã phê duyệt",
+      "released": "Đã phát hành",
+      "cancelled": "Đã hủy"
+    },
+    "changes": {
+      "add": "Thêm thay đổi",
+      "empty": "Chưa có thay đổi nào được liên kết.",
+      "unlink": "Gỡ",
+      "link_failed": "Không thể liên kết các thay đổi. Vui lòng thử lại.",
+      "unlink_failed": "Không thể gỡ thay đổi. Vui lòng thử lại.",
+      "scope_warning": "Bản phát hành này đang được rà soát. Các thay đổi phạm vi đều hiển thị với hội đồng.",
+      "tcb_badge": {
+        "pending": "TCB đang chờ",
+        "scheduled": "TCB đã lên lịch",
+        "decided": "TCB đã quyết định",
+        "withdrawn": "TCB đã rút"
+      }
+    },
+    "review": {
+      "submit": "Gửi lên RCB",
+      "resubmit": "Gửi lại",
+      "withdraw": "Rút lại",
+      "note_label": "Ghi chú gửi",
+      "note_placeholder": "Tóm tắt mức độ sẵn sàng, rủi ro và kế hoạch khôi phục",
+      "empty_history": "Chưa có yêu cầu rà soát nào.",
+      "submitted": "Bản phát hành đã được gửi lên RCB.",
+      "withdrawn": "Đã rút yêu cầu rà soát.",
+      "submit_failed": "Không thể gửi bản phát hành. Vui lòng thử lại.",
+      "withdraw_failed": "Không thể rút yêu cầu. Vui lòng thử lại."
+    },
+    "delete_modal": {
+      "title": "Xóa bản phát hành",
+      "description": "Bạn có chắc muốn xóa bản phát hành này? Các thay đổi đã gom sẽ bị gỡ liên kết."
+    },
+    "toast": {
+      "created": "Đã tạo bản phát hành.",
+      "updated": "Đã cập nhật bản phát hành.",
+      "deleted": "Đã xóa bản phát hành."
+    },
+    "errors": {
+      "create_failed": "Không thể tạo bản phát hành. Vui lòng thử lại.",
+      "update_failed": "Không thể cập nhật bản phát hành. Vui lòng thử lại.",
+      "delete_failed": "Không thể xóa bản phát hành. Vui lòng thử lại.",
+      "active_review": "Bản phát hành này có yêu cầu rà soát đang hoạt động. Hãy rút yêu cầu đó trước.",
+      "version_too_long": "Phiên bản không được quá 100 ký tự."
+    }
+  }
+}

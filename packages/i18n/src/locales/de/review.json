@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "Ausstehend",
+      "scheduled": "Geplant",
+      "decided": "Entschieden",
+      "withdrawn": "Zurückgezogen"
+    },
+    "session_status_values": {
+      "scheduled": "Geplant",
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "outcome_values": {
+      "approved": "Freigegeben",
+      "rejected": "Abgelehnt",
+      "approved_with_notes": "Freigegeben mit Hinweisen",
+      "deferred": "Zurückgestellt"
+    },
+    "participant_role_values": {
+      "chair": "Vorsitz",
+      "secretary": "Protokoll",
+      "member": "Mitglied"
+    },
+    "attendance_values": {
+      "invited": "Eingeladen",
+      "present": "Anwesend",
+      "absent": "Abwesend"
+    },
+    "queue_tab": "Warteschlange",
+    "sessions_tab": "Sitzungen",
+    "load_error": {
+      "title": "Das Board konnte nicht geladen werden",
+      "description": "Beim Laden der Review-Daten ist ein Fehler aufgetreten.",
+      "retry": "Erneut versuchen"
+    },
+    "empty_queue": {
+      "title": "Nichts wartet auf Prüfung",
+      "description": "Eingereichte Anfragen erscheinen hier."
+    },
+    "empty_sessions": {
+      "title": "Noch keine Sitzungen",
+      "description": "Planen Sie eine Sitzung, um ausstehende Anfragen zu prüfen."
+    },
+    "no_matches": {
+      "title": "Keine passenden Anfragen",
+      "description": "Versuchen Sie eine andere Suche oder setzen Sie die Filter zurück."
+    },
+    "request": {
+      "submitted": "Änderung an das TCB gesendet.",
+      "withdrawn": "Anfrage zurückgezogen.",
+      "submit_failed": "Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+      "withdraw_failed": "Die Anfrage konnte nicht zurückgezogen werden. Bitte versuchen Sie es erneut.",
+      "submission_note": "Einreichungsnotiz"
+    },
+    "tcb": {
+      "badge_pending": "TCB ausstehend",
+      "badge_scheduled": "TCB geplant",
+      "badge_decided": "TCB entschieden",
+      "badge_withdrawn": "TCB zurückgezogen"
+    },
+    "sessions": {
+      "add": "Sitzung planen",
+      "edit": "Sitzung bearbeiten",
+      "title_label": "Sitzungstitel",
+      "scheduled_at": "Datum und Uhrzeit",
+      "location": "Ort",
+      "minutes": "Protokoll",
+      "minutes_placeholder": "Schreiben Sie hier das Sitzungsprotokoll",
+      "complete": "Sitzung abschließen",
+      "cancel": "Sitzung abbrechen",
+      "complete_failed": "Die Sitzung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+      "cancel_failed": "Die Sitzung konnte nicht abgebrochen werden. Bitte versuchen Sie es erneut.",
+      "created": "Sitzung geplant.",
+      "updated": "Sitzung aktualisiert.",
+      "completed": "Sitzung abgeschlossen.",
+      "cancelled": "Sitzung abgebrochen.",
+      "create_failed": "Die Sitzung konnte nicht geplant werden. Bitte versuchen Sie es erneut.",
+      "update_failed": "Die Sitzung konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+      "empty_items": "Die Agenda ist leer. Fügen Sie ausstehende Anfragen hinzu, um sie zu prüfen.",
+      "agenda": "Agenda",
+      "pending_outcome": "Offene Entscheidungen: {count}"
+    },
+    "items": {
+      "add": "Zur Agenda hinzufügen",
+      "add_confirm": "Anfragen hinzufügen",
+      "remove": "Von Agenda entfernen",
+      "remove_failed": "Die Anfrage konnte nicht entfernt werden. Bitte versuchen Sie es erneut.",
+      "add_failed": "Die Anfragen konnten nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
+      "outcome_label": "Entscheidung",
+      "note_label": "Entscheidungsnotiz",
+      "save": "Entscheidung festhalten",
+      "save_failed": "Die Entscheidung konnte nicht festgehalten werden. Bitte versuchen Sie es erneut."
+    },
+    "participants": {
+      "add": "Teilnehmer hinzufügen",
+      "role": "Rolle",
+      "attendance": "Anwesenheit",
+      "remove": "Entfernen",
+      "add_failed": "Der Teilnehmer konnte nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
+      "update_failed": "Der Teilnehmer konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+      "remove_failed": "Der Teilnehmer konnte nicht entfernt werden. Bitte versuchen Sie es erneut.",
+      "empty": "Noch keine Teilnehmer."
+    },
+    "notification": {
+      "agenda_added": "{subject} wurde zu {session} hinzugefügt",
+      "decided": "{subject} Review-Entscheidung: {outcome}",
+      "session_scheduled": "Sie sind für {session} vorgesehen",
+      "open": "Board öffnen",
+      "dismiss": "Schließen"
+    }
+  }
+}

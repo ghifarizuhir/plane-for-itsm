@@ -1,0 +1,86 @@
+{
+  "release": {
+    "title": "Wydania",
+    "add": "Dodaj wydanie",
+    "edit": "Edytuj wydanie",
+    "delete": "Usuń wydanie",
+    "search_placeholder": "Szukaj wydań",
+    "all_statuses": "Wszystkie statusy",
+    "actions": {
+      "create": "Utwórz",
+      "save": "Zapisz"
+    },
+    "empty_state": {
+      "title": "Brak wydań",
+      "description": "Utwórz wydanie, aby zebrać zmiany do przeglądu RCB.",
+      "no_matches": {
+        "title": "Brak pasujących wydań",
+        "description": "Spróbuj innego wyszukiwania lub wyczyść filtry."
+      }
+    },
+    "load_error": {
+      "title": "Nie można wczytać wydań",
+      "description": "Podczas pobierania wydań wystąpił błąd.",
+      "retry": "Ponów próbę"
+    },
+    "fields": {
+      "name": "Nazwa wydania",
+      "version": "Wersja",
+      "status": "Status",
+      "target_date": "Data docelowa",
+      "description": "Opis",
+      "changes": "Zmiany",
+      "review_history": "Historia przeglądów"
+    },
+    "status_values": {
+      "draft": "Szkic",
+      "planned": "Zaplanowane",
+      "in_review": "W przeglądzie",
+      "approved": "Zatwierdzone",
+      "released": "Wydane",
+      "cancelled": "Anulowane"
+    },
+    "changes": {
+      "add": "Dodaj zmiany",
+      "empty": "Nie połączono jeszcze żadnych zmian.",
+      "unlink": "Usuń",
+      "link_failed": "Nie można połączyć zmian. Spróbuj ponownie.",
+      "unlink_failed": "Nie można usunąć zmiany. Spróbuj ponownie.",
+      "scope_warning": "To wydanie jest w przeglądzie. Zmiany zakresu są widoczne dla komitetu.",
+      "tcb_badge": {
+        "pending": "TCB oczekujące",
+        "scheduled": "TCB zaplanowane",
+        "decided": "TCB rozstrzygnięte",
+        "withdrawn": "TCB wycofane"
+      }
+    },
+    "review": {
+      "submit": "Prześlij do RCB",
+      "resubmit": "Prześlij ponownie",
+      "withdraw": "Wycofaj",
+      "note_label": "Notatka do zgłoszenia",
+      "note_placeholder": "Podsumuj gotowość, ryzyka i plan wycofania",
+      "empty_history": "Brak wniosków o przegląd.",
+      "submitted": "Wydanie przesłane do RCB.",
+      "withdrawn": "Wniosek o przegląd wycofany.",
+      "submit_failed": "Nie można przesłać wydania. Spróbuj ponownie.",
+      "withdraw_failed": "Nie można wycofać wniosku. Spróbuj ponownie."
+    },
+    "delete_modal": {
+      "title": "Usuń wydanie",
+      "description": "Czy na pewno usunąć to wydanie? Zebrane zmiany zostaną odłączone."
+    },
+    "toast": {
+      "created": "Wydanie utworzone.",
+      "updated": "Wydanie zaktualizowane.",
+      "deleted": "Wydanie usunięte."
+    },
+    "errors": {
+      "create_failed": "Nie można utworzyć wydania. Spróbuj ponownie.",
+      "update_failed": "Nie można zaktualizować wydania. Spróbuj ponownie.",
+      "delete_failed": "Nie można usunąć wydania. Spróbuj ponownie.",
+      "active_review": "To wydanie ma aktywny wniosek o przegląd. Najpierw go wycofaj.",
+      "version_too_long": "Wersja nie może mieć więcej niż 100 znaków."
+    }
+  }
+}

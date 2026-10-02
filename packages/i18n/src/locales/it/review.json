@@ -1,0 +1,117 @@
+{
+  "review": {
+    "board_values": {
+      "tcb": "Testing Control Board",
+      "rcb": "Release Control Board"
+    },
+    "request_status_values": {
+      "pending": "In attesa",
+      "scheduled": "Pianificata",
+      "decided": "Decisa",
+      "withdrawn": "Ritirata"
+    },
+    "session_status_values": {
+      "scheduled": "Pianificata",
+      "completed": "Completata",
+      "cancelled": "Annullata"
+    },
+    "outcome_values": {
+      "approved": "Approvata",
+      "rejected": "Respinta",
+      "approved_with_notes": "Approvata con note",
+      "deferred": "Rinviata"
+    },
+    "participant_role_values": {
+      "chair": "Presidenza",
+      "secretary": "Segreteria",
+      "member": "Membro"
+    },
+    "attendance_values": {
+      "invited": "Invitato",
+      "present": "Presente",
+      "absent": "Assente"
+    },
+    "queue_tab": "Coda",
+    "sessions_tab": "Sessioni",
+    "load_error": {
+      "title": "Impossibile caricare il comitato",
+      "description": "Si è verificato un errore durante il caricamento dei dati di revisione.",
+      "retry": "Riprova"
+    },
+    "empty_queue": {
+      "title": "Nulla in attesa di revisione",
+      "description": "Le richieste inviate appariranno qui."
+    },
+    "empty_sessions": {
+      "title": "Ancora nessuna sessione",
+      "description": "Pianifichi una sessione per esaminare le richieste in attesa."
+    },
+    "no_matches": {
+      "title": "Nessuna richiesta corrispondente",
+      "description": "Provi una ricerca diversa o azzeri i filtri."
+    },
+    "request": {
+      "submitted": "Modifica inviata a TCB.",
+      "withdrawn": "Richiesta ritirata.",
+      "submit_failed": "Impossibile inviare la richiesta. Riprovi.",
+      "withdraw_failed": "Impossibile ritirare la richiesta. Riprovi.",
+      "submission_note": "Nota di invio"
+    },
+    "tcb": {
+      "badge_pending": "TCB in attesa",
+      "badge_scheduled": "TCB pianificata",
+      "badge_decided": "TCB decisa",
+      "badge_withdrawn": "TCB ritirata"
+    },
+    "sessions": {
+      "add": "Pianifica sessione",
+      "edit": "Modifica sessione",
+      "title_label": "Titolo sessione",
+      "scheduled_at": "Data e ora",
+      "location": "Luogo",
+      "minutes": "Verbale",
+      "minutes_placeholder": "Scriva qui il verbale della riunione",
+      "complete": "Completa sessione",
+      "cancel": "Annulla sessione",
+      "complete_failed": "Impossibile completare la sessione. Riprovi.",
+      "cancel_failed": "Impossibile annullare la sessione. Riprovi.",
+      "created": "Sessione pianificata.",
+      "updated": "Sessione aggiornata.",
+      "completed": "Sessione completata.",
+      "cancelled": "Sessione annullata.",
+      "create_failed": "Impossibile pianificare la sessione. Riprovi.",
+      "update_failed": "Impossibile aggiornare la sessione. Riprovi.",
+      "empty_items": "L'ordine del giorno è vuoto. Aggiunga le richieste in attesa per esaminarle.",
+      "agenda": "Ordine del giorno",
+      "pending_outcome": "Decisioni in attesa: {count}"
+    },
+    "items": {
+      "add": "Aggiungi all'ordine del giorno",
+      "add_confirm": "Aggiungi richieste",
+      "remove": "Rimuovi dall'ordine del giorno",
+      "remove_failed": "Impossibile rimuovere la richiesta. Riprovi.",
+      "add_failed": "Impossibile aggiungere le richieste. Riprovi.",
+      "outcome_label": "Decisione",
+      "note_label": "Nota di decisione",
+      "save": "Registra decisione",
+      "save_failed": "Impossibile registrare la decisione. Riprovi."
+    },
+    "participants": {
+      "add": "Aggiungi partecipante",
+      "role": "Ruolo",
+      "attendance": "Presenza",
+      "remove": "Rimuovi",
+      "add_failed": "Impossibile aggiungere il partecipante. Riprovi.",
+      "update_failed": "Impossibile aggiornare il partecipante. Riprovi.",
+      "remove_failed": "Impossibile rimuovere il partecipante. Riprovi.",
+      "empty": "Ancora nessun partecipante."
+    },
+    "notification": {
+      "agenda_added": "{subject} aggiunto a {session}",
+      "decided": "Decisione di revisione per {subject}: {outcome}",
+      "session_scheduled": "Lei è convocato a {session}",
+      "open": "Apri il comitato",
+      "dismiss": "Ignora"
+    }
+  }
+}
