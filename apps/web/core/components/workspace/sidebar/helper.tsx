@@ -13,6 +13,7 @@ import {
   InboxOutline,
   MultipleStickyOutline,
   ProjectsOutline,
+  RocketOutline,
   ViewsOutline,
   YourWorkOutline,
 } from "@makeplane/propel/icons";
@@ -40,5 +41,7 @@ export const getSidebarNavigationItemIcon = (key: string, className: string = ""
       return <MultipleStickyOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "ai_scheduler":
       return <CalendarOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "releases":
+      return <RocketOutline className={cn("size-4 flex-shrink-0", className)} />;
   }
 };

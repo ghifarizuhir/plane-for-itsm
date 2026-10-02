@@ -77,6 +77,19 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/drafts", "./(all)/[workspaceSlug]/(projects)/drafts/page.tsx"),
         ]),
 
+        // Releases (RCB scope)
+        layout("./(all)/[workspaceSlug]/(projects)/releases/(list)/layout.tsx", [
+          route(":workspaceSlug/releases", "./(all)/[workspaceSlug]/(projects)/releases/(list)/page.tsx"),
+        ]),
+
+        // Release Detail
+        layout("./(all)/[workspaceSlug]/(projects)/releases/(detail)/layout.tsx", [
+          route(
+            ":workspaceSlug/releases/:releaseId",
+            "./(all)/[workspaceSlug]/(projects)/releases/(detail)/[releaseId]/page.tsx"
+          ),
+        ]),
+
         // Notifications
         layout("./(all)/[workspaceSlug]/(projects)/notifications/layout.tsx", [
           route(":workspaceSlug/notifications", "./(all)/[workspaceSlug]/(projects)/notifications/page.tsx"),
