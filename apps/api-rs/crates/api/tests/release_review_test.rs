@@ -3,7 +3,9 @@
 //!  cargo test -p api --test release_review_test -- --test-threads=1`
 
 use api::middleware::auth::AuthUser;
-use api::routes::release::{create, list, CreateRelease, ListParams};
+use api::routes::release::{
+    create, destroy, detail, list, patch, CreateRelease, ListParams, PatchRelease,
+};
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -383,6 +385,208 @@ async fn list_releases_filters_status() {
     .expect("list filtered");
     assert_eq!(cancelled.as_array().unwrap().len(), 1);
     assert_eq!(cancelled[0]["name"], "Rilis B");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+async fn insert_review_request(
+    pool: &PgPool,
+    workspace_id: Uuid,
+    release_id: Uuid,
+    user_id: Uuid,
+    status: &str,
+) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO review_requests (id, workspace_id, board_type, release_id, status, \
+         submission_note, submitted_by_id, submitted_at, created_at, updated_at, \
+         created_by_id, updated_by_id) \
+         VALUES (gen_random_uuid(), $1, 'rcb', $2, $3, '', $4, now(), now(), now(), $4, $4) \
+         RETURNING id",
+    )
+    .bind(workspace_id)
+    .bind(release_id)
+    .bind(status)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("scratch review request")
+}
+
+fn release_id(body: &Value) -> Uuid {
+    body["id"].as_str().unwrap().parse().unwrap()
+}
+
+#[tokio::test]
+async fn detail_release_includes_empty_bundles() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis detail")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+
+    let (status, Json(body)) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["name"], "Rilis detail");
+    assert_eq!(body["changes"].as_array().unwrap().len(), 0);
+    assert_eq!(body["review_requests"].as_array().unwrap().len(), 0);
+
+    let (status, _) = detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), Uuid::new_v4())),
+    )
+    .await
+    .expect("missing detail");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn patch_release_updates_and_clears_optional_fields() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(CreateRelease {
+            name: Some("Rilis patch".into()),
+            version: Some("v1.0.0".into()),
+            description_html: None,
+            status: None,
+            target_date: Some(chrono::NaiveDate::from_ymd_opt(2026, 10, 20).unwrap()),
+        }),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+    assert_eq!(release["version"], "v1.0.0");
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(PatchRelease {
+            name: Some("Rilis patch v2".into()),
+            version: Some(None),
+            description_html: None,
+            status: Some("planned".into()),
+            target_date: Some(Some(
+                chrono::NaiveDate::from_ymd_opt(2026, 11, 1).unwrap(),
+            )),
+        }),
+    )
+    .await
+    .expect("patch");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["name"], "Rilis patch v2");
+    assert!(body["version"].is_null());
+    assert_eq!(body["status"], "planned");
+    assert_eq!(body["target_date"], "2026-11-01");
+
+    let (status, Json(body)) = patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+        Json(PatchRelease {
+            status: Some("bogus".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("bad status");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid status");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn destroy_release_guards_active_review_and_permissions() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis hapus")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+
+    let member = scratch.add_actor(&st.pool, Some(15)).await;
+    let (status, _) = destroy(
+        State(st.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("non-creator delete");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let request_id = insert_review_request(
+        &st.pool,
+        scratch.workspace_id,
+        rid,
+        scratch.user_id,
+        "pending",
+    )
+    .await;
+    let (status, Json(body)) = destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("guarded delete");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Release has an active review request");
+
+    sqlx::query("UPDATE review_requests SET status = 'withdrawn' WHERE id = $1")
+        .bind(request_id)
+        .execute(&st.pool)
+        .await
+        .expect("withdraw request");
+
+    let (status, _) = destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), rid)),
+    )
+    .await
+    .expect("delete");
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (_, Json(all)) = list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(ListParams {
+            status: None,
+            target_date_from: None,
+            target_date_to: None,
+        }),
+    )
+    .await
+    .expect("list after delete");
+    assert_eq!(all.as_array().unwrap().len(), 0);
 
     scratch.cleanup(&st.pool).await;
 }

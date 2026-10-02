@@ -806,6 +806,12 @@ async fn main() {
             "/api/workspaces/:slug/releases/",
             get(routes::release::list).post(routes::release::create),
         )
+        .route(
+            "/api/workspaces/:slug/releases/:pk/",
+            get(routes::release::detail)
+                .patch(routes::release::patch)
+                .delete(routes::release::destroy),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror

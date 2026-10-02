@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
 };
 
-use super::service::{bad_request, validate_enum};
+use super::service::{bad_request, deserialize_present, validate_enum};
 use super::workflow::validate_name;
 
 /// Allowed `releases.status` values (spec §Model data).
@@ -216,6 +216,210 @@ pub async fn create(
         .fetch_one(&st.pool)
         .await?;
     Ok((StatusCode::CREATED, Json(release_json(&row))))
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ReleaseChangeRow {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    pub project_id: Uuid,
+    pub issue_name: String,
+    pub issue_identifier: String,
+    pub project_identifier: String,
+}
+
+fn change_json(row: &ReleaseChangeRow) -> Value {
+    json!({
+        "id": row.id,
+        "issue_id": row.issue_id,
+        "project_id": row.project_id,
+        "issue_name": row.issue_name,
+        "issue_identifier": row.issue_identifier,
+        "project_identifier": row.project_identifier,
+    })
+}
+
+pub(crate) const CHANGE_SELECT: &str = "SELECT rc.id, rc.issue_id, rc.project_id, \
+    i.name AS issue_name, (p.identifier || '-' || i.sequence_id::text) AS issue_identifier, \
+    p.identifier AS project_identifier FROM release_changes rc \
+    JOIN issues i ON i.id = rc.issue_id JOIN projects p ON p.id = rc.project_id";
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ReviewRequestRow {
+    pub id: Uuid,
+    pub board_type: String,
+    pub status: String,
+    pub submission_note: String,
+    pub submitted_by_id: Option<Uuid>,
+    pub submitted_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn request_json(row: &ReviewRequestRow) -> Value {
+    json!({
+        "id": row.id,
+        "board_type": row.board_type,
+        "status": row.status,
+        "submission_note": row.submission_note,
+        "submitted_by": row.submitted_by_id,
+        "submitted_at": row.submitted_at,
+    })
+}
+
+/// GET `/api/workspaces/:slug/releases/:pk/`
+pub async fn detail(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(row) = release_in_workspace(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    let changes: Vec<ReleaseChangeRow> = sqlx::query_as(&format!(
+        "{CHANGE_SELECT} WHERE rc.release_id = $1 AND rc.deleted_at IS NULL ORDER BY rc.created_at ASC"
+    ))
+    .bind(pk)
+    .fetch_all(&st.pool)
+    .await?;
+    let requests: Vec<ReviewRequestRow> = sqlx::query_as(
+        "SELECT id, board_type, status, submission_note, submitted_by_id, submitted_at \
+         FROM review_requests WHERE release_id = $1 AND deleted_at IS NULL \
+         ORDER BY submitted_at DESC",
+    )
+    .bind(pk)
+    .fetch_all(&st.pool)
+    .await?;
+    let mut value = release_json(&row);
+    value["changes"] = json!(changes.iter().map(change_json).collect::<Vec<_>>());
+    value["review_requests"] = json!(requests.iter().map(request_json).collect::<Vec<_>>());
+    Ok((StatusCode::OK, Json(value)))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchRelease {
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub version: Option<Option<String>>,
+    pub description_html: Option<String>,
+    pub status: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub target_date: Option<Option<NaiveDate>>,
+}
+
+/// PATCH `/api/workspaces/:slug/releases/:pk/`
+pub async fn patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<PatchRelease>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(current) = release_in_workspace(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    let name = match body.name.as_deref() {
+        Some(raw) => match validate_name(raw, "name") {
+            Ok(name) => name,
+            Err(e) => return Ok(bad_request(e)),
+        },
+        None => current.name.clone(),
+    };
+    let version = match body.version.clone() {
+        Some(Some(raw)) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else if trimmed.chars().count() > 100 {
+                return Ok(bad_request(
+                    "Ensure version has no more than 100 characters.",
+                ));
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Some(None) => None,
+        None => current.version.clone(),
+    };
+    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    if let Err(e) = validate_enum("status", &status, RELEASE_STATUSES) {
+        return Ok(bad_request(e));
+    }
+    let target_date = match body.target_date {
+        Some(value) => value,
+        None => current.target_date,
+    };
+    let description_html = body
+        .description_html
+        .clone()
+        .unwrap_or_else(|| current.description_html.clone());
+    sqlx::query(
+        "UPDATE releases SET name = $1, version = $2, description_html = $3, status = $4, \
+         target_date = $5, updated_at = now(), updated_by_id = $6 \
+         WHERE id = $7 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $8 AND deleted_at IS NULL) \
+         AND deleted_at IS NULL",
+    )
+    .bind(&name)
+    .bind(&version)
+    .bind(&description_html)
+    .bind(&status)
+    .bind(target_date)
+    .bind(auth.0)
+    .bind(pk)
+    .bind(&slug)
+    .execute(&st.pool)
+    .await?;
+    let Some(row) = release_in_workspace(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    Ok((StatusCode::OK, Json(release_json(&row))))
+}
+
+/// DELETE `/api/workspaces/:slug/releases/:pk/`
+pub async fn destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> R {
+    if !gate_ws_member(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(current) = release_in_workspace(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    if current.created_by_id != Some(auth.0) && !gate_ws_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let active: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM review_requests WHERE release_id = $1 \
+         AND status IN ('pending', 'scheduled') AND deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if active {
+        return Ok(bad_request("Release has an active review request"));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE release_changes SET deleted_at = now(), updated_at = now() \
+         WHERE release_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE releases SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
 #[cfg(test)]
