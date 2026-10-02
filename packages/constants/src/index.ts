@@ -31,6 +31,8 @@ export * from "./notification";
 export * from "./page";
 export * from "./profile";
 export * from "./project";
+export * from "./release";
+export * from "./review";
 export * from "./rich-filters";
 export * from "./settings";
 export * from "./sidebar-favorites";
