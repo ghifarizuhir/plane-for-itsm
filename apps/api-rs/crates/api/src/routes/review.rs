@@ -277,16 +277,20 @@ pub async fn submit_request(
     if let Err(e) = validate_enum("board_type", &board, BOARD_TYPES) {
         return Ok(bad_request(e));
     }
-    let workspace_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let workspace_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(workspace_id) = workspace_id else {
         return Ok(missing());
     };
-    let note = body.submission_note.clone().unwrap_or_default().trim().to_string();
+    let note = body
+        .submission_note
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
     let (project_id, change_issue_id, release_id) = if board == "tcb" {
         let Some(issue_id) = body.change_issue_id else {
@@ -300,10 +304,14 @@ pub async fn submit_request(
         .fetch_optional(&st.pool)
         .await?;
         let Some((issue_project_id, issue_workspace_id)) = issue else {
-            return Ok(bad_request("Invalid change_issue_id - object does not exist."));
+            return Ok(bad_request(
+                "Invalid change_issue_id - object does not exist.",
+            ));
         };
         if issue_workspace_id != workspace_id {
-            return Ok(bad_request("Invalid change_issue_id - object does not exist."));
+            return Ok(bad_request(
+                "Invalid change_issue_id - object does not exist.",
+            ));
         }
         if !gate_project_member(&st.pool, auth.0, &slug, issue_project_id).await? {
             return Ok(deny());
@@ -325,7 +333,10 @@ pub async fn submit_request(
         let Some(release_id) = body.release_id else {
             return Ok(bad_request("release_id is required"));
         };
-        if release_in_workspace(&st.pool, &slug, release_id).await?.is_none() {
+        if release_in_workspace(&st.pool, &slug, release_id)
+            .await?
+            .is_none()
+        {
             return Ok(bad_request("Invalid release_id - object does not exist."));
         }
         if !gate_ws_member(&st.pool, auth.0, &slug).await? {
@@ -626,12 +637,11 @@ pub async fn create_session(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
-    let workspace_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL",
-    )
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
+    let workspace_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
     let Some(workspace_id) = workspace_id else {
         return Ok(missing());
     };
@@ -811,7 +821,10 @@ pub async fn patch_session(
         }
         None => session.location.clone(),
     };
-    let minutes = body.minutes.clone().unwrap_or_else(|| session.minutes.clone());
+    let minutes = body
+        .minutes
+        .clone()
+        .unwrap_or_else(|| session.minutes.clone());
     sqlx::query(
         "UPDATE review_sessions SET title = $1, scheduled_at = $2, location = $3, minutes = $4, \
          updated_at = now(), updated_by_id = $5 WHERE id = $6 AND deleted_at IS NULL",
@@ -1294,7 +1307,9 @@ pub async fn items_create(
         .fetch_one(&mut *tx)
         .await?;
         if in_other {
-            return Ok(bad_request("Request is already in another scheduled session"));
+            return Ok(bad_request(
+                "Request is already in another scheduled session",
+            ));
         }
         if request.status != "pending" {
             return Ok(bad_request("Request is not pending"));
@@ -1451,8 +1466,8 @@ pub async fn items_patch(
     .execute(&mut *tx)
     .await?;
     if is_final {
-        if let Some(request) = request_in_workspace(&st.pool, &slug, current.review_request_id)
-            .await?
+        if let Some(request) =
+            request_in_workspace(&st.pool, &slug, current.review_request_id).await?
         {
             if let Some(receiver) = request.submitted_by_id {
                 insert_review_notification(
@@ -1463,10 +1478,7 @@ pub async fn items_patch(
                     auth.0,
                     "review_request",
                     request.id,
-                    &format!(
-                        "Review decision for {}: {outcome}",
-                        subject_label(&request)
-                    ),
+                    &format!("Review decision for {}: {outcome}", subject_label(&request)),
                     "in_app:review:decided",
                     json!({
                         "review_request": {

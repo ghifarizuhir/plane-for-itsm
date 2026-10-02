@@ -794,7 +794,10 @@ async fn submit_change_request_tcb_dedupes_and_gates() {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["board_type"], "tcb");
     assert_eq!(body["status"], "pending");
-    assert_eq!(body["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+    assert_eq!(
+        body["project_id"].as_str().unwrap(),
+        scratch.project_id.to_string()
+    );
     assert_eq!(body["subject"]["kind"], "change");
     assert!(body["subject"]["issue"]["identifier"]
         .as_str()
@@ -835,7 +838,10 @@ async fn submit_change_request_tcb_dedupes_and_gates() {
     .await
     .expect("missing issue");
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Invalid change_issue_id - object does not exist.");
+    assert_eq!(
+        body["error"],
+        "Invalid change_issue_id - object does not exist."
+    );
 
     scratch.cleanup(&st.pool).await;
 }
@@ -968,9 +974,11 @@ fn session_body(board: &str, project_id: Option<Uuid>, title: &str) -> CreateSes
         board_type: Some(board.to_string()),
         project_id,
         title: Some(title.to_string()),
-        scheduled_at: Some(chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00Z")
-            .unwrap()
-            .with_timezone(&chrono::Utc)),
+        scheduled_at: Some(
+            chrono::DateTime::parse_from_rfc3339("2026-10-10T09:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+        ),
         location: Some("Ruang Rapat 3".to_string()),
         minutes: None,
     }
@@ -993,14 +1001,21 @@ async fn create_session_requires_board_scope_admin() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path(scratch.slug.clone()),
-        Json(session_body("tcb", Some(scratch.project_id), "TCB Mingguan")),
+        Json(session_body(
+            "tcb",
+            Some(scratch.project_id),
+            "TCB Mingguan",
+        )),
     )
     .await
     .expect("create tcb session");
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["board_type"], "tcb");
     assert_eq!(body["status"], "scheduled");
-    assert_eq!(body["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+    assert_eq!(
+        body["project_id"].as_str().unwrap(),
+        scratch.project_id.to_string()
+    );
 
     let member = scratch.add_actor(&st.pool, Some(15)).await;
     let (status, _) = create_session(
@@ -1057,7 +1072,11 @@ async fn session_list_filters_and_patch() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path(scratch.slug.clone()),
-        Json(session_body("tcb", Some(scratch.project_id), "TCB Mingguan")),
+        Json(session_body(
+            "tcb",
+            Some(scratch.project_id),
+            "TCB Mingguan",
+        )),
     )
     .await
     .expect("create tcb session");
@@ -1271,7 +1290,11 @@ async fn participant_requires_workspace_member() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path(scratch.slug.clone()),
-        Json(session_body("tcb", Some(scratch.project_id), "TCB Non-member")),
+        Json(session_body(
+            "tcb",
+            Some(scratch.project_id),
+            "TCB Non-member",
+        )),
     )
     .await
     .expect("create session");
@@ -1306,7 +1329,14 @@ async fn agenda_outcomes_complete_and_notifications() {
     let st = state().await;
     let mut scratch = Scratch::new(&st.pool).await;
     let member = scratch.add_actor(&st.pool, Some(15)).await;
-    insert_project_member(&st.pool, member, scratch.project_id, scratch.workspace_id, 15).await;
+    insert_project_member(
+        &st.pool,
+        member,
+        scratch.project_id,
+        scratch.workspace_id,
+        15,
+    )
+    .await;
     let issue_id = scratch.insert_issue(&st.pool).await;
     let (_, Json(request)) = submit_request(
         State(st.clone()),
@@ -1564,7 +1594,10 @@ async fn item_guards_board_mismatch_double_schedule_and_empty_complete() {
     .await
     .expect("double schedule");
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "Request is already in another scheduled session");
+    assert_eq!(
+        body["error"],
+        "Request is already in another scheduled session"
+    );
 
     let (_, Json(release)) = create(
         State(st.clone()),
