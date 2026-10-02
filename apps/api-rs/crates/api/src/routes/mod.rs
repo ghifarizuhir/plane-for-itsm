@@ -37,6 +37,7 @@ pub mod page;
 pub mod prefs;
 pub mod project;
 pub mod reactions;
+pub mod release;
 pub mod s3proxy;
 pub mod search;
 pub mod service;

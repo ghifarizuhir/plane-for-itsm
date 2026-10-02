@@ -798,6 +798,14 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/messages/:message_id/",
             patch(routes::war_room::messages_patch).delete(routes::war_room::messages_destroy),
         )
+        // Releases (RCB scope): workspace-level bundles of work items.
+        // Session auth; reads/writes = active workspace member; delete =
+        // creator or workspace admin. Spec:
+        // docs/superpowers/specs/2026-10-02-release-testing-control-boards-design.md
+        .route(
+            "/api/workspaces/:slug/releases/",
+            get(routes::release::list).post(routes::release::create),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror
