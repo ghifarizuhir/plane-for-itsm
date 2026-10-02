@@ -3,10 +3,12 @@ import type { IReviewSession } from "@plane/types";
 // local imports
 import {
   activeRequestForSubject,
+  fromDateTimeLocal,
   latestRequestForSubject,
   reviewRequestsKey,
   reviewSessionsKey,
   sortSessionsByScheduledAt,
+  toDateTimeLocal,
 } from "./review.helpers";
 
 describe("reviewRequestsKey", () => {
@@ -49,6 +51,30 @@ describe("activeRequestForSubject", () => {
   });
 });
 
+describe("toDateTimeLocal", () => {
+  it("formats an ISO string for a datetime-local input", () => {
+    const iso = new Date(2026, 9, 5, 9, 30).toISOString();
+    expect(toDateTimeLocal(iso)).toBe("2026-10-05T09:30");
+  });
+
+  it("returns empty string for null/invalid input", () => {
+    expect(toDateTimeLocal(null)).toBe("");
+    expect(toDateTimeLocal("not-a-date")).toBe("");
+  });
+});
+
+describe("fromDateTimeLocal", () => {
+  it("converts a datetime-local value back to ISO", () => {
+    const iso = fromDateTimeLocal("2026-10-05T09:30");
+    expect(iso).not.toBeNull();
+    expect(new Date(iso as string).getFullYear()).toBe(2026);
+  });
+
+  it("returns null for empty/invalid input", () => {
+    expect(fromDateTimeLocal("")).toBeNull();
+    expect(fromDateTimeLocal("nope")).toBeNull();
+  });
+});
 describe("sortSessionsByScheduledAt", () => {
   it("orders newest first", () => {
     const sessions = [
