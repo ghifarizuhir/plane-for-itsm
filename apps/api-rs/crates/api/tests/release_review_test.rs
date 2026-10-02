@@ -8,10 +8,11 @@ use api::routes::release::{
     CreateRelease, LinkChanges, ListParams, PatchRelease,
 };
 use api::routes::review::{
-    create_session, list_requests, list_sessions, participants_create, participants_destroy,
+    cancel_session, complete_session, create_session, items_create, items_destroy, items_list,
+    items_patch, list_requests, list_sessions, participants_create, participants_destroy,
     participants_list, participants_patch, patch_session, request_detail, session_detail,
-    submit_request, withdraw_request, CreateSession, ParticipantCreate, ParticipantPatch,
-    PatchSession, RequestListParams, SessionListParams, SubmitRequest,
+    submit_request, withdraw_request, AddItems, CreateSession, ParticipantCreate, ParticipantPatch,
+    PatchItem, PatchSession, RequestListParams, SessionListParams, SubmitRequest,
 };
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
@@ -1286,6 +1287,432 @@ async fn participant_requires_workspace_member() {
     .expect("foreign participant");
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "Invalid user_id - not a workspace member.");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+fn add_items(request_id: Uuid) -> AddItems {
+    AddItems {
+        request_ids: vec![request_id],
+    }
+}
+
+fn request_id_of(body: &Value) -> Uuid {
+    body["id"].as_str().unwrap().parse().unwrap()
+}
+
+#[tokio::test]
+async fn agenda_outcomes_complete_and_notifications() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let member = scratch.add_actor(&st.pool, Some(15)).await;
+    insert_project_member(&st.pool, member, scratch.project_id, scratch.workspace_id, 15).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    let request_id = request_id_of(&request);
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Agenda")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    participants_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(participant_body(member, Some("secretary"))),
+    )
+    .await
+    .expect("add secretary");
+
+    let (status, Json(items)) = items_create(
+        State(st.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), session_id)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("add items");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(items.as_array().unwrap().len(), 1);
+    assert_eq!(items[0]["subject"]["kind"], "change");
+    let item_id: Uuid = items[0]["id"].as_str().unwrap().parse().unwrap();
+
+    let (_, Json(after_add)) = request_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("request after add");
+    assert_eq!(after_add["status"], "scheduled");
+    assert_eq!(after_add["history"].as_array().unwrap().len(), 1);
+
+    let agenda_notified: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE receiver_id = $1 \
+         AND sender = 'in_app:review:agenda_added' AND deleted_at IS NULL",
+    )
+    .bind(scratch.user_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("count agenda notifications");
+    assert_eq!(agenda_notified, 1);
+
+    let (status, Json(item)) = items_patch(
+        State(st.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), session_id, item_id)),
+        Json(PatchItem {
+            outcome: Some("approved_with_notes".into()),
+            outcome_note: Some("Lanjut dengan catatan monitoring.".into()),
+        }),
+    )
+    .await
+    .expect("record outcome");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(item["outcome"], "approved_with_notes");
+
+    let (_, Json(after_decision)) = request_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("request after decision");
+    assert_eq!(after_decision["status"], "decided");
+
+    let decided_notified: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE receiver_id = $1 \
+         AND sender = 'in_app:review:decided' AND deleted_at IS NULL",
+    )
+    .bind(scratch.user_id)
+    .fetch_one(&st.pool)
+    .await
+    .expect("count decided notifications");
+    assert_eq!(decided_notified, 1);
+
+    let (status, Json(done)) = complete_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("complete");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(done["status"], "completed");
+    assert_eq!(done["counts"]["pending_outcome"], 0);
+
+    let (status, Json(body)) = withdraw_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("withdraw decided");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Only pending or scheduled requests can be withdrawn"
+    );
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn deferred_item_and_complete_release_to_pending() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    let request_id = request_id_of(&request);
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Ditunda")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+    let (_, Json(items)) = items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("add item");
+    let item_id: Uuid = items[0]["id"].as_str().unwrap().parse().unwrap();
+
+    let (_, Json(_)) = items_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id, item_id)),
+        Json(PatchItem {
+            outcome: Some("deferred".into()),
+            outcome_note: Some("Tunggu bukti UAT.".into()),
+        }),
+    )
+    .await
+    .expect("defer");
+
+    let (_, Json(after_defer)) = request_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("request after defer");
+    assert_eq!(after_defer["status"], "pending");
+
+    complete_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("complete session");
+
+    let (_, Json(second)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Susulan")),
+    )
+    .await
+    .expect("create second session");
+    let second_id: Uuid = second["id"].as_str().unwrap().parse().unwrap();
+    let (status, Json(items)) = items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), second_id)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("readd to second session");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(items.as_array().unwrap().len(), 1);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn item_guards_board_mismatch_double_schedule_and_empty_complete() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    let request_id = request_id_of(&request);
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Guard A")),
+    )
+    .await
+    .expect("create session A");
+    let session_a: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+    items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_a)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("add to A");
+
+    let (_, Json(session_b)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Guard B")),
+    )
+    .await
+    .expect("create session B");
+    let session_b: Uuid = session_b["id"].as_str().unwrap().parse().unwrap();
+    let (status, Json(body)) = items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_b)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("double schedule");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Request is already in another scheduled session");
+
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis Guard")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+    let (_, Json(rcb_request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("rcb", None, Some(rid))),
+    )
+    .await
+    .expect("submit rcb");
+    let rcb_id = request_id_of(&rcb_request);
+    let (status, Json(body)) = items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_b)),
+        Json(add_items(rcb_id)),
+    )
+    .await
+    .expect("board mismatch");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Request board does not match session board");
+
+    let (_, Json(empty)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Kosong")),
+    )
+    .await
+    .expect("create empty session");
+    let empty_id: Uuid = empty["id"].as_str().unwrap().parse().unwrap();
+    let (status, Json(body)) = complete_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), empty_id)),
+    )
+    .await
+    .expect("complete empty");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Session has no agenda items");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn cancel_session_guards_final_outcomes_and_resets_requests() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis Cancel")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("rcb", None, Some(rid))),
+    )
+    .await
+    .expect("submit rcb");
+    let request_id = request_id_of(&request);
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("rcb", None, "RCB Cancel")),
+    )
+    .await
+    .expect("create rcb session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+    let (_, Json(items)) = items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("add rcb item");
+    let item_id: Uuid = items[0]["id"].as_str().unwrap().parse().unwrap();
+    items_patch(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id, item_id)),
+        Json(PatchItem {
+            outcome: Some("approved".into()),
+            outcome_note: None,
+        }),
+    )
+    .await
+    .expect("approve");
+    let (status, Json(body)) = cancel_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("cancel with final");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Session already has final decisions");
+
+    let (_, Json(items)) = items_list(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("items list");
+    assert_eq!(items.as_array().unwrap().len(), 1);
+
+    let (status, _) = items_destroy(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id, item_id)),
+    )
+    .await
+    .expect("remove final item");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    sqlx::query(
+        "UPDATE review_session_items SET outcome = 'deferred', decided_at = NULL WHERE id = $1",
+    )
+    .bind(item_id)
+    .execute(&st.pool)
+    .await
+    .expect("reset outcome");
+
+    let (status, Json(done)) = cancel_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("cancel after reset");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(done["status"], "cancelled");
 
     scratch.cleanup(&st.pool).await;
 }

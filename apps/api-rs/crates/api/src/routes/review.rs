@@ -750,7 +750,8 @@ pub async fn session_detail(
         return Ok(deny());
     }
     let mut value = session_json(&row);
-    value["items"] = json!([]);
+    let items = items_for_session(&st.pool, session_id).await?;
+    value["items"] = json!(items.iter().map(item_json).collect::<Vec<_>>());
     let participants = participants_for_session(&st.pool, session_id).await?;
     value["participants"] = json!(participants
         .iter()
@@ -1142,6 +1143,513 @@ pub async fn participants_destroy(
     .execute(&st.pool)
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+// ---------------------------------------------------------------------------
+// Agenda items + outcomes
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionItemRow {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub review_request_id: Uuid,
+    pub position: i32,
+    pub outcome: Option<String>,
+    pub outcome_note: String,
+    pub decided_by_id: Option<Uuid>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub request_status: String,
+    pub board_type: String,
+    pub submission_note: String,
+    pub issue_identifier: Option<String>,
+    pub issue_name: Option<String>,
+    pub release_name: Option<String>,
+    pub release_version: Option<String>,
+}
+
+const ITEM_SELECT: &str = "SELECT i.id, i.session_id, i.review_request_id, i.position, i.outcome, \
+    i.outcome_note, i.decided_by_id, i.decided_at, i.created_at, rr.status AS request_status, \
+    rr.board_type, rr.submission_note, \
+    (p.identifier || '-' || iss.sequence_id::text) AS issue_identifier, iss.name AS issue_name, \
+    rel.name AS release_name, rel.version AS release_version \
+    FROM review_session_items i \
+    JOIN review_requests rr ON rr.id = i.review_request_id \
+    LEFT JOIN issues iss ON iss.id = rr.change_issue_id \
+    LEFT JOIN projects p ON p.id = iss.project_id \
+    LEFT JOIN releases rel ON rel.id = rr.release_id";
+
+fn item_json(row: &SessionItemRow) -> Value {
+    let subject = if row.board_type == "tcb" {
+        json!({
+            "kind": "change",
+            "identifier": row.issue_identifier,
+            "name": row.issue_name,
+            "version": Value::Null,
+        })
+    } else {
+        json!({
+            "kind": "release",
+            "identifier": Value::Null,
+            "name": row.release_name,
+            "version": row.release_version,
+        })
+    };
+    json!({
+        "id": row.id,
+        "session_id": row.session_id,
+        "review_request_id": row.review_request_id,
+        "position": row.position,
+        "outcome": row.outcome,
+        "outcome_note": row.outcome_note,
+        "decided_by": row.decided_by_id,
+        "decided_at": row.decided_at,
+        "created_at": row.created_at,
+        "request_status": row.request_status,
+        "submission_note": row.submission_note,
+        "subject": subject,
+    })
+}
+
+pub(crate) async fn items_for_session(
+    pool: &sqlx::PgPool,
+    session_id: Uuid,
+) -> Result<Vec<SessionItemRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{ITEM_SELECT} WHERE i.session_id = $1 AND i.deleted_at IS NULL \
+         ORDER BY i.position ASC, i.created_at ASC"
+    ))
+    .bind(session_id)
+    .fetch_all(pool)
+    .await
+}
+
+async fn item_by_id(
+    pool: &sqlx::PgPool,
+    session_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<SessionItemRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "{ITEM_SELECT} WHERE i.id = $1 AND i.session_id = $2 AND i.deleted_at IS NULL"
+    ))
+    .bind(item_id)
+    .bind(session_id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddItems {
+    pub request_ids: Vec<Uuid>,
+}
+
+/// POST `/api/workspaces/:slug/review-sessions/:session_id/items/`
+pub async fn items_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+    Json(body): Json<AddItems>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    let mut ids = body.request_ids.clone();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(bad_request("Invalid request_ids - object does not exist."));
+    }
+    let mut tx = st.pool.begin().await?;
+    for request_id in &ids {
+        let Some(request) = request_in_workspace(&st.pool, &slug, *request_id).await? else {
+            return Ok(bad_request("Invalid request_ids - object does not exist."));
+        };
+        if request.board_type != session.board_type {
+            return Ok(bad_request("Request board does not match session board"));
+        }
+        if request.board_type == "tcb" && request.project_id != session.project_id {
+            return Ok(bad_request("Request is not part of this project"));
+        }
+        // Double-schedule guard first: a `scheduled` request already sits in
+        // another scheduled session, so the status check below would mask
+        // this specific error.
+        let in_other: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM review_session_items i \
+             JOIN review_sessions s ON s.id = i.session_id \
+             WHERE i.review_request_id = $1 AND i.deleted_at IS NULL \
+             AND s.status = 'scheduled' AND s.id != $2 AND s.deleted_at IS NULL)",
+        )
+        .bind(request_id)
+        .bind(session.id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if in_other {
+            return Ok(bad_request("Request is already in another scheduled session"));
+        }
+        if request.status != "pending" {
+            return Ok(bad_request("Request is not pending"));
+        }
+        let already: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM review_session_items \
+             WHERE session_id = $1 AND review_request_id = $2 AND deleted_at IS NULL)",
+        )
+        .bind(session.id)
+        .bind(request_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if already {
+            continue;
+        }
+        let position: i32 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(position), 0) + 1 FROM review_session_items WHERE session_id = $1",
+        )
+        .bind(session.id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO review_session_items (id, workspace_id, session_id, review_request_id, \
+             position, created_at, updated_at, created_by_id, updated_by_id) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now(), $5, $5)",
+        )
+        .bind(session.workspace_id)
+        .bind(session.id)
+        .bind(request_id)
+        .bind(position)
+        .bind(auth.0)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE review_requests SET status = 'scheduled', updated_at = now(), updated_by_id = $1 \
+             WHERE id = $2 AND deleted_at IS NULL",
+        )
+        .bind(auth.0)
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
+        if let Some(receiver) = request.submitted_by_id {
+            insert_review_notification(
+                &mut tx,
+                session.workspace_id,
+                session.project_id,
+                receiver,
+                auth.0,
+                "review_request",
+                *request_id,
+                &format!("Review request added to {}", session.title),
+                "in_app:review:agenda_added",
+                json!({
+                    "review_request": {
+                        "id": request.id,
+                        "board_type": request.board_type,
+                        "project_id": request.project_id,
+                        "workspace_slug": slug,
+                        "status": "scheduled",
+                        "subject_label": subject_label(&request),
+                        "session_id": session.id,
+                        "session_title": session.title,
+                        "scheduled_at": session.scheduled_at,
+                    }
+                }),
+            )
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    let rows = items_for_session(&st.pool, session.id).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Value::Array(rows.iter().map(item_json).collect())),
+    ))
+}
+
+/// GET `/api/workspaces/:slug/review-sessions/:session_id/items/`
+pub async fn items_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    let rows = items_for_session(&st.pool, session.id).await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(item_json).collect())),
+    ))
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PatchItem {
+    pub outcome: Option<String>,
+    pub outcome_note: Option<String>,
+}
+
+/// PATCH `/api/workspaces/:slug/review-sessions/:session_id/items/:item_id/`
+pub async fn items_patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id, item_id)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<PatchItem>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    let Some(current) = item_by_id(&st.pool, session.id, item_id).await? else {
+        return Ok(missing());
+    };
+    let outcome = body.outcome.clone().unwrap_or_default();
+    if let Err(e) = validate_enum("outcome", &outcome, OUTCOMES) {
+        return Ok(bad_request(e));
+    }
+    let is_final = FINAL_OUTCOMES.contains(&outcome.as_str());
+    let note = body
+        .outcome_note
+        .clone()
+        .unwrap_or_else(|| current.outcome_note.clone());
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE review_session_items SET outcome = $1, outcome_note = $2, decided_by_id = $3, \
+         decided_at = now(), updated_at = now(), updated_by_id = $3 \
+         WHERE id = $4 AND session_id = $5 AND deleted_at IS NULL",
+    )
+    .bind(&outcome)
+    .bind(&note)
+    .bind(auth.0)
+    .bind(item_id)
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE review_requests SET status = $1, updated_at = now(), updated_by_id = $2 \
+         WHERE id = $3 AND deleted_at IS NULL",
+    )
+    .bind(if is_final { "decided" } else { "pending" })
+    .bind(auth.0)
+    .bind(current.review_request_id)
+    .execute(&mut *tx)
+    .await?;
+    if is_final {
+        if let Some(request) = request_in_workspace(&st.pool, &slug, current.review_request_id)
+            .await?
+        {
+            if let Some(receiver) = request.submitted_by_id {
+                insert_review_notification(
+                    &mut tx,
+                    session.workspace_id,
+                    session.project_id,
+                    receiver,
+                    auth.0,
+                    "review_request",
+                    request.id,
+                    &format!(
+                        "Review decision for {}: {outcome}",
+                        subject_label(&request)
+                    ),
+                    "in_app:review:decided",
+                    json!({
+                        "review_request": {
+                            "id": request.id,
+                            "board_type": request.board_type,
+                            "project_id": request.project_id,
+                            "workspace_slug": slug,
+                            "status": "decided",
+                            "subject_label": subject_label(&request),
+                            "outcome": outcome,
+                            "session_id": session.id,
+                            "session_title": session.title,
+                        }
+                    }),
+                )
+                .await?;
+            }
+        }
+    }
+    tx.commit().await?;
+    let row = item_by_id(&st.pool, session.id, item_id)
+        .await?
+        .expect("item just updated");
+    Ok((StatusCode::OK, Json(item_json(&row))))
+}
+
+/// DELETE `/api/workspaces/:slug/review-sessions/:session_id/items/:item_id/`
+pub async fn items_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id, item_id)): Path<(String, Uuid, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    let Some(current) = item_by_id(&st.pool, session.id, item_id).await? else {
+        return Ok(missing());
+    };
+    if current
+        .outcome
+        .as_deref()
+        .is_some_and(|outcome| FINAL_OUTCOMES.contains(&outcome))
+    {
+        return Ok(bad_request("Item with a final outcome cannot be removed"));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE review_session_items SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND session_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(item_id)
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE review_requests SET status = 'pending', updated_at = now(), updated_by_id = $1 \
+         WHERE id = $2 AND status = 'scheduled' AND deleted_at IS NULL",
+    )
+    .bind(auth.0)
+    .bind(current.review_request_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+// ---------------------------------------------------------------------------
+// Complete / cancel
+// ---------------------------------------------------------------------------
+
+/// POST `/api/workspaces/:slug/review-sessions/:session_id/complete/`
+pub async fn complete_session(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    if session.item_count == 0 {
+        return Ok(bad_request("Session has no agenda items"));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE review_session_items SET outcome = 'deferred', updated_at = now() \
+         WHERE session_id = $1 AND outcome IS NULL AND deleted_at IS NULL",
+    )
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE review_requests SET status = 'pending', updated_at = now() \
+         WHERE status = 'scheduled' AND id IN ( \
+             SELECT review_request_id FROM review_session_items \
+             WHERE session_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE review_sessions SET status = 'completed', completed_at = now(), updated_at = now(), \
+         updated_by_id = $1 WHERE id = $2 AND deleted_at IS NULL",
+    )
+    .bind(auth.0)
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    let row = session_in_workspace(&st.pool, &slug, session_id)
+        .await?
+        .expect("session just completed");
+    Ok((StatusCode::OK, Json(session_json(&row))))
+}
+
+/// POST `/api/workspaces/:slug/review-sessions/:session_id/cancel/`
+pub async fn cancel_session(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, session_id)): Path<(String, Uuid)>,
+) -> R {
+    let Some(session) = session_in_workspace(&st.pool, &slug, session_id).await? else {
+        return Ok(missing());
+    };
+    if !gate_session_read(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if !can_manage_session(&st, auth.0, &slug, &session).await? {
+        return Ok(deny());
+    }
+    if session.status != "scheduled" {
+        return Ok(bad_request("Session is not scheduled"));
+    }
+    let has_final: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM review_session_items WHERE session_id = $1 \
+         AND deleted_at IS NULL AND outcome IN ('approved', 'rejected', 'approved_with_notes'))",
+    )
+    .bind(session.id)
+    .fetch_one(&st.pool)
+    .await?;
+    if has_final {
+        return Ok(bad_request("Session already has final decisions"));
+    }
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE review_requests SET status = 'pending', updated_at = now() \
+         WHERE status = 'scheduled' AND id IN ( \
+             SELECT review_request_id FROM review_session_items \
+             WHERE session_id = $1 AND deleted_at IS NULL)",
+    )
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE review_sessions SET status = 'cancelled', cancelled_at = now(), updated_at = now(), \
+         updated_by_id = $1 WHERE id = $2 AND deleted_at IS NULL",
+    )
+    .bind(auth.0)
+    .bind(session.id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    let row = session_in_workspace(&st.pool, &slug, session_id)
+        .await?
+        .expect("session just cancelled");
+    Ok((StatusCode::OK, Json(session_json(&row))))
 }
 
 #[cfg(test)]
