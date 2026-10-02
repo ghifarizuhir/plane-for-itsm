@@ -14,11 +14,13 @@ export const reviewSessionsKey = (params: TReviewSessionListParams): string =>
 
 export const latestRequestForSubject = <T extends { submitted_at: string }>(requests: T[]): T | null => {
   if (requests.length === 0) return null;
-  return [...requests].toSorted((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0];
+  // oxlint-disable-next-line unicorn/no-array-sort
+  return [...requests].sort((a, b) => b.submitted_at.localeCompare(a.submitted_at))[0];
 };
 
 export const activeRequestForSubject = <T extends { status: string; submitted_at: string }>(requests: T[]): T | null =>
   latestRequestForSubject(requests.filter((request) => request.status === "pending" || request.status === "scheduled"));
 
 export const sortSessionsByScheduledAt = (sessions: IReviewSession[]): IReviewSession[] =>
-  [...sessions].toSorted((a, b) => b.scheduled_at.localeCompare(a.scheduled_at));
+  // oxlint-disable-next-line unicorn/no-array-sort
+  [...sessions].sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at));

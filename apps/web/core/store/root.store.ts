@@ -58,6 +58,10 @@ import type { IWarRoomStore } from "./war-room.store";
 import { WarRoomStore } from "./war-room.store";
 import type { IWarRoomFilterStore } from "./war-room_filter.store";
 import { WarRoomFilterStore } from "./war-room_filter.store";
+import type { IReleaseStore } from "./release.store";
+import { ReleaseStore } from "./release.store";
+import type { IReviewStore } from "./review.store";
+import { ReviewStore } from "./review.store";
 import type { IMultipleSelectStore } from "./multiple_select.store";
 import { MultipleSelectStore } from "./multiple_select.store";
 import type { IWorkspaceNotificationStore } from "./notifications/workspace-notifications.store";
@@ -98,6 +102,8 @@ export class CoreRootStore {
   serviceFilter: IServiceFilterStore;
   warRoom: IWarRoomStore;
   warRoomFilter: IWarRoomFilterStore;
+  release: IReleaseStore;
+  review: IReviewStore;
   projectView: IProjectViewStore;
   globalView: IGlobalViewStore;
   issue: IIssueRootStore;
@@ -142,6 +148,8 @@ export class CoreRootStore {
     this.serviceFilter = new ServiceFilterStore(this);
     this.warRoom = new WarRoomStore(this);
     this.warRoomFilter = new WarRoomFilterStore(this);
+    this.release = new ReleaseStore(this);
+    this.review = new ReviewStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);
@@ -184,6 +192,8 @@ export class CoreRootStore {
     this.serviceFilter = new ServiceFilterStore(this);
     this.warRoom = new WarRoomStore(this);
     this.warRoomFilter = new WarRoomFilterStore(this);
+    this.release = new ReleaseStore(this);
+    this.review = new ReviewStore(this);
     this.projectView = new ProjectViewStore(this);
     this.globalView = new GlobalViewStore(this);
     this.issue = new IssueRootStore(this);

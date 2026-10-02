@@ -22,12 +22,15 @@ export const orderReleases = (releases: IRelease[], orderBy: TReleaseOrderByOpti
   const sorted = [...releases];
   switch (orderBy) {
     case "name":
-      return sorted.toSorted((a, b) => a.name.localeCompare(b.name));
+      // oxlint-disable-next-line unicorn/no-array-sort
+      return sorted.sort((a, b) => a.name.localeCompare(b.name));
     case "target_date":
-      return sorted.toSorted((a, b) => (a.target_date ?? "9999-12-31").localeCompare(b.target_date ?? "9999-12-31"));
+      // oxlint-disable-next-line unicorn/no-array-sort
+      return sorted.sort((a, b) => (a.target_date ?? "9999-12-31").localeCompare(b.target_date ?? "9999-12-31"));
     case "-created_at":
     default:
-      return sorted.toSorted((a, b) => b.created_at.localeCompare(a.created_at));
+      // oxlint-disable-next-line unicorn/no-array-sort
+      return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
 };
 
