@@ -6,9 +6,9 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // components
-import { ReviewOutcomePill, ReviewRequestStatusPill } from "@/components/reviews";
-import { SubmitReleaseReviewModal } from "./submit-review-modal";
+import { ReviewOutcomePill, ReviewRequestStatusPill, SubmitReviewModal } from "@/components/reviews";
 // hooks
+import { useRelease } from "@/hooks/store/use-release";
 import { useReview } from "@/hooks/store/use-review";
 
 type Props = {
@@ -23,6 +23,7 @@ export const ReleaseReviewHistory = observer(function ReleaseReviewHistory({
   canWrite,
 }: Props) {
   const { t } = useTranslation();
+  const { updateRelease } = useRelease();
   const {
     fetchRequests,
     fetchRequestDetail,
@@ -113,11 +114,17 @@ export const ReleaseReviewHistory = observer(function ReleaseReviewHistory({
           })}
         </ul>
       )}
-      <SubmitReleaseReviewModal
+      <SubmitReviewModal
         isOpen={isSubmitOpen}
         onClose={() => setIsSubmitOpen(false)}
         workspaceSlug={workspaceSlug}
-        releaseId={releaseId}
+        boardType="rcb"
+        subjectId={releaseId}
+        title={t("release.review.submit")}
+        submitLabel={t("release.review.submit")}
+        onSubmitted={async () => {
+          await updateRelease(workspaceSlug, releaseId, { status: "in_review" });
+        }}
       />
     </section>
   );

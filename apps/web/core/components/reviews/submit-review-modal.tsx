@@ -4,26 +4,33 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { IReviewRequest, TReviewBoardType, TReviewRequestCreatePayload } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore, TextArea } from "@plane/ui";
 // hooks
-import { useRelease } from "@/hooks/store/use-release";
 import { useReview } from "@/hooks/store/use-review";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   workspaceSlug: string;
-  releaseId: string;
+  boardType: TReviewBoardType;
+  subjectId: string;
+  title: string;
+  submitLabel: string;
+  onSubmitted?: (request: IReviewRequest) => void | Promise<void>;
 };
 
-export const SubmitReleaseReviewModal = observer(function SubmitReleaseReviewModal({
+export const SubmitReviewModal = observer(function SubmitReviewModal({
   isOpen,
   onClose,
   workspaceSlug,
-  releaseId,
+  boardType,
+  subjectId,
+  title,
+  submitLabel,
+  onSubmitted,
 }: Props) {
   const { t } = useTranslation();
-  const { updateRelease } = useRelease();
   const { submitRequest } = useReview();
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,21 +38,21 @@ export const SubmitReleaseReviewModal = observer(function SubmitReleaseReviewMod
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      await submitRequest(workspaceSlug, {
-        board_type: "rcb",
-        release_id: releaseId,
-        submission_note: note.trim(),
-      });
-      // Konvensi: submit menandai release in_review (bukan gate).
-      await updateRelease(workspaceSlug, releaseId, { status: "in_review" });
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "Success!", message: t("release.review.submitted") });
+      const payload: TReviewRequestCreatePayload =
+        boardType === "rcb"
+          ? { board_type: "rcb", release_id: subjectId, submission_note: note.trim() }
+          : { board_type: "tcb", change_issue_id: subjectId, submission_note: note.trim() };
+      const request = await submitRequest(workspaceSlug, payload);
+      if (onSubmitted) await onSubmitted(request);
+      setToast({ type: TOAST_TYPE.SUCCESS, title: "Success!", message: t("review.request.submitted") });
+      setNote("");
       onClose();
     } catch (error) {
       const apiError = error as { detail?: string; error?: string };
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "Error!",
-        message: apiError?.detail ?? apiError?.error ?? t("release.review.submit_failed"),
+        message: apiError?.detail ?? apiError?.error ?? t("review.request.submit_failed"),
       });
     } finally {
       setIsSubmitting(false);
@@ -55,13 +62,13 @@ export const SubmitReleaseReviewModal = observer(function SubmitReleaseReviewMod
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.TOP} width={EModalWidth.LG}>
       <div className="space-y-4 p-5">
-        <h3 className="text-13 font-semibold text-primary">{t("release.review.submit")}</h3>
+        <h3 className="text-13 font-semibold text-primary">{title}</h3>
         <div>
-          <label className="mb-1 block text-12 text-secondary">{t("release.review.note_label")}</label>
+          <label className="mb-1 block text-12 text-secondary">{t("review.request.submission_note")}</label>
           <TextArea
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder={t("release.review.note_placeholder")}
+            placeholder={t("review.request.note_placeholder")}
             rows={4}
           />
         </div>
@@ -70,7 +77,7 @@ export const SubmitReleaseReviewModal = observer(function SubmitReleaseReviewMod
             {t("cancel")}
           </Button>
           <Button variant="primary" size="lg" loading={isSubmitting} onClick={() => void handleSubmit()}>
-            {t("release.review.submit")}
+            {submitLabel}
           </Button>
         </div>
       </div>
