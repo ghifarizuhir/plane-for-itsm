@@ -7,6 +7,10 @@ use api::routes::release::{
     changes_create, changes_destroy, changes_list, create, destroy, detail, list, patch,
     CreateRelease, LinkChanges, ListParams, PatchRelease,
 };
+use api::routes::review::{
+    list_requests, request_detail, submit_request, withdraw_request, RequestListParams,
+    SubmitRequest,
+};
 use api::state::AppState;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -747,6 +751,211 @@ async fn changes_destroy_unlinks() {
     .await
     .expect("idempotent unlink");
     assert_eq!(status, StatusCode::NO_CONTENT);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+fn submit_body(board: &str, change: Option<Uuid>, release: Option<Uuid>) -> SubmitRequest {
+    SubmitRequest {
+        board_type: Some(board.to_string()),
+        change_issue_id: change,
+        release_id: release,
+        submission_note: Some("Bukti uji terlampir".to_string()),
+    }
+}
+
+fn no_request_filters(board: &str, project_id: Option<Uuid>) -> RequestListParams {
+    RequestListParams {
+        board_type: board.to_string(),
+        project_id,
+        status: None,
+        change_issue_id: None,
+        release_id: None,
+    }
+}
+
+#[tokio::test]
+async fn submit_change_request_tcb_dedupes_and_gates() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+
+    let (status, Json(body)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["board_type"], "tcb");
+    assert_eq!(body["status"], "pending");
+    assert_eq!(body["project_id"].as_str().unwrap(), scratch.project_id.to_string());
+    assert_eq!(body["subject"]["kind"], "change");
+    assert!(body["subject"]["issue"]["identifier"]
+        .as_str()
+        .unwrap()
+        .ends_with("-1"));
+
+    let (status, Json(body)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("duplicate submit");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "An active review request already exists for this subject"
+    );
+
+    let outsider = scratch.add_actor(&st.pool, Some(15)).await;
+    let (status, _) = submit_request(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("outsider submit");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, Json(body)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(Uuid::new_v4()), None)),
+    )
+    .await
+    .expect("missing issue");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Invalid change_issue_id - object does not exist.");
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn submit_release_request_rcb_and_list_filters() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_, Json(release)) = create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body("Rilis RCB")),
+    )
+    .await
+    .expect("create release");
+    let rid = release_id(&release);
+
+    let (status, Json(body)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("rcb", None, Some(rid))),
+    )
+    .await
+    .expect("submit rcb");
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["board_type"], "rcb");
+    assert!(body["project_id"].is_null());
+    assert_eq!(body["subject"]["kind"], "release");
+    assert_eq!(body["subject"]["release"]["sequence_id"], 1);
+
+    let (_, Json(rcb)) = list_requests(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(no_request_filters("rcb", None)),
+    )
+    .await
+    .expect("list rcb");
+    assert_eq!(rcb.as_array().unwrap().len(), 1);
+
+    let (status, Json(body)) = list_requests(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(no_request_filters("tcb", None)),
+    )
+    .await
+    .expect("list tcb missing project");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "project_id is required for TCB");
+
+    let (_, Json(tcb)) = list_requests(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Query(no_request_filters("tcb", Some(scratch.project_id))),
+    )
+    .await
+    .expect("list tcb");
+    assert_eq!(tcb.as_array().unwrap().len(), 0);
+
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn request_detail_history_and_withdraw() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    let request_id: Uuid = request["id"].as_str().unwrap().parse().unwrap();
+
+    let (status, Json(body)) = request_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["history"].as_array().unwrap().len(), 0);
+
+    let member = scratch.add_actor(&st.pool, Some(15)).await;
+    let (status, _) = withdraw_request(
+        State(st.clone()),
+        AuthUser(member),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("member withdraw");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, Json(body)) = withdraw_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("withdraw");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "withdrawn");
+
+    let (status, Json(body)) = withdraw_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), request_id)),
+    )
+    .await
+    .expect("withdraw again");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body["error"],
+        "Only pending or scheduled requests can be withdrawn"
+    );
 
     scratch.cleanup(&st.pool).await;
 }

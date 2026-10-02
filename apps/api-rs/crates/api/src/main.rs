@@ -820,6 +820,21 @@ async fn main() {
             "/api/workspaces/:slug/releases/:pk/changes/:issue_id/",
             delete(routes::release::changes_destroy),
         )
+        // Review control boards (RCB/TCB) — requests. Session auth. TCB =
+        // project member; RCB = workspace member. Spec:
+        // docs/superpowers/specs/2026-10-02-release-testing-control-boards-design.md
+        .route(
+            "/api/workspaces/:slug/review-requests/",
+            get(routes::review::list_requests).post(routes::review::submit_request),
+        )
+        .route(
+            "/api/workspaces/:slug/review-requests/:request_id/",
+            get(routes::review::request_detail),
+        )
+        .route(
+            "/api/workspaces/:slug/review-requests/:request_id/withdraw/",
+            post(routes::review::withdraw_request),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror
