@@ -33,6 +33,13 @@
     },
     "queue_tab": "Kuyruk",
     "sessions_tab": "Oturumlar",
+    "all_statuses": "Tüm durumlar",
+    "queue": {
+      "subject": "Konu",
+      "status": "Durum",
+      "submitted_at": "Gönderildi",
+      "session": "Oturum"
+    },
     "load_error": {
       "title": "Kurul yüklenemedi",
       "description": "İnceleme verileri alınırken bir hata oluştu.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Değişiklik TCB'ye gönderildi.",
       "withdrawn": "İstek geri çekildi.",
+      "submit": "Gönder",
       "submit_failed": "İstek gönderilemedi. Lütfen tekrar deneyin.",
       "withdraw_failed": "İstek geri çekilemedi. Lütfen tekrar deneyin.",
-      "submission_note": "Gönderim notu"
+      "submission_note": "Gönderim notu",
+      "note_placeholder": "Değişikliği, riskleri ve test kanıtlarını özetleyin"
+    },
+    "change": {
+      "submit": "TCB'ye gönder",
+      "resubmit": "Yeniden gönder",
+      "withdraw": "Geri çek"
     },
     "tcb": {
       "badge_pending": "TCB bekliyor",
@@ -69,12 +83,17 @@
       "title_label": "Oturum başlığı",
       "scheduled_at": "Tarih ve saat",
       "location": "Konum",
+      "status": "Durum",
+      "items_count": "Gündem maddeleri",
+      "participants_count": "Katılımcılar",
       "minutes": "Tutanak",
       "minutes_placeholder": "Toplantı tutanağını buraya yazın",
       "complete": "Oturumu tamamla",
       "cancel": "Oturumu iptal et",
       "complete_failed": "Oturum tamamlanamadı. Lütfen tekrar deneyin.",
       "cancel_failed": "Oturum iptal edilemedi. Lütfen tekrar deneyin.",
+      "complete_confirm": "Bu oturum tamamlansın mı? Bekleyen kararlar ertelenmiş olarak kaydedilecek.",
+      "cancel_confirm": "Bu oturum iptal edilsin mi? Nihai kararı olan oturumlar iptal edilemez.",
       "created": "Oturum planlandı.",
       "updated": "Oturum güncellendi.",
       "completed": "Oturum tamamlandı.",
@@ -89,6 +108,7 @@
       "add": "Gündeme ekle",
       "add_confirm": "İstekleri ekle",
       "remove": "Gündemden çıkar",
+      "record": "Kararı kaydet",
       "remove_failed": "İstek çıkarılamadı. Lütfen tekrar deneyin.",
       "add_failed": "İstekler eklenemedi. Lütfen tekrar deneyin.",
       "outcome_label": "Karar",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Katılımcı ekle",
+      "select_member": "Üye seç",
       "role": "Rol",
       "attendance": "Katılım",
       "remove": "Kaldır",

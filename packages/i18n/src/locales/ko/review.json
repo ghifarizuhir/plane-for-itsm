@@ -33,6 +33,13 @@
     },
     "queue_tab": "대기열",
     "sessions_tab": "세션",
+    "all_statuses": "모든 상태",
+    "queue": {
+      "subject": "주제",
+      "status": "상태",
+      "submitted_at": "제출일",
+      "session": "세션"
+    },
     "load_error": {
       "title": "위원회를 불러오지 못했습니다",
       "description": "검토 데이터를 가져오는 중 오류가 발생했습니다.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "변경 사항이 TCB에 제출되었습니다.",
       "withdrawn": "요청이 철회되었습니다.",
+      "submit": "제출",
       "submit_failed": "요청을 제출하지 못했습니다. 다시 시도하세요.",
       "withdraw_failed": "요청을 철회하지 못했습니다. 다시 시도하세요.",
-      "submission_note": "제출 메모"
+      "submission_note": "제출 메모",
+      "note_placeholder": "변경 내용, 위험 및 테스트 근거를 요약해 주세요"
+    },
+    "change": {
+      "submit": "TCB에 제출",
+      "resubmit": "다시 제출",
+      "withdraw": "철회"
     },
     "tcb": {
       "badge_pending": "TCB 대기 중",
@@ -69,12 +83,17 @@
       "title_label": "세션 제목",
       "scheduled_at": "날짜 및 시간",
       "location": "장소",
+      "status": "상태",
+      "items_count": "안건 항목",
+      "participants_count": "참가자",
       "minutes": "회의록",
       "minutes_placeholder": "회의록을 여기에 작성하세요",
       "complete": "세션 완료",
       "cancel": "세션 취소",
       "complete_failed": "세션을 완료하지 못했습니다. 다시 시도하세요.",
       "cancel_failed": "세션을 취소하지 못했습니다. 다시 시도하세요.",
+      "complete_confirm": "이 세션을 완료하시겠습니까? 대기 중인 결정은 연기됨으로 기록됩니다.",
+      "cancel_confirm": "이 세션을 취소하시겠습니까? 최종 결정이 있는 세션은 취소할 수 없습니다.",
       "created": "세션이 계획되었습니다.",
       "updated": "세션이 업데이트되었습니다.",
       "completed": "세션이 완료되었습니다.",
@@ -89,6 +108,7 @@
       "add": "안건에 추가",
       "add_confirm": "요청 추가",
       "remove": "안건에서 제거",
+      "record": "결정 기록",
       "remove_failed": "요청을 제거하지 못했습니다. 다시 시도하세요.",
       "add_failed": "요청을 추가하지 못했습니다. 다시 시도하세요.",
       "outcome_label": "결정",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "참가자 추가",
+      "select_member": "구성원 선택",
       "role": "역할",
       "attendance": "출석",
       "remove": "제거",

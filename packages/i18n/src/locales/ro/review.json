@@ -33,6 +33,13 @@
     },
     "queue_tab": "Coadă",
     "sessions_tab": "Ședințe",
+    "all_statuses": "Toate stările",
+    "queue": {
+      "subject": "Subiect",
+      "status": "Starea",
+      "submitted_at": "Trimis",
+      "session": "Ședință"
+    },
     "load_error": {
       "title": "Comitetul nu a putut fi încărcat",
       "description": "A apărut o eroare la preluarea datelor de revizuire.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Modificarea a fost trimisă la TCB.",
       "withdrawn": "Cererea a fost retrasă.",
+      "submit": "Trimiteți",
       "submit_failed": "Cererea nu a putut fi trimisă. Încercați din nou.",
       "withdraw_failed": "Cererea nu a putut fi retrasă. Încercați din nou.",
-      "submission_note": "Nota de trimitere"
+      "submission_note": "Nota de trimitere",
+      "note_placeholder": "Rezumă modificarea, riscurile și dovezile de testare"
+    },
+    "change": {
+      "submit": "Trimiteți la TCB",
+      "resubmit": "Trimiteți din nou",
+      "withdraw": "Retrageți"
     },
     "tcb": {
       "badge_pending": "TCB în așteptare",
@@ -69,12 +83,17 @@
       "title_label": "Titlul ședinței",
       "scheduled_at": "Data și ora",
       "location": "Locația",
+      "status": "Starea",
+      "items_count": "Puncte de pe ordinea de zi",
+      "participants_count": "Participanți",
       "minutes": "Procesul-verbal",
       "minutes_placeholder": "Scrieți aici procesul-verbal al ședinței",
       "complete": "Finalizați ședința",
       "cancel": "Anulați ședința",
       "complete_failed": "Ședința nu a putut fi finalizată. Încercați din nou.",
       "cancel_failed": "Ședința nu a putut fi anulată. Încercați din nou.",
+      "complete_confirm": "Finalizați această ședință? Deciziile în așteptare vor fi înregistrate ca amânate.",
+      "cancel_confirm": "Anulați această ședință? Ședințele cu decizii finale nu pot fi anulate.",
       "created": "Ședința a fost programată.",
       "updated": "Ședința a fost actualizată.",
       "completed": "Ședința a fost finalizată.",
@@ -89,6 +108,7 @@
       "add": "Adăugați la ordinea de zi",
       "add_confirm": "Adăugați cereri",
       "remove": "Eliminați de pe ordinea de zi",
+      "record": "Înregistrați decizia",
       "remove_failed": "Cererea nu a putut fi eliminată. Încercați din nou.",
       "add_failed": "Cererile nu au putut fi adăugate. Încercați din nou.",
       "outcome_label": "Decizia",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Adăugați participant",
+      "select_member": "Selectați un membru",
       "role": "Rolul",
       "attendance": "Prezența",
       "remove": "Eliminați",

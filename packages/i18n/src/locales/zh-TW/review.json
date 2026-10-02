@@ -33,6 +33,13 @@
     },
     "queue_tab": "佇列",
     "sessions_tab": "會議",
+    "all_statuses": "全部狀態",
+    "queue": {
+      "subject": "主旨",
+      "status": "狀態",
+      "submitted_at": "已提交",
+      "session": "會議"
+    },
     "load_error": {
       "title": "無法載入委員會",
       "description": "取得審查資料時發生錯誤。",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "變更已提交至 TCB。",
       "withdrawn": "請求已撤回。",
+      "submit": "提交",
       "submit_failed": "無法提交請求，請重試。",
       "withdraw_failed": "無法撤回請求，請重試。",
-      "submission_note": "提交說明"
+      "submission_note": "提交說明",
+      "note_placeholder": "概述變更內容、風險和測試證據"
+    },
+    "change": {
+      "submit": "提交至 TCB",
+      "resubmit": "重新提交",
+      "withdraw": "撤回"
     },
     "tcb": {
       "badge_pending": "TCB 待定",
@@ -69,12 +83,17 @@
       "title_label": "會議標題",
       "scheduled_at": "日期時間",
       "location": "地點",
+      "status": "狀態",
+      "items_count": "議程事項",
+      "participants_count": "與會人",
       "minutes": "會議記錄",
       "minutes_placeholder": "請在此填寫會議記錄",
       "complete": "完成會議",
       "cancel": "取消會議",
       "complete_failed": "無法完成會議，請重試。",
       "cancel_failed": "無法取消會議，請重試。",
+      "complete_confirm": "完成此會議嗎？待定的決定將被記錄為延期。",
+      "cancel_confirm": "取消此會議嗎？已有最終決定的會議無法取消。",
       "created": "會議已安排。",
       "updated": "會議已更新。",
       "completed": "會議已完成。",
@@ -89,6 +108,7 @@
       "add": "新增至議程",
       "add_confirm": "新增請求",
       "remove": "從議程移除",
+      "record": "記錄決定",
       "remove_failed": "無法移除請求，請重試。",
       "add_failed": "無法新增請求，請重試。",
       "outcome_label": "決定",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "新增與會人",
+      "select_member": "選擇成員",
       "role": "角色",
       "attendance": "出席狀況",
       "remove": "移除",

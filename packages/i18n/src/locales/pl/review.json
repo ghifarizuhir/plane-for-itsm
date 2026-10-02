@@ -33,6 +33,13 @@
     },
     "queue_tab": "Kolejka",
     "sessions_tab": "Posiedzenia",
+    "all_statuses": "Wszystkie statusy",
+    "queue": {
+      "subject": "Temat",
+      "status": "Status",
+      "submitted_at": "Zgłoszono",
+      "session": "Posiedzenie"
+    },
     "load_error": {
       "title": "Nie można wczytać komitetu",
       "description": "Podczas pobierania danych przeglądu wystąpił błąd.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Zmiana przesłana do TCB.",
       "withdrawn": "Wniosek wycofany.",
+      "submit": "Prześlij",
       "submit_failed": "Nie można przesłać wniosku. Spróbuj ponownie.",
       "withdraw_failed": "Nie można wycofać wniosku. Spróbuj ponownie.",
-      "submission_note": "Notatka do zgłoszenia"
+      "submission_note": "Notatka do zgłoszenia",
+      "note_placeholder": "Podsumuj zmianę, ryzyka i dowody testów"
+    },
+    "change": {
+      "submit": "Prześlij do TCB",
+      "resubmit": "Prześlij ponownie",
+      "withdraw": "Wycofaj"
     },
     "tcb": {
       "badge_pending": "TCB oczekujące",
@@ -69,12 +83,17 @@
       "title_label": "Tytuł posiedzenia",
       "scheduled_at": "Data i godzina",
       "location": "Miejsce",
+      "status": "Status",
+      "items_count": "Punkty porządku obrad",
+      "participants_count": "Uczestnicy",
       "minutes": "Protokół",
       "minutes_placeholder": "Wpisz tutaj protokół ze spotkania",
       "complete": "Zakończ posiedzenie",
       "cancel": "Anuluj posiedzenie",
       "complete_failed": "Nie można zakończyć posiedzenia. Spróbuj ponownie.",
       "cancel_failed": "Nie można anulować posiedzenia. Spróbuj ponownie.",
+      "complete_confirm": "Zakończyć to posiedzenie? Oczekujące decyzje zostaną zapisane jako odroczone.",
+      "cancel_confirm": "Anulować to posiedzenie? Posiedzeń z ostatecznymi decyzjami nie można anulować.",
       "created": "Posiedzenie zaplanowane.",
       "updated": "Posiedzenie zaktualizowane.",
       "completed": "Posiedzenie zakończone.",
@@ -89,6 +108,7 @@
       "add": "Dodaj do porządku obrad",
       "add_confirm": "Dodaj wnioski",
       "remove": "Usuń z porządku obrad",
+      "record": "Zapisz decyzję",
       "remove_failed": "Nie można usunąć wniosku. Spróbuj ponownie.",
       "add_failed": "Nie można dodać wniosków. Spróbuj ponownie.",
       "outcome_label": "Decyzja",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Dodaj uczestnika",
+      "select_member": "Wybierz członka",
       "role": "Rola",
       "attendance": "Obecność",
       "remove": "Usuń",

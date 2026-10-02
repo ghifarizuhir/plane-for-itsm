@@ -33,6 +33,13 @@
     },
     "queue_tab": "Fila",
     "sessions_tab": "Sessões",
+    "all_statuses": "Todos os status",
+    "queue": {
+      "subject": "Assunto",
+      "status": "Status",
+      "submitted_at": "Enviado",
+      "session": "Sessão"
+    },
     "load_error": {
       "title": "Não foi possível carregar o comitê",
       "description": "Ocorreu um erro ao buscar os dados de revisão.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Mudança enviada ao TCB.",
       "withdrawn": "Solicitação retirada.",
+      "submit": "Enviar",
       "submit_failed": "Não foi possível enviar a solicitação. Tente novamente.",
       "withdraw_failed": "Não foi possível retirar a solicitação. Tente novamente.",
-      "submission_note": "Nota de envio"
+      "submission_note": "Nota de envio",
+      "note_placeholder": "Resuma a mudança, os riscos e as evidências de teste"
+    },
+    "change": {
+      "submit": "Enviar ao TCB",
+      "resubmit": "Enviar novamente",
+      "withdraw": "Retirar"
     },
     "tcb": {
       "badge_pending": "TCB pendente",
@@ -69,12 +83,17 @@
       "title_label": "Título da sessão",
       "scheduled_at": "Data e hora",
       "location": "Local",
+      "status": "Status",
+      "items_count": "Itens da pauta",
+      "participants_count": "Participantes",
       "minutes": "Ata",
       "minutes_placeholder": "Escreva aqui a ata da reunião",
       "complete": "Concluir sessão",
       "cancel": "Cancelar sessão",
       "complete_failed": "Não foi possível concluir a sessão. Tente novamente.",
       "cancel_failed": "Não foi possível cancelar a sessão. Tente novamente.",
+      "complete_confirm": "Concluir esta sessão? Decisões pendentes serão registradas como adiadas.",
+      "cancel_confirm": "Cancelar esta sessão? Sessões com decisões finais não podem ser canceladas.",
       "created": "Sessão agendada.",
       "updated": "Sessão atualizada.",
       "completed": "Sessão concluída.",
@@ -89,6 +108,7 @@
       "add": "Adicionar à pauta",
       "add_confirm": "Adicionar solicitações",
       "remove": "Remover da pauta",
+      "record": "Registrar decisão",
       "remove_failed": "Não foi possível remover a solicitação. Tente novamente.",
       "add_failed": "Não foi possível adicionar as solicitações. Tente novamente.",
       "outcome_label": "Decisão",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Adicionar participante",
+      "select_member": "Selecionar um membro",
       "role": "Função",
       "attendance": "Presença",
       "remove": "Remover",

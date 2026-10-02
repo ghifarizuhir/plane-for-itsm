@@ -33,6 +33,13 @@
     },
     "queue_tab": "Coda",
     "sessions_tab": "Sessioni",
+    "all_statuses": "Tutti gli stati",
+    "queue": {
+      "subject": "Oggetto",
+      "status": "Stato",
+      "submitted_at": "Inviato",
+      "session": "Sessione"
+    },
     "load_error": {
       "title": "Impossibile caricare il comitato",
       "description": "Si è verificato un errore durante il caricamento dei dati di revisione.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Modifica inviata a TCB.",
       "withdrawn": "Richiesta ritirata.",
+      "submit": "Invia",
       "submit_failed": "Impossibile inviare la richiesta. Riprovi.",
       "withdraw_failed": "Impossibile ritirare la richiesta. Riprovi.",
-      "submission_note": "Nota di invio"
+      "submission_note": "Nota di invio",
+      "note_placeholder": "Riepiloga la modifica, i rischi e le evidenze di test"
+    },
+    "change": {
+      "submit": "Invia a TCB",
+      "resubmit": "Invia di nuovo",
+      "withdraw": "Ritira"
     },
     "tcb": {
       "badge_pending": "TCB in attesa",
@@ -69,12 +83,17 @@
       "title_label": "Titolo sessione",
       "scheduled_at": "Data e ora",
       "location": "Luogo",
+      "status": "Stato",
+      "items_count": "Punti all'ordine del giorno",
+      "participants_count": "Partecipanti",
       "minutes": "Verbale",
       "minutes_placeholder": "Scriva qui il verbale della riunione",
       "complete": "Completa sessione",
       "cancel": "Annulla sessione",
       "complete_failed": "Impossibile completare la sessione. Riprovi.",
       "cancel_failed": "Impossibile annullare la sessione. Riprovi.",
+      "complete_confirm": "Completare questa sessione? Le decisioni in sospeso verranno registrate come rinviate.",
+      "cancel_confirm": "Annullare questa sessione? Le sessioni con decisioni definitive non possono essere annullate.",
       "created": "Sessione pianificata.",
       "updated": "Sessione aggiornata.",
       "completed": "Sessione completata.",
@@ -89,6 +108,7 @@
       "add": "Aggiungi all'ordine del giorno",
       "add_confirm": "Aggiungi richieste",
       "remove": "Rimuovi dall'ordine del giorno",
+      "record": "Registra decisione",
       "remove_failed": "Impossibile rimuovere la richiesta. Riprovi.",
       "add_failed": "Impossibile aggiungere le richieste. Riprovi.",
       "outcome_label": "Decisione",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Aggiungi partecipante",
+      "select_member": "Seleziona un membro",
       "role": "Ruolo",
       "attendance": "Presenza",
       "remove": "Rimuovi",

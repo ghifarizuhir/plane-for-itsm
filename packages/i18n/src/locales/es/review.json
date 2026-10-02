@@ -33,6 +33,13 @@
     },
     "queue_tab": "Cola",
     "sessions_tab": "Sesiones",
+    "all_statuses": "Todos los estados",
+    "queue": {
+      "subject": "Asunto",
+      "status": "Estado",
+      "submitted_at": "Enviado",
+      "session": "Sesión"
+    },
     "load_error": {
       "title": "No se pudo cargar el comité",
       "description": "Ocurrió un error al obtener los datos de revisión.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Cambio enviado al TCB.",
       "withdrawn": "Solicitud retirada.",
+      "submit": "Enviar",
       "submit_failed": "No se pudo enviar la solicitud. Inténtelo de nuevo.",
       "withdraw_failed": "No se pudo retirar la solicitud. Inténtelo de nuevo.",
-      "submission_note": "Nota de envío"
+      "submission_note": "Nota de envío",
+      "note_placeholder": "Resume el cambio, los riesgos y la evidencia de pruebas"
+    },
+    "change": {
+      "submit": "Enviar al TCB",
+      "resubmit": "Enviar de nuevo",
+      "withdraw": "Retirar"
     },
     "tcb": {
       "badge_pending": "TCB pendiente",
@@ -69,12 +83,17 @@
       "title_label": "Título de la sesión",
       "scheduled_at": "Fecha y hora",
       "location": "Ubicación",
+      "status": "Estado",
+      "items_count": "Puntos de la agenda",
+      "participants_count": "Participantes",
       "minutes": "Acta",
       "minutes_placeholder": "Escriba aquí el acta de la reunión",
       "complete": "Completar sesión",
       "cancel": "Cancelar sesión",
       "complete_failed": "No se pudo completar la sesión. Inténtelo de nuevo.",
       "cancel_failed": "No se pudo cancelar la sesión. Inténtelo de nuevo.",
+      "complete_confirm": "¿Completar esta sesión? Las decisiones pendientes se registrarán como aplazadas.",
+      "cancel_confirm": "¿Cancelar esta sesión? Las sesiones con decisiones finales no se pueden cancelar.",
       "created": "Sesión programada.",
       "updated": "Sesión actualizada.",
       "completed": "Sesión completada.",
@@ -89,6 +108,7 @@
       "add": "Agregar a la agenda",
       "add_confirm": "Agregar solicitudes",
       "remove": "Quitar de la agenda",
+      "record": "Registrar decisión",
       "remove_failed": "No se pudo quitar la solicitud. Inténtelo de nuevo.",
       "add_failed": "No se pudieron agregar las solicitudes. Inténtelo de nuevo.",
       "outcome_label": "Decisión",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Agregar participante",
+      "select_member": "Seleccionar un miembro",
       "role": "Rol",
       "attendance": "Asistencia",
       "remove": "Quitar",

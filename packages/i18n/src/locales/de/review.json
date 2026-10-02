@@ -33,6 +33,13 @@
     },
     "queue_tab": "Warteschlange",
     "sessions_tab": "Sitzungen",
+    "all_statuses": "Alle Status",
+    "queue": {
+      "subject": "Betreff",
+      "status": "Status",
+      "submitted_at": "Eingereicht",
+      "session": "Sitzung"
+    },
     "load_error": {
       "title": "Das Board konnte nicht geladen werden",
       "description": "Beim Laden der Review-Daten ist ein Fehler aufgetreten.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Änderung an das TCB gesendet.",
       "withdrawn": "Anfrage zurückgezogen.",
+      "submit": "Senden",
       "submit_failed": "Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
       "withdraw_failed": "Die Anfrage konnte nicht zurückgezogen werden. Bitte versuchen Sie es erneut.",
-      "submission_note": "Einreichungsnotiz"
+      "submission_note": "Einreichungsnotiz",
+      "note_placeholder": "Änderung, Risiken und Testnachweise zusammenfassen"
+    },
+    "change": {
+      "submit": "An TCB senden",
+      "resubmit": "Erneut senden",
+      "withdraw": "Zurückziehen"
     },
     "tcb": {
       "badge_pending": "TCB ausstehend",
@@ -69,12 +83,17 @@
       "title_label": "Sitzungstitel",
       "scheduled_at": "Datum und Uhrzeit",
       "location": "Ort",
+      "status": "Status",
+      "items_count": "Tagesordnungspunkte",
+      "participants_count": "Teilnehmer",
       "minutes": "Protokoll",
       "minutes_placeholder": "Schreiben Sie hier das Sitzungsprotokoll",
       "complete": "Sitzung abschließen",
       "cancel": "Sitzung abbrechen",
       "complete_failed": "Die Sitzung konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
       "cancel_failed": "Die Sitzung konnte nicht abgebrochen werden. Bitte versuchen Sie es erneut.",
+      "complete_confirm": "Diese Sitzung abschließen? Ausstehende Entscheidungen werden als zurückgestellt erfasst.",
+      "cancel_confirm": "Diese Sitzung abbrechen? Sitzungen mit endgültigen Entscheidungen können nicht abgebrochen werden.",
       "created": "Sitzung geplant.",
       "updated": "Sitzung aktualisiert.",
       "completed": "Sitzung abgeschlossen.",
@@ -89,6 +108,7 @@
       "add": "Zur Agenda hinzufügen",
       "add_confirm": "Anfragen hinzufügen",
       "remove": "Von Agenda entfernen",
+      "record": "Entscheidung festhalten",
       "remove_failed": "Die Anfrage konnte nicht entfernt werden. Bitte versuchen Sie es erneut.",
       "add_failed": "Die Anfragen konnten nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
       "outcome_label": "Entscheidung",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Teilnehmer hinzufügen",
+      "select_member": "Mitglied auswählen",
       "role": "Rolle",
       "attendance": "Anwesenheit",
       "remove": "Entfernen",

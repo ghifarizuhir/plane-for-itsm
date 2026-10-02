@@ -33,6 +33,13 @@
     },
     "queue_tab": "Antrean",
     "sessions_tab": "Sesi",
+    "all_statuses": "Semua status",
+    "queue": {
+      "subject": "Subjek",
+      "status": "Status",
+      "submitted_at": "Diajukan",
+      "session": "Sesi"
+    },
     "load_error": {
       "title": "Board tidak dapat dimuat",
       "description": "Terjadi kesalahan saat memuat data review.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Perubahan diajukan ke TCB.",
       "withdrawn": "Pengajuan ditarik.",
+      "submit": "Ajukan",
       "submit_failed": "Pengajuan tidak dapat dikirim. Silakan coba lagi.",
       "withdraw_failed": "Pengajuan tidak dapat ditarik. Silakan coba lagi.",
-      "submission_note": "Catatan pengajuan"
+      "submission_note": "Catatan pengajuan",
+      "note_placeholder": "Ringkas perubahan, risiko, dan bukti pengujian"
+    },
+    "change": {
+      "submit": "Ajukan ke TCB",
+      "resubmit": "Ajukan lagi",
+      "withdraw": "Tarik"
     },
     "tcb": {
       "badge_pending": "TCB menunggu",
@@ -69,12 +83,17 @@
       "title_label": "Judul sesi",
       "scheduled_at": "Tanggal dan waktu",
       "location": "Lokasi",
+      "status": "Status",
+      "items_count": "Item agenda",
+      "participants_count": "Peserta",
       "minutes": "Notulen",
       "minutes_placeholder": "Tulis notulen rapat di sini",
       "complete": "Selesaikan sesi",
       "cancel": "Batalkan sesi",
       "complete_failed": "Sesi tidak dapat diselesaikan. Silakan coba lagi.",
       "cancel_failed": "Sesi tidak dapat dibatalkan. Silakan coba lagi.",
+      "complete_confirm": "Selesaikan sesi ini? Keputusan yang menunggu akan dicatat sebagai ditunda.",
+      "cancel_confirm": "Batalkan sesi ini? Sesi dengan keputusan final tidak dapat dibatalkan.",
       "created": "Sesi dijadwalkan.",
       "updated": "Sesi diperbarui.",
       "completed": "Sesi selesai.",
@@ -89,6 +108,7 @@
       "add": "Tambah ke agenda",
       "add_confirm": "Tambah pengajuan",
       "remove": "Hapus dari agenda",
+      "record": "Catat keputusan",
       "remove_failed": "Pengajuan tidak dapat dihapus. Silakan coba lagi.",
       "add_failed": "Pengajuan tidak dapat ditambahkan. Silakan coba lagi.",
       "outcome_label": "Keputusan",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Tambah peserta",
+      "select_member": "Pilih anggota",
       "role": "Peran",
       "attendance": "Kehadiran",
       "remove": "Hapus",

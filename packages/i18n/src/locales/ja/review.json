@@ -33,6 +33,13 @@
     },
     "queue_tab": "キュー",
     "sessions_tab": "セッション",
+    "all_statuses": "すべてのステータス",
+    "queue": {
+      "subject": "件名",
+      "status": "ステータス",
+      "submitted_at": "提出日",
+      "session": "セッション"
+    },
     "load_error": {
       "title": "ボードを読み込めませんでした",
       "description": "レビューデータの取得中にエラーが発生しました。",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "変更をTCBに提出しました。",
       "withdrawn": "依頼を取下げました。",
+      "submit": "提出する",
       "submit_failed": "依頼を提出できませんでした。もう一度お試しください。",
       "withdraw_failed": "依頼を取下げることができませんでした。もう一度お試しください。",
-      "submission_note": "提出メモ"
+      "submission_note": "提出メモ",
+      "note_placeholder": "変更内容、リスク、テストの証跡を要約してください"
+    },
+    "change": {
+      "submit": "TCBに提出",
+      "resubmit": "再提出",
+      "withdraw": "取下げ"
     },
     "tcb": {
       "badge_pending": "TCB 保留中",
@@ -69,12 +83,17 @@
       "title_label": "セッション名",
       "scheduled_at": "日時",
       "location": "場所",
+      "status": "ステータス",
+      "items_count": "アジェンダ項目",
+      "participants_count": "参加者",
       "minutes": "議事録",
       "minutes_placeholder": "会議の議事録をここに記入してください",
       "complete": "セッションを完了",
       "cancel": "セッションをキャンセル",
       "complete_failed": "セッションを完了できませんでした。もう一度お試しください。",
       "cancel_failed": "セッションをキャンセルできませんでした。もう一度お試しください。",
+      "complete_confirm": "このセッションを完了しますか？未決定の項目は延期として記録されます。",
+      "cancel_confirm": "このセッションをキャンセルしますか？最終決定のあるセッションはキャンセルできません。",
       "created": "セッションを予定しました。",
       "updated": "セッションを更新しました。",
       "completed": "セッションを完了しました。",
@@ -89,6 +108,7 @@
       "add": "アジェンダに追加",
       "add_confirm": "依頼を追加",
       "remove": "アジェンダから削除",
+      "record": "決定を記録する",
       "remove_failed": "依頼を削除できませんでした。もう一度お試しください。",
       "add_failed": "依頼を追加できませんでした。もう一度お試しください。",
       "outcome_label": "決定",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "参加者を追加",
+      "select_member": "メンバーを選択する",
       "role": "役割",
       "attendance": "出欠",
       "remove": "削除",

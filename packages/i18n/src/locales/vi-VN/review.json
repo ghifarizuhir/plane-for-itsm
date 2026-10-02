@@ -33,6 +33,13 @@
     },
     "queue_tab": "Hàng đợi",
     "sessions_tab": "Phiên họp",
+    "all_statuses": "Tất cả trạng thái",
+    "queue": {
+      "subject": "Chủ đề",
+      "status": "Trạng thái",
+      "submitted_at": "Đã gửi",
+      "session": "Phiên họp"
+    },
     "load_error": {
       "title": "Không tải được hội đồng",
       "description": "Đã xảy ra lỗi khi tải dữ liệu rà soát.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Thay đổi đã được gửi lên TCB.",
       "withdrawn": "Đã rút yêu cầu.",
+      "submit": "Gửi",
       "submit_failed": "Không thể gửi yêu cầu. Vui lòng thử lại.",
       "withdraw_failed": "Không thể rút yêu cầu. Vui lòng thử lại.",
-      "submission_note": "Ghi chú gửi"
+      "submission_note": "Ghi chú gửi",
+      "note_placeholder": "Tóm tắt thay đổi, rủi ro và bằng chứng kiểm thử"
+    },
+    "change": {
+      "submit": "Gửi lên TCB",
+      "resubmit": "Gửi lại",
+      "withdraw": "Rút lại"
     },
     "tcb": {
       "badge_pending": "TCB đang chờ",
@@ -69,12 +83,17 @@
       "title_label": "Tiêu đề phiên họp",
       "scheduled_at": "Ngày giờ",
       "location": "Địa điểm",
+      "status": "Trạng thái",
+      "items_count": "Các mục chương trình họp",
+      "participants_count": "Người tham gia",
       "minutes": "Biên bản",
       "minutes_placeholder": "Viết biên bản cuộc họp tại đây",
       "complete": "Hoàn thành phiên họp",
       "cancel": "Hủy phiên họp",
       "complete_failed": "Không thể hoàn thành phiên họp. Vui lòng thử lại.",
       "cancel_failed": "Không thể hủy phiên họp. Vui lòng thử lại.",
+      "complete_confirm": "Hoàn thành phiên họp này? Các quyết định đang chờ sẽ được ghi lại là hoãn lại.",
+      "cancel_confirm": "Hủy phiên họp này? Không thể hủy phiên họp đã có quyết định cuối cùng.",
       "created": "Đã lên lịch phiên họp.",
       "updated": "Đã cập nhật phiên họp.",
       "completed": "Đã hoàn thành phiên họp.",
@@ -89,6 +108,7 @@
       "add": "Thêm vào chương trình họp",
       "add_confirm": "Thêm yêu cầu",
       "remove": "Gỡ khỏi chương trình họp",
+      "record": "Ghi lại quyết định",
       "remove_failed": "Không thể gỡ yêu cầu. Vui lòng thử lại.",
       "add_failed": "Không thể thêm yêu cầu. Vui lòng thử lại.",
       "outcome_label": "Quyết định",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Thêm người tham gia",
+      "select_member": "Chọn thành viên",
       "role": "Vai trò",
       "attendance": "Điểm danh",
       "remove": "Gỡ",

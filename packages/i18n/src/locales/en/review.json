@@ -33,6 +33,13 @@
     },
     "queue_tab": "Queue",
     "sessions_tab": "Sessions",
+    "all_statuses": "All statuses",
+    "queue": {
+      "subject": "Subject",
+      "status": "Status",
+      "submitted_at": "Submitted",
+      "session": "Session"
+    },
     "load_error": {
       "title": "Couldn't load the board",
       "description": "Something went wrong while fetching review data.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Change submitted to TCB.",
       "withdrawn": "Request withdrawn.",
+      "submit": "Submit",
       "submit_failed": "Could not submit the request. Please try again.",
       "withdraw_failed": "Could not withdraw the request. Please try again.",
-      "submission_note": "Submission note"
+      "submission_note": "Submission note",
+      "note_placeholder": "Summarize the change, risks and test evidence"
+    },
+    "change": {
+      "submit": "Submit to TCB",
+      "resubmit": "Submit again",
+      "withdraw": "Withdraw"
     },
     "tcb": {
       "badge_pending": "TCB pending",
@@ -69,12 +83,17 @@
       "title_label": "Session title",
       "scheduled_at": "Date and time",
       "location": "Location",
+      "status": "Status",
+      "items_count": "Agenda items",
+      "participants_count": "Participants",
       "minutes": "Minutes",
       "minutes_placeholder": "Write the meeting minutes here",
       "complete": "Complete session",
       "cancel": "Cancel session",
       "complete_failed": "Could not complete the session. Please try again.",
       "cancel_failed": "Could not cancel the session. Please try again.",
+      "complete_confirm": "Complete this session? Pending decisions will be recorded as deferred.",
+      "cancel_confirm": "Cancel this session? Sessions with final decisions cannot be cancelled.",
       "created": "Session scheduled.",
       "updated": "Session updated.",
       "completed": "Session completed.",
@@ -89,6 +108,7 @@
       "add": "Add to agenda",
       "add_confirm": "Add requests",
       "remove": "Remove from agenda",
+      "record": "Record decision",
       "remove_failed": "Could not remove the request. Please try again.",
       "add_failed": "Could not add the requests. Please try again.",
       "outcome_label": "Decision",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Add participant",
+      "select_member": "Select a member",
       "role": "Role",
       "attendance": "Attendance",
       "remove": "Remove",

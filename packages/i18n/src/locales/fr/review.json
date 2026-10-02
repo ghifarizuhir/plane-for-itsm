@@ -33,6 +33,13 @@
     },
     "queue_tab": "File d'attente",
     "sessions_tab": "Séances",
+    "all_statuses": "Tous les statuts",
+    "queue": {
+      "subject": "Objet",
+      "status": "Statut",
+      "submitted_at": "Soumis",
+      "session": "Séance"
+    },
     "load_error": {
       "title": "Impossible de charger le comité",
       "description": "Une erreur s'est produite lors du chargement des données de revue.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Changement soumis au TCB.",
       "withdrawn": "Demande retirée.",
+      "submit": "Soumettre",
       "submit_failed": "Impossible de soumettre la demande. Veuillez réessayer.",
       "withdraw_failed": "Impossible de retirer la demande. Veuillez réessayer.",
-      "submission_note": "Note de soumission"
+      "submission_note": "Note de soumission",
+      "note_placeholder": "Résumez le changement, les risques et les preuves de test"
+    },
+    "change": {
+      "submit": "Soumettre au TCB",
+      "resubmit": "Soumettre à nouveau",
+      "withdraw": "Retirer"
     },
     "tcb": {
       "badge_pending": "TCB en attente",
@@ -69,12 +83,17 @@
       "title_label": "Titre de la séance",
       "scheduled_at": "Date et heure",
       "location": "Lieu",
+      "status": "Statut",
+      "items_count": "Points à l'ordre du jour",
+      "participants_count": "Participants",
       "minutes": "Compte rendu",
       "minutes_placeholder": "Rédigez ici le compte rendu de la séance",
       "complete": "Terminer la séance",
       "cancel": "Annuler la séance",
       "complete_failed": "Impossible de terminer la séance. Veuillez réessayer.",
       "cancel_failed": "Impossible d'annuler la séance. Veuillez réessayer.",
+      "complete_confirm": "Terminer cette séance ? Les décisions en attente seront consignées comme reportées.",
+      "cancel_confirm": "Annuler cette séance ? Les séances avec des décisions finales ne peuvent pas être annulées.",
       "created": "Séance planifiée.",
       "updated": "Séance mise à jour.",
       "completed": "Séance terminée.",
@@ -89,6 +108,7 @@
       "add": "Ajouter à l'ordre du jour",
       "add_confirm": "Ajouter les demandes",
       "remove": "Retirer de l'ordre du jour",
+      "record": "Consigner la décision",
       "remove_failed": "Impossible de retirer la demande. Veuillez réessayer.",
       "add_failed": "Impossible d'ajouter les demandes. Veuillez réessayer.",
       "outcome_label": "Décision",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Ajouter un participant",
+      "select_member": "Sélectionner un membre",
       "role": "Rôle",
       "attendance": "Présence",
       "remove": "Retirer",

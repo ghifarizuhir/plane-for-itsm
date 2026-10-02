@@ -33,6 +33,13 @@
     },
     "queue_tab": "Fronta",
     "sessions_tab": "Zasedání",
+    "all_statuses": "Všechny stavy",
+    "queue": {
+      "subject": "Předmět",
+      "status": "Stav",
+      "submitted_at": "Odesláno",
+      "session": "Zasedání"
+    },
     "load_error": {
       "title": "Komisi se nepodařilo načíst",
       "description": "Při načítání dat revize došlo k chybě.",
@@ -53,9 +60,16 @@
     "request": {
       "submitted": "Změna odeslána do TCB.",
       "withdrawn": "Žádost stažena.",
+      "submit": "Odeslat",
       "submit_failed": "Žádost se nepodařilo odeslat. Zkuste to prosím znovu.",
       "withdraw_failed": "Žádost se nepodařilo stáhnout. Zkuste to prosím znovu.",
-      "submission_note": "Poznámka k odeslání"
+      "submission_note": "Poznámka k odeslání",
+      "note_placeholder": "Shrňte změnu, rizika a důkazy o testování"
+    },
+    "change": {
+      "submit": "Odeslat do TCB",
+      "resubmit": "Odeslat znovu",
+      "withdraw": "Stáhnout"
     },
     "tcb": {
       "badge_pending": "TCB čeká",
@@ -69,12 +83,17 @@
       "title_label": "Název zasedání",
       "scheduled_at": "Datum a čas",
       "location": "Místo",
+      "status": "Stav",
+      "items_count": "Body programu",
+      "participants_count": "Účastníci",
       "minutes": "Zápis",
       "minutes_placeholder": "Zde napište zápis ze schůze",
       "complete": "Dokončit zasedání",
       "cancel": "Zrušit zasedání",
       "complete_failed": "Zasedání se nepodařilo dokončit. Zkuste to prosím znovu.",
       "cancel_failed": "Zasedání se nepodařilo zrušit. Zkuste to prosím znovu.",
+      "complete_confirm": "Dokončit toto zasedání? Nevyřízená rozhodnutí budou zaznamenána jako odložená.",
+      "cancel_confirm": "Zrušit toto zasedání? Zasedání s konečnými rozhodnutími nelze zrušit.",
       "created": "Zasedání naplánováno.",
       "updated": "Zasedání aktualizováno.",
       "completed": "Zasedání dokončeno.",
@@ -89,6 +108,7 @@
       "add": "Přidat do programu",
       "add_confirm": "Přidat žádosti",
       "remove": "Odebrat z programu",
+      "record": "Zaznamenat rozhodnutí",
       "remove_failed": "Žádost se nepodařilo odebrat. Zkuste to prosím znovu.",
       "add_failed": "Žádosti se nepodařilo přidat. Zkuste to prosím znovu.",
       "outcome_label": "Rozhodnutí",
@@ -98,6 +118,7 @@
     },
     "participants": {
       "add": "Přidat účastníka",
+      "select_member": "Vybrat člena",
       "role": "Role",
       "attendance": "Účast",
       "remove": "Odebrat",
