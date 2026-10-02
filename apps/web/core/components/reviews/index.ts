@@ -1,4 +1,5 @@
 export * from "./board/review-board-root";
+export * from "./change-tcb-control";
 export * from "./outcome-pill";
 export * from "./release-control/release-control-header";
 export * from "./request-status-pill";
