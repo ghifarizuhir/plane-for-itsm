@@ -21,6 +21,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IService } from "@plane/types";
+import { cn } from "@plane/utils";
 // components
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
@@ -40,10 +41,11 @@ const SERVICE_TYPE_OPTIONS: IService["type"][] = ["internal", "external", "infra
 
 type Props = {
   serviceId: string;
+  layout?: "sidebar" | "stacked";
 };
 
 export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props: Props) {
-  const { serviceId } = props;
+  const { serviceId, layout = "sidebar" } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
@@ -73,7 +75,7 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
   };
 
   return (
-    <div className="w-full px-6 md:h-full md:overflow-y-auto">
+    <div className={cn("w-full", layout === "sidebar" ? "px-6 md:h-full md:overflow-y-auto" : "px-0")}>
       <h5 className="mt-5 text-body-xs-medium">{t("common.properties")}</h5>
       <div className="mt-4 mb-2 space-y-2.5 truncate">
         <SidebarPropertyListItem icon={ActivityOutline} label={t("service.fields.health")}>
