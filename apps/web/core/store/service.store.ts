@@ -24,6 +24,12 @@ import { ServiceService } from "@/services/service.service";
 // store
 import type { CoreRootStore } from "./root.store";
 
+export type TServicePeek = {
+  workspaceSlug: string;
+  projectId: string;
+  serviceId: string;
+};
+
 export interface IServiceStore {
   loader: boolean;
   fetchedMap: Record<string, boolean>;
@@ -32,6 +38,7 @@ export interface IServiceStore {
   workItemLinkMap: Record<string, TServiceWorkItemLink>;
   healthMap: Record<string, IServiceHealthSnapshot>;
   errorMap: Record<string, boolean>;
+  peekService?: TServicePeek;
   getServiceById: (serviceId: string) => IService | null;
   getServiceHealth: (serviceId: string) => IServiceHealthSnapshot | null;
   getProjectHealthSummary: (projectId: string) => TServiceHealthSummary;
@@ -40,7 +47,9 @@ export interface IServiceStore {
   getDependenciesByProject: (projectId: string) => IServiceDependency[];
   getWorkItemLinksByService: (serviceId: string) => TServiceWorkItemLink[];
   getGraphData: (projectId: string) => TServiceGraphData;
+  getIsServicePeeked: (serviceId: string) => boolean;
   fetchServices: (workspaceSlug: string, workspaceId: string, projectId: string) => Promise<IService[] | undefined>;
+  setPeekService: (peek?: TServicePeek) => void;
   createService: (
     workspaceSlug: string,
     workspaceId: string,
@@ -100,6 +109,7 @@ export class ServicesStore implements IServiceStore {
   workItemLinkMap: Record<string, TServiceWorkItemLink> = {};
   healthMap: Record<string, IServiceHealthSnapshot> = {};
   errorMap: Record<string, boolean> = {};
+  peekService: TServicePeek | undefined = undefined;
   rootStore;
   serviceService;
   serviceHealthService;
@@ -113,7 +123,9 @@ export class ServicesStore implements IServiceStore {
       workItemLinkMap: observable,
       healthMap: observable,
       errorMap: observable,
+      peekService: observable.ref,
       fetchServices: action,
+      setPeekService: action,
       createService: action,
       updateService: action,
       deleteService: action,
@@ -190,6 +202,12 @@ export class ServicesStore implements IServiceStore {
     });
     return { services, dependencies, health };
   });
+
+  getIsServicePeeked = computedFn((serviceId: string) => this.peekService?.serviceId === serviceId);
+
+  setPeekService = (peek?: TServicePeek) => {
+    this.peekService = peek;
+  };
 
   fetchServices = async (workspaceSlug: string, workspaceId: string, projectId: string) => {
     try {
@@ -271,6 +289,7 @@ export class ServicesStore implements IServiceStore {
       Object.values(this.workItemLinkMap).forEach((l) => {
         if (l.service_id === serviceId) delete this.workItemLinkMap[l.id];
       });
+      if (this.peekService?.serviceId === serviceId) this.peekService = undefined;
     });
   };
 
