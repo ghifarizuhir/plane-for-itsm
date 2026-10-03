@@ -592,6 +592,12 @@ git commit -m "test(api): drop workflow model tests and fix state comments"
 
 ---
 
+## Catatan eksekusi (temuan saat implementasi)
+
+- `apps/api/pytest.ini` memakai `--reuse-db --nomigrations`: skema test DB dibangun dari **model**, bukan migrasi. Setelah mengubah model, rebuild test DB dengan `--create-db`.
+- `ProjectFactory` memakai `django_get_or_create`; Sequence tidak selalu advance antar build dalam satu test. Untuk test multi-project, selalu beri `name` + `identifier` eksplisit.
+- Test migrasi memanggil fungsi `RunPython` langsung (bukan lewat `migrate`); validitas schema ops `0126` sudah terbukti saat setup test DB di Task 1 (Django mengeksekusi migrasi baru saat test DB dibuat ulang).
+
 ## Self-Review
 
 - **Spec coverage:** Task 1 mengeksekusi bagian "Django 0126" (reset + drop + constraint). Task 2 mengeksekusi "Perubahan model Django". Task 3 mengeksekusi default state resolution. Task 4 mengeksekusi testing Django + cleanup. Bagian api-rs/web/packages masuk Plan 2/3.

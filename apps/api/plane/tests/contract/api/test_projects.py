@@ -55,7 +55,7 @@ class TestProjectListCreateAPIEndpoint:
 
         When project_lead points to the creator's own user_id, the endpoint
         must return 201 and create a fully-populated project (single
-        ProjectMember as admin, default workflow states).
+        ProjectMember as admin, default states).
 
         Before the fix, the endpoint returned 400 "Please provide valid detail"
         but had already persisted the Project row without states or members,
@@ -78,7 +78,7 @@ class TestProjectListCreateAPIEndpoint:
         # Creator is registered as admin (single membership; lead == creator
         # should not produce a duplicate row).
         assert ProjectMember.objects.filter(project=project, member=create_user, role=20).count() == 1
-        # Default workflow states must be created.
+        # Default states must be created.
         assert State.objects.filter(project=project).count() == 5
 
     @pytest.mark.django_db
