@@ -794,7 +794,19 @@ docker exec plane-db pg_dump -U plane -d plane -Fc -f /tmp/plane-pre-flatten.dum
 docker cp plane-db:/tmp/plane-pre-flatten.dump /tmp/plane-pre-flatten.dump
 ```
 
-- [ ] **Step 2: Rebuild backend detached**
+- [ ] **Step 2: Jalankan migrator Django DULU (wajib sebelum api baru boot)**
+
+Service `api` tidak `depends_on: migrator`, jadi migrator harus dijalankan eksplisit. Urutan ini wajib: bila api baru boot duluan, `0002` mendrop kolom duluan dan Django `0126` gagal di `RemoveField` (tanpa `IF EXISTS`).
+
+```bash
+docker compose -f docker-compose-local.yml run --rm migrator
+docker exec plane-db psql -U plane -d plane -c "SELECT name FROM django_migrations WHERE app='db' ORDER BY id DESC LIMIT 1;"
+docker exec plane-db psql -U plane -d plane -c "SELECT count(*) FROM states; SELECT to_regclass('workflows');"
+```
+
+Expected: `0126_remove_workflows_and_flatten_states`; states = 6 × jumlah project; `workflows` NULL.
+
+- [ ] **Step 3: Rebuild backend detached**
 
 ```bash
 setsid docker compose -f docker-compose-local.yml up -d --build api worker beat-worker > /tmp/plane-api-build.log 2>&1 < /dev/null &
@@ -802,7 +814,7 @@ setsid docker compose -f docker-compose-local.yml up -d --build api worker beat-
 
 Tunggu; link LTO bisa 10+ menit tanpa output — poll log, jangan abort.
 
-- [ ] **Step 3: Verifikasi health + live**
+- [ ] **Step 4: Verifikasi health + live**
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000/health
@@ -812,7 +824,7 @@ sleep 8 && curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3100/live/h
 
 Expected: `200` keduanya.
 
-- [ ] **Step 4: Smoke API**
+- [ ] **Step 5: Smoke API**
 
 ```bash
 curl -s http://localhost:8000/api/workspaces/<slug>/projects/<project_id>/states/ -H 'Cookie: ...' | head
