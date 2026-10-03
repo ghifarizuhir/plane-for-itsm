@@ -290,144 +290,21 @@ fn slugify(name: &str) -> String {
     name.to_lowercase().replace(' ', "-")
 }
 
-/// Nama type/state seed wajib tetap ASCII agar `slugify` sepadan dengan Django;
-/// mengubah nama mengubah `external_id`, jadi identitas seed ini immutable.
-#[allow(clippy::type_complexity)]
-const WORKFLOW_SEEDS: &[(&str, &str, &[(&str, &str, bool)], &[(&str, &str)])] = &[
-    (
-        "Incident",
-        "Incident Workflow",
-        &[
-            ("New", "backlog", true),
-            ("In Progress", "started", false),
-            ("On Hold", "started", false),
-            ("Resolved", "completed", false),
-            ("Closed", "completed", false),
-        ],
-        &[
-            ("New", "In Progress"),
-            ("In Progress", "On Hold"),
-            ("In Progress", "Resolved"),
-            ("On Hold", "In Progress"),
-            ("Resolved", "Closed"),
-            ("Resolved", "In Progress"),
-        ],
-    ),
-    (
-        "Problem",
-        "Problem Workflow",
-        &[
-            ("New", "backlog", true),
-            ("Investigating", "started", false),
-            ("Known Error", "started", false),
-            ("Resolved", "completed", false),
-            ("Closed", "completed", false),
-        ],
-        &[
-            ("New", "Investigating"),
-            ("Investigating", "Known Error"),
-            ("Investigating", "Resolved"),
-            ("Known Error", "Resolved"),
-            ("Known Error", "Investigating"),
-            ("Resolved", "Closed"),
-            ("Resolved", "Investigating"),
-        ],
-    ),
-    (
-        "Change",
-        "Change Workflow",
-        &[
-            ("New", "backlog", true),
-            ("Assessment", "started", false),
-            ("Approval", "started", false),
-            ("Implementation", "started", false),
-            ("Review", "started", false),
-            ("Closed", "completed", false),
-        ],
-        &[
-            ("New", "Assessment"),
-            ("Assessment", "Approval"),
-            ("Assessment", "Closed"),
-            ("Approval", "Implementation"),
-            ("Approval", "Assessment"),
-            ("Implementation", "Review"),
-            ("Review", "Closed"),
-            ("Review", "Implementation"),
-        ],
-    ),
-    (
-        "Improvement",
-        "Improvement Workflow",
-        &[
-            ("New", "backlog", true),
-            ("In Progress", "started", false),
-            ("Done", "completed", false),
-        ],
-        &[
-            ("New", "In Progress"),
-            ("In Progress", "Done"),
-            ("In Progress", "New"),
-            ("Done", "In Progress"),
-        ],
-    ),
-];
-
-fn group_color(group: &str) -> &'static str {
-    match group {
-        "started" => "#F59E0B",
-        "completed" => "#46A758",
-        "cancelled" => "#9AA4BC",
-        _ => "#60646C",
-    }
-}
+/// Nama work item type seed (parity migrasi Django 0124 untuk type saja).
+/// Nama wajib tetap ASCII agar `slugify` sepadan dengan Django; mengubah nama
+/// mengubah `external_id`, jadi identitas seed ini immutable.
+const TYPE_SEEDS: &[&str] = &["Incident", "Problem", "Change", "Improvement"];
 
 /// Marker ownership contract — SAMA dengan migrasi Django
 /// `0124_seed_default_workflows` (`SEED_EXTERNAL_SOURCE = "plane-default-itsm"`).
-/// external_id deterministik: `workflow:{type}`, `issue-type:{type}`,
-/// `workflow-state:{type}:{state}` (semua pakai `slugify`).
+/// external_id deterministik: `issue-type:{type}` (pakai `slugify`).
 /// Rerun tidak boleh menduplikasi; row tanpa marker tidak boleh diadopsi.
 const SEED_EXTERNAL_SOURCE: &str = "plane-default-itsm";
-
-async fn seed_workflow_id(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    workspace_id: Uuid,
-    bot_id: Uuid,
-    type_name: &str,
-    workflow_name: &str,
-) -> Result<Uuid, sqlx::Error> {
-    let external_id = format!("workflow:{}", slugify(type_name));
-    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM workflows WHERE workspace_id = $1 AND external_source = $2 \
-         AND external_id = $3 AND deleted_at IS NULL",
-    )
-    .bind(workspace_id)
-    .bind(SEED_EXTERNAL_SOURCE)
-    .bind(&external_id)
-    .fetch_optional(&mut **tx)
-    .await?
-    {
-        return Ok(id);
-    }
-    let (id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO workflows (id, name, description, is_active, workspace_id, external_source, \
-         external_id, created_by_id, updated_by_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, '', true, $2, $3, $4, $5, $5, now(), now()) RETURNING id",
-    )
-    .bind(workflow_name)
-    .bind(workspace_id)
-    .bind(SEED_EXTERNAL_SOURCE)
-    .bind(&external_id)
-    .bind(bot_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(id)
-}
 
 async fn seed_issue_type_id(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
     bot_id: Uuid,
-    workflow_id: Uuid,
     type_name: &str,
 ) -> Result<Uuid, sqlx::Error> {
     let external_id = format!("issue-type:{}", slugify(type_name));
@@ -458,13 +335,12 @@ async fn seed_issue_type_id(
     }
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
-         level, workflow_id, workspace_id, external_source, external_id, created_by_id, updated_by_id, \
+         level, workspace_id, external_source, external_id, created_by_id, updated_by_id, \
          created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $5, $6, $6, now(), now()) \
+         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $5, $5, now(), now()) \
          RETURNING id",
     )
     .bind(type_name)
-    .bind(workflow_id)
     .bind(workspace_id)
     .bind(SEED_EXTERNAL_SOURCE)
     .bind(&external_id)
@@ -474,99 +350,20 @@ async fn seed_issue_type_id(
     Ok(id)
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn seed_workflow_state_id(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    workflow_id: Uuid,
-    bot_id: Uuid,
-    type_name: &str,
-    name: &str,
-    group: &str,
-    sequence: f64,
-    is_default: bool,
-) -> Result<Uuid, sqlx::Error> {
-    let external_id = format!("workflow-state:{}:{}", slugify(type_name), slugify(name));
-    if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM workflow_states WHERE workflow_id = $1 AND external_source = $2 \
-         AND external_id = $3 AND deleted_at IS NULL",
-    )
-    .bind(workflow_id)
-    .bind(SEED_EXTERNAL_SOURCE)
-    .bind(&external_id)
-    .fetch_optional(&mut **tx)
-    .await?
-    {
-        return Ok(id);
-    }
-    let (id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO workflow_states (id, workflow_id, name, description, color, slug, sequence, \
-         \"group\", is_default, external_source, external_id, created_by_id, updated_by_id, \
-         created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $10, now(), now()) \
-         RETURNING id",
-    )
-    .bind(workflow_id)
-    .bind(name)
-    .bind(group_color(group))
-    .bind(slugify(name))
-    .bind(sequence)
-    .bind(group)
-    .bind(is_default)
-    .bind(SEED_EXTERNAL_SOURCE)
-    .bind(&external_id)
-    .bind(bot_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(id)
-}
-
-/// Seed workflow + type default workspace (parity migrasi Django
-/// `0124_seed_default_workflows`). Tidak mengaktifkan type di project mana pun.
-/// Marker-first lookup idempotent untuk workspace baru di dalam satu transaksi
-/// `seed_workspace`, bukan rekonsiliasi umum: row senama tanpa marker ditolak
-/// (workflow/state lewat partial unique constraint, issue type lewat cek
-/// konflik eksplisit — tidak pernah diadopsi), row bermarker dipercaya apa
-/// adanya — fail-closed seperti Django 0124.
-pub async fn insert_workflows(
+/// Seed work item type default workspace (parity migrasi Django 0124 untuk
+/// type; workflow/states/transitions tidak lagi ada). Tidak mengaktifkan type
+/// di project mana pun. Marker-first lookup idempotent untuk workspace baru
+/// di dalam satu transaksi `seed_workspace`, bukan rekonsiliasi umum: row
+/// senama tanpa marker ditolak (cek konflik eksplisit — tidak pernah
+/// diadopsi), row bermarker dipercaya apa adanya — fail-closed seperti
+/// Django 0124.
+pub async fn insert_work_item_types(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
     bot_id: Uuid,
 ) -> Result<(), sqlx::Error> {
-    for (type_name, workflow_name, states, transitions) in WORKFLOW_SEEDS {
-        let workflow_id =
-            seed_workflow_id(tx, workspace_id, bot_id, type_name, workflow_name).await?;
-        let _type_id = seed_issue_type_id(tx, workspace_id, bot_id, workflow_id, type_name).await?;
-
-        let mut state_ids = std::collections::HashMap::new();
-        for (index, (name, group, is_default)) in states.iter().enumerate() {
-            let state_id = seed_workflow_state_id(
-                tx,
-                workflow_id,
-                bot_id,
-                type_name,
-                name,
-                group,
-                ((index as f64) + 1.0) * 15000.0,
-                *is_default,
-            )
-            .await?;
-            state_ids.insert(*name, state_id);
-        }
-
-        for (from_name, to_name) in transitions.iter() {
-            sqlx::query(
-                "INSERT INTO workflow_transitions (id, workflow_id, from_state_id, to_state_id, \
-                 created_by_id, updated_by_id, created_at, updated_at) \
-                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now()) \
-                 ON CONFLICT DO NOTHING",
-            )
-            .bind(workflow_id)
-            .bind(state_ids[*from_name])
-            .bind(state_ids[*to_name])
-            .bind(bot_id)
-            .execute(&mut **tx)
-            .await?;
-        }
+    for type_name in TYPE_SEEDS {
+        seed_issue_type_id(tx, workspace_id, bot_id, type_name).await?;
     }
     Ok(())
 }
@@ -917,7 +714,7 @@ pub async fn seed_workspace(pool: &PgPool, workspace_id: Uuid) -> Result<(), any
     .await?;
     insert_views(&mut tx, workspace_id, project_id, bot_id).await?;
     insert_pages(&mut tx, workspace_id, project_id, bot_id).await?;
-    insert_workflows(&mut tx, workspace_id, bot_id).await?;
+    insert_work_item_types(&mut tx, workspace_id, bot_id).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -977,29 +774,19 @@ mod tests {
     }
 
     #[test]
-    fn workflow_seeds_are_internally_consistent() {
-        for (_type_name, workflow_name, states, transitions) in WORKFLOW_SEEDS {
-            let names: std::collections::HashSet<&str> =
-                states.iter().map(|(name, _, _)| *name).collect();
-            assert_eq!(
-                names.len(),
-                states.len(),
-                "{workflow_name}: state names must be unique"
+    fn type_seeds_are_unique_and_ascii() {
+        let names: std::collections::HashSet<&str> = TYPE_SEEDS.iter().copied().collect();
+        assert_eq!(names.len(), TYPE_SEEDS.len(), "type seed names must be unique");
+        for name in TYPE_SEEDS {
+            assert!(
+                name.is_ascii() && !name.trim().is_empty(),
+                "type seed name must stay ASCII non-empty: {name}"
             );
             assert_eq!(
-                states
-                    .iter()
-                    .filter(|(_, _, is_default)| *is_default)
-                    .count(),
-                1,
-                "{workflow_name}: exactly one default state expected"
+                slugify(name),
+                name.to_lowercase().replace(' ', "-"),
+                "slugify must match Django for seed identity: {name}"
             );
-            for (from_name, to_name) in transitions.iter() {
-                assert!(
-                    names.contains(from_name) && names.contains(to_name),
-                    "{workflow_name}: transition {from_name} -> {to_name} references an unknown state"
-                );
-            }
         }
     }
 
