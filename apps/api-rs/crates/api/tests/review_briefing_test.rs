@@ -422,3 +422,169 @@ async fn generate_briefing_stores_json_and_regenerates() {
     clear_llm_env();
     scratch.cleanup(&st.pool).await;
 }
+
+#[tokio::test]
+async fn generate_briefing_requires_ai_config() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_request_id, session_id, _item_id) = setup_session(&st, &scratch).await;
+
+    std::env::set_var("SKIP_ENV_VAR", "0");
+    std::env::remove_var("LLM_API_KEY");
+    std::env::set_var("LLM_MODEL", "test-model");
+    let (status, Json(body)) = generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("not configured");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "AI is not configured for this workspace.");
+
+    clear_llm_env();
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn generate_briefing_gates_manage_and_scheduled() {
+    let st = state().await;
+    let mut scratch = Scratch::new(&st.pool).await;
+    let outsider = scratch.add_actor(&st.pool, 15).await;
+    let (_request_id, session_id, _item_id) = setup_session(&st, &scratch).await;
+
+    let (base, _) = support::spawn_recording_upstream(r#"{"overall":"ok","items":[]}"#).await;
+    set_llm_env(&base);
+
+    let (status, _) = generate_briefing(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("deny");
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (_, Json(_)) = complete_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("complete");
+    let (status, Json(body)) = generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("completed");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Session is not scheduled");
+
+    clear_llm_env();
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn generate_briefing_rejects_empty_agenda() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "Empty")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+
+    let (base, _) = support::spawn_recording_upstream(r#"{"overall":"ok","items":[]}"#).await;
+    set_llm_env(&base);
+    let (status, Json(body)) = generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("empty agenda");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "The agenda is empty");
+
+    clear_llm_env();
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn generate_briefing_falls_back_to_text_on_bad_json() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_request_id, session_id, _item_id) = setup_session(&st, &scratch).await;
+
+    let (base, bodies) = support::spawn_recording_upstream("ini bukan json").await;
+    set_llm_env(&base);
+    let (status, Json(briefing)) = generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("fallback");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(briefing["format"], "text");
+    assert_eq!(briefing["overall"], "ini bukan json");
+    assert!(briefing["items"].as_array().unwrap().is_empty());
+    assert_eq!(bodies.lock().unwrap().len(), 2, "must retry exactly once");
+
+    clear_llm_env();
+    scratch.cleanup(&st.pool).await;
+}
+
+#[tokio::test]
+async fn generate_briefing_upstream_error_keeps_previous() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let (_request_id, session_id, _item_id) = setup_session(&st, &scratch).await;
+
+    let (base, _) =
+        support::spawn_recording_upstream(r#"{"overall":"Versi lama.","items":[]}"#).await;
+    set_llm_env(&base);
+    generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("first generate");
+
+    let base500 = spawn_status(500).await;
+    set_llm_env(&base500);
+    let (status, _) = generate_briefing(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(BriefingRequest::default()),
+    )
+    .await
+    .expect("upstream error");
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+    let (_, Json(detail)) = session_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("detail");
+    assert_eq!(detail["briefing"]["overall"], "Versi lama.");
+
+    clear_llm_env();
+    scratch.cleanup(&st.pool).await;
+}
