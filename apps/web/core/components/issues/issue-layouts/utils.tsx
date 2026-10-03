@@ -246,7 +246,9 @@ const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefin
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
   // flat project states, ordered by sequence
-  const columns = [..._states].toSorted((a, b) => a.sequence - b.sequence);
+  const columns = [..._states]
+    // oxlint-disable-next-line unicorn/no-array-sort -- ES2022 target; the spread already copies the array
+    .sort((a, b) => a.sequence - b.sequence);
   // map state columns to group by columns
   return columns.map((state) => ({
     id: state.id,
