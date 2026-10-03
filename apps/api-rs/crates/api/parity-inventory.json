@@ -4697,63 +4697,9 @@
         }
       ]
     },
-    "workflow": {
-      "rust_module": "routes/workflow.rs (+ routes/v1/work_item_type.rs)",
+    "work-item-types": {
+      "rust_module": "routes/v1/work_item_type.rs",
       "endpoints": [
-        {
-          "methods": ["GET", "POST"],
-          "path": "/api/workspaces/:slug/workflows/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::list_workflows",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth)."
-        },
-        {
-          "methods": ["GET", "PATCH", "DELETE"],
-          "path": "/api/workspaces/:slug/workflows/:workflow_id/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::retrieve_workflow",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth); delete 400 while a live work item type references it."
-        },
-        {
-          "methods": ["GET", "POST"],
-          "path": "/api/workspaces/:slug/workflows/:workflow_id/states/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::list_states",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth)."
-        },
-        {
-          "methods": ["PATCH", "DELETE"],
-          "path": "/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::patch_state",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth); delete 400 when in use by work items or when it is the workflow default."
-        },
-        {
-          "methods": ["GET", "POST"],
-          "path": "/api/workspaces/:slug/workflows/:workflow_id/transitions/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::list_transitions",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth); create 400 on duplicate or self-transition."
-        },
-        {
-          "methods": ["DELETE"],
-          "path": "/api/workspaces/:slug/workflows/:workflow_id/transitions/:transition_id/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::delete_transition",
-          "out_scope": false,
-          "notes": "ws ADMIN role >= 20 (cookie auth)."
-        },
         {
           "methods": ["GET", "POST"],
           "path": "/api/workspaces/:slug/work-item-types/",
@@ -4779,25 +4725,16 @@
           "rust_status": "implemented",
           "rust_handler": "routes::v1::work_item_type::import_to_project",
           "out_scope": false,
-          "notes": "204; 400 when another type in the project already uses the same workflow."
+          "notes": "204; enables the types for the project."
         },
         {
           "methods": ["DELETE"],
           "path": "/api/workspaces/:slug/projects/:project_id/work-item-types/:type_id/",
           "django_source": "n/a (fitur baru)",
           "rust_status": "implemented",
-          "rust_handler": "routes::workflow::unlink_type",
+          "rust_handler": "routes::v1::work_item_type::unlink_type",
           "out_scope": false,
           "notes": "204 detach; 400 when the project has live work items of the type."
-        },
-        {
-          "methods": ["GET"],
-          "path": "/api/workspaces/:slug/projects/:project_id/workflow-map/",
-          "django_source": "n/a (fitur baru)",
-          "rust_status": "implemented",
-          "rust_handler": "routes::workflow::workflow_map",
-          "out_scope": false,
-          "notes": "project member or ws admin; materializes missing mirrors on read."
         }
       ]
     }
