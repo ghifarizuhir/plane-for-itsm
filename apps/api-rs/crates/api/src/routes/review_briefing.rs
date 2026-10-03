@@ -439,11 +439,11 @@ pub async fn generate_briefing(
     let task = build_task(&language);
     let prompt = build_prompt(&context);
 
-    let first =
-        match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, &task, &prompt).await {
-            Ok(text) => text,
-            Err(error) => return Ok(llm_error_response(error, &cfg.base_url)),
-        };
+    let first = match chat_completion(&cfg.base_url, &cfg.api_key, &cfg.model, &task, &prompt).await
+    {
+        Ok(text) => text,
+        Err(error) => return Ok(llm_error_response(error, &cfg.base_url)),
+    };
     let (overall, parsed_items, format) = match parse_ai_json(&first, &valid_ids) {
         Some((overall, parsed_items)) => (overall, parsed_items, "json"),
         None => {

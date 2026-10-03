@@ -335,7 +335,11 @@ async fn setup_session(st: &AppState, scratch: &Scratch) -> (Uuid, Uuid, Uuid) {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path(scratch.slug.clone()),
-        Json(session_body("tcb", Some(scratch.project_id), "TCB Briefing")),
+        Json(session_body(
+            "tcb",
+            Some(scratch.project_id),
+            "TCB Briefing",
+        )),
     )
     .await
     .expect("create session");
@@ -387,7 +391,10 @@ async fn generate_briefing_stores_json_and_regenerates() {
     assert_eq!(briefing["included_items"], 1);
     assert_eq!(briefing["skipped_items"], 0);
     assert_eq!(briefing["items"][0]["session_item_id"], item_id.to_string());
-    assert_eq!(briefing["items"][0]["risks"][0], "Menyentuh gateway pembayaran");
+    assert_eq!(
+        briefing["items"][0]["risks"][0],
+        "Menyentuh gateway pembayaran"
+    );
 
     let request_body = bodies.lock().unwrap()[0].clone();
     let prompt = request_body["messages"][0]["content"].as_str().unwrap();
@@ -402,7 +409,10 @@ async fn generate_briefing_stores_json_and_regenerates() {
     .await
     .expect("detail");
     assert_eq!(detail["briefing"]["format"], "json");
-    assert_eq!(detail["briefing"]["items"][0]["summary"], "Perubahan retry gateway.");
+    assert_eq!(
+        detail["briefing"]["items"][0]["summary"],
+        "Perubahan retry gateway."
+    );
 
     let second = json!({"overall": "Versi kedua.", "items": []}).to_string();
     let (base2, _) = support::spawn_recording_upstream(&second).await;
