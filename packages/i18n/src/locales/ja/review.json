@@ -127,6 +127,26 @@
       "remove_failed": "参加者を削除できませんでした。もう一度お試しください。",
       "empty": "参加者はまだいません。"
     },
+    "briefing": {
+      "title": "ブリーフィング",
+      "ai_badge": "AI",
+      "disclaimer": "AI により生成されました — 決定する前に事実を確認してください。",
+      "generate": "ブリーフィングを生成",
+      "regenerate": "再生成",
+      "generated": "ブリーフィングを生成しました。",
+      "generating": "AI がブリーフィングを作成しています……最大で 1 分ほどかかる場合があります。",
+      "empty": "ブリーフィングはまだありません。アジェンダが確定したら作成してください。",
+      "empty_readonly": "このセッションのブリーフィングはありません。",
+      "generated_at": "{date} に {name} が生成 · {model}",
+      "overall": "概要",
+      "discussion_points": "議論ポイント",
+      "risks": "リスク",
+      "item_no_ai": "この項目の AI メモはありません。",
+      "skipped_notice": "{count} 件のアジェンダ項目は含まれていません（生成ごとに最大 20 件）。",
+      "text_mode_notice": "AI の出力は構造化されていませんでした。プレーンテキストとして表示しています。",
+      "stale_notice": "このブリーフィングの生成後にアジェンダが変更されました。",
+      "generate_failed": "ブリーフィングを生成できませんでした。もう一度お試しください。"
+    },
     "notification": {
       "agenda_added": "{subject}が{session}に追加されました",
       "decided": "{subject}のレビュー決定: {outcome}",

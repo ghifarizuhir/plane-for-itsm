@@ -127,6 +127,26 @@
       "remove_failed": "无法移除参会人，请重试。",
       "empty": "暂无参会人。"
     },
+    "briefing": {
+      "title": "简报",
+      "ai_badge": "AI",
+      "disclaimer": "由 AI 生成 — 请在做出决定前核实事实。",
+      "generate": "生成简报",
+      "regenerate": "重新生成",
+      "generated": "已生成简报。",
+      "generating": "AI 正在起草简报……最多可能需要一分钟。",
+      "empty": "尚无简报。议程确定后生成。",
+      "empty_readonly": "本次会议暂无简报。",
+      "generated_at": "由 {name} 于 {date} 生成 · {model}",
+      "overall": "摘要",
+      "discussion_points": "讨论要点",
+      "risks": "风险",
+      "item_no_ai": "此事项暂无 AI 备注。",
+      "skipped_notice": "有 {count} 个议程事项未包含在内（每次生成上限为 20 个）。",
+      "text_mode_notice": "AI 输出不是结构化的；此处显示为纯文本。",
+      "stale_notice": "自本次简报生成以来，议程已发生变化。",
+      "generate_failed": "无法生成简报。请重试。"
+    },
     "notification": {
       "agenda_added": "{subject} 已添加到 {session}",
       "decided": "{subject} 的评审决定：{outcome}",

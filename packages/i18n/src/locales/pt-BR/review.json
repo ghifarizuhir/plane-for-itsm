@@ -127,6 +127,26 @@
       "remove_failed": "Não foi possível remover o participante. Tente novamente.",
       "empty": "Nenhum participante ainda."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "IA",
+      "disclaimer": "Gerado por IA — verifique os fatos antes de decidir.",
+      "generate": "Gerar briefing",
+      "regenerate": "Regenerar",
+      "generated": "Briefing gerado.",
+      "generating": "A IA está elaborando o briefing… isso pode levar até um minuto.",
+      "empty": "Ainda não há briefing. Gere um após definir a pauta.",
+      "empty_readonly": "Nenhum briefing para esta sessão.",
+      "generated_at": "Gerado em {date} por {name} · {model}",
+      "overall": "Resumo",
+      "discussion_points": "Pontos de discussão",
+      "risks": "Riscos",
+      "item_no_ai": "Sem notas de IA para este item.",
+      "skipped_notice": "{count} item(ns) da pauta não foram incluídos (limite de 20 por geração).",
+      "text_mode_notice": "A saída da IA não estava estruturada; exibida como texto simples.",
+      "stale_notice": "A pauta mudou desde que este briefing foi gerado.",
+      "generate_failed": "Não foi possível gerar o briefing. Tente novamente."
+    },
     "notification": {
       "agenda_added": "{subject} foi adicionado a {session}",
       "decided": "Decisão de revisão de {subject}: {outcome}",

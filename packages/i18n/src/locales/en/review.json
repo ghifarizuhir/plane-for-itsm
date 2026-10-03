@@ -127,6 +127,26 @@
       "remove_failed": "Could not remove the participant. Please try again.",
       "empty": "No participants yet."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "AI",
+      "disclaimer": "AI-generated — verify the facts before deciding.",
+      "generate": "Generate briefing",
+      "regenerate": "Regenerate",
+      "generated": "Briefing generated.",
+      "generating": "The AI is drafting the briefing… this can take up to a minute.",
+      "empty": "No briefing yet. Generate one after the agenda is set.",
+      "empty_readonly": "No briefing for this session.",
+      "generated_at": "Generated {date} by {name} · {model}",
+      "overall": "Summary",
+      "discussion_points": "Discussion points",
+      "risks": "Risks",
+      "item_no_ai": "No AI notes for this item.",
+      "skipped_notice": "{count} agenda item(s) were not included (limit of 20 per generate).",
+      "text_mode_notice": "The AI output was not structured; showing it as plain text.",
+      "stale_notice": "The agenda changed since this briefing was generated.",
+      "generate_failed": "Could not generate the briefing. Please try again."
+    },
     "notification": {
       "agenda_added": "{subject} was added to {session}",
       "decided": "{subject} review decision: {outcome}",

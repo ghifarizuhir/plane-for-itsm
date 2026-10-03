@@ -127,6 +127,26 @@
       "remove_failed": "Peserta tidak dapat dihapus. Silakan coba lagi.",
       "empty": "Belum ada peserta."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "AI",
+      "disclaimer": "Dihasilkan AI — verifikasi fakta sebelum memutuskan.",
+      "generate": "Buat briefing",
+      "regenerate": "Buat ulang",
+      "generated": "Briefing dibuat.",
+      "generating": "AI sedang menyusun briefing… ini bisa memakan waktu hingga satu menit.",
+      "empty": "Belum ada briefing. Buat setelah agenda ditetapkan.",
+      "empty_readonly": "Tidak ada briefing untuk sesi ini.",
+      "generated_at": "Dibuat {date} oleh {name} · {model}",
+      "overall": "Ringkasan",
+      "discussion_points": "Poin diskusi",
+      "risks": "Risiko",
+      "item_no_ai": "Tidak ada catatan AI untuk item ini.",
+      "skipped_notice": "{count} item agenda tidak disertakan (batas 20 per pembuatan).",
+      "text_mode_notice": "Output AI tidak terstruktur; ditampilkan sebagai teks biasa.",
+      "stale_notice": "Agenda berubah sejak briefing ini dibuat.",
+      "generate_failed": "Briefing tidak dapat dibuat. Silakan coba lagi."
+    },
     "notification": {
       "agenda_added": "{subject} ditambahkan ke {session}",
       "decided": "Keputusan review untuk {subject}: {outcome}",

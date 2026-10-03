@@ -127,6 +127,26 @@
       "remove_failed": "Účastníka se nepodařilo odebrat. Zkuste to prosím znovu.",
       "empty": "Zatím žádní účastníci."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "AI",
+      "disclaimer": "Vygenerováno pomocí AI — před rozhodnutím ověřte fakta.",
+      "generate": "Vygenerovat briefing",
+      "regenerate": "Vygenerovat znovu",
+      "generated": "Briefing vytvořen.",
+      "generating": "AI připravuje briefing… může to trvat až minutu.",
+      "empty": "Zatím žádný briefing. Vytvořte jej po stanovení agendy.",
+      "empty_readonly": "Pro tuto schůzku není k dispozici žádný briefing.",
+      "generated_at": "Vytvořeno {date}, {name} · {model}",
+      "overall": "Shrnutí",
+      "discussion_points": "Body k projednání",
+      "risks": "Rizika",
+      "item_no_ai": "K této položce nejsou žádné poznámky AI.",
+      "skipped_notice": "{count} bod(ů) agendy nebylo zahrnuto (limit 20 na generování).",
+      "text_mode_notice": "Výstup AI nebyl strukturovaný; zobrazuje se jako prostý text.",
+      "stale_notice": "Agenda se od vytvoření tohoto briefingu změnila.",
+      "generate_failed": "Briefing se nepodařilo vytvořit. Zkuste to prosím znovu."
+    },
     "notification": {
       "agenda_added": "{subject} přidáno do {session}",
       "decided": "Rozhodnutí revize pro {subject}: {outcome}",

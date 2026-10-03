@@ -127,6 +127,26 @@
       "remove_failed": "無法移除與會人，請重試。",
       "empty": "尚無與會人。"
     },
+    "briefing": {
+      "title": "簡報",
+      "ai_badge": "AI",
+      "disclaimer": "由 AI 產生 — 請在做出決定前核實事實。",
+      "generate": "產生簡報",
+      "regenerate": "重新產生",
+      "generated": "已產生簡報。",
+      "generating": "AI 正在起草簡報……最多可能需要一分鐘。",
+      "empty": "尚無簡報。議程確定後產生。",
+      "empty_readonly": "本次會議暫無簡報。",
+      "generated_at": "由 {name} 於 {date} 產生 · {model}",
+      "overall": "摘要",
+      "discussion_points": "討論要點",
+      "risks": "風險",
+      "item_no_ai": "此事項暫無 AI 備註。",
+      "skipped_notice": "有 {count} 個議程事項未包含在內（每次產生上限為 20 個）。",
+      "text_mode_notice": "AI 輸出不是結構化的；此處顯示為純文字。",
+      "stale_notice": "自本次簡報產生以來，議程已發生變化。",
+      "generate_failed": "無法產生簡報。請重試。"
+    },
     "notification": {
       "agenda_added": "{subject} 已新增至 {session}",
       "decided": "{subject} 的審查決定：{outcome}",

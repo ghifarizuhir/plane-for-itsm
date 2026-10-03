@@ -127,6 +127,26 @@
       "remove_failed": "Không thể gỡ người tham gia. Vui lòng thử lại.",
       "empty": "Chưa có người tham gia nào."
     },
+    "briefing": {
+      "title": "Bản briefing",
+      "ai_badge": "AI",
+      "disclaimer": "Được tạo bởi AI — hãy kiểm chứng các thông tin trước khi quyết định.",
+      "generate": "Tạo bản briefing",
+      "regenerate": "Tạo lại",
+      "generated": "Đã tạo bản briefing.",
+      "generating": "AI đang soạn bản briefing… việc này có thể mất tới một phút.",
+      "empty": "Chưa có bản briefing. Hãy tạo sau khi chương trình họp đã được xác định.",
+      "empty_readonly": "Không có bản briefing cho phiên họp này.",
+      "generated_at": "Được tạo lúc {date} bởi {name} · {model}",
+      "overall": "Tóm tắt",
+      "discussion_points": "Điểm cần thảo luận",
+      "risks": "Rủi ro",
+      "item_no_ai": "Không có ghi chú AI cho mục này.",
+      "skipped_notice": "{count} mục trong chương trình họp không được đưa vào (giới hạn 20 mục mỗi lần tạo).",
+      "text_mode_notice": "Đầu ra của AI không có cấu trúc; hiển thị dưới dạng văn bản thuần túy.",
+      "stale_notice": "Chương trình họp đã thay đổi kể từ khi bản briefing này được tạo.",
+      "generate_failed": "Không thể tạo bản briefing. Vui lòng thử lại."
+    },
     "notification": {
       "agenda_added": "{subject} đã được thêm vào {session}",
       "decided": "Quyết định rà soát cho {subject}: {outcome}",

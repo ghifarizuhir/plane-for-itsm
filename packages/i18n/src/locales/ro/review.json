@@ -127,6 +127,26 @@
       "remove_failed": "Participantul nu a putut fi eliminat. Încercați din nou.",
       "empty": "Niciun participant încă."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "IA",
+      "disclaimer": "Generat de IA — verificați faptele înainte de a decide.",
+      "generate": "Generați briefingul",
+      "regenerate": "Regenerați",
+      "generated": "Briefing generat.",
+      "generating": "IA redactează briefingul… acest lucru poate dura până la un minut.",
+      "empty": "Încă niciun briefing. Generați unul după stabilirea agendei.",
+      "empty_readonly": "Niciun briefing pentru această sesiune.",
+      "generated_at": "Generat la {date} de {name} · {model}",
+      "overall": "Rezumat",
+      "discussion_points": "Puncte de discuție",
+      "risks": "Riscuri",
+      "item_no_ai": "Nicio notă IA pentru acest element.",
+      "skipped_notice": "{count} element(e) de pe agendă nu au fost incluse (limită de 20 per generare).",
+      "text_mode_notice": "Rezultatul IA nu a fost structurat; este afișat ca text simplu.",
+      "stale_notice": "Agenda s-a schimbat de la generarea acestui briefing.",
+      "generate_failed": "Briefingul nu a putut fi generat. Încercați din nou."
+    },
     "notification": {
       "agenda_added": "{subject} a fost adăugat la {session}",
       "decided": "Decizia de revizuire pentru {subject}: {outcome}",

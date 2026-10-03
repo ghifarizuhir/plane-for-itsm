@@ -127,6 +127,26 @@
       "remove_failed": "Nie można usunąć uczestnika. Spróbuj ponownie.",
       "empty": "Brak uczestników."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "AI",
+      "disclaimer": "Wygenerowane przez AI — przed podjęciem decyzji należy sprawdzić fakty.",
+      "generate": "Wygeneruj briefing",
+      "regenerate": "Wygeneruj ponownie",
+      "generated": "Utworzono briefing.",
+      "generating": "AI przygotowuje briefing… może to potrwać do minuty.",
+      "empty": "Brak briefingu. Po ustaleniu agendy należy go utworzyć.",
+      "empty_readonly": "Brak briefingu dla tej sesji.",
+      "generated_at": "Utworzono {date} przez {name} · {model}",
+      "overall": "Podsumowanie",
+      "discussion_points": "Punkty do omówienia",
+      "risks": "Ryzyka",
+      "item_no_ai": "Brak notatek AI dla tego punktu.",
+      "skipped_notice": "{count} punkt(ów) agendy nie uwzględniono (limit 20 na generowanie).",
+      "text_mode_notice": "Wynik AI nie był ustrukturyzowany; wyświetlono go jako zwykły tekst.",
+      "stale_notice": "Agenda uległa zmianie od czasu wygenerowania tego briefingu.",
+      "generate_failed": "Nie udało się utworzyć briefingu. Proszę spróbować ponownie."
+    },
     "notification": {
       "agenda_added": "{subject} dodano do {session}",
       "decided": "Decyzja przeglądowa dla {subject}: {outcome}",

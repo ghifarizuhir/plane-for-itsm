@@ -127,6 +127,26 @@
       "remove_failed": "Impossibile rimuovere il partecipante. Riprovi.",
       "empty": "Ancora nessun partecipante."
     },
+    "briefing": {
+      "title": "Briefing",
+      "ai_badge": "IA",
+      "disclaimer": "Generato dall'IA — verificare i fatti prima di decidere.",
+      "generate": "Genera briefing",
+      "regenerate": "Rigenera",
+      "generated": "Briefing generato.",
+      "generating": "L'IA sta preparando il briefing… potrebbe richiedere fino a un minuto.",
+      "empty": "Nessun briefing. Crearne uno dopo aver definito l'ordine del giorno.",
+      "empty_readonly": "Nessun briefing per questa sessione.",
+      "generated_at": "Generato il {date} da {name} · {model}",
+      "overall": "Riepilogo",
+      "discussion_points": "Punti di discussione",
+      "risks": "Rischi",
+      "item_no_ai": "Nessuna nota IA per questa voce.",
+      "skipped_notice": "{count} voce/i dell'ordine del giorno non incluse (limite di 20 per generazione).",
+      "text_mode_notice": "L'output dell'IA non era strutturato; viene mostrato come testo semplice.",
+      "stale_notice": "L'ordine del giorno è cambiato dopo la generazione di questo briefing.",
+      "generate_failed": "Impossibile generare il briefing. Riprovare."
+    },
     "notification": {
       "agenda_added": "{subject} aggiunto a {session}",
       "decided": "Decisione di revisione per {subject}: {outcome}",

@@ -127,6 +127,26 @@
       "remove_failed": "Katılımcı kaldırılamadı. Lütfen tekrar deneyin.",
       "empty": "Henüz katılımcı yok."
     },
+    "briefing": {
+      "title": "Brifing",
+      "ai_badge": "AI",
+      "disclaimer": "AI tarafından oluşturuldu — karar vermeden önce gerçekleri doğrulayın.",
+      "generate": "Brifing oluştur",
+      "regenerate": "Yeniden oluştur",
+      "generated": "Brifing oluşturuldu.",
+      "generating": "AI brifingi hazırlıyor… bu bir dakikaya kadar sürebilir.",
+      "empty": "Henüz brifing yok. Gündem belirlendikten sonra oluşturun.",
+      "empty_readonly": "Bu oturum için brifing yok.",
+      "generated_at": "{name} tarafından {date} tarihinde oluşturuldu · {model}",
+      "overall": "Özet",
+      "discussion_points": "Tartışma noktaları",
+      "risks": "Riskler",
+      "item_no_ai": "Bu öğe için AI notu yok.",
+      "skipped_notice": "{count} gündem maddesi dahil edilmedi (oluşturma başına 20 sınırı).",
+      "text_mode_notice": "AI çıktısı yapılandırılmamıştı; düz metin olarak gösteriliyor.",
+      "stale_notice": "Bu brifing oluşturulduktan sonra gündem değişti.",
+      "generate_failed": "Brifing oluşturulamadı. Lütfen tekrar deneyin."
+    },
     "notification": {
       "agenda_added": "{subject}, {session} oturumuna eklendi",
       "decided": "{subject} inceleme kararı: {outcome}",

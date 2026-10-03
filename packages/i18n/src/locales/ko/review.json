@@ -127,6 +127,26 @@
       "remove_failed": "참가자를 제거하지 못했습니다. 다시 시도하세요.",
       "empty": "아직 참가자가 없습니다."
     },
+    "briefing": {
+      "title": "브리핑",
+      "ai_badge": "AI",
+      "disclaimer": "AI가 생성했습니다 — 결정하기 전에 사실을 확인하십시오.",
+      "generate": "브리핑 생성",
+      "regenerate": "다시 생성",
+      "generated": "브리핑을 생성했습니다.",
+      "generating": "AI가 브리핑을 작성하고 있습니다… 최대 1분 정도 걸릴 수 있습니다.",
+      "empty": "아직 브리핑이 없습니다. 안건이 정해지면 생성하십시오.",
+      "empty_readonly": "이 세션에 대한 브리핑이 없습니다.",
+      "generated_at": "{date}에 {name}님이 생성 · {model}",
+      "overall": "요약",
+      "discussion_points": "논의 사항",
+      "risks": "위험 요소",
+      "item_no_ai": "이 항목에 대한 AI 메모가 없습니다.",
+      "skipped_notice": "{count}개의 안건 항목이 포함되지 않았습니다(생성당 20개 제한).",
+      "text_mode_notice": "AI 출력이 구조화되어 있지 않아 일반 텍스트로 표시합니다.",
+      "stale_notice": "이 브리핑이 생성된 이후 안건이 변경되었습니다.",
+      "generate_failed": "브리핑을 생성하지 못했습니다. 다시 시도하십시오."
+    },
     "notification": {
       "agenda_added": "{subject}이(가) {session}에 추가되었습니다",
       "decided": "{subject} 검토 결정: {outcome}",
