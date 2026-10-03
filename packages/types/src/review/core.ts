@@ -100,6 +100,40 @@ export interface IReviewItemSubject {
   version: string | null;
 }
 
+export type TReviewBriefingFormat = "json" | "text";
+
+export interface IReviewBriefingItem {
+  session_item_id: string;
+  summary: string;
+  discussion_points: string[];
+  risks: string[];
+}
+
+export interface IReviewSessionBriefing {
+  version: number;
+  generated_at: string;
+  generated_by_name: string;
+  model: string;
+  language: string;
+  format: TReviewBriefingFormat;
+  overall: string;
+  items: IReviewBriefingItem[];
+  included_items: number;
+  skipped_items: number;
+}
+
+export interface IReviewItemFacts {
+  issue_id?: string | null;
+  project_id?: string | null;
+  priority?: string | null;
+  state_name?: string | null;
+  target_date?: string | null;
+  assignees?: string[];
+  war_room?: { id: string; name: string } | null;
+  release_id?: string | null;
+  status?: string | null;
+}
+
 export interface IReviewSessionItem {
   id: string;
   session_id: string;
@@ -113,6 +147,7 @@ export interface IReviewSessionItem {
   request_status: TReviewRequestStatus;
   submission_note: string;
   subject: IReviewItemSubject;
+  facts: IReviewItemFacts;
 }
 
 export interface IReviewParticipant {
@@ -128,6 +163,7 @@ export interface IReviewParticipant {
 export interface IReviewSessionDetail extends IReviewSession {
   items: IReviewSessionItem[];
   participants: IReviewParticipant[];
+  briefing: IReviewSessionBriefing | null;
 }
 
 export type TReviewRequestCreatePayload = {
