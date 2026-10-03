@@ -654,34 +654,8 @@ async fn main() {
                 .patch(routes::state::patch)
                 .delete(routes::state::destroy),
         )
-        // Work item types + workflows (internal cookie-auth). Sejak kontrak 1:1
-        // (spec 2026-09-28-service-management-single-page-design.md), workflow
-        // dibuat/diubah/dihapus lewat work item type; hanya GET yang di-route.
-        // Handler create/patch/delete tetap ada sebagai fixture test.
-        .route(
-            "/api/workspaces/:slug/workflows/",
-            get(routes::workflow::list_workflows),
-        )
-        .route(
-            "/api/workspaces/:slug/workflows/:workflow_id/",
-            get(routes::workflow::retrieve_workflow),
-        )
-        .route(
-            "/api/workspaces/:slug/workflows/:workflow_id/states/",
-            get(routes::workflow::list_states).post(routes::workflow::create_state),
-        )
-        .route(
-            "/api/workspaces/:slug/workflows/:workflow_id/states/:state_id/",
-            patch(routes::workflow::patch_state).delete(routes::workflow::delete_state),
-        )
-        .route(
-            "/api/workspaces/:slug/workflows/:workflow_id/transitions/",
-            get(routes::workflow::list_transitions).post(routes::workflow::create_transition),
-        )
-        .route(
-            "/api/workspaces/:slug/workflows/:workflow_id/transitions/:transition_id/",
-            delete(routes::workflow::delete_transition),
-        )
+        // Work item types (internal cookie-auth). Workflows dihapus
+        // (spec 2026-10-03-remove-workflows-flatten-states-design.md).
         .route(
             "/api/workspaces/:slug/work-item-types/",
             get(routes::v1::work_item_type::list_workspace)
@@ -699,11 +673,7 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/work-item-types/:type_id/",
-            delete(routes::workflow::unlink_type),
-        )
-        .route(
-            "/api/workspaces/:slug/projects/:project_id/workflow-map/",
-            get(routes::workflow::workflow_map),
+            delete(routes::v1::work_item_type::unlink_type),
         )
         // Services (ITSM catalog + dependency DAG + work-item links).
         // Session auth; project-scoped. GET = any active member (incl.

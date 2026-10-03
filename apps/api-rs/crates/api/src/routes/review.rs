@@ -21,7 +21,7 @@ use crate::{
 use super::issue_common::{fetch_project_member_role, is_workspace_admin};
 use super::release::{gate_ws_admin, gate_ws_member, release_in_workspace};
 use super::service::{bad_request, validate_enum};
-use super::workflow::validate_name;
+use super::validation::validate_name;
 
 pub const BOARD_TYPES: &[&str] = &["tcb", "rcb"];
 pub const REQUEST_STATUSES: &[&str] = &["pending", "scheduled", "decided", "withdrawn"];

@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::service::{bad_request, deserialize_present, validate_enum};
-use super::workflow::validate_name;
+use super::validation::validate_name;
 
 /// Allowed `releases.status` values (spec §Model data).
 pub const RELEASE_STATUSES: &[&str] = &[
