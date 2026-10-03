@@ -12,7 +12,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
 import { AlertModalCore } from "@plane/ui";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type Props = {
   workspaceSlug: string;
@@ -24,7 +24,7 @@ type Props = {
 export const DeleteTypeModal = observer(function DeleteTypeModal(props: Props) {
   const { workspaceSlug, isOpen, typeId, onClose } = props;
   // store hooks
-  const { workItemTypes, deleteWorkItemType } = useWorkflow();
+  const { workItemTypes, deleteWorkItemType } = useWorkItemType();
   // plane hooks
   const { t } = useTranslation();
   // states

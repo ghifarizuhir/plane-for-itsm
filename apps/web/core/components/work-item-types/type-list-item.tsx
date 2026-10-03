@@ -24,11 +24,6 @@ export const TypeListItem = observer(function TypeListItem(props: Props) {
   const { workspaceSlug, type, onEdit, onDelete } = props;
   // plane hooks
   const { t } = useTranslation();
-  // derived values
-  const workflowLabel = type.workflow
-    ? `${type.name} Workflow`
-    : t("workspace_settings.settings.work_item_types.no_workflow");
-
   return (
     <div className="group flex items-center justify-between gap-4 px-4 py-3">
       <Link href={`/${workspaceSlug}/settings/work-item-types/${type.id}`} className="flex min-w-0 flex-1 flex-col">
@@ -49,7 +44,6 @@ export const TypeListItem = observer(function TypeListItem(props: Props) {
           </span>
         </div>
         {type.description && <p className="mt-0.5 truncate text-11 text-secondary">{type.description}</p>}
-        <p className="mt-0.5 text-11 text-placeholder">{workflowLabel}</p>
       </Link>
       <CustomMenu ellipsis ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}>
         <CustomMenu.MenuItem onClick={onEdit}>

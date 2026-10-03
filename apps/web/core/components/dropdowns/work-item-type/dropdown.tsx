@@ -21,7 +21,7 @@ import { DropdownButton } from "@/components/dropdowns/buttons";
 import { BUTTON_VARIANTS_WITH_TEXT } from "@/components/dropdowns/constants";
 import type { TDropdownProps } from "@/components/dropdowns/types";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useDropdown } from "@/hooks/use-dropdown";
 
 export type TWorkItemTypeDropdownProps = TDropdownProps & {
@@ -61,14 +61,15 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
   const [popperElement, setPopperElement] = useState<HTMLElement | null>(null);
   // store hooks
   const { t } = useTranslation();
-  const { getWorkflowMap } = useWorkflow();
-  // derived values: the project workflow map exposes only types with an attached
-  // workflow; the API filters deleted types, workflow presence, inactive types and epics
-  const mapTypes = projectId ? (getWorkflowMap(projectId)?.types ?? []) : [];
-  const selectedType = mapTypes.find((type) => type.type_id === value);
-  const options = mapTypes.map((type) => ({
-    value: type.type_id,
-    query: type.type_name,
+  const { workItemTypes } = useWorkItemType();
+  // derived values: types enabled in this project, excluding epics and inactive types
+  const projectTypes = (workItemTypes ?? []).filter(
+    (type) => !type.is_epic && type.is_active && (!projectId || type.project_ids.includes(projectId))
+  );
+  const selectedType = projectTypes.find((type) => type.id === value);
+  const options = projectTypes.map((type) => ({
+    value: type.id,
+    query: type.name,
     type,
   }));
   const filteredOptions =
@@ -102,8 +103,8 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
     handleClose();
   };
 
-  // projects without typed workflows keep the legacy form, which has no type selector
-  if (mapTypes.length === 0) return null;
+  // projects without enabled types keep the legacy form, which has no type selector
+  if (projectTypes.length === 0) return null;
 
   const comboButton = (
     <button
@@ -125,13 +126,13 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
         className={buttonClassName}
         isActive={isOpen}
         tooltipHeading={t("type")}
-        tooltipContent={selectedType?.type_name}
+        tooltipContent={selectedType?.name}
         showTooltip={showTooltip}
         variant={buttonVariant}
       >
         {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
           <span className={cn("flex-grow truncate text-left", { "text-placeholder": !selectedType })}>
-            {selectedType?.type_name ?? t("type")}
+            {selectedType?.name ?? t("type")}
           </span>
         )}
         {dropdownArrow && (
@@ -199,7 +200,7 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
                     >
                       {({ selected }) => (
                         <>
-                          <span className="flex-grow truncate">{option.type.type_name}</span>
+                          <span className="flex-grow truncate">{option.type.name}</span>
                           {selected && <TickOutline className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />}
                         </>
                       )}

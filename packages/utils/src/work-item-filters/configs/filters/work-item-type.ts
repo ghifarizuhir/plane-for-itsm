@@ -12,7 +12,7 @@ import type { IFilterIconConfig, TCreateFilterConfig, TCreateFilterConfigParams 
 import { createFilterConfig, getMultiSelectConfig, createOperatorConfigEntry } from "../../../rich-filters";
 
 /**
- * Work item type option derived from a project workflow map (`type_id` + `type_name`).
+ * Work item type option (`type_id` + `type_name`), mapped from the work item type store.
  */
 export type TWorkItemTypeOption = { type_id: string; type_name: string };
 

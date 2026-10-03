@@ -25,9 +25,8 @@ import { Row } from "@plane/ui";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // plane web imports
-import { useWorkFlowFDragNDrop } from "@/components/workflow";
 // store
-import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
+import { getSingleWorkItemTypeId } from "@/store/work-item-type.helpers";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
 import type { GroupDropLocation } from "../utils";
@@ -73,8 +72,6 @@ const SubGroupSwimlaneHeader = observer(function SubGroupSwimlaneHeader({
   showEmptyGroup,
   sub_group_by,
 }: ISubGroupSwimlaneHeader) {
-  const { getIsWorkflowWorkItemCreationDisabled } = useWorkFlowFDragNDrop(group_by, sub_group_by);
-
   return (
     <div className="relative flex h-max min-h-full w-full items-center gap-4">
       {list &&
@@ -98,7 +95,6 @@ const SubGroupSwimlaneHeader = observer(function SubGroupSwimlaneHeader({
                 collapsedGroups={collapsedGroups}
                 handleCollapsedGroups={handleCollapsedGroups}
                 issuePayload={_list.payload}
-                disableIssueCreation={getIsWorkflowWorkItemCreationDisabled(_list.id)}
                 isEpic={isEpic}
               />
             </div>
@@ -299,8 +295,8 @@ export const KanBanSwimLanes = observer(function KanBanSwimLanes(props: IKanBanS
   // derived values
   const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
   // typed state columns only apply to a state/workflow axis; other axes keep their own grouping
-  const groupTypeId = group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null;
-  const subGroupTypeId = sub_group_by === "state" || sub_group_by === "workflow_state" ? workItemTypeId : null;
+  const groupTypeId = group_by === "state" ? workItemTypeId : null;
+  const subGroupTypeId = sub_group_by === "state" ? workItemTypeId : null;
   const groupByList = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,

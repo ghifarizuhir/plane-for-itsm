@@ -13,7 +13,7 @@ type Props = {
   onRetry: () => void;
 };
 
-export function WorkflowLoadErrorState({ onRetry }: Props) {
+export function LoadErrorState({ onRetry }: Props) {
   const { t } = useTranslation();
 
   return (

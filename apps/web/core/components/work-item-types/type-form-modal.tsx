@@ -18,7 +18,7 @@ import type { TWorkItemType, TWorkItemTypePayload } from "@plane/types";
 // ui
 import { EModalPosition, EModalWidth, ModalCore, TextArea } from "@plane/ui";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type Props = {
   workspaceSlug: string;
@@ -37,7 +37,7 @@ const defaultValues: TWorkItemTypePayload = {
 export const TypeFormModal = observer(function TypeFormModal(props: Props) {
   const { workspaceSlug, isOpen, typeId, onClose, onSuccess } = props;
   // store hooks
-  const { workItemTypes, createWorkItemType, updateWorkItemType } = useWorkflow();
+  const { workItemTypes, createWorkItemType, updateWorkItemType } = useWorkItemType();
   // plane hooks
   const { t } = useTranslation();
   // derived values

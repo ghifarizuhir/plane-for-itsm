@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useMemo } from "react";
-import { isEqual } from "lodash-es";
 import { observer } from "mobx-react";
 import { v4 as uuidv4 } from "uuid";
 // plane imports
@@ -13,13 +12,12 @@ import type { TSaveViewOptions, TUpdateViewOptions } from "@plane/constants";
 import type { IWorkItemFilterInstance } from "@plane/shared-state";
 import type { IIssueFilters, TWorkItemFilterExpression } from "@plane/types";
 // store hooks
-import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 // plane web imports
 import type { TWorkItemFiltersEntityProps } from "@/hooks/work-item-filters/use-work-item-filters-config";
 import { useWorkItemFiltersConfig } from "@/hooks/work-item-filters/use-work-item-filters-config";
 // store
-import { getWorkItemTypeIds, pruneStateFilterValues, scopeStateIdsForTypes } from "@/store/workflow.helpers";
+import { getWorkItemTypeIds } from "@/store/work-item-type.helpers";
 // local imports
 import type { TSharedWorkItemFiltersHOCProps, TSharedWorkItemFiltersProps } from "./shared";
 
@@ -91,20 +89,8 @@ const WorkItemFilterRoot = observer(function WorkItemFilterRoot(props: TWorkItem
     [entityType, workItemEntityID, saveViewOptions, updateViewOptions, updateFilters]
   );
 
-  const { getStateById } = useProjectState();
-  const { stateIds } = entityConfigProps;
   const liveExpression = workItemLayoutFilter.adapter.toExternal(workItemLayoutFilter.expression);
   const selectedTypeIds = useMemo(() => getWorkItemTypeIds({ richFilters: liveExpression }), [liveExpression]);
-
-  // keep the persisted expression consistent when the active type filter narrows the state options
-  useEffect(() => {
-    if (!stateIds || stateIds.length === 0 || selectedTypeIds.length === 0) return;
-    const allowedStateIds = new Set(scopeStateIdsForTypes(stateIds, selectedTypeIds, getStateById) ?? []);
-    const prunedExpression = pruneStateFilterValues(liveExpression, allowedStateIds);
-    if (prunedExpression && !isEqual(prunedExpression, liveExpression)) {
-      workItemLayoutFilter.resetExpression(prunedExpression, false);
-    }
-  }, [liveExpression, selectedTypeIds, stateIds, getStateById, workItemLayoutFilter]);
 
   const workItemFiltersConfig = useWorkItemFiltersConfig({
     allowedFilters: filtersToShowByLayout ? filtersToShowByLayout : [],

@@ -12,7 +12,7 @@ import { TcbStatusBadge } from "./tcb-status-badge";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useReview } from "@/hooks/store/use-review";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type Props = {
   workspaceSlug: string;
@@ -25,7 +25,7 @@ export const ChangeTcbControl = observer(function ChangeTcbControl({ workspaceSl
   const {
     issue: { getIssueById },
   } = useIssueDetail();
-  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
   const { allowPermissions } = useUserPermissions();
   const { getRequestIds, getLatestRequestForChange, fetchRequests, withdrawRequest } = useReview();
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);

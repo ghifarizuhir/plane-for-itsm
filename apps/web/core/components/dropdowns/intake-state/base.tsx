@@ -24,7 +24,7 @@ import type { TDropdownProps } from "@/components/dropdowns/types";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
 // plane web imports
-import { StateOption } from "@/components/workflow";
+import { StateOption } from "@/components/dropdowns/state/state-option";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   button?: ReactNode;

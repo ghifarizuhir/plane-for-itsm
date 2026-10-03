@@ -120,18 +120,15 @@ describe("StateStore.fetchProjectStates", () => {
 });
 
 describe("StateStore.getStatePercentageInGroup", () => {
-  it("mengabaikan typed mirror state di denominator", () => {
+  it("menghitung persentase dari semua state flat dalam group", () => {
     const store = makeStore();
     store.fetchedMap["p-1"] = true;
     store.stateMap = {
       "s-1": { ...makeState("s-1", "p-1"), sequence: 1, order: 1 },
       "s-2": { ...makeState("s-2", "p-1"), sequence: 2, order: 2 },
-      "s-mirror": { ...makeState("s-mirror", "p-1"), sequence: 3, order: 3, type_id: "type-1" },
     };
 
     expect(store.getStatePercentageInGroup("s-1")).toBe(50);
     expect(store.getStatePercentageInGroup("s-2")).toBe(100);
-    // typed mirror states are filtered out of the legacy list → no position
-    expect(store.getStatePercentageInGroup("s-mirror")).toBeUndefined();
   });
 });

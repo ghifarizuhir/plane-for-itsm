@@ -18,10 +18,9 @@ import emptyModule from "@/app/assets/empty-state/module.svg?url";
 import { Spinner } from "@plane/ui";
 // components
 import { EmptyState } from "@/components/common/empty-state";
-import { WorkflowEditor } from "@/components/workflows";
-import { WorkflowLoadErrorState } from "@/components/workflows/workflow-load-error-state";
+import { LoadErrorState } from "@/components/common/load-error-state";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { TypeFormModal } from "./type-form-modal";
@@ -42,7 +41,7 @@ export const WorkItemTypeDetail = observer(function WorkItemTypeDetail(props: Pr
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { workItemTypes, fetchWorkItemTypes, updateWorkItemType } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes, updateWorkItemType } = useWorkItemType();
   // derived values
   const type = workItemTypes?.find((item) => item.id === typeId);
   const fetchErrorTitle = t("common.error.label");
@@ -81,7 +80,7 @@ export const WorkItemTypeDetail = observer(function WorkItemTypeDetail(props: Pr
   };
 
   if (workItemTypes === undefined && hasFetchError) {
-    return <WorkflowLoadErrorState onRetry={loadTypes} />;
+    return <LoadErrorState onRetry={loadTypes} />;
   }
 
   if (workItemTypes === undefined) {
@@ -145,18 +144,9 @@ export const WorkItemTypeDetail = observer(function WorkItemTypeDetail(props: Pr
           </Button>
         </div>
       </div>
-      {type.is_epic ? (
+      {type.is_epic && (
         <p className="mt-6 text-13 text-tertiary">
           {t("workspace_settings.settings.work_item_types.detail.epic_no_workflow")}
-        </p>
-      ) : type.workflow ? (
-        <div className="mt-8">
-          <h4 className="text-14 font-medium text-primary">{`${type.name} Workflow`}</h4>
-          <WorkflowEditor workspaceSlug={workspaceSlug} workflowId={type.workflow} />
-        </div>
-      ) : (
-        <p className="mt-6 text-13 text-tertiary">
-          {t("workspace_settings.settings.work_item_types.detail.no_workflow")}
         </p>
       )}
     </>

@@ -15,9 +15,9 @@ import type { TWorkItemType } from "@plane/types";
 import { Spinner } from "@plane/ui";
 // components
 import { SettingsHeading } from "@/components/settings/heading";
-import { WorkflowLoadErrorState } from "@/components/workflows/workflow-load-error-state";
+import { LoadErrorState } from "@/components/common/load-error-state";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { DeleteTypeModal } from "./delete-type-modal";
@@ -40,7 +40,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
   // derived values
   // `t` is rebuilt on every render by `useTranslation`, so depending on it directly would re-run the effect endlessly.
   // Capturing the resolved strings keeps the dependency values stable across renders.
@@ -103,7 +103,7 @@ export const WorkItemTypesRoot = observer(function WorkItemTypesRoot(props: Prop
       />
       {hasFetchError && workItemTypes === undefined ? (
         <div className="mt-6">
-          <WorkflowLoadErrorState onRetry={loadData} />
+          <LoadErrorState onRetry={loadData} />
         </div>
       ) : workItemTypes === undefined ? (
         <div className="mt-6 flex h-40 items-center justify-center">

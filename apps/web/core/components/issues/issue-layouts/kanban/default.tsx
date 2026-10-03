@@ -29,10 +29,9 @@ import { useIssues } from "@/hooks/store/use-issues";
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 // store
-import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
+import { getSingleWorkItemTypeId } from "@/store/work-item-type.helpers";
 // types
 // parent components
-import { useWorkFlowFDragNDrop } from "@/components/workflow";
 import type { TRenderQuickActions } from "../list/list-view-types";
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, getApproximateCardHeight } from "../utils";
@@ -112,8 +111,6 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
   const isDragDisabled = !issueKanBanView?.getCanUserDragDrop(group_by, sub_group_by);
   const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
 
-  const { getIsWorkflowWorkItemCreationDisabled } = useWorkFlowFDragNDrop(group_by, sub_group_by);
-
   const list = getGroupByColumns({
     groupBy: group_by as GroupByColumnTypes,
     includeNone: true,
@@ -185,11 +182,7 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
                     title={subList.name}
                     count={getGroupIssueCount(subList.id, undefined, false) ?? 0}
                     issuePayload={subList.payload}
-                    disableIssueCreation={
-                      disableIssueCreation ||
-                      isGroupByCreatedBy ||
-                      getIsWorkflowWorkItemCreationDisabled(subList.id, sub_group_id)
-                    }
+                    disableIssueCreation={disableIssueCreation || isGroupByCreatedBy}
                     addIssuesToView={addIssuesToView}
                     collapsedGroups={collapsedGroups}
                     handleCollapsedGroups={handleCollapsedGroups}

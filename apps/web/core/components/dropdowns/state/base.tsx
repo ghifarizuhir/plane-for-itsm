@@ -23,11 +23,8 @@ import { BUTTON_VARIANTS_WITH_TEXT } from "@/components/dropdowns/constants";
 import type { TDropdownProps } from "@/components/dropdowns/types";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
-import { useWorkflow } from "@/hooks/store/use-workflow";
 // plane web imports
-import { StateOption } from "@/components/workflow";
-// plane web store
-import { findWorkflowMapType, resolveSelectableStateIds } from "@/store/workflow.helpers";
+import { StateOption } from "@/components/dropdowns/state/state-option";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   button?: ReactNode;
@@ -47,7 +44,6 @@ export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   showDefaultState?: boolean;
   stateIds: string[];
   value: string | undefined | null;
-  workItemTypeId?: string | null;
 };
 
 export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdownBase(
@@ -59,27 +55,23 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     buttonContainerClassName,
     buttonVariant,
     className = "",
-    currentStateId,
     disabled = false,
     dropdownArrow = false,
     dropdownArrowClassName = "",
     getStateById,
     hideIcon = false,
     iconSize = "size-4",
-    isForWorkItemCreation = false,
     isInitializing = false,
     onChange,
     onClose,
     onDropdownOpen,
     placement,
-    projectId,
     renderByDefault = true,
     showDefaultState = true,
     showTooltip = false,
     stateIds,
     tabIndex,
     value,
-    workItemTypeId,
   } = props;
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -92,20 +84,8 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   const [isOpen, setIsOpen] = useState(false);
   // store hooks
   const { t } = useTranslation();
-  const { getWorkflowMap } = useWorkflow();
-  // workflow-aware options: typing the dropdown to a work item type limits the options to
-  // the states of that type; editing additionally follows the type's allowed transitions
-  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
-  const mapType = findWorkflowMapType(workflowMap, workItemTypeId);
-  // editing without an explicit source state falls back to the selected value so the
-  // transition filter cannot silently collapse to the default state alone
-  const effectiveStateIds = resolveSelectableStateIds(mapType, {
-    stateIds,
-    currentStateId: isForWorkItemCreation ? currentStateId : (currentStateId ?? value),
-    getStateById,
-    isForWorkItemCreation,
-  });
-  const statesList = effectiveStateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);
+  // flat project states: all options are always selectable
+  const statesList = stateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);
   const defaultState = statesList?.find((state) => state?.default);
   const stateValue = value ? value : showDefaultState ? defaultState?.id : undefined;
   // popper-js init

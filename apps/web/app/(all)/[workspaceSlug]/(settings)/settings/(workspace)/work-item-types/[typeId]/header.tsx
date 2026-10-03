@@ -14,7 +14,7 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { SettingsPageHeader } from "@/components/settings/page-header";
 import { WORKSPACE_SETTINGS_ICONS } from "@/components/settings/workspace/sidebar/item-icon";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type Props = {
   workspaceSlug: string;
@@ -28,7 +28,7 @@ export const WorkItemTypeDetailWorkspaceSettingsHeader = observer(function WorkI
   // translation
   const { t } = useTranslation();
   // store hooks
-  const { workItemTypes } = useWorkflow();
+  const { workItemTypes } = useWorkItemType();
   // derived values
   const settingsDetails = WORKSPACE_SETTINGS.work_item_types;
   const Icon = WORKSPACE_SETTINGS_ICONS.work_item_types;

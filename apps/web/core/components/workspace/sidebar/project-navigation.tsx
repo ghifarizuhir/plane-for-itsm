@@ -30,7 +30,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 export type TNavigationItem = {
   name: string;
@@ -68,7 +68,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     : undefined;
   const workItem = workItemId ? getIssueById(workItemId) : undefined;
   const project = getPartialProjectById(projectId);
-  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
 
   useEffect(() => {
     if (workItemTypes) return;

@@ -466,10 +466,6 @@ export const coreRoutes: RouteConfigEntry[] = [
   // → /settings/profile/api-tokens
   route(":workspaceSlug/settings/api-tokens", "routes/redirects/core/api-tokens.tsx"),
 
-  // Workflows legacy redirect: /:workspaceSlug/settings/workflows/*
-  // → /:workspaceSlug/settings/work-item-types/
-  route(":workspaceSlug/settings/workflows/*", "routes/redirects/core/workflows.tsx"),
-
   // Inbox redirect: /:workspaceSlug/projects/:projectId/inbox
   // → /:workspaceSlug/projects/:projectId/intake
   route(":workspaceSlug/projects/:projectId/inbox", "routes/redirects/core/inbox.tsx"),

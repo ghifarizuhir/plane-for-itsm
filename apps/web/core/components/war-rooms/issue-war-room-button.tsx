@@ -15,7 +15,7 @@ import { IconButton } from "@plane/propel/icon-button";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type Props = {
   workspaceSlug: string;
@@ -33,7 +33,7 @@ export const IssueWarRoomButton = observer(function IssueWarRoomButton({ workspa
   const {
     issue: { getIssueById },
   } = useIssueDetail();
-  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
   // derived values
   const issue = getIssueById(issueId);
 

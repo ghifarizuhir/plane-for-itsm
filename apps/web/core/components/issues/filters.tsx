@@ -15,10 +15,8 @@ import type { IIssueDisplayFilterOptions, IIssueDisplayProperties, TIssueGroupBy
 import { EIssueLayoutTypes, EIssuesStoreType } from "@plane/types";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
-import { useWorkflow } from "@/hooks/store/use-workflow";
 // plane web imports
 import type { TProject } from "@plane/types";
-import { getSingleWorkItemTypeId, resolveEffectiveDisplayFilters } from "@/store/workflow.helpers";
 // local imports
 import { WorkItemsModal } from "../analytics/work-items/modal";
 import { WorkItemFiltersToggle } from "../work-item-filters/filters-toggle";
@@ -64,36 +62,15 @@ export const HeaderFilters = observer(function HeaderFilters(props: Props) {
   const activeLayout = issueFilters?.displayFilters?.layout;
   const layoutDisplayFiltersOptions = ISSUE_STORE_TO_FILTERS_MAP[storeType]?.layoutOptions[activeLayout];
 
-  const { getWorkflowMap } = useWorkflow();
-  const workflowMap = storeType === EIssuesStoreType.PROJECT && projectId ? getWorkflowMap(projectId) : undefined;
-  const workItemTypeId = getSingleWorkItemTypeId(issueFilters);
-  const effectiveDisplayFilters = useMemo(
-    () => resolveEffectiveDisplayFilters(issueFilters?.displayFilters, workflowMap, workItemTypeId),
-    [issueFilters?.displayFilters, workflowMap, workItemTypeId]
+  const effectiveDisplayFilters = issueFilters?.displayFilters;
+  const groupByOptions = useMemo<TIssueGroupByOptions[]>(
+    () => layoutDisplayFiltersOptions?.display_filters.group_by ?? [],
+    [layoutDisplayFiltersOptions]
   );
-  const hasTypedWorkflow = (workflowMap?.types?.length ?? 0) > 0;
-  const groupByOptions = useMemo<TIssueGroupByOptions[]>(() => {
-    const base = layoutDisplayFiltersOptions?.display_filters.group_by ?? [];
-    if (!hasTypedWorkflow) return base.filter((key) => key !== "state_detail.group" && key !== "workflow_state");
-    return [
-      ...new Set<TIssueGroupByOptions>([
-        ...base.filter((key) => key !== "state"),
-        "state_detail.group",
-        "workflow_state",
-      ]),
-    ];
-  }, [layoutDisplayFiltersOptions, hasTypedWorkflow]);
-  const subGroupByOptions = useMemo<TIssueGroupByOptions[]>(() => {
-    const base = layoutDisplayFiltersOptions?.display_filters.sub_group_by ?? [];
-    if (!hasTypedWorkflow) return base.filter((key) => key !== "state_detail.group" && key !== "workflow_state");
-    return [
-      ...new Set<TIssueGroupByOptions>([
-        ...base.filter((key) => key !== "state"),
-        "state_detail.group",
-        "workflow_state",
-      ]),
-    ];
-  }, [layoutDisplayFiltersOptions, hasTypedWorkflow]);
+  const subGroupByOptions = useMemo<TIssueGroupByOptions[]>(
+    () => layoutDisplayFiltersOptions?.display_filters.sub_group_by ?? [],
+    [layoutDisplayFiltersOptions]
+  );
 
   const handleLayoutChange = useCallback(
     (layout: EIssueLayoutTypes) => {

@@ -17,13 +17,10 @@ import { EIssueLayoutTypes } from "@plane/types";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useWorkflow } from "@/hooks/store/use-workflow";
 // hooks
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
-// store
-import { getSingleWorkItemTypeId, resolveEffectiveDisplayFilters } from "@/store/workflow.helpers";
 // components
 import { IssueLayoutHOC } from "../issue-layout-HOC";
 import { resolveRenderedGroupBy } from "../mobile-layout";
@@ -81,13 +78,7 @@ export const BaseListRoot = observer(function BaseListRoot(props: IBaseListRoot)
   const displayFilters = issuesFilter?.issueFilters?.displayFilters;
   const displayProperties = issuesFilter?.issueFilters?.displayProperties;
   const { workspaceSlug, projectId } = useParams();
-  const { getWorkflowMap } = useWorkflow();
-  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
-  const effectiveDisplayFilters = resolveEffectiveDisplayFilters(
-    displayFilters,
-    workflowMap,
-    getSingleWorkItemTypeId(issuesFilter?.issueFilters)
-  );
+  const effectiveDisplayFilters = displayFilters;
   const orderBy = effectiveDisplayFilters?.order_by || undefined;
 
   const group_by = (effectiveDisplayFilters?.group_by || null) as GroupByColumnTypes | null;

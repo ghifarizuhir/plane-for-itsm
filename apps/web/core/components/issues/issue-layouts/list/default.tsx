@@ -35,7 +35,7 @@ import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { ListGroup } from "./list-group";
 import type { TRenderQuickActions } from "./list-view-types";
-import { getSingleWorkItemTypeId } from "@/store/workflow.helpers";
+import { getSingleWorkItemTypeId } from "@/store/work-item-type.helpers";
 
 export interface IList {
   groupedIssueIds: TGroupedIssues;
@@ -99,7 +99,7 @@ export const List = observer(function List(props: IList) {
     isWorkspaceLevel: isWorkspaceLevel(storeType),
     isEpic: isEpic,
     projectId,
-    typeId: group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null,
+    typeId: group_by === "state" ? workItemTypeId : null,
   });
 
   // Enable Auto Scroll for Main Kanban
@@ -176,7 +176,7 @@ export const List = observer(function List(props: IList) {
                     handleCollapsedGroups={handleCollapsedGroups}
                     collapsedGroups={collapsedGroups}
                     isEpic={isEpic}
-                    workItemTypeId={group_by === "state" || group_by === "workflow_state" ? workItemTypeId : null}
+                    workItemTypeId={group_by === "state" ? workItemTypeId : null}
                   />
                 ))}
               </div>

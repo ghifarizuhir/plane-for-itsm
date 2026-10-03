@@ -15,7 +15,6 @@ import { cn } from "@plane/utils";
 
 type Props = {
   dragColumnOrientation: "justify-start" | "justify-center" | "justify-end";
-  workflowDisabledSource?: string;
   canOverlayBeVisible: boolean;
   isDropDisabled: boolean;
   dropErrorMessage?: string;
@@ -28,7 +27,6 @@ export function GroupDragOverlay(props: Props) {
   const {
     dragColumnOrientation,
     canOverlayBeVisible,
-    workflowDisabledSource,
     isDropDisabled,
     dropErrorMessage,
     orderBy,
@@ -52,35 +50,32 @@ export function GroupDragOverlay(props: Props) {
         `absolute top-0 left-0 h-full w-full items-center rounded-sm bg-layer-1/85 text-13 font-medium text-tertiary ${dragColumnOrientation}`,
         {
           "z-2 flex flex-col border-[1px] border-strong": shouldOverlayBeVisible,
-          "bg-danger-subtle": workflowDisabledSource && isDropDisabled,
         },
         { hidden: !shouldOverlayBeVisible }
       )}
     >
-      {workflowDisabledSource ? null : (
-        <div
-          className={cn("my-8 flex flex-col items-center rounded-sm p-3", {
-            "text-secondary": shouldOverlayBeVisible,
-            "text-danger-secondary": isDropDisabled,
-          })}
-        >
-          {dropErrorMessage ? (
-            <div className="flex items-center">
-              <WarningCircleOutline width={13} height={13} /> &nbsp;
-              <span>{dropErrorMessage}</span>
-            </div>
-          ) : (
-            <>
-              {readableOrderBy && (
-                <span>
-                  {t("issue.layouts.ordered_by_label")} <span className="font-semibold">{t(readableOrderBy)}</span>.
-                </span>
-              )}
-              <span>{t("entity.drop_here_to_move", { entity: isEpic ? "epic" : "work item" })}</span>
-            </>
-          )}
-        </div>
-      )}
+      <div
+        className={cn("my-8 flex flex-col items-center rounded-sm p-3", {
+          "text-secondary": shouldOverlayBeVisible,
+          "text-danger-secondary": isDropDisabled,
+        })}
+      >
+        {dropErrorMessage ? (
+          <div className="flex items-center">
+            <WarningCircleOutline width={13} height={13} /> &nbsp;
+            <span>{dropErrorMessage}</span>
+          </div>
+        ) : (
+          <>
+            {readableOrderBy && (
+              <span>
+                {t("issue.layouts.ordered_by_label")} <span className="font-semibold">{t(readableOrderBy)}</span>.
+              </span>
+            )}
+            <span>{t("entity.drop_here_to_move", { entity: isEpic ? "epic" : "work item" })}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

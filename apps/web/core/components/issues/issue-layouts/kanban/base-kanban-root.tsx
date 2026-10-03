@@ -19,12 +19,9 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useUserPermissions } from "@/hooks/store/user";
-import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
-// store
-import { getSingleWorkItemTypeId, resolveEffectiveDisplayFilters } from "@/store/workflow.helpers";
 // ui
 // types
 import { DeleteIssueModal } from "../../delete-issue-modal";
@@ -92,10 +89,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
   const displayFilters = issuesFilter?.issueFilters?.displayFilters;
   const displayProperties = issuesFilter?.issueFilters?.displayProperties;
 
-  const { getWorkflowMap } = useWorkflow();
-  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
-  const workItemTypeId = getSingleWorkItemTypeId(issuesFilter?.issueFilters);
-  const effectiveDisplayFilters = resolveEffectiveDisplayFilters(displayFilters, workflowMap, workItemTypeId);
+  const effectiveDisplayFilters = displayFilters;
 
   const sub_group_by = effectiveDisplayFilters?.sub_group_by;
   const group_by = effectiveDisplayFilters?.group_by;

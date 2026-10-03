@@ -27,7 +27,6 @@ import { Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
-import { useWorkFlowFDragNDrop } from "@/components/workflow";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
@@ -115,15 +114,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const [intersectionElement, setIntersectionElement] = useState<HTMLDivElement | null>(null);
 
-  const {
-    workflowDisabledSource,
-    isWorkflowDropDisabled,
-    handleWorkFlowState,
-    getIsWorkflowWorkItemCreationDisabled,
-    workflowDropErrorMessage,
-  } = useWorkFlowFDragNDrop(group_by);
-  const isWorkflowIssueCreationDisabled = getIsWorkflowWorkItemCreationDisabled(group.id);
-
   const groupIssueCount = getGroupIssueCount(group.id, undefined, false) ?? 0;
   const nextPageResults = getPaginationData(group.id, undefined)?.nextPageResults;
   const isPaginating = !!getIssueLoader(group.id);
@@ -209,9 +199,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           const sourceGroupId = source?.data?.groupId as string | undefined;
           const currentGroupId = group.id;
 
-          // oxlint-disable-next-line no-unused-expressions
-          sourceGroupId && handleWorkFlowState(sourceGroupId, currentGroupId);
-
           const sourceIndex = getGroupIndex(sourceGroupId);
           const currentIndex = getGroupIndex(currentGroupId);
 
@@ -228,13 +215,12 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
           if (!source || !destination) return;
 
-          if (isWorkflowDropDisabled || group.isDropDisabled) {
-            const workflowDropError = workflowDropErrorMessage ?? group.dropErrorMessage;
-            if (workflowDropError)
+          if (group.isDropDisabled) {
+            if (group.dropErrorMessage)
               setToast({
                 type: TOAST_TYPE.WARNING,
                 title: t("common.warning"),
-                message: workflowDropError,
+                message: group.dropErrorMessage,
               });
             return;
           }
@@ -257,12 +243,11 @@ export const ListGroup = observer(function ListGroup(props: Props) {
     getGroupIndex,
     setDragColumnOrientation,
     setIsDraggingOverColumn,
-    isWorkflowDropDisabled,
   ]);
 
   const isDragAllowed = group_by ? DRAG_ALLOWED_GROUPS.includes(group_by) : true;
-  const canOverlayBeVisible = isWorkflowDropDisabled || orderBy !== "sort_order" || !!group.isDropDisabled;
-  const isDropDisabled = isWorkflowDropDisabled || !!group.isDropDisabled;
+  const canOverlayBeVisible = orderBy !== "sort_order" || !!group.isDropDisabled;
+  const isDropDisabled = !!group.isDropDisabled;
 
   const isGroupByCreatedBy = group_by === "created_by";
   const shouldExpand = (!!groupIssueCount && isExpanded) || !group_by;
@@ -288,9 +273,7 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           count={groupIssueCount}
           issuePayload={group.payload}
           canEditProperties={canEditProperties}
-          disableIssueCreation={
-            disableIssueCreation || isGroupByCreatedBy || isCompletedCycle || isWorkflowIssueCreationDisabled
-          }
+          disableIssueCreation={disableIssueCreation || isGroupByCreatedBy || isCompletedCycle}
           addIssuesToView={addIssuesToView}
           selectionHelpers={selectionHelpers}
           handleCollapsedGroups={handleCollapsedGroups}
@@ -303,7 +286,6 @@ export const ListGroup = observer(function ListGroup(props: Props) {
             dragColumnOrientation={dragColumnOrientation}
             canOverlayBeVisible={canOverlayBeVisible}
             isDropDisabled={isDropDisabled}
-            workflowDisabledSource={workflowDisabledSource}
             dropErrorMessage={group.dropErrorMessage}
             orderBy={orderBy}
             isDraggingOverColumn={isDraggingOverColumn}
@@ -339,22 +321,18 @@ export const ListGroup = observer(function ListGroup(props: Props) {
               </>
             ))}
 
-          {enableIssueQuickAdd &&
-            !disableIssueCreation &&
-            !isGroupByCreatedBy &&
-            !isCompletedCycle &&
-            !isWorkflowIssueCreationDisabled && (
-              <div className="sticky bottom-0 z-[1] w-full flex-shrink-0">
-                <QuickAddIssueRoot
-                  layout={EIssueLayoutTypes.LIST}
-                  QuickAddButton={ListQuickAddIssueButton}
-                  prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
-                  containerClassName="border-b border-t border-subtle bg-surface-1 "
-                  quickAddCallback={quickAddCallback}
-                  isEpic={isEpic}
-                />
-              </div>
-            )}
+          {enableIssueQuickAdd && !disableIssueCreation && !isGroupByCreatedBy && !isCompletedCycle && (
+            <div className="sticky bottom-0 z-[1] w-full flex-shrink-0">
+              <QuickAddIssueRoot
+                layout={EIssueLayoutTypes.LIST}
+                QuickAddButton={ListQuickAddIssueButton}
+                prePopulatedData={prePopulateQuickAddData(group_by, group.id)}
+                containerClassName="border-b border-t border-subtle bg-surface-1 "
+                quickAddCallback={quickAddCallback}
+                isEpic={isEpic}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

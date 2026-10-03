@@ -12,9 +12,9 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
 import { Spinner } from "@plane/ui";
 // components
-import { WorkflowLoadErrorState } from "@/components/workflows/workflow-load-error-state";
+import { LoadErrorState } from "@/components/common/load-error-state";
 // hooks
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 // local imports
 import { TypeToggleItem } from "./type-toggle-item";
 
@@ -30,37 +30,20 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const {
-    workItemTypes,
-    workflows,
-    workflowMap,
-    mapRefreshError,
-    fetchWorkItemTypes,
-    fetchWorkflows,
-    fetchWorkflowMap,
-    importWorkItemTypes,
-    unlinkWorkItemType,
-  } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes, importWorkItemTypes, unlinkWorkItemType } = useWorkItemType();
   // derived values
   // `t` is rebuilt on every render by `useTranslation`, so depending on it directly would re-run the effect endlessly.
   // Capturing the resolved strings keeps the dependency values stable across renders.
   const fetchErrorTitle = t("common.error.label");
   const fetchErrorMessage = t("common.error.message");
-  const workflowMapType = workflowMap[projectId];
-  // status enable mengikuti link project (project_issue_types), bukan workflow-map:
-  // map menyembunyikan type nonaktif, sementara link-nya tetap hidup dan harus
-  // tetap bisa di-unlink dari halaman ini.
+  // status enable mengikuti link project (project_issue_types)
   const enabledIds = new Set(
     (workItemTypes ?? []).filter((type) => type.project_ids?.includes(projectId)).map((type) => type.id)
   );
 
   const loadData = useCallback(() => {
     setHasFetchError(false);
-    void Promise.all([
-      fetchWorkItemTypes(workspaceSlug),
-      fetchWorkflows(workspaceSlug),
-      fetchWorkflowMap(workspaceSlug, projectId),
-    ]).catch((error: any) => {
+    void fetchWorkItemTypes(workspaceSlug).catch((error: any) => {
       setHasFetchError(true);
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -68,15 +51,7 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
         message: error?.error ?? fetchErrorMessage,
       });
     });
-  }, [
-    workspaceSlug,
-    projectId,
-    fetchWorkItemTypes,
-    fetchWorkflows,
-    fetchWorkflowMap,
-    fetchErrorTitle,
-    fetchErrorMessage,
-  ]);
+  }, [workspaceSlug, fetchWorkItemTypes, fetchErrorTitle, fetchErrorMessage]);
 
   useEffect(() => {
     loadData();
@@ -88,13 +63,6 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
       else await unlinkWorkItemType(workspaceSlug, projectId, typeId);
       // daftar type menopang status switch (project_ids); refresh agar UI akurat
       await fetchWorkItemTypes(workspaceSlug);
-      if (mapRefreshError[projectId]) {
-        setToast({
-          type: TOAST_TYPE.WARNING,
-          title: t("common.warning"),
-          message: t("workspace_settings.settings.work_item_types.map_refresh_failed"),
-        });
-      }
     } catch (error: any) {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -104,11 +72,11 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
     }
   };
 
-  if (workItemTypes === undefined || workflows === undefined || workflowMapType === undefined) {
+  if (workItemTypes === undefined) {
     if (hasFetchError) {
       return (
         <div className="mt-6">
-          <WorkflowLoadErrorState onRetry={loadData} />
+          <LoadErrorState onRetry={loadData} />
         </div>
       );
     }
@@ -138,11 +106,7 @@ export const ProjectWorkItemTypesRoot = observer(function ProjectWorkItemTypesRo
         <TypeToggleItem
           key={type.id}
           type={type}
-          workflowName={workflows.find((workflow) => workflow.id === type.workflow)?.name}
           enabled={enabledIds.has(type.id)}
-          disabledReason={
-            !type.workflow ? t("workspace_settings.settings.work_item_types.attach_workflow_first") : undefined
-          }
           onToggle={(next) => handleToggle(type.id, next)}
         />
       ))}

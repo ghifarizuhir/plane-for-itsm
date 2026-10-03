@@ -20,7 +20,7 @@ import {
 } from "@makeplane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -40,7 +40,7 @@ export const useNavigationItems = ({
   project,
   allowPermissions,
 }: UseNavigationItemsProps): TNavigationItem[] => {
-  const { workItemTypes, fetchWorkItemTypes } = useWorkflow();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
 
   useEffect(() => {
     if (workItemTypes) return;

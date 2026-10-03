@@ -54,7 +54,6 @@ import { renderFormattedDate, getFileURL } from "@plane/utils";
 import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
-import { findWorkflowMapType, resolveWorkflowStateColumns } from "@/store/workflow.helpers";
 // constants
 import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
 // components
@@ -242,25 +241,22 @@ const getModuleColumns = (): IGroupByColumn[] | undefined => {
   return modules;
 };
 
-const getStateColumns = ({ projectId, typeId }: TGetColumns): IGroupByColumn[] | undefined => {
+const getStateColumns = ({ projectId }: TGetColumns): IGroupByColumn[] | undefined => {
   const { getProjectStates, projectStates } = store.state;
   const _states = projectId ? getProjectStates(projectId) : projectStates;
   if (!_states) return;
-  // typed state columns come from the project workflow map: sequence + label are workspace-owned
-  const workflowMap = projectId ? store.workflow.getWorkflowMap(projectId) : undefined;
-  const mapType = findWorkflowMapType(workflowMap, typeId);
-  const columns = resolveWorkflowStateColumns(_states, mapType, workflowMap);
+  // flat project states, ordered by sequence
+  const columns = [..._states].toSorted((a, b) => a.sequence - b.sequence);
   // map state columns to group by columns
-  return columns.map(({ state, label }) => ({
+  return columns.map((state) => ({
     id: state.id,
-    name: label,
+    name: state.name,
     icon: (
       <div className="size-4 rounded-full">
         <StateGroupIcon stateGroup={state.group} color={state.color} size={EIconSize.LG} percentage={state.order} />
       </div>
     ),
-    // type_id ikut payload supaya header "+"/quick-add membuat item bertipe benar
-    payload: { state_id: state.id, ...(state.type_id ? { type_id: state.type_id } : {}) },
+    payload: { state_id: state.id },
   }));
 };
 

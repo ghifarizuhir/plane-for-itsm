@@ -6,8 +6,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
+
 import type { Control } from "react-hook-form";
-import { Controller, useFormContext } from "react-hook-form";
+import { Controller } from "react-hook-form";
 import { ETabIndices, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ParentOutline } from "@makeplane/propel/icons";
@@ -33,13 +34,10 @@ import { ServiceMultiSelect } from "@/components/services/select";
 import { useIssueModal } from "@/hooks/context/use-issue-modal";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useProject } from "@/hooks/store/use-project";
-import { useProjectState } from "@/hooks/store/use-project-state";
 import { useService } from "@/hooks/store/use-service";
-import { useWorkflow } from "@/hooks/store/use-workflow";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-// store
-import { getTypeDefaultStateId, shouldRetryWorkflowMapFetch } from "@/store/workflow.helpers";
 
 type TIssueDefaultPropertiesProps = {
   control: Control<TIssue>;
@@ -71,71 +69,29 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   } = props;
   // states
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
-  const [workflowMapRetry, setWorkflowMapRetry] = useState(0);
   // refs
   const initializedServiceIssueId = useRef<string | null>(null);
-  const requestedWorkflowMaps = useRef(new Set<string>());
-  // per-project retry budget so one failing project cannot spend another's attempts
-  const workflowMapRetryCount = useRef(new Map<string, number>());
-  // pending retry timers, cleared on unmount so a late callback never fires setState
-  const workflowMapRetryTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
   // store hooks
   const { t } = useTranslation();
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
   const { fetchedMap, workItemLinkMap } = useService();
   const { selectedServiceIds, setSelectedServiceIds } = useIssueModal();
-  const { fetchWorkflowMap, getWorkflowMap } = useWorkflow();
-  const { getStateById } = useProjectState();
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
-  // form context
-  const { setValue, watch } = useFormContext<TIssue>();
   // derived values
   const projectDetails = getProjectById(projectId);
-  const typeId = watch("type_id");
-  const selectedStateId = watch("state_id");
-  const workflowMap = projectId ? getWorkflowMap(projectId) : undefined;
-  const workflowMapTypes = workflowMap?.types ?? [];
+  const hasProjectTypes = (workItemTypes ?? []).some(
+    (type) => !type.is_epic && type.is_active && (!projectId || type.project_ids.includes(projectId))
+  );
 
-  // the map is fetched with the project layout, but the create modal can be opened for a
-  // project not visited this session (e.g. cross-project create), so fetch it lazily.
-  // the ref prevents duplicate in-flight requests; the store discards stale responses.
+  // the type list is usually fetched with the workspace sidebar, but the create
+  // modal can target a project whose list was never loaded — fetch lazily.
   useEffect(() => {
-    if (!projectId || !workspaceSlug || getWorkflowMap(projectId) !== undefined) return;
-    if (requestedWorkflowMaps.current.has(projectId)) return;
-    requestedWorkflowMaps.current.add(projectId);
-    void fetchWorkflowMap(workspaceSlug, projectId).catch(() => {
-      requestedWorkflowMaps.current.delete(projectId);
-      // bounded per-project retry so a transient failure does not hide the Type
-      // dropdown until the modal remounts
-      const attempts = workflowMapRetryCount.current.get(projectId) ?? 0;
-      if (!shouldRetryWorkflowMapFetch(attempts)) return;
-      workflowMapRetryCount.current.set(projectId, attempts + 1);
-      const timer = setTimeout(() => {
-        workflowMapRetryTimers.current.delete(timer);
-        setWorkflowMapRetry((value) => value + 1);
-      }, 1500);
-      workflowMapRetryTimers.current.add(timer);
-    });
-  }, [fetchWorkflowMap, getWorkflowMap, projectId, workspaceSlug, workflowMapRetry]);
-
-  // clear pending retry timers on unmount; the Set holds handles created above
-  useEffect(() => {
-    const timers = workflowMapRetryTimers.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
-  }, []);
-
-  // a quick-add column can prefill a typed state without its type (e.g. composite
-  // workflow state column); derive the type so create never sends an invalid pair
-  useEffect(() => {
-    if (id || typeId || !selectedStateId) return;
-    const derivedTypeId = getStateById(selectedStateId)?.type_id;
-    if (derivedTypeId) setValue("type_id", derivedTypeId, { shouldValidate: true });
-  }, [id, typeId, selectedStateId, getStateById, setValue]);
+    if (workItemTypes !== undefined || !workspaceSlug) return;
+    void fetchWorkItemTypes(workspaceSlug).catch(() => undefined);
+  }, [workItemTypes, workspaceSlug, fetchWorkItemTypes]);
 
   // clear the chosen services when the create modal switches project
   useEffect(() => {
@@ -169,7 +125,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {!id && workflowMapTypes.length > 0 && (
+      {!id && hasProjectTypes && (
         <Controller
           control={control}
           name="type_id"
@@ -179,7 +135,6 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 value={value}
                 onChange={(newTypeId) => {
                   onChange(newTypeId);
-                  setValue("state_id", getTypeDefaultStateId(workflowMap, newTypeId), { shouldValidate: true });
                   handleFormChange();
                 }}
                 projectId={projectId ?? undefined}
@@ -204,8 +159,6 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               projectId={projectId ?? undefined}
               buttonVariant="border-with-text"
               tabIndex={getIndex("state_id")}
-              isForWorkItemCreation={!id}
-              workItemTypeId={typeId}
               currentStateId={value}
             />
           </div>

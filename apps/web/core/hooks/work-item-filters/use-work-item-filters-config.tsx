@@ -62,9 +62,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useWorkflow } from "@/hooks/store/use-workflow";
-// store
-import { scopeStateIdsForTypes } from "@/store/workflow.helpers";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 // plane web imports
 import { useFiltersOperatorConfigs } from "@/hooks/rich-filters/use-filters-operator-configs";
 
@@ -95,25 +93,15 @@ export type TWorkItemFiltersConfig = {
 };
 
 export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps): TWorkItemFiltersConfig => {
-  const {
-    allowedFilters,
-    cycleIds,
-    labelIds,
-    memberIds,
-    moduleIds,
-    projectId,
-    projectIds,
-    selectedTypeIds,
-    stateIds,
-    workspaceSlug,
-  } = props;
+  const { allowedFilters, cycleIds, labelIds, memberIds, moduleIds, projectId, projectIds, stateIds, workspaceSlug } =
+    props;
   // store hooks
   const { loader: projectLoader, getProjectById } = useProject();
   const { getCycleById } = useCycle();
   const { getLabelById } = useLabel();
   const { getModuleById } = useModule();
   const { getStateById } = useProjectState();
-  const { getWorkflowMap } = useWorkflow();
+  const { workItemTypes: allWorkItemTypes } = useWorkItemType();
   const { getUserDetails } = useMember();
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
@@ -121,13 +109,13 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const project = useMemo(() => getProjectById(projectId), [projectId, getProjectById]);
   const workItemTypes = useMemo(
     () =>
-      projectId
-        ? (getWorkflowMap(projectId)?.types ?? []).map((type) => ({
-            type_id: type.type_id,
-            type_name: type.type_name,
-          }))
-        : [],
-    [projectId, getWorkflowMap]
+      (allWorkItemTypes ?? [])
+        .filter((type) => !projectId || type.project_ids.includes(projectId))
+        .map((type) => ({
+          type_id: type.id,
+          type_name: type.name,
+        })),
+    [projectId, allWorkItemTypes]
   );
   const members: IUserLite[] | undefined = useMemo(
     () =>
@@ -136,29 +124,11 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         : undefined,
     [memberIds, getUserDetails]
   );
-  const selectedTypeIdSet = useMemo(() => new Set(selectedTypeIds ?? []), [selectedTypeIds]);
-  const typeNameByTypeId = useMemo(
-    () => new Map(workItemTypes.map((type) => [type.type_id, type.type_name])),
-    [workItemTypes]
-  );
-  const shouldPrefixStateType = workItemTypes.length > 0 && selectedTypeIdSet.size !== 1;
-  const getStateOptionLabel = useCallback(
-    (state: IState) => {
-      const typeName = state.type_id ? typeNameByTypeId.get(state.type_id) : undefined;
-      return typeName && shouldPrefixStateType ? `${typeName} · ${state.name}` : state.name;
-    },
-    [typeNameByTypeId, shouldPrefixStateType]
-  );
+  const getStateOptionLabel = useCallback((state: IState) => state.name, []);
   const workItemStates: IState[] | undefined = useMemo(() => {
     if (!stateIds) return undefined;
-    const scopedStateIds =
-      scopeStateIdsForTypes(
-        stateIds,
-        [...selectedTypeIdSet],
-        getStateById as (stateId: string) => Partial<Pick<IState, "type_id">> | undefined
-      ) ?? [];
-    return scopedStateIds.map((stateId) => getStateById(stateId)).filter((state): state is IState => Boolean(state));
-  }, [stateIds, selectedTypeIdSet, getStateById]);
+    return stateIds.map((stateId) => getStateById(stateId)).filter((state): state is IState => Boolean(state));
+  }, [stateIds, getStateById]);
   const workItemLabels: IIssueLabel[] | undefined = useMemo(
     () =>
       labelIds

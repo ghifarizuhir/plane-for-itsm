@@ -122,10 +122,7 @@ export class ProjectViewIssuesFilter extends IssueFilterHelperStore implements I
     const filteredRouteParams: Partial<Record<TIssueParams, string | boolean>> = this.computedFilteredParams(
       userFilters?.richFilters,
       userFilters?.displayFilters,
-      filteredParams,
-      this.rootIssueStore.projectId
-        ? this.rootIssueStore.rootStore.workflow.getWorkflowMap(this.rootIssueStore.projectId)
-        : undefined
+      filteredParams
     );
 
     return filteredRouteParams;
