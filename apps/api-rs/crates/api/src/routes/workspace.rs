@@ -594,8 +594,7 @@ pub(crate) fn guard_ws_states(role: Option<i16>) -> Result<(), String> {
 /// - Deviations: `ORDER BY sequence ASC` for determinism (Django sets no
 ///   ordering); datetimes unneeded (no datetime keys in the shape);
 ///   JSON key order follows repo batch convention while the KEY SET
-///   matches `StateSerializer` plus the fork's `type_id` /
-///   `workflow_state_id` mapping keys (Task B9).
+///   matches `StateSerializer`.
 pub async fn ws_states(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -606,7 +605,7 @@ pub async fn ws_states(
         return Ok(deny());
     }
     let rows: Vec<StateFullRow> = sqlx::query_as(
-        "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence, s.type_id, s.workflow_state_id \
+        "SELECT s.id, s.project_id, s.workspace_id, s.name, s.color, s.\"group\", s.\"default\" AS is_default, s.description, s.sequence \
          FROM states s JOIN projects p ON p.id = s.project_id \
          WHERE s.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
          AND s.deleted_at IS NULL AND s.\"group\" != 'triage' AND s.is_triage = false \
