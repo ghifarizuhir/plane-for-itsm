@@ -385,3 +385,39 @@
     animation: none;
   }
 }
+
+/* Service dependency graph (React Flow).
+ * `colorMode` only toggles the library's own `.dark` palette; these overrides
+ * map each piece of chrome onto Plane tokens so the canvas matches the surface
+ * it sits on in light, dark and contrast themes. */
+.service-graph-flow {
+  --xy-background-color: var(--bg-surface-1);
+  --xy-edge-stroke: var(--border-strong);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--bg-accent-primary);
+  --xy-connectionline-stroke: var(--bg-accent-primary);
+  --xy-connectionline-stroke-width: 1.5;
+  --xy-handle-background-color: var(--bg-layer-3);
+  --xy-handle-border-color: var(--bg-surface-1);
+  --xy-controls-button-background-color: var(--bg-surface-1);
+  --xy-controls-button-background-color-hover: var(--bg-layer-2);
+  --xy-controls-button-color: var(--txt-secondary);
+  --xy-controls-button-color-hover: var(--txt-primary);
+  --xy-controls-button-border-color: var(--border-subtle);
+  --xy-controls-box-shadow: 0 0 0 1px var(--border-subtle);
+  --xy-minimap-background-color: var(--bg-surface-1);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--bg-canvas) 60%, transparent);
+  --xy-minimap-node-background-color: var(--bg-layer-3);
+  --xy-attribution-background-color: transparent;
+  --xy-selection-background-color: color-mix(in srgb, var(--bg-accent-primary) 10%, transparent);
+  --xy-selection-border: 1px dashed var(--border-accent-strong);
+}
+
+.service-graph-flow .react-flow__attribution a {
+  color: var(--txt-tertiary);
+}
+
+.service-graph-flow .react-flow__node.selected .service-node-card {
+  border-color: var(--border-accent-strong);
+  box-shadow: 0 0 0 1px var(--border-accent-strong);
+}

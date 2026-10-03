@@ -84,7 +84,7 @@ export const ServicesListView = observer(function ServicesListView() {
     }
     if (layout === "graph") {
       return (
-        <div className="h-[calc(100vh-12rem)] w-full">
+        <div className="min-h-0 w-full flex-1">
           <ServiceGraph />
         </div>
       );
@@ -98,7 +98,7 @@ export const ServicesListView = observer(function ServicesListView() {
   };
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       {renderContent()}
       {workspaceSlug && projectId && (
         <CreateUpdateServiceModal

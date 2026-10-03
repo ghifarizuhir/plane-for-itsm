@@ -5,7 +5,7 @@
  */
 
 import type { Edge, Node } from "@xyflow/react";
-import { Position } from "@xyflow/react";
+import { MarkerType, Position } from "@xyflow/react";
 import dagre from "dagre";
 import type { IService, IServiceDependency } from "@plane/types";
 
@@ -50,6 +50,7 @@ export const getLayoutedElements = (
       source: d.from_service_id,
       target: d.to_service_id,
       type: "smoothstep",
+      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
     }));
 
   return { nodes, edges };

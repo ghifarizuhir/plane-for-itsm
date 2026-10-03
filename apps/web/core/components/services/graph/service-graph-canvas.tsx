@@ -19,10 +19,12 @@ import {
 } from "@xyflow/react";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
+import { useTheme } from "next-themes";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { IService, TServiceGraphData } from "@plane/types";
+import type { IService, TServiceGraphData, TServiceHealth } from "@plane/types";
 // components
+import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceNode } from "./service-node";
 import { getLayoutedElements } from "./use-graph-layout";
 
@@ -55,6 +57,9 @@ export function ServiceGraphCanvas({
 }: TServiceGraphCanvasProps) {
   // plane hooks
   const { t, currentLocale } = useTranslation();
+  // theme — React Flow renders its own chrome, so it needs the resolved mode
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme?.includes("dark") ?? false;
   // states
   const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
   // refs
@@ -62,6 +67,11 @@ export function ServiceGraphCanvas({
   const wrapperRef = useRef<HTMLDivElement>(null);
   // derived values
   const highlighted = useMemo(() => new Set(highlightedServiceIds ?? []), [highlightedServiceIds]);
+
+  const getMiniMapNodeColor = useCallback((node: Node) => {
+    const health = (node.data as { health?: TServiceHealth } | undefined)?.health ?? DEFAULT_HEALTH;
+    return HEALTH_CONFIG[health].color;
+  }, []);
 
   const { nodes: layoutNodes, edges: layoutEdges } = useMemo(
     () => getLayoutedElements(graphData.services, graphData.dependencies),
@@ -197,6 +207,9 @@ export function ServiceGraphCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        className="service-graph-flow"
+        colorMode={isDark ? "dark" : "light"}
+        defaultMarkerColor="var(--border-strong)"
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={readOnly ? undefined : handleConnect}
@@ -210,9 +223,9 @@ export function ServiceGraphCanvas({
         deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
         onInit={setInstance}
       >
-        <Background />
+        <Background color="var(--border-subtle-1)" />
         <Controls />
-        {!readOnly && <MiniMap />}
+        {!readOnly && <MiniMap nodeColor={getMiniMapNodeColor} />}
       </ReactFlow>
     </div>
   );
