@@ -19,6 +19,7 @@ import { ServicesBoard } from "./board/services-board";
 import { ServiceGraph } from "./graph/service-graph";
 import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
+import { ServicePeekOverview } from "./peek-overview";
 import { ServiceLoadErrorState } from "./service-load-error-state";
 
 export const ServicesListView = observer(function ServicesListView() {
@@ -98,8 +99,9 @@ export const ServicesListView = observer(function ServicesListView() {
   };
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col">
       {renderContent()}
+      <ServicePeekOverview />
       {workspaceSlug && projectId && (
         <CreateUpdateServiceModal
           isOpen={isCreateModalOpen}

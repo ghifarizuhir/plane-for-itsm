@@ -19,6 +19,7 @@ export * from "./service-layout-icon";
 export * from "./dropdowns/order-by";
 export * from "./service-form";
 export * from "./modal";
+export * from "./peek-overview";
 export * from "./delete-service-modal";
 export * from "./filters";
 export * from "./applied-filters";
