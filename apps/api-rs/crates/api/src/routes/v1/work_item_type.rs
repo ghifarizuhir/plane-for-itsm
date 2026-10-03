@@ -23,7 +23,7 @@ type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 /// Column list for `issue_types t` (workspace-owned types; project links come
 /// from `project_issue_types`). `level` is `double precision` in the DB, cast
 /// to int for the SDK shape.
-pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.is_default, t.is_active, t.level::int AS level, t.workflow_id AS workflow, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
+pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
 
 #[derive(Debug, Clone, FromRow)]
 pub struct V1WorkItemTypeRow {
@@ -35,7 +35,6 @@ pub struct V1WorkItemTypeRow {
     pub is_default: bool,
     pub is_active: bool,
     pub level: Option<i32>,
-    pub workflow: Option<uuid::Uuid>,
     pub external_id: Option<String>,
     pub external_source: Option<String>,
     pub created_by: Option<uuid::Uuid>,
@@ -57,7 +56,6 @@ pub fn v1_work_item_type_json(row: &V1WorkItemTypeRow) -> Value {
         "is_default": row.is_default,
         "is_active": row.is_active,
         "level": row.level,
-        "workflow": row.workflow,
         "external_id": row.external_id,
         "external_source": row.external_source,
         "created_by": row.created_by,
@@ -85,24 +83,11 @@ pub struct V1CreateWorkItemType {
     #[serde(default)]
     pub level: Option<i32>,
     #[serde(default)]
-    pub workflow: Option<uuid::Uuid>,
-    #[serde(default)]
     pub external_id: Option<String>,
     #[serde(default)]
     pub external_source: Option<String>,
     #[serde(default)]
     pub project_ids: Vec<uuid::Uuid>,
-}
-
-/// Membedakan field `workflow` yang hilang (`None`) dari `null` eksplisit
-/// (`Some(None)`); nilai biasa menjadi `Some(Some(id))`.
-fn deserialize_optional_nullable<'de, D>(
-    deserializer: D,
-) -> Result<Option<Option<uuid::Uuid>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Ok(Some(Option::<uuid::Uuid>::deserialize(deserializer)?))
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -119,8 +104,6 @@ pub struct V1UpdateWorkItemType {
     pub is_active: Option<bool>,
     #[serde(default)]
     pub level: Option<i32>,
-    #[serde(default, deserialize_with = "deserialize_optional_nullable")]
-    pub workflow: Option<Option<uuid::Uuid>>,
     #[serde(default)]
     pub external_id: Option<String>,
     #[serde(default)]
@@ -252,13 +235,6 @@ pub async fn delete_workspace(
     if linked {
         return Ok(bad("Type is enabled in projects"));
     }
-    let workflow_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT workflow_id FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .fetch_optional(&st.pool)
-    .await?
-    .flatten();
     let mut tx = st.pool.begin().await?;
     let affected = sqlx::query(
         "UPDATE issue_types SET deleted_at = now(), updated_at = now() \
@@ -277,10 +253,6 @@ pub async fn delete_workspace(
         .bind(pk)
         .execute(&mut *tx)
         .await?;
-    // Workflow dimiliki type: ikut ter-soft-delete beserta states + transitions.
-    if let Some(workflow_id) = workflow_id {
-        crate::routes::workflow::soft_delete_workflow_cascade(&mut tx, workflow_id).await?;
-    }
     tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
@@ -314,38 +286,16 @@ async fn create_type(
     if let Some(pid) = scope_project {
         link_ids.push(pid);
     }
-    if body.is_epic.unwrap_or(false) && body.workflow.is_some() {
-        return Ok(bad("Epic types cannot have a workflow"));
-    }
-    if body.workflow.is_some() {
-        return Ok(bad("Workflows are managed through work item types"));
-    }
     let is_epic = body.is_epic.unwrap_or(false);
     let is_active = body.is_active.unwrap_or(true);
     let mut tx = st.pool.begin().await?;
-    // Type non-epic memiliki tepat satu workflow; dibuat/diadopsi dalam
-    // transaksi yang sama supaya create yang gagal tidak meninggalkan orphan.
-    let workflow_id: Option<uuid::Uuid> = if is_epic {
-        None
-    } else {
-        Some(
-            crate::routes::workflow::ensure_workflow_for_type(
-                &mut tx,
-                ws,
-                name,
-                is_active,
-                user,
-            )
-            .await?,
-        )
-    };
     let row: V1WorkItemTypeRow = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
-         is_active, level, workflow_id, external_id, external_source, workspace_id, created_by_id, \
+         is_active, level, external_id, external_source, workspace_id, created_by_id, \
          updated_by_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $11, now(), now()) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $10, now(), now()) \
          RETURNING id, name, description, logo_props, is_epic, is_default, is_active, \
-         level::int AS level, workflow_id AS workflow, external_id, external_source, \
+         level::int AS level, external_id, external_source, \
          created_by_id AS created_by, updated_by_id AS updated_by, workspace_id AS workspace, \
          created_at, updated_at, deleted_at, ARRAY[]::uuid[] AS project_ids",
     )
@@ -355,7 +305,6 @@ async fn create_type(
     .bind(is_epic)
     .bind(is_active)
     .bind(body.level.unwrap_or(0) as f64)
-    .bind(workflow_id)
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
     .bind(ws)
@@ -364,10 +313,7 @@ async fn create_type(
     .await?;
     tx.commit().await?;
 
-    let linked = link_projects(st, &ws, row.id, user, &link_ids).await?;
-    for pid in &linked {
-        crate::routes::workflow::materialize_type_states(&st.pool, *pid, row.id).await?;
-    }
+    link_projects(st, &ws, row.id, user, &link_ids).await?;
 
     let row = reload(st, &ws, row.id)
         .await?
@@ -474,30 +420,8 @@ async fn update_type(
             ));
         }
     }
-    if body.workflow.is_some() {
-        return Ok(bad("Workflows are managed through work item types"));
-    }
-    let current: Option<(Option<uuid::Uuid>, bool, bool, String)> = sqlx::query_as(
-        "SELECT workflow_id, is_epic, is_active, name FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .fetch_optional(&st.pool)
-    .await?;
-    let Some((current_workflow, current_is_epic, current_is_active, current_name)) = current else {
-        return Ok(missing());
-    };
-    let effective_is_epic = body.is_epic.unwrap_or(current_is_epic);
-    let effective_is_active = body.is_active.unwrap_or(current_is_active);
-    let effective_name = body
-        .name
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or(current_name.as_str())
-        .to_string();
-
     let mut tx = st.pool.begin().await?;
-    // Column-by-column COALESCE so omitted fields are untouched; workflow_id
-    // tidak lagi bagian dari payload.
+    // Column-by-column COALESCE so omitted fields are untouched.
     let updated = sqlx::query(
         "UPDATE issue_types SET \
          name = COALESCE($2, name), \
@@ -526,27 +450,11 @@ async fn update_type(
     if updated.rows_affected() == 0 {
         return Ok(missing());
     }
-    // Workflow mengikuti type: nama derived + is_active. Epic tidak punya.
-    if let Some(workflow_id) = current_workflow {
-        if !effective_is_epic {
-            crate::routes::workflow::sync_type_workflow(
-                &mut tx,
-                ws,
-                &effective_name,
-                effective_is_active,
-                workflow_id,
-            )
-            .await?;
-        }
-    }
     tx.commit().await?;
 
-    // Materialize hanya untuk project yang di-link lewat request ini.
+    // Link project yang diminta lewat request ini (tanpa efek samping lain).
     if let Some(ids) = body.project_ids.as_ref() {
-        let linked = link_projects(st, &ws, pk, user, ids).await?;
-        for pid in &linked {
-            crate::routes::workflow::materialize_type_states(&st.pool, *pid, pk).await?;
-        }
+        link_projects(st, &ws, pk, user, ids).await?;
     }
     match reload(st, &ws, pk).await? {
         Some(r) => Ok((StatusCode::OK, Json(v1_work_item_type_json(&r)))),
@@ -710,10 +618,61 @@ pub async fn delete_project(
     if in_use {
         return Ok(bad("Type is in use by work items"));
     }
-    // Project scope detaches only: soft-delete link + mirror, never the type.
+    // Project scope detaches only: soft-delete link, never the type.
     // Idempotent: project/type tanpa link hidup tetap 204.
-    crate::routes::workflow::detach_type_from_project(&st.pool, project_id, pk).await?;
+    sqlx::query(
+        "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
+         WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+/// DELETE `/api/workspaces/:slug/projects/:project_id/work-item-types/:type_id/`
+/// (un-enable type dari project). Soft-delete link saja.
+pub async fn unlink_type(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, type_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+) -> R {
+    if !can_write(&st.pool, auth.0, &slug, Some(project_id)).await? {
+        return Ok(deny());
+    }
+    // Project wajib milik workspace di slug; kalau tidak, jangan sentuh data
+    // workspace lain (404).
+    let (project_ok,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL AND w.deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_ok {
+        return Ok(missing());
+    }
+    let (in_use,): (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM issues WHERE project_id = $1 AND type_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if in_use {
+        return Ok(bad("Type is in use by work items"));
+    }
+    sqlx::query(
+        "UPDATE project_issue_types SET deleted_at = now(), updated_at = now() \
+         WHERE project_id = $1 AND issue_type_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(project_id)
+    .bind(type_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
 pub async fn import_to_project(
@@ -758,19 +717,6 @@ pub async fn import_to_project(
         .bind(auth.0)
         .execute(&st.pool)
         .await?;
-    }
-    // Materialize hanya type yang benar-benar punya link hidup di project ini,
-    // sehingga id asing/type dari workspace lain tidak ikut ter-materialize.
-    let linked: Vec<(uuid::Uuid,)> = sqlx::query_as(
-        "SELECT pit.issue_type_id FROM project_issue_types pit \
-         WHERE pit.project_id = $1 AND pit.deleted_at IS NULL AND pit.issue_type_id = ANY($2)",
-    )
-    .bind(project_id)
-    .bind(&ids)
-    .fetch_all(&st.pool)
-    .await?;
-    for (type_id,) in &linked {
-        crate::routes::workflow::materialize_type_states(&st.pool, project_id, *type_id).await?;
     }
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
