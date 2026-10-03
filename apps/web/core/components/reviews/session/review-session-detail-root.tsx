@@ -7,6 +7,7 @@ import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // components
 import { ReviewSessionStatusPill } from "../session-status-pill";
 import { SessionAgenda } from "./session-agenda";
+import { SessionBriefing } from "./session-briefing";
 import { SessionMinutes } from "./session-minutes";
 import { SessionParticipants } from "./session-participants";
 // hooks
@@ -56,6 +57,7 @@ export const ReviewSessionDetailRoot = observer(function ReviewSessionDetailRoot
             {session.location ? ` · ${session.location}` : ""}
           </p>
         </div>
+        <SessionBriefing workspaceSlug={workspaceSlug} session={session} canManage={canManage} />
         <SessionAgenda workspaceSlug={workspaceSlug} session={session} canManage={canManage} />
         <SessionMinutes workspaceSlug={workspaceSlug} session={session} canManage={canManage} />
       </div>
