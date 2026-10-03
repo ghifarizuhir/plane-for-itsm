@@ -91,20 +91,6 @@ class State(ProjectBaseModel):
     default = models.BooleanField(default=False)
     external_source = models.CharField(max_length=255, null=True, blank=True)
     external_id = models.CharField(max_length=255, blank=True, null=True)
-    type = models.ForeignKey(
-        "db.IssueType",
-        on_delete=models.SET_NULL,
-        related_name="states",
-        null=True,
-        blank=True,
-    )
-    workflow_state = models.ForeignKey(
-        "db.WorkflowState",
-        on_delete=models.SET_NULL,
-        related_name="state_mirrors",
-        null=True,
-        blank=True,
-    )
 
     objects = StateManager()
     all_state_objects = models.Manager()
@@ -122,23 +108,13 @@ class State(ProjectBaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["project", "name"],
-                condition=Q(deleted_at__isnull=True, type__isnull=True),
-                name="state_unique_legacy_name_project_when_deleted_at_null",
+                condition=Q(deleted_at__isnull=True),
+                name="state_unique_name_project_when_deleted_at_null",
             ),
             models.UniqueConstraint(
-                fields=["project", "type", "name"],
-                condition=Q(deleted_at__isnull=True, type__isnull=False),
-                name="state_unique_name_project_type_when_deleted_at_null",
-            ),
-            models.UniqueConstraint(
-                fields=["project", "workflow_state"],
-                condition=Q(deleted_at__isnull=True, workflow_state__isnull=False),
-                name="state_unique_project_workflow_state_when_deleted_at_null",
-            ),
-            models.UniqueConstraint(
-                fields=["project", "type"],
-                condition=Q(deleted_at__isnull=True, default=True, type__isnull=False),
-                name="state_unique_default_project_type_when_deleted_at_null",
+                fields=["project"],
+                condition=Q(deleted_at__isnull=True, default=True),
+                name="state_unique_default_project_when_deleted_at_null",
             ),
         ]
 
