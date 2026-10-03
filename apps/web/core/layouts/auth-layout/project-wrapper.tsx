@@ -25,7 +25,6 @@ import {
   PROJECT_MODULES,
   PROJECT_VIEWS,
   PROJECT_INTAKE_STATE,
-  PROJECT_WORKFLOW_MAP,
 } from "@plane/constants";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
@@ -37,7 +36,6 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
-import { useWorkflow } from "@/hooks/store/use-workflow";
 import { useTimeLineChart } from "@/hooks/use-timeline-chart";
 
 interface IProjectAuthWrapper {
@@ -70,7 +68,6 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { fetchProjectStates, fetchProjectIntakeState } = useProjectState();
   const { data: currentUserData } = useUser();
   const { fetchProjectLabels } = useLabel();
-  const { fetchWorkflowMap } = useWorkflow();
   const { getProjectEstimates } = useProjectEstimates();
   // derived values
   const hasPermissionToCurrentProject = allowPermissions(
@@ -128,11 +125,6 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
       revalidateOnFocus: false,
     }
   );
-  // fetching project workflow map
-  useSWR(isRoleReady ? PROJECT_WORKFLOW_MAP(projectId) : null, () => fetchWorkflowMap(workspaceSlug, projectId), {
-    revalidateIfStale: false,
-    revalidateOnFocus: false,
-  });
   // fetching project intake state
   useSWR(
     isRoleReady ? PROJECT_INTAKE_STATE(projectId, currentProjectRole) : null,

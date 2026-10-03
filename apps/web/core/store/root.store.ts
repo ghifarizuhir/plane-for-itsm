@@ -84,8 +84,8 @@ import type { IAiSchedulesStore } from "./ai-schedules.store";
 import { AiSchedulesStore } from "./ai-schedules.store";
 import type { IUserStore } from "./user";
 import { UserStore } from "./user";
-import type { IWorkflowStore } from "./workflow.store";
-import { WorkflowStore } from "./workflow.store";
+import type { IWorkItemTypeStore } from "./work-item-type.store";
+import { WorkItemTypeStore } from "./work-item-type.store";
 import type { IWorkspaceRootStore } from "./workspace";
 
 enableStaticRendering(typeof window === "undefined");
@@ -129,7 +129,7 @@ export class CoreRootStore {
   timelineStore: ITimelineStore;
   aiAssistant: IAIAssistantStore;
   aiSchedules: IAiSchedulesStore;
-  workflow: IWorkflowStore;
+  workItemType: IWorkItemTypeStore;
 
   constructor() {
     this.router = new RouterStore();
@@ -170,7 +170,7 @@ export class CoreRootStore {
     this.timelineStore = new TimeLineStore(this);
     this.aiAssistant = new AIAssistantStore();
     this.aiSchedules = new AiSchedulesStore();
-    this.workflow = new WorkflowStore(this);
+    this.workItemType = new WorkItemTypeStore(this);
   }
 
   resetOnSignOut() {
@@ -214,7 +214,7 @@ export class CoreRootStore {
     clearPersistedAiConversations();
     this.aiAssistant = new AIAssistantStore();
     this.aiSchedules = new AiSchedulesStore();
-    this.workflow = new WorkflowStore(this);
+    this.workItemType = new WorkItemTypeStore(this);
   }
 }
 

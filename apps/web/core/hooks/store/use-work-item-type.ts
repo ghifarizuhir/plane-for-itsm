@@ -8,10 +8,10 @@ import { useContext } from "react";
 // mobx store
 import { StoreContext } from "@/lib/store-context";
 // types
-import type { IWorkflowStore } from "@/store/workflow.store";
+import type { IWorkItemTypeStore } from "@/store/work-item-type.store";
 
-export const useWorkflow = (): IWorkflowStore => {
+export const useWorkItemType = (): IWorkItemTypeStore => {
   const context = useContext(StoreContext);
-  if (context === undefined) throw new Error("useWorkflow must be used within StoreProvider");
-  return context.workflow;
+  if (context === undefined) throw new Error("useWorkItemType must be used within StoreProvider");
+  return context.workItemType;
 };

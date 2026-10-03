@@ -4,4 +4,4 @@
  * See the LICENSE file for details.
  */
 
-export * from "./workflow.service";
+export * from "./work-item-type.service";
