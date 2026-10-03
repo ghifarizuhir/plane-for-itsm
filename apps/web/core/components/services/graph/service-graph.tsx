@@ -13,21 +13,25 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TServiceGraphData } from "@plane/types";
 // hooks
+import { usePlatformOS } from "@/hooks/use-platform-os";
+import useServicePeekOverviewRedirection from "@/hooks/use-service-peek-overview-redirection";
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { useAppRouter } from "@/hooks/use-app-router";
 // components
 import { ServiceGraphCanvas } from "./service-graph-canvas";
 
 export const ServiceGraph = observer(function ServiceGraph() {
   // router
-  const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getGraphData, addDependency, removeDependency, updateNodePosition, updateService } = useService();
+  const { getGraphData, getServiceById, addDependency, removeDependency, updateNodePosition, updateService } =
+    useService();
   const { currentWorkspace } = useWorkspace();
+  // peek overview
+  const { isMobile } = usePlatformOS();
+  const { handleRedirection } = useServicePeekOverviewRedirection();
   // derived values
   const slug = workspaceSlug?.toString();
   const pid = projectId?.toString();
@@ -90,10 +94,12 @@ export const ServiceGraph = observer(function ServiceGraph() {
 
   const handleNodeClick = useCallback(
     (serviceId: string) => {
-      if (!slug || !pid) return;
-      router.push(`/${slug}/projects/${pid}/services/${serviceId}`);
+      if (!slug) return;
+      const service = getServiceById(serviceId);
+      if (!service) return;
+      handleRedirection(slug, service, isMobile);
     },
-    [pid, router, slug]
+    [getServiceById, handleRedirection, isMobile, slug]
   );
 
   const handleReLayout = useCallback(async () => {

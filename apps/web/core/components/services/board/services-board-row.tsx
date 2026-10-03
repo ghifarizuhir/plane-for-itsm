@@ -5,14 +5,16 @@
  */
 
 import { observer } from "mobx-react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { ControlLink } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 // hooks
+import { usePlatformOS } from "@/hooks/use-platform-os";
+import useServicePeekOverviewRedirection from "@/hooks/use-service-peek-overview-redirection";
 import { useService } from "@/hooks/store/use-service";
 // local imports
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
@@ -33,6 +35,9 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
   const { t } = useTranslation();
   // store hooks
   const { getServiceById, getServiceHealth } = useService();
+  // peek overview
+  const { isMobile } = usePlatformOS();
+  const { handleRedirection } = useServicePeekOverviewRedirection();
   // derived values
   const service = getServiceById(serviceId);
   const health = getServiceHealth(serviceId);
@@ -45,8 +50,10 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
   const isCritical = service.criticality === "critical";
 
   return (
-    <Link
+    <ControlLink
+      id={`service-${service.id}`}
       href={serviceLink}
+      onClick={() => handleRedirection(workspaceSlug?.toString(), service, isMobile)}
       className="relative flex items-center gap-3 border-b border-subtle px-3 py-2.5 transition-colors hover:bg-layer-transparent-hover"
     >
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
@@ -74,6 +81,6 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
       <div className="hidden w-[56px] shrink-0 items-center justify-end xl:flex">
         {service.owner_id && <ButtonAvatars showTooltip userIds={service.owner_id} />}
       </div>
-    </Link>
+    </ControlLink>
   );
 });
