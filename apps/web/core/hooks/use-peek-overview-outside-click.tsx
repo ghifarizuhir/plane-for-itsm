@@ -10,9 +10,11 @@ import { useEffect, useCallback } from "react";
 const usePeekOverviewOutsideClickDetector = (
   ref: React.RefObject<HTMLElement | null>,
   callback: () => void,
-  issueId: string,
-  excludePreventionElementIds?: string[]
+  peekId: string,
+  excludePreventionElementIds?: string[],
+  targetElementId?: string
 ) => {
+  const resolvedTargetElementId = targetElementId ?? `issue-${peekId}`;
   const handleClick = useCallback(
     (event: MouseEvent) => {
       if (!(event.target instanceof HTMLElement)) return;
@@ -32,11 +34,11 @@ const usePeekOverviewOutsideClickDetector = (
             return;
           }
         }
-        // check if the click target is the current issue element or its children
+        // check if the click target is the current peek trigger element or its children
         let targetElement: HTMLElement | null = event.target;
         while (targetElement) {
-          if (targetElement.id === `issue-${issueId}`) {
-            // if the click target is the current issue element, return
+          if (targetElement.id === resolvedTargetElementId) {
+            // if the click target is the current peek trigger element, return
             return;
           }
           targetElement = targetElement.parentElement;
@@ -53,7 +55,7 @@ const usePeekOverviewOutsideClickDetector = (
         callback();
       }
     },
-    [ref, callback, issueId, excludePreventionElementIds]
+    [ref, callback, excludePreventionElementIds, resolvedTargetElementId]
   );
 
   useEffect(() => {
