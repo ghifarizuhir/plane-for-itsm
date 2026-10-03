@@ -224,7 +224,6 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
         display_filters: {
           group_by: [
             "state",
-            "workflow_state",
             "state_detail.group",
             "priority",
             "cycle",
@@ -245,20 +244,9 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       kanban: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          group_by: [
-            "state",
-            "workflow_state",
-            "state_detail.group",
-            "priority",
-            "cycle",
-            "module",
-            "labels",
-            "assignees",
-            "created_by",
-          ],
+          group_by: ["state", "state_detail.group", "priority", "cycle", "module", "labels", "assignees", "created_by"],
           sub_group_by: [
             "state",
-            "workflow_state",
             "state_detail.group",
             "priority",
             "cycle",

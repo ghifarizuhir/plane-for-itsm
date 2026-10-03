@@ -13,7 +13,6 @@ export type TWorkItemType = {
   is_default: boolean;
   is_active: boolean;
   level: number;
-  workflow: string | null;
   workspace: string;
   project_ids: string[];
   external_id: string | null;
