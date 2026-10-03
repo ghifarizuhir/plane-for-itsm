@@ -4,6 +4,7 @@ import type {
   IReviewRequest,
   IReviewRequestDetail,
   IReviewSession,
+  IReviewSessionBriefing,
   IReviewSessionDetail,
   IReviewSessionItem,
   TReviewItemUpdatePayload,
@@ -164,6 +165,18 @@ export class ReviewService extends APIService {
         throw toReviewError(error);
       }
     );
+  }
+
+  async generateReviewBriefing(
+    workspaceSlug: string,
+    sessionId: string,
+    language: string
+  ): Promise<IReviewSessionBriefing> {
+    return this.post(`${this.workspacePath(workspaceSlug)}/review-sessions/${sessionId}/briefing/`, { language })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toReviewError(error);
+      });
   }
 
   async getSessionParticipants(workspaceSlug: string, sessionId: string): Promise<IReviewParticipant[]> {

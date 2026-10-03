@@ -6,6 +6,7 @@ import type {
   IReviewRequest,
   IReviewRequestDetail,
   IReviewSession,
+  IReviewSessionBriefing,
   IReviewSessionDetail,
   IReviewSessionItem,
   TReviewItemUpdatePayload,
@@ -52,6 +53,7 @@ export interface IReviewStore {
   fetchSessions: (workspaceSlug: string, params: TReviewSessionListParams) => Promise<IReviewSession[] | undefined>;
   createSession: (workspaceSlug: string, data: TReviewSessionCreatePayload) => Promise<IReviewSession>;
   fetchSessionDetail: (workspaceSlug: string, sessionId: string) => Promise<IReviewSessionDetail | undefined>;
+  generateBriefing: (workspaceSlug: string, sessionId: string, language: string) => Promise<IReviewSessionBriefing>;
   updateSession: (
     workspaceSlug: string,
     sessionId: string,
@@ -112,6 +114,7 @@ export class ReviewStore implements IReviewStore {
       fetchSessions: action,
       createSession: action,
       fetchSessionDetail: action,
+      generateBriefing: action,
       updateSession: action,
       completeSession: action,
       cancelSession: action,
@@ -272,6 +275,15 @@ export class ReviewStore implements IReviewStore {
     } catch {
       return undefined;
     }
+  };
+
+  generateBriefing = async (workspaceSlug: string, sessionId: string, language: string) => {
+    const briefing = await this.reviewService.generateReviewBriefing(workspaceSlug, sessionId, language);
+    runInAction(() => {
+      const detail = this.sessionDetailMap[sessionId];
+      if (detail) set(this.sessionDetailMap, [sessionId], { ...detail, briefing });
+    });
+    return briefing;
   };
 
   updateSession = async (workspaceSlug: string, sessionId: string, data: TReviewSessionUpdatePayload) => {
