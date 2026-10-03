@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { IReviewSession } from "@plane/types";
+import type { IReviewSession, IReviewSessionBriefing } from "@plane/types";
 // local imports
 import {
   activeRequestForSubject,
+  briefingItemById,
   fromDateTimeLocal,
+  isBriefingStale,
+  isBriefingTextMode,
   latestRequestForSubject,
   reviewRequestsKey,
   reviewSessionsKey,
@@ -82,5 +85,49 @@ describe("sortSessionsByScheduledAt", () => {
       { id: "new", scheduled_at: "2026-03-01T00:00:00Z" },
     ] as IReviewSession[];
     expect(sortSessionsByScheduledAt(sessions).map((session) => session.id)).toEqual(["new", "old"]);
+  });
+});
+
+const makeBriefing = (overrides: Partial<IReviewSessionBriefing> = {}): IReviewSessionBriefing =>
+  ({
+    version: 1,
+    generated_at: "2026-10-03T00:00:00Z",
+    generated_by_name: "Budi",
+    model: "gpt-4o-mini",
+    language: "id",
+    format: "json",
+    overall: "Ringkasan",
+    items: [],
+    included_items: 0,
+    skipped_items: 0,
+    ...overrides,
+  }) as IReviewSessionBriefing;
+
+describe("briefingItemById", () => {
+  it("maps items by session_item_id and tolerates null", () => {
+    const briefing = makeBriefing({
+      items: [
+        { session_item_id: "item-1", summary: "s", discussion_points: [], risks: [] },
+        { session_item_id: "item-2", summary: "t", discussion_points: [], risks: [] },
+      ],
+    });
+    expect(briefingItemById(briefing).get("item-2")?.summary).toBe("t");
+    expect(briefingItemById(null).size).toBe(0);
+  });
+});
+
+describe("isBriefingTextMode", () => {
+  it("is true only for text format", () => {
+    expect(isBriefingTextMode(makeBriefing({ format: "text" }))).toBe(true);
+    expect(isBriefingTextMode(makeBriefing())).toBe(false);
+    expect(isBriefingTextMode(null)).toBe(false);
+  });
+});
+
+describe("isBriefingStale", () => {
+  it("compares included plus skipped against the current agenda size", () => {
+    expect(isBriefingStale(makeBriefing({ included_items: 2, skipped_items: 0 }), 3)).toBe(true);
+    expect(isBriefingStale(makeBriefing({ included_items: 2, skipped_items: 1 }), 3)).toBe(false);
+    expect(isBriefingStale(null, 3)).toBe(false);
   });
 });

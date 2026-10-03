@@ -1,4 +1,10 @@
-import type { IReviewSession, TReviewRequestListParams, TReviewSessionListParams } from "@plane/types";
+import type {
+  IReviewBriefingItem,
+  IReviewSession,
+  IReviewSessionBriefing,
+  TReviewRequestListParams,
+  TReviewSessionListParams,
+} from "@plane/types";
 
 export const reviewRequestsKey = (params: TReviewRequestListParams): string =>
   [
@@ -35,6 +41,22 @@ export const toDateTimeLocal = (value: string | null | undefined): string => {
     date.getMinutes()
   )}`;
 };
+
+export const briefingItemById = (
+  briefing: IReviewSessionBriefing | null | undefined
+): Map<string, IReviewBriefingItem> => {
+  const map = new Map<string, IReviewBriefingItem>();
+  briefing?.items.forEach((item) => map.set(item.session_item_id, item));
+  return map;
+};
+
+export const isBriefingTextMode = (briefing: IReviewSessionBriefing | null | undefined): boolean =>
+  briefing?.format === "text";
+
+export const isBriefingStale = (
+  briefing: IReviewSessionBriefing | null | undefined,
+  agendaItemCount: number
+): boolean => (briefing ? briefing.included_items + briefing.skipped_items !== agendaItemCount : false);
 
 export const fromDateTimeLocal = (value: string): string | null => {
   if (!value) return null;
