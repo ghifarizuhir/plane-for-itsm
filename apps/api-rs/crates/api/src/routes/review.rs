@@ -767,6 +767,16 @@ pub async fn session_detail(
         .iter()
         .map(participant_json)
         .collect::<Vec<_>>());
+    // `briefing` is fetched separately so the list queries (`SESSION_SELECT`)
+    // do not carry the jsonb on every session row.
+    let briefing: Option<Value> = sqlx::query_scalar(
+        "SELECT briefing FROM review_sessions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(session_id)
+    .fetch_optional(&st.pool)
+    .await?
+    .flatten();
+    value["briefing"] = briefing.unwrap_or(Value::Null);
     Ok((StatusCode::OK, Json(value)))
 }
 
@@ -1178,6 +1188,17 @@ pub struct SessionItemRow {
     pub submission_note: String,
     pub issue_identifier: Option<String>,
     pub issue_name: Option<String>,
+    pub issue_id: Option<Uuid>,
+    pub issue_project_id: Option<Uuid>,
+    pub issue_priority: Option<String>,
+    pub issue_state_name: Option<String>,
+    pub issue_target_date: Option<chrono::NaiveDate>,
+    pub issue_assignees: Option<String>,
+    pub war_room_id: Option<Uuid>,
+    pub war_room_name: Option<String>,
+    pub release_id: Option<Uuid>,
+    pub release_status: Option<String>,
+    pub release_target_date: Option<chrono::NaiveDate>,
     pub release_name: Option<String>,
     pub release_version: Option<String>,
 }
@@ -1186,11 +1207,24 @@ const ITEM_SELECT: &str = "SELECT i.id, i.session_id, i.review_request_id, i.pos
     i.outcome_note, i.decided_by_id, i.decided_at, i.created_at, rr.status AS request_status, \
     rr.board_type, rr.submission_note, \
     (p.identifier || '-' || iss.sequence_id::text) AS issue_identifier, iss.name AS issue_name, \
+    iss.id AS issue_id, iss.project_id AS issue_project_id, iss.priority AS issue_priority, \
+    iss.target_date AS issue_target_date, st.name AS issue_state_name, \
+    (SELECT string_agg(COALESCE(u.display_name, u.username), ', ' ORDER BY ia.created_at) \
+     FROM issue_assignees ia JOIN users u ON u.id = ia.assignee_id \
+     WHERE ia.issue_id = iss.id AND ia.deleted_at IS NULL) AS issue_assignees, \
+    (SELECT wr.id FROM war_room_issues wri JOIN war_rooms wr ON wr.id = wri.war_room_id \
+     WHERE wri.issue_id = iss.id AND wri.deleted_at IS NULL AND wr.deleted_at IS NULL \
+     ORDER BY wr.created_at DESC LIMIT 1) AS war_room_id, \
+    (SELECT wr.name FROM war_room_issues wri JOIN war_rooms wr ON wr.id = wri.war_room_id \
+     WHERE wri.issue_id = iss.id AND wri.deleted_at IS NULL AND wr.deleted_at IS NULL \
+     ORDER BY wr.created_at DESC LIMIT 1) AS war_room_name, \
+    rel.id AS release_id, rel.status AS release_status, rel.target_date AS release_target_date, \
     rel.name AS release_name, rel.version AS release_version \
     FROM review_session_items i \
     JOIN review_requests rr ON rr.id = i.review_request_id \
     LEFT JOIN issues iss ON iss.id = rr.change_issue_id \
     LEFT JOIN projects p ON p.id = iss.project_id \
+    LEFT JOIN states st ON st.id = iss.state_id \
     LEFT JOIN releases rel ON rel.id = rr.release_id";
 
 fn item_json(row: &SessionItemRow) -> Value {
@@ -1209,6 +1243,30 @@ fn item_json(row: &SessionItemRow) -> Value {
             "version": row.release_version,
         })
     };
+    let facts = if row.board_type == "tcb" {
+        json!({
+            "issue_id": row.issue_id,
+            "project_id": row.issue_project_id,
+            "priority": row.issue_priority,
+            "state_name": row.issue_state_name,
+            "target_date": row.issue_target_date,
+            "assignees": row
+                .issue_assignees
+                .as_deref()
+                .map(|raw| raw.split(", ").map(str::to_string).collect::<Vec<_>>())
+                .unwrap_or_default(),
+            "war_room": match (row.war_room_id, row.war_room_name.as_deref()) {
+                (Some(id), Some(name)) => json!({"id": id, "name": name}),
+                _ => Value::Null,
+            },
+        })
+    } else {
+        json!({
+            "release_id": row.release_id,
+            "status": row.release_status,
+            "target_date": row.release_target_date,
+        })
+    };
     json!({
         "id": row.id,
         "session_id": row.session_id,
@@ -1222,6 +1280,7 @@ fn item_json(row: &SessionItemRow) -> Value {
         "request_status": row.request_status,
         "submission_note": row.submission_note,
         "subject": subject,
+        "facts": facts,
     })
 }
 

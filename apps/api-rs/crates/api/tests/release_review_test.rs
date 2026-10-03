@@ -1180,6 +1180,59 @@ async fn session_detail_reads_scope() {
     scratch.cleanup(&st.pool).await;
 }
 
+#[tokio::test]
+async fn session_detail_includes_briefing_and_item_facts() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool).await;
+    let (_, Json(request)) = submit_request(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(submit_body("tcb", Some(issue_id), None)),
+    )
+    .await
+    .expect("submit");
+    let request_id = request_id_of(&request);
+    let (_, Json(session)) = create_session(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(session_body("tcb", Some(scratch.project_id), "TCB Facts")),
+    )
+    .await
+    .expect("create session");
+    let session_id: Uuid = session["id"].as_str().unwrap().parse().unwrap();
+    items_create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+        Json(add_items(request_id)),
+    )
+    .await
+    .expect("add items");
+
+    let (status, Json(body)) = session_detail(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), session_id)),
+    )
+    .await
+    .expect("session detail");
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.get("briefing").is_some());
+    assert!(body["briefing"].is_null());
+    let item = &body["items"][0];
+    assert_eq!(item["facts"]["issue_id"], issue_id.to_string());
+    assert_eq!(item["facts"]["project_id"], scratch.project_id.to_string());
+    assert_eq!(item["facts"]["state_name"], "New");
+    assert_eq!(item["facts"]["priority"], "none");
+    assert!(item["facts"]["war_room"].is_null());
+    assert!(item["facts"]["assignees"].as_array().unwrap().is_empty());
+
+    scratch.cleanup(&st.pool).await;
+}
+
 fn participant_body(user_id: Uuid, role: Option<&str>) -> ParticipantCreate {
     ParticipantCreate {
         user_id,
