@@ -84,21 +84,10 @@ class DraftIssue(WorkspaceBaseModel):
     def save(self, *args, **kwargs):
         if self.state is None:
             try:
-                from plane.db.models import IssueType, State
+                from plane.db.models import State
 
                 states = State.objects.filter(~models.Q(is_triage=True), project=self.project)
-                issue_type = None
-                if self.type_id is not None:
-                    try:
-                        issue_type = self.type
-                    except IssueType.DoesNotExist:
-                        pass
-                if issue_type is not None and not issue_type.is_epic:
-                    typed_states = states.filter(type_id=self.type_id)
-                    self.state = typed_states.filter(default=True).first() or typed_states.first()
-                else:
-                    legacy_states = states.filter(type_id__isnull=True)
-                    self.state = legacy_states.filter(default=True).first() or legacy_states.first()
+                self.state = states.filter(default=True).first() or states.first()
             except ImportError:
                 pass
         else:

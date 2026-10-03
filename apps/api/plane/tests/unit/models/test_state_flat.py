@@ -39,3 +39,26 @@ class TestStateFlatConstraints:
         make_state(first, "Backlog", "backlog", default=True)
         make_state(second, "Backlog", "backlog", default=True)
         assert State.objects.filter(name="Backlog").count() == 2
+
+
+@pytest.mark.unit
+class TestDefaultStateResolution:
+    @pytest.mark.django_db
+    def test_issue_uses_project_default_state(self):
+        from plane.db.models import Issue
+
+        project = ProjectFactory()
+        backlog = make_state(project, "Backlog", "backlog", default=True)
+        make_state(project, "Todo", "unstarted")
+        issue = Issue.objects.create(project=project, name="No state")
+        assert issue.state_id == backlog.id
+
+    @pytest.mark.django_db
+    def test_draft_uses_project_default_state(self):
+        from plane.db.models import DraftIssue
+
+        project = ProjectFactory()
+        backlog = make_state(project, "Backlog", "backlog", default=True)
+        make_state(project, "Todo", "unstarted")
+        draft = DraftIssue.objects.create(project=project, name="Draft no state")
+        assert draft.state_id == backlog.id
