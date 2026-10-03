@@ -39,6 +39,7 @@ pub mod project;
 pub mod reactions;
 pub mod release;
 pub mod review;
+pub mod review_briefing;
 pub mod s3proxy;
 pub mod search;
 pub mod service;
