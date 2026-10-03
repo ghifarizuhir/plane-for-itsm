@@ -101,36 +101,21 @@ async fn validate_create_refs(
         }
     }
     if let Some(state_id) = body.state_id {
-        // Two-stage check in one round trip: (1) the state is a live,
-        // non-triage state of this project — same predicate as the PATCH
-        // refs check, with the legacy message; (2) the state belongs to the
-        // requested type. Deliberately STRICTER than Django's
-        // `all_state_objects` (which would also accept soft-deleted and
-        // triage states): an issue must never be created against a state the
-        // StateManager UI hides. `type_id IS NULL` states stay valid for
-        // typed work items: they are the project-wide legacy states the
-        // shared resolver (`resolve_issue_state`) falls back to when a type
-        // has no mirror states, and clients that predate work item types keep
-        // sending them. A state owned by a DIFFERENT type is always rejected.
-        let (valid, type_ok): (bool, bool) = sqlx::query_as(
-            "SELECT \
-             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-               AND deleted_at IS NULL AND \"group\" != 'triage'), \
-             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-               AND deleted_at IS NULL AND \"group\" != 'triage' \
-               AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+        // State flat: cukup state hidup non-triage milik project ini.
+        // Deliberately STRICTER than Django's `all_state_objects` (which
+        // would also accept soft-deleted and triage states): an issue must
+        // never be created against a state the StateManager UI hides.
+        let (valid,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false)",
         )
         .bind(state_id)
         .bind(project_id)
-        .bind(body.type_id)
         .fetch_one(&st.pool)
         .await
         .map_err(error)?;
         if !valid {
             return Err(bad("State is not valid please pass a valid state_id"));
-        }
-        if !type_ok {
-            return Err(bad("State is not valid for this work item type"));
         }
     }
     if let Some(t) = body.type_id {
@@ -294,7 +279,7 @@ pub async fn create(
         return Ok(e);
     }
 
-    let state_id = resolve_issue_state(&st.pool, project_id, body.type_id, body.state_id).await?;
+    let state_id = resolve_issue_state(&st.pool, project_id, body.state_id).await?;
     let start_date = match parse_date(&body.start_date) {
         Ok(v) => v,
         Err(e) => return Ok(bad(&e)),

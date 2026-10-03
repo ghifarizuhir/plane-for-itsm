@@ -26,7 +26,6 @@ use super::issue_common::{
 };
 use super::issue_version_write::record_description_version;
 use super::work_item::ws_active_member;
-use super::workflow::{transition_denied, validate_initial_transition, validate_state_transition};
 use crate::routes::project::deny;
 use crate::{middleware::auth::AuthUser, state::AppState};
 
@@ -752,78 +751,43 @@ pub async fn patch_issue(
         Some(None) => current.type_id.is_some(),
         None => false,
     };
-    let effective_type_id = match body.type_id {
-        Some(Some(new_type)) => Some(new_type),
-        Some(None) => None,
-        None => current.type_id,
-    };
-    // Default resolution WAJIB memakai effective_type_id, termasuk saat state
-    // di-clear atau issue belum punya state — jangan pakai None (temuan review C2).
-    // Ganti type: lewati resolusi awal, cabang di bawah menyelesaikan sekali.
+    // Default resolution memakai project default state, termasuk saat state
+    // di-clear atau issue belum punya state. Ganti type: lewati resolusi
+    // awal, cabang di bawah menyelesaikan sekali.
     let mut new_state_id = if type_changed {
         None
     } else {
         match body.state_id {
             Some(Some(id)) => Some(id),
-            Some(None) => {
-                resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?
-            }
+            Some(None) => resolve_issue_state(&st.pool, project_id, None).await?,
             None => match current.state_id {
                 Some(id) => Some(id),
-                None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+                None => resolve_issue_state(&st.pool, project_id, None).await?,
             },
         }
     };
     if type_changed {
-        // Ganti type: state wajib milik type baru; tanpa cek transisi.
+        // Ganti type: state eksplisit wajib milik project; tanpa state
+        // eksplisit, pakai project default.
         new_state_id = match body.state_id {
             Some(Some(explicit)) => {
                 let (ok,): (bool,) = sqlx::query_as(
                     "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-                     AND deleted_at IS NULL AND type_id IS NOT DISTINCT FROM $3)",
+                     AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage')",
                 )
                 .bind(explicit)
                 .bind(project_id)
-                .bind(effective_type_id)
                 .fetch_one(&st.pool)
                 .await?;
                 if !ok {
-                    return Ok(bad("State is not valid for this work item type"));
+                    return Ok(bad("State is not valid for this project"));
                 }
                 Some(explicit)
             }
-            _ => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+            _ => resolve_issue_state(&st.pool, project_id, None).await?,
         };
     }
     let state_changed = new_state_id != current.state_id;
-    if state_changed && !type_changed {
-        if let Some(target_state) = new_state_id {
-            let verdict = match current.state_id {
-                Some(current_state) => {
-                    validate_state_transition(
-                        &st.pool,
-                        project_id,
-                        effective_type_id,
-                        current_state,
-                        target_state,
-                    )
-                    .await?
-                }
-                None => {
-                    validate_initial_transition(
-                        &st.pool,
-                        project_id,
-                        effective_type_id,
-                        target_state,
-                    )
-                    .await?
-                }
-            };
-            if let Err(allowed) = verdict {
-                return Ok(transition_denied(allowed));
-            }
-        }
-    }
     let new_state_group: Option<String> = if state_changed {
         match new_state_id {
             Some(id) => {

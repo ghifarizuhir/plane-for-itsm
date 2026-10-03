@@ -871,40 +871,20 @@ pub fn resolve_effective_state(
 /// The `.first()` lookups order by `State.Meta.ordering = ("sequence",)`
 /// (`db/models/state.py:115`), `created_at` as the tiebreak.
 ///
-/// Type-aware: when the work item's type has any live mirror state, its
-/// `default` one wins — otherwise its first by sequence — so a non-default
-/// typed state still beats the project-wide legacy default; legacy is only
-/// reached when the type has NO live typed states. Legacy fallbacks are
-/// type-less by design (`type_id IS NULL`): an untyped or epic work item must
-/// never resolve to a typed mirror state.
+/// Project-only: the project default state wins, else the first non-triage
+/// state by sequence. States are flat per project since workflow removal
+/// (spec 2026-10-03-remove-workflows-flatten-states-design.md).
 pub async fn resolve_issue_state(
     pool: &sqlx::PgPool,
     project_id: Uuid,
-    type_id: Option<Uuid>,
     explicit: Option<Uuid>,
 ) -> Result<Option<Uuid>, sqlx::Error> {
     if explicit.is_some() {
         return Ok(explicit);
     }
-    if let Some(type_id) = type_id {
-        let typed: Option<Uuid> = sqlx::query_scalar(
-            "SELECT s.id FROM states s JOIN issue_types t ON t.id = s.type_id \
-             WHERE s.project_id = $1 AND s.type_id = $2 AND s.deleted_at IS NULL \
-               AND s.is_triage = false AND s.\"group\" != 'triage' \
-               AND t.deleted_at IS NULL AND t.is_epic = false \
-             ORDER BY s.\"default\" DESC, s.sequence ASC, s.created_at ASC LIMIT 1",
-        )
-        .bind(project_id)
-        .bind(type_id)
-        .fetch_optional(pool)
-        .await?;
-        if typed.is_some() {
-            return Ok(typed);
-        }
-    }
     let default_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
+         AND \"group\" != 'triage' AND is_triage = false AND \"default\" = true \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)
@@ -915,7 +895,7 @@ pub async fn resolve_issue_state(
     }
     let first_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
-         AND type_id IS NULL AND \"group\" != 'triage' AND is_triage = false \
+         AND \"group\" != 'triage' AND is_triage = false \
          ORDER BY sequence ASC, created_at ASC LIMIT 1",
     )
     .bind(project_id)

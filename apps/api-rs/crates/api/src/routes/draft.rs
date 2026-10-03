@@ -9,7 +9,7 @@ use super::issue_common::{
     next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
     DetailEnvelope, PageWindow,
 };
-use super::workflow::{transition_denied, validate_initial_transition, validate_state_transition};
+
 
 /// Workspace drafts + draft-to-issue — parity with Django
 /// `WorkspaceDraftIssueViewSet` (`plane/app/views/workspace/draft.py:46-311`,
@@ -111,9 +111,6 @@ pub(crate) const NO_PROJECT_MSG: &str = "Project is required to create an issue.
 pub(crate) const START_DATE_MSG: &str = "Start date cannot exceed target date";
 /// Quoted from `plane/app/serializers/draft.py:119`.
 pub(crate) const STATE_MSG: &str = "State is not valid please pass a valid state_id";
-/// Type-aware state rejection on draft→issue convert (mirrors the create/
-/// PATCH message, `issue_write.rs` / `issue_update.rs`).
-pub(crate) const STATE_TYPE_MSG: &str = "State is not valid for this work item type";
 /// Quoted from `plane/app/serializers/draft.py:129`.
 pub(crate) const PARENT_MSG: &str = "Parent is not valid issue_id please pass a valid issue_id";
 /// Quoted from `plane/app/serializers/draft.py:138`.
@@ -471,22 +468,17 @@ async fn workspace_id(pool: &sqlx::PgPool, slug: &str) -> Result<Option<uuid::Uu
 }
 
 /// Resolves the effective state for a new draft/issue, mirroring
-/// `DraftIssue.save` (`db/models/draft.py:84-98`) / `Issue._ensure_default_state`
-/// (`db/models/issue.py:231-243`), by delegating to the shared type-aware
-/// [`resolve_issue_state`](crate::routes::issue_common::resolve_issue_state).
-/// A non-default typed state wins over the project's legacy default, which is
-/// only reached when the type has NO live typed states. Without a project
-/// there is no state lookup to do, so only an explicit id can be honoured.
+/// `DraftIssue.save` / `Issue._ensure_default_state`: project default state,
+/// else first non-triage state. Without a project there is no state lookup
+/// to do, so only an explicit id can be honoured.
 async fn resolve_default_state(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
-    type_id: Option<uuid::Uuid>,
     explicit: Option<uuid::Uuid>,
 ) -> Result<Option<uuid::Uuid>, sqlx::Error> {
     match project_id {
         Some(project_id) => {
-            crate::routes::issue_common::resolve_issue_state(pool, project_id, type_id, explicit)
-                .await
+            crate::routes::issue_common::resolve_issue_state(pool, project_id, explicit).await
         }
         None => Ok(explicit),
     }
@@ -601,25 +593,20 @@ async fn check_state(
     .await
 }
 
-/// Apakah `state_id` sah dipakai work item bertipe `type_id`: state hidup,
-/// non-triage, dan dimiliki type itu ATAU state legacy untyped (`type_id IS
-/// NULL`) yang tetap kompatibel dengan type apa pun — aturan yang sama dengan
-/// `validate_create_refs` (`issue_write.rs`). Dipakai untuk state eksplisit
-/// body DAN untuk state draft yang dipertahankan saat convert.
-async fn state_matches_type(
+/// Apakah `state_id` sah dipakai di project ini: state hidup dan non-triage.
+/// Dipakai untuk state eksplisit body DAN untuk state draft yang dipertahankan
+/// saat convert.
+async fn state_belongs_to_project(
     pool: &sqlx::PgPool,
     project_id: uuid::Uuid,
     state_id: uuid::Uuid,
-    type_id: Option<uuid::Uuid>,
 ) -> Result<bool, sqlx::Error> {
     let (ok,): (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-         AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage' \
-         AND (type_id IS NOT DISTINCT FROM $3 OR type_id IS NULL))",
+         AND deleted_at IS NULL AND is_triage = false AND \"group\" != 'triage')",
     )
     .bind(state_id)
     .bind(project_id)
-    .bind(type_id)
     .fetch_one(pool)
     .await?;
     Ok(ok)
@@ -847,7 +834,7 @@ pub async fn create(
             return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
         }
     }
-    let state_id = resolve_default_state(&st.pool, b.project_id, b.type_id, b.state_id).await?;
+    let state_id = resolve_default_state(&st.pool, b.project_id, b.state_id).await?;
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
         if group.as_deref() == Some("completed") {
@@ -1209,17 +1196,9 @@ pub async fn destroy(
 /// - Type/state reconciliation (C4): a body `type_id` must exist, be live and
 ///   be enabled in the project; an epic is accepted only when it echoes the
 ///   draft's own type → else 400 `type_id is not valid`. `effective_type =
-///   body.type_id or draft.type_id` drives BOTH the default-state resolution
-///   and the `type_id` stored on the issue. State resolution order is
-///   explicit body → draft's stored state (kept only while it still matches
-///   the effective type; otherwise the type default) → type default; a type
-///   change resolves the new type's default unless the body sent an explicit
-///   state. An explicit state owned by a different type → 400 `State is not
-///   valid for this work item type`. A type change skips transition
-///   enforcement (state must be the new type's/default); an unchanged type
-///   with a state moved off the draft's state is enforced through
-///   `validate_state_transition`/`validate_initial_transition` and denied
-///   with `transition_denied`.
+///   body.type_id or draft.type_id` drives the `type_id` stored on the
+///   issue. State resolution order is explicit body → draft's stored state
+///   (kept only while still a live project state) → project default.
 /// - Side-writes mirrored (`draft.py:239-307`, Celery skipped):
 ///   `CycleIssue` when `cycle_id` present, `ModuleIssue` bulk when
 ///   `module_ids` non-empty, `FileAsset`s re-pointed
@@ -1264,7 +1243,7 @@ pub async fn create_draft_to_issue(
     // (`project_issue_types`), beda dari create yang hanya cek eksistensi
     // type (`issue_write.rs`, sengaja dibiarkan apa adanya). Type epic
     // diterima HANYA saat body meng-echo type draft sendiri (FE menyebar
-    // payload draft; epic tidak lewat workflow).
+    // payload draft).
     if let Some(t) = b.type_id {
         let (ok,): (bool,) = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM issue_types t \
@@ -1290,15 +1269,9 @@ pub async fn create_draft_to_issue(
     // C2: dulu default di-resolve dari `d.type_id` tapi row di-bind
     // `b.type_id`).
     let effective_type = b.type_id.or(d.type_id);
-    let type_changed = effective_type != d.type_id;
     if let Some(sid) = b.state_id {
         if !check_state(&st.pool, Some(project_id), sid).await? {
             return Ok(bad_request(json!({"non_field_errors": [STATE_MSG]})));
-        }
-        // State milik type lain selalu ditolak; state untyped (legacy) tetap
-        // boleh, sama seperti `validate_create_refs` di issue_write.rs.
-        if !state_matches_type(&st.pool, project_id, sid, effective_type).await? {
-            return Ok(bad_request(json!({"error": STATE_TYPE_MSG})));
         }
     }
     if let Some(pid) = b.parent_id {
@@ -1320,54 +1293,22 @@ pub async fn create_draft_to_issue(
     let Some((workspace_id, default_assignee)) = proj else {
         return Ok(bad_request(json!({"error": PAYLOAD_INVALID_MSG})));
     };
-    // Urutan resolusi state (review C4): explicit body → state draft
-    // (dipertahankan HANYA jika masih sah untuk type efektif) → default type.
-    // Body tanpa state tidak boleh memfabrikasi perpindahan ke default saat
-    // draft punya state yang valid; state draft yang deleted/triage/atau
-    // dimiliki type lain tidak boleh ikut dan jatuh ke default type efektif.
-    // Saat type berubah, state draft milik type lama tidak pernah ikut.
+    // Urutan resolusi state: explicit body → state draft (dipertahankan HANYA
+    // jika masih state hidup project ini) → project default. Body tanpa
+    // state tidak boleh memfabrikasi perpindahan ke default saat draft punya
+    // state yang valid; state draft yang deleted/triage tidak boleh ikut dan
+    // jatuh ke project default.
     let state_id = if let Some(sid) = b.state_id {
         Some(sid)
-    } else if type_changed {
-        resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
     } else if let Some(sid) = d.state_id {
-        if state_matches_type(&st.pool, project_id, sid, effective_type).await? {
+        if state_belongs_to_project(&st.pool, project_id, sid).await? {
             Some(sid)
         } else {
-            resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
+            resolve_default_state(&st.pool, Some(project_id), None).await?
         }
     } else {
-        resolve_default_state(&st.pool, Some(project_id), effective_type, None).await?
+        resolve_default_state(&st.pool, Some(project_id), None).await?
     };
-    // Type berubah (draft→body atau body mengganti type draft): tanpa cek
-    // transisi, state cukup milik/default type baru. Type sama dan state
-    // berpindah dari `d.state_id`: enforcement transisi seperti PATCH; draft
-    // tanpa state lama diperlakukan sebagai transisi awal (hanya default type
-    // yang boleh dipilih).
-    let state_changed = state_id != d.state_id;
-    if state_changed && !type_changed {
-        if let Some(target_state) = state_id {
-            let verdict = match d.state_id {
-                Some(current_state) => {
-                    validate_state_transition(
-                        &st.pool,
-                        project_id,
-                        effective_type,
-                        current_state,
-                        target_state,
-                    )
-                    .await?
-                }
-                None => {
-                    validate_initial_transition(&st.pool, project_id, effective_type, target_state)
-                        .await?
-                }
-            };
-            if let Err(allowed) = verdict {
-                return Ok(transition_denied(allowed));
-            }
-        }
-    }
     let group = state_group(&st.pool, state_id).await?;
     let completed_at: Option<chrono::DateTime<chrono::Utc>> =
         if group.as_deref() == Some("completed") {

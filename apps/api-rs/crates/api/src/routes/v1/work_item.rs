@@ -15,9 +15,6 @@ use crate::routes::project::{deny, missing};
 use crate::routes::v1::common::PageParams;
 use crate::routes::v1::pql::{parse_v1_pql, push_pql_where, V1Pql};
 use crate::routes::work_item::ws_active_member;
-use crate::routes::workflow::{
-    transition_denied, validate_initial_transition, validate_state_transition,
-};
 
 /// Serialize a list row and add the SDK-key aliases `assignees`/`labels`
 /// (the fork's rows carry `assignee_ids`/`label_ids`). `WorkItemDetail`'s
@@ -675,31 +672,14 @@ fn internal(e: sqlx::Error) -> (StatusCode, Json<Value>) {
     )
 }
 
-/// Which predicate the explicit state must satisfy during `validate_write`.
-/// Create keeps the legacy allowance (amendment rule 7); a v1 update type
-/// change requires the state to belong to the NEW type strictly (rule 6,
-/// mirroring the C3 PATCH type-change branch).
-#[derive(Debug, Clone, Copy)]
-enum StateTypeCheck {
-    /// Create: the state may belong to the effective type OR be a legacy
-    /// untyped state (`type_id IS NULL`).
-    Create(Option<uuid::Uuid>),
-    /// Update type change: the state must belong to the new type strictly.
-    TypeChange(uuid::Uuid),
-}
-
-/// `state_type_check`: `Some(Create(_))` applies the C4 create predicate — a
-/// live non-triage state may be owned by the effective type or be a legacy
-/// untyped state (`type_id IS NULL`); `Some(TypeChange(_))` applies the strict
-/// C3 predicate (state must belong to the new type, no legacy allowance).
-/// `None` keeps only the project/live/non-triage check, so untyped/epic and
-/// unchanged-type updates keep their free state movement.
+/// Validasi write: state eksplisit harus state hidup non-triage milik
+/// project ini (flat, tanpa konsep type). Type hanya divalidasi
+/// keberadaannya.
 async fn validate_write(
     st: &AppState,
     project_id: uuid::Uuid,
     body: &V1WriteWorkItem,
     require_name: bool,
-    state_type_check: Option<StateTypeCheck>,
 ) -> Result<(), (StatusCode, Json<Value>)> {
     let bad = |msg: String| (StatusCode::BAD_REQUEST, Json(json!({"error": msg})));
     match body.name.as_deref() {
@@ -742,37 +722,18 @@ async fn validate_write(
         }
     }
     if let Some(state_id) = body.state {
-        // Two-stage check in one round trip: (1) the state is a live,
-        // non-triage state of this project — legacy message; (2) when the
-        // caller asks for it, the state satisfies the effective-type predicate
-        // (legacy-allowed on create, strict on a type change). `$4` gates the
-        // `type_id IS NULL` allowance so the strict path can never admit a
-        // legacy state.
-        let (state_type_id, allow_legacy) = match state_type_check {
-            Some(StateTypeCheck::Create(t)) => (t, true),
-            Some(StateTypeCheck::TypeChange(t)) => (Some(t), false),
-            None => (None, false),
-        };
-        let (valid, type_ok): (bool, bool) = sqlx::query_as(
-            "SELECT \
-             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false), \
-             EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
-               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false \
-               AND (type_id IS NOT DISTINCT FROM $3 OR ($4::bool AND type_id IS NULL)))",
+        // State flat: cukup state hidup non-triage milik project ini.
+        let (valid,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM states WHERE id = $1 AND project_id = $2 \
+               AND deleted_at IS NULL AND \"group\" != 'triage' AND is_triage = false)",
         )
         .bind(state_id)
         .bind(project_id)
-        .bind(state_type_id)
-        .bind(allow_legacy)
         .fetch_one(&st.pool)
         .await
         .map_err(internal)?;
         if !valid {
             return Err(bad("State is not valid please pass a valid state_id".into()));
-        }
-        if state_type_check.is_some() && !type_ok {
-            return Err(bad("State is not valid for this work item type".into()));
         }
     }
     if let Some(ep) = body.estimate_point {
@@ -816,22 +777,13 @@ pub async fn create(
             Json(json!({"error": "Project not found"})),
         ));
     }
-    if let Err(e) = validate_write(
-        &st,
-        project_id,
-        &body,
-        true,
-        Some(StateTypeCheck::Create(body.type_id)),
-    )
-    .await
-    {
+    if let Err(e) = validate_write(&st, project_id, &body, true).await {
         return Ok(e);
     }
     let name = body.name.clone().unwrap_or_default();
 
-    // Shared type-aware resolver: explicit → the type's default/first mirror →
-    // the legacy untyped default/first (no inline typed default query).
-    let state = resolve_issue_state(&st.pool, project_id, body.type_id, body.state).await?;
+    // Shared project resolver: explicit → project default → first state.
+    let state = resolve_issue_state(&st.pool, project_id, body.state).await?;
     let start_date = match parse_date(&body.start_date) {
         Ok(v) => v,
         Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e})))),
@@ -941,21 +893,7 @@ pub async fn update(
             Json(json!({"error": "Issue not found"})),
         ));
     };
-    // C3 semantics for type changes: a type change skips transition checks but
-    // an explicit state must belong to the new type STRICTLY (rule 6, no
-    // legacy allowance), while an unchanged type keeps the legacy check-only
-    // path so the transition verdict owns cross-type rejection
-    // (`allowed_state_ids: []`).
-    let type_changed = match body.type_id {
-        Some(new_type) => Some(new_type) != current_type,
-        None => false,
-    };
-    let effective_type_id = body.type_id.or(current_type);
-    let state_type_check = body
-        .type_id
-        .filter(|new_type| Some(*new_type) != current_type)
-        .map(StateTypeCheck::TypeChange);
-    if let Err(e) = validate_write(&st, project_id, &body, false, state_type_check).await {
+    if let Err(e) = validate_write(&st, project_id, &body, false).await {
         return Ok(e);
     }
 
@@ -978,41 +916,16 @@ pub async fn update(
                 .map(wrap_stripped)
         });
 
-    // Final state resolution + transition enforcement: a type change carries
-    // the explicit state when it belongs to the new type (checked above) and
-    // otherwise auto-moves to the new type's default; an unchanged type
-    // enforces the workflow when the state actually moves, using the initial
-    // check while the issue has no current state. The resolved value is what
+    // Final state resolution: a type change carries the explicit state
+    // (validated above) or auto-moves to the project default; otherwise the
+    // explicit state (if any) is written as-is. The resolved value is what
     // the SET list writes.
-    let state_write: Option<Option<uuid::Uuid>> = if type_changed {
+    let state_write: Option<Option<uuid::Uuid>> = if body.type_id.is_some() && body.type_id != current_type {
         Some(match body.state {
             Some(explicit) => Some(explicit),
-            None => resolve_issue_state(&st.pool, project_id, effective_type_id, None).await?,
+            None => resolve_issue_state(&st.pool, project_id, None).await?,
         })
     } else {
-        if let Some(target) = body.state {
-            if Some(target) != current_state {
-                let verdict = match current_state {
-                    Some(current_state) => {
-                        validate_state_transition(
-                            &st.pool,
-                            project_id,
-                            effective_type_id,
-                            current_state,
-                            target,
-                        )
-                        .await?
-                    }
-                    None => {
-                        validate_initial_transition(&st.pool, project_id, effective_type_id, target)
-                            .await?
-                    }
-                };
-                if let Err(allowed) = verdict {
-                    return Ok(transition_denied(allowed));
-                }
-            }
-        }
         body.state.map(Some)
     };
 

@@ -1587,17 +1587,17 @@ pub async fn patch_issue(
         };
         // C6: accepting resolves the target default state BEFORE any write so
         // a project without one 400s and the intake stays pending (Django
-        // parity). The shared resolver picks the typed mirror default first,
-        // then the legacy project default, excluding epic types and triage.
+        // parity). The shared resolver picks the project default, excluding
+        // triage.
         let accept_target: Option<uuid::Uuid> = if n_status == Some(1) {
-            let issue_scope: Option<(uuid::Uuid, Option<uuid::Uuid>)> =
-                sqlx::query_as("SELECT project_id, type_id FROM issues WHERE id = $1")
+            let issue_scope: Option<(uuid::Uuid,)> =
+                sqlx::query_as("SELECT project_id FROM issues WHERE id = $1")
                     .bind(issue_id)
                     .fetch_optional(&st.pool)
                     .await?;
             match issue_scope {
-                Some((issue_project_id, issue_type_id)) => {
-                    resolve_issue_state(&st.pool, issue_project_id, issue_type_id, None).await?
+                Some((issue_project_id,)) => {
+                    resolve_issue_state(&st.pool, issue_project_id, None).await?
                 }
                 None => None,
             }
