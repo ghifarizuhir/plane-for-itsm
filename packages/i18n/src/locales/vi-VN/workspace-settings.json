@@ -499,44 +499,14 @@
           "description": "Mô tả",
           "active": "Hoạt động"
         },
-        "no_workflow": "Không có quy trình làm việc",
         "not_found": {
           "title": "Không tìm thấy loại mục công việc",
           "description": "Loại mục công việc bạn đang tìm không tồn tại hoặc đã bị xóa."
         },
         "detail": {
-          "epic_no_workflow": "Các loại Epic không có quy trình làm việc.",
-          "no_workflow": "Loại này chưa có quy trình làm việc."
+          "epic_no_workflow": "Các loại Epic không có quy trình làm việc."
         },
-        "attach_workflow_first": "Đính kèm quy trình làm việc trước",
-        "inactive": "Không hoạt động",
-        "map_refresh_failed": "Loại đã được lưu, nhưng không thể làm mới danh sách quy trình làm việc của dự án. Tải lại trang để xem trạng thái mới nhất."
-      },
-      "workflows": {
-        "form": {
-          "description": "Mô tả"
-        },
-        "no_states": "Chưa có trạng thái",
-        "states": {
-          "heading": "Trạng thái",
-          "add_state": "Thêm trạng thái",
-          "name": "Tên",
-          "color": "Màu",
-          "group": "Nhóm",
-          "default": "Mặc định",
-          "set_default": "Đặt làm mặc định",
-          "delete_confirmation": {
-            "title": "Xóa trạng thái",
-            "description": "Trạng thái này sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này."
-          }
-        },
-        "no_transitions": "Thêm trạng thái trước để định cấu hình chuyển đổi.",
-        "transitions": {
-          "heading": "Chuyển đổi được phép",
-          "description": "Chọn mọi cặp từ → đến được phép. Những cặp không được chọn sẽ bị chặn.",
-          "from": "Từ",
-          "to": "Đến"
-        }
+        "inactive": "Không hoạt động"
       }
     },
     "empty_state": {

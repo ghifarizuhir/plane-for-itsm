@@ -499,44 +499,14 @@
           "description": "Descripción",
           "active": "Activo"
         },
-        "no_workflow": "Sin flujo de trabajo",
         "not_found": {
           "title": "Tipo de elemento de trabajo no encontrado",
           "description": "El tipo de elemento de trabajo que buscas no existe o ha sido eliminado."
         },
         "detail": {
-          "epic_no_workflow": "Los tipos Epic no tienen flujo de trabajo.",
-          "no_workflow": "Este tipo aún no tiene flujo de trabajo."
+          "epic_no_workflow": "Los tipos Epic no tienen flujo de trabajo."
         },
-        "attach_workflow_first": "Asocia primero un flujo de trabajo",
-        "inactive": "Inactivo",
-        "map_refresh_failed": "El tipo se guardó, pero no se pudo actualizar la lista de flujos de trabajo del proyecto. Recarga la página para ver el estado más reciente."
-      },
-      "workflows": {
-        "form": {
-          "description": "Descripción"
-        },
-        "no_states": "Aún no hay estados",
-        "states": {
-          "heading": "Estados",
-          "add_state": "Agregar estado",
-          "name": "Nombre",
-          "color": "Color",
-          "group": "Grupo",
-          "default": "Predeterminado",
-          "set_default": "Establecer como predeterminado",
-          "delete_confirmation": {
-            "title": "Eliminar estado",
-            "description": "Este estado se eliminará de forma permanente. Esta acción no se puede deshacer."
-          }
-        },
-        "no_transitions": "Agrega primero los estados para configurar las transiciones.",
-        "transitions": {
-          "heading": "Transiciones permitidas",
-          "description": "Marca cada par desde → hasta permitido. Los pares no marcados se bloquean.",
-          "from": "Desde",
-          "to": "Hasta"
-        }
+        "inactive": "Inactivo"
       }
     },
     "empty_state": {

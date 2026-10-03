@@ -61,7 +61,6 @@ export const ISSUE_FILTER_DEFAULT_DATA: Record<TIssueDisplayFilterOptions, keyof
   cycle: "cycle_id",
   module: "module_ids",
   state: "state_id",
-  workflow_state: "state_id",
   "state_detail.group": "state_group" as keyof IIssue, // state_detail.group is only being used for state_group display,
   priority: "priority",
   labels: "label_ids",

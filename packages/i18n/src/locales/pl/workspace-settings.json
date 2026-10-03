@@ -499,44 +499,14 @@
           "description": "Opis",
           "active": "Aktywny"
         },
-        "no_workflow": "Brak przepływu pracy",
         "not_found": {
           "title": "Nie znaleziono typu elementu pracy",
           "description": "Typ elementu pracy, którego szukasz, nie istnieje lub został usunięty."
         },
         "detail": {
-          "epic_no_workflow": "Typy Epik nie mają przepływu pracy.",
-          "no_workflow": "Ten typ nie ma jeszcze przepływu pracy."
+          "epic_no_workflow": "Typy Epik nie mają przepływu pracy."
         },
-        "attach_workflow_first": "Najpierw przypisz przepływ pracy",
-        "inactive": "Nieaktywny",
-        "map_refresh_failed": "Typ został zapisany, ale nie udało się odświeżyć listy przepływów pracy projektu. Odśwież stronę, aby zobaczyć najnowszy stan."
-      },
-      "workflows": {
-        "form": {
-          "description": "Opis"
-        },
-        "no_states": "Brak stanów",
-        "states": {
-          "heading": "Stany",
-          "add_state": "Dodaj stan",
-          "name": "Nazwa",
-          "color": "Kolor",
-          "group": "Grupa",
-          "default": "Domyślne",
-          "set_default": "Ustaw jako domyślny",
-          "delete_confirmation": {
-            "title": "Usuń stan",
-            "description": "Ten stan zostanie trwale usunięty. Tej operacji nie można cofnąć."
-          }
-        },
-        "no_transitions": "Najpierw dodaj stany, aby skonfigurować przejścia.",
-        "transitions": {
-          "heading": "Dozwolone przejścia",
-          "description": "Zaznacz każdą dozwoloną parę od → do. Niezaznaczone pary są blokowane.",
-          "from": "Od",
-          "to": "Do"
-        }
+        "inactive": "Nieaktywny"
       }
     },
     "empty_state": {

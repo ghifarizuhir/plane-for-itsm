@@ -34,7 +34,6 @@ export const NAMESPACES = [
   "wiki",
   "work-item",
   "work-item-type",
-  "workflow",
   "workspace",
   "workspace-settings",
 ] as const;

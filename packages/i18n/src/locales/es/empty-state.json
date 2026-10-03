@@ -256,15 +256,6 @@
       "title": "Aún no hay plantillas",
       "description": "Reduce el tiempo de configuración creando plantillas para proyectos, elementos de trabajo y páginas — y comienza un nuevo trabajo en segundos.",
       "cta_primary": "Crear plantilla"
-    },
-    "workflows": {
-      "title": "Aún no hay flujos de trabajo",
-      "description": "Crea flujos de trabajo para gestionar el progreso de tus elementos de trabajo.",
-      "cta_primary": "Agregar nuevo flujo de trabajo",
-      "states": {
-        "title": "Agregar estados",
-        "description": "Selecciona los estados por los que avanza el elemento de trabajo."
-      }
     }
   }
 }

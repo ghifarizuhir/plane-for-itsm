@@ -499,44 +499,14 @@
           "description": "Description",
           "active": "Actif"
         },
-        "no_workflow": "Aucun flux de travail",
         "not_found": {
           "title": "Type d’élément de travail introuvable",
           "description": "Le type d’élément de travail que vous recherchez n’existe pas ou a été supprimé."
         },
         "detail": {
-          "epic_no_workflow": "Les types Epic n’ont pas de flux de travail.",
-          "no_workflow": "Ce type n’a pas encore de flux de travail."
+          "epic_no_workflow": "Les types Epic n’ont pas de flux de travail."
         },
-        "attach_workflow_first": "Associez d’abord un flux de travail",
-        "inactive": "Inactif",
-        "map_refresh_failed": "Le type a été enregistré, mais la liste des flux de travail du projet n’a pas pu être actualisée. Rechargez la page pour voir l’état le plus récent."
-      },
-      "workflows": {
-        "form": {
-          "description": "Description"
-        },
-        "no_states": "Aucun état pour le moment",
-        "states": {
-          "heading": "États",
-          "add_state": "Ajouter un état",
-          "name": "Nom",
-          "color": "Couleur",
-          "group": "Groupe",
-          "default": "Par défaut",
-          "set_default": "Définir par défaut",
-          "delete_confirmation": {
-            "title": "Supprimer l’état",
-            "description": "Cet état sera définitivement supprimé. Cette action est irréversible."
-          }
-        },
-        "no_transitions": "Ajoutez d’abord des états pour configurer les transitions.",
-        "transitions": {
-          "heading": "Transitions autorisées",
-          "description": "Cochez chaque paire de → à autorisée. Les paires non cochées sont bloquées.",
-          "from": "De",
-          "to": "À"
-        }
+        "inactive": "Inactif"
       }
     },
     "empty_state": {

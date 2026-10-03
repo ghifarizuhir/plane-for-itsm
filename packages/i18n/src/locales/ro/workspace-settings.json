@@ -499,44 +499,14 @@
           "description": "Descriere",
           "active": "Activ"
         },
-        "no_workflow": "Niciun flux de lucru",
         "not_found": {
           "title": "Tipul de activitate nu a fost găsit",
           "description": "Tipul de activitate căutat nu există sau a fost șters."
         },
         "detail": {
-          "epic_no_workflow": "Tipurile Epic nu au flux de lucru.",
-          "no_workflow": "Acest tip nu are încă un flux de lucru."
+          "epic_no_workflow": "Tipurile Epic nu au flux de lucru."
         },
-        "attach_workflow_first": "Atribuiți mai întâi un flux de lucru",
-        "inactive": "Inactiv",
-        "map_refresh_failed": "Tipul a fost salvat, dar lista de fluxuri de lucru a proiectului nu a putut fi reîmprospătată. Reîncărcați pagina pentru a vedea starea cea mai recentă."
-      },
-      "workflows": {
-        "form": {
-          "description": "Descriere"
-        },
-        "no_states": "Încă nu există stări",
-        "states": {
-          "heading": "Stări",
-          "add_state": "Adăugați stare",
-          "name": "Nume",
-          "color": "Culoare",
-          "group": "Grup",
-          "default": "Implicit",
-          "set_default": "Setați ca implicit",
-          "delete_confirmation": {
-            "title": "Ștergeți starea",
-            "description": "Această stare va fi ștearsă definitiv. Această acțiune nu poate fi anulată."
-          }
-        },
-        "no_transitions": "Adăugați mai întâi stări pentru a configura tranzițiile.",
-        "transitions": {
-          "heading": "Tranziții permise",
-          "description": "Bifați fiecare pereche permisă de la → la. Perechile nebifate sunt blocate.",
-          "from": "De la",
-          "to": "La"
-        }
+        "inactive": "Inactiv"
       }
     },
     "empty_state": {

@@ -256,15 +256,6 @@
       "title": "Brak szablonów",
       "description": "Skróć czas konfiguracji, tworząc szablony dla projektów, elementów roboczych i stron — i rozpocznij nową pracę w ciągu kilku sekund.",
       "cta_primary": "Utwórz szablon"
-    },
-    "workflows": {
-      "title": "Brak przepływów pracy",
-      "description": "Utwórz przepływy pracy, aby zarządzać postępem elementów pracy.",
-      "cta_primary": "Dodaj nowy przepływ pracy",
-      "states": {
-        "title": "Dodaj stany",
-        "description": "Wybierz stany, przez które przechodzi element pracy."
-      }
     }
   }
 }

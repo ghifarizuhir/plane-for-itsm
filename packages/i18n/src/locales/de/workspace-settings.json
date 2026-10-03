@@ -499,44 +499,14 @@
           "description": "Beschreibung",
           "active": "Aktiv"
         },
-        "no_workflow": "Kein Workflow",
         "not_found": {
           "title": "Arbeitselementtyp nicht gefunden",
           "description": "Der gesuchte Arbeitselementtyp existiert nicht oder wurde gelöscht."
         },
         "detail": {
-          "epic_no_workflow": "Epic-Typen haben keinen Workflow.",
-          "no_workflow": "Dieser Typ hat noch keinen Workflow."
+          "epic_no_workflow": "Epic-Typen haben keinen Workflow."
         },
-        "attach_workflow_first": "Zuerst einen Workflow zuweisen",
-        "inactive": "Inaktiv",
-        "map_refresh_failed": "Der Typ wurde gespeichert, aber die Workflowliste des Projekts konnte nicht aktualisiert werden. Laden Sie die Seite neu, um den aktuellen Stand zu sehen."
-      },
-      "workflows": {
-        "form": {
-          "description": "Beschreibung"
-        },
-        "no_states": "Noch keine Status",
-        "states": {
-          "heading": "Status",
-          "add_state": "Status hinzufügen",
-          "name": "Name",
-          "color": "Farbe",
-          "group": "Gruppe",
-          "default": "Standard",
-          "set_default": "Als Standard festlegen",
-          "delete_confirmation": {
-            "title": "Status löschen",
-            "description": "Dieser Status wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
-          }
-        },
-        "no_transitions": "Fügen Sie zuerst Status hinzu, um Übergänge zu konfigurieren.",
-        "transitions": {
-          "heading": "Zulässige Übergänge",
-          "description": "Markieren Sie jedes zulässige Paar von → zu. Nicht markierte Paare sind blockiert.",
-          "from": "Von",
-          "to": "Zu"
-        }
+        "inactive": "Inaktiv"
       }
     },
     "empty_state": {

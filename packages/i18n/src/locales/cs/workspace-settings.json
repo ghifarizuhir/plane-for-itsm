@@ -499,44 +499,14 @@
           "description": "Popis",
           "active": "Aktivní"
         },
-        "no_workflow": "Žádný workflow",
         "not_found": {
           "title": "Typ pracovní položky nenalezen",
           "description": "Typ pracovní položky, který hledáte, neexistuje nebo byl odstraněn."
         },
         "detail": {
-          "epic_no_workflow": "Typy Epik nemají workflow.",
-          "no_workflow": "Tento typ zatím nemá workflow."
+          "epic_no_workflow": "Typy Epik nemají workflow."
         },
-        "attach_workflow_first": "Nejprve přiřaďte workflow",
-        "inactive": "Neaktivní",
-        "map_refresh_failed": "Typ byl uložen, ale seznam pracovních postupů projektu se nepodařilo obnovit. Načtěte stránku znovu, abyste viděli aktuální stav."
-      },
-      "workflows": {
-        "form": {
-          "description": "Popis"
-        },
-        "no_states": "Zatím žádné stavy",
-        "states": {
-          "heading": "Stavy",
-          "add_state": "Přidat stav",
-          "name": "Název",
-          "color": "Barva",
-          "group": "Skupina",
-          "default": "Výchozí",
-          "set_default": "Nastavit jako výchozí",
-          "delete_confirmation": {
-            "title": "Smazat stav",
-            "description": "Tento stav bude trvale smazán. Tuto akci nelze vrátit zpět."
-          }
-        },
-        "no_transitions": "Nejprve přidejte stavy, abyste mohli nakonfigurovat přechody.",
-        "transitions": {
-          "heading": "Povolené přechody",
-          "description": "Zaškrtněte každou povolenou dvojici od → do. Nezaškrtnuté dvojice jsou blokovány.",
-          "from": "Od",
-          "to": "Do"
-        }
+        "inactive": "Neaktivní"
       }
     },
     "empty_state": {

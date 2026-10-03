@@ -256,15 +256,6 @@
       "title": "Zatím žádné šablony",
       "description": "Zkraťte dobu nastavení vytvářením šablon pro projekty, pracovní položky a stránky — a začněte novou práci během několika sekund.",
       "cta_primary": "Vytvořit šablonu"
-    },
-    "workflows": {
-      "title": "Zatím žádné workflow",
-      "description": "Vytvářejte workflow pro správu průběhu vašich pracovních položek.",
-      "cta_primary": "Přidat nové workflow",
-      "states": {
-        "title": "Přidat stavy",
-        "description": "Vyberte stavy, kterými pracovní položka prochází."
-      }
     }
   }
 }

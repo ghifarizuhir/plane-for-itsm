@@ -499,44 +499,14 @@
           "description": "Descrição",
           "active": "Ativo"
         },
-        "no_workflow": "Sem fluxo de trabalho",
         "not_found": {
           "title": "Tipo de item de trabalho não encontrado",
           "description": "O tipo de item de trabalho que você procura não existe ou foi excluído."
         },
         "detail": {
-          "epic_no_workflow": "Tipos Epic não têm fluxo de trabalho.",
-          "no_workflow": "Este tipo ainda não tem fluxo de trabalho."
+          "epic_no_workflow": "Tipos Epic não têm fluxo de trabalho."
         },
-        "attach_workflow_first": "Associe um fluxo de trabalho primeiro",
-        "inactive": "Inativo",
-        "map_refresh_failed": "O tipo foi salvo, mas não foi possível atualizar a lista de fluxos de trabalho do projeto. Recarregue a página para ver o estado mais recente."
-      },
-      "workflows": {
-        "form": {
-          "description": "Descrição"
-        },
-        "no_states": "Ainda não há estados",
-        "states": {
-          "heading": "Estados",
-          "add_state": "Adicionar estado",
-          "name": "Nome",
-          "color": "Cor",
-          "group": "Grupo",
-          "default": "Padrão",
-          "set_default": "Definir como padrão",
-          "delete_confirmation": {
-            "title": "Excluir estado",
-            "description": "Este estado será excluído permanentemente. Esta ação não pode ser desfeita."
-          }
-        },
-        "no_transitions": "Adicione estados primeiro para configurar as transições.",
-        "transitions": {
-          "heading": "Transições permitidas",
-          "description": "Marque cada par de → para permitido. Pares não marcados são bloqueados.",
-          "from": "De",
-          "to": "Para"
-        }
+        "inactive": "Inativo"
       }
     },
     "empty_state": {

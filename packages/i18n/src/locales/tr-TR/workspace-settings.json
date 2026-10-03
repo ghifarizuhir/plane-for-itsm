@@ -499,44 +499,14 @@
           "description": "Açıklama",
           "active": "Aktif"
         },
-        "no_workflow": "İş akışı yok",
         "not_found": {
           "title": "İş öğesi türü bulunamadı",
           "description": "Aradığınız iş öğesi türü mevcut değil veya silinmiş."
         },
         "detail": {
-          "epic_no_workflow": "Epik türlerinin iş akışı yoktur.",
-          "no_workflow": "Bu türün henüz bir iş akışı yok."
+          "epic_no_workflow": "Epik türlerinin iş akışı yoktur."
         },
-        "attach_workflow_first": "Önce bir iş akışı ekleyin",
-        "inactive": "Pasif",
-        "map_refresh_failed": "Tür kaydedildi, ancak projenin iş akışı listesi yenilenemedi. En güncel durumu görmek için sayfayı yenileyin."
-      },
-      "workflows": {
-        "form": {
-          "description": "Açıklama"
-        },
-        "no_states": "Henüz durum yok",
-        "states": {
-          "heading": "Durumlar",
-          "add_state": "Durum ekle",
-          "name": "Ad",
-          "color": "Renk",
-          "group": "Grup",
-          "default": "Varsayılan",
-          "set_default": "Varsayılan olarak ayarla",
-          "delete_confirmation": {
-            "title": "Durumu sil",
-            "description": "Bu durum kalıcı olarak silinecek. Bu işlem geri alınamaz."
-          }
-        },
-        "no_transitions": "Geçişleri yapılandırmak için önce durumları ekleyin.",
-        "transitions": {
-          "heading": "İzin verilen geçişler",
-          "description": "İzin verilen her kaynak → hedef çiftini işaretleyin. İşaretlenmeyen çiftler engellenir.",
-          "from": "Kaynak",
-          "to": "Hedef"
-        }
+        "inactive": "Pasif"
       }
     },
     "empty_state": {

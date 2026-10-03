@@ -491,44 +491,14 @@
           "description": "Description",
           "active": "Active"
         },
-        "no_workflow": "No workflow",
         "not_found": {
           "title": "Work item type not found",
           "description": "The work item type you are looking for does not exist or has been deleted."
         },
         "detail": {
-          "epic_no_workflow": "Epic types don't have a workflow.",
-          "no_workflow": "This type has no workflow yet."
+          "epic_no_workflow": "Epic types don't have a workflow."
         },
-        "attach_workflow_first": "Attach a workflow first",
-        "inactive": "Inactive",
-        "map_refresh_failed": "The type was saved, but the project workflow list could not be refreshed. Reload the page to see the latest state."
-      },
-      "workflows": {
-        "form": {
-          "description": "Description"
-        },
-        "no_states": "No states yet",
-        "states": {
-          "heading": "States",
-          "add_state": "Add state",
-          "name": "Name",
-          "color": "Color",
-          "group": "Group",
-          "default": "Default",
-          "set_default": "Set as default",
-          "delete_confirmation": {
-            "title": "Delete state",
-            "description": "This state will be permanently deleted. This action cannot be undone."
-          }
-        },
-        "no_transitions": "Add states first to configure transitions.",
-        "transitions": {
-          "heading": "Allowed transitions",
-          "description": "Check every from → to pair that is allowed. Unchecked pairs are blocked.",
-          "from": "From",
-          "to": "To"
-        }
+        "inactive": "Inactive"
       }
     },
     "empty_state": {

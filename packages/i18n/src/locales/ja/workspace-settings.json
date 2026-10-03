@@ -499,44 +499,14 @@
           "description": "説明",
           "active": "アクティブ"
         },
-        "no_workflow": "ワークフローなし",
         "not_found": {
           "title": "作業項目タイプが見つかりません",
           "description": "お探しの作業項目タイプは存在しないか、削除されました。"
         },
         "detail": {
-          "epic_no_workflow": "エピックタイプにワークフローはありません。",
-          "no_workflow": "このタイプにはまだワークフローがありません。"
+          "epic_no_workflow": "エピックタイプにワークフローはありません。"
         },
-        "attach_workflow_first": "先にワークフローを関連付けてください",
-        "inactive": "非アクティブ",
-        "map_refresh_failed": "タイプは保存されましたが、プロジェクトのワークフロー一覧を更新できませんでした。最新の状態を確認するには、ページを再読み込みしてください。"
-      },
-      "workflows": {
-        "form": {
-          "description": "説明"
-        },
-        "no_states": "ステータスはまだありません",
-        "states": {
-          "heading": "ステータス",
-          "add_state": "ステータスを追加",
-          "name": "名前",
-          "color": "色",
-          "group": "グループ",
-          "default": "デフォルト",
-          "set_default": "デフォルトに設定",
-          "delete_confirmation": {
-            "title": "ステータスを削除",
-            "description": "このステータスは完全に削除されます。この操作は取り消せません。"
-          }
-        },
-        "no_transitions": "トランジションを設定するには、先にステータスを追加してください。",
-        "transitions": {
-          "heading": "許可されるトランジション",
-          "description": "許可する「遷移元 → 遷移先」の各組み合わせにチェックを入れます。チェックのない組み合わせはブロックされます。",
-          "from": "遷移元",
-          "to": "遷移先"
-        }
+        "inactive": "非アクティブ"
       }
     },
     "empty_state": {

@@ -256,15 +256,6 @@
       "title": "Zatiaľ žiadne šablóny",
       "description": "Skráťte dobu nastavenia vytváraním šablón pre projekty, pracovné položky a stránky — a začnite novú prácu počas niekoľkých sekúnd.",
       "cta_primary": "Vytvoriť šablónu"
-    },
-    "workflows": {
-      "title": "Zatiaľ žiadne pracovné postupy",
-      "description": "Vytvorte pracovné postupy na riadenie priebehu svojich pracovných položiek.",
-      "cta_primary": "Pridať nový pracovný postup",
-      "states": {
-        "title": "Pridať stavy",
-        "description": "Vyberte stavy, cez ktoré pracovná položka prechádza."
-      }
     }
   }
 }

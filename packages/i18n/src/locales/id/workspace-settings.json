@@ -499,44 +499,14 @@
           "description": "Deskripsi",
           "active": "Aktif"
         },
-        "no_workflow": "Tidak ada alur kerja",
         "not_found": {
           "title": "Tipe item kerja tidak ditemukan",
           "description": "Tipe item kerja yang Anda cari tidak ada atau telah dihapus."
         },
         "detail": {
-          "epic_no_workflow": "Tipe Epik tidak memiliki alur kerja.",
-          "no_workflow": "Tipe ini belum memiliki alur kerja."
+          "epic_no_workflow": "Tipe Epik tidak memiliki alur kerja."
         },
-        "attach_workflow_first": "Lampirkan alur kerja terlebih dahulu",
-        "inactive": "Tidak aktif",
-        "map_refresh_failed": "Tipe telah disimpan, tetapi daftar alur kerja proyek tidak dapat disegarkan. Muat ulang halaman untuk melihat status terbaru."
-      },
-      "workflows": {
-        "form": {
-          "description": "Deskripsi"
-        },
-        "no_states": "Belum ada status",
-        "states": {
-          "heading": "Status",
-          "add_state": "Tambah status",
-          "name": "Nama",
-          "color": "Warna",
-          "group": "Grup",
-          "default": "Bawaan",
-          "set_default": "Atur sebagai default",
-          "delete_confirmation": {
-            "title": "Hapus status",
-            "description": "Status ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan."
-          }
-        },
-        "no_transitions": "Tambahkan status terlebih dahulu untuk mengonfigurasi transisi.",
-        "transitions": {
-          "heading": "Transisi yang diizinkan",
-          "description": "Centang setiap pasangan dari → ke yang diizinkan. Pasangan yang tidak dicentang akan diblokir.",
-          "from": "Dari",
-          "to": "Ke"
-        }
+        "inactive": "Tidak aktif"
       }
     },
     "empty_state": {
