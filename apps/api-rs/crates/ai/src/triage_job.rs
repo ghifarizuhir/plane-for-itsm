@@ -54,6 +54,26 @@ async fn load_types(pool: &PgPool, project_id: Uuid) -> Result<Vec<TypeOption>, 
         .collect())
 }
 
+async fn load_services(pool: &PgPool, project_id: Uuid) -> Result<Vec<triage::ServiceOption>, sqlx::Error> {
+    let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
+        "SELECT id, name, \"type\", criticality, status FROM services \
+         WHERE project_id = $1 AND deleted_at IS NULL AND status <> 'retired' \
+         ORDER BY name LIMIT $2",
+    )
+    .bind(project_id)
+    .bind(triage::MAX_SERVICES as i64)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(service_id, name, service_type, criticality, status)| triage::ServiceOption {
+            criteria: format!("{name} — {service_type}, criticality {criticality}, status {status}"),
+            service_id,
+            name,
+        })
+        .collect())
+}
+
 /// Insert a pending row; on conflict take over a failed row below the attempt
 /// cap. `true` means this invocation owns the item.
 async fn claim(
@@ -98,6 +118,7 @@ async fn save_ready(
             category_type_id = $4, category_label = $5, category_confidence = $6, \
             severity_priority = $7, severity_score = $8, severity_confidence = $9, \
             needs_human = $10, input_tokens = $11, output_tokens = $12, \
+            service_id = $13, service_label = $14, service_confidence = $15, \
             last_error = NULL, updated_at = now() \
          WHERE intake_issue_id = $1",
     )
@@ -113,6 +134,9 @@ async fn save_ready(
     .bind(mapped.needs_human)
     .bind(mapped.input_tokens as i32)
     .bind(mapped.output_tokens as i32)
+    .bind(mapped.service_id)
+    .bind(&mapped.service_label)
+    .bind(mapped.service_confidence)
     .execute(pool)
     .await?;
     Ok(())
@@ -157,16 +181,17 @@ pub async fn classify(pool: &PgPool, intake_issue_id: Uuid) -> Result<(), sqlx::
         return Ok(());
     }
     let types = load_types(pool, item.project_id).await?;
+    let services = load_services(pool, item.project_id).await?;
     let state = triage::build_state(triage::TriageState {
         name: &item.name,
         description: item.description.as_deref().unwrap_or(""),
         project_name: &item.project_name,
         source: item.source.as_deref().unwrap_or("IN_APP"),
     });
-    let questions = decision::questions_json(&triage::build_questions(&types));
+    let questions = decision::questions_json(&triage::build_questions(&types, &services));
     match tokio::time::timeout(REQUEST_TIMEOUT, decision::ask(&config, &state, questions)).await {
         Ok(Ok(outcome)) => {
-            let mapped = triage::triage_outcome(outcome, &types);
+            let mapped = triage::triage_outcome(outcome, &types, &services);
             save_ready(pool, item.intake_issue_id, &mapped).await?;
         }
         Ok(Err(error)) => {
