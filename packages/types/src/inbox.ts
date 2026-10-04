@@ -28,7 +28,15 @@ export enum EInboxIssueSource {
   IN_APP = "IN_APP",
   FORMS = "FORMS",
   EMAIL = "EMAIL",
+  WEBHOOK = "WEBHOOK",
 }
+
+export type TInboxIntakeSource = {
+  id: string;
+  name: string;
+  occurrence_count: number;
+  last_seen_at: string | null;
+};
 
 export type TInboxIssueStatus = EInboxIssueStatus;
 export type TInboxIssue = {
@@ -37,6 +45,7 @@ export type TInboxIssue = {
   snoozed_till: Date | null;
   duplicate_to: string | undefined;
   source: EInboxIssueSource | undefined;
+  intake_source: TInboxIntakeSource | null;
   issue: TIssue;
   created_by: string;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined;
