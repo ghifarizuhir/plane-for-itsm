@@ -40,6 +40,8 @@ import type { IProjectInboxStore } from "./inbox/project-inbox.store";
 import { ProjectInboxStore } from "./inbox/project-inbox.store";
 import type { IInstanceStore } from "./instance.store";
 import { InstanceStore } from "./instance.store";
+import type { IIntakeSourceStore } from "./intake-source.store";
+import { IntakeSourceStore } from "./intake-source.store";
 import type { IIssueRootStore } from "./issue/root.store";
 import { IssueRootStore } from "./issue/root.store";
 import type { ILabelStore } from "./label.store";
@@ -130,6 +132,7 @@ export class CoreRootStore {
   aiAssistant: IAIAssistantStore;
   aiSchedules: IAiSchedulesStore;
   workItemType: IWorkItemTypeStore;
+  intakeSource: IIntakeSourceStore;
 
   constructor() {
     this.router = new RouterStore();
@@ -171,6 +174,7 @@ export class CoreRootStore {
     this.aiAssistant = new AIAssistantStore();
     this.aiSchedules = new AiSchedulesStore();
     this.workItemType = new WorkItemTypeStore(this);
+    this.intakeSource = new IntakeSourceStore(this);
   }
 
   resetOnSignOut() {
@@ -215,6 +219,7 @@ export class CoreRootStore {
     this.aiAssistant = new AIAssistantStore();
     this.aiSchedules = new AiSchedulesStore();
     this.workItemType = new WorkItemTypeStore(this);
+    this.intakeSource = new IntakeSourceStore(this);
   }
 }
 
