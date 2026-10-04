@@ -387,6 +387,54 @@ pub fn workspace_tools(
             user_id,
             trace: trace.clone(),
         })
+        .tool(ListSprints {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetSprint {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListSprintWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListTracks {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetTrack {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListTrackWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(SearchArticles {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetArticle {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
         .tool(CreateSchedule {
             trace: trace.clone(),
         })
@@ -520,6 +568,70 @@ pub fn read_tools(
     }
     if allowed.contains(&CountIntakeItems::NAME) {
         server = server.tool(CountIntakeItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListSprints::NAME) {
+        server = server.tool(ListSprints {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetSprint::NAME) {
+        server = server.tool(GetSprint {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListSprintWorkItems::NAME) {
+        server = server.tool(ListSprintWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListTracks::NAME) {
+        server = server.tool(ListTracks {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetTrack::NAME) {
+        server = server.tool(GetTrack {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListTrackWorkItems::NAME) {
+        server = server.tool(ListTrackWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&SearchArticles::NAME) {
+        server = server.tool(SearchArticles {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetArticle::NAME) {
+        server = server.tool(GetArticle {
             pool,
             workspace_id,
             user_id,
@@ -1177,6 +1289,76 @@ mod tests {
         };
         assert_eq!(CountIntakeItems::NAME, "count_intake_items");
         assert!(!count.description().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sprint_track_and_kb_tools_expose_metadata() {
+        let pool = lazy_pool();
+        let trace = crate::agent::new_trace();
+        let sprints = ListSprints {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListSprints::NAME, "list_sprints");
+        assert!(sprints.parameters()["properties"]["status"].is_object());
+        let get_sprint = GetSprint {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(GetSprint::NAME, "get_sprint");
+        assert!(!get_sprint.description().is_empty());
+        let sprint_items = ListSprintWorkItems {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListSprintWorkItems::NAME, "list_sprint_work_items");
+        assert!(sprint_items.parameters()["properties"]["sprint"].is_object());
+        let tracks = ListTracks {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListTracks::NAME, "list_tracks");
+        assert!(tracks.parameters()["properties"]["status"].is_object());
+        let get_track = GetTrack {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(GetTrack::NAME, "get_track");
+        assert!(!get_track.description().is_empty());
+        let track_items = ListTrackWorkItems {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListTrackWorkItems::NAME, "list_track_work_items");
+        assert!(track_items.parameters()["properties"]["track"].is_object());
+        let search = SearchArticles {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(SearchArticles::NAME, "search_articles");
+        assert!(search.parameters()["properties"]["query"].is_object());
+        let article = GetArticle {
+            pool,
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace,
+        };
+        assert_eq!(GetArticle::NAME, "get_article");
+        assert!(!article.description().is_empty());
     }
 
     #[test]

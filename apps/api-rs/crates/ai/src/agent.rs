@@ -43,7 +43,7 @@ pub fn record(trace: &ToolTrace, name: &str, arguments: &impl serde::Serialize) 
 }
 
 pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
-Answer factual questions about projects, work items, services, the intake triage queue, people, and their metadata by calling the provided tools; never invent identifiers, names, \
+Answer factual questions about projects, work items, services, the intake queue, sprints, tracks, knowledge base articles, people, and their metadata by calling the provided tools; never invent identifiers, names, \
 counts, or states. All tools are scoped to the user's current workspace and \
 read-only, except create_schedule and create_work_item, which only propose \
 something and never save anything. If a tool returns no results, say so. \

@@ -15,7 +15,7 @@ pub const DEFAULT_HOURLY_TIME: &str = "00:00";
 pub const DEFAULT_TIMEZONE: &str = "UTC";
 
 pub const SPEC_VERSION: u8 = 1;
-pub const SPEC_TOOLS: [&str; 15] = [
+pub const SPEC_TOOLS: [&str; 23] = [
     "list_projects",
     "count_work_items",
     "search_work_items",
@@ -31,6 +31,14 @@ pub const SPEC_TOOLS: [&str; 15] = [
     "list_intake_items",
     "get_intake_item",
     "count_intake_items",
+    "list_sprints",
+    "get_sprint",
+    "list_sprint_work_items",
+    "list_tracks",
+    "get_track",
+    "list_track_work_items",
+    "search_articles",
+    "get_article",
 ];
 pub const SPEC_DESCRIPTION_MAX: usize = 500;
 pub const SPEC_STEPS_MAX: usize = 10;
@@ -754,6 +762,6 @@ mod tests {
         let all: Vec<String> = SPEC_TOOLS.iter().map(|tool| tool.to_string()).collect();
         let spec = ScheduleSpec::new("d", &["s".to_string()], &all, "o").unwrap();
         assert_eq!(spec.tools.len(), SPEC_TOOLS.len());
-        assert_eq!(SPEC_TOOLS.len(), 15);
+        assert_eq!(SPEC_TOOLS.len(), 23);
     }
 }

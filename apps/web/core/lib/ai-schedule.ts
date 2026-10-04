@@ -25,6 +25,14 @@ export const AI_SCHEDULE_TOOLS = [
   "list_intake_items",
   "get_intake_item",
   "count_intake_items",
+  "list_sprints",
+  "get_sprint",
+  "list_sprint_work_items",
+  "list_tracks",
+  "get_track",
+  "list_track_work_items",
+  "search_articles",
+  "get_article",
 ] as const;
 export type TAiScheduleTool = (typeof AI_SCHEDULE_TOOLS)[number];
 

@@ -355,6 +355,14 @@ mod tests {
                 "list_intake_items".to_string(),
                 "get_intake_item".to_string(),
                 "count_intake_items".to_string(),
+                "list_sprints".to_string(),
+                "get_sprint".to_string(),
+                "list_sprint_work_items".to_string(),
+                "list_tracks".to_string(),
+                "get_track".to_string(),
+                "list_track_work_items".to_string(),
+                "search_articles".to_string(),
+                "get_article".to_string(),
             ]
         );
     }
