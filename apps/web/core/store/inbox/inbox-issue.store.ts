@@ -11,6 +11,7 @@ import type {
   TInboxIssueStatus,
   TInboxIssueTriageField,
   TInboxIssueTriageSuggestion,
+  TInboxIntakeSource,
   EInboxIssueSource,
   TIssue,
   TInboxDuplicateIssueDetails,
@@ -30,6 +31,7 @@ export interface IInboxIssueStore {
   issue: Partial<TIssue>;
   snoozed_till: Date | undefined;
   source: EInboxIssueSource | undefined;
+  intakeSource: TInboxIntakeSource | null;
   duplicate_to: string | undefined;
   created_by: string | undefined;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined;
@@ -57,6 +59,7 @@ export class InboxIssueStore implements IInboxIssueStore {
   issue: Partial<TIssue> = {};
   snoozed_till: Date | undefined;
   source: EInboxIssueSource | undefined;
+  intakeSource: TInboxIntakeSource | null = null;
   duplicate_to: string | undefined;
   created_by: string | undefined;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined = undefined;
@@ -81,6 +84,7 @@ export class InboxIssueStore implements IInboxIssueStore {
     this.duplicate_to = data?.duplicate_to || undefined;
     this.created_by = data?.created_by || undefined;
     this.source = data?.source || undefined;
+    this.intakeSource = data?.intake_source ?? null;
     this.duplicate_issue_detail = data?.duplicate_issue_detail || undefined;
     this.workspaceSlug = workspaceSlug;
     this.projectId = projectId;
@@ -97,6 +101,7 @@ export class InboxIssueStore implements IInboxIssueStore {
       duplicate_issue_detail: observable,
       created_by: observable,
       source: observable,
+      intakeSource: observable,
       triageSuggestion: observable,
       triageSuggestionFetched: observable,
       // actions

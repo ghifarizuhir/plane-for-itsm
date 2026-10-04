@@ -75,6 +75,10 @@
     "source": {
       "in-app": "in-app"
     },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} event(s), last at {date}"
+    },
     "order_by": {
       "created_at": "Created at",
       "updated_at": "Updated at",

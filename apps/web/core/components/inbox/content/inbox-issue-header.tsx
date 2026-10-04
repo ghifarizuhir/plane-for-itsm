@@ -23,6 +23,7 @@ import {
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { Button } from "@plane/propel/button";
 import { IconButton, getIconButtonStyling } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -332,6 +333,18 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
             </h3>
           )}
           <InboxIssueStatus inboxIssue={inboxIssue} iconSize={12} />
+          {inboxIssue?.intakeSource && (
+            <Tooltip
+              label={t("inbox_issue.intake_source.tooltip", {
+                count: inboxIssue.intakeSource.occurrence_count,
+                date: inboxIssue.intakeSource.last_seen_at ?? "",
+              })}
+            >
+              <span className="rounded-sm bg-layer-2 px-1.5 py-0.5 text-caption-sm-regular text-tertiary">
+                {t("inbox_issue.intake_source.badge", { name: inboxIssue.intakeSource.name })}
+              </span>
+            </Tooltip>
+          )}
           <div className="flex w-full items-center justify-end">
             <NameDescriptionUpdateStatus isSubmitting={isSubmitting} />
           </div>
