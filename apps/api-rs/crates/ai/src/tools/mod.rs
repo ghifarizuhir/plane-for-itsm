@@ -5,11 +5,13 @@
 pub mod lookups;
 pub mod projects;
 pub mod proposals;
+pub mod services;
 pub mod work_items;
 
 pub use lookups::*;
 pub use projects::*;
 pub use proposals::*;
+pub use services::*;
 pub use work_items::*;
 
 use rig::tool::{Tool, ToolExecutionError};
