@@ -350,6 +350,11 @@ mod tests {
                 "list_states".to_string(),
                 "list_labels".to_string(),
                 "list_work_item_types".to_string(),
+                "list_services".to_string(),
+                "get_service".to_string(),
+                "list_intake_items".to_string(),
+                "get_intake_item".to_string(),
+                "count_intake_items".to_string(),
             ]
         );
     }

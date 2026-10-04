@@ -351,6 +351,36 @@ pub fn workspace_tools(
             user_id,
             trace: trace.clone(),
         })
+        .tool(ListServices {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetService {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListIntakeItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetIntakeItem {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(CountIntakeItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
         .tool(CreateSchedule {
             trace: trace.clone(),
         })
@@ -444,6 +474,46 @@ pub fn read_tools(
     }
     if allowed.contains(&ListWorkItemTypes::NAME) {
         server = server.tool(ListWorkItemTypes {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListServices::NAME) {
+        server = server.tool(ListServices {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetService::NAME) {
+        server = server.tool(GetService {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListIntakeItems::NAME) {
+        server = server.tool(ListIntakeItems {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetIntakeItem::NAME) {
+        server = server.tool(GetIntakeItem {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&CountIntakeItems::NAME) {
+        server = server.tool(CountIntakeItems {
             pool,
             workspace_id,
             user_id,
@@ -1055,6 +1125,52 @@ mod tests {
         };
         assert_eq!(ListWorkItemTypes::NAME, "list_work_item_types");
         assert!(!types.description().is_empty());
+    }
+
+    #[tokio::test]
+    async fn service_and_intake_tools_expose_metadata() {
+        let pool = lazy_pool();
+        let trace = crate::agent::new_trace();
+        let services = ListServices {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListServices::NAME, "list_services");
+        assert!(services.parameters()["properties"]["type"].is_object());
+        let get_service = GetService {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(GetService::NAME, "get_service");
+        assert!(!get_service.description().is_empty());
+        let intake = ListIntakeItems {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListIntakeItems::NAME, "list_intake_items");
+        assert!(intake.parameters()["properties"]["status"].is_object());
+        let detail = GetIntakeItem {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(GetIntakeItem::NAME, "get_intake_item");
+        assert!(detail.parameters()["properties"]["intake_item"].is_object());
+        let count = CountIntakeItems {
+            pool,
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace,
+        };
+        assert_eq!(CountIntakeItems::NAME, "count_intake_items");
+        assert!(!count.description().is_empty());
     }
 
     #[test]
