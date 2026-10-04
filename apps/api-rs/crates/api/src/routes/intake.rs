@@ -1353,6 +1353,54 @@ const INBOX_ISSUE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_or
   AND i.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $3) \
   AND i.deleted_at IS NULL";
 
+/// Accept gate ITSM: type wajib bila project punya tipe live non-epic;
+/// service wajib bila tipe terpilih ber-flag `requires_service`.
+async fn accept_gate(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+) -> Result<Option<&'static str>, sqlx::Error> {
+    let issue: Option<(Option<uuid::Uuid>, Option<bool>)> = sqlx::query_as(
+        "SELECT i.type_id, t.requires_service FROM issues i \
+         LEFT JOIN issue_types t ON t.id = i.type_id AND t.deleted_at IS NULL \
+         WHERE i.id = $1 AND i.deleted_at IS NULL",
+    )
+    .bind(issue_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((type_id, requires_service)) = issue else {
+        return Ok(None);
+    };
+    if type_id.is_none() {
+        let (has_types,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM project_issue_types pit \
+             JOIN issue_types t ON t.id = pit.issue_type_id \
+             WHERE pit.project_id = $1 AND pit.deleted_at IS NULL \
+             AND t.deleted_at IS NULL AND t.is_epic = false)",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
+        if has_types {
+            return Ok(Some("Select a work item type before accepting"));
+        }
+        return Ok(None);
+    }
+    if requires_service == Some(true) {
+        let (has_service,): (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM service_issues \
+             WHERE issue_id = $1 AND deleted_at IS NULL)",
+        )
+        .bind(issue_id)
+        .fetch_one(pool)
+        .await?;
+        if !has_service {
+            return Ok(Some("Select a service before accepting this work item"));
+        }
+    }
+    Ok(None)
+}
+
 /// PATCH `/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/`
 /// (and the `intake-issues/:pk/` twin) — parity with Django
 /// `IntakeIssueViewSet.partial_update`
@@ -1572,6 +1620,11 @@ pub async fn patch_issue(
     // Intake-level write (`IntakeIssueSerializer` partial, `base.py:426-431`).
     if may_write_intake {
         let n_status = body.status;
+        if n_status == Some(1) {
+            if let Some(message) = accept_gate(&st.pool, project_id, issue_id).await? {
+                return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+            }
+        }
         let (dup_set, dup_val): (bool, Option<uuid::Uuid>) = match body.duplicate_to {
             None => (false, None),
             Some(v) => (true, v),
