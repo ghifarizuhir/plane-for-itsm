@@ -1225,6 +1225,8 @@ pub struct InboxIssueFields {
     pub description_json: Option<Value>,
     #[serde(default)]
     pub priority: Option<String>,
+    #[serde(default)]
+    pub type_id: Option<uuid::Uuid>,
 }
 
 /// Top-level PATCH body: optional nested `issue` (Django reads
@@ -1461,12 +1463,30 @@ pub async fn patch_issue(
         }
     }
     let new_priority = issue.and_then(|i| i.priority.clone());
+    let new_type = issue.and_then(|i| i.type_id);
     if !narrowed {
         if let Some(p) = &new_priority {
             if !PRIORITIES.contains(&p.as_str()) {
                 return Ok((
                     StatusCode::BAD_REQUEST,
                     Json(json!({"error": "Invalid priority"})),
+                ));
+            }
+        }
+        if let Some(type_id) = new_type {
+            let (type_ok,): (bool,) = sqlx::query_as(
+                "SELECT EXISTS(SELECT 1 FROM issue_types t \
+                 JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
+                 WHERE t.id = $1 AND pit.project_id = $2 AND t.deleted_at IS NULL AND t.is_epic = false)",
+            )
+            .bind(type_id)
+            .bind(project_id)
+            .fetch_one(&st.pool)
+            .await?;
+            if !type_ok {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "Invalid work item type"})),
                 ));
             }
         }
@@ -1533,20 +1553,23 @@ pub async fn patch_issue(
             || desc_html.is_some()
             || desc_json.is_some()
             || new_priority.is_some()
+            || new_type.is_some()
         {
             sqlx::query(
                 "UPDATE issues SET name = COALESCE($1, name), \
                   description_html = COALESCE($2, description_html), \
                   description_json = COALESCE($3::jsonb, description_json), \
                   priority = COALESCE($4, priority), \
-                  updated_at = now(), updated_by_id = $6, \
-                  description_stripped = CASE WHEN $7::boolean THEN $8::text ELSE description_stripped END \
-                  WHERE id = $5 AND deleted_at IS NULL",
+                  type_id = COALESCE($5, type_id), \
+                  updated_at = now(), updated_by_id = $7, \
+                  description_stripped = CASE WHEN $8::boolean THEN $9::text ELSE description_stripped END \
+                  WHERE id = $6 AND deleted_at IS NULL",
             )
             .bind(&new_name)
             .bind(&desc_html)
             .bind(&desc_json)
             .bind(&new_priority)
+            .bind(new_type)
             .bind(issue_id)
             .bind(user_id)
             .bind(desc_stripped_flag)

@@ -5,8 +5,8 @@ mod support;
 
 use api::middleware::auth::AuthUser;
 use api::routes::intake::{
-    apply_triage_suggestion, dismiss_triage_suggestion, get_triage_suggestion, CreateIntakeIssue,
-    IntakeIssuePayload, TriageFieldsBody,
+    apply_triage_suggestion, dismiss_triage_suggestion, get_triage_suggestion, patch_issue,
+    CreateIntakeIssue, InboxIssueFields, InboxIssuePatch, IntakeIssuePayload, TriageFieldsBody,
 };
 use api::state::AppState;
 use axum::extract::{Path, State};
@@ -169,6 +169,80 @@ impl Scratch {
         type_id
     }
 
+    async fn add_default_state(&self, pool: &PgPool) {
+        sqlx::query(
+            "INSERT INTO states (id, name, description, slug, \"group\", color, sequence, is_triage, \
+             \"default\", project_id, workspace_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), 'Backlog', '', 'backlog', 'backlog', '#4E5355', 1000, false, \
+             true, $1, $2, now(), now())",
+        )
+        .bind(self.project_id)
+        .bind(self.workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch default state");
+    }
+
+    async fn add_type_requiring_service(&self, pool: &PgPool, name: &str) -> Uuid {
+        let type_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
+             is_active, level, requires_service, workspace_id, created_at, updated_at) \
+             VALUES ($1, $2, 'Something is broken', '{}'::jsonb, false, false, true, 0, true, $3, \
+             now(), now())",
+        )
+        .bind(type_id)
+        .bind(name)
+        .bind(self.workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch type");
+        sqlx::query(
+            "INSERT INTO project_issue_types (id, created_at, updated_at, project_id, \
+             workspace_id, issue_type_id, level, is_default) \
+             VALUES (gen_random_uuid(), now(), now(), $1, $2, $3, 0, false)",
+        )
+        .bind(self.project_id)
+        .bind(self.workspace_id)
+        .bind(type_id)
+        .execute(pool)
+        .await
+        .expect("scratch project type");
+        type_id
+    }
+
+    async fn add_service(&self, pool: &PgPool, name: &str) -> Uuid {
+        let service_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO services (id, workspace_id, project_id, name, description, description_html, \
+             status, criticality, \"type\", created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, '', '', 'active', 'high', 'internal', now(), now())",
+        )
+        .bind(service_id)
+        .bind(self.workspace_id)
+        .bind(self.project_id)
+        .bind(name)
+        .execute(pool)
+        .await
+        .expect("scratch service");
+        service_id
+    }
+
+    async fn link_service(&self, pool: &PgPool, service_id: Uuid, issue_id: Uuid) {
+        sqlx::query(
+            "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+             created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now())",
+        )
+        .bind(self.workspace_id)
+        .bind(self.project_id)
+        .bind(service_id)
+        .bind(issue_id)
+        .execute(pool)
+        .await
+        .expect("scratch service link");
+    }
+
     async fn create_item(&self, state: &AppState, name: &str) -> (Uuid, Uuid) {
         let (status, Json(detail)) = api::routes::intake::create_issue(
             State(state.clone()),
@@ -197,6 +271,8 @@ impl Scratch {
             "DELETE FROM issue_description_versions WHERE project_id = $1",
             "DELETE FROM issues WHERE workspace_id = $1",
             "DELETE FROM states WHERE workspace_id = $1",
+            "DELETE FROM service_issues WHERE project_id = $1",
+            "DELETE FROM services WHERE project_id = $1",
             "DELETE FROM intakes WHERE workspace_id = $1",
             "DELETE FROM project_issue_types WHERE workspace_id = $1",
             "DELETE FROM issue_types WHERE workspace_id = $1",
@@ -382,6 +458,117 @@ async fn sweep_candidates_skips_ready_and_recent_failures() {
     assert!(candidates.contains(&old_failed));
     assert!(!candidates.contains(&ready_id));
     assert!(!candidates.contains(&recent_failed));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn accept_gate_requires_type_then_service() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    scratch.add_default_state(&pool).await;
+    let incident_type = scratch.add_type_requiring_service(&pool, "Incident").await;
+    let service_id = scratch.add_service(&pool, "Payment Gateway").await;
+    let st = state(&pool).await;
+
+    let (_, issue_id) = scratch.create_item(&st, "Checkout down").await;
+
+    let accept = || {
+        patch_issue(
+            State(st.clone()),
+            AuthUser(scratch.user_id),
+            Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+            Json(InboxIssuePatch {
+                status: Some(1),
+                ..Default::default()
+            }),
+        )
+    };
+
+    // 1. Type kosong, project punya tipe → 400.
+    let (status, Json(body)) = accept().await.expect("accept");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].as_str().unwrap().contains("work item type"));
+
+    // 2. Type di-set lewat PATCH intake → 200, kolom tertulis, state tetap triage.
+    let (status, _) = patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(InboxIssuePatch {
+            issue: Some(InboxIssueFields {
+                type_id: Some(incident_type),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch type");
+    assert_eq!(status, StatusCode::OK);
+    let stored_type: Option<Uuid> = sqlx::query_scalar("SELECT type_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored_type, Some(incident_type));
+    let state_group: String = sqlx::query_scalar(
+        "SELECT s.\"group\" FROM issues i JOIN states s ON s.id = i.state_id WHERE i.id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state_group, "triage");
+
+    // 3. Type requires_service tanpa link → 400.
+    let (status, Json(body)) = accept().await.expect("accept");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].as_str().unwrap().contains("service"));
+
+    // 4. Link service → accept lolos dan keluar dari triage.
+    scratch.link_service(&pool, service_id, issue_id).await;
+    let (status, _) = accept().await.expect("accept");
+    assert_eq!(status, StatusCode::OK);
+    let state_group: String = sqlx::query_scalar(
+        "SELECT s.\"group\" FROM issues i JOIN states s ON s.id = i.state_id WHERE i.id = $1",
+    )
+    .bind(issue_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_ne!(state_group, "triage");
+
+    // 5. Tipe tanpa flag → accept tanpa service.
+    let (_, issue_id_2) = scratch.create_item(&st, "Printer queue").await;
+    let problem_type = scratch.add_type(&pool, "Problem").await;
+    patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id_2)),
+        Json(InboxIssuePatch {
+            issue: Some(InboxIssueFields {
+                type_id: Some(problem_type),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("patch type");
+    let problem_accept = patch_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id_2)),
+        Json(InboxIssuePatch {
+            status: Some(1),
+            ..Default::default()
+        }),
+    )
+    .await
+    .expect("accept problem");
+    assert_eq!(problem_accept.0, StatusCode::OK);
 
     scratch.purge(&pool).await;
 }
