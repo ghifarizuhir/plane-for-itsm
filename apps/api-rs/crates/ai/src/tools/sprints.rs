@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::{
     clamp_limit, db_error, ensure_feature, optional_text, resolve_project, schema_of,
-    ProjectFeature,
+    ProjectFeature, ProjectRow,
 };
 use crate::agent::{record, ToolTrace};
 
@@ -158,6 +158,238 @@ impl Tool for ListSprints {
     }
 }
 
+pub const SPRINT_BY_ID_SQL: &str = "SELECT c.id, c.name, p.identifier AS project, \
+     c.start_date::text AS start_date, c.end_date::text AS end_date, \
+     CASE WHEN c.start_date IS NULL OR c.end_date IS NULL THEN 'draft' \
+          WHEN now() < c.start_date THEN 'upcoming' \
+          WHEN now() > c.end_date THEN 'completed' ELSE 'current' END AS status, \
+     COALESCE(u.display_name, u.email, '') AS owner, \
+     COALESCE((SELECT count(*) FROM cycle_issues ci \
+       JOIN issues i ON i.id = ci.issue_id AND i.deleted_at IS NULL \
+       WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL), 0)::int8 AS total, \
+     COALESCE((SELECT count(*) FROM cycle_issues ci \
+       JOIN issues i ON i.id = ci.issue_id AND i.deleted_at IS NULL \
+       JOIN states s ON s.id = i.state_id AND s.deleted_at IS NULL \
+       WHERE ci.cycle_id = c.id AND ci.deleted_at IS NULL \
+         AND s.\"group\" = 'completed'), 0)::int8 AS completed \
+     FROM cycles c \
+     JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN users u ON u.id = c.owned_by_id \
+     WHERE c.id = $1 AND c.workspace_id = $2 AND c.deleted_at IS NULL \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+       AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL)";
+
+pub const SPRINTS_BY_NAME_PROJECT_SQL: &str = "SELECT c.id, c.name, \
+     p.identifier AS project, c.start_date::text AS start_date, \
+     c.end_date::text AS end_date, \
+     CASE WHEN c.start_date IS NULL OR c.end_date IS NULL THEN 'draft' \
+          WHEN now() < c.start_date THEN 'upcoming' \
+          WHEN now() > c.end_date THEN 'completed' ELSE 'current' END AS status, \
+     COALESCE(u.display_name, u.email, '') AS owner, 0::int8 AS total, \
+     0::int8 AS completed \
+     FROM cycles c \
+     JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN users u ON u.id = c.owned_by_id \
+     WHERE c.project_id = $1 AND c.workspace_id = $2 AND c.deleted_at IS NULL \
+     AND c.archived_at IS NULL \
+     AND (lower(c.name) = lower($3) OR c.name ILIKE '%' || $3 || '%') \
+     ORDER BY c.start_date DESC NULLS LAST, c.name LIMIT 10";
+
+pub const SPRINTS_BY_NAME_SQL: &str = "SELECT c.id, c.name, p.identifier AS project, \
+     c.start_date::text AS start_date, c.end_date::text AS end_date, \
+     CASE WHEN c.start_date IS NULL OR c.end_date IS NULL THEN 'draft' \
+          WHEN now() < c.start_date THEN 'upcoming' \
+          WHEN now() > c.end_date THEN 'completed' ELSE 'current' END AS status, \
+     COALESCE(u.display_name, u.email, '') AS owner, 0::int8 AS total, \
+     0::int8 AS completed \
+     FROM cycles c \
+     JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN users u ON u.id = c.owned_by_id \
+     WHERE c.workspace_id = $1 AND c.deleted_at IS NULL AND c.archived_at IS NULL \
+     AND p.cycle_view = true \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+       AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+     AND (lower(c.name) = lower($3) OR c.name ILIKE '%' || $3 || '%') \
+     ORDER BY c.start_date DESC NULLS LAST, c.name LIMIT 10";
+
+pub fn pick_sprint(rows: Vec<SprintRow>, reference: &str) -> Result<SprintRow, ToolExecutionError> {
+    let needle = reference.trim();
+    if rows.is_empty() {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "sprint '{needle}' was not found or is not accessible"
+        )));
+    }
+    let exact: Vec<&SprintRow> = rows
+        .iter()
+        .filter(|row| row.name.eq_ignore_ascii_case(needle))
+        .collect();
+    if exact.len() == 1 {
+        return Ok(exact[0].clone());
+    }
+    if exact.len() > 1 || rows.len() > 1 {
+        let names = rows
+            .iter()
+            .map(|row| format!("{}/{}", row.project, row.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(ToolExecutionError::invalid_args(format!(
+            "sprint '{needle}' is ambiguous; use one of: {names}"
+        )));
+    }
+    Ok(rows.into_iter().next().expect("one row"))
+}
+
+pub async fn resolve_sprint(
+    pool: &PgPool,
+    workspace_id: Uuid,
+    user_id: Uuid,
+    reference: &str,
+    project: Option<&ProjectRow>,
+) -> Result<SprintRow, ToolExecutionError> {
+    if let Ok(id) = Uuid::parse_str(reference.trim()) {
+        let row: Option<SprintRow> = sqlx::query_as(SPRINT_BY_ID_SQL)
+            .bind(id)
+            .bind(workspace_id)
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_error)?;
+        return row.ok_or_else(|| {
+            ToolExecutionError::invalid_args(format!(
+                "sprint '{reference}' was not found or is not accessible"
+            ))
+        });
+    }
+    let rows: Vec<SprintRow> = match project {
+        Some(project) => sqlx::query_as(SPRINTS_BY_NAME_PROJECT_SQL)
+            .bind(project.id)
+            .bind(workspace_id)
+            .bind(reference.trim())
+            .fetch_all(pool)
+            .await
+            .map_err(db_error)?,
+        None => sqlx::query_as(SPRINTS_BY_NAME_SQL)
+            .bind(workspace_id)
+            .bind(user_id)
+            .bind(reference.trim())
+            .fetch_all(pool)
+            .await
+            .map_err(db_error)?,
+    };
+    pick_sprint(rows, reference)
+}
+
+pub const SPRINT_STATE_COUNTS_SQL: &str = "SELECT s.\"group\" AS state_group, \
+     count(*)::int8 AS count \
+     FROM cycle_issues ci \
+     JOIN issues i ON i.id = ci.issue_id AND i.deleted_at IS NULL \
+     JOIN states s ON s.id = i.state_id AND s.deleted_at IS NULL \
+     WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+     GROUP BY s.\"group\" ORDER BY s.\"group\"";
+
+pub const SPRINT_OPEN_ITEMS_SQL: &str = "SELECT \
+     p.identifier || '-' || i.sequence_id AS identifier, i.name, \
+     COALESCE(s.name, '') AS state, COALESCE(s.\"group\", '') AS state_group, i.priority \
+     FROM cycle_issues ci \
+     JOIN issues i ON i.id = ci.issue_id AND i.deleted_at IS NULL AND i.is_draft = false \
+     JOIN projects p ON p.id = i.project_id AND p.deleted_at IS NULL \
+     JOIN states s ON s.id = i.state_id AND s.deleted_at IS NULL \
+     WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+     AND s.\"group\" NOT IN ('completed', 'cancelled') \
+     ORDER BY i.updated_at DESC LIMIT 10";
+
+pub fn sprint_detail_json(
+    row: &SprintRow,
+    counts: &[crate::tools::work_items::GroupCountRow],
+    open_items: &[crate::tools::work_items::WorkItemBrief],
+) -> String {
+    json!({
+        "name": row.name,
+        "project": row.project,
+        "status": row.status,
+        "start_date": row.start_date,
+        "end_date": row.end_date,
+        "owner": row.owner,
+        "total": row.total,
+        "completed": row.completed,
+        "state_counts": counts,
+        "open_work_items": open_items,
+    })
+    .to_string()
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct GetSprintArgs {
+    /// Sprint name, or a sprint id when known.
+    pub sprint: String,
+    /// Project identifier or name; narrows a name lookup across projects.
+    pub project: Option<String>,
+}
+
+pub struct GetSprint {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for GetSprint {
+    const NAME: &'static str = "get_sprint";
+    type Args = GetSprintArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Get one sprint by name or id: dates, computed status, owner, progress \
+         (total and completed), the count of work items per state group \
+         (computed live), and the 10 most recently updated unfinished items."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<GetSprintArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let project = match optional_text(args.project.as_deref()) {
+            Some(reference) => {
+                let project =
+                    resolve_project(&self.pool, self.workspace_id, self.user_id, &reference)
+                        .await?;
+                ensure_feature(&self.pool, project.id, ProjectFeature::Cycles).await?;
+                Some(project)
+            }
+            None => None,
+        };
+        let row = resolve_sprint(
+            &self.pool,
+            self.workspace_id,
+            self.user_id,
+            &args.sprint,
+            project.as_ref(),
+        )
+        .await?;
+        let counts: Vec<crate::tools::work_items::GroupCountRow> =
+            sqlx::query_as(SPRINT_STATE_COUNTS_SQL)
+                .bind(row.id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_error)?;
+        let open_items: Vec<crate::tools::work_items::WorkItemBrief> =
+            sqlx::query_as(SPRINT_OPEN_ITEMS_SQL)
+                .bind(row.id)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_error)?;
+        Ok(sprint_detail_json(&row, &counts, &open_items))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +432,48 @@ mod tests {
         assert!(SPRINTS_SQL.contains("project_members"));
         assert!(SPRINTS_SQL.contains("p.cycle_view = true"));
         assert!(SPRINTS_SQL.contains("c.deleted_at IS NULL"));
+    }
+
+    fn sprint(name: &str, project: &str) -> SprintRow {
+        SprintRow {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            project: project.to_string(),
+            start_date: None,
+            end_date: None,
+            status: "draft".to_string(),
+            owner: String::new(),
+            total: 0,
+            completed: 0,
+        }
+    }
+
+    #[test]
+    fn pick_sprint_prefers_exact_then_unique_substring() {
+        let rows = vec![sprint("Sprint 3", "LTS"), sprint("Sprint 30", "LTS")];
+        assert_eq!(pick_sprint(rows.clone(), "sprint 3").unwrap().name, "Sprint 3");
+        assert!(pick_sprint(rows, "sprint").is_err());
+        assert!(pick_sprint(vec![], "sprint 3").is_err());
+    }
+
+    #[test]
+    fn sprint_detail_json_shape() {
+        let row = sprint("Sprint 3", "LTS");
+        let counts = vec![crate::tools::work_items::GroupCountRow {
+            state_group: "started".to_string(),
+            count: 4,
+        }];
+        let items = vec![crate::tools::work_items::WorkItemBrief {
+            identifier: "LTS-42".to_string(),
+            name: "Fix pump".to_string(),
+            state: "In Progress".to_string(),
+            state_group: "started".to_string(),
+            priority: "urgent".to_string(),
+        }];
+        let parsed: serde_json::Value =
+            serde_json::from_str(&sprint_detail_json(&row, &counts, &items)).unwrap();
+        assert_eq!(parsed["name"], json!("Sprint 3"));
+        assert_eq!(parsed["state_counts"][0]["count"], json!(4));
+        assert_eq!(parsed["open_work_items"][0]["identifier"], json!("LTS-42"));
     }
 }
