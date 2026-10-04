@@ -489,7 +489,8 @@
         "form": {
           "name": "Name",
           "description": "Description",
-          "active": "Active"
+          "active": "Active",
+          "requires_service": "Requires a service"
         },
         "not_found": {
           "title": "Work item type not found",

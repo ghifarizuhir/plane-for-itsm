@@ -32,6 +32,7 @@ const defaultValues: TWorkItemTypePayload = {
   name: "",
   description: "",
   is_active: true,
+  requires_service: false,
 };
 
 export const TypeFormModal = observer(function TypeFormModal(props: Props) {
@@ -58,6 +59,7 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
             name: type.name,
             description: type.description,
             is_active: type.is_active,
+            requires_service: type.requires_service,
           }
         : defaultValues
     );
@@ -168,6 +170,23 @@ export const TypeFormModal = observer(function TypeFormModal(props: Props) {
                     checked={value ?? false}
                     onCheckedChange={onChange}
                     aria-label={t("workspace_settings.settings.work_item_types.form.active")}
+                  />
+                )}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-13 font-medium">
+                {t("workspace_settings.settings.work_item_types.form.requires_service")}
+              </span>
+              <Controller
+                control={control}
+                name="requires_service"
+                render={({ field: { value, onChange } }) => (
+                  <Switch
+                    size="sm"
+                    checked={value ?? false}
+                    onCheckedChange={onChange}
+                    aria-label={t("workspace_settings.settings.work_item_types.form.requires_service")}
                   />
                 )}
               />
