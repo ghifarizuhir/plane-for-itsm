@@ -492,6 +492,90 @@ impl Tool for ListWorkItemComments {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ListWorkItemRelationsArgs {
+    /// Work item identifier, e.g. "LTS-42".
+    pub work_item: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
+pub struct RelationRow {
+    pub relation_type: String,
+    pub identifier: String,
+    pub name: String,
+}
+
+pub const WORK_ITEM_RELATIONS_SQL: &str = "SELECT \
+     r.relation_type AS relation_type, \
+     p.identifier || '-' || other.sequence_id AS identifier, \
+     other.name AS name \
+     FROM issue_relations r \
+     JOIN issues other ON other.id = \
+       CASE WHEN r.issue_id = $1 THEN r.related_issue_id ELSE r.issue_id END \
+       AND other.deleted_at IS NULL \
+     JOIN projects p ON p.id = other.project_id AND p.deleted_at IS NULL \
+     WHERE (r.issue_id = $1 OR r.related_issue_id = $1) AND r.deleted_at IS NULL \
+     ORDER BY r.relation_type, identifier";
+
+pub fn relations_json(work_item: &str, rows: &[RelationRow]) -> String {
+    let relations: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "type": row.relation_type,
+                "identifier": row.identifier,
+                "name": row.name,
+            })
+        })
+        .collect();
+    json!({
+        "work_item": work_item,
+        "returned": relations.len(),
+        "relations": relations,
+    })
+    .to_string()
+}
+
+pub struct ListWorkItemRelations {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for ListWorkItemRelations {
+    const NAME: &'static str = "list_work_item_relations";
+    type Args = ListWorkItemRelationsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "List the relations of one work item (e.g. blocked_by, blocking, \
+         relates_to, duplicate) with the other item's identifier and name."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ListWorkItemRelationsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let resolved =
+            resolve_work_item(&self.pool, self.workspace_id, self.user_id, &args.work_item).await?;
+        let rows: Vec<RelationRow> = sqlx::query_as(WORK_ITEM_RELATIONS_SQL)
+            .bind(resolved.id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(relations_json(&resolved.identifier, &rows))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -624,6 +708,40 @@ mod tests {
                 ListWorkItemCommentsArgs {
                     work_item: "no-dash".to_string(),
                     limit: Some(5),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("PROJ-123"));
+    }
+
+    #[test]
+    fn relations_json_shape() {
+        let rows = vec![RelationRow {
+            relation_type: "blocked_by".to_string(),
+            identifier: "OPS-3".to_string(),
+            name: "Fix network".to_string(),
+        }];
+        let parsed: serde_json::Value =
+            serde_json::from_str(&relations_json("LTS-42", &rows)).unwrap();
+        assert_eq!(parsed["work_item"], json!("LTS-42"));
+        assert_eq!(parsed["relations"][0]["type"], json!("blocked_by"));
+        assert_eq!(parsed["relations"][0]["identifier"], json!("OPS-3"));
+    }
+
+    #[tokio::test]
+    async fn list_relations_rejects_a_malformed_ref_before_querying() {
+        let tool = ListWorkItemRelations {
+            pool: lazy_pool(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: crate::agent::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut ToolContext::new(),
+                ListWorkItemRelationsArgs {
+                    work_item: "nope".to_string(),
                 },
             )
             .await
