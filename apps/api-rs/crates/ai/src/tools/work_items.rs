@@ -77,6 +77,66 @@ pub fn search_json(rows: &[(String, String, String, String, String)]) -> String 
     json!({"returned": items.len(), "items": items}).to_string()
 }
 
+/// Normalized filter set shared by `search_work_items` and `count_work_items`.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct WorkItemFilters {
+    pub query: Option<String>,
+    pub project: Option<String>,
+    pub state_group: Option<String>,
+    pub priority: Option<String>,
+    pub work_item_type: Option<String>,
+    pub service: Option<String>,
+    pub assignee: Option<String>,
+    pub assignee_me: bool,
+    pub sprint: Option<String>,
+    pub track: Option<String>,
+    pub label: Option<String>,
+}
+
+impl WorkItemFilters {
+    #[allow(clippy::too_many_arguments)]
+    pub fn normalize(
+        query: Option<&str>,
+        project: Option<&str>,
+        state_group: Option<&str>,
+        priority: Option<&str>,
+        work_item_type: Option<&str>,
+        service: Option<&str>,
+        assignee: Option<&str>,
+        sprint: Option<&str>,
+        track: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<Self, ToolExecutionError> {
+        let assignee = optional_text(assignee);
+        let (assignee, assignee_me) = match assignee {
+            Some(value) if value.eq_ignore_ascii_case("me") => (None, true),
+            other => (other, false),
+        };
+        Ok(Self {
+            query: optional_text(query),
+            project: optional_text(project),
+            state_group: state_group_arg(state_group)?,
+            priority: priority_arg(priority)?,
+            work_item_type: optional_text(work_item_type),
+            service: optional_text(service),
+            assignee,
+            assignee_me,
+            sprint: optional_text(sprint),
+            track: optional_text(track),
+            label: optional_text(label),
+        })
+    }
+
+    /// Echo of the assignee filter for tool output: "me", a name, or nothing.
+    pub fn assignee_label(&self) -> Option<String> {
+        if self.assignee_me {
+            Some("me".to_string())
+        } else {
+            self.assignee.clone()
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct CountWorkItemsArgs {
     /// Project identifier (case-insensitive exact, e.g. "LTS") or project name (case-insensitive substring).
@@ -747,5 +807,73 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("PROJ-123"));
+    }
+
+    #[test]
+    fn work_item_filters_normalize_me_and_trim() {
+        let filters = WorkItemFilters::normalize(
+            None,
+            Some(" lts "),
+            Some("Started"),
+            Some("URGENT"),
+            Some(" Incident "),
+            Some(" API "),
+            Some("me"),
+            Some(" Sprint 3 "),
+            Some(" Track A "),
+            Some(" bug "),
+        )
+        .unwrap();
+        assert_eq!(filters.project.as_deref(), Some("lts"));
+        assert_eq!(filters.state_group.as_deref(), Some("started"));
+        assert_eq!(filters.priority.as_deref(), Some("urgent"));
+        assert_eq!(filters.work_item_type.as_deref(), Some("Incident"));
+        assert_eq!(filters.service.as_deref(), Some("API"));
+        assert!(filters.assignee_me);
+        assert_eq!(filters.assignee, None);
+        assert_eq!(filters.sprint.as_deref(), Some("Sprint 3"));
+        assert_eq!(filters.track.as_deref(), Some("Track A"));
+        assert_eq!(filters.label.as_deref(), Some("bug"));
+    }
+
+    #[test]
+    fn work_item_filters_keep_a_named_assignee() {
+        let filters = WorkItemFilters::normalize(
+            None, None, None, None, None, None, Some("Budi"), None, None, None,
+        )
+        .unwrap();
+        assert_eq!(filters.assignee.as_deref(), Some("Budi"));
+        assert!(!filters.assignee_me);
+    }
+
+    #[test]
+    fn work_item_filters_validate_allowlists() {
+        assert!(
+            WorkItemFilters::normalize(
+                None, None, Some("nope"), None, None, None, None, None, None, None
+            )
+            .is_err()
+        );
+        assert!(
+            WorkItemFilters::normalize(
+                None, None, None, Some("p0"), None, None, None, None, None, None
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn work_item_filters_assignee_label_prefers_me() {
+        let me = WorkItemFilters {
+            assignee_me: true,
+            ..Default::default()
+        };
+        assert_eq!(me.assignee_label().as_deref(), Some("me"));
+        let named = WorkItemFilters {
+            assignee: Some("Budi".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(named.assignee_label().as_deref(), Some("Budi"));
+        assert_eq!(WorkItemFilters::default().assignee_label(), None);
     }
 }
