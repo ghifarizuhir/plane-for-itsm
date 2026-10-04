@@ -266,6 +266,135 @@ impl Tool for CountIntakeItems {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+pub struct IntakeDetailRow {
+    pub intake_issue_id: Uuid,
+    pub identifier: String,
+    pub name: String,
+    pub priority: String,
+    pub source: String,
+    pub intake_status: i32,
+    pub snoozed_till: Option<String>,
+    pub created_at: String,
+    pub project: String,
+    pub intake_view: bool,
+}
+
+pub const INTAKE_DETAIL_SQL: &str = "SELECT ii.id AS intake_issue_id, \
+     p.identifier || '-' || i.sequence_id AS identifier, i.name, i.priority, \
+     COALESCE(ii.source, '') AS source, ii.status AS intake_status, \
+     ii.snoozed_till::text AS snoozed_till, ii.created_at::text AS created_at, \
+     p.identifier AS project, p.intake_view AS intake_view \
+     FROM intake_issues ii \
+     JOIN issues i ON i.id = ii.issue_id AND i.deleted_at IS NULL \
+     JOIN projects p ON p.id = ii.project_id AND p.deleted_at IS NULL \
+     WHERE ii.issue_id = $1 AND ii.workspace_id = $2 AND ii.deleted_at IS NULL \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+       AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL)";
+
+#[derive(Debug, Clone, PartialEq, Serialize, sqlx::FromRow)]
+pub struct SuggestionRow {
+    pub status: String,
+    pub model: Option<String>,
+    pub category_label: Option<String>,
+    pub category_confidence: Option<f64>,
+    pub severity_priority: Option<String>,
+    pub severity_score: Option<f64>,
+    pub severity_confidence: Option<f64>,
+    pub service_label: Option<String>,
+    pub service_confidence: Option<f64>,
+    pub needs_human: Option<f64>,
+    pub applied_fields: Vec<String>,
+    pub dismissed_fields: Vec<String>,
+}
+
+pub const INTAKE_SUGGESTION_SQL: &str = "SELECT status, model, category_label, \
+     category_confidence, severity_priority, severity_score, severity_confidence, \
+     service_label, service_confidence, needs_human, applied_fields, dismissed_fields \
+     FROM intake_triage_suggestions WHERE intake_issue_id = $1";
+
+pub fn intake_detail_json(row: &IntakeDetailRow, suggestion: Option<&SuggestionRow>) -> String {
+    json!({
+        "id": row.intake_issue_id,
+        "identifier": row.identifier,
+        "name": row.name,
+        "priority": row.priority,
+        "source": row.source,
+        "status": status_label(row.intake_status),
+        "snoozed_till": row.snoozed_till,
+        "created_at": row.created_at,
+        "project": row.project,
+        "suggestion": suggestion,
+    })
+    .to_string()
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct GetIntakeItemArgs {
+    /// Intake item id (uuid) as returned by list_intake_items.
+    pub intake_item: String,
+}
+
+pub struct GetIntakeItem {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for GetIntakeItem {
+    const NAME: &'static str = "get_intake_item";
+    type Args = GetIntakeItemArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Get one intake (triage inbox) item by id with its full AI triage \
+         suggestion: category, severity, and service with confidence scores, \
+         which fields were already applied or dismissed, and needs_human."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<GetIntakeItemArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let intake_item = Uuid::parse_str(args.intake_item.trim()).map_err(|_| {
+            ToolExecutionError::invalid_args("intake_item must be a uuid from list_intake_items")
+        })?;
+        let row: Option<IntakeDetailRow> = sqlx::query_as(INTAKE_DETAIL_SQL)
+            .bind(intake_item)
+            .bind(self.workspace_id)
+            .bind(self.user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_error)?;
+        let Some(row) = row else {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "intake item '{}' was not found or is not accessible",
+                args.intake_item
+            )));
+        };
+        if !row.intake_view {
+            return Err(ToolExecutionError::invalid_args(
+                "the intake feature is disabled in this project",
+            ));
+        }
+        let suggestion: Option<SuggestionRow> = sqlx::query_as(INTAKE_SUGGESTION_SQL)
+            .bind(row.intake_issue_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(intake_detail_json(&row, suggestion.as_ref()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +463,65 @@ mod tests {
             assert!(sql.contains("project_members"));
             assert!(sql.contains("ii.status = $3"));
         }
+    }
+
+    #[tokio::test]
+    async fn get_intake_item_rejects_a_non_uuid_before_querying() {
+        let tool = GetIntakeItem {
+            pool: super::super::lazy_pool(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: crate::agent::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut rig::tool::ToolContext::new(),
+                GetIntakeItemArgs {
+                    intake_item: "LTS-7".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("uuid"));
+    }
+
+    #[test]
+    fn intake_detail_json_shape() {
+        let row = IntakeDetailRow {
+            intake_issue_id: Uuid::nil(),
+            identifier: "LTS-7".to_string(),
+            name: "Alert: disk full".to_string(),
+            priority: "high".to_string(),
+            source: "webhook".to_string(),
+            intake_status: -2,
+            snoozed_till: None,
+            created_at: "2026-10-01 00:00:00+00".to_string(),
+            project: "LTS".to_string(),
+            intake_view: true,
+        };
+        let suggestion = SuggestionRow {
+            status: "ready".to_string(),
+            model: Some("test-model".to_string()),
+            category_label: Some("Incident".to_string()),
+            category_confidence: Some(0.9),
+            severity_priority: Some("high".to_string()),
+            severity_score: Some(0.8),
+            severity_confidence: Some(0.7),
+            service_label: Some("API".to_string()),
+            service_confidence: Some(0.6),
+            needs_human: Some(0.1),
+            applied_fields: vec!["category".to_string()],
+            dismissed_fields: vec![],
+        };
+        let parsed: serde_json::Value =
+            serde_json::from_str(&intake_detail_json(&row, Some(&suggestion))).unwrap();
+        assert_eq!(parsed["identifier"], json!("LTS-7"));
+        assert_eq!(parsed["status"], json!("pending"));
+        assert_eq!(parsed["suggestion"]["service_confidence"], json!(0.6));
+        assert_eq!(parsed["suggestion"]["applied_fields"][0], json!("category"));
+
+        let without: serde_json::Value =
+            serde_json::from_str(&intake_detail_json(&row, None)).unwrap();
+        assert_eq!(without["suggestion"], json!(null));
     }
 }
