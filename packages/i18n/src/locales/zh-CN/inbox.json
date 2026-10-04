@@ -38,6 +38,10 @@
       "accept_permission": "只有项目管理员可以接受工作项",
       "decline_permission": "只有项目管理员可以拒绝工作项"
     },
+    "gate": {
+      "type_required": "接受前请选择工作项类型",
+      "service_required": "接受此工作项前请选择服务"
+    },
     "actions": {
       "accept": "接受",
       "decline": "拒绝",
@@ -54,6 +58,8 @@
       "pending": "正在分类此工作项…",
       "suggested_by": "由 {model} 建议",
       "category": "类型",
+      "service": "服务",
+      "no_service": "未推荐服务",
       "severity": "优先级",
       "needs_human": "需要人工处理",
       "yes": "是",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "应用内"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} 个事件，上次 {date}"
     },
     "order_by": {
       "created_at": "创建时间",

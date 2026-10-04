@@ -38,6 +38,10 @@
       "accept_permission": "Nur Projektadministratoren können Arbeitselemente annehmen",
       "decline_permission": "Nur Projektadministratoren können Arbeitselemente ablehnen"
     },
+    "gate": {
+      "type_required": "Vor dem Akzeptieren einen Arbeitselementtyp auswählen",
+      "service_required": "Vor dem Akzeptieren dieses Arbeitselements einen Service auswählen"
+    },
     "actions": {
       "accept": "Annehmen",
       "decline": "Ablehnen",
@@ -54,6 +58,8 @@
       "pending": "Dieses Arbeitselement wird klassifiziert…",
       "suggested_by": "Vorgeschlagen von {model}",
       "category": "Typ",
+      "service": "Service",
+      "no_service": "Kein Service vorgeschlagen",
       "severity": "Priorität",
       "needs_human": "Manuelle Prüfung erforderlich",
       "yes": "Ja",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "in der App"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} Ereignisse, zuletzt {date}"
     },
     "order_by": {
       "created_at": "Erstellt am",

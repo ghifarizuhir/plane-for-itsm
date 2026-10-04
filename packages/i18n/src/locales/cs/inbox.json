@@ -38,6 +38,10 @@
       "accept_permission": "Pouze správci projektu mohou přijímat pracovní položky",
       "decline_permission": "Pouze správci projektu mohou odmítnout pracovní položky"
     },
+    "gate": {
+      "type_required": "Před přijetím vyberte typ pracovní položky",
+      "service_required": "Před přijetím této pracovní položky vyberte službu"
+    },
     "actions": {
       "accept": "Přijmout",
       "decline": "Odmítnout",
@@ -54,6 +58,8 @@
       "pending": "Klasifikuji tuto pracovní položku…",
       "suggested_by": "Navrženo modelem {model}",
       "category": "Typ",
+      "service": "Služba",
+      "no_service": "Žádná navržená služba",
       "severity": "Priorita",
       "needs_human": "Vyžaduje člověka",
       "yes": "Ano",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "v aplikaci"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} událostí, poslední {date}"
     },
     "order_by": {
       "created_at": "Vytvořeno dne",

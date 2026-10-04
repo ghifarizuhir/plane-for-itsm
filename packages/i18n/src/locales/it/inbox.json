@@ -38,6 +38,10 @@
       "accept_permission": "Solo gli amministratori del progetto possono accettare gli elementi di lavoro",
       "decline_permission": "Solo gli amministratori del progetto possono rifiutare gli elementi di lavoro"
     },
+    "gate": {
+      "type_required": "Selezionare il tipo di elemento di lavoro prima di accettare",
+      "service_required": "Selezionare un servizio prima di accettare questo elemento di lavoro"
+    },
     "actions": {
       "accept": "Accetta",
       "decline": "Rifiuta",
@@ -54,6 +58,8 @@
       "pending": "Classificazione di questo elemento di lavoro…",
       "suggested_by": "Suggerito da {model}",
       "category": "Tipo",
+      "service": "servizio",
+      "no_service": "Nessun servizio suggerito",
       "severity": "Priorità",
       "needs_human": "Richiede l'intervento umano",
       "yes": "Sì",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "nell'app"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} eventi, ultimo {date}"
     },
     "order_by": {
       "created_at": "Creato il",

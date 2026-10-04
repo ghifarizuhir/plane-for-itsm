@@ -38,6 +38,10 @@
       "accept_permission": "只有專案管理員可以接受工作事項",
       "decline_permission": "只有專案管理員可以拒絕工作事項"
     },
+    "gate": {
+      "type_required": "接受前請選擇工作項類型",
+      "service_required": "接受此工作項前請選擇服務"
+    },
     "actions": {
       "accept": "接受",
       "decline": "拒絕",
@@ -54,6 +58,8 @@
       "pending": "正在分類此工作事項…",
       "suggested_by": "由 {model} 建議",
       "category": "類型",
+      "service": "服務",
+      "no_service": "未推薦服務",
       "severity": "優先順序",
       "needs_human": "需要人工處理",
       "yes": "是",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "應用程式內"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} 個事件，上次 {date}"
     },
     "order_by": {
       "created_at": "建立時間",

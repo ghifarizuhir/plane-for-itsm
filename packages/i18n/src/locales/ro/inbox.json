@@ -38,6 +38,10 @@
       "accept_permission": "Doar administratorii proiectului pot accepta activități",
       "decline_permission": "Doar administratorii proiectului pot respinge activități"
     },
+    "gate": {
+      "type_required": "Selectați tipul activității înainte de a accepta",
+      "service_required": "Selectați un serviciu înainte de a accepta această activitate"
+    },
     "actions": {
       "accept": "Acceptă",
       "decline": "Respinge",
@@ -54,6 +58,8 @@
       "pending": "Se clasifică această activitate…",
       "suggested_by": "Sugerat de {model}",
       "category": "Tip",
+      "service": "serviciu",
+      "no_service": "Niciun serviciu sugerat",
       "severity": "Prioritate",
       "needs_human": "Necesită intervenție umană",
       "yes": "Da",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "în aplicație"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} evenimente, ultimul {date}"
     },
     "order_by": {
       "created_at": "Creată la",

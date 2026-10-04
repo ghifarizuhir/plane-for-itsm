@@ -38,6 +38,10 @@
       "accept_permission": "Chỉ quản trị viên dự án mới có thể chấp nhận mục công việc",
       "decline_permission": "Chỉ quản trị viên dự án mới có thể từ chối mục công việc"
     },
+    "gate": {
+      "type_required": "Chọn loại mục công việc trước khi chấp nhận",
+      "service_required": "Chọn dịch vụ trước khi chấp nhận mục công việc này"
+    },
     "actions": {
       "accept": "Chấp nhận",
       "decline": "Từ chối",
@@ -54,6 +58,8 @@
       "pending": "Đang phân loại mục công việc này…",
       "suggested_by": "Được gợi ý bởi {model}",
       "category": "Loại",
+      "service": "Dịch vụ",
+      "no_service": "Không có dịch vụ nào được đề xuất",
       "severity": "Ưu tiên",
       "needs_human": "Cần người xử lý",
       "yes": "Có",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "Trong ứng dụng"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} sự kiện, gần nhất {date}"
     },
     "order_by": {
       "created_at": "Thời gian tạo",

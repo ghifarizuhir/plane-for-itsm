@@ -38,6 +38,10 @@
       "accept_permission": "プロジェクト管理者のみが作業項目を承認できます",
       "decline_permission": "プロジェクト管理者のみが作業項目を却下できます"
     },
+    "gate": {
+      "type_required": "受け入れる前に作業項目の種類を選択してください",
+      "service_required": "この作業項目を受け入れる前にサービスを選択してください"
+    },
     "actions": {
       "accept": "承認",
       "decline": "却下",
@@ -54,6 +58,8 @@
       "pending": "この作業項目を分類しています……",
       "suggested_by": "{model}による提案",
       "category": "タイプ",
+      "service": "サービス",
+      "no_service": "提案されたサービスはありません",
       "severity": "優先度",
       "needs_human": "人間の対応が必要",
       "yes": "はい",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "アプリ内"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count}件のイベント、最終 {date}"
     },
     "order_by": {
       "created_at": "作成日",

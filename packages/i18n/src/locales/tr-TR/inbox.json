@@ -38,6 +38,10 @@
       "accept_permission": "Yalnızca proje yöneticileri iş öğelerini kabul edebilir",
       "decline_permission": "Yalnızca proje yöneticileri iş öğelerini reddedebilir"
     },
+    "gate": {
+      "type_required": "Kabul etmeden önce bir iş öğesi türü seçin",
+      "service_required": "Bu iş öğesini kabul etmeden önce bir hizmet seçin"
+    },
     "actions": {
       "accept": "Kabul Et",
       "decline": "Reddet",
@@ -54,6 +58,8 @@
       "pending": "Bu iş öğesi sınıflandırılıyor…",
       "suggested_by": "{model} tarafından önerildi",
       "category": "Tür",
+      "service": "Hizmet",
+      "no_service": "Önerilen hizmet yok",
       "severity": "Öncelik",
       "needs_human": "İnsan müdahalesi gerekiyor",
       "yes": "Evet",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "uygulama içi"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} olay, son {date}"
     },
     "order_by": {
       "created_at": "Oluşturulma tarihi",

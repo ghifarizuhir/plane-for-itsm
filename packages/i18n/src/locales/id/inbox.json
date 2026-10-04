@@ -38,6 +38,10 @@
       "accept_permission": "Hanya admin proyek yang bisa menerima item kerja",
       "decline_permission": "Hanya admin proyek yang bisa menolak item kerja"
     },
+    "gate": {
+      "type_required": "Pilih tipe item kerja sebelum menerima",
+      "service_required": "Pilih layanan sebelum menerima item kerja ini"
+    },
     "actions": {
       "accept": "Terima",
       "decline": "Tolak",
@@ -54,6 +58,8 @@
       "pending": "Mengklasifikasikan item kerja ini…",
       "suggested_by": "Disarankan oleh {model}",
       "category": "Tipe",
+      "service": "Layanan",
+      "no_service": "Tidak ada layanan yang disarankan",
       "severity": "Prioritas",
       "needs_human": "Perlu ditangani manusia",
       "yes": "Ya",
@@ -68,6 +74,10 @@
     },
     "source": {
       "in-app": "dalam aplikasi"
+    },
+    "intake_source": {
+      "badge": "via {name}",
+      "tooltip": "{count} peristiwa, terakhir {date}"
     },
     "order_by": {
       "created_at": "Dibuat pada",
