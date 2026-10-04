@@ -8,6 +8,7 @@ pub mod projects;
 pub mod proposals;
 pub mod services;
 pub mod sprints;
+pub mod tracks;
 pub mod work_items;
 
 pub use intake::*;
@@ -16,6 +17,7 @@ pub use projects::*;
 pub use proposals::*;
 pub use services::*;
 pub use sprints::*;
+pub use tracks::*;
 pub use work_items::*;
 
 use rig::tool::{Tool, ToolExecutionError};
