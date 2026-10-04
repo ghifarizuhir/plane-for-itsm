@@ -17,6 +17,7 @@ class IssueType(BaseModel):
     description = models.TextField(blank=True)
     logo_props = models.JSONField(default=dict)
     is_epic = models.BooleanField(default=False)
+    requires_service = models.BooleanField(default=False)
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     level = models.FloatField(default=0)
