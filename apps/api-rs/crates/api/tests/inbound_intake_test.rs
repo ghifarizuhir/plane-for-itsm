@@ -260,6 +260,48 @@ impl Scratch {
         .expect("scratch source");
         (id, token)
     }
+
+    async fn purge(&self, pool: &PgPool) {
+        for statement in [
+            "DELETE FROM intake_triage_suggestions WHERE workspace_id = $1",
+            "DELETE FROM issue_comments WHERE workspace_id = $1",
+            "DELETE FROM intake_issues WHERE workspace_id = $1",
+            "DELETE FROM issue_sequences WHERE project_id = $1",
+            "DELETE FROM issue_description_versions WHERE project_id = $1",
+            "DELETE FROM issues WHERE workspace_id = $1",
+            "DELETE FROM intake_sources WHERE project_id = $1",
+            "DELETE FROM states WHERE workspace_id = $1",
+            "DELETE FROM service_issues WHERE project_id = $1",
+            "DELETE FROM services WHERE project_id = $1",
+            "DELETE FROM intakes WHERE workspace_id = $1",
+            "DELETE FROM project_issue_types WHERE workspace_id = $1",
+            "DELETE FROM issue_types WHERE workspace_id = $1",
+            "DELETE FROM project_members WHERE workspace_id = $1",
+            "DELETE FROM workspace_members WHERE workspace_id = $1",
+        ] {
+            let scope = if statement.contains("project_id") {
+                self.project_id
+            } else {
+                self.workspace_id
+            };
+            sqlx::query(statement).bind(scope).execute(pool).await.ok();
+        }
+        sqlx::query("DELETE FROM projects WHERE id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM workspaces WHERE id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM users WHERE username LIKE $1")
+            .bind(format!("{}%", self.slug))
+            .execute(pool)
+            .await
+            .ok();
+    }
 }
 
 fn alert_payload(fingerprint: &str, status: &str, severity: &str) -> serde_json::Value {
@@ -354,6 +396,8 @@ async fn creates_pending_item_with_mapped_type_service_priority() {
     .await
     .unwrap();
     assert_eq!(not_found, StatusCode::NOT_FOUND);
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -424,6 +468,8 @@ async fn firing_upserts_series_and_reopens_declined() {
     .await
     .unwrap();
     assert_eq!(status_again, -2);
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -543,6 +589,8 @@ async fn resolved_declines_pending_and_completes_accepted() {
             .unwrap();
     assert_eq!(state_id, Some(default_state));
     assert!(completed_at.is_none());
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -633,6 +681,8 @@ async fn auto_accept_only_when_classification_complete() {
     .await
     .unwrap();
     assert_eq!(status, -2);
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -712,6 +762,8 @@ async fn batch_common_labels_and_fingerprint_fallback() {
     .await
     .unwrap();
     assert_eq!(bad, StatusCode::BAD_REQUEST);
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -757,4 +809,6 @@ async fn detail_exposes_webhook_source() {
     assert_eq!(detail["intake_source"]["name"], "Prometheus Prod");
     assert_eq!(detail["intake_source"]["occurrence_count"], 1);
     assert!(detail["intake_source"]["last_seen_at"].is_string());
+
+    scratch.purge(&pool).await;
 }

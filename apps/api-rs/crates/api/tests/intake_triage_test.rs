@@ -145,8 +145,8 @@ impl Scratch {
         let type_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
-             is_active, level, workspace_id, created_at, updated_at) \
-             VALUES ($1, $2, 'Something is broken', '{}'::jsonb, false, false, true, 0, $3, \
+             is_active, level, requires_service, workspace_id, created_at, updated_at) \
+             VALUES ($1, $2, 'Something is broken', '{}'::jsonb, false, false, true, 0, false, $3, \
              now(), now())",
         )
         .bind(type_id)

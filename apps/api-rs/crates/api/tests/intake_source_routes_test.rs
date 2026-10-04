@@ -194,6 +194,48 @@ impl Scratch {
         .expect("scratch source");
         (id, token)
     }
+
+    async fn purge(&self, pool: &PgPool) {
+        for statement in [
+            "DELETE FROM intake_triage_suggestions WHERE workspace_id = $1",
+            "DELETE FROM issue_comments WHERE workspace_id = $1",
+            "DELETE FROM intake_issues WHERE workspace_id = $1",
+            "DELETE FROM issue_sequences WHERE project_id = $1",
+            "DELETE FROM issue_description_versions WHERE project_id = $1",
+            "DELETE FROM issues WHERE workspace_id = $1",
+            "DELETE FROM intake_sources WHERE project_id = $1",
+            "DELETE FROM states WHERE workspace_id = $1",
+            "DELETE FROM service_issues WHERE project_id = $1",
+            "DELETE FROM services WHERE project_id = $1",
+            "DELETE FROM intakes WHERE workspace_id = $1",
+            "DELETE FROM project_issue_types WHERE workspace_id = $1",
+            "DELETE FROM issue_types WHERE workspace_id = $1",
+            "DELETE FROM project_members WHERE workspace_id = $1",
+            "DELETE FROM workspace_members WHERE workspace_id = $1",
+        ] {
+            let scope = if statement.contains("project_id") {
+                self.project_id
+            } else {
+                self.workspace_id
+            };
+            sqlx::query(statement).bind(scope).execute(pool).await.ok();
+        }
+        sqlx::query("DELETE FROM projects WHERE id = $1")
+            .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM workspaces WHERE id = $1")
+            .bind(self.workspace_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM users WHERE username LIKE $1")
+            .bind(format!("{}%", self.slug))
+            .execute(pool)
+            .await
+            .ok();
+    }
 }
 
 #[tokio::test]
@@ -247,6 +289,8 @@ async fn create_validates_config_and_returns_token() {
     .await
     .unwrap();
     assert_eq!(bad, StatusCode::BAD_REQUEST);
+
+    scratch.purge(&pool).await;
 }
 
 #[tokio::test]
@@ -276,4 +320,6 @@ async fn rotate_invalidates_old_token() {
     .await
     .unwrap();
     assert!(!old_alive);
+
+    scratch.purge(&pool).await;
 }
