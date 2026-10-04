@@ -87,12 +87,21 @@ pub fn allowed_origins_from_env(frontend_url: &str) -> Vec<String> {
     }
 }
 
+/// Endpoint inbound server-to-server (Alertmanager) tidak mengirim
+/// Origin/Referer. Path di bawah prefix ini dikecualikan dari CSRF check;
+/// autentikasi tetap lewat token di URL.
+pub fn inbound_path_exempt(path: &str) -> bool {
+    path.starts_with("/api/inbound/")
+}
+
 pub async fn origin_middleware(
     axum::extract::State(frontends): axum::extract::State<Vec<String>>,
     req: Request,
     next: Next,
 ) -> Response {
-    if !origin_allowed_many(req.method(), req.headers(), &frontends) {
+    if !origin_allowed_many(req.method(), req.headers(), &frontends)
+        && !inbound_path_exempt(req.uri().path())
+    {
         return (
             StatusCode::FORBIDDEN,
             axum::Json(json!({"error": "bad origin"})),
@@ -100,4 +109,15 @@ pub async fn origin_middleware(
             .into_response();
     }
     next.run(req).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inbound_paths_are_exempt_from_origin_check() {
+        assert!(inbound_path_exempt("/api/inbound/alertmanager/abc/"));
+        assert!(!inbound_path_exempt("/api/workspaces/acme/projects/1/intake-sources/"));
+    }
 }
