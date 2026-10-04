@@ -20,10 +20,38 @@ pub const COUNT_SQL: &str = "SELECT count(*)::int8 FROM issues i \
        AND s.deleted_at IS NULL \
      WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
      AND s.\"group\" <> 'triage' \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
+       AND pm.member_id = $10 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND ($2::text IS NULL OR p.identifier ILIKE $2 OR p.name ILIKE '%' || $2 || '%') \
      AND ($3::text IS NULL OR s.\"group\" = $3) \
      AND ($4::text IS NULL OR i.priority = $4) \
-     AND ($5::bool OR i.archived_at IS NULL)";
+     AND ($5::bool OR i.archived_at IS NULL) \
+     AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM issue_types it \
+       WHERE it.id = i.type_id AND it.deleted_at IS NULL \
+       AND (lower(it.name) = lower($6) OR it.name ILIKE '%' || $6 || '%'))) \
+     AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM service_issues si \
+       JOIN services sv ON sv.id = si.service_id AND sv.deleted_at IS NULL \
+       WHERE si.issue_id = i.id AND si.deleted_at IS NULL \
+       AND (lower(sv.name) = lower($7) OR sv.name ILIKE '%' || $7 || '%'))) \
+     AND ($8::text IS NULL OR EXISTS (SELECT 1 FROM issue_assignees ia \
+       JOIN users u ON u.id = ia.assignee_id \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL \
+       AND (lower(COALESCE(u.display_name, '')) = lower($8) \
+         OR lower(COALESCE(u.email, '')) = lower($8)))) \
+     AND ($9::bool = false OR EXISTS (SELECT 1 FROM issue_assignees ia \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL AND ia.assignee_id = $10)) \
+     AND ($11::text IS NULL OR EXISTS (SELECT 1 FROM cycle_issues ci \
+       JOIN cycles c ON c.id = ci.cycle_id AND c.deleted_at IS NULL \
+       WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL \
+       AND (lower(c.name) = lower($11) OR c.name ILIKE '%' || $11 || '%'))) \
+     AND ($12::text IS NULL OR EXISTS (SELECT 1 FROM module_issues mi \
+       JOIN modules m ON m.id = mi.module_id AND m.deleted_at IS NULL \
+       WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL \
+       AND (lower(m.name) = lower($12) OR m.name ILIKE '%' || $12 || '%'))) \
+     AND ($13::text IS NULL OR EXISTS (SELECT 1 FROM issue_labels il \
+       JOIN labels l ON l.id = il.label_id AND l.deleted_at IS NULL \
+       WHERE il.issue_id = i.id AND il.deleted_at IS NULL \
+       AND (lower(l.name) = lower($13) OR l.name ILIKE '%' || $13 || '%')))";
 
 pub const SEARCH_SQL: &str = "SELECT p.identifier AS project, \
      p.identifier || '-' || i.sequence_id AS identifier, \
@@ -105,20 +133,20 @@ pub fn search_json(rows: &[SearchRow]) -> String {
     json!({"returned": items.len(), "items": items}).to_string()
 }
 
-pub fn count_json(
-    count: i64,
-    project: Option<&str>,
-    state_group: Option<&str>,
-    priority: Option<&str>,
-    include_archived: bool,
-) -> String {
+pub fn count_json(count: i64, filters: &WorkItemFilters, include_archived: bool) -> String {
     json!({
         "count": count,
         "filters": {
-            "project": project,
-            "state_group": state_group,
-            "priority": priority,
-            "include_archived": include_archived
+            "project": filters.project,
+            "state_group": filters.state_group,
+            "priority": filters.priority,
+            "include_archived": include_archived,
+            "type": filters.work_item_type,
+            "service": filters.service,
+            "assignee": filters.assignee_label(),
+            "sprint": filters.sprint,
+            "track": filters.track,
+            "label": filters.label,
         }
     })
     .to_string()
@@ -194,6 +222,19 @@ pub struct CountWorkItemsArgs {
     pub priority: Option<String>,
     /// Include archived work items. Defaults to false.
     pub include_archived: Option<bool>,
+    /// Work item type name, e.g. "Incident".
+    #[serde(rename = "type")]
+    pub work_item_type: Option<String>,
+    /// Service name (case-insensitive exact or substring).
+    pub service: Option<String>,
+    /// Assignee display name, email, or "me" for the signed-in user.
+    pub assignee: Option<String>,
+    /// Sprint (cycle) name (case-insensitive exact or substring).
+    pub sprint: Option<String>,
+    /// Track (module) name (case-insensitive exact or substring).
+    pub track: Option<String>,
+    /// Label name (case-insensitive exact or substring).
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -226,6 +267,7 @@ pub struct SearchWorkItemsArgs {
 pub struct CountWorkItems {
     pub pool: PgPool,
     pub workspace_id: Uuid,
+    pub user_id: Uuid,
     pub trace: ToolTrace,
 }
 
@@ -236,7 +278,12 @@ impl Tool for CountWorkItems {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Count non-deleted, non-draft work items in the current workspace, excluding triage items, issues with a missing or deleted state, and issues in deleted or archived projects. Archived items are excluded unless include_archived is true. Optionally filtered by project, state group, and priority.".to_string()
+        "Count non-deleted, non-draft work items the caller can access, \
+         excluding triage items and items in archived projects. Archived items \
+         are excluded unless include_archived is true. Optionally filtered by \
+         project, state group, priority, type, service, assignee (a name, \
+         email, or \"me\"), sprint, track, and label."
+            .to_string()
     }
 
     fn parameters(&self) -> Value {
@@ -249,26 +296,37 @@ impl Tool for CountWorkItems {
         args: Self::Args,
     ) -> Result<Self::Output, Self::Error> {
         record(&self.trace, Self::NAME, &args);
-        let project = optional_text(args.project.as_deref());
-        let state_group = state_group_arg(args.state_group.as_deref())?;
-        let priority = priority_arg(args.priority.as_deref())?;
+        let filters = WorkItemFilters::normalize(
+            None,
+            args.project.as_deref(),
+            args.state_group.as_deref(),
+            args.priority.as_deref(),
+            args.work_item_type.as_deref(),
+            args.service.as_deref(),
+            args.assignee.as_deref(),
+            args.sprint.as_deref(),
+            args.track.as_deref(),
+            args.label.as_deref(),
+        )?;
         let include_archived = args.include_archived.unwrap_or(false);
         let count: i64 = sqlx::query_scalar(COUNT_SQL)
             .bind(self.workspace_id)
-            .bind(&project)
-            .bind(&state_group)
-            .bind(&priority)
+            .bind(&filters.project)
+            .bind(&filters.state_group)
+            .bind(&filters.priority)
             .bind(include_archived)
+            .bind(&filters.work_item_type)
+            .bind(&filters.service)
+            .bind(&filters.assignee)
+            .bind(filters.assignee_me)
+            .bind(self.user_id)
+            .bind(&filters.sprint)
+            .bind(&filters.track)
+            .bind(&filters.label)
             .fetch_one(&self.pool)
             .await
             .map_err(db_error)?;
-        Ok(count_json(
-            count,
-            project.as_deref(),
-            state_group.as_deref(),
-            priority.as_deref(),
-            include_archived,
-        ))
+        Ok(count_json(count, &filters, include_archived))
     }
 }
 
@@ -958,6 +1016,21 @@ mod tests {
         };
         assert_eq!(named.assignee_label().as_deref(), Some("Budi"));
         assert_eq!(WorkItemFilters::default().assignee_label(), None);
+    }
+
+    #[test]
+    fn count_sql_carries_the_new_filters_and_membership_guard() {
+        for fragment in [
+            "service_issues",
+            "cycle_issues",
+            "module_issues",
+            "issue_labels",
+            "issue_types",
+            "project_members",
+            "$9::bool = false",
+        ] {
+            assert!(COUNT_SQL.contains(fragment), "missing {fragment}");
+        }
     }
 
     #[test]

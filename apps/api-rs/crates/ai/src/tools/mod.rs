@@ -252,6 +252,7 @@ pub fn workspace_tools(
         .tool(CountWorkItems {
             pool: pool.clone(),
             workspace_id,
+            user_id,
             trace: trace.clone(),
         })
         .tool(SearchWorkItems {
@@ -309,6 +310,7 @@ pub fn read_tools(
         server = server.tool(CountWorkItems {
             pool: pool.clone(),
             workspace_id,
+            user_id,
             trace: trace.clone(),
         });
     }
@@ -423,7 +425,16 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&projects).unwrap(),
             json!({"items": [{"identifier": "LTS", "name": "Logistics"}]})
         );
-        let count = count_json(7, Some("LTS"), Some("started"), Some("urgent"), false);
+        let count = count_json(
+            7,
+            &WorkItemFilters {
+                project: Some("LTS".to_string()),
+                state_group: Some("started".to_string()),
+                priority: Some("urgent".to_string()),
+                ..Default::default()
+            },
+            false,
+        );
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&count).unwrap(),
             json!({
@@ -432,7 +443,13 @@ mod tests {
                     "project": "LTS",
                     "state_group": "started",
                     "priority": "urgent",
-                    "include_archived": false
+                    "include_archived": false,
+                    "type": null,
+                    "service": null,
+                    "assignee": null,
+                    "sprint": null,
+                    "track": null,
+                    "label": null
                 }
             })
         );
@@ -476,6 +493,7 @@ mod tests {
         let count = CountWorkItems {
             pool: pool.clone(),
             workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
             trace: trace.clone(),
         };
         assert_eq!(CountWorkItems::NAME, "count_work_items");
@@ -509,6 +527,7 @@ mod tests {
         let tool = CountWorkItems {
             pool: lazy_pool(),
             workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
             trace: crate::agent::new_trace(),
         };
         let error = tool
@@ -519,6 +538,12 @@ mod tests {
                     state_group: Some("nope".to_string()),
                     priority: None,
                     include_archived: None,
+                    work_item_type: None,
+                    service: None,
+                    assignee: None,
+                    sprint: None,
+                    track: None,
+                    label: None,
                 },
             )
             .await
