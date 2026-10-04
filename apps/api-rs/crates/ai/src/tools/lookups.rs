@@ -265,6 +265,102 @@ impl Tool for ListLabels {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct TypeRow {
+    pub name: String,
+    pub is_epic: bool,
+    pub requires_service: bool,
+}
+
+pub const WORKSPACE_TYPES_SQL: &str = "SELECT it.name, it.is_epic, it.requires_service \
+     FROM issue_types it \
+     WHERE it.workspace_id = $1 AND it.deleted_at IS NULL AND it.is_active = true \
+     ORDER BY it.level, it.name";
+
+pub const PROJECT_TYPES_SQL: &str = "SELECT it.name, it.is_epic, it.requires_service \
+     FROM issue_types it \
+     JOIN project_issue_types pit ON pit.issue_type_id = it.id \
+       AND pit.project_id = $1 AND pit.deleted_at IS NULL \
+     WHERE it.workspace_id = $2 AND it.deleted_at IS NULL AND it.is_active = true \
+     ORDER BY it.level, it.name";
+
+pub fn types_json(scope: &str, rows: &[TypeRow]) -> String {
+    let types: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            json!({
+                "name": row.name,
+                "is_epic": row.is_epic,
+                "requires_service": row.requires_service,
+            })
+        })
+        .collect();
+    json!({"scope": scope, "returned": types.len(), "types": types}).to_string()
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ListWorkItemTypesArgs {
+    /// Project identifier or name; omitted lists every workspace-level type.
+    pub project: Option<String>,
+}
+
+pub struct ListWorkItemTypes {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for ListWorkItemTypes {
+    const NAME: &'static str = "list_work_item_types";
+    type Args = ListWorkItemTypesArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "List work item types (e.g. Incident, Problem, Change, Improvement) with \
+         is_epic and requires_service flags: the types enabled for one project, \
+         or every workspace-level type when no project is given. An Incident \
+         that requires a service cannot be accepted into a project until a \
+         service is linked."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ListWorkItemTypesArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        match optional_text(args.project.as_deref()) {
+            Some(reference) => {
+                let project =
+                    resolve_project(&self.pool, self.workspace_id, self.user_id, &reference)
+                        .await?;
+                let rows: Vec<TypeRow> = sqlx::query_as(PROJECT_TYPES_SQL)
+                    .bind(project.id)
+                    .bind(self.workspace_id)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(db_error)?;
+                Ok(types_json(&format!("project {}", project.identifier), &rows))
+            }
+            None => {
+                let rows: Vec<TypeRow> = sqlx::query_as(WORKSPACE_TYPES_SQL)
+                    .bind(self.workspace_id)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(db_error)?;
+                Ok(types_json("workspace", &rows))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +431,26 @@ mod tests {
         assert_eq!(parsed["project"], json!("LTS"));
         assert_eq!(parsed["returned"], json!(2));
         assert_eq!(parsed["labels"][0], json!("bug"));
+    }
+
+    #[test]
+    fn types_json_shape() {
+        let rows = vec![
+            TypeRow {
+                name: "Incident".to_string(),
+                is_epic: false,
+                requires_service: true,
+            },
+            TypeRow {
+                name: "Change".to_string(),
+                is_epic: false,
+                requires_service: false,
+            },
+        ];
+        let parsed: serde_json::Value =
+            serde_json::from_str(&types_json("project LTS", &rows)).unwrap();
+        assert_eq!(parsed["scope"], json!("project LTS"));
+        assert_eq!(parsed["types"][0]["name"], json!("Incident"));
+        assert_eq!(parsed["types"][0]["requires_service"], json!(true));
     }
 }
