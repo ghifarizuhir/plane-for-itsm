@@ -20,7 +20,7 @@ pub struct CreateScheduleArgs {
     pub description: String,
     /// Ordered, concrete steps the agent must follow on every fire (1-10 steps, each 1-500 characters).
     pub how_to: Vec<String>,
-    /// Tools the run may use: at least one of list_projects, count_work_items, search_work_items.
+    /// Tools the run may use: at least one read tool name from the schema's list.
     pub tools: Vec<String>,
     /// What the result should contain, e.g. "a markdown table of overdue items with owner and due date" (1-1000 characters).
     pub expected_output: String,
@@ -64,7 +64,14 @@ impl Tool for CreateSchedule {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "Propose a recurring scheduled task for this workspace. Only call this when the user explicitly asks for a recurring or scheduled task (for example a message starting with /schedule), and only after the recipe is complete: description, ordered how_to steps, the tools it needs (at least one of list_projects, count_work_items, search_work_items), expected_output, and the frequency. The user must confirm and may edit every field in the UI before anything is saved. Never claim the schedule exists until they confirm.".to_string()
+        "Propose a recurring scheduled task for this workspace. Only call this \
+         when the user explicitly asks for a recurring or scheduled task (for \
+         example a message starting with /schedule), and only after the recipe \
+         is complete: description, ordered how_to steps, the read tools it \
+         needs (at least one), expected_output, and the frequency. The user \
+         must confirm and may edit every field in the UI before anything is \
+         saved. Never claim the schedule exists until they confirm."
+            .to_string()
     }
 
     fn parameters(&self) -> Value {

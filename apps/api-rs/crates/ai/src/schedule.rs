@@ -15,7 +15,18 @@ pub const DEFAULT_HOURLY_TIME: &str = "00:00";
 pub const DEFAULT_TIMEZONE: &str = "UTC";
 
 pub const SPEC_VERSION: u8 = 1;
-pub const SPEC_TOOLS: [&str; 3] = ["list_projects", "count_work_items", "search_work_items"];
+pub const SPEC_TOOLS: [&str; 10] = [
+    "list_projects",
+    "count_work_items",
+    "search_work_items",
+    "get_work_item",
+    "list_work_item_comments",
+    "list_work_item_relations",
+    "list_members",
+    "list_states",
+    "list_labels",
+    "list_work_item_types",
+];
 pub const SPEC_DESCRIPTION_MAX: usize = 500;
 pub const SPEC_STEPS_MAX: usize = 10;
 pub const SPEC_STEP_MAX: usize = 500;
@@ -731,5 +742,13 @@ mod tests {
             vec!["list_projects", "search_work_items"]
         );
         assert!(allowed_read_tools(&[]).is_empty());
+    }
+
+    #[test]
+    fn spec_accepts_every_spec_tool() {
+        let all: Vec<String> = SPEC_TOOLS.iter().map(|tool| tool.to_string()).collect();
+        let spec = ScheduleSpec::new("d", &["s".to_string()], &all, "o").unwrap();
+        assert_eq!(spec.tools.len(), SPEC_TOOLS.len());
+        assert_eq!(SPEC_TOOLS.len(), 10);
     }
 }

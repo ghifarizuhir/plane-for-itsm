@@ -342,7 +342,14 @@ mod tests {
             vec![
                 "list_projects".to_string(),
                 "count_work_items".to_string(),
-                "search_work_items".to_string()
+                "search_work_items".to_string(),
+                "get_work_item".to_string(),
+                "list_work_item_comments".to_string(),
+                "list_work_item_relations".to_string(),
+                "list_members".to_string(),
+                "list_states".to_string(),
+                "list_labels".to_string(),
+                "list_work_item_types".to_string(),
             ]
         );
     }
