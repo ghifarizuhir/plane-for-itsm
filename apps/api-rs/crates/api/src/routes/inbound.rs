@@ -118,8 +118,16 @@ pub async fn alertmanager(
             counts.bump(Outcome::Ignored);
             continue;
         }
-        let outcome =
-            create_series(&st, &source, alert, &common_labels, &common_annotations).await?;
+        let fingerprint = fingerprint_of(alert);
+        let outcome = match find_series(&st.pool, source.id, &fingerprint).await? {
+            Some(series) => {
+                let actor = source.created_by_id.unwrap_or(series.issue_id);
+                fire_series(&st, &source, &series, actor).await?
+            }
+            None => {
+                create_series(&st, &source, alert, &common_labels, &common_annotations).await?
+            }
+        };
         counts.bump(outcome);
     }
 
@@ -283,6 +291,106 @@ async fn resolve_or_create_intake(
         .fetch_one(&mut **tx)
         .await,
     }
+}
+
+async fn find_series(
+    pool: &sqlx::PgPool,
+    source_id: Uuid,
+    fingerprint: &str,
+) -> Result<Option<Series>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT i.id AS issue_id, ii.id AS row_id, ii.status, st.\"group\" AS state_group \
+         FROM issues i \
+         JOIN intake_issues ii ON ii.issue_id = i.id AND ii.deleted_at IS NULL \
+         LEFT JOIN states st ON st.id = i.state_id \
+         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = $2 \
+         AND i.deleted_at IS NULL LIMIT 1",
+    )
+    .bind(source_id)
+    .bind(fingerprint)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn system_comment(
+    st: &AppState,
+    issue_id: Uuid,
+    project_id: Uuid,
+    actor: Uuid,
+    html: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO issue_comments (id, comment_html, comment_json, comment_stripped, access, attachments, \
+         issue_id, project_id, workspace_id, actor_id, created_by_id, created_at, updated_at) \
+         SELECT gen_random_uuid(), $1, '{}', '', 'INTERNAL', '{}', $2, $3, i.workspace_id, $4, $4, now(), now() \
+         FROM issues i WHERE i.id = $2",
+    )
+    .bind(html)
+    .bind(issue_id)
+    .bind(project_id)
+    .bind(actor)
+    .execute(&st.pool)
+    .await?;
+    Ok(())
+}
+
+async fn fire_series(
+    st: &AppState,
+    source: &Source,
+    series: &Series,
+    actor: Uuid,
+) -> Result<Outcome, common::errors::AppError> {
+    sqlx::query(
+        "UPDATE issues SET intake_occurrence_count = intake_occurrence_count + 1, \
+         intake_last_seen_at = now(), updated_at = now() WHERE id = $1",
+    )
+    .bind(series.issue_id)
+    .execute(&st.pool)
+    .await?;
+
+    if series.status == -2 || series.status == 0 || series.status == 2 {
+        return Ok(Outcome::Updated);
+    }
+    if series.status == -1 {
+        sqlx::query(
+            "UPDATE intake_issues SET status = -2, updated_at = now() \
+             WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(series.row_id)
+        .execute(&st.pool)
+        .await?;
+        return Ok(Outcome::Reopened);
+    }
+    // status == 1: hanya reopen bila issue sudah selesai/dibatalkan.
+    let closed = matches!(
+        series.state_group.as_deref(),
+        Some("completed") | Some("cancelled")
+    );
+    if !closed {
+        return Ok(Outcome::Updated);
+    }
+    let Some(target) =
+        super::issue_common::resolve_issue_state(&st.pool, source.project_id, None).await?
+    else {
+        tracing::warn!(issue_id = %series.issue_id, "alert refire: no default state to reopen");
+        return Ok(Outcome::Updated);
+    };
+    sqlx::query(
+        "UPDATE issues SET state_id = $2, completed_at = NULL, updated_at = now() WHERE id = $1",
+    )
+    .bind(series.issue_id)
+    .bind(target)
+    .execute(&st.pool)
+    .await?;
+    system_comment(
+        st,
+        series.issue_id,
+        source.project_id,
+        actor,
+        "<p>Reopened by alert refire</p>",
+    )
+    .await?;
+    Ok(Outcome::Reopened)
 }
 
 #[allow(clippy::too_many_arguments)]

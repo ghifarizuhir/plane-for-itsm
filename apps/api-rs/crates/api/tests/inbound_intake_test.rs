@@ -354,3 +354,73 @@ async fn creates_pending_item_with_mapped_type_service_priority() {
     .unwrap();
     assert_eq!(not_found, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn firing_upserts_series_and_reopens_declined() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let service_id = scratch.add_service(&pool, "Payment API").await;
+    let type_id = scratch.add_type_requiring_service(&pool, "Incident").await;
+    scratch.add_default_state(&pool).await;
+    let (source_id, token) = scratch
+        .add_source_with_config(
+            &pool,
+            type_id,
+            serde_json::json!({ "service_map": { "payment-api": service_id } }),
+        )
+        .await;
+    let st = state(&pool).await;
+
+    for _ in 0..2 {
+        let (status, _) = api::routes::inbound::alertmanager(
+            State(st.clone()),
+            Path(token.clone()),
+            Json(alert_payload("fp-dup", "firing", "warning")),
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, StatusCode::ACCEPTED);
+    }
+
+    let (count, occurrence, row_status): (i64, i32, i32) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM issues WHERE intake_source_id = $1 AND deleted_at IS NULL), \
+                i.intake_occurrence_count, ii.status \
+         FROM issues i JOIN intake_issues ii ON ii.issue_id = i.id \
+         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = 'fp-dup'",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(occurrence, 2);
+    assert_eq!(row_status, -2);
+
+    // Triager decline → firing berikutnya membuka lagi.
+    sqlx::query(
+        "UPDATE intake_issues SET status = -1 WHERE issue_id IN \
+         (SELECT id FROM issues WHERE intake_source_id = $1 AND intake_fingerprint = 'fp-dup')",
+    )
+    .bind(source_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, Json(body)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-dup", "firing", "warning")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(body["reopened"], 1);
+    let (status_again,): (i32,) = sqlx::query_as(
+        "SELECT ii.status FROM issues i JOIN intake_issues ii ON ii.issue_id = i.id \
+         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = 'fp-dup'",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status_again, -2);
+}
