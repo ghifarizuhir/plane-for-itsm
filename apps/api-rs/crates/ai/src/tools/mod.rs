@@ -236,6 +236,48 @@ pub async fn resolve_work_item(
     })
 }
 
+/// Project feature gates exposed to tools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectFeature {
+    Cycles,
+    Modules,
+    Pages,
+    Intake,
+}
+
+/// `(column, human label)` for one feature gate.
+pub fn feature_column(feature: ProjectFeature) -> (&'static str, &'static str) {
+    match feature {
+        ProjectFeature::Cycles => ("cycle_view", "sprints"),
+        ProjectFeature::Modules => ("module_view", "tracks"),
+        ProjectFeature::Pages => ("page_view", "knowledge base"),
+        ProjectFeature::Intake => ("intake_view", "intake"),
+    }
+}
+
+/// Reject a tool call when the project feature is disabled, with a
+/// model-visible message instead of an empty result.
+pub async fn ensure_feature(
+    pool: &PgPool,
+    project_id: Uuid,
+    feature: ProjectFeature,
+) -> Result<(), ToolExecutionError> {
+    let (column, label) = feature_column(feature);
+    let sql = format!("SELECT {column} FROM projects WHERE id = $1 AND deleted_at IS NULL");
+    let enabled: Option<bool> = sqlx::query_scalar(&sql)
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(db_error)?;
+    match enabled {
+        Some(true) => Ok(()),
+        Some(false) => Err(ToolExecutionError::invalid_args(format!(
+            "the {label} feature is disabled in this project"
+        ))),
+        None => Err(ToolExecutionError::invalid_args("project was not found")),
+    }
+}
+
 /// Build the production tool server: three read-only tools plus the
 /// `create_schedule` and `create_work_item` proposal tools, all scoped to one
 /// workspace and sharing the caller's trace handle.
@@ -1046,5 +1088,19 @@ mod tests {
             assert!(sql.contains("project_members"));
             assert!(sql.contains("is_active = true"));
         }
+    }
+
+    #[test]
+    fn feature_column_maps_each_project_gate() {
+        assert_eq!(
+            feature_column(ProjectFeature::Cycles),
+            ("cycle_view", "sprints")
+        );
+        assert_eq!(
+            feature_column(ProjectFeature::Modules),
+            ("module_view", "tracks")
+        );
+        assert_eq!(feature_column(ProjectFeature::Pages), ("page_view", "knowledge base"));
+        assert_eq!(feature_column(ProjectFeature::Intake), ("intake_view", "intake"));
     }
 }
