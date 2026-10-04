@@ -942,6 +942,15 @@ async fn fetch_inbox_detail(
             .await?
         }
     };
+    let intake_source: Option<InboxIntakeSource> = sqlx::query_as(
+        "SELECT s.id, s.name, i.intake_occurrence_count AS occurrence_count, \
+         i.intake_last_seen_at AS last_seen_at \
+         FROM issues i JOIN intake_sources s ON s.id = i.intake_source_id AND s.deleted_at IS NULL \
+         WHERE i.id = $1 AND i.intake_source_id IS NOT NULL",
+    )
+    .bind(issue_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(Some(InboxIssueDetail {
         id: row_id,
         status,
@@ -950,6 +959,7 @@ async fn fetch_inbox_detail(
         duplicate_issue_detail,
         source,
         issue: issue_row,
+        intake_source,
     }))
 }
 
@@ -1132,7 +1142,7 @@ const INTAKE_STATUSES: [i32; 5] = [-2, -1, 0, 1, 2];
 /// Top-level `IntakeIssueDetailSerializer.Meta.fields` order
 /// (`serializers/intake.py:99-107`).
 #[allow(dead_code)]
-pub(crate) const INBOX_DETAIL_KEYS: [&str; 7] = [
+pub(crate) const INBOX_DETAIL_KEYS: [&str; 8] = [
     "id",
     "status",
     "duplicate_to",
@@ -1140,6 +1150,7 @@ pub(crate) const INBOX_DETAIL_KEYS: [&str; 7] = [
     "duplicate_issue_detail",
     "source",
     "issue",
+    "intake_source",
 ];
 
 /// Nested `issue` = `IssueDetailSerializer` key order
@@ -1299,6 +1310,15 @@ pub(crate) struct InboxDuplicateDetail {
     pub(crate) created_by: Option<uuid::Uuid>,
 }
 
+/// Atribusi sumber webhook (ekstensi Rust; Django tidak punya serializer ini).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub(crate) struct InboxIntakeSource {
+    pub(crate) id: uuid::Uuid,
+    pub(crate) name: String,
+    pub(crate) occurrence_count: i32,
+    pub(crate) last_seen_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// 200 body: `IntakeIssueDetailSerializer` field order (see
 /// `INBOX_DETAIL_KEYS`).
 #[derive(Debug, Clone, Serialize)]
@@ -1310,6 +1330,7 @@ pub(crate) struct InboxIssueDetail {
     pub(crate) duplicate_issue_detail: Option<InboxDuplicateDetail>,
     pub(crate) source: Option<String>,
     pub(crate) issue: InboxIssueDetailIssue,
+    pub(crate) intake_source: Option<InboxIntakeSource>,
 }
 
 /// Shared nested-issue SELECT (D7 `ARCHIVE_SELECT_SQL` convention — live
@@ -1873,6 +1894,7 @@ mod inbox_patch_tests {
         // `IntakeIssueDetailSerializer.Meta.fields`
         // (`serializers/intake.py:99-107`): id, status, duplicate_to,
         // snoozed_till, duplicate_issue_detail, source, issue.
+        // `intake_source` = ekstensi Rust (atribusi webhook), tidak ada di Django.
         assert_eq!(
             INBOX_DETAIL_KEYS,
             [
@@ -1883,6 +1905,7 @@ mod inbox_patch_tests {
                 "duplicate_issue_detail",
                 "source",
                 "issue",
+                "intake_source",
             ]
         );
         // Nested `issue` is `IssueDetailSerializer`

@@ -1,5 +1,6 @@
 //! DB-backed Alertmanager intake ingest tests. Run with `--test-threads=1`.
 
+use api::middleware::auth::AuthUser;
 use api::state::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -711,4 +712,49 @@ async fn batch_common_labels_and_fingerprint_fallback() {
     .await
     .unwrap();
     assert_eq!(bad, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn detail_exposes_webhook_source() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let service_id = scratch.add_service(&pool, "Payment API").await;
+    let type_id = scratch.add_type_requiring_service(&pool, "Incident").await;
+    let (_, token) = scratch
+        .add_source_with_config(
+            &pool,
+            type_id,
+            serde_json::json!({ "service_map": { "payment-api": service_id } }),
+        )
+        .await;
+    let st = state(&pool).await;
+
+    let _ = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token),
+        Json(alert_payload("fp-detail", "firing", "warning")),
+    )
+    .await
+    .unwrap();
+    let issue_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM issues WHERE intake_fingerprint = 'fp-detail' AND deleted_at IS NULL \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let (status, Json(detail)) = api::routes::intake::detail_issue(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["source"], "WEBHOOK");
+    assert_eq!(detail["intake_source"]["name"], "Prometheus Prod");
+    assert_eq!(detail["intake_source"]["occurrence_count"], 1);
+    assert!(detail["intake_source"]["last_seen_at"].is_string());
 }
