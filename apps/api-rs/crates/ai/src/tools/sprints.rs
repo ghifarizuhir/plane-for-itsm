@@ -390,6 +390,109 @@ impl Tool for GetSprint {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ListSprintWorkItemsArgs {
+    /// Sprint name, or a sprint id when known.
+    pub sprint: String,
+    /// Project identifier or name; narrows a name lookup across projects.
+    pub project: Option<String>,
+    /// One of: backlog, unstarted, started, completed, cancelled.
+    pub state_group: Option<String>,
+    /// Assignee display name, email, or "me" for the signed-in user.
+    pub assignee: Option<String>,
+    /// Maximum rows to return, 1-25 (default 10).
+    pub limit: Option<i64>,
+}
+
+pub const SPRINT_ITEMS_SQL: &str = "SELECT p.identifier AS project, \
+     p.identifier || '-' || i.sequence_id AS identifier, i.name, \
+     COALESCE(s.name, '') AS state, i.priority, \
+     COALESCE((SELECT it.name FROM issue_types it \
+       WHERE it.id = i.type_id AND it.deleted_at IS NULL), '') AS work_item_type, \
+     COALESCE((SELECT string_agg(COALESCE(u.display_name, u.email, 'unknown'), ', ' \
+         ORDER BY COALESCE(u.display_name, u.email, 'unknown')) \
+       FROM issue_assignees ia JOIN users u ON u.id = ia.assignee_id \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '') AS assignees \
+     FROM cycle_issues ci \
+     JOIN issues i ON i.id = ci.issue_id AND i.deleted_at IS NULL AND i.is_draft = false \
+     JOIN projects p ON p.id = i.project_id AND p.deleted_at IS NULL \
+     JOIN states s ON s.id = i.state_id AND s.deleted_at IS NULL \
+     WHERE ci.cycle_id = $1 AND ci.deleted_at IS NULL \
+     AND ($2::text IS NULL OR s.\"group\" = $2) \
+     AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM issue_assignees ia \
+       JOIN users u ON u.id = ia.assignee_id \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL \
+       AND (lower(COALESCE(u.display_name, '')) = lower($3) \
+         OR lower(COALESCE(u.email, '')) = lower($3)))) \
+     AND ($4::bool = false OR EXISTS (SELECT 1 FROM issue_assignees ia \
+       WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL AND ia.assignee_id = $5)) \
+     ORDER BY i.updated_at DESC LIMIT $6";
+
+pub struct ListSprintWorkItems {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for ListSprintWorkItems {
+    const NAME: &'static str = "list_sprint_work_items";
+    type Args = ListSprintWorkItemsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "List work items in one sprint, optionally filtered by state group and \
+         assignee (a name, email, or \"me\"). Returns project, identifier, name, \
+         state, priority, type, and assignees."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ListSprintWorkItemsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let state_group = super::state_group_arg(args.state_group.as_deref())?;
+        let (assignee, assignee_me) = super::assignee_arg(args.assignee.as_deref());
+        let limit = clamp_limit(args.limit);
+        let project = match optional_text(args.project.as_deref()) {
+            Some(reference) => Some(
+                resolve_project(&self.pool, self.workspace_id, self.user_id, &reference).await?,
+            ),
+            None => None,
+        };
+        if let Some(project) = project.as_ref() {
+            ensure_feature(&self.pool, project.id, ProjectFeature::Cycles).await?;
+        }
+        let sprint = resolve_sprint(
+            &self.pool,
+            self.workspace_id,
+            self.user_id,
+            &args.sprint,
+            project.as_ref(),
+        )
+        .await?;
+        let rows: Vec<crate::tools::work_items::SearchRow> =
+            sqlx::query_as(SPRINT_ITEMS_SQL)
+                .bind(sprint.id)
+                .bind(&state_group)
+                .bind(&assignee)
+                .bind(assignee_me)
+                .bind(self.user_id)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_error)?;
+        Ok(crate::tools::work_items::search_json(&rows))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -475,5 +578,29 @@ mod tests {
         assert_eq!(parsed["name"], json!("Sprint 3"));
         assert_eq!(parsed["state_counts"][0]["count"], json!(4));
         assert_eq!(parsed["open_work_items"][0]["identifier"], json!("LTS-42"));
+    }
+
+    #[tokio::test]
+    async fn list_sprint_items_rejects_a_bad_state_group_before_querying() {
+        let tool = ListSprintWorkItems {
+            pool: super::super::lazy_pool(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: crate::agent::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut ToolContext::new(),
+                ListSprintWorkItemsArgs {
+                    sprint: Uuid::new_v4().to_string(),
+                    project: None,
+                    state_group: Some("nope".to_string()),
+                    assignee: None,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("state_group"));
     }
 }
