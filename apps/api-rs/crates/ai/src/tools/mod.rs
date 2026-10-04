@@ -2,10 +2,12 @@
 //! item resolvers, and the tool registry. Domain tools live in sibling
 //! modules and are re-exported here so `crate::tools::<Item>` keeps working.
 
+pub mod lookups;
 pub mod projects;
 pub mod proposals;
 pub mod work_items;
 
+pub use lookups::*;
 pub use projects::*;
 pub use proposals::*;
 pub use work_items::*;
