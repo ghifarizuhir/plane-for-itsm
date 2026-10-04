@@ -17,6 +17,7 @@ pub mod history;
 pub mod instance;
 pub mod instance_admin;
 pub mod intake;
+pub mod intake_source;
 pub mod invite;
 pub mod issue_activity_write;
 pub mod issue_archive_one;

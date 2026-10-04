@@ -1332,6 +1332,20 @@ async fn main() {
             post(routes::webhook::regenerate),
         )
         .route("/api/workspaces/:slug/webhook-logs/:webhook_id/", get(routes::webhook::list_logs))
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-sources/",
+            get(routes::intake_source::list).post(routes::intake_source::create),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-sources/:pk/",
+            get(routes::intake_source::detail)
+                .patch(routes::intake_source::patch)
+                .delete(routes::intake_source::destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/projects/:project_id/intake-sources/:pk/rotate/",
+            post(routes::intake_source::rotate),
+        )
         .route("/api/workspaces/:slug/users/notifications/", get(routes::notification::list))
         .route("/api/workspaces/:slug/users/notifications/unread/", get(routes::notification::unread))
         .route(
