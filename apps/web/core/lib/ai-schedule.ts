@@ -9,7 +9,18 @@ import type { TNotificationData, TNotificationScheduleRun } from "@plane/types";
 
 export type TAiScheduleFrequency = "hourly" | "daily" | "weekly" | "monthly";
 
-export const AI_SCHEDULE_TOOLS = ["list_projects", "count_work_items", "search_work_items"] as const;
+export const AI_SCHEDULE_TOOLS = [
+  "list_projects",
+  "count_work_items",
+  "search_work_items",
+  "get_work_item",
+  "list_work_item_comments",
+  "list_work_item_relations",
+  "list_members",
+  "list_states",
+  "list_labels",
+  "list_work_item_types",
+] as const;
 export type TAiScheduleTool = (typeof AI_SCHEDULE_TOOLS)[number];
 
 export type TAiScheduleSpec = {

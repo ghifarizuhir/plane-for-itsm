@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AI_SCHEDULE_TOOLS,
   filterSchedules,
   humanizeSchedule,
   isScheduleCommand,
@@ -143,6 +144,23 @@ describe("validateScheduleSpec", () => {
       })
     ).toBe("At most 10 steps are allowed.");
     expect(validateScheduleSpec({ ...validSpec, tools: ["drop_tables" as never] })).toBe("Unknown tool selected.");
+  });
+});
+
+describe("AI_SCHEDULE_TOOLS", () => {
+  it("lists every read tool in backend canonical order", () => {
+    expect([...AI_SCHEDULE_TOOLS]).toEqual([
+      "list_projects",
+      "count_work_items",
+      "search_work_items",
+      "get_work_item",
+      "list_work_item_comments",
+      "list_work_item_relations",
+      "list_members",
+      "list_states",
+      "list_labels",
+      "list_work_item_types",
+    ]);
   });
 });
 
