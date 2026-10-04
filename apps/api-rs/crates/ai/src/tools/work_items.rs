@@ -411,6 +411,30 @@ pub fn truncate_chars(text: &str, max: usize) -> String {
     out
 }
 
+/// Split an assignee filter into `(name_or_email, is_me)`.
+pub fn assignee_arg(value: Option<&str>) -> (Option<String>, bool) {
+    match optional_text(value) {
+        Some(value) if value.eq_ignore_ascii_case("me") => (None, true),
+        other => (other, false),
+    }
+}
+
+/// Compact work item row shared by container-scoped list tools.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
+pub struct WorkItemBrief {
+    pub identifier: String,
+    pub name: String,
+    pub state: String,
+    pub state_group: String,
+    pub priority: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
+pub struct GroupCountRow {
+    pub state_group: String,
+    pub count: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct WorkItemDetailRow {
     pub project: String,
@@ -1016,6 +1040,17 @@ mod tests {
         };
         assert_eq!(named.assignee_label().as_deref(), Some("Budi"));
         assert_eq!(WorkItemFilters::default().assignee_label(), None);
+    }
+
+    #[test]
+    fn assignee_arg_splits_me_from_names() {
+        assert_eq!(assignee_arg(None), (None, false));
+        assert_eq!(assignee_arg(Some("  ")), (None, false));
+        assert_eq!(assignee_arg(Some(" ME ")), (None, true));
+        assert_eq!(
+            assignee_arg(Some(" Budi ")),
+            (Some("Budi".to_string()), false)
+        );
     }
 
     #[test]
