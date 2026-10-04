@@ -1894,8 +1894,8 @@ mod inbox_patch_tests {
 // AI triage suggestions (Jev).
 // ============================================================================
 
-const TRIAGE_FIELDS: [&str; 3] = ["category", "severity", "needs_human"];
-const TRIAGE_APPLY_FIELDS: [&str; 1] = ["severity"];
+const TRIAGE_FIELDS: [&str; 4] = ["category", "service", "severity", "needs_human"];
+const TRIAGE_APPLY_FIELDS: [&str; 3] = ["category", "service", "severity"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TriageFieldsBody {
@@ -1915,6 +1915,9 @@ struct TriageRow {
     severity_priority: Option<String>,
     severity_score: Option<f64>,
     severity_confidence: Option<f64>,
+    service_id: Option<uuid::Uuid>,
+    service_label: Option<String>,
+    service_confidence: Option<f64>,
     needs_human: Option<f64>,
     applied_fields: Vec<String>,
     dismissed_fields: Vec<String>,
@@ -1928,6 +1931,7 @@ async fn fetch_triage_row(
     sqlx::query_as(
         "SELECT id, status, model, answers, category_type_id, category_label, \
                 category_confidence, severity_priority, severity_score, severity_confidence, \
+                service_id, service_label, service_confidence, \
                 needs_human, applied_fields, dismissed_fields, created_at \
          FROM intake_triage_suggestions WHERE intake_issue_id = $1",
     )
@@ -1986,6 +1990,21 @@ fn triage_json(row: &TriageRow) -> Value {
     } else {
         None
     };
+    let service = if ready {
+        row.service_label.as_ref().map(|label| {
+            json!({
+                "id": row.service_id,
+                "label": label,
+                "confidence": row.service_confidence,
+                "probabilities": answers
+                    .get("service")
+                    .map(|value| probability_json(value, None))
+                    .unwrap_or_else(|| json!({})),
+            })
+        })
+    } else {
+        None
+    };
     let needs_human = if ready {
         row.needs_human
             .map(|probability| json!({"probability": probability}))
@@ -1997,6 +2016,7 @@ fn triage_json(row: &TriageRow) -> Value {
         "status": row.status,
         "model": row.model,
         "category": category,
+        "service": service,
         "severity": severity,
         "needs_human": needs_human,
         "applied_fields": row.applied_fields,
@@ -2080,30 +2100,108 @@ pub async fn apply_triage_suggestion(
         .iter()
         .any(|field| !TRIAGE_APPLY_FIELDS.contains(&field.as_str()))
     {
-        return Ok(triage_bad_request("Only severity can be applied"));
+        return Ok(triage_bad_request(
+            "Only category, service and severity can be applied",
+        ));
     }
-    if let Some(priority) = &row.severity_priority {
-        if !row.applied_fields.iter().any(|field| field == "severity") {
-            let mut tx = st.pool.begin().await?;
-            sqlx::query(
-                "UPDATE issues SET priority = $1, updated_at = now(), updated_by_id = $2 \
-                 WHERE id = $3 AND deleted_at IS NULL",
+    let apply_category = body.fields.iter().any(|f| f == "category")
+        && !row.applied_fields.iter().any(|f| f == "category");
+    let apply_service = body.fields.iter().any(|f| f == "service")
+        && !row.applied_fields.iter().any(|f| f == "service");
+    let apply_severity = body.fields.iter().any(|f| f == "severity")
+        && !row.applied_fields.iter().any(|f| f == "severity");
+
+    if apply_category {
+        let type_ok: bool = match row.category_type_id {
+            Some(type_id) => sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM issue_types t \
+                 JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
+                 WHERE t.id = $1 AND pit.project_id = $2 AND t.deleted_at IS NULL AND t.is_epic = false)",
             )
-            .bind(priority)
-            .bind(auth.0)
-            .bind(scope.issue_id)
-            .execute(&mut *tx)
-            .await?;
-            sqlx::query(
-                "UPDATE intake_triage_suggestions \
-                 SET applied_fields = array_append(applied_fields, 'severity'), updated_at = now() \
-                 WHERE id = $1",
-            )
-            .bind(row.id)
-            .execute(&mut *tx)
-            .await?;
-            tx.commit().await?;
+            .bind(type_id)
+            .bind(project_id)
+            .fetch_one(&st.pool)
+            .await?,
+            None => false,
+        };
+        if !type_ok {
+            return Ok(triage_bad_request("Category suggestion is no longer available"));
         }
+    }
+    if apply_service {
+        let service_ok: bool = match row.service_id {
+            Some(service_id) => sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 \
+                 AND deleted_at IS NULL AND status <> 'retired')",
+            )
+            .bind(service_id)
+            .bind(project_id)
+            .fetch_one(&st.pool)
+            .await?,
+            None => false,
+        };
+        if !service_ok {
+            return Ok(triage_bad_request("No service to apply"));
+        }
+    }
+
+    if apply_category || apply_service || apply_severity {
+        let mut tx = st.pool.begin().await?;
+        let mut applied = row.applied_fields.clone();
+        if apply_category {
+            if let Some(type_id) = row.category_type_id {
+                sqlx::query(
+                    "UPDATE issues SET type_id = $1, updated_at = now(), updated_by_id = $2 \
+                     WHERE id = $3 AND deleted_at IS NULL",
+                )
+                .bind(type_id)
+                .bind(auth.0)
+                .bind(scope.issue_id)
+                .execute(&mut *tx)
+                .await?;
+                applied.push("category".to_string());
+            }
+        }
+        if apply_service {
+            if let Some(service_id) = row.service_id {
+                sqlx::query(
+                    "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+                     created_by_id, updated_by_id, created_at, updated_at) \
+                     SELECT gen_random_uuid(), ii.workspace_id, ii.project_id, $1, ii.issue_id, $2, $2, \
+                     now(), now() FROM intake_issues ii WHERE ii.id = $3 \
+                     AND NOT EXISTS(SELECT 1 FROM service_issues si \
+                       WHERE si.service_id = $1 AND si.issue_id = ii.issue_id AND si.deleted_at IS NULL)",
+                )
+                .bind(service_id)
+                .bind(auth.0)
+                .bind(row.id)
+                .execute(&mut *tx)
+                .await?;
+                applied.push("service".to_string());
+            }
+        }
+        if apply_severity {
+            if let Some(priority) = &row.severity_priority {
+                sqlx::query(
+                    "UPDATE issues SET priority = $1, updated_at = now(), updated_by_id = $2 \
+                     WHERE id = $3 AND deleted_at IS NULL",
+                )
+                .bind(priority)
+                .bind(auth.0)
+                .bind(scope.issue_id)
+                .execute(&mut *tx)
+                .await?;
+                applied.push("severity".to_string());
+            }
+        }
+        sqlx::query(
+            "UPDATE intake_triage_suggestions SET applied_fields = $2, updated_at = now() WHERE id = $1",
+        )
+        .bind(row.id)
+        .bind(&applied)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
     }
     let refreshed = fetch_triage_row(&st.pool, scope.row_id).await?.unwrap_or(row);
     Ok((StatusCode::OK, Json(json!({"data": triage_json(&refreshed)}))))
