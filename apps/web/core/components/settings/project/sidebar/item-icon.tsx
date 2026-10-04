@@ -34,6 +34,7 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   features_intake: IntakeOutline,
   states: StateOutline,
   work_item_types: WorkItemsOutline,
+  intake_sources: IntakeOutline,
   labels: LabelsOutline,
   estimates: EstimateOutline,
   automations: TriggerOutline,

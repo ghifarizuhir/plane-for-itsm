@@ -93,6 +93,13 @@ export const PROJECT_SETTINGS: Record<TProjectSettingsTabs, TProjectSettingsItem
     access: [EUserProjectRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/work-item-types/`,
   },
+  intake_sources: {
+    key: "intake_sources",
+    i18n_label: "project_settings.intake_sources.heading",
+    href: `/intake-sources`,
+    access: [EUserProjectRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/intake-sources/`,
+  },
   labels: {
     key: "labels",
     i18n_label: "common.labels",
@@ -130,6 +137,7 @@ export const GROUPED_PROJECT_SETTINGS: Record<PROJECT_SETTINGS_CATEGORY, TProjec
   [PROJECT_SETTINGS_CATEGORY.WORK_STRUCTURE]: [
     PROJECT_SETTINGS["states"],
     PROJECT_SETTINGS["work_item_types"],
+    PROJECT_SETTINGS["intake_sources"],
     PROJECT_SETTINGS["labels"],
     PROJECT_SETTINGS["estimates"],
   ],

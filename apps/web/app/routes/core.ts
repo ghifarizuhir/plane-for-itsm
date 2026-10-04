@@ -422,6 +422,11 @@ export const coreRoutes: RouteConfigEntry[] = [
               ":workspaceSlug/settings/projects/:projectId/work-item-types",
               "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/work-item-types/page.tsx"
             ),
+            // Project Intake Sources
+            route(
+              ":workspaceSlug/settings/projects/:projectId/intake-sources",
+              "./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/intake-sources/page.tsx"
+            ),
             // Project Automations
             layout("./(all)/[workspaceSlug]/(settings)/settings/projects/[projectId]/automations/layout.tsx", [
               route(
