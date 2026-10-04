@@ -8,8 +8,14 @@ import type { TIntakeSourceConfig, TIntakeSourcePriority } from "@plane/types";
 
 export const INTAKE_PRIORITIES: TIntakeSourcePriority[] = ["urgent", "high", "medium", "low", "none"];
 
-export type TServiceRow = { labelValue: string; serviceId: string };
-export type TSeverityRow = { labelValue: string; priority: TIntakeSourcePriority };
+export type TServiceRow = { id: string; labelValue: string; serviceId: string };
+export type TSeverityRow = { id: string; labelValue: string; priority: TIntakeSourcePriority };
+
+let rowSequence = 0;
+export const nextRowId = (): string => {
+  rowSequence += 1;
+  return `row-${rowSequence}`;
+};
 
 export type TIntakeSourceForm = {
   name: string;
@@ -27,10 +33,15 @@ export const buildWebhookUrl = (apiBaseUrl: string, token: string): string =>
   `${apiBaseUrl.replace(/\/+$/, "")}/api/inbound/alertmanager/${token}/`;
 
 export const serviceRowsFromConfig = (config?: TIntakeSourceConfig): TServiceRow[] =>
-  Object.entries(config?.service_map ?? {}).map(([labelValue, serviceId]) => ({ labelValue, serviceId }));
+  Object.entries(config?.service_map ?? {}).map(([labelValue, serviceId]) => ({
+    id: nextRowId(),
+    labelValue,
+    serviceId,
+  }));
 
 export const severityRowsFromConfig = (config?: TIntakeSourceConfig): TSeverityRow[] =>
   Object.entries(config?.severity_map ?? {}).map(([labelValue, priority]) => ({
+    id: nextRowId(),
     labelValue,
     priority: priority as TIntakeSourcePriority,
   }));

@@ -17,14 +17,18 @@ describe("intake-source helpers", () => {
   it("round-trips config rows", () => {
     const config = configFromForm({
       serviceLabelKey: "service",
-      serviceRows: [{ labelValue: "payment", serviceId: "s1" }],
+      serviceRows: [{ id: "a", labelValue: "payment", serviceId: "s1" }],
       fallbackServiceId: "s1",
       severityLabelKey: "severity",
-      severityRows: [{ labelValue: "critical", priority: "urgent" }],
+      severityRows: [{ id: "b", labelValue: "critical", priority: "urgent" }],
       defaultPriority: "none",
     });
-    expect(serviceRowsFromConfig(config)).toEqual([{ labelValue: "payment", serviceId: "s1" }]);
-    expect(severityRowsFromConfig(config)).toEqual([{ labelValue: "critical", priority: "urgent" }]);
+    expect(serviceRowsFromConfig(config).map(({ labelValue, serviceId }) => ({ labelValue, serviceId }))).toEqual([
+      { labelValue: "payment", serviceId: "s1" },
+    ]);
+    expect(severityRowsFromConfig(config).map(({ labelValue, priority }) => ({ labelValue, priority }))).toEqual([
+      { labelValue: "critical", priority: "urgent" },
+    ]);
   });
 
   it("rejects duplicate label values and unknown services", () => {
@@ -34,18 +38,18 @@ describe("intake-source helpers", () => {
       autoAccept: false,
       serviceLabelKey: "service",
       serviceRows: [
-        { labelValue: "payment", serviceId: "s1" },
-        { labelValue: "payment", serviceId: "s1" },
+        { id: "a", labelValue: "payment", serviceId: "s1" },
+        { id: "b", labelValue: "payment", serviceId: "s1" },
       ],
       fallbackServiceId: "s1",
       severityLabelKey: "severity",
-      severityRows: [{ labelValue: "critical", priority: "urgent" as const }],
+      severityRows: [{ id: "c", labelValue: "critical", priority: "urgent" as const }],
       defaultPriority: "none" as const,
     };
     expect(validateIntakeSourceForm(base, ["s1", "t1"])).not.toBeNull();
-    const unknown = { ...base, serviceRows: [{ labelValue: "payment", serviceId: "nope" }] };
+    const unknown = { ...base, serviceRows: [{ id: "a", labelValue: "payment", serviceId: "nope" }] };
     expect(validateIntakeSourceForm(unknown, ["s1", "t1"])).not.toBeNull();
-    const valid = { ...base, serviceRows: [{ labelValue: "payment", serviceId: "s1" }] };
+    const valid = { ...base, serviceRows: [{ id: "a", labelValue: "payment", serviceId: "s1" }] };
     expect(validateIntakeSourceForm(valid, ["s1", "t1"])).toBeNull();
   });
 });

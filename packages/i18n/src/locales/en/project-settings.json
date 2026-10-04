@@ -182,18 +182,18 @@
       "description": "Configure automated actions to streamline your project management workflow and reduce manual tasks.",
       "auto-archive": {
         "title": "Auto-archive closed work items",
-        "description": "Terraline will auto archive work items that have been completed or canceled.",
+        "description": "Plane will auto archive work items that have been completed or canceled.",
         "duration": "Auto-archive work items that are closed for"
       },
       "auto-close": {
         "title": "Auto-close work items",
-        "description": "Terraline will automatically close work items that haven't been completed or canceled.",
+        "description": "Plane will automatically close work items that haven't been completed or canceled.",
         "duration": "Auto-close work items that are inactive for",
         "auto_close_status": "Auto-close status"
       },
       "auto-remind": {
         "title": "Auto-reminders",
-        "description": "Terraline will automatically send reminders via email and in-app notifications to keep your team on track with deadlines.",
+        "description": "Plane will automatically send reminders via email and in-app notifications to keep your team on track with deadlines.",
         "duration": "Send reminder before"
       }
     },
@@ -216,6 +216,42 @@
       "heading": "Work item types",
       "description": "Create and customize different types of work items with unique properties",
       "untyped": "Untyped"
+    },
+    "intake_sources": {
+      "title": "Intake sources",
+      "heading": "Intake sources",
+      "description": "Connect monitoring tools to create intake items automatically from alerts.",
+      "add_source": "Add source",
+      "edit_source": "Edit source",
+      "create_source": "Create source",
+      "update_source": "Save changes",
+      "empty": "No intake sources yet. Add one and point your Alertmanager webhook at its URL.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "auto_accept": "Auto-accept",
+      "copy_url": "Copy URL",
+      "rotate": "Rotate token",
+      "rotate_confirm": "Rotate this token? The old URL stops working immediately.",
+      "delete_confirm": "Delete \"{name}\"? Incoming events will be rejected.",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "save_error": "Could not save the intake source.",
+      "form": {
+        "name": "Name",
+        "type": "Work item type",
+        "select_type": "Select a type",
+        "auto_accept": "Auto-accept once classified",
+        "default_priority": "Default priority",
+        "service_mapping": "Service mapping",
+        "service_label_key": "Service label key",
+        "severity_mapping": "Severity mapping",
+        "severity_label_key": "Severity label key",
+        "label_value": "Label value",
+        "select_service": "Select a service",
+        "fallback_service": "Fallback service",
+        "no_fallback": "No fallback",
+        "add_row": "Add row"
+      }
     },
     "features": {
       "cycles": {
@@ -266,7 +302,7 @@
         },
         "email": {
           "title": "Email",
-          "description": "Collect new work items from anyone who sends an email to a Terraline email address.",
+          "description": "Collect new work items from anyone who sends an email to a Plane email address.",
           "fieldName": "Email ID"
         },
         "form": {
