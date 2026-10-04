@@ -23,7 +23,7 @@ type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 /// Column list for `issue_types t` (workspace-owned types; project links come
 /// from `project_issue_types`). `level` is `double precision` in the DB, cast
 /// to int for the SDK shape.
-pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
+pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.requires_service, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
 
 #[derive(Debug, Clone, FromRow)]
 pub struct V1WorkItemTypeRow {
@@ -32,6 +32,7 @@ pub struct V1WorkItemTypeRow {
     pub description: Option<String>,
     pub logo_props: Option<Value>,
     pub is_epic: bool,
+    pub requires_service: bool,
     pub is_default: bool,
     pub is_active: bool,
     pub level: Option<i32>,
@@ -53,6 +54,7 @@ pub fn v1_work_item_type_json(row: &V1WorkItemTypeRow) -> Value {
         "description": row.description,
         "logo_props": row.logo_props.clone().unwrap_or(Value::Null),
         "is_epic": row.is_epic,
+        "requires_service": row.requires_service,
         "is_default": row.is_default,
         "is_active": row.is_active,
         "level": row.level,
@@ -79,6 +81,8 @@ pub struct V1CreateWorkItemType {
     #[serde(default)]
     pub is_epic: Option<bool>,
     #[serde(default)]
+    pub requires_service: Option<bool>,
+    #[serde(default)]
     pub is_active: Option<bool>,
     #[serde(default)]
     pub level: Option<i32>,
@@ -100,6 +104,8 @@ pub struct V1UpdateWorkItemType {
     pub logo_props: Option<Value>,
     #[serde(default)]
     pub is_epic: Option<bool>,
+    #[serde(default)]
+    pub requires_service: Option<bool>,
     #[serde(default)]
     pub is_active: Option<bool>,
     #[serde(default)]
@@ -287,14 +293,21 @@ async fn create_type(
         link_ids.push(pid);
     }
     let is_epic = body.is_epic.unwrap_or(false);
+    let requires_service = body.requires_service.unwrap_or(false);
+    if is_epic && requires_service {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "epic types cannot require a service"})),
+        ));
+    }
     let is_active = body.is_active.unwrap_or(true);
     let mut tx = st.pool.begin().await?;
     let row: V1WorkItemTypeRow = sqlx::query_as(
-        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
+        "INSERT INTO issue_types (id, name, description, logo_props, is_epic, requires_service, is_default, \
          is_active, level, external_id, external_source, workspace_id, created_by_id, \
          updated_by_id, created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $10, now(), now()) \
-         RETURNING id, name, description, logo_props, is_epic, is_default, is_active, \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, $6, $7, $8, $9, $10, $11, $11, now(), now()) \
+         RETURNING id, name, description, logo_props, is_epic, requires_service, is_default, is_active, \
          level::int AS level, external_id, external_source, \
          created_by_id AS created_by, updated_by_id AS updated_by, workspace_id AS workspace, \
          created_at, updated_at, deleted_at, ARRAY[]::uuid[] AS project_ids",
@@ -303,6 +316,7 @@ async fn create_type(
     .bind(body.description.clone().unwrap_or_default())
     .bind(body.logo_props.clone().unwrap_or_else(|| json!({})))
     .bind(is_epic)
+    .bind(requires_service)
     .bind(is_active)
     .bind(body.level.unwrap_or(0) as f64)
     .bind(body.external_id.clone())
@@ -411,6 +425,21 @@ async fn update_type(
     if !in_scope {
         return Ok(missing());
     }
+    let current: Option<(bool, bool)> = sqlx::query_as(
+        "SELECT is_epic, requires_service FROM issue_types WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some((current_epic, current_requires)) = current else {
+        return Ok(missing());
+    };
+    if body.is_epic.unwrap_or(current_epic) && body.requires_service.unwrap_or(current_requires) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "epic types cannot require a service"})),
+        ));
+    }
 
     if let Some(n) = body.name.as_deref().map(str::trim) {
         if n.is_empty() {
@@ -432,7 +461,8 @@ async fn update_type(
          level = COALESCE($7, level), \
          external_id = COALESCE($8, external_id), \
          external_source = COALESCE($9, external_source), \
-         updated_by_id = $10, updated_at = now() \
+         requires_service = COALESCE($10, requires_service), \
+         updated_by_id = $11, updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
@@ -444,6 +474,7 @@ async fn update_type(
     .bind(body.level.map(|l| l as f64))
     .bind(body.external_id.clone())
     .bind(body.external_source.clone())
+    .bind(body.requires_service)
     .bind(user)
     .execute(&mut *tx)
     .await?;

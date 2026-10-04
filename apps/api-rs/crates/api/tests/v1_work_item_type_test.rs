@@ -10,6 +10,7 @@ fn work_item_type_json_has_sdk_required_and_optional_keys() {
         description: Some("d".to_string()),
         logo_props: None,
         is_epic: false,
+        requires_service: false,
         is_default: false,
         is_active: true,
         level: Some(1),
@@ -30,6 +31,7 @@ fn work_item_type_json_has_sdk_required_and_optional_keys() {
         "description",
         "logo_props",
         "is_epic",
+        "requires_service",
         "is_default",
         "is_active",
         "level",
@@ -53,4 +55,11 @@ fn create_body_accepts_missing_fields() {
     let body: V1CreateWorkItemType = serde_json::from_value(serde_json::json!({})).unwrap();
     assert!(body.name.is_none());
     assert!(body.project_ids.is_empty());
+}
+
+#[test]
+fn create_body_accepts_requires_service() {
+    let body: V1CreateWorkItemType =
+        serde_json::from_value(serde_json::json!({"name": "Incident", "requires_service": true})).unwrap();
+    assert_eq!(body.requires_service, Some(true));
 }
