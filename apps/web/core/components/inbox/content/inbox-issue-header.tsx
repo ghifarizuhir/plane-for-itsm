@@ -34,8 +34,11 @@ import { copyUrlToClipboard, findHowManyDaysLeft, generateWorkItemLink } from "@
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { NameDescriptionUpdateStatus } from "@/components/issues/issue-update-status";
 // hooks
+import { getIntakeAcceptGate } from "@/components/inbox/accept-gate";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { useService } from "@/hooks/store/use-service";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // store
@@ -88,6 +91,32 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   const { getProjectById } = useProject();
 
   const issue = inboxIssue?.issue;
+  // derived values
+  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
+  const { workItemLinkMap } = useService();
+
+  useEffect(() => {
+    if (!workItemTypes) void fetchWorkItemTypes(workspaceSlug).catch(() => undefined);
+  }, [workItemTypes, workspaceSlug, fetchWorkItemTypes]);
+
+  const projectTypes = (workItemTypes ?? []).filter(
+    (type) => !type.is_epic && type.is_active && type.project_ids.includes(projectId)
+  );
+  const selectedType = projectTypes.find((type) => type.id === issue?.type_id);
+  const hasLinkedService = Object.values(workItemLinkMap).some(
+    (link) => link.issue_id === issue?.id && link.project_id === projectId
+  );
+  const acceptGate = getIntakeAcceptGate({
+    projectHasTypes: projectTypes.length > 0,
+    issueTypeId: issue?.type_id,
+    typeRequiresService: selectedType?.requires_service ?? false,
+    hasLinkedService,
+  });
+  const acceptGateHint = acceptGate.missingType
+    ? t("inbox_issue.gate.type_required")
+    : acceptGate.missingService
+      ? t("inbox_issue.gate.service_required")
+      : undefined;
   // derived values
   const isAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -164,6 +193,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
     if (!inboxIssue || !currentInboxIssueId) return;
     await deleteInboxIssue(workspaceSlug, projectId, currentInboxIssueId).then(() => {
       if (!isNotificationEmbed) router.push(`/${workspaceSlug}/projects/${projectId}/intake`);
+      return undefined;
     });
   };
 
@@ -332,6 +362,8 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
               <Button
                 variant="secondary"
                 size="lg"
+                disabled={!acceptGate.ready}
+                title={acceptGateHint}
                 onClick={() =>
                   handleActionWithPermission(
                     isProjectAdmin,
