@@ -10,6 +10,7 @@ export type TWorkItemType = {
   description: string;
   logo_props: Record<string, unknown>;
   is_epic: boolean;
+  requires_service: boolean;
   is_default: boolean;
   is_active: boolean;
   level: number;
@@ -25,5 +26,6 @@ export type TWorkItemTypePayload = {
   name?: string;
   description?: string;
   is_active?: boolean;
+  requires_service?: boolean;
   project_ids?: string[];
 };

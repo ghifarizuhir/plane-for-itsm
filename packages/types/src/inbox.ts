@@ -98,7 +98,7 @@ export type TInboxDuplicateIssueDetails = {
   name: string;
 };
 
-export type TInboxIssueTriageField = "category" | "severity" | "needs_human";
+export type TInboxIssueTriageField = "category" | "service" | "severity" | "needs_human";
 
 export type TInboxIssueTriageStatus = "pending" | "ready" | "failed";
 
@@ -117,6 +117,12 @@ export type TInboxIssueTriageSuggestion = {
     score: number;
     confidence: number;
     probabilities: Partial<Record<TIssuePriorities, number>>;
+  } | null;
+  service: {
+    id: string | null;
+    label: string;
+    confidence: number;
+    probabilities: Record<string, number>;
   } | null;
   needs_human: { probability: number } | null;
   applied_fields: TInboxIssueTriageField[];
