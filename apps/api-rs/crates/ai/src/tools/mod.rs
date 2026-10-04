@@ -257,6 +257,7 @@ pub fn workspace_tools(
         .tool(SearchWorkItems {
             pool: pool.clone(),
             workspace_id,
+            user_id,
             trace: trace.clone(),
         })
         .tool(GetWorkItem {
@@ -315,6 +316,7 @@ pub fn read_tools(
         server = server.tool(SearchWorkItems {
             pool: pool.clone(),
             workspace_id,
+            user_id,
             trace: trace.clone(),
         });
     }
@@ -434,13 +436,15 @@ mod tests {
                 }
             })
         );
-        let search = search_json(&[(
-            "LTS".to_string(),
-            "LTS-12".to_string(),
-            "Fix pump".to_string(),
-            "In Progress".to_string(),
-            "urgent".to_string(),
-        )]);
+        let search = search_json(&[SearchRow {
+            project: "LTS".to_string(),
+            identifier: "LTS-12".to_string(),
+            name: "Fix pump".to_string(),
+            state: "In Progress".to_string(),
+            priority: "urgent".to_string(),
+            work_item_type: "Incident".to_string(),
+            assignees: "Budi, Sari".to_string(),
+        }]);
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&search).unwrap(),
             json!({"returned": 1, "items": [{
@@ -448,7 +452,9 @@ mod tests {
                 "identifier": "LTS-12",
                 "name": "Fix pump",
                 "state": "In Progress",
-                "priority": "urgent"
+                "priority": "urgent",
+                "type": "Incident",
+                "assignees": "Budi, Sari"
             }]})
         );
     }
@@ -482,6 +488,7 @@ mod tests {
         let search = SearchWorkItems {
             pool,
             workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
             trace,
         };
         assert_eq!(SearchWorkItems::NAME, "search_work_items");
