@@ -1,50 +1,50 @@
 {
   "issue": {
-    "label": "{count, plural, one {Work item} other {Work items}}",
-    "all": "All Work items",
-    "edit": "Edit work item",
+    "label": "{count, plural, one {Ticket} other {Tickets}}",
+    "all": "All Tickets",
+    "edit": "Edit ticket",
     "title": {
-      "label": "Work item title",
-      "required": "Work item title is required."
+      "label": "Ticket title",
+      "required": "Ticket title is required."
     },
     "add": {
-      "press_enter": "Press 'Enter' to add another work item",
-      "label": "Add work item",
+      "press_enter": "Press 'Enter' to add another ticket",
+      "label": "Add ticket",
       "cycle": {
-        "failed": "Work item could not be added to the cycle. Please try again.",
-        "success": "{count, plural, one {Work item} other {Work items}} added to the cycle successfully.",
-        "loading": "Adding {count, plural, one {work item} other {work items}} to the cycle"
+        "failed": "Ticket could not be added to the cycle. Please try again.",
+        "success": "{count, plural, one {Ticket} other {Tickets}} added to the cycle successfully.",
+        "loading": "Adding {count, plural, one {ticket} other {tickets}} to the cycle"
       },
       "assignee": "Add assignees",
       "start_date": "Add start date",
       "due_date": "Add due date",
-      "parent": "Add parent work item",
-      "sub_issue": "Add sub-work item",
+      "parent": "Add parent ticket",
+      "sub_issue": "Add sub-ticket",
       "dependency": "Add dependency",
       "relation": "Add relation",
       "link": "Add link",
-      "existing": "Add existing work item"
+      "existing": "Add existing ticket"
     },
     "remove": {
-      "label": "Remove work item",
+      "label": "Remove ticket",
       "cycle": {
-        "loading": "Removing work item from the cycle",
-        "success": "Work item removed from the cycle successfully.",
-        "failed": "Work item could not be removed from the cycle. Please try again."
+        "loading": "Removing ticket from the cycle",
+        "success": "Ticket removed from the cycle successfully.",
+        "failed": "Ticket could not be removed from the cycle. Please try again."
       },
       "module": {
-        "loading": "Removing work item from the module",
-        "success": "Work item removed from the module successfully.",
-        "failed": "Work item could not be removed from the module. Please try again."
+        "loading": "Removing ticket from the module",
+        "success": "Ticket removed from the module successfully.",
+        "failed": "Ticket could not be removed from the module. Please try again."
       },
       "parent": {
-        "label": "Remove parent work item"
+        "label": "Remove parent ticket"
       }
     },
-    "new": "New work item",
-    "adding": "Adding work item",
+    "new": "New ticket",
+    "adding": "Adding ticket",
     "create": {
-      "success": "Work item created successfully"
+      "success": "Ticket created successfully"
     },
     "priority": {
       "urgent": "Urgent",
@@ -56,15 +56,15 @@
       "properties": {
         "label": "Display Properties",
         "id": "ID",
-        "issue_type": "Work item Type",
-        "sub_issue_count": "Sub-work item count",
+        "issue_type": "Ticket Type",
+        "sub_issue_count": "Sub-ticket count",
         "attachment_count": "Attachment count",
         "created_on": "Created on",
-        "sub_issue": "Sub-work item",
-        "work_item_count": "Work item count"
+        "sub_issue": "Sub-ticket",
+        "work_item_count": "Ticket count"
       },
       "extra": {
-        "show_sub_issues": "Show sub-work items",
+        "show_sub_issues": "Show sub-tickets",
         "show_empty_groups": "Show empty groups"
       }
     },
@@ -152,35 +152,35 @@
     },
     "empty_state": {
       "issue_detail": {
-        "title": "Work item does not exist",
-        "description": "The work item you are looking for does not exist, has been archived, or has been deleted.",
+        "title": "Ticket does not exist",
+        "description": "The ticket you are looking for does not exist, has been archived, or has been deleted.",
         "primary_button": {
-          "text": "View other work items"
+          "text": "View other tickets"
         }
       }
     },
     "sibling": {
-      "label": "Sibling work items"
+      "label": "Sibling tickets"
     },
     "archive": {
-      "description": "Only completed or canceled work items can be archived",
-      "label": "Archive Work item",
-      "confirm_message": "Are you sure you want to archive the work item? All your archived work items can be restored later.",
+      "description": "Only completed or canceled tickets can be archived",
+      "label": "Archive Ticket",
+      "confirm_message": "Are you sure you want to archive the ticket? All your archived tickets can be restored later.",
       "success": {
         "label": "Archive success",
         "message": "Your archives can be found in project archives."
       },
       "failed": {
-        "message": "Work item could not be archived. Please try again."
+        "message": "Ticket could not be archived. Please try again."
       }
     },
     "restore": {
       "success": {
         "title": "Restore success",
-        "message": "Your work item can be found in project work items."
+        "message": "Your ticket can be found in project tickets."
       },
       "failed": {
-        "message": "Work item could not be restored. Please try again."
+        "message": "Ticket could not be restored. Please try again."
       }
     },
     "relation": {
@@ -195,29 +195,29 @@
       "implements": "Implements",
       "implemented_by": "Implemented By"
     },
-    "copy_link": "Copy work item link",
+    "copy_link": "Copy ticket link",
     "delete": {
-      "label": "Delete work item",
-      "error": "Error deleting work item"
+      "label": "Delete ticket",
+      "error": "Error deleting ticket"
     },
     "subscription": {
       "actions": {
-        "subscribed": "Work item subscribed successfully",
-        "unsubscribed": "Work item unsubscribed successfully"
+        "subscribed": "Ticket subscribed successfully",
+        "unsubscribed": "Ticket unsubscribed successfully"
       }
     },
     "select": {
-      "error": "Please select at least one work item",
-      "empty": "No work items selected",
-      "add_selected": "Add selected work items",
+      "error": "Please select at least one ticket",
+      "empty": "No tickets selected",
+      "add_selected": "Add selected tickets",
       "select_all": "Select all",
       "deselect_all": "Deselect all"
     },
-    "open_in_full_screen": "Open work item in full screen",
+    "open_in_full_screen": "Open ticket in full screen",
     "duplicate": {
       "modal": {
         "title": "Make a copy to another project",
-        "description1": "This creates a copy of the work item.",
+        "description1": "This creates a copy of the ticket.",
         "description2": "All property data will be removed while duplicating.",
         "placeholder": "Select a project"
       }
@@ -225,10 +225,10 @@
     "toast": {
       "duplicate": {
         "success": {
-          "message": "Work item duplicated successfully"
+          "message": "Ticket duplicated successfully"
         },
         "error": {
-          "message": "Failed to duplicate work item"
+          "message": "Failed to duplicate ticket"
         }
       }
     },
@@ -270,22 +270,22 @@
   },
   "sub_work_item": {
     "update": {
-      "success": "Sub-work item updated successfully",
-      "error": "Error updating sub-work item"
+      "success": "Sub-ticket updated successfully",
+      "error": "Error updating sub-ticket"
     },
     "remove": {
-      "success": "Sub-work item removed successfully",
-      "error": "Error removing sub-work item"
+      "success": "Sub-ticket removed successfully",
+      "error": "Error removing sub-ticket"
     },
     "empty_state": {
       "sub_list_filters": {
-        "title": "You don't have sub-work items that match the filters you've applied.",
-        "description": "To see all sub-work items, clear all applied filters.",
+        "title": "You don't have sub-tickets that match the filters you've applied.",
+        "description": "To see all sub-tickets, clear all applied filters.",
         "action": "Clear filters"
       },
       "list_filters": {
-        "title": "You don't have work items that match the filters you've applied.",
-        "description": "To see all work items, clear all applied filters.",
+        "title": "You don't have tickets that match the filters you've applied.",
+        "description": "To see all tickets, clear all applied filters.",
         "action": "Clear filters"
       }
     }
@@ -293,10 +293,10 @@
   "issue_relation": {
     "empty_state": {
       "search": {
-        "title": "No matching work items found"
+        "title": "No matching tickets found"
       },
       "no_issues": {
-        "title": "No work items found"
+        "title": "No tickets found"
       }
     }
   },
@@ -304,36 +304,36 @@
     "empty_state": {
       "general": {
         "title": "No comments yet",
-        "description": "Comments can be used as a discussion and follow-up space for the work items"
+        "description": "Comments can be used as a discussion and follow-up space for the tickets"
       }
     }
   },
   "bulk_operations": {
     "error_details": {
       "invalid_archive_state_group": {
-        "title": "Unable to archive work items",
-        "message": "Only work items belonging to Completed or Canceled state groups can be archived."
+        "title": "Unable to archive tickets",
+        "message": "Only tickets belonging to Completed or Canceled state groups can be archived."
       },
       "invalid_issue_start_date": {
-        "title": "Unable to update work items",
-        "message": "Start date selected succeeds the due date for some work items. Ensure start date to be before the due date."
+        "title": "Unable to update tickets",
+        "message": "Start date selected succeeds the due date for some tickets. Ensure start date to be before the due date."
       },
       "invalid_issue_target_date": {
-        "title": "Unable to update work items",
-        "message": "Due date selected precedes the start date for some work items. Ensure due date to be after the start date."
+        "title": "Unable to update tickets",
+        "message": "Due date selected precedes the start date for some tickets. Ensure due date to be after the start date."
       },
       "invalid_state_transition": {
-        "title": "Unable to update work items",
-        "message": "State change is not allowed for some work items. Ensure the state change is allowed."
+        "title": "Unable to update tickets",
+        "message": "State change is not allowed for some tickets. Ensure the state change is allowed."
       }
     }
   },
   "recurring_work_items": {
     "settings": {
-      "heading": "Recurring work items",
+      "heading": "Recurring tickets",
       "description": "Set your repeatable work once, and we’ll take care of the repeats. You’ll see everything right here when it’s time.",
-      "new_recurring_work_item": "New recurring work item",
-      "update_recurring_work_item": "Update recurring work item",
+      "new_recurring_work_item": "New recurring ticket",
+      "update_recurring_work_item": "Update recurring ticket",
       "form": {
         "interval": {
           "title": "Schedule",
@@ -349,13 +349,13 @@
           }
         },
         "button": {
-          "create": "Create recurring work item",
-          "update": "Update recurring work item"
+          "create": "Create recurring ticket",
+          "update": "Update recurring ticket"
         }
       },
       "create_button": {
-        "label": "Create recurring work item",
-        "no_permission": "Contact your project admin to create recurring work items"
+        "label": "Create recurring ticket",
+        "no_permission": "Contact your project admin to create recurring tickets"
       }
     },
     "empty_state": {
@@ -364,46 +364,46 @@
         "description": "Set it once. We’ll bring it back when it’s due. Upgrade to Business to make recurring work feel effortless."
       },
       "no_templates": {
-        "button": "Create your first recurring work item"
+        "button": "Create your first recurring ticket"
       }
     },
     "toasts": {
       "create": {
         "success": {
-          "title": "Recurring work item created",
-          "message": "{name}, the recurring work item, is now available for your workspace."
+          "title": "Recurring ticket created",
+          "message": "{name}, the recurring ticket, is now available for your workspace."
         },
         "error": {
-          "title": "We couldn't create that recurring work item this time.",
-          "message": "Try saving your details again or copy them over to a new recurring work item, preferably in another tab."
+          "title": "We couldn't create that recurring ticket this time.",
+          "message": "Try saving your details again or copy them over to a new recurring ticket, preferably in another tab."
         }
       },
       "update": {
         "success": {
-          "title": "Recurring work item changed",
-          "message": "{name}, the recurring work item, was changed."
+          "title": "Recurring ticket changed",
+          "message": "{name}, the recurring ticket, was changed."
         },
         "error": {
-          "title": "We couldn't save changes to this recurring work item.",
-          "message": "Try saving your details again or come back to this recurring work item later. If there's trouble still, reach out to us."
+          "title": "We couldn't save changes to this recurring ticket.",
+          "message": "Try saving your details again or come back to this recurring ticket later. If there's trouble still, reach out to us."
         }
       },
       "delete": {
         "success": {
-          "title": "Recurring work item deleted",
-          "message": "{name}, the recurring work item, has now been deleted from your workspace."
+          "title": "Recurring ticket deleted",
+          "message": "{name}, the recurring ticket, has now been deleted from your workspace."
         },
         "error": {
-          "title": "We couldn't delete that recurring work item this.",
+          "title": "We couldn't delete that recurring ticket this.",
           "message": "Try deleting it again or come back to it later. If you can't delete it then, reach out to us."
         }
       }
     },
     "delete_confirmation": {
-      "title": "Delete recurring work item",
+      "title": "Delete recurring ticket",
       "description": {
-        "prefix": "Are you sure you want to delete recurring work item-",
-        "suffix": "? All of the data related to the recurring work item will be permanently removed. This action cannot be undone."
+        "prefix": "Are you sure you want to delete recurring ticket-",
+        "suffix": "? All of the data related to the recurring ticket will be permanently removed. This action cannot be undone."
       }
     }
   },

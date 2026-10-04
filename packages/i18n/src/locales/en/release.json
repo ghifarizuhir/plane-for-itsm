@@ -1,7 +1,7 @@
 {
   "release": {
-    "title": "Releases",
-    "add": "Add release",
+    "title": "Release packages",
+    "add": "New release package",
     "edit": "Edit release",
     "delete": "Delete release",
     "search_placeholder": "Search releases",
@@ -11,8 +11,8 @@
       "save": "Save"
     },
     "empty_state": {
-      "title": "No releases yet",
-      "description": "Create a release to bundle changes for RCB review.",
+      "title": "No release packages yet",
+      "description": "Create a release package to bundle approved changes for CAB review and deployment.",
       "no_matches": {
         "title": "No matching releases",
         "description": "Try a different search or clear the filters."
@@ -27,10 +27,10 @@
       "name": "Release name",
       "version": "Version",
       "status": "Status",
-      "target_date": "Target date",
+      "target_date": "Target deploy date",
       "description": "Description",
-      "changes": "Changes",
-      "review_history": "Review history"
+      "changes": "Bundled changes",
+      "review_history": "CAB history"
     },
     "status_values": {
       "draft": "Draft",
@@ -46,40 +46,40 @@
       "unlink": "Remove",
       "link_failed": "Could not link changes. Please try again.",
       "unlink_failed": "Could not remove the change. Please try again.",
-      "scope_warning": "This release is under review. Scope changes are visible to the board.",
+      "scope_warning": "This package is under CAB review. Scope changes are visible to the board.",
       "tcb_badge": {
-        "pending": "TCB pending",
-        "scheduled": "TCB scheduled",
-        "decided": "TCB decided",
-        "withdrawn": "TCB withdrawn"
+        "pending": "Review pending",
+        "scheduled": "Review scheduled",
+        "decided": "Review decided",
+        "withdrawn": "Review withdrawn"
       }
     },
     "review": {
-      "submit": "Submit to RCB",
+      "submit": "Submit to CAB",
       "resubmit": "Submit again",
       "withdraw": "Withdraw",
       "note_label": "Submission note",
       "note_placeholder": "Summarize readiness, risks and rollback plan",
-      "empty_history": "No review requests yet.",
-      "submitted": "Release submitted to RCB.",
+      "empty_history": "No CAB requests yet.",
+      "submitted": "Release package submitted to CAB.",
       "withdrawn": "Review request withdrawn.",
       "submit_failed": "Could not submit the release. Please try again.",
       "withdraw_failed": "Could not withdraw the request. Please try again."
     },
     "delete_modal": {
-      "title": "Delete release",
-      "description": "Are you sure you want to delete this release? Bundled changes will be unlinked."
+      "title": "Delete release package",
+      "description": "Are you sure you want to delete this release package? Bundled changes will be unlinked."
     },
     "toast": {
-      "created": "Release created successfully.",
-      "updated": "Release updated successfully.",
-      "deleted": "Release deleted successfully."
+      "created": "Release package created successfully.",
+      "updated": "Release package updated successfully.",
+      "deleted": "Release package deleted successfully."
     },
     "errors": {
-      "create_failed": "Release could not be created. Please try again.",
-      "update_failed": "Release could not be updated. Please try again.",
-      "delete_failed": "Release could not be deleted. Please try again.",
-      "active_review": "This release has an active review request. Withdraw it first.",
+      "create_failed": "Release package could not be created. Please try again.",
+      "update_failed": "Release package could not be updated. Please try again.",
+      "delete_failed": "Release package could not be deleted. Please try again.",
+      "active_review": "This package has an active CAB request. Withdraw it first.",
       "version_too_long": "Ensure version has no more than 100 characters."
     }
   }

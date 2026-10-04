@@ -7,31 +7,31 @@
     }
   },
   "project_cycles": {
-    "add_cycle": "Add cycle",
+    "add_cycle": "Add sprint",
     "more_details": "More details",
-    "cycle": "Cycle",
-    "update_cycle": "Update cycle",
-    "create_cycle": "Create cycle",
-    "no_matching_cycles": "No matching cycles",
+    "cycle": "Sprint",
+    "update_cycle": "Update sprint",
+    "create_cycle": "Create sprint",
+    "no_matching_cycles": "No matching sprints",
     "remove_filters_to_see_all_cycles": "Remove the filters to see all cycles",
     "remove_search_criteria_to_see_all_cycles": "Remove the search criteria to see all cycles",
-    "only_completed_cycles_can_be_archived": "Only completed cycles can be archived",
+    "only_completed_cycles_can_be_archived": "Only completed sprints can be archived",
     "start_date": "Start date",
     "end_date": "End date",
     "in_your_timezone": "In your timezone",
-    "transfer_work_items": "Transfer {count} work items",
+    "transfer_work_items": "Transfer {count} tickets",
     "transfer": {
-      "no_cycles_available": "No other cycles available to transfer work items to."
+      "no_cycles_available": "No other sprints available to transfer tickets to."
     },
     "date_range": "Date range",
     "add_date": "Add date",
     "active_cycle": {
-      "label": "Active cycle",
+      "label": "Active sprint",
       "progress": "Progress",
       "chart": "Burndown chart",
-      "priority_issue": "Priority work items",
+      "priority_issue": "Priority tickets",
       "assignees": "Assignees",
-      "issue_burndown": "Work item burndown",
+      "issue_burndown": "Ticket burndown",
       "ideal": "Ideal",
       "current": "Current",
       "labels": "Labels",
@@ -39,10 +39,10 @@
       "leading": "Leading"
     },
     "upcoming_cycle": {
-      "label": "Upcoming cycle"
+      "label": "Upcoming sprint"
     },
     "completed_cycle": {
-      "label": "Completed cycle"
+      "label": "Completed sprint"
     },
     "status": {
       "days_left": "Days left",
@@ -53,115 +53,115 @@
     },
     "action": {
       "restore": {
-        "title": "Restore cycle",
+        "title": "Restore sprint",
         "success": {
-          "title": "Cycle restored",
-          "description": "The cycle has been restored."
+          "title": "Sprint restored",
+          "description": "The sprint has been restored."
         },
         "failed": {
-          "title": "Cycle restore failed",
-          "description": "The cycle could not be restored. Please try again."
+          "title": "Sprint restore failed",
+          "description": "The sprint could not be restored. Please try again."
         }
       },
       "favorite": {
-        "loading": "Adding cycle to favorites",
+        "loading": "Adding sprint to favorites",
         "success": {
-          "description": "Cycle added to favorites.",
+          "description": "Sprint added to favorites.",
           "title": "Success!"
         },
         "failed": {
-          "description": "Couldn't add the cycle to favorites. Please try again.",
+          "description": "Couldn't add the sprint to favorites. Please try again.",
           "title": "Error!"
         }
       },
       "unfavorite": {
-        "loading": "Removing cycle from favorites",
+        "loading": "Removing sprint from favorites",
         "success": {
-          "description": "Cycle removed from favorites.",
+          "description": "Sprint removed from favorites.",
           "title": "Success!"
         },
         "failed": {
-          "description": "Couldn't remove the cycle from favorites. Please try again.",
+          "description": "Couldn't remove the sprint from favorites. Please try again.",
           "title": "Error!"
         }
       },
       "update": {
-        "loading": "Updating cycle",
+        "loading": "Updating sprint",
         "success": {
-          "description": "Cycle updated successfully.",
+          "description": "Sprint updated successfully.",
           "title": "Success!"
         },
         "failed": {
-          "description": "Error updating the cycle. Please try again.",
+          "description": "Error updating the sprint. Please try again.",
           "title": "Error!"
         },
         "error": {
-          "already_exists": "You already have a cycle on the given dates, if you want to create a draft cycle, you can do that by removing both the dates."
+          "already_exists": "You already have a sprint on the given dates, if you want to create a draft sprint, you can do that by removing both the dates."
         }
       }
     },
     "empty_state": {
       "general": {
-        "title": "Group and timebox your work in Cycles.",
-        "description": "Break delivery work into timeboxed chunks, set dates around your deadlines, and keep your team's progress visible.",
+        "title": "Plan service work in Sprints.",
+        "description": "Break tickets into 1-2 week sprints, set dates around maintenance windows, and keep on-call progress visible.",
         "primary_button": {
-          "text": "Set your first cycle",
+          "text": "Set your first sprint",
           "comic": {
-            "title": "Cycles are repetitive time-boxes.",
-            "description": "A recurring window — weekly, fortnightly, or per maintenance cycle — used to track a chunk of work is a Cycle."
+            "title": "Sprints are repeating on-call windows.",
+            "description": "A recurring window — weekly, fortnightly, or per maintenance window — used to track a chunk of service work is a Sprint."
           }
         }
       },
       "no_issues": {
-        "title": "No work items added to the cycle",
-        "description": "Add or create work items you wish to timebox and deliver within this cycle",
+        "title": "No tickets added to the sprint",
+        "description": "Add or create tickets you wish to timebox and deliver within this sprint",
         "primary_button": {
-          "text": "Create new work item"
+          "text": "Create new ticket"
         },
         "secondary_button": {
-          "text": "Add existing work item"
+          "text": "Add existing ticket"
         }
       },
       "completed_no_issues": {
-        "title": "No work items in the cycle",
-        "description": "No work items in the cycle. Work items are either transferred or hidden. To see hidden work items if any, update your display properties accordingly."
+        "title": "No tickets in the sprint",
+        "description": "No tickets in the sprint. Tickets are either transferred or hidden. To see hidden tickets if any, update your display properties accordingly."
       },
       "active": {
-        "title": "No active cycle",
-        "description": "An active cycle includes any period that encompasses today's date within its range. Find the progress and details of the active cycle here."
+        "title": "No active sprint",
+        "description": "An active sprint includes any period that encompasses today's date within its range. Find the progress and details of the active sprint here."
       },
       "archived": {
-        "title": "No archived cycles yet",
-        "description": "To tidy up your project, archive completed cycles. Find them here once archived."
+        "title": "No archived sprints yet",
+        "description": "To tidy up your project, archive completed sprints. Find them here once archived."
       }
     }
   },
   "project_views": {
     "empty_state": {
       "general": {
-        "title": "Save filtered views for your project. Create as many as you need",
-        "description": "Views are a set of saved filters that you use frequently or want easy access to. All your colleagues in a project can see everyone's views and choose whichever suits their needs best.",
+        "title": "Save queues for your service team. Create as many as you need",
+        "description": "Queues are saved ticket filters that you use frequently. All your colleagues in a project can see everyone's queues and choose whichever suits their on-call needs best.",
         "primary_button": {
-          "text": "Create your first view",
+          "text": "Create your first queue",
           "comic": {
-            "title": "Views work atop Work item properties.",
-            "description": "You can create a view from here with as many properties as filters as you see fit."
+            "title": "Queues work atop ticket properties.",
+            "description": "You can create a queue from here with as many properties as filters as you see fit."
           }
         },
         "filter": {
-          "title": "No matching views",
-          "description": "No views match the search criteria.\n Create a new view instead."
+          "title": "No matching queues",
+          "description": "No queues match the search criteria.\n Create a new queue instead."
         }
       },
       "no_archived_issues": {
-        "title": "No archived work items yet",
-        "description": "Manually or through automation, you can archive work items that are completed or cancelled. Find them here once archived.",
+        "title": "No archived tickets yet",
+        "description": "Manually or through automation, you can archive tickets that are completed or cancelled. Find them here once archived.",
         "primary_button": {
           "text": "Set automation"
         }
       },
       "issues_empty_filter": {
-        "title": "No work items found matching the filters applied",
+        "title": "No tickets found matching the filters applied",
         "secondary_button": {
           "text": "Clear all filters"
         }
@@ -183,32 +183,32 @@
       }
     },
     "delete_view": {
-      "title": "Are you sure you want to delete this view?",
-      "content": "If you confirm, all the sort, filter, and display options + the layout you have chosen for this view will be permanently deleted without any way to restore them."
+      "title": "Are you sure you want to delete this queue?",
+      "content": "If you confirm, all the sort, filter, and display options + the layout you have chosen for this queue will be permanently deleted without any way to restore them."
     }
   },
   "project_issues": {
     "empty_state": {
       "no_issues": {
-        "title": "Create a work item and assign it to someone, even yourself",
-        "description": "Think of work items as tasks, tickets, or requests. A work item and its sub-work items are usually time-based actionables assigned to members of your team. Your team creates, assigns, and completes work items to move your project forward.",
+        "title": "Create a ticket and assign it to someone, even yourself",
+        "description": "Think of tickets as incidents, requests, problems, or changes. A ticket and its sub-tickets are usually time-based actionables assigned to members of your team. Your team creates, assigns, and resolves tickets to keep services running.",
         "primary_button": {
-          "text": "Create your first work item",
+          "text": "Create your first ticket",
           "comic": {
-            "title": "Work items are building blocks in Terraline.",
-            "description": "Onboard a new identity provider, migrate a database, or roll out a service desk process are examples of work items that likely have sub-work items."
+            "title": "Tickets are building blocks in service operations.",
+            "description": "Onboard a new identity provider, migrate a database, or handle a service outage are examples of tickets that likely have sub-tickets."
           }
         }
       },
       "no_archived_issues": {
-        "title": "No archived work items yet",
-        "description": "Manually or through automation, you can archive work items that are completed or cancelled. Find them here once archived.",
+        "title": "No archived tickets yet",
+        "description": "Manually or through automation, you can archive tickets that are completed or cancelled. Find them here once archived.",
         "primary_button": {
           "text": "Set automation"
         }
       },
       "issues_empty_filter": {
-        "title": "No work items found matching the filters applied",
+        "title": "No tickets found matching the filters applied",
         "secondary_button": {
           "text": "Clear all filters"
         }
@@ -216,37 +216,37 @@
     }
   },
   "project_module": {
-    "add_module": "Add Module",
-    "update_module": "Update Module",
-    "create_module": "Create Module",
-    "archive_module": "Archive Module",
-    "restore_module": "Restore Module",
-    "delete_module": "Delete module",
+    "add_module": "Add track",
+    "update_module": "Update track",
+    "create_module": "Create track",
+    "archive_module": "Archive track",
+    "restore_module": "Restore track",
+    "delete_module": "Delete track",
     "empty_state": {
       "general": {
-        "title": "Group related work into Modules and track it easily.",
-        "description": "A Module groups work items under a logical parent — a service, a platform, or a large initiative. Modules have their own periods, deadlines, and analytics so you can see how far you are from done.",
+        "title": "Group tickets into Tracks per service or program.",
+        "description": "A track groups tickets under one service, platform, or program with its own deadline and progress. See how far you are from done.",
         "primary_button": {
-          "text": "Build your first module",
+          "text": "Build your first track",
           "comic": {
-            "title": "Modules help group work by hierarchy.",
-            "description": "A payments service module, an identity platform module, and a data warehouse module are good examples of this grouping."
+            "title": "Tracks help group service work by ownership.",
+            "description": "A payments service track, an identity platform track, and a data warehouse track are good examples of this grouping."
           }
         }
       },
       "no_issues": {
-        "title": "No work items in the module",
-        "description": "Create or add work items which you want to accomplish as part of this module",
+        "title": "No tickets in the track",
+        "description": "Create or add tickets which you want to accomplish as part of this track",
         "primary_button": {
-          "text": "Create new work items"
+          "text": "Create new tickets"
         },
         "secondary_button": {
-          "text": "Add an existing work item"
+          "text": "Add an existing ticket"
         }
       },
       "archived": {
-        "title": "No archived Modules yet",
-        "description": "To tidy up your project, archive completed or cancelled modules. Find them here once archived."
+        "title": "No archived tracks yet",
+        "description": "To tidy up your project, archive completed or cancelled tracks. Find them here once archived."
       },
       "sidebar": {
         "in_active": "This module isn't active yet.",
@@ -254,25 +254,25 @@
       }
     },
     "quick_actions": {
-      "archive_module": "Archive module",
-      "archive_module_description": "Only completed or canceled\nmodule can be archived.",
-      "delete_module": "Delete module"
+      "archive_module": "Archive track",
+      "archive_module_description": "Only completed or canceled\ntrack can be archived.",
+      "delete_module": "Delete track"
     },
     "toast": {
       "copy": {
-        "success": "Module link copied to clipboard"
+        "success": "Track link copied to clipboard"
       },
       "delete": {
-        "success": "Module deleted successfully",
-        "error": "Failed to delete module"
+        "success": "Track deleted successfully",
+        "error": "Failed to delete track"
       }
     }
   },
   "project_page": {
     "empty_state": {
       "general": {
-        "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Terraline's AI assistant, to help you get started",
-        "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
+        "title": "Write a runbook, SOP, or postmortem. Get Galileo, Terraline's AI assistant, to help you get started",
+        "description": "Articles are your service knowledge base. Write runbooks, SOPs, shift handovers, and postmortems, format them easily, embed tickets, lay them out using a library of components, and keep them in your service context. To make short work of any doc, invoke Galileo with a shortcut or the click of a button.",
         "primary_button": {
           "text": "Create your first page"
         }
@@ -300,36 +300,36 @@
   "disabled_project": {
     "empty_state": {
       "inbox": {
-        "title": "Intake is not enabled for the project.",
-        "description": "Intake helps you manage incoming requests to your project and add them as work items in your workflow. Enable intake from project settings to manage requests.",
+        "title": "Service desk intake is not enabled for the project.",
+        "description": "Intake is the front door for service requests and incidents. Enable intake from project settings to triage them into tickets.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "cycle": {
-        "title": "Cycles is not enabled for this project.",
-        "description": "Break work down by timeboxed chunks, work backwards from your project deadline to set dates, and make tangible progress as a team. Enable the cycles feature for your project to start using them.",
+        "title": "Sprints are not enabled for this project.",
+        "description": "Break tickets into 1-2 week sprints, work backwards from maintenance windows, and make tangible progress as a team. Enable sprints to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "module": {
-        "title": "Modules are not enabled for the project.",
-        "description": "Modules are the building blocks of your project. Enable modules from project settings to start using them.",
+        "title": "Tracks are not enabled for the project.",
+        "description": "Tracks group tickets per service or program. Enable tracks from project settings to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "page": {
-        "title": "Pages are not enabled for the project.",
-        "description": "Pages are the building blocks of your project. Enable pages from project settings to start using them.",
+        "title": "Knowledge base is not enabled for the project.",
+        "description": "Articles hold runbooks, SOPs, and postmortems. Enable knowledge base from project settings to start using it.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "view": {
-        "title": "Views are not enabled for the project.",
-        "description": "Views are the building blocks of your project. Enable views from project settings to start using them.",
+        "title": "Queues are not enabled for the project.",
+        "description": "Queues are saved ticket filters for on-call. Enable queues from project settings to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
@@ -353,7 +353,7 @@
     "order_by": {
       "name": "Name",
       "progress": "Progress",
-      "issues": "Number of work items",
+      "issues": "Number of tickets",
       "due_date": "Due date",
       "created_at": "Created date",
       "manual": "Manual"

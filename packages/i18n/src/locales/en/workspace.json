@@ -1,7 +1,7 @@
 {
   "workspace_creation": {
     "heading": "Create your workspace",
-    "subheading": "To start using Terraline, you need to create or join a workspace.",
+    "subheading": "To start using Plane, you need to create or join a workspace.",
     "form": {
       "name": {
         "label": "Name your workspace",
@@ -54,11 +54,11 @@
     "empty_state": {
       "general": {
         "title": "Overview of your projects, activity, and metrics",
-        "description": "Welcome to Terraline. Create your first project, add your services, and start tracking requests and work items — this page will turn into your operations overview.",
+        "description": "Welcome to Plane. Create your first project, add your services, and start tracking requests and work items — this page will turn into your operations overview.",
         "primary_button": {
           "text": "Build your first project",
           "comic": {
-            "title": "Everything starts with a project in Terraline",
+            "title": "Everything starts with a project in Plane",
             "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
@@ -66,30 +66,30 @@
     }
   },
   "workspace_analytics": {
-    "label": "Analytics",
-    "page_label": "{workspace} - Analytics",
-    "open_tasks": "Total open tasks",
+    "label": "Reports",
+    "page_label": "{workspace} - Reports",
+    "open_tasks": "Total open tickets",
     "error": "There was some error in fetching the data.",
-    "work_items_closed_in": "Work items closed in",
+    "work_items_closed_in": "Tickets closed in",
     "selected_projects": "Selected projects",
     "total_members": "Total members",
-    "total_cycles": "Total cycles",
-    "total_modules": "Total modules",
+    "total_cycles": "Total sprints",
+    "total_modules": "Total tracks",
     "pending_work_items": {
-      "title": "Pending work items",
-      "empty_state": "Analysis of pending work items by co-workers appears here."
+      "title": "Pending tickets",
+      "empty_state": "Analysis of pending tickets by co-workers appears here."
     },
     "work_items_closed_in_a_year": {
-      "title": "Work items closed in a year",
-      "empty_state": "Close work items to view analysis of the same in the form of a graph."
+      "title": "Tickets closed in a year",
+      "empty_state": "Close tickets to view analysis of the same in the form of a graph."
     },
     "most_work_items_created": {
-      "title": "Most work items created",
-      "empty_state": "Co-workers and the number of work items created by them appears here."
+      "title": "Most tickets created",
+      "empty_state": "Co-workers and the number of tickets created by them appears here."
     },
     "most_work_items_closed": {
-      "title": "Most work items closed",
-      "empty_state": "Co-workers and the number of work items closed by them appears here."
+      "title": "Most tickets closed",
+      "empty_state": "Co-workers and the number of tickets closed by them appears here."
     },
     "tabs": {
       "scope_and_demand": "Scope and Demand",
@@ -106,7 +106,7 @@
     "trend_on_charts": "Trend on charts",
     "active_projects": "Active Projects",
     "customized_insights": "Customized Insights",
-    "created_vs_resolved": "Created vs Resolved",
+    "created_vs_resolved": "Opened vs Resolved",
     "empty_state": {
       "project_insights": {
         "title": "No data yet",
@@ -121,31 +121,31 @@
         "description": "Work items assigned to you, broken down by state, will show up here."
       },
       "general": {
-        "title": "Track throughput, workloads, and trends. Spot bottlenecks and keep work moving",
-        "description": "See how work moves from open to done, where time goes, and how your team is performing — so services stay on track.",
+        "title": "Track ticket throughput, on-call load, and SLA trends",
+        "description": "See how tickets move from open to resolved, where time goes, and how your service team performs — so services stay on track.",
         "primary_button": {
           "text": "Start your first project",
           "comic": {
-            "title": "Analytics works best with Cycles + Modules",
-            "description": "First, timebox your work items into Cycles and group longer efforts into Modules. Check out both on the left nav."
+            "title": "Reports work best with Sprints + Tracks",
+            "description": "First, timebox your tickets into Sprints and group longer efforts into Tracks. Check out both on the left nav."
           }
         }
       },
       "cycle_progress": {
         "title": "No data yet",
-        "description": "Cycle progress analytics will appear here. Add work items to cycles to start tracking progress."
+        "description": "Sprint progress analytics will appear here. Add tickets to sprints to start tracking progress."
       },
       "module_progress": {
         "title": "No data yet",
-        "description": "Module progress analytics will appear here. Add work items to modules to start tracking progress."
+        "description": "Track progress analytics will appear here. Add tickets to tracks to start tracking progress."
       },
       "intake_trends": {
         "title": "No data yet",
-        "description": "Intake trends analytics will appear here. Add work items to intake to start tracking trends."
+        "description": "Intake trends will appear here. Triage intake requests into tickets to start tracking trends."
       }
     },
     "upgrade_to_plan": "Upgrade to {plan} to unlock {tab}",
-    "workitem_resolved_vs_pending": "Work items resolved vs pending",
+    "workitem_resolved_vs_pending": "Tickets resolved vs pending",
     "projects_by_status": "Projects by status",
     "active_users": "Active users",
     "intake_trends": "Intake Trends"
@@ -200,7 +200,7 @@
         "primary_button": {
           "text": "Start your first project",
           "comic": {
-            "title": "Everything starts with a project in Terraline",
+            "title": "Everything starts with a project in Plane",
             "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
@@ -211,7 +211,7 @@
         "primary_button": {
           "text": "Start your first project",
           "comic": {
-            "title": "Everything starts with a project in Terraline",
+            "title": "Everything starts with a project in Plane",
             "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
@@ -289,8 +289,8 @@
   "workspace_pages": {
     "empty_state": {
       "general": {
-        "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Terraline's AI assistant, to help you get started",
-        "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Terraline's AI, with a shortcut or the click of a button.",
+        "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Plane's AI assistant, to help you get started",
+        "description": "Pages are your team's knowledge base in Plane. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Plane's AI, with a shortcut or the click of a button.",
         "primary_button": {
           "text": "Create your first page"
         }

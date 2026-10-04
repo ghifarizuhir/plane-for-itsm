@@ -5,7 +5,7 @@
     "create": "Create service",
     "empty_state": {
       "title": "No services yet",
-      "description": "Add a service to start mapping dependencies.",
+      "description": "Add a service (application/CI) to start mapping dependencies and impacted tickets.",
       "no_matches": {
         "title": "No matching services",
         "description": "No services match the current filters. Try adjusting or clearing them."
@@ -14,19 +14,19 @@
     "fields": {
       "name": "Name",
       "description": "Description",
-      "status": "Status",
-      "criticality": "Criticality",
-      "type": "Type",
-      "owner": "Owner",
-      "repository": "Repository",
-      "documentation": "Documentation",
-      "health": "Health",
+      "status": "Lifecycle status",
+      "criticality": "Business criticality",
+      "type": "Service type",
+      "owner": "Service owner",
+      "repository": "Repository / runbook",
+      "documentation": "Documentation / SOP",
+      "health": "Operational health",
       "incidents": "Incidents",
       "deploy": "Last deploy"
     },
     "tabs": {
       "overview": "Overview",
-      "work_items": "Work items",
+      "work_items": "Tickets",
       "dependencies": "Dependencies"
     },
     "layout": {
@@ -101,16 +101,16 @@
       "select_service": "Select service",
       "no_dependencies": "No dependencies yet",
       "no_dependents": "No dependents yet",
-      "no_work_items": "No work items linked yet",
+      "no_work_items": "No tickets linked yet",
       "untitled": "Untitled",
       "not_found_title": "Service does not exist",
       "not_found_description": "The service you are looking for does not exist or has been deleted.",
       "view_other_services": "View other services",
       "create_dependency_error": "Could not create dependency. Please try again.",
       "delete_dependency_error": "Could not delete dependency. Please try again.",
-      "link_work_item_error": "Could not link work item. Please try again.",
-      "unlink_work_item_error": "Could not unlink work item. Please try again.",
-      "add_work_items": "Add work items",
+      "link_work_item_error": "Could not link ticket. Please try again.",
+      "unlink_work_item_error": "Could not unlink ticket. Please try again.",
+      "add_work_items": "Link tickets",
       "load_error_title": "Couldn't load services",
       "load_error_description": "Something went wrong while fetching services. Please try again.",
       "retry": "Retry"

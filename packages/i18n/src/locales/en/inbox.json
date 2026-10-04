@@ -39,8 +39,8 @@
       "decline_permission": "Only project admins can deny work items"
     },
     "gate": {
-      "type_required": "Select a work item type before accepting",
-      "service_required": "Select a service before accepting this work item"
+      "type_required": "Select ticket type (Incident/Problem/Change) before accepting",
+      "service_required": "Select the impacted service before accepting this ticket"
     },
     "actions": {
       "accept": "Accept",
@@ -54,7 +54,7 @@
       "move": "Move {value} to project work items"
     },
     "triage": {
-      "title": "Triage suggestion",
+      "title": "Auto-triage suggestion",
       "pending": "Classifying this work item…",
       "suggested_by": "Suggested by {model}",
       "category": "Type",
@@ -84,10 +84,10 @@
       "updated_at": "Updated at",
       "id": "ID"
     },
-    "label": "Intake",
-    "page_label": "{workspace} - Intake",
+    "label": "Service desk intake",
+    "page_label": "{workspace} - Service desk intake",
     "modal": {
-      "title": "Create intake work item"
+      "title": "Create intake ticket"
     },
     "tabs": {
       "open": "Open",

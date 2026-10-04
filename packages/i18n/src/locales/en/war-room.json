@@ -1,8 +1,8 @@
 {
   "war_room": {
-    "title": "War rooms",
-    "add": "Create war room",
-    "open": "Open war room",
+    "title": "Incident bridge",
+    "add": "Open bridge",
+    "open": "Open bridge",
     "notification": {
       "mention": "{name} mentioned you in {room}",
       "dismiss": "Dismiss"
@@ -52,26 +52,26 @@
       "elapsed": "Elapsed"
     },
     "empty_state": {
-      "title": "No war rooms yet",
-      "description": "Open a war room to coordinate incident response.",
+      "title": "No active bridges",
+      "description": "Open a bridge from a SEV1-2 incident to coordinate response.",
       "no_matches": {
-        "title": "No matching war rooms",
-        "description": "No war rooms match the current filters. Try adjusting or clearing them."
+        "title": "No matching bridges",
+        "description": "No bridges match the current filters. Try adjusting or clearing them."
       }
     },
     "create": {
-      "title": "Create war room",
+      "title": "Open incident bridge",
       "incident": "Primary incident",
       "select_incident": "Select incident",
       "incident_selected": "Incident selected",
       "incident_required": "Select the primary incident to continue",
       "name": "Name",
-      "name_placeholder": "War room name",
+      "name_placeholder": "Bridge name (e.g. SEV1 payments-api outage)",
       "severity": "Severity",
       "severity_auto": "From incident priority",
       "services": "Affected services",
       "description": "Description",
-      "submit": "Create war room",
+      "submit": "Open bridge",
       "duplicate_title": "Active war room already exists",
       "duplicate_description": "An active war room already exists for this incident.",
       "open_existing": "Open war room"
@@ -135,7 +135,7 @@
     "chat": {
       "title": "Chat",
       "load_older": "Load older messages",
-      "composer_placeholder": "Message the room. Use @ to mention.",
+      "composer_placeholder": "Coordinate here. Use @ to page a responder.",
       "send": "Send",
       "empty_title": "No messages yet",
       "empty_description": "Start coordinating the response here.",
@@ -179,9 +179,9 @@
     },
     "runbook": {
       "progress": "{done}/{total} done",
-      "add_placeholder": "Add a step and press Enter",
+      "add_placeholder": "Add an SOP step and press Enter",
       "empty_title": "No runbook steps",
-      "empty_description": "Add steps to track the response checklist.",
+      "empty_description": "Add SOP steps to track the response checklist.",
       "mark_done": "Mark as done",
       "mark_undone": "Mark as not done",
       "edit": "Edit step",

@@ -14,7 +14,7 @@
     },
     "not_found": {
       "title": "Oops! Something seems wrong",
-      "description": "We are unable to fetch your Terraline account currently. This might be a network error.",
+      "description": "We are unable to fetch your Plane account currently. This might be a network error.",
       "cta_primary": "Try reloading"
     },
     "server_error": {
@@ -36,74 +36,74 @@
       "description": "The project you are looking for does not exist."
     },
     "work_items": {
-      "title": "Start with your first work item.",
-      "description": "Work items are the building blocks of your project — assign owners, set priorities, and track progress easily.",
-      "cta_primary": "Create your first work item"
+      "title": "Start with your first ticket.",
+      "description": "Tickets are the building blocks of service operations — assign owners, set priorities, link the impacted service, and track resolution.",
+      "cta_primary": "Create your first ticket"
     },
     "cycles": {
-      "title": "Group and timebox your work in Cycles.",
-      "description": "Break delivery work into timeboxed chunks, set dates around your deadlines, and keep your team's progress visible.",
-      "cta_primary": "Set your first cycle"
+      "title": "Plan service work in Sprints.",
+      "description": "Break tickets into 1-2 week sprints, set dates around maintenance windows, and keep on-call progress visible.",
+      "cta_primary": "Set your first sprint"
     },
     "cycle_work_items": {
-      "title": "No work items to show in this cycle",
-      "description": "Create work items to begin monitoring your team's progress this cycle and achieve your goals on time.",
-      "cta_primary": "Create work item",
-      "cta_secondary": "Add existing work item"
+      "title": "No tickets to show in this sprint",
+      "description": "Create tickets to begin monitoring your team's progress this sprint and hit SLA on time.",
+      "cta_primary": "Create ticket",
+      "cta_secondary": "Add existing ticket"
     },
     "modules": {
-      "title": "Group related work into Modules and track it easily.",
-      "description": "Modules group interconnected work items — by service, platform, or phase — with their own deadlines and analytics, so you can see how close you are to done.",
-      "cta_primary": "Set your first module"
+      "title": "Group tickets into Tracks per service or program.",
+      "description": "Tracks group tickets — by service, platform, or phase — with their own deadlines and progress, so you can see how close you are to done.",
+      "cta_primary": "Set your first track"
     },
     "module_work_items": {
-      "title": "No work items to show in this Module",
-      "description": "Create work items to begin monitoring this module.",
-      "cta_primary": "Create work item",
-      "cta_secondary": "Add existing work item"
+      "title": "No tickets to show in this track",
+      "description": "Create tickets to begin monitoring this track.",
+      "cta_primary": "Create ticket",
+      "cta_secondary": "Add existing ticket"
     },
     "views": {
-      "title": "Save custom views for your project",
-      "description": "Views are saved filters that help you quickly access the information you use most. Collaborate effortlessly as teammates share and tailor views to their specific needs.",
-      "cta_primary": "Create view"
+      "title": "Save queues for your service team",
+      "description": "Queues are saved ticket filters for on-call (e.g. My shifts, SEV1 open, Waiting on vendor). Teammates share and tailor queues to their needs.",
+      "cta_primary": "Create queue"
     },
     "no_work_items_in_project": {
-      "title": "No work items in the project yet",
-      "description": "Add work items to your project and slice your work into trackable pieces with views.",
-      "cta_primary": "Add work item"
+      "title": "No tickets in the project yet",
+      "description": "Add tickets to your project and slice service work into trackable queues.",
+      "cta_primary": "Add ticket"
     },
     "work_item_filter": {
-      "title": "No work items found",
+      "title": "No tickets found",
       "description": "Your current filter didn't return any results. Try changing the filters.",
-      "cta_primary": "Add work item"
+      "cta_primary": "Add ticket"
     },
     "pages": {
       "title": "Document everything — from runbooks to postmortems",
-      "description": "Pages let you capture and organize operational knowledge in one place. Write runbooks, SOPs, shift handovers, and postmortems, embed work items, and structure them with ready-to-use components.",
-      "cta_primary": "Create your first Page"
+      "description": "Articles capture operational knowledge in one place. Write runbooks, SOPs, shift handovers, and postmortems, embed tickets, and structure them with ready-to-use components.",
+      "cta_primary": "Create your first article"
     },
     "archive_pages": {
       "title": "No archived pages yet",
       "description": "Archive pages not on your radar. Access them here when needed."
     },
     "intake_sidebar": {
-      "title": "Log Intake requests",
-      "description": "Submit service requests to be reviewed, prioritized, and tracked in your project's workflow.",
-      "cta_primary": "Create Intake request"
+      "title": "Log service desk requests",
+      "description": "Submit service requests and incidents to be triaged, prioritized, and tracked as tickets.",
+      "cta_primary": "Create intake request"
     },
     "intake_main": {
-      "title": "Select an Intake work item to view its details"
+      "title": "Select an intake ticket to view its details"
     },
     "epics": {
       "title": "Turn large efforts into structured Epics.",
-      "description": "An Epic helps you organize a large initiative into smaller, trackable work items.",
+      "description": "An Epic helps you organize a large initiative into smaller, trackable tickets.",
       "cta_primary": "Create an Epic",
       "cta_secondary": "Documentation"
     },
     "epic_work_items": {
-      "title": "You haven't added work items to this epic yet.",
-      "description": "Start by adding some work items to this epic and track them here.",
-      "cta_secondary": "Add work items"
+      "title": "You haven't added tickets to this epic yet.",
+      "description": "Start by adding some tickets to this epic and track them here.",
+      "cta_secondary": "Add tickets"
     }
   },
   "workspace_empty_state": {
@@ -112,61 +112,61 @@
       "description": "You can archive epics that are completed or cancelled. Find them here once archived."
     },
     "archive_work_items": {
-      "title": "No archived work items yet",
-      "description": "Manually or through automation, you can archive work items that are completed or cancelled. Find them here once archived.",
+      "title": "No archived tickets yet",
+      "description": "Manually or through automation, you can archive tickets that are completed or cancelled. Find them here once archived.",
       "cta_primary": "Set automation"
     },
     "archive_cycles": {
-      "title": "No archived cycles yet",
-      "description": "To tidy up your project, archive completed cycles. Find them here once archived."
+      "title": "No archived sprints yet",
+      "description": "To tidy up your project, archive completed sprints. Find them here once archived."
     },
     "archive_modules": {
-      "title": "No archived Modules yet",
-      "description": "To tidy up your project, archive completed or cancelled modules. Find them here once archived."
+      "title": "No archived tracks yet",
+      "description": "To tidy up your project, archive completed or cancelled tracks. Find them here once archived."
     },
     "home_widget_quick_links": {
       "title": "Keep important references, resources, or docs handy for your work"
     },
     "inbox_sidebar_all": {
-      "title": "Updates for your subscribed work items will appear here"
+      "title": "Updates for your subscribed tickets will appear here"
     },
     "inbox_sidebar_mentions": {
-      "title": "Mentions for your work items will appear here"
+      "title": "Mentions for your tickets will appear here"
     },
     "your_work_by_priority": {
-      "title": "No work item assigned yet"
+      "title": "No ticket assigned yet"
     },
     "your_work_by_state": {
-      "title": "No work item assigned yet"
+      "title": "No ticket assigned yet"
     },
     "views": {
-      "title": "No Views yet",
-      "description": "Add work items to your project and use views to filter, sort, and monitor progress effortlessly.",
-      "cta_primary": "Add work item"
+      "title": "No queues yet",
+      "description": "Add tickets to your project and use queues to filter, sort, and monitor SLA effortlessly.",
+      "cta_primary": "Add ticket"
     },
     "drafts": {
-      "title": "Half-written work items",
-      "description": "To try this out, start adding a work item and leave it mid-way or create your first draft below. 😉",
-      "cta_primary": "Create draft work item"
+      "title": "Half-written tickets",
+      "description": "To try this out, start adding a ticket and leave it mid-way or create your first draft below. 😉",
+      "cta_primary": "Create draft ticket"
     },
     "projects_archived": {
       "title": "No projects archived",
       "description": "Looks like all your projects are still active—great job!"
     },
     "analytics_projects": {
-      "title": "Create projects to visualize project metrics here."
+      "title": "Create projects to visualize service metrics here."
     },
     "analytics_work_items": {
-      "title": "Create projects with work items and assignees to start tracking performance, progress, and team impact here."
+      "title": "Create projects with tickets and assignees to start tracking SLA, throughput, and on-call load here."
     },
     "analytics_no_cycle": {
-      "title": "Create cycles to organize work into time-bound phases and track delivery progress."
+      "title": "Create sprints to organize tickets into time-bound periods and track delivery progress."
     },
     "analytics_no_module": {
-      "title": "Create modules to organize your work and track progress across different stages."
+      "title": "Create tracks to organize tickets per service and track progress across different stages."
     },
     "analytics_no_intake": {
-      "title": "Set up intake to manage incoming requests and track how they're accepted and rejected"
+      "title": "Open service desk intake to receive requests and track accept vs reject rate"
     },
     "home_widget_stickies": {
       "title": "Jot down an idea, capture an aha, or record a brainwave. Add a sticky to get started."
@@ -183,9 +183,9 @@
       "cta_primary": "Create new dashboard"
     },
     "wiki": {
-      "title": "Write a note, a doc, or a full knowledge base.",
-      "description": "Pages are your team's knowledge base in Terraline. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context.",
-      "cta_primary": "Create your page"
+      "title": "Write a runbook, SOP, or postmortem.",
+      "description": "Articles are your service knowledge base. Write runbooks, SOPs, shift handovers, and postmortems, format them easily, embed tickets, lay them out using ready-to-use components, and keep them in service context.",
+      "cta_primary": "Create your article"
     },
     "project_overview_state_sidebar": {
       "title": "Enable project states",

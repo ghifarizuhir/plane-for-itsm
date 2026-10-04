@@ -1,8 +1,8 @@
 {
   "review": {
     "board_values": {
-      "tcb": "Testing Control Board",
-      "rcb": "Release Control Board"
+      "tcb": "Technical review",
+      "rcb": "CAB review"
     },
     "request_status_values": {
       "pending": "Pending",
@@ -18,8 +18,8 @@
     "outcome_values": {
       "approved": "Approved",
       "rejected": "Rejected",
-      "approved_with_notes": "Approved with notes",
-      "deferred": "Deferred"
+      "approved_with_notes": "Approved with conditions",
+      "deferred": "Deferred to next CAB"
     },
     "participant_role_values": {
       "chair": "Chair",
@@ -46,19 +46,19 @@
       "retry": "Retry"
     },
     "empty_queue": {
-      "title": "Nothing waiting for review",
-      "description": "Submitted requests will appear here."
+      "title": "No changes awaiting review",
+      "description": "Submitted changes and release packages appear here for CAB."
     },
     "empty_sessions": {
       "title": "No sessions yet",
-      "description": "Schedule a session to review pending requests."
+      "description": "Schedule a CAB session to review pending requests."
     },
     "no_matches": {
       "title": "No matching requests",
       "description": "Try a different search or clear the filters."
     },
     "request": {
-      "submitted": "Change submitted to TCB.",
+      "submitted": "Change submitted for technical review.",
       "withdrawn": "Request withdrawn.",
       "submit": "Submit",
       "submit_failed": "Could not submit the request. Please try again.",
@@ -67,15 +67,15 @@
       "note_placeholder": "Summarize the change, risks and test evidence"
     },
     "change": {
-      "submit": "Submit to TCB",
+      "submit": "Submit for technical review",
       "resubmit": "Submit again",
       "withdraw": "Withdraw"
     },
     "tcb": {
-      "badge_pending": "TCB pending",
-      "badge_scheduled": "TCB scheduled",
-      "badge_decided": "TCB decided",
-      "badge_withdrawn": "TCB withdrawn"
+      "badge_pending": "Review pending",
+      "badge_scheduled": "Review scheduled",
+      "badge_decided": "Review decided",
+      "badge_withdrawn": "Review withdrawn"
     },
     "sessions": {
       "add": "Schedule session",
@@ -86,8 +86,8 @@
       "status": "Status",
       "items_count": "Agenda items",
       "participants_count": "Participants",
-      "minutes": "Minutes",
-      "minutes_placeholder": "Write the meeting minutes here",
+      "minutes": "CAB minutes",
+      "minutes_placeholder": "Write CAB minutes, decisions, and conditions here",
       "complete": "Complete session",
       "cancel": "Cancel session",
       "complete_failed": "Could not complete the session. Please try again.",
