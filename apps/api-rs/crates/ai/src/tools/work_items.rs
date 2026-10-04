@@ -424,6 +424,74 @@ impl Tool for GetWorkItem {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct ListWorkItemCommentsArgs {
+    /// Work item identifier, e.g. "LTS-42".
+    pub work_item: String,
+    /// Maximum comments to return, 1-25 (default 10).
+    pub limit: Option<i64>,
+}
+
+pub const WORK_ITEM_COMMENTS_SQL: &str = "SELECT \
+     COALESCE(u.display_name, u.email, 'unknown') AS author, \
+     cm.created_at::text AS at, \
+     left(cm.comment_stripped, 500) AS text \
+     FROM issue_comments cm \
+     LEFT JOIN users u ON u.id = COALESCE(cm.actor_id, cm.created_by_id) \
+     WHERE cm.issue_id = $1 AND cm.deleted_at IS NULL \
+     ORDER BY cm.created_at DESC, cm.id DESC LIMIT $2";
+
+pub fn comments_json(work_item: &str, rows: &[CommentView]) -> String {
+    json!({
+        "work_item": work_item,
+        "returned": rows.len(),
+        "comments": rows,
+    })
+    .to_string()
+}
+
+pub struct ListWorkItemComments {
+    pub pool: PgPool,
+    pub workspace_id: Uuid,
+    pub user_id: Uuid,
+    pub trace: ToolTrace,
+}
+
+impl Tool for ListWorkItemComments {
+    const NAME: &'static str = "list_work_item_comments";
+    type Args = ListWorkItemCommentsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "List the most recent comments on one work item (newest first), each \
+         with author, timestamp, and text truncated to 500 characters."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ListWorkItemCommentsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        record(&self.trace, Self::NAME, &args);
+        let resolved =
+            resolve_work_item(&self.pool, self.workspace_id, self.user_id, &args.work_item).await?;
+        let limit = clamp_limit(args.limit);
+        let rows: Vec<CommentView> = sqlx::query_as(WORK_ITEM_COMMENTS_SQL)
+            .bind(resolved.id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_error)?;
+        Ok(comments_json(&resolved.identifier, &rows))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,5 +586,48 @@ mod tests {
             identifier: "LTS-1".to_string(),
         };
         assert_eq!(item.identifier, "LTS-1");
+    }
+
+    #[test]
+    fn comments_json_shape() {
+        let rows = vec![
+            CommentView {
+                author: "Budi".to_string(),
+                at: "2026-10-01 10:00:00+00".to_string(),
+                text: "first".to_string(),
+            },
+            CommentView {
+                author: "Sari".to_string(),
+                at: "2026-10-02 10:00:00+00".to_string(),
+                text: "second".to_string(),
+            },
+        ];
+        let parsed: serde_json::Value =
+            serde_json::from_str(&comments_json("LTS-42", &rows)).unwrap();
+        assert_eq!(parsed["work_item"], json!("LTS-42"));
+        assert_eq!(parsed["returned"], json!(2));
+        assert_eq!(parsed["comments"][0]["author"], json!("Budi"));
+        assert_eq!(parsed["comments"][1]["text"], json!("second"));
+    }
+
+    #[tokio::test]
+    async fn list_comments_rejects_a_malformed_ref_before_querying() {
+        let tool = ListWorkItemComments {
+            pool: lazy_pool(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: crate::agent::new_trace(),
+        };
+        let error = tool
+            .call(
+                &mut ToolContext::new(),
+                ListWorkItemCommentsArgs {
+                    work_item: "no-dash".to_string(),
+                    limit: Some(5),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("PROJ-123"));
     }
 }
