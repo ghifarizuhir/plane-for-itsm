@@ -72,6 +72,168 @@ pub fn schema_of<T: JsonSchema>() -> Value {
         .unwrap_or_else(|_| json!({"type": "object", "properties": {}}))
 }
 
+/// Project reference parsed from a work item identifier like "LTS-42".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkItemRef {
+    pub project: String,
+    pub sequence_id: i64,
+}
+
+pub fn parse_work_item_ref(reference: &str) -> Result<WorkItemRef, ToolExecutionError> {
+    let trimmed = reference.trim();
+    let Some((project, sequence)) = trimmed.rsplit_once('-') else {
+        return Err(ToolExecutionError::invalid_args(
+            "work_item must look like PROJ-123",
+        ));
+    };
+    let project = project.trim();
+    if project.is_empty() || !project.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(ToolExecutionError::invalid_args(
+            "work_item must look like PROJ-123",
+        ));
+    }
+    let sequence_id: i64 = sequence
+        .trim()
+        .parse()
+        .map_err(|_| ToolExecutionError::invalid_args("work_item must look like PROJ-123"))?;
+    if sequence_id <= 0 {
+        return Err(ToolExecutionError::invalid_args(
+            "work_item must look like PROJ-123",
+        ));
+    }
+    Ok(WorkItemRef {
+        project: project.to_string(),
+        sequence_id,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct ProjectRow {
+    pub id: Uuid,
+    pub identifier: String,
+    pub name: String,
+}
+
+pub const RESOLVE_PROJECTS_SQL: &str = "SELECT p.id, p.identifier, p.name FROM projects p \
+     WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND p.archived_at IS NULL \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.member_id = $2 \
+       AND pm.is_active = true AND pm.deleted_at IS NULL) \
+     AND (lower(p.identifier) = lower($3) OR lower(p.name) = lower($3) \
+       OR p.name ILIKE '%' || $3 || '%') \
+     ORDER BY p.name LIMIT 10";
+
+/// Pick one project: identifier exact, then name exact, then a unique name
+/// substring. Anything else is a model-visible error; never guess.
+pub fn pick_project(
+    rows: &[ProjectRow],
+    reference: &str,
+) -> Result<ProjectRow, ToolExecutionError> {
+    let needle = reference.trim().to_ascii_lowercase();
+    if needle.is_empty() || rows.is_empty() {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "project '{reference}' was not found or is not accessible"
+        )));
+    }
+    if let Some(exact) = rows
+        .iter()
+        .find(|row| row.identifier.to_ascii_lowercase() == needle)
+    {
+        return Ok(exact.clone());
+    }
+    let exact_names: Vec<&ProjectRow> = rows
+        .iter()
+        .filter(|row| row.name.to_ascii_lowercase() == needle)
+        .collect();
+    if exact_names.len() == 1 {
+        return Ok(exact_names[0].clone());
+    }
+    if exact_names.len() > 1 {
+        return Err(ambiguous_project_error(rows, reference));
+    }
+    let matching: Vec<&ProjectRow> = rows
+        .iter()
+        .filter(|row| {
+            row.identifier.to_ascii_lowercase().contains(&needle)
+                || row.name.to_ascii_lowercase().contains(&needle)
+        })
+        .collect();
+    if matching.len() == 1 {
+        return Ok(matching[0].clone());
+    }
+    if matching.is_empty() {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "project '{reference}' was not found or is not accessible"
+        )));
+    }
+    Err(ambiguous_project_error(rows, reference))
+}
+
+fn ambiguous_project_error(rows: &[ProjectRow], reference: &str) -> ToolExecutionError {
+    let identifiers = rows
+        .iter()
+        .map(|row| row.identifier.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
+    ToolExecutionError::invalid_args(format!(
+        "project '{reference}' is ambiguous; use one identifier: {identifiers}"
+    ))
+}
+
+pub async fn resolve_project(
+    pool: &PgPool,
+    workspace_id: Uuid,
+    user_id: Uuid,
+    reference: &str,
+) -> Result<ProjectRow, ToolExecutionError> {
+    let rows: Vec<ProjectRow> = sqlx::query_as(RESOLVE_PROJECTS_SQL)
+        .bind(workspace_id)
+        .bind(user_id)
+        .bind(reference.trim())
+        .fetch_all(pool)
+        .await
+        .map_err(db_error)?;
+    pick_project(&rows, reference)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct ResolvedWorkItem {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub identifier: String,
+}
+
+pub const RESOLVE_WORK_ITEM_SQL: &str = "SELECT i.id, i.project_id, \
+     p.identifier || '-' || i.sequence_id AS identifier \
+     FROM issues i \
+     JOIN projects p ON p.id = i.project_id AND p.workspace_id = $1 AND p.deleted_at IS NULL \
+     WHERE i.workspace_id = $1 AND i.deleted_at IS NULL AND i.is_draft = false \
+     AND p.identifier ILIKE $2 AND i.sequence_id = $3 \
+     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.member_id = $4 \
+       AND pm.is_active = true AND pm.deleted_at IS NULL) \
+     LIMIT 1";
+
+pub async fn resolve_work_item(
+    pool: &PgPool,
+    workspace_id: Uuid,
+    user_id: Uuid,
+    reference: &str,
+) -> Result<ResolvedWorkItem, ToolExecutionError> {
+    let parsed = parse_work_item_ref(reference)?;
+    let row: Option<ResolvedWorkItem> = sqlx::query_as(RESOLVE_WORK_ITEM_SQL)
+        .bind(workspace_id)
+        .bind(&parsed.project)
+        .bind(parsed.sequence_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(db_error)?;
+    row.ok_or_else(|| {
+        ToolExecutionError::invalid_args(format!(
+            "work item '{reference}' was not found or is not accessible"
+        ))
+    })
+}
+
 /// Build the production tool server: three read-only tools plus the
 /// `create_schedule` and `create_work_item` proposal tools, all scoped to one
 /// workspace and sharing the caller's trace handle.
@@ -645,5 +807,42 @@ mod tests {
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle_with_create_work_item() {
         let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
+    }
+
+    #[test]
+    fn parse_work_item_ref_rules() {
+        assert_eq!(
+            parse_work_item_ref("LTS-42").unwrap(),
+            WorkItemRef {
+                project: "LTS".to_string(),
+                sequence_id: 42
+            }
+        );
+        assert_eq!(parse_work_item_ref(" lts-7 ").unwrap().project, "lts");
+        for bad in ["LTS", "LTS-0", "LTS--1", "LTS-abc", "-5"] {
+            assert!(parse_work_item_ref(bad).is_err(), "{bad} should be rejected");
+        }
+    }
+
+    #[test]
+    fn pick_project_prefers_identifier_then_exact_name_then_unique_substring() {
+        let rows = vec![
+            ProjectRow { id: Uuid::from_u128(1), identifier: "LTS".into(), name: "Logistics".into() },
+            ProjectRow { id: Uuid::from_u128(2), identifier: "OPS".into(), name: "Operations".into() },
+        ];
+        assert_eq!(pick_project(&rows, "lts").unwrap().id, Uuid::from_u128(1));
+        assert_eq!(pick_project(&rows, "logistics").unwrap().id, Uuid::from_u128(1));
+        assert_eq!(pick_project(&rows, "oper").unwrap().id, Uuid::from_u128(2));
+        assert!(pick_project(&rows, "o").is_err());
+        assert!(pick_project(&[], "lts").is_err());
+    }
+
+    #[test]
+    fn resolver_sql_is_workspace_scoped_and_requires_membership() {
+        for sql in [RESOLVE_PROJECTS_SQL, RESOLVE_WORK_ITEM_SQL] {
+            assert!(sql.contains("workspace_id = $1"));
+            assert!(sql.contains("project_members"));
+            assert!(sql.contains("is_active = true"));
+        }
     }
 }
