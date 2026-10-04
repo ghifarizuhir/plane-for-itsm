@@ -3,6 +3,7 @@
 //! modules and are re-exported here so `crate::tools::<Item>` keeps working.
 
 pub mod intake;
+pub mod kb;
 pub mod lookups;
 pub mod projects;
 pub mod proposals;
@@ -12,6 +13,7 @@ pub mod tracks;
 pub mod work_items;
 
 pub use intake::*;
+pub use kb::*;
 pub use lookups::*;
 pub use projects::*;
 pub use proposals::*;
