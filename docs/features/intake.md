@@ -107,11 +107,21 @@ tidak dikembalikan (`data: null`). Tidak ada counterpart Django.
 - **Question service Jev**: Choice atas services project (maks 20, exclude `retired`/deleted), plus opsi abstain `"No service / unsure"` → sentinel `__none__` (hanya bisa Dismiss, apply → 400).
 - Link lama tidak dihapus saat ganti type/apply lain; gate hanya membaca link live.
 
+### Channel webhook — Alertmanager → Incident (2026-10-04)
+
+- **Endpoint publik** `POST /api/inbound/alertmanager/:token/` (tanpa auth user; token per source; origin check dikecualikan untuk prefix `/api/inbound/`). Token salah → 404, source nonaktif → 403.
+- **Source** (`intake_sources`, per project, kelola di settings → Intake sources): nama, token `plane_is_*` (rotate/revoke), toggle `auto_accept`, `type_id` tetap (default Incident), `config` mapping label → service (`service_map` + `fallback_service_id`) dan severity → priority (`severity_map` + `default_priority`).
+- **Klasifikasi deterministik** (tanpa Jev): service dari label `service`, priority dari label `severity`; title dari `annotations.summary`; deskripsi dari `annotations.description` + `generatorURL` (di-escape). Item dibuat pending (`status -2`) dengan `source = 'WEBHOOK'` + link `service_issues` bila terpetakan.
+- **Dedup fingerprint**: firing berulang update item yang sama (`intake_occurrence_count`, `intake_last_seen_at`); declined → pending lagi; accepted yang sudah completed → reopen; resolved saat pending → decline otomatis (snoozed dibiarkan); resolved pada issue accepted → state `completed` + comment INTERNAL; refire membuka lagi.
+- **Auto-accept** (default off): hanya bila klasifikasi lengkap lolos gate; service tak terpetakan → tetap pending + WARN. Error internal → 500 agar Alertmanager retry; idempotensi dijamin upsert fingerprint.
+- **Detail intake** memuat `intake_source {id, name, occurrence_count, last_seen_at}`; badge `via <nama>` di header detail.
+
 ---
 
 ## Changelog
 
 | Date       | Change                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------- |
+| 2026-10-04 | webhook Alertmanager → Incident (intake source + dedup + auto-accept)                       |
 | 2026-10-04 | gate accept (type wajib + service kondisional) + saran service Jev + apply category/service |
 | 2026-09-03 | init — snapshot actual dari `core.ts`, `inbox/` components, store + `intake.py`             |
