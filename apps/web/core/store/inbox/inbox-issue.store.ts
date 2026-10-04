@@ -35,6 +35,8 @@ export interface IInboxIssueStore {
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined;
   triageSuggestion: TInboxIssueTriageSuggestion | null;
   triageSuggestionFetched: boolean;
+  workspaceSlug: string;
+  projectId: string;
   // actions
   updateInboxIssueStatus: (status: TInboxIssueStatus) => Promise<void>; // accept, decline
   updateInboxIssueDuplicateTo: (issueId: string) => Promise<void>; // connecting the inbox issue to the project existing issue
@@ -259,6 +261,9 @@ export class InboxIssueStore implements IInboxIssueStore {
       set(this, "triageSuggestion", suggestion);
       if (suggestion?.severity && suggestion.applied_fields.includes("severity")) {
         set(this.issue, "priority", suggestion.severity.priority);
+      }
+      if (suggestion?.category && suggestion.category.type_id && suggestion.applied_fields.includes("category")) {
+        set(this.issue, "type_id", suggestion.category.type_id);
       }
     });
   };

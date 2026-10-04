@@ -10,6 +10,9 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TInboxIssueTriageField } from "@plane/types";
+// hooks
+import { useService } from "@/hooks/store/use-service";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 // stores
 import type { IInboxIssueStore } from "@/store/inbox/inbox-issue.store";
 
@@ -23,6 +26,8 @@ export const InboxIssueTriageSuggestion = observer(function InboxIssueTriageSugg
   const { inboxIssue } = props;
   // store hooks
   const { t } = useTranslation();
+  const { fetchServices } = useService();
+  const { currentWorkspace, getWorkspaceBySlug } = useWorkspace();
   const suggestion = inboxIssue.triageSuggestion;
 
   useEffect(() => {
@@ -31,8 +36,13 @@ export const InboxIssueTriageSuggestion = observer(function InboxIssueTriageSugg
 
   const runAction = async (action: "apply" | "dismiss", fields: TInboxIssueTriageField[]) => {
     try {
-      if (action === "apply") await inboxIssue.applyTriageSuggestion(fields);
-      else await inboxIssue.dismissTriageSuggestion(fields);
+      if (action === "apply") {
+        await inboxIssue.applyTriageSuggestion(fields);
+        if (fields.includes("service")) {
+          const workspaceId = getWorkspaceBySlug(inboxIssue.workspaceSlug)?.id ?? currentWorkspace?.id;
+          if (workspaceId) void fetchServices(inboxIssue.workspaceSlug, workspaceId, inboxIssue.projectId);
+        }
+      } else await inboxIssue.dismissTriageSuggestion(fields);
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
@@ -77,14 +87,69 @@ export const InboxIssueTriageSuggestion = observer(function InboxIssueTriageSugg
             </div>
             {dismissed.includes("category") ? (
               <span className="text-11 text-tertiary">{t("inbox_issue.triage.dismissed")}</span>
+            ) : applied.includes("category") ? (
+              <span className="text-11 text-tertiary">{t("inbox_issue.triage.applied")}</span>
             ) : (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-11 text-accent-primary hover:underline"
+                  onClick={() => void runAction("apply", ["category"])}
+                >
+                  {t("inbox_issue.triage.apply")}
+                </button>
+                <button
+                  type="button"
+                  className="text-11 text-tertiary hover:text-primary"
+                  onClick={() => void runAction("dismiss", ["category"])}
+                >
+                  {t("inbox_issue.triage.dismiss")}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {suggestion.service && (
+          <div className="flex items-center justify-between gap-2 py-2">
+            <div className="flex flex-col">
+              <span className="text-13 text-tertiary">{t("inbox_issue.triage.service")}</span>
+              <span className="text-13 text-primary">
+                {suggestion.service.label === "__none__"
+                  ? t("inbox_issue.triage.no_service")
+                  : suggestion.service.label}{" "}
+                <span className="text-tertiary">({percent(suggestion.service.confidence)})</span>
+              </span>
+            </div>
+            {applied.includes("service") ? (
+              <span className="text-11 text-tertiary">{t("inbox_issue.triage.applied")}</span>
+            ) : dismissed.includes("service") ? (
+              <span className="text-11 text-tertiary">{t("inbox_issue.triage.dismissed")}</span>
+            ) : suggestion.service.label === "__none__" ? (
               <button
                 type="button"
                 className="text-11 text-tertiary hover:text-primary"
-                onClick={() => void runAction("dismiss", ["category"])}
+                onClick={() => void runAction("dismiss", ["service"])}
               >
                 {t("inbox_issue.triage.dismiss")}
               </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-11 text-accent-primary hover:underline"
+                  onClick={() => void runAction("apply", ["service"])}
+                >
+                  {t("inbox_issue.triage.apply")}
+                </button>
+                <button
+                  type="button"
+                  className="text-11 text-tertiary hover:text-primary"
+                  onClick={() => void runAction("dismiss", ["service"])}
+                >
+                  {t("inbox_issue.triage.dismiss")}
+                </button>
+              </div>
             )}
           </div>
         )}
