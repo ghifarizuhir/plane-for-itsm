@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import {
   DueDateOutline,
   DuplicateOfOutline,
+  IntakeOutline,
   LabelsOutline,
   MembersOutline,
   PriorityOutline,
@@ -23,10 +24,13 @@ import { IntakeStateDropdown } from "@/components/dropdowns/intake-state/dropdow
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { PriorityDropdown } from "@/components/dropdowns/priority";
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
+import { WorkItemTypeDropdown } from "@/components/dropdowns/work-item-type/dropdown";
+import { ServiceSelect } from "@/components/services/select/service-select";
 import type { TIssueOperations } from "@/components/issues/issue-detail";
 import { IssueLabel } from "@/components/issues/issue-detail/label";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 import { useAppRouter } from "@/hooks/use-app-router";
 
 type Props = {
@@ -59,6 +63,12 @@ export const InboxIssueContentProperties = observer(function InboxIssueContentPr
     sequenceId: duplicateIssueDetails?.sequence_id,
   });
   const DropdownComponent = isIntakeAccepted ? StateDropdown : IntakeStateDropdown;
+  // store hooks
+  const { workItemTypes } = useWorkItemType();
+  const projectTypes = (workItemTypes ?? []).filter(
+    (type) => !type.is_epic && type.is_active && type.project_ids.includes(projectId?.toString() ?? "")
+  );
+  const selectedType = projectTypes.find((type) => type.id === issue?.type_id);
 
   return (
     <div className="flex w-full flex-col divide-y-2 divide-subtle-1">
@@ -86,6 +96,46 @@ export const InboxIssueContentProperties = observer(function InboxIssueContentPr
                   dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"
                 />
               )}
+            </div>
+            {/* Type */}
+            <div className="flex h-8 items-center gap-2">
+              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-13 text-tertiary">
+                <IntakeOutline className="h-4 w-4 flex-shrink-0" />
+                <span>Type</span>
+              </div>
+              <WorkItemTypeDropdown
+                value={issue?.type_id}
+                onChange={(typeId) =>
+                  issue?.id && issueOperations.update(workspaceSlug, projectId, issue?.id, { type_id: typeId })
+                }
+                disabled={!isEditable}
+                projectId={projectId?.toString()}
+                buttonVariant="border-with-text"
+                className="w-3/5 flex-grow rounded-sm px-2 hover:bg-layer-1"
+                buttonContainerClassName="w-full text-left"
+                buttonClassName="text-13"
+              />
+            </div>
+            {/* Service */}
+            <div className="flex min-h-8 items-center gap-2">
+              <div className="flex w-2/5 flex-shrink-0 items-center gap-1 text-13 text-tertiary">
+                <div className="h-4 w-4 flex-shrink-0" />
+                <span>Service</span>
+                {selectedType?.requires_service && (
+                  <span className="rounded-sm bg-layer-2 px-1 text-10 text-tertiary">Required</span>
+                )}
+              </div>
+              <div className="h-full min-h-8 w-3/5 flex-grow pt-1">
+                {issue?.id && (
+                  <ServiceSelect
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    issueId={issue.id}
+                    issueData={issue}
+                    disabled={!isEditable}
+                  />
+                )}
+              </div>
             </div>
             {/* Assignee */}
             <div className="flex h-8 items-center gap-2">

@@ -11,6 +11,7 @@ import { usePopper } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { ChevronDownOutline, CloseOutline, SearchOutline } from "@makeplane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { TIssue } from "@plane/types";
 import { ComboDropDown } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
@@ -26,10 +27,11 @@ type TServiceSelect = {
   projectId: string;
   issueId: string;
   disabled?: boolean;
+  issueData?: Partial<TIssue>;
 };
 
 export const ServiceSelect = observer(function ServiceSelect(props: TServiceSelect) {
-  const { className = "", workspaceSlug, projectId, issueId, disabled = false } = props;
+  const { className = "", workspaceSlug, projectId, issueId, disabled = false, issueData } = props;
   const { t } = useTranslation();
   // states
   const [isOpen, setIsOpen] = useState(false);
@@ -57,7 +59,7 @@ export const ServiceSelect = observer(function ServiceSelect(props: TServiceSele
   } = useService();
   const { currentWorkspace, getWorkspaceBySlug } = useWorkspace();
   // derived values
-  const issue = getIssueById(issueId);
+  const issue = issueData ?? getIssueById(issueId);
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id ?? currentWorkspace?.id;
   const serviceIds = getProjectServiceIds(projectId);
   const issueLinks = Object.values(workItemLinkMap).filter((l) => l.issue_id === issueId && l.project_id === projectId);
