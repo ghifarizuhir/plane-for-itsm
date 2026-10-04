@@ -517,8 +517,9 @@ async fn resolved_declines_pending_and_completes_accepted() {
     .unwrap();
     assert_eq!(resolved["resolved"], 1);
     let (state_id,): (Option<Uuid>,) = sqlx::query_as(
-        "SELECT state_id FROM issues WHERE intake_fingerprint = 'fp-acc'",
+        "SELECT state_id FROM issues WHERE intake_source_id = $1 AND intake_fingerprint = 'fp-acc'",
     )
+    .bind(source_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -534,7 +535,8 @@ async fn resolved_declines_pending_and_completes_accepted() {
     .unwrap();
     assert_eq!(reopened["reopened"], 1);
     let (state_id, completed_at): (Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>) =
-        sqlx::query_as("SELECT state_id, completed_at FROM issues WHERE intake_fingerprint = 'fp-acc'")
+        sqlx::query_as("SELECT state_id, completed_at FROM issues WHERE intake_source_id = $1 AND intake_fingerprint = 'fp-acc'")
+            .bind(source_id)
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -630,4 +632,83 @@ async fn auto_accept_only_when_classification_complete() {
     .await
     .unwrap();
     assert_eq!(status, -2);
+}
+
+#[tokio::test]
+async fn batch_common_labels_and_fingerprint_fallback() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let service_id = scratch.add_service(&pool, "Payment API").await;
+    let type_id = scratch.add_type_requiring_service(&pool, "Incident").await;
+    scratch.add_default_state(&pool).await;
+    scratch.add_completed_state(&pool).await;
+    let (source_id, token) = scratch
+        .add_source_with_config(
+            &pool,
+            type_id,
+            serde_json::json!({
+                "service_map": { "payment-api": service_id },
+                "severity_map": { "critical": "urgent" },
+                "default_priority": "none"
+            }),
+        )
+        .await;
+    let st = state(&pool).await;
+
+    // Dua alert tanpa fingerprint; severity hanya di commonLabels.
+    let payload = serde_json::json!({
+        "version": "4",
+        "commonLabels": { "severity": "critical", "service": "payment-api" },
+        "alerts": [
+            { "status": "firing", "labels": { "alertname": "A" }, "annotations": { "summary": "A down" } },
+            { "status": "firing", "labels": { "alertname": "B" }, "annotations": { "summary": "B down" } }
+        ]
+    });
+    let (status, Json(body)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(payload.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(body["created"], 2);
+
+    // Kirim ulang payload yang sama: idempoten (update, bukan duplikat).
+    let (_, Json(second)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(payload.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(second["created"], 0);
+    assert_eq!(second["updated"], 2);
+    let (total,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issues WHERE intake_source_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(total, 2);
+    let (urgent_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM issues WHERE intake_source_id = $1 AND priority = 'urgent' AND deleted_at IS NULL",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(urgent_count, 2);
+
+    // Body invalid → 400.
+    let (bad, _) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(serde_json::json!({ "alerts": "nope" })),
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad, StatusCode::BAD_REQUEST);
 }
