@@ -842,7 +842,7 @@ Ganti isi `apply_triage_suggestion` setelah validasi dismissed dengan:
                 )
                 .bind(service_id)
                 .bind(auth.0)
-                .bind(row.id)
+                .bind(scope.row_id)
                 .execute(&mut *tx)
                 .await?;
                 applied.push("service".to_string());
@@ -1915,5 +1915,6 @@ git commit -m "docs(intake): document type gate and service binding"
 ## Catatan Eksekusi
 
 - Suite scratch Rust (`intake_triage_test`) memakai prefix unik per test dan `purge` per workspace; selalu jalankan `-- --test-threads=1` (AGENTS.md).
+- **Stop `worker` + `beat-worker` sebelum integration test DB** (`docker stop plane-for-itsm-worker-1 plane-for-itsm-beat-worker-1`, start lagi setelahnya): sweep beat live bisa mengklasifikasi item scratch dan membuat INSERT test tabrakan unique constraint. Restart setelah selesai.
 - Migrasi sqlx 0014 idempotent (`IF NOT EXISTS`), aman bila Django 0128 sudah jalan lebih dulu.
 - Jangan mengubah endpoint intake existing selain gate accept + field baru; parity FE (`intake_triage_routes_test`) memverifikasi URL triage tetap 3.

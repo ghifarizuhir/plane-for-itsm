@@ -17,7 +17,7 @@ Pintu masuk kerja baru: work items yang masuk (dari form, integrasi, atau anggot
 - Actions: `inbox/modals/decline-issue-modal.tsx` (reject), `snooze-issue-modal.tsx` (snooze), `select-duplicate.tsx` (duplicate), `inbox-issue-status.tsx`; accept via `updateInboxIssueStatus(ACCEPTED)` → pindah ke default state project (`app/serializers/intake.py:51-69`).
 - Working: tab open/closed, accept/decline/snooze/duplicate, properties, description versions.
 - Stub: `intake.service.ts:10-14` (`IntakeService` kosong — CRUD via base); `IntakeIssueService.list()` masih hit `/inbox-issues/` (`packages/services/src/intake/issue.service.ts:15-23`).
-- Missing (ITSM fork): tidak ada — tidak ada triage request/incident di kode; ide diparkir di [`_backlog.md`](./_backlog.md).
+- Missing (ITSM fork, sebelum 2026-10-04): tidak ada triage request/incident di kode; ide diparkir di [`_backlog.md`](./_backlog.md). Sejak 2026-10-04 intake menjadi front-door ITSM: klasifikasi type + `requires_service` per tipe + gate accept (lihat §Gate accept & service binding).
 
 ### Bukan draft, bukan state Issue biasa
 
@@ -98,8 +98,20 @@ tidak dikembalikan (`data: null`). Tidak ada counterpart Django.
 
 ---
 
+### Gate accept & service binding (2026-10-04)
+
+- Flag `issue_types.requires_service` per tipe work item (toggle di settings Work item types; seed/backfill: Incident, Request/Service Request). Epic tidak boleh `requires_service`.
+- **Accept gate** (`routes/intake.rs`): type wajib bila project punya tipe live non-epic; service link wajib bila tipe terpilih `requires_service`. Validasi di server; tombol Accept di FE disabled + hint.
+- **Set type manual** lewat `PATCH intake-issues` (`{"issue": {"type_id": ...}}`) — ditulis langsung tanpa state resolution, state triage dipertahankan sampai accept.
+- **Apply saran**: `apply` menerima `category`, `service`, `severity` — category menulis `type_id` langsung, service menulis link `service_issues`; response suggestion memuat objek `service {id, label, confidence, probabilities}`.
+- **Question service Jev**: Choice atas services project (maks 20, exclude `retired`/deleted), plus opsi abstain `"No service / unsure"` → sentinel `__none__` (hanya bisa Dismiss, apply → 400).
+- Link lama tidak dihapus saat ganti type/apply lain; gate hanya membaca link live.
+
+---
+
 ## Changelog
 
-| Date       | Change                                                                          |
-| ---------- | ------------------------------------------------------------------------------- |
-| 2026-09-03 | init — snapshot actual dari `core.ts`, `inbox/` components, store + `intake.py` |
+| Date       | Change                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| 2026-10-04 | gate accept (type wajib + service kondisional) + saran service Jev + apply category/service |
+| 2026-09-03 | init — snapshot actual dari `core.ts`, `inbox/` components, store + `intake.py`             |
