@@ -188,7 +188,7 @@ pub async fn workspace_ai_agent(
         };
     drop(conn);
     let trace = new_trace();
-    let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, trace.clone());
+    let tool_server = tools::workspace_tools(st.pool.clone(), workspace_id, auth.0, trace.clone());
     let agent_result = tokio::time::timeout(
         AGENT_TIMEOUT,
         run_agent(

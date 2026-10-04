@@ -78,8 +78,11 @@ pub fn schema_of<T: JsonSchema>() -> Value {
 pub fn workspace_tools(
     pool: PgPool,
     workspace_id: Uuid,
+    user_id: Uuid,
     trace: ToolTrace,
 ) -> rig::tool::server::ToolServerHandle {
+    // user_id belum dibaca tool mana pun di Task 2; tool baru memakainya mulai Task 4.
+    let _ = user_id;
     rig::tool::server::ToolServer::new()
         .tool(ListProjects {
             pool: pool.clone(),
@@ -111,9 +114,11 @@ pub fn workspace_tools(
 pub fn read_tools(
     pool: PgPool,
     workspace_id: Uuid,
+    user_id: Uuid,
     trace: ToolTrace,
     allowed: &[&str],
 ) -> rig::tool::server::ToolServerHandle {
+    let _ = user_id;
     let mut server = rig::tool::server::ToolServer::new();
     if allowed.contains(&ListProjects::NAME) {
         server = server.tool(ListProjects {
@@ -288,7 +293,7 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle() {
-        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), crate::agent::new_trace());
+        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
     }
 
     #[tokio::test]
@@ -477,6 +482,7 @@ mod tests {
         let _handle = read_tools(
             lazy_pool(),
             Uuid::nil(),
+            Uuid::nil(),
             crate::agent::new_trace(),
             &["list_projects"],
         );
@@ -638,6 +644,6 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle_with_create_work_item() {
-        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), crate::agent::new_trace());
+        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
     }
 }
