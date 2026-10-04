@@ -541,3 +541,93 @@ async fn resolved_declines_pending_and_completes_accepted() {
     assert_eq!(state_id, Some(default_state));
     assert!(completed_at.is_none());
 }
+
+#[tokio::test]
+async fn auto_accept_only_when_classification_complete() {
+    let pool = pool().await;
+    // Bersihkan sisa run sebelumnya agar fetch tanpa scope tidak salah baca.
+    sqlx::query(
+        "UPDATE intake_issues SET deleted_at = now() WHERE issue_id IN \
+         (SELECT id FROM issues WHERE intake_fingerprint IN ('fp-auto', 'fp-nosvc'))",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE issues SET deleted_at = now() WHERE intake_fingerprint IN ('fp-auto', 'fp-nosvc')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let service_id = scratch.add_service(&pool, "Payment API").await;
+    let type_id = scratch.add_type_requiring_service(&pool, "Incident").await;
+    scratch.add_default_state(&pool).await;
+    let (_, token) = scratch
+        .add_source_with_config(
+            &pool,
+            type_id,
+            serde_json::json!({ "service_map": { "payment-api": service_id } }),
+        )
+        .await;
+    // Nyalakan auto_accept.
+    sqlx::query("UPDATE intake_sources SET auto_accept = true WHERE token = $1")
+        .bind(&token)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let source_id: Uuid = sqlx::query_scalar("SELECT id FROM intake_sources WHERE token = $1")
+        .bind(&token)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let st = state(&pool).await;
+
+    let (_, Json(body)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-auto", "firing", "critical")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(body["accepted"], 1);
+    let (status, state_group): (i32, Option<String>) = sqlx::query_as(
+        "SELECT ii.status, st.\"group\" FROM issues i \
+         JOIN intake_issues ii ON ii.issue_id = i.id \
+         LEFT JOIN states st ON st.id = i.state_id \
+         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = 'fp-auto'",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, 1);
+    assert_ne!(state_group.as_deref(), Some("triage"));
+
+    // Source tanpa mapping service → tetap pending (Incident requires_service).
+    let (_, token_no_service) = scratch
+        .add_source_with_config(&pool, type_id, serde_json::json!({}))
+        .await;
+    sqlx::query("UPDATE intake_sources SET auto_accept = true WHERE token = $1")
+        .bind(&token_no_service)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, Json(body)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token_no_service.clone()),
+        Json(alert_payload("fp-nosvc", "firing", "critical")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(body["accepted"], 0);
+    assert_eq!(body["created"], 1);
+    let (status,): (i32,) = sqlx::query_as(
+        "SELECT ii.status FROM issues i JOIN intake_issues ii ON ii.issue_id = i.id \
+         WHERE i.intake_fingerprint = 'fp-nosvc' AND i.deleted_at IS NULL \
+         ORDER BY i.created_at DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, -2);
+}

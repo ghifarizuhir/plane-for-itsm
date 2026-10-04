@@ -1403,6 +1403,52 @@ async fn accept_gate(
     Ok(None)
 }
 
+/// Accept intake issue dari jalur non-HTTP (webhook auto-accept): gate,
+/// status → 1, lalu pindah issue keluar dari triage. Return
+/// `Ok(Err(pesan))` bila gate menolak (item tetap pending), `Err` hanya
+/// untuk kegagalan DB. SQL sengaja dicerminkan dari `patch_issue` agar
+/// PATCH manual dan ingest tidak divergen.
+pub(crate) async fn accept_intake_issue(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    row_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+    actor: Option<uuid::Uuid>,
+) -> Result<Result<(), &'static str>, sqlx::Error> {
+    if let Some(message) = accept_gate(pool, project_id, issue_id).await? {
+        return Ok(Err(message));
+    }
+    let Some(target_state) = resolve_issue_state(pool, project_id, None).await? else {
+        return Ok(Err(
+            "Cannot accept intake issue: No default state found for the project",
+        ));
+    };
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "UPDATE intake_issues SET status = 1, updated_at = now(), updated_by_id = $2 \
+         WHERE id = $1 AND deleted_at IS NULL AND status = -2",
+    )
+    .bind(row_id)
+    .bind(actor)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE issues i SET state_id = $2, \
+           completed_at = CASE WHEN (SELECT \"group\" FROM states WHERE id = $2) = 'completed' \
+                               THEN now() ELSE NULL END, \
+           updated_at = now(), updated_by_id = $3 \
+         WHERE i.id = $1 AND i.state_id IN \
+           (SELECT id FROM states WHERE project_id = i.project_id AND \"group\" = 'triage' AND deleted_at IS NULL)",
+    )
+    .bind(issue_id)
+    .bind(target_state)
+    .bind(actor)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Ok(()))
+}
+
 /// PATCH `/api/workspaces/:slug/projects/:project_id/inbox-issues/:pk/`
 /// (and the `intake-issues/:pk/` twin) — parity with Django
 /// `IntakeIssueViewSet.partial_update`

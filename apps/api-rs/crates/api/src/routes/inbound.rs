@@ -9,7 +9,10 @@ use axum::{
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::{routes::intake::PRIORITIES, state::AppState};
+use crate::{
+    routes::intake::{accept_intake_issue, PRIORITIES},
+    state::AppState,
+};
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Source {
@@ -113,29 +116,81 @@ pub async fn alertmanager(
             .get("status")
             .and_then(Value::as_str)
             .unwrap_or("firing");
-        if status == "resolved" {
-            let fingerprint = fingerprint_of(alert);
-            let outcome = match find_series(&st.pool, source.id, &fingerprint).await? {
-                Some(series) => {
-                    let actor = source.created_by_id.unwrap_or(series.issue_id);
-                    resolve_series(&st, &source, &series, actor).await?
-                }
-                None => Outcome::Ignored,
-            };
-            counts.bump(outcome);
-            continue;
-        }
+        let resolved = status == "resolved";
         let fingerprint = fingerprint_of(alert);
-        let outcome = match find_series(&st.pool, source.id, &fingerprint).await? {
-            Some(series) => {
-                let actor = source.created_by_id.unwrap_or(series.issue_id);
-                fire_series(&st, &source, &series, actor).await?
+        let existing = find_series(&st.pool, source.id, &fingerprint).await?;
+        let Some(actor) = source.created_by_id else {
+            return Err(common::errors::AppError(anyhow::anyhow!(
+                "intake source without created_by_id"
+            )));
+        };
+
+        let outcome = if resolved {
+            match &existing {
+                Some(series) => resolve_series(&st, &source, series, actor).await?,
+                None => Outcome::Ignored,
             }
-            None => {
-                create_series(&st, &source, alert, &common_labels, &common_annotations).await?
+        } else {
+            match &existing {
+                Some(series) => fire_series(&st, &source, series, actor).await?,
+                None => {
+                    create_series(&st, &source, alert, &common_labels, &common_annotations).await?
+                }
             }
         };
-        counts.bump(outcome);
+
+        // Auto-accept: hanya untuk firing yang berakhir pending.
+        let mut counted = false;
+        if !resolved
+            && source.auto_accept
+            && matches!(
+                outcome,
+                Outcome::Created | Outcome::Updated | Outcome::Reopened
+            )
+        {
+            let pending = match &existing {
+                Some(series) => series.status == -1 || series.status == -2,
+                None => true,
+            };
+            if pending {
+                let (row_id, issue_id) = match &existing {
+                    Some(series) => (series.row_id, series.issue_id),
+                    None => sqlx::query_as::<_, (Uuid, Uuid)>(
+                        "SELECT ii.id, ii.issue_id FROM issues i \
+                         JOIN intake_issues ii ON ii.issue_id = i.id \
+                         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = $2 \
+                         AND i.deleted_at IS NULL",
+                    )
+                    .bind(source.id)
+                    .bind(&fingerprint)
+                    .fetch_one(&st.pool)
+                    .await?,
+                };
+                match accept_intake_issue(
+                    &st.pool,
+                    source.project_id,
+                    row_id,
+                    issue_id,
+                    Some(actor),
+                )
+                .await?
+                {
+                    Ok(()) => {
+                        counts.bump_accepted();
+                        counted = true;
+                    }
+                    Err(message) => tracing::warn!(
+                        source_id = %source.id,
+                        fingerprint = %fingerprint,
+                        message,
+                        "auto-accept skipped"
+                    ),
+                }
+            }
+        }
+        if !counted {
+            counts.bump(outcome);
+        }
     }
 
     Ok((
