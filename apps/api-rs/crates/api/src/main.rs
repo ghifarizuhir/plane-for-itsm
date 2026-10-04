@@ -51,6 +51,10 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(routes::health::health))
         .route(
+            "/api/inbound/alertmanager/:token/",
+            post(routes::inbound::alertmanager),
+        )
+        .route(
             "/api/workspaces/",
             get(routes::workspace::list).post(routes::workspace::create),
         )

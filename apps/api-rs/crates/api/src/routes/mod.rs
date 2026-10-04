@@ -16,6 +16,7 @@ pub mod health;
 pub mod history;
 pub mod instance;
 pub mod instance_admin;
+pub mod inbound;
 pub mod intake;
 pub mod intake_source;
 pub mod invite;

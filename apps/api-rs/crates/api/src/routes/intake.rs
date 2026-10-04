@@ -41,7 +41,7 @@ pub struct CreateIntakeIssue {
     pub issue: IntakeIssuePayload,
 }
 
-const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
+pub(crate) const PRIORITIES: [&str; 5] = ["low", "medium", "high", "urgent", "none"];
 
 pub fn validate_create(body: &CreateIntake) -> Result<(), String> {
     if body.name.trim().is_empty() {
