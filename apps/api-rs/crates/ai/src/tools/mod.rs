@@ -281,6 +281,30 @@ pub fn workspace_tools(
             user_id,
             trace: trace.clone(),
         })
+        .tool(ListMembers {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListStates {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListLabels {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListWorkItemTypes {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
         .tool(CreateSchedule {
             trace: trace.clone(),
         })
@@ -342,6 +366,38 @@ pub fn read_tools(
     }
     if allowed.contains(&ListWorkItemRelations::NAME) {
         server = server.tool(ListWorkItemRelations {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListMembers::NAME) {
+        server = server.tool(ListMembers {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListStates::NAME) {
+        server = server.tool(ListStates {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListLabels::NAME) {
+        server = server.tool(ListLabels {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListWorkItemTypes::NAME) {
+        server = server.tool(ListWorkItemTypes {
             pool,
             workspace_id,
             user_id,
@@ -915,6 +971,44 @@ mod tests {
         };
         assert_eq!(ListWorkItemRelations::NAME, "list_work_item_relations");
         assert!(!relations.description().is_empty());
+    }
+
+    #[tokio::test]
+    async fn lookup_tools_expose_metadata() {
+        let pool = lazy_pool();
+        let trace = crate::agent::new_trace();
+        let members = ListMembers {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListMembers::NAME, "list_members");
+        assert!(members.parameters()["properties"]["project"].is_object());
+        let states = ListStates {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListStates::NAME, "list_states");
+        assert!(states.parameters()["properties"]["project"].is_object());
+        let labels = ListLabels {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListLabels::NAME, "list_labels");
+        assert!(!labels.description().is_empty());
+        let types = ListWorkItemTypes {
+            pool,
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace,
+        };
+        assert_eq!(ListWorkItemTypes::NAME, "list_work_item_types");
+        assert!(!types.description().is_empty());
     }
 
     #[test]
