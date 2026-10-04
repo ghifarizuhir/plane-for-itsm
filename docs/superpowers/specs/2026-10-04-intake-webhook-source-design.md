@@ -94,8 +94,9 @@ Satu seri `(source, fingerprint)` = satu issue selamanya; upsert aman dari race 
 
 **1.3 Status triage & atribusi** — tidak ada kolom baru:
 
-- `intake_issues.source = 'WEBHOOK'`, `intake_issues.external_source = <nama source>` (CharField bebas, sudah ada).
-- Status: pending `-2`, declined `-1`, snoozed `0`, accepted `1` (nilai v1).
+- `intake_issues.source = 'WEBHOOK'` (CharField bebas, sudah ada; `external_source` tidak dipakai).
+- Atribusi nama source dibaca dari join `issues.intake_source_id` → `intake_sources.name`; respons detail issue intake menyertakan `{id, name, occurrence_count, last_seen_at}`.
+- Status: pending `-2`, declined `-1`, snoozed `0`, accepted `1`, duplicate `2` (nilai v1).
 - FE: tambah `WEBHOOK = "WEBHOOK"` ke `EInboxIssueSource` (`packages/types/src/inbox.ts`).
 
 ### 2. Endpoint ingest (publik)
@@ -120,7 +121,7 @@ Satu seri `(source, fingerprint)` = satu issue selamanya; upsert aman dari race 
 - Service: `service_map[labels[service_label_key]]` → `fallback_service_id` → null.
 - Priority: `severity_map[labels[severity_label_key]]` → `default_priority` (`urgent|high|medium|low|none`).
 - Title: `annotations.summary` → `labels.alertname` → `"Alert"`. Deskripsi: `annotations.description` + baris `generatorURL`.
-- Type: `source.type_id` (default Incident; bila type null → fallback `resolve_issue_state` tetap jalan, gate accept akan memblokir bila project punya type).
+- Type: `source.type_id` (default Incident). Bila type sudah tidak live (dihapus setelah source dibuat) → type null; item tetap dibuat, gate accept memblokir hingga triager memilih type.
 
 **2.4 Dedup & resolve** — cari issue by `(intake_source_id, intake_fingerprint)`:
 
@@ -130,9 +131,12 @@ Satu seri `(source, fingerprint)` = satu issue selamanya; upsert aman dari race 
 | pending (`-2`)                                | `occurrence_count+1`, `last_seen=now`                                                        | auto-decline (`-1`)                                                      |
 | snoozed (`0`)                                 | update metadata saja                                                                         | biarkan (tidak menyentuh aksi triager)                                   |
 | declined (`-1`)                               | update metadata + kembali pending (`-2`)                                                     | no-op                                                                    |
+| duplicate (`2`)                               | update metadata saja                                                                         | no-op                                                                    |
 | accepted (`1`), state issue open              | update metadata                                                                              | set state `completed` pertama project + `completed_at`, comment INTERNAL |
 | accepted (`1`), state `completed`/`cancelled` | update metadata + reopen ke state default project (`resolve_issue_state`) + comment INTERNAL | no-op                                                                    |
 
+- Pencarian series memfilter `issues.deleted_at IS NULL`; issue yang dihapus manual → event berikutnya membuat item baru.
+- Hitungan di respons saling eksklusif per alert (satu alert masuk tepat satu kategori).
 - Project tanpa state `completed` → resolve di-skip + WARN (item dibiarkan open), bukan error.
 - Service link: saat create, mapping yang ada langsung di-insert ke `service_issues` (bukan suggestion). Mapping kosong → biarkan null, triager isi manual.
 
@@ -153,7 +157,7 @@ Satu seri `(source, fingerprint)` = satu issue selamanya; upsert aman dari race 
 
 - Jev **tidak** di-queue untuk item webhook (mapping deterministik; hemat AI & hindari saran yang melawan mapping).
 - Intake default project dipakai; bila hilang, buat ulang dengan SQL yang sama seperti create project (`project.rs:1053`), bukan 404.
-- Semua `created_by`/`updated_by` system = null (tidak ada user pelaku).
+- `created_by_id`/`updated_by_id` item = user pembuat source (`intake_sources.created_by_id`); helper `insert_issue` yang ada mewajibkan user, dan atribusi asli tetap terlihat dari badge source.
 
 ### 3. CRUD source (auth)
 
