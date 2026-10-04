@@ -114,8 +114,15 @@ pub async fn alertmanager(
             .and_then(Value::as_str)
             .unwrap_or("firing");
         if status == "resolved" {
-            // Task 6 mengisi resolve; sementara dihitung ignored.
-            counts.bump(Outcome::Ignored);
+            let fingerprint = fingerprint_of(alert);
+            let outcome = match find_series(&st.pool, source.id, &fingerprint).await? {
+                Some(series) => {
+                    let actor = source.created_by_id.unwrap_or(series.issue_id);
+                    resolve_series(&st, &source, &series, actor).await?
+                }
+                None => Outcome::Ignored,
+            };
+            counts.bump(outcome);
             continue;
         }
         let fingerprint = fingerprint_of(alert);
@@ -332,6 +339,72 @@ async fn system_comment(
     .execute(&st.pool)
     .await?;
     Ok(())
+}
+
+async fn first_completed_state(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND deleted_at IS NULL \
+         AND \"group\" = 'completed' ORDER BY sequence ASC, created_at ASC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+}
+
+async fn resolve_series(
+    st: &AppState,
+    source: &Source,
+    series: &Series,
+    actor: Uuid,
+) -> Result<Outcome, common::errors::AppError> {
+    match series.status {
+        -2 => {
+            sqlx::query(
+                "UPDATE intake_issues SET status = -1, updated_at = now() \
+                 WHERE id = $1 AND deleted_at IS NULL",
+            )
+            .bind(series.row_id)
+            .execute(&st.pool)
+            .await?;
+            Ok(Outcome::Declined)
+        }
+        1 => {
+            if matches!(
+                series.state_group.as_deref(),
+                Some("completed") | Some("cancelled")
+            ) {
+                return Ok(Outcome::Ignored);
+            }
+            let Some(target) = first_completed_state(&st.pool, source.project_id).await? else {
+                tracing::warn!(
+                    issue_id = %series.issue_id,
+                    "alert resolved but project has no completed state"
+                );
+                return Ok(Outcome::Ignored);
+            };
+            sqlx::query(
+                "UPDATE issues SET state_id = $2, completed_at = now(), updated_at = now() WHERE id = $1",
+            )
+            .bind(series.issue_id)
+            .bind(target)
+            .execute(&st.pool)
+            .await?;
+            system_comment(
+                st,
+                series.issue_id,
+                source.project_id,
+                actor,
+                "<p>Auto-resolved by Alertmanager</p>",
+            )
+            .await?;
+            Ok(Outcome::Resolved)
+        }
+        // snoozed (0), declined (-1), duplicate (2)
+        _ => Ok(Outcome::Ignored),
+    }
 }
 
 async fn fire_series(

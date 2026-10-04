@@ -424,3 +424,120 @@ async fn firing_upserts_series_and_reopens_declined() {
     .unwrap();
     assert_eq!(status_again, -2);
 }
+
+#[tokio::test]
+async fn resolved_declines_pending_and_completes_accepted() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let service_id = scratch.add_service(&pool, "Payment API").await;
+    let type_id = scratch.add_type_requiring_service(&pool, "Incident").await;
+    scratch.add_default_state(&pool).await;
+    scratch.add_completed_state(&pool).await;
+    let (source_id, token) = scratch
+        .add_source_with_config(
+            &pool,
+            type_id,
+            serde_json::json!({ "service_map": { "payment-api": service_id } }),
+        )
+        .await;
+    let st = state(&pool).await;
+
+    // Pending → resolved = declined.
+    let _ = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-res", "firing", "warning")),
+    )
+    .await
+    .unwrap();
+    let (_, Json(body)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-res", "resolved", "warning")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(body["declined"], 1);
+    let (declined,): (i32,) = sqlx::query_as(
+        "SELECT ii.status FROM issues i JOIN intake_issues ii ON ii.issue_id = i.id \
+         WHERE i.intake_source_id = $1 AND i.intake_fingerprint = 'fp-res'",
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(declined, -1);
+
+    // Resolved duplikat = ignored.
+    let (_, Json(again)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-res", "resolved", "warning")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(again["ignored"], 1);
+
+    // Accepted (manual) + resolved = completed.
+    let _ = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-acc", "firing", "warning")),
+    )
+    .await
+    .unwrap();
+    let completed_state: Uuid = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND \"group\" = 'completed' LIMIT 1",
+    )
+    .bind(scratch.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let default_state: Uuid = sqlx::query_scalar(
+        "SELECT id FROM states WHERE project_id = $1 AND \"group\" = 'backlog' LIMIT 1",
+    )
+    .bind(scratch.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE intake_issues SET status = 1 WHERE issue_id IN \
+         (SELECT id FROM issues WHERE intake_fingerprint = 'fp-acc')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, Json(resolved)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-acc", "resolved", "warning")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(resolved["resolved"], 1);
+    let (state_id,): (Option<Uuid>,) = sqlx::query_as(
+        "SELECT state_id FROM issues WHERE intake_fingerprint = 'fp-acc'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state_id, Some(completed_state));
+
+    // Refire setelah completed = reopen ke state default.
+    let (_, Json(reopened)) = api::routes::inbound::alertmanager(
+        State(st.clone()),
+        Path(token.clone()),
+        Json(alert_payload("fp-acc", "firing", "warning")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reopened["reopened"], 1);
+    let (state_id, completed_at): (Option<Uuid>, Option<chrono::DateTime<chrono::Utc>>) =
+        sqlx::query_as("SELECT state_id, completed_at FROM issues WHERE intake_fingerprint = 'fp-acc'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(state_id, Some(default_state));
+    assert!(completed_at.is_none());
+}
