@@ -243,8 +243,6 @@ pub fn workspace_tools(
     user_id: Uuid,
     trace: ToolTrace,
 ) -> rig::tool::server::ToolServerHandle {
-    // user_id belum dibaca tool mana pun di Task 2; tool baru memakainya mulai Task 4.
-    let _ = user_id;
     rig::tool::server::ToolServer::new()
         .tool(ListProjects {
             pool: pool.clone(),
@@ -257,8 +255,26 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(SearchWorkItems {
-            pool,
+            pool: pool.clone(),
             workspace_id,
+            trace: trace.clone(),
+        })
+        .tool(GetWorkItem {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListWorkItemComments {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(ListWorkItemRelations {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -280,7 +296,6 @@ pub fn read_tools(
     trace: ToolTrace,
     allowed: &[&str],
 ) -> rig::tool::server::ToolServerHandle {
-    let _ = user_id;
     let mut server = rig::tool::server::ToolServer::new();
     if allowed.contains(&ListProjects::NAME) {
         server = server.tool(ListProjects {
@@ -298,8 +313,32 @@ pub fn read_tools(
     }
     if allowed.contains(&SearchWorkItems::NAME) {
         server = server.tool(SearchWorkItems {
+            pool: pool.clone(),
+            workspace_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&GetWorkItem::NAME) {
+        server = server.tool(GetWorkItem {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListWorkItemComments::NAME) {
+        server = server.tool(ListWorkItemComments {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        });
+    }
+    if allowed.contains(&ListWorkItemRelations::NAME) {
+        server = server.tool(ListWorkItemRelations {
             pool,
             workspace_id,
+            user_id,
             trace: trace.clone(),
         });
     }
@@ -807,6 +846,41 @@ mod tests {
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle_with_create_work_item() {
         let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
+    }
+
+    #[tokio::test]
+    async fn new_work_item_tools_expose_metadata() {
+        let pool = lazy_pool();
+        let trace = crate::agent::new_trace();
+
+        let get = GetWorkItem {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(GetWorkItem::NAME, "get_work_item");
+        assert_eq!(get.parameters()["type"], json!("object"));
+        assert!(get.parameters()["properties"]["work_item"].is_object());
+        assert!(!get.description().is_empty());
+
+        let comments = ListWorkItemComments {
+            pool: pool.clone(),
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace: trace.clone(),
+        };
+        assert_eq!(ListWorkItemComments::NAME, "list_work_item_comments");
+        assert!(comments.parameters()["properties"]["limit"].is_object());
+
+        let relations = ListWorkItemRelations {
+            pool,
+            workspace_id: Uuid::nil(),
+            user_id: Uuid::nil(),
+            trace,
+        };
+        assert_eq!(ListWorkItemRelations::NAME, "list_work_item_relations");
+        assert!(!relations.description().is_empty());
     }
 
     #[test]
