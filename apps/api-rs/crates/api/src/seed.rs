@@ -306,6 +306,7 @@ async fn seed_issue_type_id(
     workspace_id: Uuid,
     bot_id: Uuid,
     type_name: &str,
+    requires_service: bool,
 ) -> Result<Uuid, sqlx::Error> {
     let external_id = format!("issue-type:{}", slugify(type_name));
     if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
@@ -335,12 +336,14 @@ async fn seed_issue_type_id(
     }
     let (id,): (Uuid,) = sqlx::query_as(
         "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, is_active, \
-         level, workspace_id, external_source, external_id, created_by_id, updated_by_id, \
-         created_at, updated_at) \
-         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $5, $5, now(), now()) \
+         level, requires_service, workspace_id, external_source, external_id, created_by_id, \
+         updated_by_id, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, '', '{}', false, false, true, 0, $2, $3, $4, $5, $6, $6, \
+         now(), now()) \
          RETURNING id",
     )
     .bind(type_name)
+    .bind(requires_service)
     .bind(workspace_id)
     .bind(SEED_EXTERNAL_SOURCE)
     .bind(&external_id)
@@ -363,7 +366,7 @@ pub async fn insert_work_item_types(
     bot_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     for type_name in TYPE_SEEDS {
-        seed_issue_type_id(tx, workspace_id, bot_id, type_name).await?;
+        seed_issue_type_id(tx, workspace_id, bot_id, type_name, *type_name == "Incident").await?;
     }
     Ok(())
 }
