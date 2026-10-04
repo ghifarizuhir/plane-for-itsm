@@ -2174,7 +2174,7 @@ pub async fn apply_triage_suggestion(
                 )
                 .bind(service_id)
                 .bind(auth.0)
-                .bind(row.id)
+                .bind(scope.row_id)
                 .execute(&mut *tx)
                 .await?;
                 applied.push("service".to_string());

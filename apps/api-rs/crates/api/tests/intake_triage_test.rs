@@ -572,3 +572,138 @@ async fn accept_gate_requires_type_then_service() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn suggestion_includes_service_and_apply_writes_type_and_link() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    let incident_type = scratch.add_type_requiring_service(&pool, "Incident").await;
+    let service_id = scratch.add_service(&pool, "Payment Gateway").await;
+    let st = state(&pool).await;
+
+    let (base_url, bodies) = support::spawn_systemone_upstream(json!({
+        "model": "jev-1.13.0",
+        "answers": {
+            "category": {"type": "choice", "choice": "Incident", "confidence": 0.9,
+                         "probabilities": {"Incident": 0.9}},
+            "service": {"type": "choice", "choice": "Payment Gateway", "confidence": 0.74,
+                        "probabilities": {"Payment Gateway": 0.74}},
+            "severity": {"type": "score", "score": 3.0, "confidence": 0.8,
+                         "probabilities": {"3": 0.8}},
+            "needs_human": {"type": "noul", "noul": 0.4}
+        },
+        "usage": {"input_tokens": 100, "output_tokens": 10}
+    }))
+    .await;
+    set_decision_env(&base_url);
+
+    let (row_id, issue_id) = scratch.create_item(&st, "Payments failing").await;
+    ai::triage_job::classify(&pool, row_id).await.expect("classify");
+
+    let sent = bodies.lock().unwrap().clone();
+    assert!(sent[0]["questions"]["service"]["criteria"]
+        .get("Payment Gateway")
+        .is_some());
+
+    let (status, Json(body)) = get_triage_suggestion(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+    )
+    .await
+    .expect("get suggestion");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["service"]["label"], "Payment Gateway");
+    assert_eq!(body["data"]["service"]["confidence"], 0.74);
+
+    let (status, Json(applied)) = apply_triage_suggestion(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(TriageFieldsBody {
+            fields: vec!["category".to_string(), "service".to_string()],
+        }),
+    )
+    .await
+    .expect("apply");
+    assert_eq!(status, StatusCode::OK);
+    for field in ["category", "service"] {
+        assert!(applied["data"]["applied_fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == field));
+    }
+    let stored_type: Option<Uuid> = sqlx::query_scalar("SELECT type_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored_type, Some(incident_type));
+    let linked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM service_issues WHERE issue_id = $1 AND service_id = $2 \
+         AND deleted_at IS NULL)",
+    )
+    .bind(issue_id)
+    .bind(service_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(linked);
+
+    clear_decision_env();
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn service_abstain_stores_sentinel_and_rejects_apply() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    scratch.add_intake(&pool).await;
+    scratch.add_service(&pool, "Payment Gateway").await;
+    let st = state(&pool).await;
+
+    let (base_url, _) = support::spawn_systemone_upstream(json!({
+        "model": "jev-1.13.0",
+        "answers": {
+            "service": {"type": "choice", "choice": "No service / unsure", "confidence": 0.6,
+                        "probabilities": {}},
+            "severity": {"type": "score", "score": 1.0, "confidence": 0.5,
+                         "probabilities": {"1": 0.5}},
+            "needs_human": {"type": "noul", "noul": 0.2}
+        },
+        "usage": {"input_tokens": 10, "output_tokens": 2}
+    }))
+    .await;
+    set_decision_env(&base_url);
+
+    let (row_id, issue_id) = scratch.create_item(&st, "General question").await;
+    ai::triage_job::classify(&pool, row_id).await.expect("classify");
+
+    let (status, Json(body)) = get_triage_suggestion(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+    )
+    .await
+    .expect("get suggestion");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["data"]["service"]["label"], "__none__");
+    assert!(body["data"]["service"]["id"].is_null());
+
+    let (status, _) = apply_triage_suggestion(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id, issue_id)),
+        Json(TriageFieldsBody {
+            fields: vec!["service".to_string()],
+        }),
+    )
+    .await
+    .expect("apply sentinel");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    clear_decision_env();
+    scratch.purge(&pool).await;
+}
