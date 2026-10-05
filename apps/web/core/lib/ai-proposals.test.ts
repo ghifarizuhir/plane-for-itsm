@@ -3,12 +3,14 @@ import {
   changedFieldCount,
   matchByNameOrId,
   validateAddCommentProposal,
+  validateCreateArticleProposal,
   validateCreateServiceProposal,
   validateCreateSprintProposal,
   validateCreateTrackProposal,
   validateManageServiceLinksProposal,
   validateManageSprintItemsProposal,
   validateManageTrackItemsProposal,
+  validateUpdateArticleProposal,
   validateUpdateServiceProposal,
   validateUpdateSprintProposal,
   validateUpdateTrackProposal,
@@ -180,5 +182,60 @@ describe("container proposal validators", () => {
     expect(validateUpdateTrackProposal({ track: "Onboarding", changes: { members: [] } })).toBeNull();
     expect(validateUpdateTrackProposal({ track: "Onboarding", changes: {} })).toBe("At least one change is required.");
     expect(validateUpdateTrackProposal({ changes: { status: "paused" } })).toBe("Track is required.");
+  });
+});
+
+describe("article proposal validators", () => {
+  it("validates create-article proposals", () => {
+    expect(
+      validateCreateArticleProposal({
+        project: "LTS",
+        name: "Runbook",
+        content: "Step 1",
+        access: "private",
+      })
+    ).toBeNull();
+    expect(validateCreateArticleProposal({ project: "LTS", name: "Runbook", content: "  " })).toBe(
+      "Content is required."
+    );
+    expect(validateCreateArticleProposal({ project: "LTS", name: "Runbook", content: "x".repeat(20001) })).toBe(
+      "Content must be at most 20000 characters."
+    );
+    expect(
+      validateCreateArticleProposal({ project: "LTS", name: "Runbook", content: "Step", access: "secret" as never })
+    ).toBe("Unknown access.");
+    expect(
+      validateCreateArticleProposal({ project: "LTS", name: "Runbook", content: "Step", parent_article: "nope" })
+    ).toBe("Parent article must be a page uuid.");
+  });
+
+  it("validates update-article proposals", () => {
+    expect(
+      validateUpdateArticleProposal({
+        article: "0f3f3f3f-0000-0000-0000-000000000002",
+        action: "append",
+        content: "Step 3",
+      })
+    ).toBeNull();
+    expect(validateUpdateArticleProposal({ article: "0f3f3f3f-0000-0000-0000-000000000002", action: "append" })).toBe(
+      "At least one of name or content is required."
+    );
+    expect(validateUpdateArticleProposal({ article: "nope", action: "append", content: "x" })).toBe(
+      "Article must be a page uuid."
+    );
+    expect(
+      validateUpdateArticleProposal({
+        article: "0f3f3f3f-0000-0000-0000-000000000002",
+        action: "rewrite" as never,
+        content: "x",
+      })
+    ).toBe("Action must be append or replace.");
+    expect(
+      validateUpdateArticleProposal({
+        article: "0f3f3f3f-0000-0000-0000-000000000002",
+        action: "append",
+        name: "  ",
+      })
+    ).toBe("Name must not be empty.");
   });
 });

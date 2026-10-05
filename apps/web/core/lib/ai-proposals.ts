@@ -19,6 +19,8 @@ export const PROPOSAL_KINDS = [
   "update_sprint",
   "create_track",
   "update_track",
+  "create_article",
+  "update_article",
 ] as const;
 export type TAiProposalKind = (typeof PROPOSAL_KINDS)[number];
 
@@ -30,12 +32,15 @@ export const PROPOSAL_LIMITS = {
   services: 10,
   items: 25,
   url: 2048,
+  articleContent: 20000,
 } as const;
 
 export const SERVICE_STATUS_VALUES = ["active", "planned", "maintenance", "deprecated", "retired"] as const;
 export const SERVICE_CRITICALITY_VALUES = ["critical", "high", "medium", "low"] as const;
 export const SERVICE_TYPE_VALUES = ["internal", "external", "infrastructure", "third_party"] as const;
 export const MODULE_STATUS_VALUES = ["backlog", "planned", "in-progress", "paused", "completed", "cancelled"] as const;
+export const ARTICLE_ACCESS_VALUES = ["public", "private"] as const;
+export const ARTICLE_ACTION_VALUES = ["append", "replace"] as const;
 
 export type TAiWorkItemChanges = {
   name?: string | null;
@@ -154,6 +159,22 @@ export type TAiUpdateTrackProposal = {
   changes: TAiUpdateTrackChanges;
 };
 
+export type TAiCreateArticleProposal = {
+  project: string;
+  name: string;
+  content: string;
+  parent_article?: string | null;
+  access?: string | null;
+};
+
+export type TAiUpdateArticleProposal = {
+  article: string;
+  project?: string | null;
+  action: "append" | "replace";
+  name?: string | null;
+  content?: string | null;
+};
+
 export type TAiProposal =
   | { key: string; kind: "update_work_item"; proposal: TAiUpdateWorkItemProposal }
   | { key: string; kind: "add_comment"; proposal: TAiAddCommentProposal }
@@ -165,13 +186,16 @@ export type TAiProposal =
   | { key: string; kind: "create_sprint"; proposal: TAiCreateSprintProposal }
   | { key: string; kind: "update_sprint"; proposal: TAiUpdateSprintProposal }
   | { key: string; kind: "create_track"; proposal: TAiCreateTrackProposal }
-  | { key: string; kind: "update_track"; proposal: TAiUpdateTrackProposal };
+  | { key: string; kind: "update_track"; proposal: TAiUpdateTrackProposal }
+  | { key: string; kind: "create_article"; proposal: TAiCreateArticleProposal }
+  | { key: string; kind: "update_article"; proposal: TAiUpdateArticleProposal };
 
 export type TAiProposalDecisionResult = {
   created_comment_id?: string;
   created_service_id?: string;
   created_sprint_id?: string;
   created_track_id?: string;
+  created_article_id?: string;
 };
 
 export type TAiProposalDecision = {
@@ -209,7 +233,20 @@ export type TAiProposalConfirmPayload =
   | { kind: "create_sprint"; projectId: string; data: Partial<ICycle> }
   | { kind: "update_sprint"; projectId: string; cycleId: string; changes: Partial<ICycle> }
   | { kind: "create_track"; projectId: string; data: Partial<IModule> }
-  | { kind: "update_track"; projectId: string; moduleId: string; changes: Partial<IModule> };
+  | { kind: "update_track"; projectId: string; moduleId: string; changes: Partial<IModule> }
+  | {
+      kind: "create_article";
+      projectId: string;
+      data: { name: string; descriptionHtml: string; access: number; parent?: string };
+    }
+  | {
+      kind: "update_article";
+      projectId: string;
+      pageId: string;
+      action: "append" | "replace";
+      name?: string;
+      descriptionHtml?: string;
+    };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -434,5 +471,43 @@ export const validateUpdateTrackProposal = (proposal: Partial<TAiUpdateTrackProp
   if (start && target && start > target) return "Start date must not be after target date.";
   if ((changes.members?.length ?? 0) > PROPOSAL_LIMITS.refs)
     return `At most ${PROPOSAL_LIMITS.refs} members are allowed.`;
+  return null;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Mirrors `create_article_proposal_from_args` on the backend. */
+export const validateCreateArticleProposal = (proposal: Partial<TAiCreateArticleProposal>): string | null => {
+  const name = proposal.name?.trim() ?? "";
+  if (!name) return "Name is required.";
+  if (name.length > PROPOSAL_LIMITS.name) return `Name must be at most ${PROPOSAL_LIMITS.name} characters.`;
+  const content = proposal.content?.trim() ?? "";
+  if (!content) return "Content is required.";
+  if (content.length > PROPOSAL_LIMITS.articleContent)
+    return `Content must be at most ${PROPOSAL_LIMITS.articleContent} characters.`;
+  if (proposal.parent_article && !UUID_RE.test(proposal.parent_article.trim()))
+    return "Parent article must be a page uuid.";
+  if (proposal.access && !ARTICLE_ACCESS_VALUES.includes(proposal.access as (typeof ARTICLE_ACCESS_VALUES)[number]))
+    return "Unknown access.";
+  return null;
+};
+
+/** Mirrors `update_article_proposal_from_args` on the backend. */
+export const validateUpdateArticleProposal = (proposal: Partial<TAiUpdateArticleProposal>): string | null => {
+  if (!proposal.article || !UUID_RE.test(proposal.article.trim())) return "Article must be a page uuid.";
+  if (!ARTICLE_ACTION_VALUES.includes(proposal.action as (typeof ARTICLE_ACTION_VALUES)[number]))
+    return "Action must be append or replace.";
+  if (proposal.name != null) {
+    const name = proposal.name.trim();
+    if (!name) return "Name must not be empty.";
+    if (name.length > PROPOSAL_LIMITS.name) return `Name must be at most ${PROPOSAL_LIMITS.name} characters.`;
+  }
+  if (proposal.content != null) {
+    const content = proposal.content.trim();
+    if (!content) return "Content must not be empty.";
+    if (content.length > PROPOSAL_LIMITS.articleContent)
+      return `Content must be at most ${PROPOSAL_LIMITS.articleContent} characters.`;
+  }
+  if (proposal.name == null && proposal.content == null) return "At least one of name or content is required.";
   return null;
 };
