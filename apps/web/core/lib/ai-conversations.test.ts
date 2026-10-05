@@ -77,4 +77,28 @@ describe("toAiMessage", () => {
     expect(message.workItemProposals).toBeUndefined();
     expect(message.workItemDecisions).toBeUndefined();
   });
+
+  it("maps generic proposals and decisions from metadata", () => {
+    const message = toAiMessage(
+      stored({
+        metadata: {
+          proposals: [
+            { key: "k1", kind: "update_work_item", proposal: { work_item: "LTS-1", changes: { priority: "high" } } },
+            { key: "k2", kind: "add_comment", proposal: { work_item: "LTS-1", comment: "hi" } },
+          ],
+          proposal_decisions: { k1: { kind: "update_work_item", decision: "applied" } },
+        },
+      })
+    );
+    expect(message.proposals).toHaveLength(2);
+    expect(message.proposals?.[0].kind).toBe("update_work_item");
+    expect(message.proposals?.[1].kind).toBe("add_comment");
+    expect(message.proposalDecisions?.k1.decision).toBe("applied");
+  });
+
+  it("leaves generic proposal fields undefined when metadata is absent", () => {
+    const message = toAiMessage(stored({}));
+    expect(message.proposals).toBeUndefined();
+    expect(message.proposalDecisions).toBeUndefined();
+  });
 });

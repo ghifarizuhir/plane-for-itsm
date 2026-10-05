@@ -5,6 +5,7 @@
  */
 
 import type { TAiMessage } from "@/lib/ai-context";
+import type { TAiProposal, TAiProposalDecision } from "@/lib/ai-proposals";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision, TAiWorkItemProposalEntry } from "@/lib/ai-work-items";
 
@@ -25,6 +26,8 @@ export type TAiMessageMetadata = {
   created_schedule_id?: string;
   work_item_proposals?: TAiWorkItemProposalEntry[];
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
+  proposals?: TAiProposal[];
+  proposal_decisions?: Record<string, TAiProposalDecision>;
   is_error?: boolean;
 };
 
@@ -40,6 +43,7 @@ export type TAiStoredMessage = {
 /** Keys the `PATCH .../messages/:id/` endpoint accepts (server allowlist). */
 export type TAiMessageMetadataPatch = Pick<TAiMessageMetadata, "schedule_decision" | "created_schedule_id"> & {
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
+  proposal_decisions?: Record<string, TAiProposalDecision>;
 };
 
 /** Map a server-stored message onto the chat bubble model. */
@@ -54,5 +58,7 @@ export const toAiMessage = (stored: TAiStoredMessage): TAiMessage => ({
   createdScheduleId: stored.metadata?.created_schedule_id,
   workItemProposals: stored.metadata?.work_item_proposals,
   workItemDecisions: stored.metadata?.work_item_decisions,
+  proposals: stored.metadata?.proposals,
+  proposalDecisions: stored.metadata?.proposal_decisions,
   createdAt: stored.created_at,
 });

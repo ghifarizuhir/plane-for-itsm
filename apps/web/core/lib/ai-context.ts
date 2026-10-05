@@ -5,6 +5,7 @@
  */
 
 import sanitizeHtml from "sanitize-html";
+import type { TAiProposal, TAiProposalDecision } from "@/lib/ai-proposals";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision, TAiWorkItemProposalEntry } from "@/lib/ai-work-items";
 
@@ -26,6 +27,8 @@ export type TAiMessage = {
   createdScheduleId?: string;
   workItemProposals?: TAiWorkItemProposalEntry[];
   workItemDecisions?: Record<string, TAiWorkItemDecision>;
+  proposals?: TAiProposal[];
+  proposalDecisions?: Record<string, TAiProposalDecision>;
   createdAt?: string;
 };
 
