@@ -84,7 +84,13 @@ existing one, call update_service, update_sprint, or update_track with its \
 name (or id) and only the fields that change. These are proposals: the user \
 must confirm them in the UI first, so never claim they were created or \
 updated before that confirmation. Sprint dates must be provided as a pair; \
-service and track owners, leads, and members may be human-readable names.";
+service and track owners, leads, and members may be human-readable names. \
+To write a knowledge base article, call create_article with the project, \
+title, and body text. To change an article, call update_article with its id \
+and action append or replace; use append unless the user explicitly wants \
+the body replaced. Articles are proposals too: the user must confirm them \
+in the UI first, so never claim they were created or updated before that \
+confirmation.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -395,6 +401,25 @@ mod tests {
         assert_eq!(actions[3]["kind"], json!("update_sprint"));
         assert_eq!(actions[4]["kind"], json!("create_track"));
         assert_eq!(actions[5]["kind"], json!("update_track"));
+    }
+
+    #[test]
+    fn pending_actions_covers_article_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::CREATE_ARTICLE_NAME,
+            &json!({"project": "LTS", "name": "Runbook", "content": "Step 1"}),
+        );
+        record(
+            &trace,
+            crate::tools::UPDATE_ARTICLE_NAME,
+            &json!({"article": "0f3f3f3f-0000-0000-0000-000000000002", "action": "append"}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["kind"], json!("create_article"));
+        assert_eq!(actions[1]["kind"], json!("update_article"));
     }
 
     #[test]

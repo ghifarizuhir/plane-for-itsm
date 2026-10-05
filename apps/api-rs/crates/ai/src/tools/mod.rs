@@ -39,7 +39,7 @@ pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
 /// database and never schedule-eligible.
-pub const PROPOSAL_TOOL_NAMES: [&str; 13] = [
+pub const PROPOSAL_TOOL_NAMES: [&str; 15] = [
     CREATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
@@ -53,6 +53,8 @@ pub const PROPOSAL_TOOL_NAMES: [&str; 13] = [
     UPDATE_SPRINT_NAME,
     CREATE_TRACK_NAME,
     UPDATE_TRACK_NAME,
+    CREATE_ARTICLE_NAME,
+    UPDATE_ARTICLE_NAME,
 ];
 
 pub fn optional_text(value: Option<&str>) -> Option<String> {
@@ -515,6 +517,12 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(UpdateTrack {
+            trace: trace.clone(),
+        })
+        .tool(CreateArticle {
+            trace: trace.clone(),
+        })
+        .tool(UpdateArticle {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -1606,5 +1614,21 @@ mod tests {
         };
         assert_eq!(UpdateTrack::NAME, "update_track");
         assert!(update_track.parameters()["properties"]["track"].is_object());
+    }
+
+    #[tokio::test]
+    async fn article_tools_expose_metadata() {
+        let create = CreateArticle {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(CreateArticle::NAME, "create_article");
+        assert!(create.parameters()["properties"]["content"].is_object());
+        assert!(!create.description().is_empty());
+
+        let update = UpdateArticle {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(UpdateArticle::NAME, "update_article");
+        assert!(update.parameters()["properties"]["action"].is_object());
     }
 }

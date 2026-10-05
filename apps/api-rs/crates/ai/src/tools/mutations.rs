@@ -546,6 +546,8 @@ pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
         UPDATE_SPRINT_NAME => Some("update_sprint"),
         CREATE_TRACK_NAME => Some("create_track"),
         UPDATE_TRACK_NAME => Some("update_track"),
+        CREATE_ARTICLE_NAME => Some("create_article"),
+        UPDATE_ARTICLE_NAME => Some("update_article"),
         _ => None,
     }
 }
@@ -1883,6 +1885,18 @@ mod tests {
         assert_eq!(
             mutation_kind_for_tool(UPDATE_TRACK_NAME),
             Some("update_track")
+        );
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_article_tools() {
+        assert_eq!(
+            mutation_kind_for_tool(CREATE_ARTICLE_NAME),
+            Some("create_article")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(UPDATE_ARTICLE_NAME),
+            Some("update_article")
         );
     }
 
