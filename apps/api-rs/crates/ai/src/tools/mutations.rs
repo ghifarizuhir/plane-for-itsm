@@ -1665,6 +1665,121 @@ impl Tool for ApplyTriageSuggestion {
     }
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct TriageIntakeItemArgs {
+    /// Work item identifier of the intake item, like "LTS-42".
+    pub intake_item: String,
+    /// One of: accept, reject, snooze, duplicate.
+    pub action: String,
+    /// RFC3339 datetime, required for snooze and not allowed otherwise.
+    pub snoozed_till: Option<String>,
+    /// Work item identifier like "LTS-42", required for duplicate.
+    pub duplicate_of: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TriageIntakeItemProposal {
+    pub intake_item: String,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snoozed_till: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duplicate_of: Option<String>,
+}
+
+/// Validate raw tool args into a normalized triage-action proposal.
+pub fn triage_intake_item_proposal_from_args(
+    args: TriageIntakeItemArgs,
+) -> Result<TriageIntakeItemProposal, ToolExecutionError> {
+    let intake_item = args.intake_item.trim();
+    if intake_item.is_empty() {
+        return Err(ToolExecutionError::invalid_args("intake_item is required"));
+    }
+    parse_work_item_ref(intake_item)?;
+    let action = enum_arg(&args.action, &TRIAGE_ACTIONS, "action")?;
+    let snoozed_till = match args.snoozed_till.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(raw) => Some(
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .map_err(|_| {
+                    ToolExecutionError::invalid_args("snoozed_till must be an RFC3339 datetime")
+                })?
+                .to_rfc3339(),
+        ),
+    };
+    let duplicate_of = match args.duplicate_of.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(raw) => {
+            parse_work_item_ref(raw)?;
+            Some(raw.to_string())
+        }
+    };
+    if action == "snooze" {
+        if snoozed_till.is_none() {
+            return Err(ToolExecutionError::invalid_args(
+                "snoozed_till is required when action is snooze",
+            ));
+        }
+    } else if snoozed_till.is_some() {
+        return Err(ToolExecutionError::invalid_args(
+            "snoozed_till is only allowed when action is snooze",
+        ));
+    }
+    if action == "duplicate" {
+        if duplicate_of.is_none() {
+            return Err(ToolExecutionError::invalid_args(
+                "duplicate_of is required when action is duplicate",
+            ));
+        }
+    } else if duplicate_of.is_some() {
+        return Err(ToolExecutionError::invalid_args(
+            "duplicate_of is only allowed when action is duplicate",
+        ));
+    }
+    Ok(TriageIntakeItemProposal {
+        intake_item: intake_item.to_string(),
+        action,
+        snoozed_till,
+        duplicate_of,
+    })
+}
+
+pub struct TriageIntakeItem {
+    pub trace: ToolTrace,
+}
+
+impl Tool for TriageIntakeItem {
+    const NAME: &'static str = TRIAGE_INTAKE_ITEM_NAME;
+    type Args = TriageIntakeItemArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose accepting, rejecting, snoozing, or marking one intake item as \
+         duplicate. Only call this when the user asks to triage the item. The \
+         intake item is identified by its work item identifier like LTS-42, \
+         never guess it. Snooze requires an RFC3339 snoozed_till; duplicate \
+         requires a duplicate_of work item identifier. The user must confirm \
+         the card in the UI first, so never claim the item was triaged before \
+         that confirmation."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<TriageIntakeItemArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = triage_intake_item_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("TriageIntakeItemProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2510,5 +2625,82 @@ mod tests {
         })
         .unwrap_err();
         assert!(empty.to_string().contains("at least one"));
+    }
+
+    #[test]
+    fn triage_intake_item_validates_action_specific_args() {
+        let accept = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: " LTS-42 ".into(),
+            action: " ACCEPT ".into(),
+            snoozed_till: None,
+            duplicate_of: None,
+        })
+        .unwrap();
+        assert_eq!(accept.intake_item, "LTS-42");
+        assert_eq!(accept.action, "accept");
+        assert_eq!(accept.snoozed_till, None);
+
+        let snooze = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "snooze".into(),
+            snoozed_till: Some("2026-11-01T09:00:00Z".into()),
+            duplicate_of: None,
+        })
+        .unwrap();
+        assert_eq!(snooze.snoozed_till.as_deref(), Some("2026-11-01T09:00:00+00:00"));
+
+        let duplicate = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "duplicate".into(),
+            snoozed_till: None,
+            duplicate_of: Some(" LTS-7 ".into()),
+        })
+        .unwrap();
+        assert_eq!(duplicate.duplicate_of.as_deref(), Some("LTS-7"));
+
+        let missing_snooze = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "snooze".into(),
+            snoozed_till: None,
+            duplicate_of: None,
+        })
+        .unwrap_err();
+        assert!(missing_snooze.to_string().contains("snoozed_till"));
+
+        let stray_snooze = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "accept".into(),
+            snoozed_till: Some("2026-11-01T09:00:00Z".into()),
+            duplicate_of: None,
+        })
+        .unwrap_err();
+        assert!(stray_snooze.to_string().contains("only"));
+
+        let bad_date = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "snooze".into(),
+            snoozed_till: Some("2026-11-01".into()),
+            duplicate_of: None,
+        })
+        .unwrap_err();
+        assert!(bad_date.to_string().contains("RFC3339"));
+
+        let missing_duplicate = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "duplicate".into(),
+            snoozed_till: None,
+            duplicate_of: None,
+        })
+        .unwrap_err();
+        assert!(missing_duplicate.to_string().contains("duplicate_of"));
+
+        let bad_action = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
+            intake_item: "LTS-42".into(),
+            action: "archive".into(),
+            snoozed_till: None,
+            duplicate_of: None,
+        })
+        .unwrap_err();
+        assert!(bad_action.to_string().contains("accept"));
     }
 }
