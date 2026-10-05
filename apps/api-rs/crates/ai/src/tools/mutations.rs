@@ -730,6 +730,177 @@ impl Tool for CreateService {
     }
 }
 
+fn required_when_present(
+    value: Option<&str>,
+    label: &str,
+    max: usize,
+) -> Result<Option<String>, ToolExecutionError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("") => Err(ToolExecutionError::invalid_args(format!(
+            "{label} must not be empty when provided"
+        ))),
+        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(
+            format!("{label} must be at most {max} characters"),
+        )),
+        Some(text) => Ok(Some(text.to_string())),
+    }
+}
+
+/// Optional text where a provided blank value means "clear the field".
+fn clearable_text(
+    value: Option<&str>,
+    label: &str,
+    max: usize,
+) -> Result<Option<String>, ToolExecutionError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("") => Ok(Some(String::new())),
+        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(
+            format!("{label} must be at most {max} characters"),
+        )),
+        Some(text) => Ok(Some(text.to_string())),
+    }
+}
+
+/// Optional URL where blank clears; non-blank must be http(s).
+fn clearable_url(value: Option<&str>, label: &str) -> Result<Option<String>, ToolExecutionError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("") => Ok(Some(String::new())),
+        Some(url) if url.chars().count() > SERVICE_URL_MAX => Err(ToolExecutionError::invalid_args(
+            format!("{label} must be at most {SERVICE_URL_MAX} characters"),
+        )),
+        Some(url) if !(url.starts_with("http://") || url.starts_with("https://")) => Err(
+            ToolExecutionError::invalid_args(format!("{label} must start with http:// or https://")),
+        ),
+        Some(url) => Ok(Some(url.to_string())),
+    }
+}
+
+pub const UPDATE_SERVICE_NAME: &str = "update_service";
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct UpdateServiceChanges {
+    /// New status: active, planned, maintenance, deprecated, retired.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// New criticality: critical, high, medium, low.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub criticality: Option<String>,
+    /// New type: internal, external, infrastructure, third_party.
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub service_type: Option<String>,
+    /// New owner display name or email; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// New plain-text description; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New repository URL; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_url: Option<String>,
+    /// New documentation URL; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub documentation_url: Option<String>,
+}
+
+fn normalize_service_changes(
+    changes: UpdateServiceChanges,
+) -> Result<UpdateServiceChanges, ToolExecutionError> {
+    let normalized = UpdateServiceChanges {
+        status: optional_enum_arg(changes.status.as_deref(), &SERVICE_STATUSES, "status")?,
+        criticality: optional_enum_arg(
+            changes.criticality.as_deref(),
+            &SERVICE_CRITICALITIES,
+            "criticality",
+        )?,
+        service_type: optional_enum_arg(changes.service_type.as_deref(), &SERVICE_TYPES, "type")?,
+        owner: clearable_text(changes.owner.as_deref(), "owner", CONTAINER_REF_MAX)?,
+        description: clearable_text(
+            changes.description.as_deref(),
+            "description",
+            SERVICE_DESCRIPTION_MAX,
+        )?,
+        repository_url: clearable_url(changes.repository_url.as_deref(), "repository_url")?,
+        documentation_url: clearable_url(changes.documentation_url.as_deref(), "documentation_url")?,
+    };
+    if normalized == UpdateServiceChanges::default() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one change is required",
+        ));
+    }
+    Ok(normalized)
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct UpdateServiceArgs {
+    /// Service name or id. Required.
+    pub service: String,
+    /// Project identifier or name; use it when the service name is not unique.
+    pub project: Option<String>,
+    /// Fields to change. At least one field must be set.
+    pub changes: UpdateServiceChanges,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UpdateServiceProposal {
+    pub service: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub changes: UpdateServiceChanges,
+}
+
+/// Validate raw tool args into a normalized update-service proposal.
+pub fn update_service_proposal_from_args(
+    args: UpdateServiceArgs,
+) -> Result<UpdateServiceProposal, ToolExecutionError> {
+    let service = required_text(&args.service, "service", CONTAINER_REF_MAX)?;
+    let project = optional_container_project(args.project)?;
+    let changes = normalize_service_changes(args.changes)?;
+    Ok(UpdateServiceProposal {
+        service,
+        project,
+        changes,
+    })
+}
+
+pub struct UpdateService {
+    pub trace: ToolTrace,
+}
+
+impl Tool for UpdateService {
+    const NAME: &'static str = UPDATE_SERVICE_NAME;
+    type Args = UpdateServiceArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose editing exactly one existing service. Only call this when the \
+         user asks to change a service's status, criticality, type, owner, \
+         description, or URLs. The service name or id is required; never guess \
+         it. Send only the fields that change; an empty string clears a field. \
+         The user must confirm and may edit every field in the UI before \
+         anything is saved. Never claim the service was updated until they \
+         confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<UpdateServiceArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = update_service_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("UpdateServiceProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1105,5 +1276,66 @@ mod tests {
         let value = serde_json::to_value(&proposal).unwrap();
         assert_eq!(value["type"], serde_json::json!("internal"));
         assert!(value.get("service_type").is_none());
+    }
+
+    #[test]
+    fn update_service_normalizes_clears_and_requires_a_change() {
+        let proposal = update_service_proposal_from_args(UpdateServiceArgs {
+            service: " Email ".into(),
+            project: Some(" LTS ".into()),
+            changes: UpdateServiceChanges {
+                status: Some(" DEPRECATED ".into()),
+                owner: Some("".into()),
+                repository_url: Some("".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(proposal.service, "Email");
+        assert_eq!(proposal.project.as_deref(), Some("LTS"));
+        assert_eq!(proposal.changes.status.as_deref(), Some("deprecated"));
+        assert_eq!(proposal.changes.owner.as_deref(), Some(""));
+        assert_eq!(proposal.changes.repository_url.as_deref(), Some(""));
+
+        let empty = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "Email".into(),
+            project: None,
+            changes: UpdateServiceChanges::default(),
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("at least one"));
+
+        let blank_service = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "  ".into(),
+            project: None,
+            changes: UpdateServiceChanges {
+                status: Some("active".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(blank_service.to_string().contains("service"));
+
+        let bad_type = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "Email".into(),
+            project: None,
+            changes: UpdateServiceChanges {
+                service_type: Some("legacy".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(bad_type.to_string().contains("internal"));
+
+        let bad_url = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "Email".into(),
+            project: None,
+            changes: UpdateServiceChanges {
+                documentation_url: Some("docs.example.com".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(bad_url.to_string().contains("http"));
     }
 }
