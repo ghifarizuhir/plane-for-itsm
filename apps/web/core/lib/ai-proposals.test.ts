@@ -3,9 +3,15 @@ import {
   changedFieldCount,
   matchByNameOrId,
   validateAddCommentProposal,
+  validateCreateServiceProposal,
+  validateCreateSprintProposal,
+  validateCreateTrackProposal,
   validateManageServiceLinksProposal,
   validateManageSprintItemsProposal,
   validateManageTrackItemsProposal,
+  validateUpdateServiceProposal,
+  validateUpdateSprintProposal,
+  validateUpdateTrackProposal,
   validateUpdateWorkItemProposal,
 } from "./ai-proposals";
 
@@ -95,5 +101,84 @@ describe("matchByNameOrId", () => {
     expect(matchByNameOrId(items, " email ")?.id).toBe("1");
     expect(matchByNameOrId(items, "nope")).toBeUndefined();
     expect(matchByNameOrId(items, "  ")).toBeUndefined();
+  });
+});
+
+describe("container proposal validators", () => {
+  it("validates create-service proposals", () => {
+    expect(validateCreateServiceProposal({ project: "LTS", name: "Email", status: "active" })).toBeNull();
+    expect(validateCreateServiceProposal({ project: "LTS", name: "  " })).toBe("Name is required.");
+    expect(validateCreateServiceProposal({ project: "LTS", name: "Email", status: "broken" })).toBe("Unknown status.");
+    expect(validateCreateServiceProposal({ project: "LTS", name: "Email", repository_url: "git.example.com" })).toBe(
+      "Repository URL must start with http:// or https://."
+    );
+  });
+
+  it("validates update-service proposals", () => {
+    expect(validateUpdateServiceProposal({ service: "Email", changes: { status: "deprecated" } })).toBeNull();
+    expect(validateUpdateServiceProposal({ service: "Email", changes: {} })).toBe("At least one change is required.");
+    expect(validateUpdateServiceProposal({ changes: { status: "active" } })).toBe("Service is required.");
+    expect(validateUpdateServiceProposal({ service: "Email", changes: { owner: "" } })).toBeNull();
+    expect(validateUpdateServiceProposal({ service: "Email", changes: { type: "legacy" } })).toBe("Unknown type.");
+  });
+
+  it("validates create-sprint proposals", () => {
+    expect(
+      validateCreateSprintProposal({
+        project: "LTS",
+        name: "Sprint 4",
+        start_date: "2026-11-01",
+        end_date: "2026-11-14",
+      })
+    ).toBeNull();
+    expect(validateCreateSprintProposal({ project: "LTS", name: "Sprint 4", start_date: "2026-11-01" })).toBe(
+      "Provide both start and end dates or neither."
+    );
+    expect(
+      validateCreateSprintProposal({
+        project: "LTS",
+        name: "Sprint 4",
+        start_date: "2026-11-14",
+        end_date: "2026-11-01",
+      })
+    ).toBe("Start date must not be after end date.");
+  });
+
+  it("validates update-sprint proposals", () => {
+    expect(validateUpdateSprintProposal({ sprint: "Sprint 4", changes: { name: "Sprint 4b" } })).toBeNull();
+    expect(validateUpdateSprintProposal({ sprint: "Sprint 4", changes: {} })).toBe("At least one change is required.");
+    expect(validateUpdateSprintProposal({ sprint: "Sprint 4", changes: { name: "  " } })).toBe(
+      "Name must not be empty."
+    );
+    expect(validateUpdateSprintProposal({ sprint: "Sprint 4", changes: { start_date: "" } })).toBe(
+      "Start date must be YYYY-MM-DD."
+    );
+  });
+
+  it("validates create-track proposals", () => {
+    expect(validateCreateTrackProposal({ project: "LTS", name: "Onboarding", status: "planned" })).toBeNull();
+    expect(validateCreateTrackProposal({ project: "LTS", name: "Onboarding", status: "live" })).toBe("Unknown status.");
+    expect(
+      validateCreateTrackProposal({
+        project: "LTS",
+        name: "Onboarding",
+        start_date: "2026-12-01",
+        target_date: "2026-11-01",
+      })
+    ).toBe("Start date must not be after target date.");
+    expect(
+      validateCreateTrackProposal({
+        project: "LTS",
+        name: "Onboarding",
+        members: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"],
+      })
+    ).toBe("At most 10 members are allowed.");
+  });
+
+  it("validates update-track proposals", () => {
+    expect(validateUpdateTrackProposal({ track: "Onboarding", changes: { description: "" } })).toBeNull();
+    expect(validateUpdateTrackProposal({ track: "Onboarding", changes: { members: [] } })).toBeNull();
+    expect(validateUpdateTrackProposal({ track: "Onboarding", changes: {} })).toBe("At least one change is required.");
+    expect(validateUpdateTrackProposal({ changes: { status: "paused" } })).toBe("Track is required.");
   });
 });
