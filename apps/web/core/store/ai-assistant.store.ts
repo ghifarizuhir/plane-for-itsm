@@ -12,6 +12,8 @@ import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
 import { IssueService } from "@/services/issue/issue.service";
 import { IssueCommentService } from "@/services/issue/issue_comment.service";
+import { ModuleService } from "@/services/module.service";
+import { ServiceService } from "@/services/service.service";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
 import type { TAiProposalConfirmPayload, TAiProposalDecision, TAiProposalDecisionResult } from "@/lib/ai-proposals";
@@ -28,8 +30,10 @@ type TAiConversationsService = Pick<
   AiConversationsService,
   "list" | "create" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
 >;
-type TIssueService = Pick<IssueService, "createIssue" | "patchIssue">;
+type TIssueService = Pick<IssueService, "createIssue" | "patchIssue" | "addIssueToCycle" | "removeIssueFromCycle">;
 type TCommentsService = Pick<IssueCommentService, "createIssueComment">;
+type TServicesService = Pick<ServiceService, "linkWorkItem" | "unlinkWorkItem">;
+type TModulesService = Pick<ModuleService, "addIssuesToModule" | "removeIssuesFromModuleBulk">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -114,7 +118,9 @@ export class AIAssistantStore implements IAIAssistantStore {
     private schedulesService: TAiSchedulesService = new AiSchedulesService(),
     private conversationsService: TAiConversationsService = new AiConversationsService(),
     private issuesService: TIssueService = new IssueService(),
-    private commentsService: TCommentsService = new IssueCommentService()
+    private commentsService: TCommentsService = new IssueCommentService(),
+    private servicesService: TServicesService = new ServiceService(),
+    private modulesService: TModulesService = new ModuleService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -458,12 +464,48 @@ export class AIAssistantStore implements IAIAssistantStore {
     let result: TAiProposalDecisionResult | undefined;
     if (payload.kind === "update_work_item") {
       await this.issuesService.patchIssue(slug, payload.projectId, payload.issueId, payload.changes);
-    } else {
+    } else if (payload.kind === "add_comment") {
       const created = await this.commentsService.createIssueComment(slug, payload.projectId, payload.issueId, {
         comment_html: payload.commentHtml,
       });
       if (!created?.id) throw new Error("Comment creation returned no id");
       result = { created_comment_id: created.id };
+    } else if (payload.kind === "manage_service_links") {
+      if (payload.action === "link") {
+        await Promise.all(
+          payload.links.map((link) =>
+            this.servicesService.linkWorkItem(slug, "", payload.projectId, link.serviceId, {
+              id: payload.issueId,
+            })
+          )
+        );
+      } else {
+        const missing = payload.links.find((link) => !link.linkId);
+        if (missing) throw new Error("Unlink target is missing its link id");
+        await Promise.all(
+          payload.links.map((link) =>
+            this.servicesService.unlinkWorkItem(slug, "", payload.projectId, link.linkId ?? "")
+          )
+        );
+      }
+    } else if (payload.kind === "manage_sprint_items") {
+      if (payload.action === "add") {
+        await this.issuesService.addIssueToCycle(slug, payload.projectId, payload.cycleId, {
+          issues: payload.issueIds,
+        });
+      } else {
+        await Promise.all(
+          payload.issueIds.map((issueId) =>
+            this.issuesService.removeIssueFromCycle(slug, payload.projectId, payload.cycleId, issueId)
+          )
+        );
+      }
+    } else if (payload.action === "add") {
+      await this.modulesService.addIssuesToModule(slug, payload.projectId, payload.moduleId, {
+        issues: payload.issueIds,
+      });
+    } else {
+      await this.modulesService.removeIssuesFromModuleBulk(slug, payload.projectId, payload.moduleId, payload.issueIds);
     }
     runInAction(() => {
       message.proposalDecisions = {

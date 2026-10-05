@@ -83,6 +83,8 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
   issues: {
     createIssue: vi.fn(async (_slug: string, projectId: string) => ({ id: "i1", project_id: projectId })),
     patchIssue: vi.fn(async () => undefined),
+    addIssueToCycle: vi.fn(async () => undefined),
+    removeIssueFromCycle: vi.fn(async () => undefined),
     ...overrides.issues,
   },
   comments: {
@@ -93,6 +95,16 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
     })),
     ...overrides.comments,
   },
+  services: {
+    linkWorkItem: vi.fn(async () => ({ id: "l1" })),
+    unlinkWorkItem: vi.fn(async () => undefined),
+    ...overrides.services,
+  },
+  modules: {
+    addIssuesToModule: vi.fn(async () => undefined),
+    removeIssuesFromModuleBulk: vi.fn(async () => undefined),
+    ...overrides.modules,
+  },
 });
 
 const makeStore = (services = makeServices()) =>
@@ -101,7 +113,9 @@ const makeStore = (services = makeServices()) =>
     services.schedules as any,
     services.conversations as any,
     services.issues as any,
-    services.comments as any
+    services.comments as any,
+    services.services as any,
+    services.modules as any
   );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1508,5 +1522,152 @@ describe("generic proposals", () => {
       "srv-assistant",
       { proposal_decisions: { k1: { kind: "update_work_item", decision: "cancelled" } } }
     );
+  });
+});
+
+const serviceLinksMetadata = {
+  proposals: [
+    {
+      key: "k3",
+      kind: "manage_service_links",
+      proposal: { work_item: "LTS-1", services: ["Email"], action: "link" },
+    },
+  ],
+};
+
+const sprintItemsMetadata = {
+  proposals: [
+    {
+      key: "k4",
+      kind: "manage_sprint_items",
+      proposal: { sprint: "Sprint 3", work_items: ["LTS-1", "LTS-2"], action: "add" },
+    },
+  ],
+};
+
+const trackItemsMetadata = {
+  proposals: [
+    {
+      key: "k5",
+      kind: "manage_track_items",
+      proposal: { track: "Onboarding", work_items: ["LTS-1"], action: "remove" },
+    },
+  ],
+};
+
+describe("link proposals", () => {
+  const openAgent = async (services = makeServices(), metadata: Record<string, unknown>) => {
+    services.conversations.listMessages = vi.fn(async () => [mutationMessage(metadata)]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    return { store, services };
+  };
+
+  it("links and unlinks services", async () => {
+    const { store, services } = await openAgent(makeServices(), serviceLinksMetadata);
+    await store.confirmProposal("srv-assistant", "k3", {
+      kind: "manage_service_links",
+      projectId: "p1",
+      issueId: "i1",
+      action: "link",
+      links: [{ serviceId: "s1" }],
+    });
+    expect(services.services.linkWorkItem).toHaveBeenCalledWith("acme", "", "p1", "s1", { id: "i1" });
+    expect(store.messages[0].proposalDecisions?.k3).toEqual({
+      kind: "manage_service_links",
+      decision: "applied",
+    });
+  });
+
+  it("unlinks a service with its link id", async () => {
+    const metadata = {
+      proposals: [
+        {
+          key: "k3b",
+          kind: "manage_service_links",
+          proposal: { work_item: "LTS-1", services: ["Email"], action: "unlink" },
+        },
+      ],
+    };
+    const { store, services } = await openAgent(makeServices(), metadata);
+    await store.confirmProposal("srv-assistant", "k3b", {
+      kind: "manage_service_links",
+      projectId: "p1",
+      issueId: "i1",
+      action: "unlink",
+      links: [{ serviceId: "s1", linkId: "l1" }],
+    });
+    expect(services.services.unlinkWorkItem).toHaveBeenCalledWith("acme", "", "p1", "l1");
+  });
+
+  it("adds work items to a sprint", async () => {
+    const { store, services } = await openAgent(makeServices(), sprintItemsMetadata);
+    await store.confirmProposal("srv-assistant", "k4", {
+      kind: "manage_sprint_items",
+      projectId: "p1",
+      cycleId: "c1",
+      action: "add",
+      issueIds: ["i1", "i2"],
+    });
+    expect(services.issues.addIssueToCycle).toHaveBeenCalledWith("acme", "p1", "c1", { issues: ["i1", "i2"] });
+  });
+
+  it("removes work items from a sprint one by one", async () => {
+    const metadata = {
+      proposals: [
+        {
+          key: "k4b",
+          kind: "manage_sprint_items",
+          proposal: { sprint: "Sprint 3", work_items: ["LTS-1", "LTS-2"], action: "remove" },
+        },
+      ],
+    };
+    const { store, services } = await openAgent(makeServices(), metadata);
+    await store.confirmProposal("srv-assistant", "k4b", {
+      kind: "manage_sprint_items",
+      projectId: "p1",
+      cycleId: "c1",
+      action: "remove",
+      issueIds: ["i1", "i2"],
+    });
+    expect(services.issues.removeIssueFromCycle).toHaveBeenCalledTimes(2);
+    expect(services.issues.removeIssueFromCycle).toHaveBeenCalledWith("acme", "p1", "c1", "i1");
+    expect(services.issues.removeIssueFromCycle).toHaveBeenCalledWith("acme", "p1", "c1", "i2");
+  });
+
+  it("adds work items to a track", async () => {
+    const metadata = {
+      proposals: [
+        {
+          key: "k5a",
+          kind: "manage_track_items",
+          proposal: { track: "Onboarding", work_items: ["LTS-1"], action: "add" },
+        },
+      ],
+    };
+    const { store, services } = await openAgent(makeServices(), metadata);
+    await store.confirmProposal("srv-assistant", "k5a", {
+      kind: "manage_track_items",
+      projectId: "p1",
+      moduleId: "m1",
+      action: "add",
+      issueIds: ["i1"],
+    });
+    expect(services.modules.addIssuesToModule).toHaveBeenCalledWith("acme", "p1", "m1", { issues: ["i1"] });
+  });
+
+  it("removes work items from a track in bulk", async () => {
+    const { store, services } = await openAgent(makeServices(), trackItemsMetadata);
+    await store.confirmProposal("srv-assistant", "k5", {
+      kind: "manage_track_items",
+      projectId: "p1",
+      moduleId: "m1",
+      action: "remove",
+      issueIds: ["i1"],
+    });
+    expect(services.modules.removeIssuesFromModuleBulk).toHaveBeenCalledWith("acme", "p1", "m1", ["i1"]);
   });
 });
