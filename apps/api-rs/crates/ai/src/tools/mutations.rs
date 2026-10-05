@@ -317,6 +317,145 @@ impl Tool for ManageServiceLinks {
     }
 }
 
+pub const MANAGE_SPRINT_ITEMS_NAME: &str = "manage_sprint_items";
+pub const MAX_BULK_ITEMS: usize = 25;
+pub const CONTAINER_REF_MAX: usize = 255;
+pub const CONTAINER_PROJECT_MAX: usize = 100;
+
+fn required_text(
+    value: &str,
+    label: &str,
+    max: usize,
+) -> Result<String, ToolExecutionError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "{label} is required"
+        )));
+    }
+    if trimmed.chars().count() > max {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be at most {max} characters"
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn optional_container_project(
+    value: Option<String>,
+) -> Result<Option<String>, ToolExecutionError> {
+    match value.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(project) if project.chars().count() > CONTAINER_PROJECT_MAX => {
+            Err(ToolExecutionError::invalid_args(format!(
+                "project must be at most {CONTAINER_PROJECT_MAX} characters"
+            )))
+        }
+        Some(project) => Ok(Some(project.to_string())),
+    }
+}
+
+/// Validate and dedupe a bulk list of `PROJ-123` references.
+pub fn work_item_refs_arg(
+    values: Vec<String>,
+) -> Result<Vec<String>, ToolExecutionError> {
+    if values.is_empty() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one work item is required",
+        ));
+    }
+    if values.len() > MAX_BULK_ITEMS {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "at most {MAX_BULK_ITEMS} work items are allowed"
+        )));
+    }
+    let mut seen: Vec<String> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        parse_work_item_ref(trimmed)?;
+        let key = trimmed.to_ascii_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        out.push(trimmed.to_string());
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ManageSprintItemsArgs {
+    /// Sprint name or id. Required.
+    pub sprint: String,
+    /// Project identifier or name; use it when the sprint name is not unique.
+    pub project: Option<String>,
+    /// Work item identifiers like "LTS-42" (1-25).
+    pub work_items: Vec<String>,
+    /// One of: add, remove.
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ManageSprintItemsProposal {
+    pub sprint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub work_items: Vec<String>,
+    pub action: String,
+}
+
+/// Validate raw tool args into a normalized sprint items proposal.
+pub fn manage_sprint_items_proposal_from_args(
+    args: ManageSprintItemsArgs,
+) -> Result<ManageSprintItemsProposal, ToolExecutionError> {
+    let sprint = required_text(&args.sprint, "sprint", CONTAINER_REF_MAX)?;
+    let project = optional_container_project(args.project)?;
+    let action = enum_arg(&args.action, &["add", "remove"], "action")?;
+    let work_items = work_item_refs_arg(args.work_items)?;
+    Ok(ManageSprintItemsProposal {
+        sprint,
+        project,
+        work_items,
+        action,
+    })
+}
+
+pub struct ManageSprintItems {
+    pub trace: ToolTrace,
+}
+
+impl Tool for ManageSprintItems {
+    const NAME: &'static str = MANAGE_SPRINT_ITEMS_NAME;
+    type Args = ManageSprintItemsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose adding or removing work items in a sprint. Only call this when \
+         the user asks to plan or change sprint scope. The sprint name (or id) \
+         and at least one work item identifier are required; never guess them. \
+         Pass the project when the sprint name is not unique. The user must \
+         confirm the card in the UI before anything is saved. Never claim the \
+         sprint was changed until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ManageSprintItemsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = manage_sprint_items_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("ManageSprintItemsProposal serializes"))
+    }
+}
+
 /// Map a mutation tool name to its proposal `kind`. Plan 2B extends the match.
 pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
     match name {
@@ -535,5 +674,70 @@ mod tests {
         })
         .unwrap_err();
         assert!(bad_action.to_string().contains("link, unlink"));
+    }
+
+    #[test]
+    fn sprint_items_normalize_and_validate() {
+        let proposal = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: " Sprint 3 ".into(),
+            project: Some(" LTS ".into()),
+            work_items: vec![" lts-1 ".into(), "LTS-1".into(), "LTS-2".into()],
+            action: " Add ".into(),
+        })
+        .unwrap();
+        assert_eq!(proposal.sprint, "Sprint 3");
+        assert_eq!(proposal.project.as_deref(), Some("LTS"));
+        assert_eq!(
+            proposal.work_items,
+            vec!["lts-1".to_string(), "LTS-2".to_string()]
+        );
+        assert_eq!(proposal.action, "add");
+
+        let blank_sprint = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: "   ".into(),
+            project: None,
+            work_items: vec!["LTS-1".into()],
+            action: "add".into(),
+        })
+        .unwrap_err();
+        assert!(blank_sprint.to_string().contains("sprint"));
+
+        let empty_items = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: "Sprint 3".into(),
+            project: None,
+            work_items: vec![],
+            action: "add".into(),
+        })
+        .unwrap_err();
+        assert!(empty_items.to_string().contains("work item"));
+
+        let bad_ref = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: "Sprint 3".into(),
+            project: None,
+            work_items: vec!["nope".into()],
+            action: "add".into(),
+        })
+        .unwrap_err();
+        assert!(bad_ref.to_string().contains("PROJ-123"));
+
+        let too_many = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: "Sprint 3".into(),
+            project: None,
+            work_items: (0..=MAX_BULK_ITEMS)
+                .map(|index| format!("LTS-{index}"))
+                .collect(),
+            action: "add".into(),
+        })
+        .unwrap_err();
+        assert!(too_many.to_string().contains("at most"));
+
+        let bad_action = manage_sprint_items_proposal_from_args(ManageSprintItemsArgs {
+            sprint: "Sprint 3".into(),
+            project: None,
+            work_items: vec!["LTS-1".into()],
+            action: "attach".into(),
+        })
+        .unwrap_err();
+        assert!(bad_action.to_string().contains("add, remove"));
     }
 }
