@@ -10,6 +10,7 @@ import type { TIssue } from "@plane/types";
 import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
+import { CycleService } from "@/services/cycle.service";
 import { IssueService } from "@/services/issue/issue.service";
 import { IssueCommentService } from "@/services/issue/issue_comment.service";
 import { ModuleService } from "@/services/module.service";
@@ -32,8 +33,12 @@ type TAiConversationsService = Pick<
 >;
 type TIssueService = Pick<IssueService, "createIssue" | "patchIssue" | "addIssueToCycle" | "removeIssueFromCycle">;
 type TCommentsService = Pick<IssueCommentService, "createIssueComment">;
-type TServicesService = Pick<ServiceService, "linkWorkItem" | "unlinkWorkItem">;
-type TModulesService = Pick<ModuleService, "addIssuesToModule" | "removeIssuesFromModuleBulk">;
+type TServicesService = Pick<ServiceService, "linkWorkItem" | "unlinkWorkItem" | "createService" | "updateService">;
+type TModulesService = Pick<
+  ModuleService,
+  "addIssuesToModule" | "removeIssuesFromModuleBulk" | "createModule" | "patchModule"
+>;
+type TCyclesService = Pick<CycleService, "createCycle" | "patchCycle">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -120,7 +125,8 @@ export class AIAssistantStore implements IAIAssistantStore {
     private issuesService: TIssueService = new IssueService(),
     private commentsService: TCommentsService = new IssueCommentService(),
     private servicesService: TServicesService = new ServiceService(),
-    private modulesService: TModulesService = new ModuleService()
+    private modulesService: TModulesService = new ModuleService(),
+    private cyclesService: TCyclesService = new CycleService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -470,6 +476,24 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
       if (!created?.id) throw new Error("Comment creation returned no id");
       result = { created_comment_id: created.id };
+    } else if (payload.kind === "create_service") {
+      const created = await this.servicesService.createService(slug, "", payload.projectId, payload.data);
+      if (!created?.id) throw new Error("Service creation returned no id");
+      result = { created_service_id: created.id };
+    } else if (payload.kind === "update_service") {
+      await this.servicesService.updateService(slug, "", payload.projectId, payload.serviceId, payload.changes);
+    } else if (payload.kind === "create_sprint") {
+      const created = await this.cyclesService.createCycle(slug, payload.projectId, payload.data);
+      if (!created?.id) throw new Error("Sprint creation returned no id");
+      result = { created_sprint_id: created.id };
+    } else if (payload.kind === "update_sprint") {
+      await this.cyclesService.patchCycle(slug, payload.projectId, payload.cycleId, payload.changes);
+    } else if (payload.kind === "create_track") {
+      const created = await this.modulesService.createModule(slug, payload.projectId, payload.data);
+      if (!created?.id) throw new Error("Track creation returned no id");
+      result = { created_track_id: created.id };
+    } else if (payload.kind === "update_track") {
+      await this.modulesService.patchModule(slug, payload.projectId, payload.moduleId, payload.changes);
     } else if (payload.kind === "manage_service_links") {
       if (payload.action === "link") {
         await Promise.all(

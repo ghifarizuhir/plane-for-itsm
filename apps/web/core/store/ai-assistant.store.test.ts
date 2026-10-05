@@ -98,12 +98,24 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
   services: {
     linkWorkItem: vi.fn(async () => ({ id: "l1" })),
     unlinkWorkItem: vi.fn(async () => undefined),
+    createService: vi.fn(async (_slug: string, _workspaceId: string, projectId: string) => ({
+      id: "srv1",
+      project_id: projectId,
+    })),
+    updateService: vi.fn(async () => ({ id: "srv1" })),
     ...overrides.services,
   },
   modules: {
     addIssuesToModule: vi.fn(async () => undefined),
     removeIssuesFromModuleBulk: vi.fn(async () => undefined),
+    createModule: vi.fn(async (_slug: string, projectId: string) => ({ id: "m1", project_id: projectId })),
+    patchModule: vi.fn(async () => ({ id: "m1" })),
     ...overrides.modules,
+  },
+  cycles: {
+    createCycle: vi.fn(async (_slug: string, projectId: string) => ({ id: "cy1", project_id: projectId })),
+    patchCycle: vi.fn(async () => ({ id: "cy1" })),
+    ...overrides.cycles,
   },
 });
 
@@ -115,7 +127,8 @@ const makeStore = (services = makeServices()) =>
     services.issues as any,
     services.comments as any,
     services.services as any,
-    services.modules as any
+    services.modules as any,
+    services.cycles as any
   );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1669,5 +1682,174 @@ describe("link proposals", () => {
       issueIds: ["i1"],
     });
     expect(services.modules.removeIssuesFromModuleBulk).toHaveBeenCalledWith("acme", "p1", "m1", ["i1"]);
+  });
+});
+
+const createServiceMetadata = {
+  proposals: [
+    {
+      key: "k6",
+      kind: "create_service",
+      proposal: { project: "LTS", name: "Email", status: "active" },
+    },
+  ],
+};
+
+const updateServiceMetadata = {
+  proposals: [
+    {
+      key: "k7",
+      kind: "update_service",
+      proposal: { service: "Email", changes: { status: "deprecated" } },
+    },
+  ],
+};
+
+const createSprintMetadata = {
+  proposals: [
+    {
+      key: "k8",
+      kind: "create_sprint",
+      proposal: { project: "LTS", name: "Sprint 4" },
+    },
+  ],
+};
+
+const updateSprintMetadata = {
+  proposals: [
+    {
+      key: "k9",
+      kind: "update_sprint",
+      proposal: { sprint: "Sprint 4", changes: { name: "Sprint 4b" } },
+    },
+  ],
+};
+
+const createTrackMetadata = {
+  proposals: [
+    {
+      key: "k10",
+      kind: "create_track",
+      proposal: { project: "LTS", name: "Onboarding" },
+    },
+  ],
+};
+
+const updateTrackMetadata = {
+  proposals: [
+    {
+      key: "k11",
+      kind: "update_track",
+      proposal: { track: "Onboarding", changes: { status: "in-progress" } },
+    },
+  ],
+};
+
+describe("container form proposals", () => {
+  const openAgent = async (services = makeServices(), metadata: Record<string, unknown>) => {
+    services.conversations.listMessages = vi.fn(async () => [mutationMessage(metadata)]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    return { store, services };
+  };
+
+  it("creates a service and stores the created id", async () => {
+    const { store, services } = await openAgent(makeServices(), createServiceMetadata);
+    await store.confirmProposal("srv-assistant", "k6", {
+      kind: "create_service",
+      projectId: "p1",
+      data: { name: "Email", status: "active" },
+    });
+    expect(services.services.createService).toHaveBeenCalledWith("acme", "", "p1", {
+      name: "Email",
+      status: "active",
+    });
+    expect(store.messages[0].proposalDecisions?.k6).toEqual({
+      kind: "create_service",
+      decision: "applied",
+      result: { created_service_id: "srv1" },
+    });
+  });
+
+  it("updates a service without a result", async () => {
+    const { store, services } = await openAgent(makeServices(), updateServiceMetadata);
+    await store.confirmProposal("srv-assistant", "k7", {
+      kind: "update_service",
+      projectId: "p1",
+      serviceId: "s1",
+      changes: { status: "deprecated" },
+    });
+    expect(services.services.updateService).toHaveBeenCalledWith("acme", "", "p1", "s1", {
+      status: "deprecated",
+    });
+    expect(store.messages[0].proposalDecisions?.k7).toEqual({
+      kind: "update_service",
+      decision: "applied",
+    });
+  });
+
+  it("creates a sprint and stores the created id", async () => {
+    const { store, services } = await openAgent(makeServices(), createSprintMetadata);
+    await store.confirmProposal("srv-assistant", "k8", {
+      kind: "create_sprint",
+      projectId: "p1",
+      data: { name: "Sprint 4" },
+    });
+    expect(services.cycles.createCycle).toHaveBeenCalledWith("acme", "p1", { name: "Sprint 4" });
+    expect(store.messages[0].proposalDecisions?.k8).toEqual({
+      kind: "create_sprint",
+      decision: "applied",
+      result: { created_sprint_id: "cy1" },
+    });
+  });
+
+  it("updates a sprint without a result", async () => {
+    const { store, services } = await openAgent(makeServices(), updateSprintMetadata);
+    await store.confirmProposal("srv-assistant", "k9", {
+      kind: "update_sprint",
+      projectId: "p1",
+      cycleId: "cy1",
+      changes: { name: "Sprint 4b" },
+    });
+    expect(services.cycles.patchCycle).toHaveBeenCalledWith("acme", "p1", "cy1", { name: "Sprint 4b" });
+    expect(store.messages[0].proposalDecisions?.k9).toEqual({
+      kind: "update_sprint",
+      decision: "applied",
+    });
+  });
+
+  it("creates a track and stores the created id", async () => {
+    const { store, services } = await openAgent(makeServices(), createTrackMetadata);
+    await store.confirmProposal("srv-assistant", "k10", {
+      kind: "create_track",
+      projectId: "p1",
+      data: { name: "Onboarding" },
+    });
+    expect(services.modules.createModule).toHaveBeenCalledWith("acme", "p1", { name: "Onboarding" });
+    expect(store.messages[0].proposalDecisions?.k10).toEqual({
+      kind: "create_track",
+      decision: "applied",
+      result: { created_track_id: "m1" },
+    });
+  });
+
+  it("updates a track without a result", async () => {
+    const { store, services } = await openAgent(makeServices(), updateTrackMetadata);
+    await store.confirmProposal("srv-assistant", "k11", {
+      kind: "update_track",
+      projectId: "p1",
+      moduleId: "m1",
+      changes: { status: "in-progress" },
+    });
+    expect(services.modules.patchModule).toHaveBeenCalledWith("acme", "p1", "m1", {
+      status: "in-progress",
+    });
+    expect(store.messages[0].proposalDecisions?.k11).toEqual({
+      kind: "update_track",
+      decision: "applied",
+    });
   });
 });
