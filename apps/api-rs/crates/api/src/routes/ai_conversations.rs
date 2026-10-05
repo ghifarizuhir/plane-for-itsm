@@ -501,6 +501,7 @@ fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
         | "update_service"
         | "update_sprint"
         | "update_track"
+        | "update_article"
         | "manage_service_links"
         | "manage_sprint_items"
         | "manage_track_items" => Some(&[]),
@@ -508,6 +509,7 @@ fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
         "create_service" => Some(&["created_service_id"]),
         "create_sprint" => Some(&["created_sprint_id"]),
         "create_track" => Some(&["created_track_id"]),
+        "create_article" => Some(&["created_article_id"]),
         _ => None,
     }
 }
@@ -519,6 +521,7 @@ fn required_result_key(kind: &str) -> Option<&'static str> {
         "create_service" => Some("created_service_id"),
         "create_sprint" => Some("created_sprint_id"),
         "create_track" => Some("created_track_id"),
+        "create_article" => Some("created_article_id"),
         _ => None,
     }
 }
@@ -935,6 +938,43 @@ mod tests {
         )]))
         .unwrap_err();
         assert!(wrong_key.contains("not allowed"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_article_decisions() {
+        let key = Uuid::new_v4().to_string();
+        let page = Uuid::new_v4();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {
+                "kind": "create_article",
+                "decision": "applied",
+                "result": {"created_article_id": page},
+            }}),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][key.as_str()]["result"]["created_article_id"],
+            json!(page)
+        );
+
+        let missing = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {"kind": "create_article", "decision": "applied"}}),
+        )]))
+        .unwrap_err();
+        assert!(missing.contains("created_article_id"));
+
+        let update_key = Uuid::new_v4().to_string();
+        let clean_update = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(update_key.clone()): {"kind": "update_article", "decision": "applied"}}),
+        )]))
+        .expect("valid update patch");
+        assert_eq!(
+            clean_update["proposal_decisions"][update_key.as_str()]["decision"],
+            json!("applied")
+        );
     }
 
     #[test]
