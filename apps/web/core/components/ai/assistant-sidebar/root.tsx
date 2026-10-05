@@ -32,9 +32,7 @@ import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
 import { WorkItemProposalCard } from "./work-item-proposal-card";
-import { CommentProposalCard } from "./proposals/comment-proposal-card";
-import { LinkItemsProposalCard } from "./proposals/link-items-proposal-card";
-import { WorkItemUpdateProposalCard } from "./proposals/work-item-update-proposal-card";
+import { ProposalCard } from "./proposals/proposal-card";
 
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
@@ -333,64 +331,15 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                               onCancel={() => resolveWorkItemProposal(message.id, entry.key)}
                             />
                           ))}
-                          {message.proposals?.map((entry) => {
-                            if (entry.kind === "update_work_item") {
-                              return (
-                                <WorkItemUpdateProposalCard
-                                  key={entry.key}
-                                  proposal={entry.proposal}
-                                  decision={message.proposalDecisions?.[entry.key]}
-                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
-                                  onCancel={() => cancelProposal(message.id, entry.key)}
-                                />
-                              );
-                            }
-                            if (entry.kind === "add_comment") {
-                              return (
-                                <CommentProposalCard
-                                  key={entry.key}
-                                  proposal={entry.proposal}
-                                  decision={message.proposalDecisions?.[entry.key]}
-                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
-                                  onCancel={() => cancelProposal(message.id, entry.key)}
-                                />
-                              );
-                            }
-                            if (entry.kind === "manage_service_links") {
-                              return (
-                                <LinkItemsProposalCard
-                                  key={entry.key}
-                                  kind={entry.kind}
-                                  proposal={entry.proposal}
-                                  decision={message.proposalDecisions?.[entry.key]}
-                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
-                                  onCancel={() => cancelProposal(message.id, entry.key)}
-                                />
-                              );
-                            }
-                            if (entry.kind === "manage_sprint_items") {
-                              return (
-                                <LinkItemsProposalCard
-                                  key={entry.key}
-                                  kind={entry.kind}
-                                  proposal={entry.proposal}
-                                  decision={message.proposalDecisions?.[entry.key]}
-                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
-                                  onCancel={() => cancelProposal(message.id, entry.key)}
-                                />
-                              );
-                            }
-                            return (
-                              <LinkItemsProposalCard
-                                key={entry.key}
-                                kind="manage_track_items"
-                                proposal={entry.proposal}
-                                decision={message.proposalDecisions?.[entry.key]}
-                                onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
-                                onCancel={() => cancelProposal(message.id, entry.key)}
-                              />
-                            );
-                          })}
+                          {message.proposals?.map((entry) => (
+                            <ProposalCard
+                              key={entry.key}
+                              entry={entry}
+                              decision={message.proposalDecisions?.[entry.key]}
+                              onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                              onCancel={() => cancelProposal(message.id, entry.key)}
+                            />
+                          ))}
                         </div>
                       </div>
                     )}
