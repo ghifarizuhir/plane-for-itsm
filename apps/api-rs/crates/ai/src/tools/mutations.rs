@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    bounded_ref_list, bounded_ref_list_opt, enum_arg, parse_iso_date, parse_work_item_ref,
-    priority_arg, schema_of, WORK_ITEM_DESCRIPTION_MAX, WORK_ITEM_NAME_MAX, WORK_ITEM_STATE_MAX,
+    bounded_ref_list, bounded_ref_list_opt, enum_arg, optional_enum_arg, optional_text,
+    parse_iso_date, parse_work_item_ref, priority_arg, schema_of, WORK_ITEM_DESCRIPTION_MAX,
+    WORK_ITEM_NAME_MAX, WORK_ITEM_STATE_MAX,
 };
 use crate::agent::{record, ToolTrace};
 
@@ -579,6 +580,156 @@ impl Tool for UpdateWorkItem {
     }
 }
 
+pub const SERVICE_NAME_MAX: usize = 255;
+pub const SERVICE_DESCRIPTION_MAX: usize = 5000;
+pub const SERVICE_URL_MAX: usize = 2048;
+pub const MAX_MEMBER_REFS: usize = 10;
+pub const SERVICE_STATUSES: [&str; 5] = ["active", "planned", "maintenance", "deprecated", "retired"];
+pub const SERVICE_CRITICALITIES: [&str; 4] = ["critical", "high", "medium", "low"];
+pub const SERVICE_TYPES: [&str; 4] = ["internal", "external", "infrastructure", "third_party"];
+pub const MODULE_STATUSES: [&str; 6] = ["backlog", "planned", "in-progress", "paused", "completed", "cancelled"];
+
+fn optional_bounded_text(
+    value: Option<&str>,
+    label: &str,
+    max: usize,
+) -> Result<Option<String>, ToolExecutionError> {
+    let Some(text) = optional_text(value) else {
+        return Ok(None);
+    };
+    if text.chars().count() > max {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be at most {max} characters"
+        )));
+    }
+    Ok(Some(text))
+}
+
+fn optional_url(value: Option<&str>, label: &str) -> Result<Option<String>, ToolExecutionError> {
+    let Some(url) = optional_text(value) else {
+        return Ok(None);
+    };
+    if url.chars().count() > SERVICE_URL_MAX {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be at most {SERVICE_URL_MAX} characters"
+        )));
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "{label} must start with http:// or https://"
+        )));
+    }
+    Ok(Some(url))
+}
+
+pub const CREATE_SERVICE_NAME: &str = "create_service";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CreateServiceArgs {
+    /// Project identifier or name. Required.
+    pub project: String,
+    /// Service name (1-255 characters), unique per project.
+    pub name: String,
+    /// Plain-text description (max 5000 characters).
+    pub description: Option<String>,
+    /// One of: active, planned, maintenance, deprecated, retired.
+    pub status: Option<String>,
+    /// One of: critical, high, medium, low.
+    pub criticality: Option<String>,
+    /// One of: internal, external, infrastructure, third_party.
+    #[serde(rename = "type")]
+    pub service_type: Option<String>,
+    /// Owner display name or email; resolved by the UI.
+    pub owner: Option<String>,
+    /// Repository URL starting with http:// or https://.
+    pub repository_url: Option<String>,
+    /// Documentation URL starting with http:// or https://.
+    pub documentation_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreateServiceProposal {
+    pub project: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub criticality: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub service_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub documentation_url: Option<String>,
+}
+
+/// Validate raw tool args into a normalized create-service proposal.
+pub fn create_service_proposal_from_args(
+    args: CreateServiceArgs,
+) -> Result<CreateServiceProposal, ToolExecutionError> {
+    let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
+    let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
+    let description =
+        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let status = optional_enum_arg(args.status.as_deref(), &SERVICE_STATUSES, "status")?;
+    let criticality =
+        optional_enum_arg(args.criticality.as_deref(), &SERVICE_CRITICALITIES, "criticality")?;
+    let service_type = optional_enum_arg(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
+    let owner = optional_bounded_text(args.owner.as_deref(), "owner", CONTAINER_REF_MAX)?;
+    let repository_url = optional_url(args.repository_url.as_deref(), "repository_url")?;
+    let documentation_url = optional_url(args.documentation_url.as_deref(), "documentation_url")?;
+    Ok(CreateServiceProposal {
+        project,
+        name,
+        description,
+        status,
+        criticality,
+        service_type,
+        owner,
+        repository_url,
+        documentation_url,
+    })
+}
+
+pub struct CreateService {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateService {
+    const NAME: &'static str = CREATE_SERVICE_NAME;
+    type Args = CreateServiceArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose creating one service in a project. Only call this when the user \
+         asks to create a service. The project and service name are required; \
+         never guess them. Status, criticality, type, owner, and URLs are \
+         optional. The user must confirm and may edit every field in the UI \
+         before anything is saved. Never claim the service was created until \
+         they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateServiceArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = create_service_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("CreateServiceProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -865,5 +1016,94 @@ mod tests {
             mutation_kind_for_tool(MANAGE_TRACK_ITEMS_NAME),
             Some("manage_track_items")
         );
+    }
+
+    #[test]
+    fn create_service_normalizes_and_validates() {
+        let proposal = create_service_proposal_from_args(CreateServiceArgs {
+            project: " LTS ".into(),
+            name: " Email Gateway ".into(),
+            description: Some("  Handles mail  ".into()),
+            status: Some(" ACTIVE ".into()),
+            criticality: Some("High".into()),
+            service_type: Some("internal".into()),
+            owner: Some(" Budi ".into()),
+            repository_url: Some(" https://git.example.com/email ".into()),
+            documentation_url: None,
+        })
+        .unwrap();
+        assert_eq!(proposal.project, "LTS");
+        assert_eq!(proposal.name, "Email Gateway");
+        assert_eq!(proposal.description.as_deref(), Some("Handles mail"));
+        assert_eq!(proposal.status.as_deref(), Some("active"));
+        assert_eq!(proposal.criticality.as_deref(), Some("high"));
+        assert_eq!(proposal.service_type.as_deref(), Some("internal"));
+        assert_eq!(proposal.owner.as_deref(), Some("Budi"));
+        assert_eq!(
+            proposal.repository_url.as_deref(),
+            Some("https://git.example.com/email")
+        );
+        assert_eq!(proposal.documentation_url, None);
+
+        let blank_name = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "  ".into(),
+            description: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            owner: None,
+            repository_url: None,
+            documentation_url: None,
+        })
+        .unwrap_err();
+        assert!(blank_name.to_string().contains("name"));
+
+        let bad_status = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "Email".into(),
+            description: None,
+            status: Some("broken".into()),
+            criticality: None,
+            service_type: None,
+            owner: None,
+            repository_url: None,
+            documentation_url: None,
+        })
+        .unwrap_err();
+        assert!(bad_status.to_string().contains("active"));
+
+        let bad_url = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "Email".into(),
+            description: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            owner: None,
+            repository_url: Some("git.example.com".into()),
+            documentation_url: None,
+        })
+        .unwrap_err();
+        assert!(bad_url.to_string().contains("http"));
+    }
+
+    #[test]
+    fn create_service_proposal_serializes_type_key() {
+        let proposal = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "Email".into(),
+            description: None,
+            status: None,
+            criticality: None,
+            service_type: Some("internal".into()),
+            owner: None,
+            repository_url: None,
+            documentation_url: None,
+        })
+        .unwrap();
+        let value = serde_json::to_value(&proposal).unwrap();
+        assert_eq!(value["type"], serde_json::json!("internal"));
+        assert!(value.get("service_type").is_none());
     }
 }

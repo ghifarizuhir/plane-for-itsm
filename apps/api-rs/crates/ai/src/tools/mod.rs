@@ -101,6 +101,18 @@ pub fn enum_arg(
     }
 }
 
+/// Normalize an optional enum argument (e.g. a status) against an allowlist.
+pub fn optional_enum_arg(
+    value: Option<&str>,
+    allowed: &[&str],
+    label: &str,
+) -> Result<Option<String>, ToolExecutionError> {
+    match optional_text(value) {
+        None => Ok(None),
+        Some(normalized) => enum_arg(&normalized, allowed, label).map(Some),
+    }
+}
+
 pub fn clamp_limit(value: Option<i64>) -> i64 {
     value.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
 }
@@ -726,6 +738,18 @@ mod tests {
         );
         let err = enum_arg("attach", &["link", "unlink"], "action").unwrap_err();
         assert!(err.to_string().contains("link, unlink"));
+    }
+
+    #[test]
+    fn optional_enum_arg_rules() {
+        assert_eq!(optional_enum_arg(None, &["a"], "x").unwrap(), None);
+        assert_eq!(optional_enum_arg(Some("  "), &["a"], "x").unwrap(), None);
+        assert_eq!(
+            optional_enum_arg(Some(" A "), &["a"], "x").unwrap(),
+            Some("a".to_string())
+        );
+        let err = optional_enum_arg(Some("b"), &["a"], "x").unwrap_err();
+        assert!(err.to_string().contains("x must be one of: a"));
     }
 
     #[test]
