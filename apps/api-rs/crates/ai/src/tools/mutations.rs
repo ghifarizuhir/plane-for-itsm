@@ -1572,6 +1572,99 @@ impl Tool for UpdateArticle {
     }
 }
 
+pub const APPLY_TRIAGE_SUGGESTION_NAME: &str = "apply_triage_suggestion";
+pub const TRIAGE_INTAKE_ITEM_NAME: &str = "triage_intake_item";
+pub const TRIAGE_APPLY_FIELDS: [&str; 3] = ["category", "service", "severity"];
+pub const TRIAGE_ACTIONS: [&str; 4] = ["accept", "reject", "snooze", "duplicate"];
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ApplyTriageSuggestionArgs {
+    /// Work item identifier of the intake item, like "LTS-42".
+    pub intake_item: String,
+    /// Fields to apply, a subset of: category, service, severity. Defaults to all.
+    pub fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ApplyTriageSuggestionProposal {
+    pub intake_item: String,
+    pub fields: Vec<String>,
+}
+
+/// Validate raw tool args into a normalized apply-suggestion proposal.
+pub fn apply_triage_suggestion_proposal_from_args(
+    args: ApplyTriageSuggestionArgs,
+) -> Result<ApplyTriageSuggestionProposal, ToolExecutionError> {
+    let intake_item = args.intake_item.trim();
+    if intake_item.is_empty() {
+        return Err(ToolExecutionError::invalid_args("intake_item is required"));
+    }
+    parse_work_item_ref(intake_item)?;
+    let fields = match args.fields {
+        None => TRIAGE_APPLY_FIELDS
+            .iter()
+            .map(|field| field.to_string())
+            .collect(),
+        Some(values) => {
+            if values.is_empty() {
+                return Err(ToolExecutionError::invalid_args(
+                    "at least one field is required",
+                ));
+            }
+            let mut seen: Vec<String> = Vec::new();
+            let mut out: Vec<String> = Vec::new();
+            for value in values {
+                let normalized = enum_arg(&value, &TRIAGE_APPLY_FIELDS, "fields")?;
+                if seen.contains(&normalized) {
+                    continue;
+                }
+                seen.push(normalized.clone());
+                out.push(normalized);
+            }
+            out
+        }
+    };
+    Ok(ApplyTriageSuggestionProposal {
+        intake_item: intake_item.to_string(),
+        fields,
+    })
+}
+
+pub struct ApplyTriageSuggestion {
+    pub trace: ToolTrace,
+}
+
+impl Tool for ApplyTriageSuggestion {
+    const NAME: &'static str = APPLY_TRIAGE_SUGGESTION_NAME;
+    type Args = ApplyTriageSuggestionArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose applying the existing AI triage suggestion of one intake \
+         item. Only call this when the user asks to apply the suggestion. The \
+         intake item is identified by its work item identifier like LTS-42, \
+         never guess it. Fields default to category, service, and severity. \
+         The user must confirm the card in the UI first, so never claim the \
+         suggestion was applied before that confirmation."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ApplyTriageSuggestionArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = apply_triage_suggestion_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("ApplyTriageSuggestionProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2372,5 +2465,50 @@ mod tests {
         })
         .unwrap_err();
         assert!(blank_name.to_string().contains("name"));
+    }
+
+    #[test]
+    fn apply_triage_suggestion_normalizes_fields() {
+        let proposal = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
+            intake_item: " lts-42 ".into(),
+            fields: Some(vec![" Category ".into(), "category".into(), "severity".into()]),
+        })
+        .unwrap();
+        assert_eq!(proposal.intake_item, "lts-42");
+        assert_eq!(
+            proposal.fields,
+            vec!["category".to_string(), "severity".to_string()]
+        );
+
+        let defaulted = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
+            intake_item: "LTS-42".into(),
+            fields: None,
+        })
+        .unwrap();
+        assert_eq!(
+            defaulted.fields,
+            vec!["category".to_string(), "service".to_string(), "severity".to_string()]
+        );
+
+        let bad_ref = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
+            intake_item: "nope".into(),
+            fields: None,
+        })
+        .unwrap_err();
+        assert!(bad_ref.to_string().contains("PROJ-123"));
+
+        let bad_field = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
+            intake_item: "LTS-42".into(),
+            fields: Some(vec!["needs_human".into()]),
+        })
+        .unwrap_err();
+        assert!(bad_field.to_string().contains("category"));
+
+        let empty = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
+            intake_item: "LTS-42".into(),
+            fields: Some(vec![]),
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("at least one"));
     }
 }
