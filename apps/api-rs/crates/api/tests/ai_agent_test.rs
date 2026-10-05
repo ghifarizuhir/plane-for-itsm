@@ -1655,3 +1655,101 @@ async fn update_track_proposal_roundtrip() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn create_article_proposal_roundtrip() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::tool_roundtrip_url(
+        "create_article",
+        r#"{"project":"LTS","name":"Runbook: restart API","content":"Step 1\nStep 2","access":"private"}"#,
+    )
+    .await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "write a runbook article in LTS",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals[0]["kind"], json!("create_article"));
+    assert_eq!(proposals[0]["proposal"]["name"], json!("Runbook: restart API"));
+    assert_eq!(proposals[0]["proposal"]["access"], json!("private"));
+    let key = proposals[0]["key"].as_str().unwrap().to_string();
+    let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+
+    let created = Uuid::new_v4();
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {"kind": "create_article", "decision": "applied", "result": {"created_article_id": created}}
+        }}})),
+    )
+    .await
+    .expect("patch applied");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["proposal_decisions"][key.as_str()]["result"]["created_article_id"],
+        json!(created)
+    );
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn update_article_proposal_roundtrip() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let article = Uuid::new_v4();
+    let arguments = format!(
+        r#"{{"article":"{article}","action":"append","content":"Step 3"}}"#
+    );
+    let leaked: &'static str = Box::leak(arguments.into_boxed_str());
+    let base_url = tool_roundtrip::tool_roundtrip_url("update_article", leaked).await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "append a step to the runbook",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals[0]["kind"], json!("update_article"));
+    assert_eq!(proposals[0]["proposal"]["action"], json!("append"));
+    assert_eq!(proposals[0]["proposal"]["article"], json!(article));
+
+    scratch.purge(&pool).await;
+}
