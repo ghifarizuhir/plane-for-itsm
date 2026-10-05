@@ -498,10 +498,27 @@ fn clean_work_item_decisions(value: &Value) -> Result<Value, String> {
 fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
         "update_work_item"
+        | "update_service"
+        | "update_sprint"
+        | "update_track"
         | "manage_service_links"
         | "manage_sprint_items"
         | "manage_track_items" => Some(&[]),
         "add_comment" => Some(&["created_comment_id"]),
+        "create_service" => Some(&["created_service_id"]),
+        "create_sprint" => Some(&["created_sprint_id"]),
+        "create_track" => Some(&["created_track_id"]),
+        _ => None,
+    }
+}
+
+/// Result key that must be present when the decision is `applied`.
+fn required_result_key(kind: &str) -> Option<&'static str> {
+    match kind {
+        "add_comment" => Some("created_comment_id"),
+        "create_service" => Some("created_service_id"),
+        "create_sprint" => Some("created_sprint_id"),
+        "create_track" => Some("created_track_id"),
         _ => None,
     }
 }
@@ -546,10 +563,12 @@ fn clean_proposal_decisions(value: &Value) -> Result<Value, String> {
                         result.insert(result_key.clone(), json!(uuid));
                     }
                 }
-                if kind == "add_comment" && !result.contains_key("created_comment_id") {
-                    return Err(
-                        "add_comment applied decisions need result.created_comment_id".to_string()
-                    );
+                if let Some(required) = required_result_key(kind) {
+                    if !result.contains_key(required) {
+                        return Err(format!(
+                            "{kind} applied decisions need result.{required}"
+                        ));
+                    }
                 }
                 let mut cleaned = serde_json::Map::new();
                 cleaned.insert("kind".to_string(), json!(kind));
@@ -864,6 +883,58 @@ mod tests {
         )]))
         .unwrap_err();
         assert!(err.contains("not allowed"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_container_decisions() {
+        let create_key = Uuid::new_v4().to_string();
+        let update_key = Uuid::new_v4().to_string();
+        let service = Uuid::new_v4();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({
+                (create_key.clone()): {
+                    "kind": "create_service",
+                    "decision": "applied",
+                    "result": {"created_service_id": service},
+                },
+                (update_key.clone()): {
+                    "kind": "update_sprint",
+                    "decision": "applied",
+                },
+            }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][create_key.as_str()]["result"]["created_service_id"],
+            json!(service)
+        );
+        assert_eq!(
+            clean["proposal_decisions"][update_key.as_str()]["decision"],
+            json!("applied")
+        );
+    }
+
+    #[test]
+    fn metadata_patch_requires_create_result_ids() {
+        let key = Uuid::new_v4().to_string();
+        let missing = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {"kind": "create_track", "decision": "applied"}}),
+        )]))
+        .unwrap_err();
+        assert!(missing.contains("created_track_id"));
+
+        let wrong_key = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {
+                "kind": "create_sprint",
+                "decision": "applied",
+                "result": {"created_comment_id": Uuid::new_v4()},
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(wrong_key.contains("not allowed"));
     }
 
     #[test]
