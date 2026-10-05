@@ -1455,6 +1455,121 @@ impl Tool for CreateArticle {
     }
 }
 
+pub const UPDATE_ARTICLE_NAME: &str = "update_article";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct UpdateArticleArgs {
+    /// Article (page) id, a uuid.
+    pub article: String,
+    /// Project identifier or name; use it when the article id is not unique.
+    pub project: Option<String>,
+    /// One of: append, replace. Required so a body is never replaced by accident.
+    pub action: String,
+    /// New title (1-255 characters).
+    pub name: Option<String>,
+    /// New plain-text body (1-20000 characters).
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UpdateArticleProposal {
+    pub article: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+}
+
+/// Validate raw tool args into a normalized update-article proposal.
+pub fn update_article_proposal_from_args(
+    args: UpdateArticleArgs,
+) -> Result<UpdateArticleProposal, ToolExecutionError> {
+    let article = Uuid::parse_str(args.article.trim())
+        .map_err(|_| ToolExecutionError::invalid_args("article must be a page uuid"))?
+        .to_string();
+    let project = optional_container_project(args.project)?;
+    let action = enum_arg(&args.action, &["append", "replace"], "action")?;
+    let name = match args.name.as_deref().map(str::trim) {
+        None => None,
+        Some("") => {
+            return Err(ToolExecutionError::invalid_args(
+                "name must not be empty when provided",
+            ))
+        }
+        Some(value) if value.chars().count() > SERVICE_NAME_MAX => {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "name must be at most {SERVICE_NAME_MAX} characters"
+            )))
+        }
+        Some(value) => Some(value.to_string()),
+    };
+    let content = match args.content.as_deref().map(str::trim) {
+        None => None,
+        Some("") => {
+            return Err(ToolExecutionError::invalid_args(
+                "content must not be empty when provided",
+            ))
+        }
+        Some(value) if value.chars().count() > ARTICLE_CONTENT_MAX => {
+            return Err(ToolExecutionError::invalid_args(format!(
+                "content must be at most {ARTICLE_CONTENT_MAX} characters"
+            )))
+        }
+        Some(value) => Some(value.to_string()),
+    };
+    if name.is_none() && content.is_none() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one of name or content is required",
+        ));
+    }
+    Ok(UpdateArticleProposal {
+        article,
+        project,
+        action,
+        name,
+        content,
+    })
+}
+
+pub struct UpdateArticle {
+    pub trace: ToolTrace,
+}
+
+impl Tool for UpdateArticle {
+    const NAME: &'static str = UPDATE_ARTICLE_NAME;
+    type Args = UpdateArticleArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose editing one knowledge base article (page). Only call this when \
+         the user asks to change an article's title or body. The article id is \
+         required; never guess it. The action is required: append adds the text \
+         at the end, replace swaps the whole body. Pass the project when known. \
+         The user must confirm and may edit the article in the UI before \
+         anything is saved. Never claim the article was updated until they \
+         confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<UpdateArticleArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = update_article_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("UpdateArticleProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2187,5 +2302,61 @@ mod tests {
         })
         .unwrap_err();
         assert!(bad_access.to_string().contains("public"));
+    }
+
+    #[test]
+    fn update_article_requires_action_and_a_change() {
+        let proposal = update_article_proposal_from_args(UpdateArticleArgs {
+            article: " 0f3f3f3f-0000-0000-0000-000000000002 ".into(),
+            project: Some(" LTS ".into()),
+            action: " APPEND ".into(),
+            name: None,
+            content: Some(" Step 3 ".into()),
+        })
+        .unwrap();
+        assert_eq!(proposal.article, "0f3f3f3f-0000-0000-0000-000000000002");
+        assert_eq!(proposal.project.as_deref(), Some("LTS"));
+        assert_eq!(proposal.action, "append");
+        assert_eq!(proposal.content.as_deref(), Some("Step 3"));
+
+        let empty = update_article_proposal_from_args(UpdateArticleArgs {
+            article: "0f3f3f3f-0000-0000-0000-000000000002".into(),
+            project: None,
+            action: "replace".into(),
+            name: None,
+            content: None,
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("at least one"));
+
+        let bad_action = update_article_proposal_from_args(UpdateArticleArgs {
+            article: "0f3f3f3f-0000-0000-0000-000000000002".into(),
+            project: None,
+            action: "rewrite".into(),
+            name: Some("x".into()),
+            content: None,
+        })
+        .unwrap_err();
+        assert!(bad_action.to_string().contains("append"));
+
+        let bad_article = update_article_proposal_from_args(UpdateArticleArgs {
+            article: "LTS-7".into(),
+            project: None,
+            action: "append".into(),
+            name: Some("x".into()),
+            content: None,
+        })
+        .unwrap_err();
+        assert!(bad_article.to_string().contains("uuid"));
+
+        let blank_name = update_article_proposal_from_args(UpdateArticleArgs {
+            article: "0f3f3f3f-0000-0000-0000-000000000002".into(),
+            project: None,
+            action: "append".into(),
+            name: Some("  ".into()),
+            content: None,
+        })
+        .unwrap_err();
+        assert!(blank_name.to_string().contains("name"));
     }
 }
