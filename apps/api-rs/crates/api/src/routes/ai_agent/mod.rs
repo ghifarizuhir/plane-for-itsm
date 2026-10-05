@@ -59,6 +59,24 @@ pub fn work_item_proposals_metadata(trace: &ToolTrace) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+/// Metadata entry for every generic mutation proposal in this turn: one
+/// server-generated key per proposal so the FE can persist a decision per card.
+pub fn proposal_metadata(trace: &ToolTrace) -> Vec<Value> {
+    trace
+        .lock()
+        .map(|recorded| {
+            recorded
+                .iter()
+                .filter_map(|call| {
+                    ai::tools::mutation_kind_for_tool(&call.name).map(|kind| {
+                        json!({"key": Uuid::new_v4(), "kind": kind, "proposal": call.arguments.clone()})
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// 200 response body: raw text, newline-mapped HTML for the chat bubble, the
 /// recorded tool calls, the last `create_schedule` proposal (if any), and all
 /// proposals of the turn (including `create_work_item`) for the FE cards.
@@ -219,6 +237,7 @@ pub async fn workspace_ai_agent(
             let action = pending_action(&trace);
             let actions = pending_actions(&trace);
             let work_items = work_item_proposals_metadata(&trace);
+            let proposals = proposal_metadata(&trace);
             let mut metadata = json!({ "is_error": false });
             if let Some(action) = action.as_ref() {
                 metadata["schedule_proposal"] = action["proposal"].clone();
@@ -227,6 +246,9 @@ pub async fn workspace_ai_agent(
             }
             if !work_items.is_empty() {
                 metadata["work_item_proposals"] = json!(work_items);
+            }
+            if !proposals.is_empty() {
+                metadata["proposals"] = json!(proposals);
             }
             // Assistant message + prune + updated_at in ONE transaction. A
             // conversation deleted mid-turn (row gone / FK violation) → 404.
@@ -358,6 +380,32 @@ mod tests {
         let action = json!({"kind": "create_work_item", "proposal": {"name": "Fix pump"}});
         let body = success_body("done", vec![], None, vec![action.clone()]);
         assert_eq!(body["pending_actions"][0], action);
+    }
+
+    #[test]
+    fn proposal_metadata_maps_mutation_tools_with_kind_and_key() {
+        let trace = new_trace();
+        record(
+            &trace,
+            ai::tools::UPDATE_WORK_ITEM_NAME,
+            &json!({"work_item": "LTS-1", "changes": {"priority": "high"}}),
+        );
+        record(&trace, "search_work_items", &json!({}));
+        record(
+            &trace,
+            ai::tools::ADD_COMMENT_NAME,
+            &json!({"work_item": "LTS-1", "comment": "hi"}),
+        );
+        let proposals = proposal_metadata(&trace);
+        assert_eq!(proposals.len(), 2);
+        assert_eq!(proposals[0]["kind"], json!("update_work_item"));
+        assert_eq!(
+            proposals[0]["proposal"]["changes"]["priority"],
+            json!("high")
+        );
+        assert_ne!(proposals[0]["key"], proposals[1]["key"]);
+        assert!(proposals[0]["key"].as_str().is_some());
+        assert_eq!(proposals[1]["kind"], json!("add_comment"));
     }
 
     #[test]
