@@ -41,6 +41,20 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** True when the message starts with the `/task` slash command (case-insensitive). */
 export const isWorkItemCommand = (text: string): boolean => /^\/task(?:\s|$)/i.test(text.trimStart());
 
+export type TWorkItemRef = { projectIdentifier: string; sequenceId: string };
+
+/** Split "LTS-42" into its project identifier and sequence id; null when malformed. */
+export const parseWorkItemRef = (reference: string): TWorkItemRef | null => {
+  const trimmed = reference.trim();
+  const index = trimmed.lastIndexOf("-");
+  if (index <= 0 || index === trimmed.length - 1) return null;
+  const projectIdentifier = trimmed.slice(0, index);
+  const sequenceId = trimmed.slice(index + 1);
+  if (!/^[A-Za-z0-9]+$/.test(projectIdentifier) || !/^\d+$/.test(sequenceId)) return null;
+  if (Number(sequenceId) <= 0) return null;
+  return { projectIdentifier, sequenceId };
+};
+
 /** Mirrors `work_item_proposal_from_args` on the backend; returns the first error. */
 export const validateWorkItemProposal = (proposal: Partial<TAiWorkItemProposal>): string | null => {
   const name = proposal.name?.trim() ?? "";

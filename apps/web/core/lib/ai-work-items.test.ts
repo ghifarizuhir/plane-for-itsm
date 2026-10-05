@@ -5,6 +5,7 @@ import {
   matchLabels,
   matchProject,
   matchState,
+  parseWorkItemRef,
   textToDescriptionHtml,
   validateWorkItemProposal,
   workItemHref,
@@ -100,5 +101,21 @@ describe("matching helpers", () => {
 describe("workItemHref", () => {
   it("builds the project issue route", () => {
     expect(workItemHref("acme", "p1", "i9")).toBe("/acme/projects/p1/issues/i9");
+  });
+});
+
+describe("parseWorkItemRef", () => {
+  it("splits an identifier into project and sequence", () => {
+    expect(parseWorkItemRef(" LTS-42 ")).toEqual({ projectIdentifier: "LTS", sequenceId: "42" });
+    expect(parseWorkItemRef("lts-7")).toEqual({ projectIdentifier: "lts", sequenceId: "7" });
+  });
+
+  it("rejects malformed references", () => {
+    expect(parseWorkItemRef("LTS")).toBeNull();
+    expect(parseWorkItemRef("LTS-")).toBeNull();
+    expect(parseWorkItemRef("-42")).toBeNull();
+    expect(parseWorkItemRef("LTS-abc")).toBeNull();
+    expect(parseWorkItemRef("LTS-0")).toBeNull();
+    expect(parseWorkItemRef("L T S-4")).toBeNull();
   });
 });
