@@ -1124,6 +1124,240 @@ impl Tool for UpdateSprint {
     }
 }
 
+pub const CREATE_TRACK_NAME: &str = "create_track";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CreateTrackArgs {
+    /// Project identifier or name. Required.
+    pub project: String,
+    /// Track (module) name (1-255 characters), unique per project.
+    pub name: String,
+    /// Plain-text description (max 5000 characters).
+    pub description: Option<String>,
+    /// Start date "YYYY-MM-DD".
+    pub start_date: Option<String>,
+    /// Target date "YYYY-MM-DD".
+    pub target_date: Option<String>,
+    /// One of: backlog, planned, in-progress, paused, completed, cancelled.
+    pub status: Option<String>,
+    /// Lead display name or email; resolved by the UI.
+    pub lead: Option<String>,
+    /// Member display names or emails (max 10); resolved by the UI.
+    pub members: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreateTrackProposal {
+    pub project: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lead: Option<String>,
+    pub members: Vec<String>,
+}
+
+/// Validate raw tool args into a normalized create-track proposal.
+pub fn create_track_proposal_from_args(
+    args: CreateTrackArgs,
+) -> Result<CreateTrackProposal, ToolExecutionError> {
+    let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
+    let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
+    let description =
+        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let start_date = date_change(args.start_date.as_deref(), "start_date", false)?;
+    let target_date = date_change(args.target_date.as_deref(), "target_date", false)?;
+    if let (Some(start), Some(target)) = (&start_date, &target_date) {
+        if start > target {
+            return Err(ToolExecutionError::invalid_args(
+                "start_date must not be after target_date",
+            ));
+        }
+    }
+    let status = optional_enum_arg(args.status.as_deref(), &MODULE_STATUSES, "status")?;
+    let lead = optional_bounded_text(args.lead.as_deref(), "lead", CONTAINER_REF_MAX)?;
+    let members = bounded_ref_list(args.members, "members")?;
+    Ok(CreateTrackProposal {
+        project,
+        name,
+        description,
+        start_date,
+        target_date,
+        status,
+        lead,
+        members,
+    })
+}
+
+pub struct CreateTrack {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateTrack {
+    const NAME: &'static str = CREATE_TRACK_NAME;
+    type Args = CreateTrackArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose creating one track (module) in a project. Only call this when \
+         the user asks to create a track. The project and track name are \
+         required; never guess them. Dates, status, lead, and members are \
+         optional; lead and member names are human-readable and resolved by the \
+         UI. The user must confirm and may edit every field in the UI before \
+         anything is saved. Never claim the track was created until they \
+         confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateTrackArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = create_track_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("CreateTrackProposal serializes"))
+    }
+}
+
+pub const UPDATE_TRACK_NAME: &str = "update_track";
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct UpdateTrackChanges {
+    /// New track name (1-255 characters); must not be blank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// New plain-text description; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New start date "YYYY-MM-DD"; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    /// New target date "YYYY-MM-DD"; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_date: Option<String>,
+    /// New status: backlog, planned, in-progress, paused, completed, cancelled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// New lead display name or email; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<String>,
+    /// New member display names or emails; an empty list clears them (max 10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub members: Option<Vec<String>>,
+}
+
+fn normalize_track_changes(
+    changes: UpdateTrackChanges,
+) -> Result<UpdateTrackChanges, ToolExecutionError> {
+    let normalized = UpdateTrackChanges {
+        name: required_when_present(changes.name.as_deref(), "name", SERVICE_NAME_MAX)?,
+        description: clearable_text(
+            changes.description.as_deref(),
+            "description",
+            SERVICE_DESCRIPTION_MAX,
+        )?,
+        start_date: date_change(changes.start_date.as_deref(), "start_date", true)?,
+        target_date: date_change(changes.target_date.as_deref(), "target_date", true)?,
+        status: optional_enum_arg(changes.status.as_deref(), &MODULE_STATUSES, "status")?,
+        lead: clearable_text(changes.lead.as_deref(), "lead", CONTAINER_REF_MAX)?,
+        members: bounded_ref_list_opt(changes.members, "members")?,
+    };
+    if normalized == UpdateTrackChanges::default() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one change is required",
+        ));
+    }
+    if let (Some(start), Some(target)) = (&normalized.start_date, &normalized.target_date) {
+        if !start.is_empty() && !target.is_empty() && start > target {
+            return Err(ToolExecutionError::invalid_args(
+                "start_date must not be after target_date",
+            ));
+        }
+    }
+    Ok(normalized)
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct UpdateTrackArgs {
+    /// Track (module) name or id. Required.
+    pub track: String,
+    /// Project identifier or name; use it when the track name is not unique.
+    pub project: Option<String>,
+    /// Fields to change. At least one field must be set.
+    pub changes: UpdateTrackChanges,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UpdateTrackProposal {
+    pub track: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub changes: UpdateTrackChanges,
+}
+
+/// Validate raw tool args into a normalized update-track proposal.
+pub fn update_track_proposal_from_args(
+    args: UpdateTrackArgs,
+) -> Result<UpdateTrackProposal, ToolExecutionError> {
+    let track = required_text(&args.track, "track", CONTAINER_REF_MAX)?;
+    let project = optional_container_project(args.project)?;
+    let changes = normalize_track_changes(args.changes)?;
+    Ok(UpdateTrackProposal {
+        track,
+        project,
+        changes,
+    })
+}
+
+pub struct UpdateTrack {
+    pub trace: ToolTrace,
+}
+
+impl Tool for UpdateTrack {
+    const NAME: &'static str = UPDATE_TRACK_NAME;
+    type Args = UpdateTrackArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose editing exactly one existing track. Only call this when the \
+         user asks to change a track's name, description, dates, status, lead, \
+         or members. The track name or id is required; never guess it. Send \
+         only the fields that change; empty strings and empty member lists \
+         clear those fields. Pass the project when the track name is not \
+         unique. The user must confirm and may edit every field in the UI \
+         before anything is saved. Never claim the track was updated until \
+         they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<UpdateTrackArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = update_track_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("UpdateTrackProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1664,5 +1898,109 @@ mod tests {
         })
         .unwrap_err();
         assert!(reversed.to_string().contains("start_date"));
+    }
+
+    #[test]
+    fn create_track_normalizes_and_bounds_members() {
+        let proposal = create_track_proposal_from_args(CreateTrackArgs {
+            project: " LTS ".into(),
+            name: " Onboarding ".into(),
+            description: Some(" New joiner path ".into()),
+            start_date: Some("2026-11-01".into()),
+            target_date: Some("2026-12-01".into()),
+            status: Some(" PLANNED ".into()),
+            lead: Some(" Budi ".into()),
+            members: Some(vec![" Budi ".into(), "budi".into(), "Sari".into()]),
+        })
+        .unwrap();
+        assert_eq!(proposal.project, "LTS");
+        assert_eq!(proposal.name, "Onboarding");
+        assert_eq!(proposal.status.as_deref(), Some("planned"));
+        assert_eq!(proposal.lead.as_deref(), Some("Budi"));
+        assert_eq!(
+            proposal.members,
+            vec!["Budi".to_string(), "Sari".to_string()]
+        );
+
+        let bad_status = create_track_proposal_from_args(CreateTrackArgs {
+            project: "LTS".into(),
+            name: "Onboarding".into(),
+            description: None,
+            start_date: None,
+            target_date: None,
+            status: Some("live".into()),
+            lead: None,
+            members: None,
+        })
+        .unwrap_err();
+        assert!(bad_status.to_string().contains("backlog"));
+
+        let reversed = create_track_proposal_from_args(CreateTrackArgs {
+            project: "LTS".into(),
+            name: "Onboarding".into(),
+            description: None,
+            start_date: Some("2026-12-01".into()),
+            target_date: Some("2026-11-01".into()),
+            status: None,
+            lead: None,
+            members: None,
+        })
+        .unwrap_err();
+        assert!(reversed.to_string().contains("start_date"));
+
+        let too_many = create_track_proposal_from_args(CreateTrackArgs {
+            project: "LTS".into(),
+            name: "Onboarding".into(),
+            description: None,
+            start_date: None,
+            target_date: None,
+            status: None,
+            lead: None,
+            members: Some((0..=MAX_MEMBER_REFS).map(|index| format!("u{index}")).collect()),
+        })
+        .unwrap_err();
+        assert!(too_many.to_string().contains("at most"));
+    }
+
+    #[test]
+    fn update_track_supports_clears_and_member_replace() {
+        let proposal = update_track_proposal_from_args(UpdateTrackArgs {
+            track: " Onboarding ".into(),
+            project: None,
+            changes: UpdateTrackChanges {
+                description: Some("".into()),
+                start_date: Some("".into()),
+                target_date: Some("".into()),
+                lead: Some("".into()),
+                members: Some(vec![]),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(proposal.track, "Onboarding");
+        assert_eq!(proposal.changes.description.as_deref(), Some(""));
+        assert_eq!(proposal.changes.start_date.as_deref(), Some(""));
+        assert_eq!(proposal.changes.target_date.as_deref(), Some(""));
+        assert_eq!(proposal.changes.lead.as_deref(), Some(""));
+        assert_eq!(proposal.changes.members, Some(vec![]));
+
+        let empty = update_track_proposal_from_args(UpdateTrackArgs {
+            track: "Onboarding".into(),
+            project: None,
+            changes: UpdateTrackChanges::default(),
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("at least one"));
+
+        let blank_name = update_track_proposal_from_args(UpdateTrackArgs {
+            track: "Onboarding".into(),
+            project: None,
+            changes: UpdateTrackChanges {
+                name: Some("  ".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(blank_name.to_string().contains("name"));
     }
 }
