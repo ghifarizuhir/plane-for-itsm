@@ -160,10 +160,86 @@ pub fn update_work_item_proposal_from_args(
     })
 }
 
+pub const ADD_COMMENT_NAME: &str = "add_comment";
+pub const MAX_COMMENT_CHARS: usize = 5000;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct AddCommentArgs {
+    /// Work item identifier like "LTS-42". Required.
+    pub work_item: String,
+    /// Plain-text comment (1-5000 characters).
+    pub comment: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AddCommentProposal {
+    pub work_item: String,
+    pub comment: String,
+}
+
+/// Validate raw tool args into a normalized comment proposal.
+pub fn add_comment_proposal_from_args(
+    args: AddCommentArgs,
+) -> Result<AddCommentProposal, ToolExecutionError> {
+    let work_item = args.work_item.trim();
+    if work_item.is_empty() {
+        return Err(ToolExecutionError::invalid_args("work_item is required"));
+    }
+    parse_work_item_ref(work_item)?;
+    let comment = args.comment.trim();
+    if comment.is_empty() {
+        return Err(ToolExecutionError::invalid_args("comment is required"));
+    }
+    if comment.chars().count() > MAX_COMMENT_CHARS {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "comment must be at most {MAX_COMMENT_CHARS} characters"
+        )));
+    }
+    Ok(AddCommentProposal {
+        work_item: work_item.to_string(),
+        comment: comment.to_string(),
+    })
+}
+
+pub struct AddComment {
+    pub trace: ToolTrace,
+}
+
+impl Tool for AddComment {
+    const NAME: &'static str = ADD_COMMENT_NAME;
+    type Args = AddCommentArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose posting one comment on an existing work item. Only call this \
+         when the user asks to comment on or reply to a work item. The work item \
+         identifier is required; never guess it. Keep the comment in the user's \
+         language. The user must confirm and may edit the text in the UI before \
+         it is posted. Never claim the comment was posted until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<AddCommentArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = add_comment_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("AddCommentProposal serializes"))
+    }
+}
+
 /// Map a mutation tool name to its proposal `kind`. Plan 2B extends the match.
 pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
     match name {
         UPDATE_WORK_ITEM_NAME => Some("update_work_item"),
+        ADD_COMMENT_NAME => Some("add_comment"),
         _ => None,
     }
 }
@@ -295,5 +371,45 @@ mod tests {
             Some("update_work_item")
         );
         assert_eq!(mutation_kind_for_tool("search_work_items"), None);
+    }
+
+    #[test]
+    fn add_comment_normalizes_and_bounds() {
+        let proposal = add_comment_proposal_from_args(AddCommentArgs {
+            work_item: " lts-7 ".into(),
+            comment: "  replaced the filter  ".into(),
+        })
+        .unwrap();
+        assert_eq!(proposal.work_item, "lts-7");
+        assert_eq!(proposal.comment, "replaced the filter");
+
+        let empty = add_comment_proposal_from_args(AddCommentArgs {
+            work_item: "LTS-7".into(),
+            comment: "   ".into(),
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("comment"));
+
+        let too_long = add_comment_proposal_from_args(AddCommentArgs {
+            work_item: "LTS-7".into(),
+            comment: "a".repeat(MAX_COMMENT_CHARS + 1),
+        })
+        .unwrap_err();
+        assert!(too_long.to_string().contains("at most"));
+
+        let bad_ref = add_comment_proposal_from_args(AddCommentArgs {
+            work_item: "nope".into(),
+            comment: "hi".into(),
+        })
+        .unwrap_err();
+        assert!(bad_ref.to_string().contains("PROJ-123"));
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_add_comment() {
+        assert_eq!(
+            mutation_kind_for_tool(ADD_COMMENT_NAME),
+            Some("add_comment")
+        );
     }
 }
