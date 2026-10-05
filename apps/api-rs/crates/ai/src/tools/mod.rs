@@ -39,7 +39,7 @@ pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
 /// database and never schedule-eligible.
-pub const PROPOSAL_TOOL_NAMES: [&str; 7] = [
+pub const PROPOSAL_TOOL_NAMES: [&str; 13] = [
     CREATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
@@ -47,6 +47,12 @@ pub const PROPOSAL_TOOL_NAMES: [&str; 7] = [
     MANAGE_SERVICE_LINKS_NAME,
     MANAGE_SPRINT_ITEMS_NAME,
     MANAGE_TRACK_ITEMS_NAME,
+    CREATE_SERVICE_NAME,
+    UPDATE_SERVICE_NAME,
+    CREATE_SPRINT_NAME,
+    UPDATE_SPRINT_NAME,
+    CREATE_TRACK_NAME,
+    UPDATE_TRACK_NAME,
 ];
 
 pub fn optional_text(value: Option<&str>) -> Option<String> {
@@ -491,6 +497,24 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(ManageTrackItems {
+            trace: trace.clone(),
+        })
+        .tool(CreateService {
+            trace: trace.clone(),
+        })
+        .tool(UpdateService {
+            trace: trace.clone(),
+        })
+        .tool(CreateSprint {
+            trace: trace.clone(),
+        })
+        .tool(UpdateSprint {
+            trace: trace.clone(),
+        })
+        .tool(CreateTrack {
+            trace: trace.clone(),
+        })
+        .tool(UpdateTrack {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -1541,5 +1565,46 @@ mod tests {
         assert_eq!(ManageTrackItems::NAME, "manage_track_items");
         assert!(track.parameters()["properties"]["track"].is_object());
         assert!(!track.description().is_empty());
+    }
+
+    #[tokio::test]
+    async fn create_and_update_tools_expose_metadata() {
+        let create_service = CreateService {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(CreateService::NAME, "create_service");
+        assert!(create_service.parameters()["properties"]["name"].is_object());
+        assert!(create_service.parameters()["properties"]["type"].is_object());
+        assert!(!create_service.description().is_empty());
+
+        let update_service = UpdateService {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(UpdateService::NAME, "update_service");
+        assert!(update_service.parameters()["properties"]["changes"].is_object());
+
+        let create_sprint = CreateSprint {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(CreateSprint::NAME, "create_sprint");
+        assert!(create_sprint.parameters()["properties"]["start_date"].is_object());
+
+        let update_sprint = UpdateSprint {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(UpdateSprint::NAME, "update_sprint");
+        assert!(update_sprint.parameters()["properties"]["sprint"].is_object());
+
+        let create_track = CreateTrack {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(CreateTrack::NAME, "create_track");
+        assert!(create_track.parameters()["properties"]["members"].is_object());
+
+        let update_track = UpdateTrack {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(UpdateTrack::NAME, "update_track");
+        assert!(update_track.parameters()["properties"]["track"].is_object());
     }
 }

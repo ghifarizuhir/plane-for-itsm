@@ -78,7 +78,13 @@ work item identifier and service names or ids. To add or remove work items in \
 a sprint or track, call manage_sprint_items or manage_track_items with the \
 container name and the work item identifiers. These are proposals too: the \
 user must confirm them in the UI first, so never claim they were applied \
-before that confirmation.";
+before that confirmation. To create a service, sprint, or track, call create_service, create_sprint, \
+or create_track with the project and name the user gave. To change an \
+existing one, call update_service, update_sprint, or update_track with its \
+name (or id) and only the fields that change. These are proposals: the user \
+must confirm them in the UI first, so never claim they were created or \
+updated before that confirmation. Sprint dates must be provided as a pair; \
+service and track owners, leads, and members may be human-readable names.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -346,6 +352,49 @@ mod tests {
         assert_eq!(actions[0]["kind"], json!("manage_service_links"));
         assert_eq!(actions[1]["kind"], json!("manage_sprint_items"));
         assert_eq!(actions[2]["kind"], json!("manage_track_items"));
+    }
+
+    #[test]
+    fn pending_actions_covers_create_and_update_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::CREATE_SERVICE_NAME,
+            &json!({"project": "LTS", "name": "Email"}),
+        );
+        record(
+            &trace,
+            crate::tools::UPDATE_SERVICE_NAME,
+            &json!({"service": "Email", "changes": {"status": "deprecated"}}),
+        );
+        record(
+            &trace,
+            crate::tools::CREATE_SPRINT_NAME,
+            &json!({"project": "LTS", "name": "Sprint 4"}),
+        );
+        record(
+            &trace,
+            crate::tools::UPDATE_SPRINT_NAME,
+            &json!({"sprint": "Sprint 4", "changes": {"name": "Sprint 4b"}}),
+        );
+        record(
+            &trace,
+            crate::tools::CREATE_TRACK_NAME,
+            &json!({"project": "LTS", "name": "Onboarding"}),
+        );
+        record(
+            &trace,
+            crate::tools::UPDATE_TRACK_NAME,
+            &json!({"track": "Onboarding", "changes": {"status": "in-progress"}}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 6);
+        assert_eq!(actions[0]["kind"], json!("create_service"));
+        assert_eq!(actions[1]["kind"], json!("update_service"));
+        assert_eq!(actions[2]["kind"], json!("create_sprint"));
+        assert_eq!(actions[3]["kind"], json!("update_sprint"));
+        assert_eq!(actions[4]["kind"], json!("create_track"));
+        assert_eq!(actions[5]["kind"], json!("update_track"));
     }
 
     #[test]

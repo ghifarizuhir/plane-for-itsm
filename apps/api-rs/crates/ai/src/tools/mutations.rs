@@ -539,6 +539,12 @@ pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
         MANAGE_SERVICE_LINKS_NAME => Some("manage_service_links"),
         MANAGE_SPRINT_ITEMS_NAME => Some("manage_sprint_items"),
         MANAGE_TRACK_ITEMS_NAME => Some("manage_track_items"),
+        CREATE_SERVICE_NAME => Some("create_service"),
+        UPDATE_SERVICE_NAME => Some("update_service"),
+        CREATE_SPRINT_NAME => Some("create_sprint"),
+        UPDATE_SPRINT_NAME => Some("update_sprint"),
+        CREATE_TRACK_NAME => Some("create_track"),
+        UPDATE_TRACK_NAME => Some("update_track"),
         _ => None,
     }
 }
@@ -1643,6 +1649,34 @@ mod tests {
         assert_eq!(
             mutation_kind_for_tool(MANAGE_TRACK_ITEMS_NAME),
             Some("manage_track_items")
+        );
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_create_and_update_tools() {
+        assert_eq!(
+            mutation_kind_for_tool(CREATE_SERVICE_NAME),
+            Some("create_service")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(UPDATE_SERVICE_NAME),
+            Some("update_service")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(CREATE_SPRINT_NAME),
+            Some("create_sprint")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(UPDATE_SPRINT_NAME),
+            Some("update_sprint")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(CREATE_TRACK_NAME),
+            Some("create_track")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(UPDATE_TRACK_NAME),
+            Some("update_track")
         );
     }
 
