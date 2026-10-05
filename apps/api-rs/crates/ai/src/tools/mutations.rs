@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    bounded_ref_list_opt, parse_iso_date, parse_work_item_ref, priority_arg, schema_of,
-    WORK_ITEM_DESCRIPTION_MAX, WORK_ITEM_NAME_MAX, WORK_ITEM_STATE_MAX,
+    bounded_ref_list, bounded_ref_list_opt, enum_arg, parse_iso_date, parse_work_item_ref,
+    priority_arg, schema_of, WORK_ITEM_DESCRIPTION_MAX, WORK_ITEM_NAME_MAX, WORK_ITEM_STATE_MAX,
 };
 use crate::agent::{record, ToolTrace};
 
@@ -235,6 +235,88 @@ impl Tool for AddComment {
     }
 }
 
+pub const MANAGE_SERVICE_LINKS_NAME: &str = "manage_service_links";
+pub const MAX_SERVICE_REFS: usize = 10;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ManageServiceLinksArgs {
+    /// Work item identifier like "LTS-42". Required.
+    pub work_item: String,
+    /// Service names or ids (1-10).
+    pub services: Vec<String>,
+    /// One of: link, unlink.
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ManageServiceLinksProposal {
+    pub work_item: String,
+    pub services: Vec<String>,
+    pub action: String,
+}
+
+/// Validate raw tool args into a normalized service link proposal.
+pub fn manage_service_links_proposal_from_args(
+    args: ManageServiceLinksArgs,
+) -> Result<ManageServiceLinksProposal, ToolExecutionError> {
+    let work_item = args.work_item.trim();
+    if work_item.is_empty() {
+        return Err(ToolExecutionError::invalid_args("work_item is required"));
+    }
+    parse_work_item_ref(work_item)?;
+    let action = enum_arg(&args.action, &["link", "unlink"], "action")?;
+    if args.services.is_empty() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one service is required",
+        ));
+    }
+    if args.services.len() > MAX_SERVICE_REFS {
+        return Err(ToolExecutionError::invalid_args(format!(
+            "at most {MAX_SERVICE_REFS} services are allowed"
+        )));
+    }
+    let services = bounded_ref_list(Some(args.services), "services")?;
+    Ok(ManageServiceLinksProposal {
+        work_item: work_item.to_string(),
+        services,
+        action,
+    })
+}
+
+pub struct ManageServiceLinks {
+    pub trace: ToolTrace,
+}
+
+impl Tool for ManageServiceLinks {
+    const NAME: &'static str = MANAGE_SERVICE_LINKS_NAME;
+    type Args = ManageServiceLinksArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose linking or unlinking services to one work item. Only call this \
+         when the user asks to attach or detach services on a work item. The work \
+         item identifier and at least one service name or id are required; never \
+         guess them. The user must confirm the card in the UI before anything is \
+         saved. Never claim the links were changed until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ManageServiceLinksArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = manage_service_links_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("ManageServiceLinksProposal serializes"))
+    }
+}
+
 /// Map a mutation tool name to its proposal `kind`. Plan 2B extends the match.
 pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
     match name {
@@ -411,5 +493,47 @@ mod tests {
             mutation_kind_for_tool(ADD_COMMENT_NAME),
             Some("add_comment")
         );
+    }
+
+    #[test]
+    fn service_links_normalize_and_validate() {
+        let proposal = manage_service_links_proposal_from_args(ManageServiceLinksArgs {
+            work_item: " LTS-7 ".into(),
+            services: vec![" Email ".into(), "email".into(), "VPN".into()],
+            action: " LINK ".into(),
+        })
+        .unwrap();
+        assert_eq!(proposal.work_item, "LTS-7");
+        assert_eq!(
+            proposal.services,
+            vec!["Email".to_string(), "VPN".to_string()]
+        );
+        assert_eq!(proposal.action, "link");
+
+        let no_services = manage_service_links_proposal_from_args(ManageServiceLinksArgs {
+            work_item: "LTS-7".into(),
+            services: vec![],
+            action: "link".into(),
+        })
+        .unwrap_err();
+        assert!(no_services.to_string().contains("service"));
+
+        let too_many = manage_service_links_proposal_from_args(ManageServiceLinksArgs {
+            work_item: "LTS-7".into(),
+            services: (0..=MAX_SERVICE_REFS)
+                .map(|index| format!("svc-{index}"))
+                .collect(),
+            action: "link".into(),
+        })
+        .unwrap_err();
+        assert!(too_many.to_string().contains("at most"));
+
+        let bad_action = manage_service_links_proposal_from_args(ManageServiceLinksArgs {
+            work_item: "LTS-7".into(),
+            services: vec!["Email".into()],
+            action: "attach".into(),
+        })
+        .unwrap_err();
+        assert!(bad_action.to_string().contains("link, unlink"));
     }
 }

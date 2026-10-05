@@ -81,6 +81,23 @@ pub fn priority_arg(value: Option<&str>) -> Result<Option<String>, ToolExecution
     }
 }
 
+/// Normalize a small enum argument (e.g. `action`) against an allowlist.
+pub fn enum_arg(
+    value: &str,
+    allowed: &[&str],
+    label: &str,
+) -> Result<String, ToolExecutionError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if allowed.contains(&normalized.as_str()) {
+        Ok(normalized)
+    } else {
+        Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be one of: {}",
+            allowed.join(", ")
+        )))
+    }
+}
+
 pub fn clamp_limit(value: Option<i64>) -> i64 {
     value.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT)
 }
@@ -687,6 +704,16 @@ mod tests {
             assert!(sql.contains("s.\"group\" <> 'triage'"));
             assert!(!sql.contains("LEFT JOIN"));
         }
+    }
+
+    #[test]
+    fn enum_arg_normalizes_and_rejects() {
+        assert_eq!(
+            enum_arg(" Link ", &["link", "unlink"], "action").unwrap(),
+            "link"
+        );
+        let err = enum_arg("attach", &["link", "unlink"], "action").unwrap_err();
+        assert!(err.to_string().contains("link, unlink"));
     }
 
     #[test]
