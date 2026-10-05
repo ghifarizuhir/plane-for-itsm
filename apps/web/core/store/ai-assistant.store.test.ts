@@ -81,7 +81,16 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
   },
   issues: {
     createIssue: vi.fn(async (_slug: string, projectId: string) => ({ id: "i1", project_id: projectId })),
+    patchIssue: vi.fn(async () => undefined),
     ...overrides.issues,
+  },
+  comments: {
+    createIssueComment: vi.fn(async (_slug: string, projectId: string, issueId: string) => ({
+      id: "cm1",
+      project_id: projectId,
+      issue: issueId,
+    })),
+    ...overrides.comments,
   },
 });
 
@@ -90,7 +99,8 @@ const makeStore = (services = makeServices()) =>
     services.ai as any,
     services.schedules as any,
     services.conversations as any,
-    services.issues as any
+    services.issues as any,
+    services.comments as any
   );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1381,6 +1391,121 @@ describe("work item proposals", () => {
       {
         work_item_decisions: { k1: { decision: "cancelled" } },
       }
+    );
+  });
+});
+
+const mutationMessage = (metadata: Record<string, unknown>) => ({
+  id: "srv-assistant",
+  role: "assistant" as const,
+  content: "Here is a proposal",
+  content_html: "<p>Here is a proposal</p>",
+  metadata,
+  created_at: "2026-10-05T09:00:00Z",
+});
+
+const updateMetadata = {
+  proposals: [{ key: "k1", kind: "update_work_item", proposal: { work_item: "LTS-1", changes: { priority: "high" } } }],
+};
+
+const commentMetadata = {
+  proposals: [{ key: "k2", kind: "add_comment", proposal: { work_item: "LTS-1", comment: "Replaced the filter" } }],
+};
+
+describe("generic proposals", () => {
+  const openAgent = async (services = makeServices(), metadata: Record<string, unknown> = updateMetadata) => {
+    services.conversations.listMessages = vi.fn(async () => [mutationMessage(metadata)]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    return { store, services };
+  };
+
+  it("applies an update proposal and persists the decision", async () => {
+    const { store, services } = await openAgent();
+    await store.confirmProposal("srv-assistant", "k1", {
+      kind: "update_work_item",
+      projectId: "p1",
+      issueId: "i1",
+      changes: { priority: "high" },
+    });
+    expect(services.issues.patchIssue).toHaveBeenCalledWith("acme", "p1", "i1", { priority: "high" });
+    expect(store.messages[0].proposalDecisions?.k1).toEqual({
+      kind: "update_work_item",
+      decision: "applied",
+    });
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
+      "acme",
+      expect.any(String),
+      "srv-assistant",
+      { proposal_decisions: { k1: { kind: "update_work_item", decision: "applied" } } }
+    );
+  });
+
+  it("applies a comment proposal and stores the comment id", async () => {
+    const { store, services } = await openAgent(makeServices(), commentMetadata);
+    await store.confirmProposal("srv-assistant", "k2", {
+      kind: "add_comment",
+      projectId: "p1",
+      issueId: "i1",
+      commentHtml: "<p>Replaced the filter</p>",
+    });
+    expect(services.comments.createIssueComment).toHaveBeenCalledWith("acme", "p1", "i1", {
+      comment_html: "<p>Replaced the filter</p>",
+    });
+    expect(store.messages[0].proposalDecisions?.k2).toEqual({
+      kind: "add_comment",
+      decision: "applied",
+      result: { created_comment_id: "cm1" },
+    });
+  });
+
+  it("does not apply the same proposal twice", async () => {
+    const { store, services } = await openAgent();
+    const payload = {
+      kind: "update_work_item" as const,
+      projectId: "p1",
+      issueId: "i1",
+      changes: { priority: "high" },
+    };
+    await store.confirmProposal("srv-assistant", "k1", payload);
+    await store.confirmProposal("srv-assistant", "k1", payload);
+    expect(services.issues.patchIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the decision pending when the mutation fails", async () => {
+    const services = makeServices();
+    services.issues.patchIssue = vi.fn(async () => {
+      throw new Error("nope");
+    });
+    const { store } = await openAgent(services);
+    await expect(
+      store.confirmProposal("srv-assistant", "k1", {
+        kind: "update_work_item",
+        projectId: "p1",
+        issueId: "i1",
+        changes: { priority: "high" },
+      })
+    ).rejects.toThrow("nope");
+    expect(store.messages[0].proposalDecisions?.k1).toBeUndefined();
+    expect(services.conversations.updateMessageMetadata).not.toHaveBeenCalled();
+  });
+
+  it("cancels a proposal and persists the decision", async () => {
+    const { store, services } = await openAgent();
+    store.cancelProposal("srv-assistant", "k1");
+    expect(store.messages[0].proposalDecisions?.k1).toEqual({
+      kind: "update_work_item",
+      decision: "cancelled",
+    });
+    await flush();
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith(
+      "acme",
+      expect.any(String),
+      "srv-assistant",
+      { proposal_decisions: { k1: { kind: "update_work_item", decision: "cancelled" } } }
     );
   });
 });

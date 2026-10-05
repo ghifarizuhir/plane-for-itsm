@@ -11,8 +11,10 @@ import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
 import { IssueService } from "@/services/issue/issue.service";
+import { IssueCommentService } from "@/services/issue/issue_comment.service";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
+import type { TAiProposalConfirmPayload, TAiProposalDecision, TAiProposalDecisionResult } from "@/lib/ai-proposals";
 import { isScheduleCommand, type TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision } from "@/lib/ai-work-items";
 import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
@@ -26,7 +28,8 @@ type TAiConversationsService = Pick<
   AiConversationsService,
   "list" | "create" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
 >;
-type TIssueService = Pick<IssueService, "createIssue">;
+type TIssueService = Pick<IssueService, "createIssue" | "patchIssue">;
+type TCommentsService = Pick<IssueCommentService, "createIssueComment">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -57,6 +60,8 @@ export interface IAIAssistantStore {
     payload: { projectId: string; issue: Partial<TIssue> }
   ) => Promise<void>;
   resolveWorkItemProposal: (messageId: string, key: string) => void;
+  confirmProposal: (messageId: string, key: string, payload: TAiProposalConfirmPayload) => Promise<void>;
+  cancelProposal: (messageId: string, key: string) => void;
 }
 
 export const AI_ASSISTANT_STORAGE_PREFIX = "ai_assistant_messages_";
@@ -108,7 +113,8 @@ export class AIAssistantStore implements IAIAssistantStore {
     private aiService: TAiService = new AIService(),
     private schedulesService: TAiSchedulesService = new AiSchedulesService(),
     private conversationsService: TAiConversationsService = new AiConversationsService(),
-    private issuesService: TIssueService = new IssueService()
+    private issuesService: TIssueService = new IssueService(),
+    private commentsService: TCommentsService = new IssueCommentService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -135,6 +141,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       resolveScheduleProposal: action,
       confirmWorkItemProposal: action,
       resolveWorkItemProposal: action,
+      confirmProposal: action,
+      cancelProposal: action,
     });
   }
 
@@ -439,6 +447,49 @@ export class AIAssistantStore implements IAIAssistantStore {
     void this.persistWorkItemDecisions(conversationId, message);
   };
 
+  confirmProposal = async (messageId: string, key: string, payload: TAiProposalConfirmPayload) => {
+    const slug = this.workspaceSlug;
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    const entry = message?.proposals?.find((candidate) => candidate.key === key);
+    if (!slug || !message || !entry) return;
+    if (entry.kind !== payload.kind) return;
+    if (message.proposalDecisions?.[key]) return;
+    let result: TAiProposalDecisionResult | undefined;
+    if (payload.kind === "update_work_item") {
+      await this.issuesService.patchIssue(slug, payload.projectId, payload.issueId, payload.changes);
+    } else {
+      const created = await this.commentsService.createIssueComment(slug, payload.projectId, payload.issueId, {
+        comment_html: payload.commentHtml,
+      });
+      if (!created?.id) throw new Error("Comment creation returned no id");
+      result = { created_comment_id: created.id };
+    }
+    runInAction(() => {
+      message.proposalDecisions = {
+        ...message.proposalDecisions,
+        [key]: { kind: payload.kind, decision: "applied", ...(result ? { result } : {}) },
+      };
+    });
+    await this.persistProposalDecisions(conversationId, message);
+  };
+
+  cancelProposal = (messageId: string, key: string) => {
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    const entry = message?.proposals?.find((candidate) => candidate.key === key);
+    if (!message || !entry) return;
+    if (message.proposalDecisions?.[key]) return;
+    const decision: TAiProposalDecision = { kind: entry.kind, decision: "cancelled" };
+    runInAction(() => {
+      message.proposalDecisions = {
+        ...message.proposalDecisions,
+        [key]: decision,
+      };
+    });
+    void this.persistProposalDecisions(conversationId, message);
+  };
+
   private persistWorkItemDecisions = async (conversationId: string | undefined, message: TAiMessage) => {
     const slug = this.workspaceSlug;
     if (!slug || !conversationId || !message.workItemDecisions) return;
@@ -448,6 +499,18 @@ export class AIAssistantStore implements IAIAssistantStore {
       });
     } catch {
       // best-effort: the created work item is already the source of truth
+    }
+  };
+
+  private persistProposalDecisions = async (conversationId: string | undefined, message: TAiMessage) => {
+    const slug = this.workspaceSlug;
+    if (!slug || !conversationId || !message.proposalDecisions) return;
+    try {
+      await this.conversationsService.updateMessageMetadata(slug, conversationId, message.id, {
+        proposal_decisions: message.proposalDecisions,
+      });
+    } catch {
+      // best-effort: the mutation already succeeded; a reload re-fetches metadata
     }
   };
 
