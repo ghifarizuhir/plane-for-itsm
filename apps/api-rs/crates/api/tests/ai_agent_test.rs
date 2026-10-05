@@ -372,6 +372,60 @@ mod tool_roundtrip {
         spawn_work_item_roundtrip().await.0
     }
 
+    /// Serve one tool call for `name`/`arguments`, then a final answer.
+    pub(super) async fn tool_roundtrip_url(name: &'static str, arguments: &'static str) -> String {
+        let state: Shared = Arc::new(Upstream::default());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handler = move |State(state): State<Shared>, Json(body): Json<Value>| async move {
+            let n = {
+                let mut calls = state.calls.lock().unwrap();
+                let n = *calls;
+                *calls += 1;
+                n
+            };
+            state.bodies.lock().unwrap().push(body);
+            if n == 0 {
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "id": "1", "object": "chat.completion", "created": 0, "model": "test",
+                        "choices": [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": null,
+                                "tool_calls": [{
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {"name": name, "arguments": arguments}
+                                }]
+                            },
+                            "finish_reason": "tool_calls"
+                        }]
+                    })),
+                )
+            } else {
+                (
+                    StatusCode::OK,
+                    Json(json!({
+                        "id": "2", "object": "chat.completion", "created": 0, "model": "test",
+                        "choices": [{
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "final answer"},
+                            "finish_reason": "stop"
+                        }]
+                    })),
+                )
+            }
+        };
+        let app = Router::new()
+            .route("/v1/chat/completions", post(handler))
+            .with_state(state);
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}/v1")
+    }
+
     #[tokio::test]
     async fn tool_call_roundtrip_records_trace_and_returns_final_text() {
         let (base, upstream) = spawn_roundtrip().await;
@@ -1010,6 +1064,158 @@ async fn work_item_proposal_metadata_and_decisions_roundtrip() {
     .unwrap();
     assert_eq!(stored["work_item_proposals"][0]["proposal"]["name"], json!("Fix pump"));
     assert_eq!(stored["work_item_decisions"][key]["decision"], json!("cancelled"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn update_work_item_proposal_roundtrip_persists_generic_metadata() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::tool_roundtrip_url(
+        "update_work_item",
+        r#"{"work_item":"LTS-42","changes":{"priority":"high"}}"#,
+    )
+    .await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "set LTS-42 to high priority",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(proposals[0]["kind"], json!("update_work_item"));
+    assert_eq!(
+        proposals[0]["proposal"]["changes"]["priority"],
+        json!("high")
+    );
+    let key = proposals[0]["key"].as_str().unwrap().to_string();
+    let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+
+    // An applied decision (no result) roundtrips.
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {"kind": "update_work_item", "decision": "applied"}
+        }}})),
+    )
+    .await
+    .expect("patch applied");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["proposal_decisions"][key.as_str()]["decision"],
+        json!("applied")
+    );
+
+    // A result on a result-less kind is rejected.
+    let (status, _) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {
+                "kind": "update_work_item",
+                "decision": "applied",
+                "result": {"created_comment_id": Uuid::new_v4()},
+            }
+        }}})),
+    )
+    .await
+    .expect("patch bad result");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn add_comment_proposal_roundtrip_requires_comment_result() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::tool_roundtrip_url(
+        "add_comment",
+        r#"{"work_item":"LTS-42","comment":"Replaced the filter"}"#,
+    )
+    .await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "comment on LTS-42",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals[0]["kind"], json!("add_comment"));
+    let key = proposals[0]["key"].as_str().unwrap().to_string();
+    let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+
+    // Applied without the comment id is rejected.
+    let (status, _) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {"kind": "add_comment", "decision": "applied"}
+        }}})),
+    )
+    .await
+    .expect("patch missing id");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Applied with the comment id persists.
+    let comment_id = Uuid::new_v4();
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {
+                "kind": "add_comment",
+                "decision": "applied",
+                "result": {"created_comment_id": comment_id},
+            }
+        }}})),
+    )
+    .await
+    .expect("patch applied");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["proposal_decisions"][key.as_str()]["result"]["created_comment_id"],
+        json!(comment_id)
+    );
 
     scratch.purge(&pool).await;
 }
