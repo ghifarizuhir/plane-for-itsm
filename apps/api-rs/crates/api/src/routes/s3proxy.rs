@@ -83,6 +83,14 @@ async fn proxy_inner(
     if let Some(ct) = headers.get(axum::http::header::CONTENT_TYPE).cloned() {
         req = req.header(axum::http::header::CONTENT_TYPE, ct);
     }
+    // SigV4 presigned GET mengikat `host` (`SignedHeaders=host`) ke endpoint
+    // publik (`s3_endpoint_for` memakai request-Host). Tanpa ini reqwest
+    // mengirim `Host: plane-minio:9000` ke upstream sehingga MinIO menolak
+    // dengan 403 (POST lolos karena policy tidak mengikat host — pola
+    // "POST 204 tapi GET selalu 403" di production log). Teruskan Host asli.
+    if let Some(host) = headers.get(axum::http::header::HOST).cloned() {
+        req = req.header(axum::http::header::HOST, host);
+    }
     let upstream = match req.send().await {
         Ok(r) => r,
         Err(e) => {
