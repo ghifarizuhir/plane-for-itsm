@@ -456,11 +456,88 @@ impl Tool for ManageSprintItems {
     }
 }
 
-/// Map a mutation tool name to its proposal `kind`. Plan 2B extends the match.
+pub const MANAGE_TRACK_ITEMS_NAME: &str = "manage_track_items";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ManageTrackItemsArgs {
+    /// Track (module) name or id. Required.
+    pub track: String,
+    /// Project identifier or name; use it when the track name is not unique.
+    pub project: Option<String>,
+    /// Work item identifiers like "LTS-42" (1-25).
+    pub work_items: Vec<String>,
+    /// One of: add, remove.
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ManageTrackItemsProposal {
+    pub track: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub work_items: Vec<String>,
+    pub action: String,
+}
+
+/// Validate raw tool args into a normalized track items proposal.
+pub fn manage_track_items_proposal_from_args(
+    args: ManageTrackItemsArgs,
+) -> Result<ManageTrackItemsProposal, ToolExecutionError> {
+    let track = required_text(&args.track, "track", CONTAINER_REF_MAX)?;
+    let project = optional_container_project(args.project)?;
+    let action = enum_arg(&args.action, &["add", "remove"], "action")?;
+    let work_items = work_item_refs_arg(args.work_items)?;
+    Ok(ManageTrackItemsProposal {
+        track,
+        project,
+        work_items,
+        action,
+    })
+}
+
+pub struct ManageTrackItems {
+    pub trace: ToolTrace,
+}
+
+impl Tool for ManageTrackItems {
+    const NAME: &'static str = MANAGE_TRACK_ITEMS_NAME;
+    type Args = ManageTrackItemsArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose adding or removing work items in a track. Only call this when \
+         the user asks to organize work into tracks. The track name (or id) and \
+         at least one work item identifier are required; never guess them. Pass \
+         the project when the track name is not unique. The user must confirm \
+         the card in the UI before anything is saved. Never claim the track was \
+         changed until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ManageTrackItemsArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = manage_track_items_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("ManageTrackItemsProposal serializes"))
+    }
+}
+
+/// Map a mutation tool name to its proposal `kind`.
 pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
     match name {
         UPDATE_WORK_ITEM_NAME => Some("update_work_item"),
         ADD_COMMENT_NAME => Some("add_comment"),
+        MANAGE_SERVICE_LINKS_NAME => Some("manage_service_links"),
+        MANAGE_SPRINT_ITEMS_NAME => Some("manage_sprint_items"),
+        MANAGE_TRACK_ITEMS_NAME => Some("manage_track_items"),
         _ => None,
     }
 }
@@ -739,5 +816,54 @@ mod tests {
         })
         .unwrap_err();
         assert!(bad_action.to_string().contains("add, remove"));
+    }
+
+    #[test]
+    fn track_items_normalize_and_validate() {
+        let proposal = manage_track_items_proposal_from_args(ManageTrackItemsArgs {
+            track: " Onboarding ".into(),
+            project: None,
+            work_items: vec!["LTS-9".into()],
+            action: " REMOVE ".into(),
+        })
+        .unwrap();
+        assert_eq!(proposal.track, "Onboarding");
+        assert_eq!(proposal.project, None);
+        assert_eq!(proposal.work_items, vec!["LTS-9".to_string()]);
+        assert_eq!(proposal.action, "remove");
+
+        let blank_track = manage_track_items_proposal_from_args(ManageTrackItemsArgs {
+            track: "  ".into(),
+            project: None,
+            work_items: vec!["LTS-9".into()],
+            action: "remove".into(),
+        })
+        .unwrap_err();
+        assert!(blank_track.to_string().contains("track"));
+
+        let bad_action = manage_track_items_proposal_from_args(ManageTrackItemsArgs {
+            track: "Onboarding".into(),
+            project: None,
+            work_items: vec!["LTS-9".into()],
+            action: "detach".into(),
+        })
+        .unwrap_err();
+        assert!(bad_action.to_string().contains("add, remove"));
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_link_tools() {
+        assert_eq!(
+            mutation_kind_for_tool(MANAGE_SERVICE_LINKS_NAME),
+            Some("manage_service_links")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(MANAGE_SPRINT_ITEMS_NAME),
+            Some("manage_sprint_items")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(MANAGE_TRACK_ITEMS_NAME),
+            Some("manage_track_items")
+        );
     }
 }
