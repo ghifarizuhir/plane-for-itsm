@@ -1753,3 +1753,102 @@ async fn update_article_proposal_roundtrip() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn apply_triage_suggestion_proposal_roundtrip() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::tool_roundtrip_url(
+        "apply_triage_suggestion",
+        r#"{"intake_item":"LTS-42","fields":["category","severity"]}"#,
+    )
+    .await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "apply the triage suggestion for LTS-42",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals[0]["kind"], json!("apply_triage_suggestion"));
+    assert_eq!(proposals[0]["proposal"]["intake_item"], json!("LTS-42"));
+    assert_eq!(proposals[0]["proposal"]["fields"][1], json!("severity"));
+    let key = proposals[0]["key"].as_str().unwrap().to_string();
+    let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(patched)) = api::routes::ai_conversations::patch_message(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), conversation_id, message_id)),
+        Json(json!({"metadata": {"proposal_decisions": {
+            (key.clone()): {"kind": "apply_triage_suggestion", "decision": "applied"}
+        }}})),
+    )
+    .await
+    .expect("patch applied");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        patched["metadata"]["proposal_decisions"][key.as_str()]["decision"],
+        json!("applied")
+    );
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn triage_intake_item_proposal_roundtrip() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let base_url = tool_roundtrip::tool_roundtrip_url(
+        "triage_intake_item",
+        r#"{"intake_item":"LTS-42","action":"snooze","snoozed_till":"2026-11-01T09:00:00Z"}"#,
+    )
+    .await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "snooze LTS-42 until November",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    let proposals = body["assistant_message"]["metadata"]["proposals"]
+        .as_array()
+        .expect("proposals array");
+    assert_eq!(proposals[0]["kind"], json!("triage_intake_item"));
+    assert_eq!(proposals[0]["proposal"]["action"], json!("snooze"));
+    assert_eq!(
+        proposals[0]["proposal"]["snoozed_till"],
+        json!("2026-11-01T09:00:00+00:00")
+    );
+
+    scratch.purge(&pool).await;
+}
