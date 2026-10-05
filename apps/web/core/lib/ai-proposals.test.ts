@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { changedFieldCount, validateAddCommentProposal, validateUpdateWorkItemProposal } from "./ai-proposals";
+import {
+  changedFieldCount,
+  matchByNameOrId,
+  validateAddCommentProposal,
+  validateManageServiceLinksProposal,
+  validateManageSprintItemsProposal,
+  validateManageTrackItemsProposal,
+  validateUpdateWorkItemProposal,
+} from "./ai-proposals";
 
 describe("validateUpdateWorkItemProposal", () => {
   it("accepts a minimal change", () => {
@@ -45,5 +53,47 @@ describe("validateAddCommentProposal", () => {
       "Comment must be at most 5000 characters."
     );
     expect(validateAddCommentProposal({ comment: "hi" })).toBe("Work item is required.");
+  });
+});
+
+describe("link proposal validators", () => {
+  it("validates service link proposals", () => {
+    expect(validateManageServiceLinksProposal({ work_item: "LTS-1", services: ["Email"], action: "link" })).toBeNull();
+    expect(validateManageServiceLinksProposal({ work_item: "LTS-1", services: [], action: "link" })).toBe(
+      "At least one service is required."
+    );
+    expect(
+      validateManageServiceLinksProposal({
+        work_item: "LTS-1",
+        services: ["Email"],
+        action: "attach" as never,
+      })
+    ).toBe("Action must be link or unlink.");
+    expect(validateManageServiceLinksProposal({ services: ["Email"], action: "link" })).toBe("Work item is required.");
+  });
+
+  it("validates sprint and track item proposals", () => {
+    expect(validateManageSprintItemsProposal({ sprint: "Sprint 3", work_items: ["LTS-1"], action: "add" })).toBeNull();
+    expect(validateManageSprintItemsProposal({ sprint: "Sprint 3", work_items: [], action: "add" })).toBe(
+      "At least one work item is required."
+    );
+    expect(
+      validateManageTrackItemsProposal({ track: "Onboarding", work_items: ["LTS-1"], action: "remove" })
+    ).toBeNull();
+    expect(validateManageTrackItemsProposal({ work_items: ["LTS-1"], action: "remove" })).toBe("Track is required.");
+  });
+});
+
+describe("matchByNameOrId", () => {
+  const items = [
+    { id: "1", name: "Email" },
+    { id: "2", name: "VPN" },
+  ];
+
+  it("matches by id first, then exact name case-insensitively", () => {
+    expect(matchByNameOrId(items, "2")?.name).toBe("VPN");
+    expect(matchByNameOrId(items, " email ")?.id).toBe("1");
+    expect(matchByNameOrId(items, "nope")).toBeUndefined();
+    expect(matchByNameOrId(items, "  ")).toBeUndefined();
   });
 });
