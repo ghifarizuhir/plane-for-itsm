@@ -7,6 +7,7 @@
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { v4 as uuidv4 } from "uuid";
 import type { TIssue, TPage } from "@plane/types";
+import { EInboxIssueStatus, type TInboxIssueStatus } from "@plane/types";
 import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
@@ -14,6 +15,7 @@ import { CycleService } from "@/services/cycle.service";
 import { ProjectPageService } from "@/services/page/project-page.service";
 import { IssueService } from "@/services/issue/issue.service";
 import { IssueCommentService } from "@/services/issue/issue_comment.service";
+import { InboxIssueService } from "@/services/inbox/inbox-issue.service";
 import { ModuleService } from "@/services/module.service";
 import { ServiceService } from "@/services/service.service";
 import { convertHTMLDocumentToAllFormats } from "@plane/editor";
@@ -42,6 +44,7 @@ type TModulesService = Pick<
 >;
 type TCyclesService = Pick<CycleService, "createCycle" | "patchCycle">;
 type TPagesService = Pick<ProjectPageService, "create" | "update" | "fetchById" | "updateDescription">;
+type TInboxService = Pick<InboxIssueService, "applyTriageSuggestion" | "update">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -102,6 +105,13 @@ const modeStorageKey = (workspaceSlug: string | undefined) =>
 const activeStorageKey = (workspaceSlug: string | undefined, mode: TAiAssistantMode) =>
   `${AI_ASSISTANT_ACTIVE_PREFIX}${workspaceSlug ?? "unknown"}_${mode}`;
 
+const TRIAGE_STATUS_BY_ACTION: Record<"accept" | "reject" | "snooze" | "duplicate", TInboxIssueStatus> = {
+  accept: EInboxIssueStatus.ACCEPTED,
+  reject: EInboxIssueStatus.DECLINED,
+  snooze: EInboxIssueStatus.SNOOZED,
+  duplicate: EInboxIssueStatus.DUPLICATE,
+};
+
 export class AIAssistantStore implements IAIAssistantStore {
   messages: TAiMessage[] = [];
   isGenerating = false;
@@ -130,7 +140,8 @@ export class AIAssistantStore implements IAIAssistantStore {
     private servicesService: TServicesService = new ServiceService(),
     private modulesService: TModulesService = new ModuleService(),
     private cyclesService: TCyclesService = new CycleService(),
-    private pagesService: TPagesService = new ProjectPageService()
+    private pagesService: TPagesService = new ProjectPageService(),
+    private inboxService: TInboxService = new InboxIssueService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -520,6 +531,14 @@ export class AIAssistantStore implements IAIAssistantStore {
         const document = convertHTMLDocumentToAllFormats({ document_html: mergedHtml, variant: "document" });
         await this.pagesService.updateDescription(slug, payload.projectId, payload.pageId, document);
       }
+    } else if (payload.kind === "apply_triage_suggestion") {
+      await this.inboxService.applyTriageSuggestion(slug, payload.projectId, payload.issueId, payload.fields);
+    } else if (payload.kind === "triage_intake_item") {
+      await this.inboxService.update(slug, payload.projectId, payload.issueId, {
+        status: TRIAGE_STATUS_BY_ACTION[payload.action],
+        ...(payload.snoozedTill ? { snoozed_till: new Date(payload.snoozedTill) } : {}),
+        ...(payload.duplicateToIssueId ? { duplicate_to: payload.duplicateToIssueId } : {}),
+      });
     } else if (payload.kind === "manage_service_links") {
       if (payload.action === "link") {
         await Promise.all(

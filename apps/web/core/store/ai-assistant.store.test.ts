@@ -124,6 +124,11 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
     updateDescription: vi.fn(async () => ({ message: "Updated successfully" })),
     ...overrides.pages,
   },
+  inbox: {
+    applyTriageSuggestion: vi.fn(async () => ({ id: "ts1", status: "ready" })),
+    update: vi.fn(async () => ({ id: "ii1" })),
+    ...overrides.inbox,
+  },
 });
 
 const makeStore = (services = makeServices()) =>
@@ -136,7 +141,8 @@ const makeStore = (services = makeServices()) =>
     services.services as any,
     services.modules as any,
     services.cycles as any,
-    services.pages as any
+    services.pages as any,
+    services.inbox as any
   );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1932,6 +1938,114 @@ describe("article proposals", () => {
     expect(store.messages[0].proposalDecisions?.k13).toEqual({
       kind: "update_article",
       decision: "applied",
+    });
+  });
+});
+
+const applyTriageMetadata = {
+  proposals: [
+    {
+      key: "k14",
+      kind: "apply_triage_suggestion",
+      proposal: { intake_item: "LTS-42", fields: ["category", "severity"] },
+    },
+  ],
+};
+
+const triageAcceptMetadata = {
+  proposals: [
+    {
+      key: "k15",
+      kind: "triage_intake_item",
+      proposal: { intake_item: "LTS-42", action: "accept" },
+    },
+  ],
+};
+
+const triageSnoozeMetadata = {
+  proposals: [
+    {
+      key: "k16",
+      kind: "triage_intake_item",
+      proposal: { intake_item: "LTS-42", action: "snooze", snoozed_till: "2026-11-01T09:00:00Z" },
+    },
+  ],
+};
+
+const triageDuplicateMetadata = {
+  proposals: [
+    {
+      key: "k17",
+      kind: "triage_intake_item",
+      proposal: { intake_item: "LTS-42", action: "duplicate", duplicate_of: "LTS-7" },
+    },
+  ],
+};
+
+describe("triage proposals", () => {
+  const openAgent = async (services = makeServices(), metadata: Record<string, unknown>) => {
+    services.conversations.listMessages = vi.fn(async () => [mutationMessage(metadata)]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    return { store, services };
+  };
+
+  it("applies triage suggestion fields", async () => {
+    const { store, services } = await openAgent(makeServices(), applyTriageMetadata);
+    await store.confirmProposal("srv-assistant", "k14", {
+      kind: "apply_triage_suggestion",
+      projectId: "p1",
+      issueId: "i1",
+      fields: ["category", "severity"],
+    });
+    expect(services.inbox.applyTriageSuggestion).toHaveBeenCalledWith("acme", "p1", "i1", ["category", "severity"]);
+    expect(store.messages[0].proposalDecisions?.k14).toEqual({
+      kind: "apply_triage_suggestion",
+      decision: "applied",
+    });
+  });
+
+  it("accepts an intake item", async () => {
+    const { store, services } = await openAgent(makeServices(), triageAcceptMetadata);
+    await store.confirmProposal("srv-assistant", "k15", {
+      kind: "triage_intake_item",
+      projectId: "p1",
+      issueId: "i1",
+      action: "accept",
+    });
+    expect(services.inbox.update).toHaveBeenCalledWith("acme", "p1", "i1", { status: 1 });
+  });
+
+  it("snoozes an intake item with an ISO date", async () => {
+    const { store, services } = await openAgent(makeServices(), triageSnoozeMetadata);
+    await store.confirmProposal("srv-assistant", "k16", {
+      kind: "triage_intake_item",
+      projectId: "p1",
+      issueId: "i1",
+      action: "snooze",
+      snoozedTill: "2026-11-01T09:00:00Z",
+    });
+    expect(services.inbox.update).toHaveBeenCalledWith("acme", "p1", "i1", {
+      status: 0,
+      snoozed_till: new Date("2026-11-01T09:00:00Z"),
+    });
+  });
+
+  it("marks an intake item as duplicate", async () => {
+    const { store, services } = await openAgent(makeServices(), triageDuplicateMetadata);
+    await store.confirmProposal("srv-assistant", "k17", {
+      kind: "triage_intake_item",
+      projectId: "p1",
+      issueId: "i1",
+      action: "duplicate",
+      duplicateToIssueId: "i7",
+    });
+    expect(services.inbox.update).toHaveBeenCalledWith("acme", "p1", "i1", {
+      status: 2,
+      duplicate_to: "i7",
     });
   });
 });
