@@ -39,7 +39,7 @@ pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
 /// database and never schedule-eligible.
-pub const PROPOSAL_TOOL_NAMES: [&str; 15] = [
+pub const PROPOSAL_TOOL_NAMES: [&str; 17] = [
     CREATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
@@ -55,6 +55,8 @@ pub const PROPOSAL_TOOL_NAMES: [&str; 15] = [
     UPDATE_TRACK_NAME,
     CREATE_ARTICLE_NAME,
     UPDATE_ARTICLE_NAME,
+    APPLY_TRIAGE_SUGGESTION_NAME,
+    TRIAGE_INTAKE_ITEM_NAME,
 ];
 
 pub fn optional_text(value: Option<&str>) -> Option<String> {
@@ -523,6 +525,12 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(UpdateArticle {
+            trace: trace.clone(),
+        })
+        .tool(ApplyTriageSuggestion {
+            trace: trace.clone(),
+        })
+        .tool(TriageIntakeItem {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -1630,5 +1638,21 @@ mod tests {
         };
         assert_eq!(UpdateArticle::NAME, "update_article");
         assert!(update.parameters()["properties"]["action"].is_object());
+    }
+
+    #[tokio::test]
+    async fn triage_tools_expose_metadata() {
+        let apply = ApplyTriageSuggestion {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(ApplyTriageSuggestion::NAME, "apply_triage_suggestion");
+        assert!(apply.parameters()["properties"]["fields"].is_object());
+        assert!(!apply.description().is_empty());
+
+        let triage = TriageIntakeItem {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(TriageIntakeItem::NAME, "triage_intake_item");
+        assert!(triage.parameters()["properties"]["action"].is_object());
     }
 }

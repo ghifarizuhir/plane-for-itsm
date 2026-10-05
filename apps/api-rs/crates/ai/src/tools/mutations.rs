@@ -548,6 +548,8 @@ pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
         UPDATE_TRACK_NAME => Some("update_track"),
         CREATE_ARTICLE_NAME => Some("create_article"),
         UPDATE_ARTICLE_NAME => Some("update_article"),
+        APPLY_TRIAGE_SUGGESTION_NAME => Some("apply_triage_suggestion"),
+        TRIAGE_INTAKE_ITEM_NAME => Some("triage_intake_item"),
         _ => None,
     }
 }
@@ -2105,6 +2107,18 @@ mod tests {
         assert_eq!(
             mutation_kind_for_tool(UPDATE_ARTICLE_NAME),
             Some("update_article")
+        );
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_triage_tools() {
+        assert_eq!(
+            mutation_kind_for_tool(APPLY_TRIAGE_SUGGESTION_NAME),
+            Some("apply_triage_suggestion")
+        );
+        assert_eq!(
+            mutation_kind_for_tool(TRIAGE_INTAKE_ITEM_NAME),
+            Some("triage_intake_item")
         );
     }
 

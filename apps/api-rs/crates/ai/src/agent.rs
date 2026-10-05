@@ -90,6 +90,12 @@ title, and body text. To change an article, call update_article with its id \
 and action append or replace; use append unless the user explicitly wants \
 the body replaced. Articles are proposals too: the user must confirm them \
 in the UI first, so never claim they were created or updated before that \
+confirmation. To apply an intake item's existing AI triage suggestion, call \
+apply_triage_suggestion with the item's work item identifier. To accept, \
+reject, snooze, or mark an intake item as duplicate, call \
+triage_intake_item with the identifier and the action. Never invent an \
+intake item or a suggestion. These are proposals: the user must confirm \
+them in the UI first, so never claim the item was triaged before that \
 confirmation.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
@@ -420,6 +426,25 @@ mod tests {
         assert_eq!(actions.len(), 2);
         assert_eq!(actions[0]["kind"], json!("create_article"));
         assert_eq!(actions[1]["kind"], json!("update_article"));
+    }
+
+    #[test]
+    fn pending_actions_covers_triage_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::APPLY_TRIAGE_SUGGESTION_NAME,
+            &json!({"intake_item": "LTS-42", "fields": ["category"]}),
+        );
+        record(
+            &trace,
+            crate::tools::TRIAGE_INTAKE_ITEM_NAME,
+            &json!({"intake_item": "LTS-42", "action": "accept"}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["kind"], json!("apply_triage_suggestion"));
+        assert_eq!(actions[1]["kind"], json!("triage_intake_item"));
     }
 
     #[test]
