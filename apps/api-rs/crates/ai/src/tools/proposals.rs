@@ -134,7 +134,7 @@ pub struct WorkItemProposal {
     pub target_date: Option<String>,
 }
 
-fn bounded_ref_list(
+pub fn bounded_ref_list(
     values: Option<Vec<String>>,
     label: &str,
 ) -> Result<Vec<String>, ToolExecutionError> {
@@ -168,7 +168,19 @@ fn bounded_ref_list(
     Ok(out)
 }
 
-fn parse_iso_date(value: &str, label: &str) -> Result<chrono::NaiveDate, ToolExecutionError> {
+/// Like `bounded_ref_list` but preserves "field absent" as `None` (an empty
+/// list means "clear the field").
+pub fn bounded_ref_list_opt(
+    values: Option<Vec<String>>,
+    label: &str,
+) -> Result<Option<Vec<String>>, ToolExecutionError> {
+    match values {
+        None => Ok(None),
+        Some(values) => bounded_ref_list(Some(values), label).map(Some),
+    }
+}
+
+pub fn parse_iso_date(value: &str, label: &str) -> Result<chrono::NaiveDate, ToolExecutionError> {
     chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
         .map_err(|_| ToolExecutionError::invalid_args(format!("{label} must be YYYY-MM-DD")))
 }

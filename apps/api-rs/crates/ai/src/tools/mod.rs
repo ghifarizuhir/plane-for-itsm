@@ -5,6 +5,7 @@
 pub mod intake;
 pub mod kb;
 pub mod lookups;
+pub mod mutations;
 pub mod projects;
 pub mod proposals;
 pub mod services;
@@ -15,6 +16,7 @@ pub mod work_items;
 pub use intake::*;
 pub use kb::*;
 pub use lookups::*;
+pub use mutations::*;
 pub use projects::*;
 pub use proposals::*;
 pub use services::*;
