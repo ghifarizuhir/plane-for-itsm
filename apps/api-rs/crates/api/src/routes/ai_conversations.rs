@@ -501,10 +501,12 @@ fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
         | "update_service"
         | "update_sprint"
         | "update_track"
-        | "update_article"
+        |         "update_article"
         | "manage_service_links"
         | "manage_sprint_items"
-        | "manage_track_items" => Some(&[]),
+        | "manage_track_items"
+        | "apply_triage_suggestion"
+        | "triage_intake_item" => Some(&[]),
         "add_comment" => Some(&["created_comment_id"]),
         "create_service" => Some(&["created_service_id"]),
         "create_sprint" => Some(&["created_sprint_id"]),
@@ -975,6 +977,39 @@ mod tests {
             clean_update["proposal_decisions"][update_key.as_str()]["decision"],
             json!("applied")
         );
+    }
+
+    #[test]
+    fn metadata_patch_accepts_triage_decisions() {
+        let apply_key = Uuid::new_v4().to_string();
+        let triage_key = Uuid::new_v4().to_string();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({
+                (apply_key.clone()): {"kind": "apply_triage_suggestion", "decision": "applied"},
+                (triage_key.clone()): {"kind": "triage_intake_item", "decision": "cancelled"},
+            }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][apply_key.as_str()]["decision"],
+            json!("applied")
+        );
+        assert_eq!(
+            clean["proposal_decisions"][triage_key.as_str()]["decision"],
+            json!("cancelled")
+        );
+
+        let result_on_apply = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(apply_key.clone()): {
+                "kind": "apply_triage_suggestion",
+                "decision": "applied",
+                "result": {"created_comment_id": Uuid::new_v4()},
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(result_on_apply.contains("not allowed"));
     }
 
     #[test]
