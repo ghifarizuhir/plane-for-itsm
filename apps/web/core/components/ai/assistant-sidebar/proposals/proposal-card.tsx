@@ -9,6 +9,7 @@ import { ArticleProposalCard } from "./article-proposal-card";
 import { CommentProposalCard } from "./comment-proposal-card";
 import { LinkItemsProposalCard } from "./link-items-proposal-card";
 import { ProposalFormCard } from "./proposal-form-card";
+import { TriageProposalCard } from "./triage-proposal-card";
 import { WorkItemUpdateProposalCard } from "./work-item-update-proposal-card";
 
 type Props = {
@@ -126,6 +127,26 @@ export const ProposalCard = ({ entry, decision, onConfirm, onCancel }: Props) =>
     return (
       <ArticleProposalCard
         kind="update_article"
+        proposal={entry.proposal}
+        decision={decision}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+  if (entry.kind === "apply_triage_suggestion")
+    return (
+      <TriageProposalCard
+        kind="apply_triage_suggestion"
+        proposal={entry.proposal}
+        decision={decision}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+  if (entry.kind === "triage_intake_item")
+    return (
+      <TriageProposalCard
+        kind="triage_intake_item"
         proposal={entry.proposal}
         decision={decision}
         onConfirm={onConfirm}
