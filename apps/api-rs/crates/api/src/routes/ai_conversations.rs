@@ -497,7 +497,10 @@ fn clean_work_item_decisions(value: &Value) -> Result<Value, String> {
 /// data get an empty allowlist.
 fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
-        "update_work_item" => Some(&[]),
+        "update_work_item"
+        | "manage_service_links"
+        | "manage_sprint_items"
+        | "manage_track_items" => Some(&[]),
         "add_comment" => Some(&["created_comment_id"]),
         _ => None,
     }
@@ -830,6 +833,37 @@ mod tests {
         )]))
         .unwrap_err();
         assert!(not_an_object.contains("object"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_link_decisions_without_result() {
+        let key = Uuid::new_v4().to_string();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({
+                (key.clone()): {"kind": "manage_service_links", "decision": "applied"},
+            }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][key.as_str()]["decision"],
+            json!("applied")
+        );
+    }
+
+    #[test]
+    fn metadata_patch_rejects_result_on_link_decisions() {
+        let key = Uuid::new_v4().to_string();
+        let err = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {
+                "kind": "manage_sprint_items",
+                "decision": "applied",
+                "result": {"created_comment_id": Uuid::new_v4()},
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(err.contains("not allowed"));
     }
 
     #[test]
