@@ -73,7 +73,12 @@ update_work_item with its identifier and only the fields that change. When \
 the user asks to comment on a work item, call add_comment with its identifier \
 and the comment text. Both are proposals: the user must confirm them in the \
 UI first, so never say a work item was updated or a comment was posted before \
-that confirmation.";
+that confirmation. To link or unlink services on a work item, call manage_service_links with the \
+work item identifier and service names or ids. To add or remove work items in \
+a sprint or track, call manage_sprint_items or manage_track_items with the \
+container name and the work item identifiers. These are proposals too: the \
+user must confirm them in the UI first, so never claim they were applied \
+before that confirmation.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -316,6 +321,31 @@ mod tests {
         assert_eq!(actions.len(), 2);
         assert_eq!(actions[0]["kind"], json!("update_work_item"));
         assert_eq!(actions[1]["kind"], json!("add_comment"));
+    }
+
+    #[test]
+    fn pending_actions_covers_link_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::MANAGE_SERVICE_LINKS_NAME,
+            &json!({"work_item": "LTS-1", "services": ["Email"], "action": "link"}),
+        );
+        record(
+            &trace,
+            crate::tools::MANAGE_SPRINT_ITEMS_NAME,
+            &json!({"sprint": "Sprint 3", "work_items": ["LTS-1"], "action": "add"}),
+        );
+        record(
+            &trace,
+            crate::tools::MANAGE_TRACK_ITEMS_NAME,
+            &json!({"track": "Onboarding", "work_items": ["LTS-1"], "action": "remove"}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 3);
+        assert_eq!(actions[0]["kind"], json!("manage_service_links"));
+        assert_eq!(actions[1]["kind"], json!("manage_sprint_items"));
+        assert_eq!(actions[2]["kind"], json!("manage_track_items"));
     }
 
     #[test]

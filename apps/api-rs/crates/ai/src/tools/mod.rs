@@ -38,12 +38,15 @@ pub const DEFAULT_LIMIT: i64 = 10;
 pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
-/// database and never schedule-eligible. Plan 2B extends the list.
-pub const PROPOSAL_TOOL_NAMES: [&str; 4] = [
+/// database and never schedule-eligible.
+pub const PROPOSAL_TOOL_NAMES: [&str; 7] = [
     CREATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
     ADD_COMMENT_NAME,
+    MANAGE_SERVICE_LINKS_NAME,
+    MANAGE_SPRINT_ITEMS_NAME,
+    MANAGE_TRACK_ITEMS_NAME,
 ];
 
 pub fn optional_text(value: Option<&str>) -> Option<String> {
@@ -467,6 +470,15 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(AddComment {
+            trace: trace.clone(),
+        })
+        .tool(ManageServiceLinks {
+            trace: trace.clone(),
+        })
+        .tool(ManageSprintItems {
+            trace: trace.clone(),
+        })
+        .tool(ManageTrackItems {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -1481,5 +1493,29 @@ mod tests {
                 "{name} must never be schedule-eligible"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn link_tools_expose_metadata() {
+        let links = ManageServiceLinks {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(ManageServiceLinks::NAME, "manage_service_links");
+        assert!(links.parameters()["properties"]["services"].is_object());
+        assert!(!links.description().is_empty());
+
+        let sprint = ManageSprintItems {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(ManageSprintItems::NAME, "manage_sprint_items");
+        assert!(sprint.parameters()["properties"]["work_items"].is_object());
+        assert!(!sprint.description().is_empty());
+
+        let track = ManageTrackItems {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(ManageTrackItems::NAME, "manage_track_items");
+        assert!(track.parameters()["properties"]["track"].is_object());
+        assert!(!track.description().is_empty());
     }
 }
