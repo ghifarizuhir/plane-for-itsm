@@ -6,7 +6,7 @@
 
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { v4 as uuidv4 } from "uuid";
-import type { TIssue } from "@plane/types";
+import type { TIssue, TPage } from "@plane/types";
 import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
@@ -499,12 +499,13 @@ export class AIAssistantStore implements IAIAssistantStore {
     } else if (payload.kind === "update_track") {
       await this.modulesService.patchModule(slug, payload.projectId, payload.moduleId, payload.changes);
     } else if (payload.kind === "create_article") {
-      const created = await this.pagesService.create(slug, payload.projectId, {
+      const body: Partial<TPage> & { parent?: string } = {
         name: payload.data.name,
         description_html: payload.data.descriptionHtml,
         access: payload.data.access,
-        parent: payload.data.parent,
-      });
+        ...(payload.data.parent ? { parent: payload.data.parent } : {}),
+      };
+      const created = await this.pagesService.create(slug, payload.projectId, body);
       if (!created?.id) throw new Error("Article creation returned no id");
       result = { created_article_id: created.id };
     } else if (payload.kind === "update_article") {

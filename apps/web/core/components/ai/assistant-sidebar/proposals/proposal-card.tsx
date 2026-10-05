@@ -5,6 +5,7 @@
  */
 
 import type { TAiProposal, TAiProposalConfirmPayload, TAiProposalDecision } from "@/lib/ai-proposals";
+import { ArticleProposalCard } from "./article-proposal-card";
 import { CommentProposalCard } from "./comment-proposal-card";
 import { LinkItemsProposalCard } from "./link-items-proposal-card";
 import { ProposalFormCard } from "./proposal-form-card";
@@ -105,6 +106,26 @@ export const ProposalCard = ({ entry, decision, onConfirm, onCancel }: Props) =>
     return (
       <ProposalFormCard
         kind="create_track"
+        proposal={entry.proposal}
+        decision={decision}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+  if (entry.kind === "create_article")
+    return (
+      <ArticleProposalCard
+        kind="create_article"
+        proposal={entry.proposal}
+        decision={decision}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    );
+  if (entry.kind === "update_article")
+    return (
+      <ArticleProposalCard
+        kind="update_article"
         proposal={entry.proposal}
         decision={decision}
         onConfirm={onConfirm}
