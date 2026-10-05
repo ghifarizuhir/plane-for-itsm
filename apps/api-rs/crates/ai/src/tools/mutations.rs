@@ -901,6 +901,229 @@ impl Tool for UpdateService {
     }
 }
 
+fn date_change(
+    value: Option<&str>,
+    label: &str,
+    allow_clear: bool,
+) -> Result<Option<String>, ToolExecutionError> {
+    match value.map(str::trim) {
+        None => Ok(None),
+        Some("") if allow_clear => Ok(Some(String::new())),
+        Some("") => Err(ToolExecutionError::invalid_args(format!(
+            "{label} must not be empty when provided"
+        ))),
+        Some(text) => parse_iso_date(text, label).map(|date| Some(date.to_string())),
+    }
+}
+
+pub const CREATE_SPRINT_NAME: &str = "create_sprint";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CreateSprintArgs {
+    /// Project identifier or name. Required.
+    pub project: String,
+    /// Sprint name (1-255 characters).
+    pub name: String,
+    /// Plain-text description (max 5000 characters).
+    pub description: Option<String>,
+    /// Start date "YYYY-MM-DD"; provide both dates or neither.
+    pub start_date: Option<String>,
+    /// End date "YYYY-MM-DD"; provide both dates or neither.
+    pub end_date: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreateSprintProposal {
+    pub project: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+}
+
+/// Validate raw tool args into a normalized create-sprint proposal.
+pub fn create_sprint_proposal_from_args(
+    args: CreateSprintArgs,
+) -> Result<CreateSprintProposal, ToolExecutionError> {
+    let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
+    let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
+    let description =
+        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let start_date = date_change(args.start_date.as_deref(), "start_date", false)?;
+    let end_date = date_change(args.end_date.as_deref(), "end_date", false)?;
+    if start_date.is_some() != end_date.is_some() {
+        return Err(ToolExecutionError::invalid_args(
+            "provide both start_date and end_date or neither",
+        ));
+    }
+    if let (Some(start), Some(end)) = (&start_date, &end_date) {
+        if start > end {
+            return Err(ToolExecutionError::invalid_args(
+                "start_date must not be after end_date",
+            ));
+        }
+    }
+    Ok(CreateSprintProposal {
+        project,
+        name,
+        description,
+        start_date,
+        end_date,
+    })
+}
+
+pub struct CreateSprint {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateSprint {
+    const NAME: &'static str = CREATE_SPRINT_NAME;
+    type Args = CreateSprintArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose creating one sprint (cycle) in a project. Only call this when \
+         the user asks to create a sprint. The project and sprint name are \
+         required; never guess them. Provide both start and end dates or \
+         neither. The sprint owner is always the confirming user. The user must \
+         confirm and may edit every field in the UI before anything is saved. \
+         Never claim the sprint was created until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateSprintArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = create_sprint_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("CreateSprintProposal serializes"))
+    }
+}
+
+pub const UPDATE_SPRINT_NAME: &str = "update_sprint";
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct UpdateSprintChanges {
+    /// New sprint name (1-255 characters); must not be blank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// New plain-text description; an empty string clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New start date "YYYY-MM-DD"; cannot be cleared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    /// New end date "YYYY-MM-DD"; cannot be cleared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+}
+
+fn normalize_sprint_changes(
+    changes: UpdateSprintChanges,
+) -> Result<UpdateSprintChanges, ToolExecutionError> {
+    let normalized = UpdateSprintChanges {
+        name: required_when_present(changes.name.as_deref(), "name", SERVICE_NAME_MAX)?,
+        description: clearable_text(
+            changes.description.as_deref(),
+            "description",
+            SERVICE_DESCRIPTION_MAX,
+        )?,
+        start_date: date_change(changes.start_date.as_deref(), "start_date", false)?,
+        end_date: date_change(changes.end_date.as_deref(), "end_date", false)?,
+    };
+    if normalized == UpdateSprintChanges::default() {
+        return Err(ToolExecutionError::invalid_args(
+            "at least one change is required",
+        ));
+    }
+    if let (Some(start), Some(end)) = (&normalized.start_date, &normalized.end_date) {
+        if start > end {
+            return Err(ToolExecutionError::invalid_args(
+                "start_date must not be after end_date",
+            ));
+        }
+    }
+    Ok(normalized)
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct UpdateSprintArgs {
+    /// Sprint name or id. Required.
+    pub sprint: String,
+    /// Project identifier or name; use it when the sprint name is not unique.
+    pub project: Option<String>,
+    /// Fields to change. At least one field must be set.
+    pub changes: UpdateSprintChanges,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct UpdateSprintProposal {
+    pub sprint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub changes: UpdateSprintChanges,
+}
+
+/// Validate raw tool args into a normalized update-sprint proposal.
+pub fn update_sprint_proposal_from_args(
+    args: UpdateSprintArgs,
+) -> Result<UpdateSprintProposal, ToolExecutionError> {
+    let sprint = required_text(&args.sprint, "sprint", CONTAINER_REF_MAX)?;
+    let project = optional_container_project(args.project)?;
+    let changes = normalize_sprint_changes(args.changes)?;
+    Ok(UpdateSprintProposal {
+        sprint,
+        project,
+        changes,
+    })
+}
+
+pub struct UpdateSprint {
+    pub trace: ToolTrace,
+}
+
+impl Tool for UpdateSprint {
+    const NAME: &'static str = UPDATE_SPRINT_NAME;
+    type Args = UpdateSprintArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose editing exactly one existing sprint. Only call this when the \
+         user asks to change a sprint's name, description, or dates. The sprint \
+         name or id is required; never guess it. Send only the fields that \
+         change; an empty description clears it and dates cannot be cleared. \
+         Pass the project when the sprint name is not unique. The user must \
+         confirm and may edit every field in the UI before anything is saved. \
+         Never claim the sprint was updated until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<UpdateSprintArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = update_sprint_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("UpdateSprintProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1337,5 +1560,109 @@ mod tests {
         })
         .unwrap_err();
         assert!(bad_url.to_string().contains("http"));
+    }
+
+    #[test]
+    fn create_sprint_requires_paired_dates() {
+        let proposal = create_sprint_proposal_from_args(CreateSprintArgs {
+            project: " LTS ".into(),
+            name: " Sprint 4 ".into(),
+            description: Some(" Q4 hardening ".into()),
+            start_date: Some("2026-11-01".into()),
+            end_date: Some("2026-11-14".into()),
+        })
+        .unwrap();
+        assert_eq!(proposal.project, "LTS");
+        assert_eq!(proposal.name, "Sprint 4");
+        assert_eq!(proposal.description.as_deref(), Some("Q4 hardening"));
+        assert_eq!(proposal.start_date.as_deref(), Some("2026-11-01"));
+        assert_eq!(proposal.end_date.as_deref(), Some("2026-11-14"));
+
+        let single = create_sprint_proposal_from_args(CreateSprintArgs {
+            project: "LTS".into(),
+            name: "Sprint 4".into(),
+            description: None,
+            start_date: Some("2026-11-01".into()),
+            end_date: None,
+        })
+        .unwrap_err();
+        assert!(single.to_string().contains("both"));
+
+        let reversed = create_sprint_proposal_from_args(CreateSprintArgs {
+            project: "LTS".into(),
+            name: "Sprint 4".into(),
+            description: None,
+            start_date: Some("2026-11-14".into()),
+            end_date: Some("2026-11-01".into()),
+        })
+        .unwrap_err();
+        assert!(reversed.to_string().contains("start_date"));
+
+        let bad_date = create_sprint_proposal_from_args(CreateSprintArgs {
+            project: "LTS".into(),
+            name: "Sprint 4".into(),
+            description: None,
+            start_date: Some("01-11-2026".into()),
+            end_date: Some("2026-11-14".into()),
+        })
+        .unwrap_err();
+        assert!(bad_date.to_string().contains("YYYY-MM-DD"));
+    }
+
+    #[test]
+    fn update_sprint_allows_single_date_and_rejects_blank() {
+        let proposal = update_sprint_proposal_from_args(UpdateSprintArgs {
+            sprint: " Sprint 4 ".into(),
+            project: None,
+            changes: UpdateSprintChanges {
+                end_date: Some("2026-11-21".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(proposal.sprint, "Sprint 4");
+        assert_eq!(proposal.changes.end_date.as_deref(), Some("2026-11-21"));
+
+        let empty = update_sprint_proposal_from_args(UpdateSprintArgs {
+            sprint: "Sprint 4".into(),
+            project: None,
+            changes: UpdateSprintChanges::default(),
+        })
+        .unwrap_err();
+        assert!(empty.to_string().contains("at least one"));
+
+        let blank_date = update_sprint_proposal_from_args(UpdateSprintArgs {
+            sprint: "Sprint 4".into(),
+            project: None,
+            changes: UpdateSprintChanges {
+                start_date: Some("".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(blank_date.to_string().contains("must not be empty"));
+
+        let blank_name = update_sprint_proposal_from_args(UpdateSprintArgs {
+            sprint: "Sprint 4".into(),
+            project: None,
+            changes: UpdateSprintChanges {
+                name: Some("  ".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(blank_name.to_string().contains("name"));
+
+        let reversed = update_sprint_proposal_from_args(UpdateSprintArgs {
+            sprint: "Sprint 4".into(),
+            project: None,
+            changes: UpdateSprintChanges {
+                start_date: Some("2026-11-21".into()),
+                end_date: Some("2026-11-14".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(reversed.to_string().contains("start_date"));
     }
 }
