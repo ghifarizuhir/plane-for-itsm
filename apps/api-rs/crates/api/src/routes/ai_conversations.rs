@@ -417,6 +417,9 @@ fn clean_metadata_patch(patch: &serde_json::Map<String, Value>) -> Result<Value,
             "work_item_decisions" => {
                 clean.insert(key.clone(), clean_work_item_decisions(value)?);
             }
+            "proposal_decisions" => {
+                clean.insert(key.clone(), clean_proposal_decisions(value)?);
+            }
             _ => return Err(format!("metadata key not allowed: {key}")),
         }
     }
@@ -490,9 +493,92 @@ fn clean_work_item_decisions(value: &Value) -> Result<Value, String> {
     Ok(Value::Object(clean))
 }
 
+/// Result keys the FE may persist per proposal kind. Kinds without result
+/// data get an empty allowlist.
+fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
+    match kind {
+        "update_work_item" => Some(&[]),
+        "add_comment" => Some(&["created_comment_id"]),
+        _ => None,
+    }
+}
+
+/// Shape-check the `proposal_decisions` map written by the generic proposal
+/// cards: UUID keys, known kind, decision enum, and a result object limited to
+/// the kind's allowlisted UUID keys.
+fn clean_proposal_decisions(value: &Value) -> Result<Value, String> {
+    let Some(decisions) = value.as_object() else {
+        return Err("proposal_decisions must be an object".to_string());
+    };
+    let mut clean = serde_json::Map::new();
+    for (key, decision) in decisions {
+        let Some(decision_key) = Uuid::parse_str(key).ok() else {
+            return Err("proposal_decisions keys must be uuids".to_string());
+        };
+        let Some(entry) = decision.as_object() else {
+            return Err("proposal_decisions values must be objects".to_string());
+        };
+        let Some(kind) = entry.get("kind").and_then(Value::as_str) else {
+            return Err("proposal_decisions entries need a kind".to_string());
+        };
+        let Some(result_keys) = allowed_result_keys(kind) else {
+            return Err(format!("proposal_decisions kind not allowed: {kind}"));
+        };
+        match entry.get("decision").and_then(Value::as_str) {
+            Some("applied") => {
+                let mut result = serde_json::Map::new();
+                if let Some(raw) = entry.get("result") {
+                    let Some(result_object) = raw.as_object() else {
+                        return Err("proposal_decisions result must be an object".to_string());
+                    };
+                    for (result_key, result_value) in result_object {
+                        if !result_keys.contains(&result_key.as_str()) {
+                            return Err(format!("{kind} result key not allowed: {result_key}"));
+                        }
+                        let Some(uuid) =
+                            result_value.as_str().and_then(|raw| Uuid::parse_str(raw).ok())
+                        else {
+                            return Err(format!("{kind} result values must be uuids"));
+                        };
+                        result.insert(result_key.clone(), json!(uuid));
+                    }
+                }
+                if kind == "add_comment" && !result.contains_key("created_comment_id") {
+                    return Err(
+                        "add_comment applied decisions need result.created_comment_id".to_string()
+                    );
+                }
+                let mut cleaned = serde_json::Map::new();
+                cleaned.insert("kind".to_string(), json!(kind));
+                cleaned.insert("decision".to_string(), json!("applied"));
+                if !result.is_empty() {
+                    cleaned.insert("result".to_string(), Value::Object(result));
+                }
+                clean.insert(decision_key.to_string(), Value::Object(cleaned));
+            }
+            Some("cancelled") => {
+                if entry.get("result").is_some() {
+                    return Err("cancelled decisions must not carry a result".to_string());
+                }
+                clean.insert(
+                    decision_key.to_string(),
+                    json!({"kind": kind, "decision": "cancelled"}),
+                );
+            }
+            _ => {
+                return Err(
+                    "proposal_decisions decision must be 'applied' or 'cancelled'".to_string(),
+                )
+            }
+        }
+    }
+    Ok(Value::Object(clean))
+}
+
 /// `PATCH .../messages/:message_id/` — merge an allowlisted metadata patch
-/// (`schedule_decision`, `created_schedule_id`, `work_item_decisions`) written
-/// by the FE when the user resolves a proposal card.
+/// (`schedule_decision`, `created_schedule_id`, `work_item_decisions`,
+/// `proposal_decisions`) written by the FE when the user resolves a proposal
+/// card.
 pub async fn patch_message(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -644,6 +730,102 @@ mod tests {
 
         let not_an_object = clean_metadata_patch(&patch_map(vec![(
             "work_item_decisions",
+            json!("nope"),
+        )]))
+        .unwrap_err();
+        assert!(not_an_object.contains("object"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_proposal_decisions() {
+        let comment_key = Uuid::new_v4().to_string();
+        let update_key = Uuid::new_v4().to_string();
+        let comment = Uuid::new_v4();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({
+                (comment_key.clone()): {
+                    "kind": "add_comment",
+                    "decision": "applied",
+                    "result": {"created_comment_id": comment},
+                },
+                (update_key.clone()): {
+                    "kind": "update_work_item",
+                    "decision": "applied",
+                },
+            }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][comment_key.as_str()]["decision"],
+            json!("applied")
+        );
+        assert_eq!(
+            clean["proposal_decisions"][comment_key.as_str()]["result"]["created_comment_id"],
+            json!(comment)
+        );
+        assert_eq!(
+            clean["proposal_decisions"][update_key.as_str()]["decision"],
+            json!("applied")
+        );
+    }
+
+    #[test]
+    fn metadata_patch_rejects_bad_proposal_decisions() {
+        let key = Uuid::new_v4().to_string();
+
+        let unknown_kind = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {"kind": "delete_work_item", "decision": "applied"}}),
+        )]))
+        .unwrap_err();
+        assert!(unknown_kind.contains("kind"));
+
+        let missing_comment = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {"kind": "add_comment", "decision": "applied"}}),
+        )]))
+        .unwrap_err();
+        assert!(missing_comment.contains("created_comment_id"));
+
+        let result_on_update = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {
+                "kind": "update_work_item",
+                "decision": "applied",
+                "result": {"created_comment_id": Uuid::new_v4()},
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(result_on_update.contains("not allowed"));
+
+        let result_on_cancel = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {
+                "kind": "update_work_item",
+                "decision": "cancelled",
+                "result": {},
+            }}),
+        )]))
+        .unwrap_err();
+        assert!(result_on_cancel.contains("cancelled"));
+
+        let bad_decision = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({(key.clone()): {"kind": "update_work_item", "decision": "done"}}),
+        )]))
+        .unwrap_err();
+        assert!(bad_decision.contains("applied"));
+
+        let bad_key = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({"nope": {"kind": "update_work_item", "decision": "applied"}}),
+        )]))
+        .unwrap_err();
+        assert!(bad_key.contains("uuid"));
+
+        let not_an_object = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
             json!("nope"),
         )]))
         .unwrap_err();
