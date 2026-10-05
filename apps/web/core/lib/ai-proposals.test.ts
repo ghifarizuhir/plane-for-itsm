@@ -3,6 +3,7 @@ import {
   changedFieldCount,
   matchByNameOrId,
   validateAddCommentProposal,
+  validateApplyTriageSuggestionProposal,
   validateCreateArticleProposal,
   validateCreateServiceProposal,
   validateCreateSprintProposal,
@@ -10,6 +11,7 @@ import {
   validateManageServiceLinksProposal,
   validateManageSprintItemsProposal,
   validateManageTrackItemsProposal,
+  validateTriageIntakeItemProposal,
   validateUpdateArticleProposal,
   validateUpdateServiceProposal,
   validateUpdateSprintProposal,
@@ -237,5 +239,55 @@ describe("article proposal validators", () => {
         name: "  ",
       })
     ).toBe("Name must not be empty.");
+  });
+});
+
+describe("triage proposal validators", () => {
+  it("validates apply-suggestion proposals", () => {
+    expect(
+      validateApplyTriageSuggestionProposal({ intake_item: "LTS-42", fields: ["category", "severity"] })
+    ).toBeNull();
+    expect(validateApplyTriageSuggestionProposal({ intake_item: "LTS-42", fields: [] })).toBe(
+      "At least one field is required."
+    );
+    expect(validateApplyTriageSuggestionProposal({ intake_item: "nope", fields: ["category"] })).toBe(
+      "Intake item must look like PROJ-123."
+    );
+    expect(validateApplyTriageSuggestionProposal({ intake_item: "LTS-42", fields: ["needs_human" as never] })).toBe(
+      "Unknown field: needs_human."
+    );
+  });
+
+  it("validates triage-action proposals", () => {
+    expect(validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "accept" })).toBeNull();
+    expect(
+      validateTriageIntakeItemProposal({
+        intake_item: "LTS-42",
+        action: "snooze",
+        snoozed_till: "2026-11-01T09:00:00Z",
+      })
+    ).toBeNull();
+    expect(
+      validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "duplicate", duplicate_of: "LTS-7" })
+    ).toBeNull();
+    expect(validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "snooze" })).toBe(
+      "Snoozed till is required for snooze."
+    );
+    expect(
+      validateTriageIntakeItemProposal({
+        intake_item: "LTS-42",
+        action: "accept",
+        snoozed_till: "2026-11-01T09:00:00Z",
+      })
+    ).toBe("Snoozed till is only allowed for snooze.");
+    expect(validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "duplicate" })).toBe(
+      "Duplicate of is required for duplicate."
+    );
+    expect(
+      validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "snooze", snoozed_till: "2026-11-01" })
+    ).toBe("Snoozed till must be an RFC3339 datetime.");
+    expect(validateTriageIntakeItemProposal({ intake_item: "LTS-42", action: "archive" as never })).toBe(
+      "Action must be accept, reject, snooze, or duplicate."
+    );
   });
 });

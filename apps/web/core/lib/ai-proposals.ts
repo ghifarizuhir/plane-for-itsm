@@ -21,6 +21,8 @@ export const PROPOSAL_KINDS = [
   "update_track",
   "create_article",
   "update_article",
+  "apply_triage_suggestion",
+  "triage_intake_item",
 ] as const;
 export type TAiProposalKind = (typeof PROPOSAL_KINDS)[number];
 
@@ -41,6 +43,10 @@ export const SERVICE_TYPE_VALUES = ["internal", "external", "infrastructure", "t
 export const MODULE_STATUS_VALUES = ["backlog", "planned", "in-progress", "paused", "completed", "cancelled"] as const;
 export const ARTICLE_ACCESS_VALUES = ["public", "private"] as const;
 export const ARTICLE_ACTION_VALUES = ["append", "replace"] as const;
+export const TRIAGE_FIELD_VALUES = ["category", "service", "severity"] as const;
+export const TRIAGE_ACTION_VALUES = ["accept", "reject", "snooze", "duplicate"] as const;
+export type TTriageField = (typeof TRIAGE_FIELD_VALUES)[number];
+export type TTriageAction = (typeof TRIAGE_ACTION_VALUES)[number];
 
 export type TAiWorkItemChanges = {
   name?: string | null;
@@ -175,6 +181,18 @@ export type TAiUpdateArticleProposal = {
   content?: string | null;
 };
 
+export type TAiApplyTriageSuggestionProposal = {
+  intake_item: string;
+  fields: TTriageField[];
+};
+
+export type TAiTriageIntakeItemProposal = {
+  intake_item: string;
+  action: TTriageAction;
+  snoozed_till?: string | null;
+  duplicate_of?: string | null;
+};
+
 export type TAiProposal =
   | { key: string; kind: "update_work_item"; proposal: TAiUpdateWorkItemProposal }
   | { key: string; kind: "add_comment"; proposal: TAiAddCommentProposal }
@@ -188,7 +206,9 @@ export type TAiProposal =
   | { key: string; kind: "create_track"; proposal: TAiCreateTrackProposal }
   | { key: string; kind: "update_track"; proposal: TAiUpdateTrackProposal }
   | { key: string; kind: "create_article"; proposal: TAiCreateArticleProposal }
-  | { key: string; kind: "update_article"; proposal: TAiUpdateArticleProposal };
+  | { key: string; kind: "update_article"; proposal: TAiUpdateArticleProposal }
+  | { key: string; kind: "apply_triage_suggestion"; proposal: TAiApplyTriageSuggestionProposal }
+  | { key: string; kind: "triage_intake_item"; proposal: TAiTriageIntakeItemProposal };
 
 export type TAiProposalDecisionResult = {
   created_comment_id?: string;
@@ -246,6 +266,20 @@ export type TAiProposalConfirmPayload =
       action: "append" | "replace";
       name?: string;
       descriptionHtml?: string;
+    }
+  | {
+      kind: "apply_triage_suggestion";
+      projectId: string;
+      issueId: string;
+      fields: TTriageField[];
+    }
+  | {
+      kind: "triage_intake_item";
+      projectId: string;
+      issueId: string;
+      action: TTriageAction;
+      snoozedTill?: string;
+      duplicateToIssueId?: string;
     };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -509,5 +543,46 @@ export const validateUpdateArticleProposal = (proposal: Partial<TAiUpdateArticle
       return `Content must be at most ${PROPOSAL_LIMITS.articleContent} characters.`;
   }
   if (proposal.name == null && proposal.content == null) return "At least one of name or content is required.";
+  return null;
+};
+
+const WORK_ITEM_REF_RE = /^[A-Za-z0-9]+-\d+$/;
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Mirrors `apply_triage_suggestion_proposal_from_args` on the backend. */
+export const validateApplyTriageSuggestionProposal = (
+  proposal: Partial<TAiApplyTriageSuggestionProposal>
+): string | null => {
+  const intakeItem = proposal.intake_item?.trim() ?? "";
+  if (!intakeItem) return "Intake item is required.";
+  if (!WORK_ITEM_REF_RE.test(intakeItem)) return "Intake item must look like PROJ-123.";
+  const fields = proposal.fields ?? [];
+  if (fields.length === 0) return "At least one field is required.";
+  const unknown = fields.find((field) => !TRIAGE_FIELD_VALUES.includes(field));
+  if (unknown) return `Unknown field: ${unknown}.`;
+  return null;
+};
+
+/** Mirrors `triage_intake_item_proposal_from_args` on the backend. */
+export const validateTriageIntakeItemProposal = (proposal: Partial<TAiTriageIntakeItemProposal>): string | null => {
+  const intakeItem = proposal.intake_item?.trim() ?? "";
+  if (!intakeItem) return "Intake item is required.";
+  if (!WORK_ITEM_REF_RE.test(intakeItem)) return "Intake item must look like PROJ-123.";
+  if (!TRIAGE_ACTION_VALUES.includes(proposal.action as TTriageAction))
+    return "Action must be accept, reject, snooze, or duplicate.";
+  const snoozedTill = proposal.snoozed_till?.trim() ?? "";
+  const duplicateOf = proposal.duplicate_of?.trim() ?? "";
+  if (proposal.action === "snooze") {
+    if (!snoozedTill) return "Snoozed till is required for snooze.";
+    if (!RFC3339_RE.test(snoozedTill)) return "Snoozed till must be an RFC3339 datetime.";
+  } else if (snoozedTill) {
+    return "Snoozed till is only allowed for snooze.";
+  }
+  if (proposal.action === "duplicate") {
+    if (!duplicateOf) return "Duplicate of is required for duplicate.";
+    if (!WORK_ITEM_REF_RE.test(duplicateOf)) return "Duplicate of must look like PROJ-123.";
+  } else if (duplicateOf) {
+    return "Duplicate of is only allowed for duplicate.";
+  }
   return null;
 };
