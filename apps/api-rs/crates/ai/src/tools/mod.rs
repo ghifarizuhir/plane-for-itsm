@@ -37,6 +37,15 @@ pub const PRIORITIES: [&str; 5] = ["urgent", "high", "medium", "low", "none"];
 pub const DEFAULT_LIMIT: i64 = 10;
 pub const MAX_LIMIT: i64 = 25;
 
+/// Proposal tool names: recorded in the trace but never executed against the
+/// database and never schedule-eligible. Plan 2B extends the list.
+pub const PROPOSAL_TOOL_NAMES: [&str; 4] = [
+    CREATE_SCHEDULE_NAME,
+    CREATE_WORK_ITEM_NAME,
+    UPDATE_WORK_ITEM_NAME,
+    ADD_COMMENT_NAME,
+];
+
 pub fn optional_text(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -435,6 +444,12 @@ pub fn workspace_tools(
             pool: pool.clone(),
             workspace_id,
             user_id,
+            trace: trace.clone(),
+        })
+        .tool(UpdateWorkItem {
+            trace: trace.clone(),
+        })
+        .tool(AddComment {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
@@ -1412,5 +1427,32 @@ mod tests {
         );
         assert_eq!(feature_column(ProjectFeature::Pages), ("page_view", "knowledge base"));
         assert_eq!(feature_column(ProjectFeature::Intake), ("intake_view", "intake"));
+    }
+
+    #[tokio::test]
+    async fn mutation_tools_expose_metadata() {
+        let update = UpdateWorkItem {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(UpdateWorkItem::NAME, "update_work_item");
+        assert!(update.parameters()["properties"]["changes"].is_object());
+        assert!(!update.description().is_empty());
+
+        let comment = AddComment {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(AddComment::NAME, "add_comment");
+        assert!(comment.parameters()["properties"]["comment"].is_object());
+        assert!(!comment.description().is_empty());
+    }
+
+    #[test]
+    fn proposal_tools_are_not_schedule_eligible() {
+        for name in PROPOSAL_TOOL_NAMES {
+            assert!(
+                !crate::schedule::SPEC_TOOLS.contains(&name),
+                "{name} must never be schedule-eligible"
+            );
+        }
     }
 }

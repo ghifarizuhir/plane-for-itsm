@@ -12,7 +12,7 @@ use rig::tool::server::ToolServerHandle;
 use serde_json::{json, Value};
 
 use crate::llm::LlmError;
-use crate::tools::{CREATE_SCHEDULE_NAME, CREATE_WORK_ITEM_NAME};
+use crate::tools::{CREATE_SCHEDULE_NAME, PROPOSAL_TOOL_NAMES};
 
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -68,7 +68,12 @@ or emails, and label names may be human-readable; the UI resolves them. The \
 context may name the signed-in user as Current user; when the user refers to \
 themselves (\"me\", \"saya\"), that is the person to use as the assignee. A \
 work item is only created after the user confirms the proposal card, so never \
-say it is already created.";
+say it is already created. When the user asks to change an existing work item's fields, call \
+update_work_item with its identifier and only the fields that change. When \
+the user asks to comment on a work item, call add_comment with its identifier \
+and the comment text. Both are proposals: the user must confirm them in the \
+UI first, so never say a work item was updated or a comment was posted before \
+that confirmation.";
 
 /// Total model-call budget: initial call + every tool round-trip continuation.
 pub const MAX_TURNS: usize = 6;
@@ -232,7 +237,7 @@ pub fn pending_actions(trace: &ToolTrace) -> Vec<Value> {
     };
     recorded
         .iter()
-        .filter(|call| call.name == CREATE_SCHEDULE_NAME || call.name == CREATE_WORK_ITEM_NAME)
+        .filter(|call| PROPOSAL_TOOL_NAMES.contains(&call.name.as_str()))
         .map(|call| {
             json!({
                 "kind": call.name,
@@ -245,6 +250,7 @@ pub fn pending_actions(trace: &ToolTrace) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::CREATE_WORK_ITEM_NAME;
     use serde_json::json;
 
     #[test]
@@ -291,6 +297,25 @@ mod tests {
         assert_eq!(current_user_context("ctx", None, None), "ctx");
         assert_eq!(current_user_context("ctx", Some("  "), Some("")), "ctx");
         assert_eq!(current_user_context("", None, None), "");
+    }
+
+    #[test]
+    fn pending_actions_covers_fase2_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::UPDATE_WORK_ITEM_NAME,
+            &json!({"work_item": "LTS-1", "changes": {"priority": "high"}}),
+        );
+        record(
+            &trace,
+            crate::tools::ADD_COMMENT_NAME,
+            &json!({"work_item": "LTS-1", "comment": "hi"}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0]["kind"], json!("update_work_item"));
+        assert_eq!(actions[1]["kind"], json!("add_comment"));
     }
 
     #[test]
