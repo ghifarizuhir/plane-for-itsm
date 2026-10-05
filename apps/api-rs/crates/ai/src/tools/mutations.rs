@@ -5,6 +5,7 @@ use rig::tool::{Tool, ToolContext, ToolExecutionError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use super::{
     bounded_ref_list, bounded_ref_list_opt, enum_arg, optional_enum_arg, optional_text,
@@ -1364,6 +1365,96 @@ impl Tool for UpdateTrack {
     }
 }
 
+pub const CREATE_ARTICLE_NAME: &str = "create_article";
+pub const ARTICLE_CONTENT_MAX: usize = 20_000;
+pub const ARTICLE_ACCESSES: [&str; 2] = ["public", "private"];
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CreateArticleArgs {
+    /// Project identifier or name. Required.
+    pub project: String,
+    /// Article title (1-255 characters).
+    pub name: String,
+    /// Plain-text body (1-20000 characters); the UI converts it to rich text.
+    pub content: String,
+    /// Parent article (page) id, when the user wants a sub-page.
+    pub parent_article: Option<String>,
+    /// One of: public, private. Defaults to public.
+    pub access: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CreateArticleProposal {
+    pub project: String,
+    pub name: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_article: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
+}
+
+/// Validate raw tool args into a normalized create-article proposal.
+pub fn create_article_proposal_from_args(
+    args: CreateArticleArgs,
+) -> Result<CreateArticleProposal, ToolExecutionError> {
+    let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
+    let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
+    let content = required_text(&args.content, "content", ARTICLE_CONTENT_MAX)?;
+    let parent_article = match args.parent_article.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(raw) => {
+            let parsed = Uuid::parse_str(raw).map_err(|_| {
+                ToolExecutionError::invalid_args("parent_article must be a page uuid")
+            })?;
+            Some(parsed.to_string())
+        }
+    };
+    let access = optional_enum_arg(args.access.as_deref(), &ARTICLE_ACCESSES, "access")?;
+    Ok(CreateArticleProposal {
+        project,
+        name,
+        content,
+        parent_article,
+        access,
+    })
+}
+
+pub struct CreateArticle {
+    pub trace: ToolTrace,
+}
+
+impl Tool for CreateArticle {
+    const NAME: &'static str = CREATE_ARTICLE_NAME;
+    type Args = CreateArticleArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose creating one knowledge base article (page) in a project. Only \
+         call this when the user asks to write an article. The project, title, \
+         and body text are required; never guess them. Access defaults to \
+         public. The user must confirm and may edit the article in the UI \
+         before anything is saved. Never claim the article was created until \
+         they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<CreateArticleArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = create_article_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("CreateArticleProposal serializes"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2036,5 +2127,65 @@ mod tests {
         })
         .unwrap_err();
         assert!(blank_name.to_string().contains("name"));
+    }
+
+    #[test]
+    fn create_article_normalizes_and_validates() {
+        let proposal = create_article_proposal_from_args(CreateArticleArgs {
+            project: " LTS ".into(),
+            name: " Runbook: restart API ".into(),
+            content: " Step 1\nStep 2 ".into(),
+            parent_article: Some(" 0f3f3f3f-0000-0000-0000-000000000001 ".into()),
+            access: Some(" PRIVATE ".into()),
+        })
+        .unwrap();
+        assert_eq!(proposal.project, "LTS");
+        assert_eq!(proposal.name, "Runbook: restart API");
+        assert_eq!(proposal.content, "Step 1\nStep 2");
+        assert_eq!(
+            proposal.parent_article.as_deref(),
+            Some("0f3f3f3f-0000-0000-0000-000000000001")
+        );
+        assert_eq!(proposal.access.as_deref(), Some("private"));
+
+        let blank_content = create_article_proposal_from_args(CreateArticleArgs {
+            project: "LTS".into(),
+            name: "Runbook".into(),
+            content: "   ".into(),
+            parent_article: None,
+            access: None,
+        })
+        .unwrap_err();
+        assert!(blank_content.to_string().contains("content"));
+
+        let long_content = create_article_proposal_from_args(CreateArticleArgs {
+            project: "LTS".into(),
+            name: "Runbook".into(),
+            content: "x".repeat(ARTICLE_CONTENT_MAX + 1),
+            parent_article: None,
+            access: None,
+        })
+        .unwrap_err();
+        assert!(long_content.to_string().contains("at most"));
+
+        let bad_parent = create_article_proposal_from_args(CreateArticleArgs {
+            project: "LTS".into(),
+            name: "Runbook".into(),
+            content: "Step".into(),
+            parent_article: Some("not-a-uuid".into()),
+            access: None,
+        })
+        .unwrap_err();
+        assert!(bad_parent.to_string().contains("parent_article"));
+
+        let bad_access = create_article_proposal_from_args(CreateArticleArgs {
+            project: "LTS".into(),
+            name: "Runbook".into(),
+            content: "Step".into(),
+            parent_article: None,
+            access: Some("secret".into()),
+        })
+        .unwrap_err();
+        assert!(bad_access.to_string().contains("public"));
     }
 }
