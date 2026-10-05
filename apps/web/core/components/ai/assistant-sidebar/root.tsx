@@ -32,6 +32,8 @@ import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
 import { WorkItemProposalCard } from "./work-item-proposal-card";
+import { CommentProposalCard } from "./proposals/comment-proposal-card";
+import { WorkItemUpdateProposalCard } from "./proposals/work-item-update-proposal-card";
 
 const SUGGESTIONS = [
   "Summarize this work item in 3 bullets",
@@ -70,6 +72,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     resolveScheduleProposal,
     confirmWorkItemProposal,
     resolveWorkItemProposal,
+    confirmProposal,
+    cancelProposal,
   } = useAiAssistant();
   const {
     peekIssue,
@@ -328,6 +332,28 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                               onCancel={() => resolveWorkItemProposal(message.id, entry.key)}
                             />
                           ))}
+                          {message.proposals?.map((entry) => {
+                            if (entry.kind === "update_work_item") {
+                              return (
+                                <WorkItemUpdateProposalCard
+                                  key={entry.key}
+                                  proposal={entry.proposal}
+                                  decision={message.proposalDecisions?.[entry.key]}
+                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                                  onCancel={() => cancelProposal(message.id, entry.key)}
+                                />
+                              );
+                            }
+                            return (
+                              <CommentProposalCard
+                                key={entry.key}
+                                proposal={entry.proposal}
+                                decision={message.proposalDecisions?.[entry.key]}
+                                onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                                onCancel={() => cancelProposal(message.id, entry.key)}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     )}

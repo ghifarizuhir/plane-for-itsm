@@ -3,6 +3,7 @@ import { AIAssistantStore, AI_ASSISTANT_ACTIVE_PREFIX, clearPersistedAiConversat
 import type { TAiIssueContext } from "@/lib/ai-context";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiConversation, TAiStoredMessage } from "@/lib/ai-conversations";
+import type { TAiProposalConfirmPayload } from "@/lib/ai-proposals";
 
 class LocalStorageStub {
   private store = new Map<string, string>();
@@ -1464,8 +1465,8 @@ describe("generic proposals", () => {
 
   it("does not apply the same proposal twice", async () => {
     const { store, services } = await openAgent();
-    const payload = {
-      kind: "update_work_item" as const,
+    const payload: TAiProposalConfirmPayload = {
+      kind: "update_work_item",
       projectId: "p1",
       issueId: "i1",
       changes: { priority: "high" },
