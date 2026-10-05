@@ -11,10 +11,12 @@ import { AIService } from "@/services/ai.service";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
 import { AiConversationsService } from "@/services/ai-conversations.service";
 import { CycleService } from "@/services/cycle.service";
+import { ProjectPageService } from "@/services/page/project-page.service";
 import { IssueService } from "@/services/issue/issue.service";
 import { IssueCommentService } from "@/services/issue/issue_comment.service";
 import { ModuleService } from "@/services/module.service";
 import { ServiceService } from "@/services/service.service";
+import { convertHTMLDocumentToAllFormats } from "@plane/editor";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
 import type { TAiProposalConfirmPayload, TAiProposalDecision, TAiProposalDecisionResult } from "@/lib/ai-proposals";
@@ -39,6 +41,7 @@ type TModulesService = Pick<
   "addIssuesToModule" | "removeIssuesFromModuleBulk" | "createModule" | "patchModule"
 >;
 type TCyclesService = Pick<CycleService, "createCycle" | "patchCycle">;
+type TPagesService = Pick<ProjectPageService, "create" | "update" | "fetchById" | "updateDescription">;
 
 export interface IAIAssistantStore {
   messages: TAiMessage[];
@@ -126,7 +129,8 @@ export class AIAssistantStore implements IAIAssistantStore {
     private commentsService: TCommentsService = new IssueCommentService(),
     private servicesService: TServicesService = new ServiceService(),
     private modulesService: TModulesService = new ModuleService(),
-    private cyclesService: TCyclesService = new CycleService()
+    private cyclesService: TCyclesService = new CycleService(),
+    private pagesService: TPagesService = new ProjectPageService()
   ) {
     makeObservable(this, {
       messages: observable.deep,
@@ -494,6 +498,27 @@ export class AIAssistantStore implements IAIAssistantStore {
       result = { created_track_id: created.id };
     } else if (payload.kind === "update_track") {
       await this.modulesService.patchModule(slug, payload.projectId, payload.moduleId, payload.changes);
+    } else if (payload.kind === "create_article") {
+      const created = await this.pagesService.create(slug, payload.projectId, {
+        name: payload.data.name,
+        description_html: payload.data.descriptionHtml,
+        access: payload.data.access,
+        parent: payload.data.parent,
+      });
+      if (!created?.id) throw new Error("Article creation returned no id");
+      result = { created_article_id: created.id };
+    } else if (payload.kind === "update_article") {
+      if (payload.name) {
+        await this.pagesService.update(slug, payload.projectId, payload.pageId, { name: payload.name });
+      }
+      if (payload.descriptionHtml) {
+        const page = await this.pagesService.fetchById(slug, payload.projectId, payload.pageId, false);
+        const currentHtml = page?.description_html ?? "";
+        const mergedHtml =
+          payload.action === "append" ? `${currentHtml}${payload.descriptionHtml}` : payload.descriptionHtml;
+        const document = convertHTMLDocumentToAllFormats({ document_html: mergedHtml, variant: "document" });
+        await this.pagesService.updateDescription(slug, payload.projectId, payload.pageId, document);
+      }
     } else if (payload.kind === "manage_service_links") {
       if (payload.action === "link") {
         await Promise.all(

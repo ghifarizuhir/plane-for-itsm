@@ -117,6 +117,13 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
     patchCycle: vi.fn(async () => ({ id: "cy1" })),
     ...overrides.cycles,
   },
+  pages: {
+    create: vi.fn(async (_slug: string, projectId: string) => ({ id: "pg1", project_id: projectId })),
+    update: vi.fn(async () => ({ id: "pg1" })),
+    fetchById: vi.fn(async () => ({ id: "pg1", description_html: "<p>Step 1</p>" })),
+    updateDescription: vi.fn(async () => ({ message: "Updated successfully" })),
+    ...overrides.pages,
+  },
 });
 
 const makeStore = (services = makeServices()) =>
@@ -128,7 +135,8 @@ const makeStore = (services = makeServices()) =>
     services.comments as any,
     services.services as any,
     services.modules as any,
-    services.cycles as any
+    services.cycles as any,
+    services.pages as any
   );
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -1849,6 +1857,80 @@ describe("container form proposals", () => {
     });
     expect(store.messages[0].proposalDecisions?.k11).toEqual({
       kind: "update_track",
+      decision: "applied",
+    });
+  });
+});
+
+const createArticleMetadata = {
+  proposals: [
+    {
+      key: "k12",
+      kind: "create_article",
+      proposal: { project: "LTS", name: "Runbook", content: "Step 1" },
+    },
+  ],
+};
+
+const updateArticleMetadata = {
+  proposals: [
+    {
+      key: "k13",
+      kind: "update_article",
+      proposal: { article: "pg1", action: "append", content: "Step 3" },
+    },
+  ],
+};
+
+describe("article proposals", () => {
+  const openAgent = async (services = makeServices(), metadata: Record<string, unknown>) => {
+    services.conversations.listMessages = vi.fn(async () => [mutationMessage(metadata)]);
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    return { store, services };
+  };
+
+  it("creates an article and stores the created id", async () => {
+    const { store, services } = await openAgent(makeServices(), createArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k12", {
+      kind: "create_article",
+      projectId: "p1",
+      data: { name: "Runbook", descriptionHtml: "<p>Step 1</p>", access: 1 },
+    });
+    expect(services.pages.create).toHaveBeenCalledWith("acme", "p1", {
+      name: "Runbook",
+      description_html: "<p>Step 1</p>",
+      access: 1,
+      parent: undefined,
+    });
+    expect(store.messages[0].proposalDecisions?.k12).toEqual({
+      kind: "create_article",
+      decision: "applied",
+      result: { created_article_id: "pg1" },
+    });
+  });
+
+  it("appends to an article and rewrites the document payload", async () => {
+    const { store, services } = await openAgent(makeServices(), updateArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k13", {
+      kind: "update_article",
+      projectId: "p1",
+      pageId: "pg1",
+      action: "append",
+      descriptionHtml: "<p>Step 3</p>",
+    });
+    expect(services.pages.fetchById).toHaveBeenCalledWith("acme", "p1", "pg1", false);
+    expect(services.pages.updateDescription).toHaveBeenCalledTimes(1);
+    const [, , , payload] = services.pages.updateDescription.mock.calls[0];
+    expect(typeof payload.description_binary).toBe("string");
+    expect(payload.description_binary.length).toBeGreaterThan(0);
+    expect(payload.description_html).toContain("Step 1");
+    expect(payload.description_html).toContain("Step 3");
+    expect(store.messages[0].proposalDecisions?.k13).toEqual({
+      kind: "update_article",
       decision: "applied",
     });
   });
