@@ -33,6 +33,7 @@ import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
 import { WorkItemProposalCard } from "./work-item-proposal-card";
 import { CommentProposalCard } from "./proposals/comment-proposal-card";
+import { LinkItemsProposalCard } from "./proposals/link-items-proposal-card";
 import { WorkItemUpdateProposalCard } from "./proposals/work-item-update-proposal-card";
 
 const SUGGESTIONS = [
@@ -344,9 +345,45 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                                 />
                               );
                             }
+                            if (entry.kind === "add_comment") {
+                              return (
+                                <CommentProposalCard
+                                  key={entry.key}
+                                  proposal={entry.proposal}
+                                  decision={message.proposalDecisions?.[entry.key]}
+                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                                  onCancel={() => cancelProposal(message.id, entry.key)}
+                                />
+                              );
+                            }
+                            if (entry.kind === "manage_service_links") {
+                              return (
+                                <LinkItemsProposalCard
+                                  key={entry.key}
+                                  kind={entry.kind}
+                                  proposal={entry.proposal}
+                                  decision={message.proposalDecisions?.[entry.key]}
+                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                                  onCancel={() => cancelProposal(message.id, entry.key)}
+                                />
+                              );
+                            }
+                            if (entry.kind === "manage_sprint_items") {
+                              return (
+                                <LinkItemsProposalCard
+                                  key={entry.key}
+                                  kind={entry.kind}
+                                  proposal={entry.proposal}
+                                  decision={message.proposalDecisions?.[entry.key]}
+                                  onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
+                                  onCancel={() => cancelProposal(message.id, entry.key)}
+                                />
+                              );
+                            }
                             return (
-                              <CommentProposalCard
+                              <LinkItemsProposalCard
                                 key={entry.key}
+                                kind="manage_track_items"
                                 proposal={entry.proposal}
                                 decision={message.proposalDecisions?.[entry.key]}
                                 onConfirm={(payload) => confirmProposal(message.id, entry.key, payload)}
