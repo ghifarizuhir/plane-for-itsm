@@ -104,12 +104,16 @@ Fallback jika UI dashboard menolak hostname duplikat: PUT `cfd_tunnel/{id}/confi
 
 Mengikuti pola `~/.config/systemd/user/plane-web-prod.service`:
 
-| Unit                       | Port | ExecStart                                                                                       |
-| -------------------------- | ---- | ----------------------------------------------------------------------------------------------- |
-| `plane-admin-prod.service` | 3001 | `npx -y serve@13 -s /home/ghifari/plane-for-itsm/apps/admin/build/client -l tcp://0.0.0.0:3001` |
-| `plane-space-prod.service` | 3002 | `pnpm --filter=space start` (react-router-serve, `PORT=3002`, cwd repo)                         |
+| Unit                       | Port | ExecStart                                                          |
+| -------------------------- | ---- | ------------------------------------------------------------------ |
+| `plane-admin-prod.service` | 3001 | `pnpm --filter=admin exec vite preview --port 3001 --host 0.0.0.0` |
+| `plane-space-prod.service` | 3002 | `pnpm --filter=space start` (react-router-serve, `PORT=3002`)      |
 
-Keduanya `Restart=always`, `WantedBy=default.target`, `PATH` nvm seperti unit existing. `pnpm --filter=space start` menjalankan `react-router-serve ./build/server/index.js` dengan base `/spaces` yang sudah dibekukan saat build.
+Keduanya `Restart=always`, `WantedBy=default.target`, `PATH` nvm seperti unit existing.
+
+- Admin: `serve -s build/client` **tidak bisa** dipakai — index.html membekukan `/god-mode/assets/...` sedangkan file ada di `build/client/assets/`, dan `serve` tidak melakukan prefix mapping/fallback per-prefix. `vite preview` menghormati `base` dari `vite.config.ts` sehingga `/god-mode/*` + fallback SPA benar (diuji: `/god-mode/` 200, `/god-mode/assets/*.js` 200, `/god-mode/issues/list` 200 html, `/` 302 → `/god-mode/`). Padanan tanpa container dari Caddy upstream (`try_files {path} /god-mode/index.html`).
+- Space: `pnpm --filter=space start` menjalankan `react-router-serve ./build/server/index.js` dengan basename `/spaces` (dibaca dari `react-router.config.ts` saat start; diuji: `/spaces/` 200 html, `/` 404).
+- `plane-admin.service` (dev, 3001) sedang aktif **dan** enabled → wajib `stop` + `disable` sebelum `plane-admin-prod` start. `plane-space.service` sudah disabled/inactive.
 
 ## Urutan implementasi
 
@@ -143,7 +147,7 @@ Keduanya `Restart=always`, `WantedBy=default.target`, `PATH` nvm seperti unit ex
 
 - **Duplikat hostname di UI Cloudflare**: jika ditolak, pakai fallback API (lihat Ingress). Perlu account API token; tunnel token saja tidak cukup.
 - **Konflik port saat dev**: `pnpm dev` memakai 3001/3002 → stop `plane-admin-prod`/`plane-space-prod` dulu, analog aturan port 3000.
-- **SPA fallback admin**: `serve -s` melempar path tak dikenal ke `index.html`; pola upstream Plane memang `/god-mode/* → admin:3000`, jadi perilaku ini sudah teruji di desain upstream. Verifikasi manual tetap dilakukan.
+- **Serving admin path-based**: `vite preview` menghormati `base` `/god-mode` (terverifikasi manual sebelum plan ditulis); upstream memakai Caddy dengan `try_files` per-prefix. Jangan kembali ke `serve -s` untuk admin.
 - **Rollback**: kembalikan nilai env, rebuild tiga app, hapus dua ingress rule, stop dua unit baru. Tidak ada perubahan data.
 
 ## Definisi selesai
