@@ -44,6 +44,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local components
 import { IssuePropertyLabels } from "./labels";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
+import { WarRoomProperty } from "@/components/war-rooms/war-room-property";
 
 export interface IIssueProperties {
   issue: TIssue;
@@ -56,7 +57,7 @@ export interface IIssueProperties {
 }
 
 export const IssueProperties = observer(function IssueProperties(props: IIssueProperties) {
-  const { issue, updateIssue, displayProperties, isReadOnly, className, isEpic = false } = props;
+  const { issue, updateIssue, displayProperties, isReadOnly, className, activeLayout, isEpic = false } = props;
   // i18n
   const { t } = useTranslation();
   // store hooks
@@ -225,6 +226,20 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             buttonVariant="border-without-text"
             renderByDefault={isMobile}
             showTooltip
+          />
+        </div>
+      </WithDisplayPropertiesHOC>
+
+      {/* war room (Incident bridge) */}
+      <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="war_room">
+        {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
+        <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
+          <WarRoomProperty
+            workspaceSlug={workspaceSlug?.toString() ?? ""}
+            projectId={issue.project_id ?? ""}
+            issue={issue}
+            disabled={isReadOnly}
+            readOnly={activeLayout === "Kanban"}
           />
         </div>
       </WithDisplayPropertiesHOC>

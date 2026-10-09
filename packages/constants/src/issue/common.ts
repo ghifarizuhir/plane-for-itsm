@@ -157,6 +157,7 @@ export const ISSUE_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = 
   "modules",
   "cycle",
   "issue_type",
+  "war_room",
 ];
 
 export const SUB_ISSUES_DISPLAY_PROPERTIES_KEYS: (keyof IIssueDisplayProperties)[] = [
@@ -209,11 +210,16 @@ export const ISSUE_DISPLAY_PROPERTIES: {
   },
   { key: "modules", titleTranslationKey: "common.module" },
   { key: "cycle", titleTranslationKey: "common.cycle" },
+  {
+    key: "war_room",
+    titleTranslationKey: "war_room.property_label",
+  },
 ];
 
 export const SPREADSHEET_PROPERTY_LIST: (keyof IIssueDisplayProperties)[] = [
   "state",
   "priority",
+  "war_room",
   "assignee",
   "labels",
   "modules",
@@ -349,6 +355,14 @@ export const SPREADSHEET_PROPERTY_DETAILS: {
     descendingOrderKey: "sub_issues_count",
     descendingOrderTitle: "Least",
     icon: "LayersIcon",
+  },
+  war_room: {
+    i18n_title: "war_room.property_label",
+    ascendingOrderKey: "-created_at",
+    ascendingOrderTitle: "New",
+    descendingOrderKey: "created_at",
+    descendingOrderTitle: "Old",
+    icon: "ContrastIcon",
   },
 };
 
