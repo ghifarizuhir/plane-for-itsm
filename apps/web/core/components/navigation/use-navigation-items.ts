@@ -4,12 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import {
   AlertOctagonOutline,
-  CheckDoneOutline,
   CyclesOutline,
   IntakeOutline,
   ModuleOutline,
@@ -20,7 +19,6 @@ import {
 } from "@makeplane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
-import { useWorkItemType } from "@/hooks/store/use-work-item-type";
 
 type UseNavigationItemsProps = {
   workspaceSlug: string;
@@ -40,17 +38,6 @@ export const useNavigationItems = ({
   project,
   allowPermissions,
 }: UseNavigationItemsProps): TNavigationItem[] => {
-  const { workItemTypes, fetchWorkItemTypes } = useWorkItemType();
-
-  useEffect(() => {
-    if (workItemTypes) return;
-    void fetchWorkItemTypes(workspaceSlug).catch(() => undefined);
-  }, [workItemTypes, fetchWorkItemTypes, workspaceSlug]);
-
-  const hasChangeType =
-    workItemTypes?.some((type) => type.name.toLowerCase() === "change" && type.project_ids?.includes(projectId)) ??
-    false;
-
   // Base navigation items
   const baseNavigation = useCallback(
     // oxlint-disable-next-line no-shadow
@@ -108,16 +95,6 @@ export const useNavigationItems = ({
         sortOrder: 4.5,
       },
       {
-        i18n_key: "sidebar.testing_control",
-        key: "testing-control",
-        name: "Testing control",
-        href: `/${workspaceSlug}/projects/${projectId}/testing-control`,
-        icon: CheckDoneOutline,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: hasChangeType,
-        sortOrder: 4.75,
-      },
-      {
         i18n_key: "sidebar.views",
         key: "views",
         name: "Views",
@@ -148,7 +125,7 @@ export const useNavigationItems = ({
         sortOrder: 7,
       },
     ],
-    [project, hasChangeType]
+    [project]
   );
 
   // Combine, filter, and sort navigation items
