@@ -1,5 +1,7 @@
 # War Room Phase 3 (Web List + Create) Implementation Plan
 
+> **Superseded (2026-10-09):** halaman list + create modal dihapus; bridge kini property + filter di Work Items (`docs/superpowers/plans/2026-10-09-war-room-work-item-property.md`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the war room frontend entry surface: shared types/constants/i18n, API service + MobX store, the project list page (summary chips, status tabs, search, rows), the create modal (incident picker single-select, severity/services/description defaults, 409 duplicate banner), the sidebar/tab-navigation entry, and the "Open war room" entry point on Incident work items. A minimal read-only room overview route is included so list rows and create redirects land on a real page; Phase 4 replaces that overview with the full room (map/chat/panels).

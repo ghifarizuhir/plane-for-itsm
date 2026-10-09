@@ -1,7 +1,7 @@
 # War Rooms
 
 Status: **Approved**
-Route: `:workspaceSlug/projects/:projectId/war-rooms` (list) · `:workspaceSlug/projects/:projectId/war-rooms/:warRoomId` (detail) — lihat `apps/web/app/routes/core.ts:196-207`
+Route: `:workspaceSlug/projects/:projectId/issues?war_room=on` (daftar bridge = filter Work Items; `/war-rooms` lama redirect ke sini) · `:workspaceSlug/projects/:projectId/war-rooms/:warRoomId` (detail) — lihat `apps/web/app/routes/core.ts`, `apps/web/app/routes/redirects/core/war-rooms.tsx`
 Share: CORE
 
 ## Intent
@@ -10,12 +10,12 @@ Ruang koordinasi insiden per project: peta blast radius, chat realtime, runbook,
 
 ## Current State (snapshot kode)
 
-- Halaman: `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/**` (list + detail).
-- Komponen: `apps/web/core/components/war-rooms/**` — list/board + summary, create modal, room header (lifecycle + join/leave), `service-map` (blast radius), chat, context panel (Notes/Work items/Runbook/Activity/People), modal resolve/archive/delete/edit details.
-- Store/service/hook: `apps/web/core/store/war-room.store.ts`, `apps/web/core/services/war-room.service.ts`, `apps/web/core/hooks/use-war-room-socket.ts`.
-- Backend: `apps/api-rs/crates/api/src/routes/war_room.rs`; migrasi `apps/api-rs/migrations/0011_war_rooms.sql`.
+- Halaman: detail room `.../war-rooms/(detail)/[warRoomId]`; daftar bridge = filter di halaman Work Items (`/issues?war_room=on`), nav "Incident bridge" = shortcut ke filter itu.
+- Komponen: `apps/web/core/components/war-rooms/**` — `war-room-property.tsx` (toggle di work item), room header (lifecycle + join/leave), `service-map` (blast radius), chat, context panel (Notes/Work items/Runbook/Activity/People), modal resolve/archive/delete/edit details.
+- Store/service/hook: `apps/web/core/store/war-room.store.ts` (`toggleWarRoom`: ON = create/reopen, OFF = resolve), `apps/web/core/services/war-room.service.ts`, `apps/web/core/hooks/use-war-room-socket.ts`.
+- Backend: `apps/api-rs/crates/api/src/routes/war_room.rs`; kolom turunan `war_room_id/status/severity` di payload issue (`issue_query.rs`); filter `war_room` (`on`/`off`); index `apps/api-rs/migrations/0017_war_rooms_primary_issue_idx.sql`.
 - Realtime: controller `war-rooms` di `apps/live`, relay event lewat Redis `war-room:events`.
-- Working: list + tab status + search + summary; create (primary incident wajib, 409 bila sudah ada room aktif untuk incident itu); detail map-first; chat (kirim/edit/hapus, mention `@{user_id}`, typing, presence, reconnect); runbook; notes autosave; work items; activity; participants + role; lifecycle transitions; notifikasi mention in-app.
+- Working: property toggle "War room" di work item Incident (detail, peek, kolom list/spreadsheet, chip kanban) — ON auto-create (nama = judul, severity ikut priority, service auto dari incident) atau reopen bila terakhir resolved, OFF = resolve; 409 duplicate diadopsi sebagai sukses; detail map-first; chat (kirim/edit/hapus, mention `@{user_id}`, typing, presence, reconnect); runbook; notes autosave; work items; activity; participants + role; lifecycle transitions; notifikasi mention in-app.
 - Stub: —
 - Missing (ITSM fork): — (Problem/Change/Request/Knowledge terpisah belum ada; ide diparkir di [`_backlog.md`](./_backlog.md)).
 
@@ -23,35 +23,37 @@ Ruang koordinasi insiden per project: peta blast radius, chat realtime, runbook,
 
 - Layout B (map first): panel kiri peta blast radius read-only (canvas `service-graph-canvas.tsx`; node affected + 1-hop neighbor + legenda); panel kanan chat + tab konteks.
 - Header: identifier `WR-{sequence_id}`, nama, badge severity/status, timer elapsed, aksi lifecycle (Resolve/Reopen/Archive), edit details, join/leave, menu delete.
-- List: board row per room (identifier, nama, severity, status, incident utama, peserta, waktu) + summary chip (active / SEV1–2 / resolved 7d).
+- Daftar bridge: baris Work Items dengan kolom "War room" (toggle + chip `SEV{n} · status` + link Open room); chip di card kanban (read-only).
 
 ## Actions
 
-| Action                         | Trigger               | Permission                      | State required                                 |
-| ------------------------------ | --------------------- | ------------------------------- | ---------------------------------------------- |
-| Create                         | Toolbar / empty state | Project member                  | —                                              |
-| Open room                      | Row click             | Project member; guest read-only | —                                              |
-| Send message                   | Composer Enter        | Project member                  | status != archived                             |
-| Edit/delete message            | Hover pesan sendiri   | Author                          | status != archived                             |
-| Mention                        | `@` di composer       | Project member                  | Mentioned harus workspace member               |
-| Change status                  | Header lifecycle menu | Project member                  | transisi valid (`WAR_ROOM_STATUS_TRANSITIONS`) |
-| Resolve                        | Header                | Project member                  | status active/monitoring                       |
-| Reopen                         | Header                | Project member                  | status resolved                                |
-| Archive                        | Header/menu           | Project member                  | status != archived                             |
-| Delete                         | Header menu           | Project member                  | konfirmasi modal                               |
-| Edit details                   | Header menu           | Project member                  | status != archived                             |
-| Link/unlink services           | Header map            | Project member                  | status != archived                             |
-| Add participant / change role  | People tab            | Project member                  | status != archived                             |
-| Join/Leave                     | Header / People tab   | Project member                  | status != archived                             |
-| Edit notes                     | Notes tab             | Project member                  | status != archived                             |
-| Runbook toggle/add/edit/delete | Runbook tab           | Project member                  | status != archived                             |
-| Link/unlink work items         | Work items tab        | Project member                  | status != archived                             |
+| Action                         | Trigger               | Permission                      | State required                                                                                                 |
+| ------------------------------ | --------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Toggle ON (buat room)          | Property "War room"   | Project member                  | Incident; belum ada room aktif (auto-create: nama = judul, severity ikut priority; 409 = adopsi room existing) |
+| Toggle ON (reopen)             | Property "War room"   | Project member                  | Room terakhir `resolved` → `active`                                                                            |
+| Toggle OFF (resolve)           | Property "War room"   | Project member                  | Room `active`/`monitoring` → `resolved`                                                                        |
+| Open room                      | Link "Open bridge"    | Project member; guest read-only | Room ada (dari chip/kolom work item)                                                                           |
+| Send message                   | Composer Enter        | Project member                  | status != archived                                                                                             |
+| Edit/delete message            | Hover pesan sendiri   | Author                          | status != archived                                                                                             |
+| Mention                        | `@` di composer       | Project member                  | Mentioned harus workspace member                                                                               |
+| Change status                  | Header lifecycle menu | Project member                  | transisi valid (`WAR_ROOM_STATUS_TRANSITIONS`)                                                                 |
+| Resolve                        | Header                | Project member                  | status active/monitoring                                                                                       |
+| Reopen                         | Header                | Project member                  | status resolved                                                                                                |
+| Archive                        | Header/menu           | Project member                  | status != archived                                                                                             |
+| Delete                         | Header menu           | Project member                  | konfirmasi modal                                                                                               |
+| Edit details                   | Header menu           | Project member                  | status != archived                                                                                             |
+| Link/unlink services           | Header map            | Project member                  | status != archived                                                                                             |
+| Add participant / change role  | People tab            | Project member                  | status != archived                                                                                             |
+| Join/Leave                     | Header / People tab   | Project member                  | status != archived                                                                                             |
+| Edit notes                     | Notes tab             | Project member                  | status != archived                                                                                             |
+| Runbook toggle/add/edit/delete | Runbook tab           | Project member                  | status != archived                                                                                             |
+| Link/unlink work items         | Work items tab        | Project member                  | status != archived                                                                                             |
 
 ## Filters / Sort / Search
 
-- Tabs: Active (`active,monitoring`), Resolved (`resolved`), All.
-- Search: nama room / identifier + nama incident (server-side `search`).
-- Sort: terbaru dulu (`-created_at`); summary chip dari endpoint `summary/`.
+- Filter Work Items: `War room: On` (ada room active/monitoring) / `Off` (tidak ada) — server-side via `EXISTS`, berlaku di semua layout + pagination.
+- Nav "Incident bridge" (sidebar + tab) = shortcut yang meng-apply preset `War room = On` di `/issues`.
+- Chip kolom menampilkan severity + status room (`SEV{n} · Active/Monitoring/Resolved`) + link Open room.
 
 ## Detail View
 
@@ -100,3 +102,4 @@ Base `/api/workspaces/:slug/projects/:project_id/war-rooms/`: list/create, `summ
 | Date       | Change                                                                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-10-01 | Doc dibuat — Fase 1–4 sudah shipped (backend, chat realtime, list+create, room page); Fase 5 menambah notifikasi mention + doc ini. |
+| 2026-10-09 | War room jadi property Work Items (toggle ON/OFF, kolom, filter, nav shortcut); halaman list + create modal dihapus.                |
