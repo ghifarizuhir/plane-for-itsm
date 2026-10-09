@@ -5,6 +5,7 @@
 //!  cargo test -p api --test war_room_test -- --test-threads=1`
 
 use api::middleware::auth::AuthUser;
+use api::routes::issue_query::{list as list_issues, ProjectIssuesQuery};
 use api::routes::war_room::{
     create, destroy, detail, events_list, issues_create, issues_destroy, list, messages_create,
     messages_destroy, messages_list, messages_patch, participants_create, participants_destroy,
@@ -163,8 +164,8 @@ impl Scratch {
         .expect("scratch state");
         sqlx::query(
             "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
-             is_default, level, is_epic, created_at, updated_at) \
-             VALUES ($1, 'Incident', '', '{}'::jsonb, $2, true, true, 0, false, now(), now())",
+             is_default, level, is_epic, requires_service, created_at, updated_at) \
+             VALUES ($1, 'Incident', '', '{}'::jsonb, $2, true, true, 0, false, false, now(), now())",
         )
         .bind(type_id)
         .bind(workspace_id)
@@ -417,6 +418,63 @@ async fn create_room(st: &AppState, scratch: &Scratch, issue_id: Uuid) -> Value 
 
 fn room_id(body: &Value) -> Uuid {
     Uuid::parse_str(body["id"].as_str().unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn issue_list_exposes_and_filters_war_room_property() {
+    let st = state().await;
+    let scratch = Scratch::new(&st.pool).await;
+    let issue_id = scratch.insert_issue(&st.pool, None).await;
+
+    let query = |filters: &str| ProjectIssuesQuery {
+        filters: Some(filters.to_string()),
+        ..Default::default()
+    };
+
+    // Tanpa room: kolom turunan null dan filter `off` match.
+    let (status, Json(body)) = list_issues(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(query(r#"{"and":[{"war_room__in":"off"}]}"#)),
+    )
+    .await
+    .expect("list off");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total_count"], 1);
+    let row = &body["results"][0];
+    assert!(row["war_room_id"].is_null());
+    assert!(row["war_room_status"].is_null());
+    assert!(row["war_room_severity"].is_null());
+
+    create_room(&st, &scratch, issue_id).await;
+
+    // Ada room active: filter `on` match dan row membawa id/status/severity.
+    let (_, Json(body)) = list_issues(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(query(r#"{"and":[{"war_room__in":"on"}]}"#)),
+    )
+    .await
+    .expect("list on");
+    assert_eq!(body["total_count"], 1);
+    let row = &body["results"][0];
+    assert_eq!(row["war_room_status"], "active");
+    assert!(row["war_room_id"].is_string());
+    assert!(row["war_room_severity"].is_string());
+
+    let (_, Json(body)) = list_issues(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), scratch.project_id)),
+        Query(query(r#"{"and":[{"war_room__in":"off"}]}"#)),
+    )
+    .await
+    .expect("list off again");
+    assert_eq!(body["total_count"], 0);
+
+    scratch.cleanup(&st.pool).await;
 }
 
 #[tokio::test]
