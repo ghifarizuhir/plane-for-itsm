@@ -1,7 +1,7 @@
 # War Rooms
 
 Status: **Approved**
-Route: `:workspaceSlug/projects/:projectId/issues?war_room=on` (daftar bridge = filter Work Items; `/war-rooms` lama redirect ke sini) · `:workspaceSlug/projects/:projectId/war-rooms/:warRoomId` (detail) — lihat `apps/web/app/routes/core.ts`, `apps/web/app/routes/redirects/core/war-rooms.tsx`
+Route: `:workspaceSlug/projects/:projectId/issues?war_room=on` (daftar bridge = filter Work Items; `/war-rooms` lama redirect ke sini) · `:workspaceSlug/projects/:projectId/war-rooms/:warRoomId` (detail) — lihat `apps/web/app/routes/core.ts`, `apps/web/app/routes/redirects/core/war-rooms.tsx`. Tidak ada item nav "Incident bridge" (dihapus dari sidebar + tab header).
 Share: CORE
 
 ## Intent
@@ -10,7 +10,7 @@ Ruang koordinasi insiden per project: peta blast radius, chat realtime, runbook,
 
 ## Current State (snapshot kode)
 
-- Halaman: detail room `.../war-rooms/(detail)/[warRoomId]`; daftar bridge = filter di halaman Work Items (`/issues?war_room=on`), nav "Incident bridge" = shortcut ke filter itu.
+- Halaman: detail room `.../war-rooms/(detail)/[warRoomId]`; daftar bridge = filter di halaman Work Items (`/issues?war_room=on`, filter manual — item nav "Incident bridge" dihapus).
 - Komponen: `apps/web/core/components/war-rooms/**` — `war-room-property.tsx` (toggle di work item), room header (lifecycle + join/leave), `service-map` (blast radius), chat, context panel (Notes/Work items/Runbook/Activity/People), modal resolve/archive/delete/edit details.
 - Store/service/hook: `apps/web/core/store/war-room.store.ts` (`toggleWarRoom`: ON = create/reopen, OFF = resolve), `apps/web/core/services/war-room.service.ts`, `apps/web/core/hooks/use-war-room-socket.ts`.
 - Backend: `apps/api-rs/crates/api/src/routes/war_room.rs`; kolom turunan `war_room_id/status/severity` di payload issue (`issue_query.rs`); filter `war_room` (`on`/`off`); index `apps/api-rs/migrations/0017_war_rooms_primary_issue_idx.sql`.
@@ -52,7 +52,6 @@ Ruang koordinasi insiden per project: peta blast radius, chat realtime, runbook,
 ## Filters / Sort / Search
 
 - Filter Work Items: `War room: On` (ada room active/monitoring) / `Off` (tidak ada) — server-side via `EXISTS`, berlaku di semua layout + pagination.
-- Nav "Incident bridge" (sidebar + tab) = shortcut yang meng-apply preset `War room = On` di `/issues`.
 - Chip kolom menampilkan severity + status room (`SEV{n} · Active/Monitoring/Resolved`) + link Open room.
 
 ## Detail View

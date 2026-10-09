@@ -15,14 +15,14 @@ Terkait: `docs/features/war-rooms.md`, `docs/superpowers/specs/2026-09-30-war-ro
 
 ## Keputusan (brainstormed & approved 2026-10-09)
 
-| #   | Keputusan                                                                                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | **Keep room, remove list** — halaman list war-rooms dihapus; route detail `/war-rooms/:warRoomId` tetap.                                         |
-| 2   | Nav "Incident bridge" tetap ada, klik = apply preset filter lalu arahkan ke `/issues`.                                                           |
-| 3   | Toggle ON = auto-create room tanpa modal; OFF = resolve (bisa reopen).                                                                           |
-| 4   | Property hanya untuk work item tipe **Incident**.                                                                                                |
-| 5   | Pendekatan data: **turunan langsung dari tabel `war_rooms`** (single source of truth, tanpa perubahan schema; hanya 1 index migration).          |
-| 6   | Bukan N+1: pola correlated subquery sudah dipakai `LIST_SELECT_SQL` (`cycle_id`, counts). Kebutuhan riil = index per lookup (lihat §Data & API). |
+| #   | Keputusan                                                                                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Keep room, remove list** — halaman list war-rooms dihapus; route detail `/war-rooms/:warRoomId` tetap.                                                                             |
+| 2   | ~~Nav "Incident bridge" tetap ada sebagai shortcut~~ → dibatalkan 2026-10-10: item nav dihapus total dari sidebar + tab header; daftar bridge hanya via filter manual di Work Items. |
+| 3   | Toggle ON = auto-create room tanpa modal; OFF = resolve (bisa reopen).                                                                                                               |
+| 4   | Property hanya untuk work item tipe **Incident**.                                                                                                                                    |
+| 5   | Pendekatan data: **turunan langsung dari tabel `war_rooms`** (single source of truth, tanpa perubahan schema; hanya 1 index migration).                                              |
+| 6   | Bukan N+1: pola correlated subquery sudah dipakai `LIST_SELECT_SQL` (`cycle_id`, counts). Kebutuhan riil = index per lookup (lihat §Data & API).                                     |
 
 ## Data & API (api-rs)
 
@@ -84,7 +84,7 @@ Alasan: lookup kolom turunan per baris `WHERE primary_issue_id = ? AND deleted_a
 3. **Spreadsheet layout** — kolom yang sama.
 4. **Kanban** — chip SEV read-only di card saat ON.
 5. **Filter** — rich filter "War room" (`on`/`off`) di panel filter; chip filter tampil di toolbar.
-6. **Nav** — item "Incident bridge" di dua lokasi (`workspace/sidebar/project-navigation.tsx:124-134` dan `navigation/use-navigation-items.ts:86-96`): klik = apply preset `war_room = on` (pola `updateFilterExpressionFromConditions` seperti cycle progress) lalu `router.push(.../issues)`. Catatan: preset menimpa `rich_filters` tersimpan per user, sama seperti perilaku saved view.
+6. **Nav** — ~~item "Incident bridge" sebagai shortcut preset~~ → dibatalkan 2026-10-10: item dihapus dari kedua lokasi nav. Mekanisme preset `?war_room=on` di `ProjectLayoutRoot` tetap ada (dipakai redirect route `/war-rooms` lama + deep link manual).
 
 ### Yang dihapus / dipertahankan
 
