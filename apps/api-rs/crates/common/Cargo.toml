@@ -19,3 +19,6 @@ hmac = { workspace = true }
 aes = { workspace = true }
 base64 = { workspace = true }
 jsonwebtoken = { workspace = true }
+
+[dev-dependencies]
+crc = "3"

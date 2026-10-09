@@ -12,7 +12,7 @@ async fn main() {
 
     let cfg = common::config::AppConfig::from_env();
     let pool = common::db::create_pool(&cfg).await;
-    if let Err(e) = common::db::migrate(&pool).await {
+    if let Err(e) = common::db::migrate(&cfg.database_url).await {
         tracing::warn!(error=%e, "migrate failed");
     }
     let mut redis = common::redis::create_redis(&cfg.redis_url).await;

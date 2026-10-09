@@ -2,8 +2,9 @@
 
 #[tokio::test]
 async fn migrate_runs() {
-    let pool = common::db::create_pool(&common::config::AppConfig::from_env()).await;
-    common::db::migrate(&pool).await.unwrap();
+    let cfg = common::config::AppConfig::from_env();
+    common::db::migrate(&cfg.database_url).await.unwrap();
+    let pool = common::db::create_pool(&cfg).await;
     // Baseline applied: core tables exist.
     let (exists,): (bool,) =
         sqlx::query_as("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='workspaces')")
@@ -16,5 +17,5 @@ async fn migrate_runs() {
         .execute(&pool)
         .await
         .unwrap();
-    common::db::migrate(&pool).await.unwrap();
+    common::db::migrate(&cfg.database_url).await.unwrap();
 }

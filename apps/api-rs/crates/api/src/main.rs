@@ -43,7 +43,7 @@ async fn main() {
 
     let cfg = common::config::AppConfig::from_env();
     let pool = common::db::create_pool(&cfg).await;
-    if let Err(e) = common::db::migrate(&pool).await {
+    if let Err(e) = common::db::migrate(&cfg.database_url).await {
         tracing::warn!(error=%e, "migrate failed");
     }
     let redis = redis::Client::open(cfg.redis_url.as_str()).expect("redis client open failed");
