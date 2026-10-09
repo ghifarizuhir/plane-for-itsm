@@ -84,7 +84,7 @@ export const WAR_ROOM_STATUS_TABS: { key: TWarRoomStatusTab; label_key: string; 
 export const getWarRoomLink = (workspaceSlug: string, projectId: string, warRoomId?: string): string =>
   warRoomId
     ? `/${workspaceSlug}/projects/${projectId}/war-rooms/${warRoomId}`
-    : `/${workspaceSlug}/projects/${projectId}/war-rooms`;
+    : `/${workspaceSlug}/projects/${projectId}/issues?war_room=on`;
 
 /** Server-enforced transition map (`war_room.rs::transitions_allowed`); `archived` is terminal. */
 export const WAR_ROOM_STATUS_TRANSITIONS: Record<TWarRoomStatus, TWarRoomStatus[]> = {

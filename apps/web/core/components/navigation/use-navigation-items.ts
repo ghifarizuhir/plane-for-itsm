@@ -86,8 +86,8 @@ export const useNavigationItems = ({
       {
         i18n_key: "sidebar.war_rooms",
         key: "war-rooms",
-        name: "War rooms",
-        href: `/${workspaceSlug}/projects/${projectId}/war-rooms`,
+        name: "Incident bridge",
+        href: `/${workspaceSlug}/projects/${projectId}/issues?war_room=on`,
         icon: AlertOctagonOutline,
         // guest hanya baca; item tetap tampil untuk guest
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],

@@ -200,14 +200,6 @@ export const coreRoutes: RouteConfigEntry[] = [
             ),
           ]),
 
-          // War Rooms List
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(list)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/war-rooms",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(list)/page.tsx"
-            ),
-          ]),
-
           // View Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/views/(detail)/layout.tsx", [
             route(
@@ -429,6 +421,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Inbox redirect: /:workspaceSlug/projects/:projectId/inbox
   // → /:workspaceSlug/projects/:projectId/intake
   route(":workspaceSlug/projects/:projectId/inbox", "routes/redirects/core/inbox.tsx"),
+
+  // War rooms list redirect: /:workspaceSlug/projects/:projectId/war-rooms
+  // → /:workspaceSlug/projects/:projectId/issues?war_room=on
+  route(":workspaceSlug/projects/:projectId/war-rooms", "routes/redirects/core/war-rooms.tsx"),
 
   // Sign-up redirects
   route("accounts/sign-up", "routes/redirects/core/accounts-signup.tsx"),

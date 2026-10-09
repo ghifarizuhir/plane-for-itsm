@@ -125,7 +125,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         i18n_key: "sidebar.war_rooms",
         key: "war-rooms",
         name: "Incident bridge",
-        href: `/${workspaceSlug}/projects/${projectId}/war-rooms`,
+        href: `/${workspaceSlug}/projects/${projectId}/issues?war_room=on`,
         icon: AlertOctagonOutline,
         // guest hanya baca; item tetap tampil untuk guest
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
