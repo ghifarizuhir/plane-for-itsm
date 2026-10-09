@@ -415,4 +415,22 @@ describe("WarRoomStore.toggleWarRoom", () => {
 
     expect(warRoomService.getWarRoom).toHaveBeenCalledWith("acme", "project-1", "room-9");
   });
+
+  it("creates a new room when the latest room is archived", async () => {
+    const { store, warRoomService } = makeStore();
+
+    await store.toggleWarRoom(
+      "acme",
+      "project-1",
+      makeIssue({ war_room_id: "room-1", war_room_status: "archived", war_room_severity: "sev1" })
+    );
+
+    expect(warRoomService.updateWarRoom).not.toHaveBeenCalled();
+    expect(warRoomService.createWarRoom).toHaveBeenCalledWith("acme", "project-1", {
+      primary_issue_id: "issue-1",
+      name: "Checkout latency spike",
+      severity: "sev1",
+      service_ids: [],
+    });
+  });
 });
