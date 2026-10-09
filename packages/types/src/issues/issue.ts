@@ -6,6 +6,7 @@
 
 import type { TIssuePriorities } from "../issues";
 import type { TStateGroups } from "../state";
+import type { TWarRoomSeverity, TWarRoomStatus } from "../war-room/core";
 import type { TIssuePublicComment } from "./activity/issue_comment";
 import type { TIssueAttachment } from "./issue_attachment";
 import type { TIssueLink } from "./issue_link";
@@ -63,6 +64,11 @@ export type TBaseIssue = {
   cycle_id: string | null;
   module_ids: string[] | null;
   type_id: string | null;
+
+  // Fork: kolom turunan dari war room terbaru non-deleted (getWarRoomLink).
+  war_room_id?: string | null;
+  war_room_status?: TWarRoomStatus | null;
+  war_room_severity?: TWarRoomSeverity | null;
 
   created_at: string;
   updated_at: string;
