@@ -15,4 +15,8 @@ then transformed:
 
 Safe to run on a fresh DB **and** on the already-migrated live `plane-db`.
 Applied at boot via `common::db::migrate`. New schema changes go in
-`0002_*.sql` (plain, non-idempotent deltas).
+`NNNN_*.sql` where `NNNN` is one higher than the current maximum version —
+NEVER reuse an existing version number or edit an applied migration in place
+(2026-10-09: reusing `0002` wedged api + worker startup on the migration
+advisory lock). Guard: `crates/common/tests/migration_versions_test.rs` fails
+the build on duplicate versions.
