@@ -1165,6 +1165,9 @@ pub(crate) const COMPLEX_FILTER_ALLOWLIST: &[&str] = &[
     "priority",
     "priority__exact",
     "priority__in",
+    "war_room",
+    "war_room__exact",
+    "war_room__in",
 ];
 
 /// Parses + validates the `filters` JSON param, mirroring
@@ -1571,6 +1574,7 @@ fn apply_complex_leaf(
         "target_date" => apply_complex_date_leaf(qb, "i.target_date", &pieces, suffix),
         "created_at" => apply_complex_date_leaf(qb, "DATE(i.created_at)", &pieces, suffix),
         "updated_at" => apply_complex_date_leaf(qb, "DATE(i.updated_at)", &pieces, suffix),
+        "war_room" => apply_complex_war_room_leaf(qb, &pieces, suffix),
         _ => Err(ComplexFilterError::invalid_filterset()),
     }
 }
@@ -1688,6 +1692,39 @@ fn apply_complex_text_leaf(
         qb.push(col)
             .push(" = ")
             .push_bind(pieces.last().cloned().unwrap_or_default());
+    }
+    Ok(())
+}
+
+/// Leaf virtual khusus fork: `war_room` mencocokkan issue berdasarkan state
+/// room turunan (bukan kolom). Nilai: `on` (ada room active/monitoring) dan
+/// `off` (tidak ada). `in`/exact memperlakukan CSV pieces sebagai set: `on`
+/// saja → EXISTS, `off` saja → NOT EXISTS, keduanya/kosong → TRUE (semua).
+/// Suffix `range` dan nilai tak dikenal → 400 `invalid_filterset`.
+fn apply_complex_war_room_leaf(
+    qb: &mut QueryBuilder<Postgres>,
+    pieces: &[String],
+    suffix: &str,
+) -> Result<(), ComplexFilterError> {
+    if suffix == "range" {
+        return Err(ComplexFilterError::invalid_filterset());
+    }
+    let mut wants_on = false;
+    let mut wants_off = false;
+    for piece in pieces {
+        match piece.as_str() {
+            "on" => wants_on = true,
+            "off" => wants_off = true,
+            "" => {}
+            _ => return Err(ComplexFilterError::invalid_filterset()),
+        }
+    }
+    if wants_on && !wants_off {
+        qb.push("EXISTS(SELECT 1 FROM war_rooms wr WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL AND wr.status IN ('active','monitoring'))");
+    } else if wants_off && !wants_on {
+        qb.push("NOT EXISTS(SELECT 1 FROM war_rooms wr WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL AND wr.status IN ('active','monitoring'))");
+    } else {
+        qb.push("TRUE");
     }
     Ok(())
 }
@@ -2252,6 +2289,38 @@ mod issue_list_tests {
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id"));
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__exact"));
         assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"type_id__in"));
+    }
+
+    #[test]
+    fn complex_war_room_filter_is_allowlisted() {
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"war_room"));
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"war_room__exact"));
+        assert!(COMPLEX_FILTER_ALLOWLIST.contains(&"war_room__in"));
+    }
+
+    #[test]
+    fn complex_war_room_on_off_render_exists_checks() {
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
+        apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":"on"}]})).unwrap();
+        assert!(qb.sql().contains("EXISTS(SELECT 1 FROM war_rooms wr"), "{}", qb.sql());
+
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
+        apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":"off"}]})).unwrap();
+        assert!(qb.sql().contains("NOT EXISTS(SELECT 1 FROM war_rooms wr"), "{}", qb.sql());
+    }
+
+    #[test]
+    fn complex_war_room_both_values_match_all_and_unknown_400s() {
+        let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
+        apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":["on","off"]}]})).unwrap();
+        assert!(qb.sql().contains("TRUE"), "{}", qb.sql());
+
+        let err = apply_complex_leaf(
+            &mut QueryBuilder::<Postgres>::new("SELECT 1"),
+            "war_room",
+            &serde_json::json!("maybe"),
+        );
+        assert!(err.is_err());
     }
 
     /// Fork tidak punya custom property; kondisi legacy `customproperty_*`
