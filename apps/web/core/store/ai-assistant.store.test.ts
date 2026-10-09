@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { convertBase64StringToBinaryData, getAllDocumentFormatsFromDocumentEditorBinaryData } from "@plane/editor";
 import { AIAssistantStore, AI_ASSISTANT_ACTIVE_PREFIX, clearPersistedAiConversations } from "./ai-assistant.store";
 import type { TAiIssueContext } from "@/lib/ai-context";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
@@ -1939,6 +1940,53 @@ describe("article proposals", () => {
       kind: "update_article",
       decision: "applied",
     });
+  });
+
+  it("keeps the page title in the rewritten document binary", async () => {
+    const services = makeServices({
+      pages: {
+        fetchById: vi.fn(async () => ({ id: "pg1", name: "Runbook", description_html: "<p>Step 1</p>" })),
+      },
+    });
+    const { store } = await openAgent(services, updateArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k13", {
+      kind: "update_article",
+      projectId: "p1",
+      pageId: "pg1",
+      action: "append",
+      descriptionHtml: "<p>Step 3</p>",
+    });
+    const [, , , payload] = services.pages.updateDescription.mock.calls[0];
+    const formats = getAllDocumentFormatsFromDocumentEditorBinaryData(
+      convertBase64StringToBinaryData(payload.description_binary),
+      true
+    );
+    expect(formats.titleHTML).toContain("Runbook");
+  });
+
+  it("embeds the renamed title when the proposal updates name and content", async () => {
+    const services = makeServices({
+      pages: {
+        fetchById: vi.fn(async () => ({ id: "pg1", name: "Old Runbook", description_html: "<p>Step 1</p>" })),
+      },
+    });
+    const { store } = await openAgent(services, updateArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k13", {
+      kind: "update_article",
+      projectId: "p1",
+      pageId: "pg1",
+      action: "append",
+      name: "New Runbook",
+      descriptionHtml: "<p>Step 3</p>",
+    });
+    expect(services.pages.update).toHaveBeenCalledWith("acme", "p1", "pg1", { name: "New Runbook" });
+    const [, , , payload] = services.pages.updateDescription.mock.calls[0];
+    const formats = getAllDocumentFormatsFromDocumentEditorBinaryData(
+      convertBase64StringToBinaryData(payload.description_binary),
+      true
+    );
+    expect(formats.titleHTML).toContain("New Runbook");
+    expect(formats.titleHTML).not.toContain("Old Runbook");
   });
 });
 

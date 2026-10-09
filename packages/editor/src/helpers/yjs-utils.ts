@@ -199,6 +199,7 @@ export const getAllDocumentFormatsFromDocumentEditorBinaryData = (
 type TConvertHTMLDocumentToAllFormatsArgs = {
   document_html: string;
   variant: "rich" | "document";
+  title?: string;
 };
 
 /**
@@ -206,11 +207,13 @@ type TConvertHTMLDocumentToAllFormatsArgs = {
  * @param {TConvertHTMLDocumentToAllFormatsArgs} args - Arguments containing HTML content and variant type
  * @param {string} args.document_html - The HTML content to convert
  * @param {"rich" | "document"} args.variant - The type of editor variant to use for conversion
+ * @param {string} [args.title] - Optional title merged into the Yjs `title` fragment. Only applies to
+ * `variant: "document"` (the `rich` variant ignores it). Omitting it preserves previous behavior.
  * @returns {TDocumentPayload} Object containing the document in all supported formats
  * @throws {Error} If an invalid variant is provided
  */
 export const convertHTMLDocumentToAllFormats = (args: TConvertHTMLDocumentToAllFormatsArgs): TDocumentPayload => {
-  const { document_html, variant } = args;
+  const { document_html, variant, title } = args;
 
   let allFormats: TDocumentPayload;
 
@@ -227,7 +230,7 @@ export const convertHTMLDocumentToAllFormats = (args: TConvertHTMLDocumentToAllF
     };
   } else if (variant === "document") {
     // Convert HTML to binary format for document editor
-    const contentBinary = getBinaryDataFromDocumentEditorHTMLString(document_html);
+    const contentBinary = getBinaryDataFromDocumentEditorHTMLString(document_html, title);
     // Generate all document formats from the binary data
     const { contentBinaryEncoded, contentHTML, contentJSON } = getAllDocumentFormatsFromDocumentEditorBinaryData(
       contentBinary,

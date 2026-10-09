@@ -528,7 +528,12 @@ export class AIAssistantStore implements IAIAssistantStore {
         const currentHtml = page?.description_html ?? "";
         const mergedHtml =
           payload.action === "append" ? `${currentHtml}${payload.descriptionHtml}` : payload.descriptionHtml;
-        const document = convertHTMLDocumentToAllFormats({ document_html: mergedHtml, variant: "document" });
+        const effectiveTitle = payload.name?.trim() || page?.name?.trim() || undefined;
+        const document = convertHTMLDocumentToAllFormats({
+          document_html: mergedHtml,
+          variant: "document",
+          title: effectiveTitle,
+        });
         await this.pagesService.updateDescription(slug, payload.projectId, payload.pageId, document);
       }
     } else if (payload.kind === "apply_triage_suggestion") {
