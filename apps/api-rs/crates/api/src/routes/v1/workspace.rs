@@ -24,7 +24,6 @@ pub fn v1_workspace_features_json() -> Value {
         "wiki": false,
         "pi": false,
         "work_item_types": false,
-        "releases": false,
         "states_owned_by_workspace": false,
     })
 }
