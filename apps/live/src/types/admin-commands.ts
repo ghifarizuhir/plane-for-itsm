@@ -65,6 +65,7 @@ export enum AdminCommand {
   FORCE_CLOSE = "force_close",
   HEALTH_CHECK = "health_check",
   RESTART_DOCUMENT = "restart_document",
+  APPLY_DOCUMENT = "apply_document",
 }
 
 /**
@@ -89,9 +90,21 @@ export interface HealthCheckCommandData {
 }
 
 /**
+ * Apply external content to a live document (AI article edits).
+ */
+export interface ApplyDocumentCommandData {
+  command: AdminCommand.APPLY_DOCUMENT;
+  docId: string;
+  descriptionHtml: string;
+  name: string;
+  originServer: string;
+  timestamp?: string;
+}
+
+/**
  * Union type for all admin commands
  */
-export type AdminCommandData = ForceCloseCommandData | HealthCheckCommandData;
+export type AdminCommandData = ForceCloseCommandData | HealthCheckCommandData | ApplyDocumentCommandData;
 
 /**
  * Client force close message structure (sent to clients via sendStateless)
@@ -121,6 +134,13 @@ export function isForceCloseCommand(data: AdminCommandData): data is ForceCloseC
  */
 export function isHealthCheckCommand(data: AdminCommandData): data is HealthCheckCommandData {
   return data.command === AdminCommand.HEALTH_CHECK;
+}
+
+/**
+ * Type guard to check if data is an ApplyDocumentCommandData
+ */
+export function isApplyDocumentCommand(data: AdminCommandData): data is ApplyDocumentCommandData {
+  return data.command === AdminCommand.APPLY_DOCUMENT;
 }
 
 /**

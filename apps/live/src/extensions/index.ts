@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { ApplyDocumentHandler } from "./apply-document";
 import { Database } from "./database";
 import { ForceCloseHandler } from "./force-close-handler";
 import { Logger } from "./logger";
@@ -15,5 +16,6 @@ export const getExtensions = () => [
   new Database(),
   new Redis(),
   new TitleSyncExtension(),
+  new ApplyDocumentHandler(), // Must be after Redis to receive broadcasts
   new ForceCloseHandler(), // Must be after Redis to receive broadcasts
 ];

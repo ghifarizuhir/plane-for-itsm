@@ -8,6 +8,7 @@ import { getBinaryDataFromDocumentEditorHTMLString } from "@plane/editor";
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { replaceDocumentContent } from "@/lib/replace-document";
+import { AdminCommand, isApplyDocumentCommand } from "@/types/admin-commands";
 
 const makeDoc = (html: string, title: string) => {
   const doc = new Y.Doc();
@@ -48,5 +49,31 @@ describe("replaceDocumentContent", () => {
     const doc = makeDoc("<p>Old body</p>", "Old title");
     expect(() => replaceDocumentContent(doc, "<p></p>", "")).not.toThrow();
     expect(doc.getXmlFragment("default").toString()).not.toContain("Old body");
+  });
+});
+
+describe("isApplyDocumentCommand", () => {
+  it("accepts an apply_document payload", () => {
+    expect(
+      isApplyDocumentCommand({
+        command: AdminCommand.APPLY_DOCUMENT,
+        docId: "page-1",
+        descriptionHtml: "<p>Hi</p>",
+        name: "Title",
+        originServer: "api-rs",
+      })
+    ).toBe(true);
+  });
+
+  it("rejects other commands", () => {
+    expect(
+      isApplyDocumentCommand({
+        command: AdminCommand.FORCE_CLOSE,
+        docId: "page-1",
+        reason: "admin_request",
+        code: 4000,
+        originServer: "api-rs",
+      } as never)
+    ).toBe(false);
   });
 });
