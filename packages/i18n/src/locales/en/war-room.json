@@ -3,6 +3,11 @@
     "title": "Incident bridge",
     "add": "Open bridge",
     "open": "Open bridge",
+    "property_label": "War room",
+    "toggle": {
+      "turn_on": "Start incident bridge",
+      "turn_off": "Resolve bridge"
+    },
     "notification": {
       "mention": "{name} mentioned you in {room}",
       "dismiss": "Dismiss"
