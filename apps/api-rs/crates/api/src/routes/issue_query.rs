@@ -1874,7 +1874,7 @@ pub(crate) const DETAIL_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.s
        ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_status, \
      (SELECT wr.severity FROM war_rooms wr \
        WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
-       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity, \
+       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity \
      FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 pub async fn list_detail(
     State(st): State<AppState>,
