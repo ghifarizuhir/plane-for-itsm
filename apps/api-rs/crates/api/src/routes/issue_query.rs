@@ -67,7 +67,7 @@ pub fn build_ungrouped_envelope(total: i64, limit: i64, page: i128, results: Vec
 /// The page-query SELECT prefix for `list`: the 26 Django `IssueListRow`
 /// columns (`issue_common.rs:24-58`) plus the fork `i.type_id` key (B10).
 /// Same projection as the flat path below.
-pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at, i.type_id FROM issues i LEFT JOIN states s ON s.id = i.state_id";
+pub(crate) const LIST_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_order, i.completed_at, i.estimate_point_id AS estimate_point, i.priority, i.start_date, i.target_date, i.sequence_id, i.project_id, i.parent_id, (SELECT ci.cycle_id FROM cycle_issues ci WHERE ci.issue_id = i.id AND ci.deleted_at IS NULL ORDER BY ci.created_at DESC LIMIT 1) AS cycle_id, COALESCE((SELECT array_agg(mi.module_id) FROM module_issues mi WHERE mi.issue_id = i.id AND mi.deleted_at IS NULL), '{}'::uuid[]) AS module_ids, COALESCE((SELECT array_agg(il.label_id) FROM issue_labels il WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{}'::uuid[]) AS label_ids, COALESCE((SELECT array_agg(ia.assignee_id) FROM issue_assignees ia WHERE ia.issue_id = i.id AND ia.deleted_at IS NULL), '{}'::uuid[]) AS assignee_ids, (SELECT COUNT(*) FROM issues si WHERE si.parent_id = i.id AND si.deleted_at IS NULL) AS sub_issues_count, i.created_at, i.updated_at, i.created_by_id AS created_by, i.updated_by_id AS updated_by, (SELECT COUNT(*) FROM file_assets fa WHERE fa.issue_id = i.id AND fa.entity_type = 'ISSUE_ATTACHMENT' AND fa.deleted_at IS NULL) AS attachment_count, (SELECT COUNT(*) FROM issue_links lin WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, i.is_draft, i.archived_at, i.deleted_at, i.type_id, (SELECT wr.id FROM war_rooms wr WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_id, (SELECT wr.status FROM war_rooms wr WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_status, (SELECT wr.severity FROM war_rooms wr WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 
 /// Key-scan SELECT for grouped `list` mode: every groupable key as text
 /// over the flat scope (same FROM/WHERE as the flat path). Arrays use the
@@ -492,7 +492,16 @@ pub async fn list_by_ids(
           AND fa.deleted_at IS NULL) AS attachment_count, \
         (SELECT COUNT(*) FROM issue_links lin \
           WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
-        i.is_draft, i.archived_at, i.deleted_at, i.type_id \
+        i.is_draft, i.archived_at, i.deleted_at, i.type_id, \
+        (SELECT wr.id FROM war_rooms wr \
+          WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+          ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_id, \
+        (SELECT wr.status FROM war_rooms wr \
+          WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+          ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_status, \
+        (SELECT wr.severity FROM war_rooms wr \
+          WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+          ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity \
         FROM issues i \
         LEFT JOIN states s ON s.id = i.state_id \
         WHERE i.project_id = $1 \
@@ -1856,7 +1865,16 @@ pub(crate) const DETAIL_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.s
        AND fa.deleted_at IS NULL) AS attachment_count, \
      (SELECT COUNT(*) FROM issue_links lin \
        WHERE lin.issue_id = i.id AND lin.deleted_at IS NULL) AS link_count, \
-     i.type_id \
+     i.type_id, \
+     (SELECT wr.id FROM war_rooms wr \
+       WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_id, \
+     (SELECT wr.status FROM war_rooms wr \
+       WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_status, \
+     (SELECT wr.severity FROM war_rooms wr \
+       WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
+       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity, \
      FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 pub async fn list_detail(
     State(st): State<AppState>,
@@ -2248,6 +2266,17 @@ mod issue_list_tests {
         );
         apply_complex_filter(&mut qb, tree.as_ref().unwrap()).unwrap();
         assert!(qb.sql().contains("TRUE"), "sql: {}", qb.sql());
+    }
+
+    #[test]
+    fn list_and_detail_selects_expose_war_room_property() {
+        // Fork (2026-10-09): property "War room" membaca kolom turunan dari
+        // war_rooms (primary_issue_id), tanpa kolom baru di `issues`.
+        for sql in [LIST_SELECT_SQL, DETAIL_SELECT_SQL] {
+            assert!(sql.contains("AS war_room_id"), "{sql}");
+            assert!(sql.contains("AS war_room_status"), "{sql}");
+            assert!(sql.contains("AS war_room_severity"), "{sql}");
+        }
     }
 }
 

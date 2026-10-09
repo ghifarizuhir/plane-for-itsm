@@ -54,6 +54,12 @@ pub struct IssueListRow {
     /// Fork key appended after the Django 26-key order (B10): drives the web
     /// work-item-type UI.
     pub type_id: Option<uuid::Uuid>,
+    /// Fork (2026-10-09): room terbaru non-deleted untuk issue ini (turunan,
+    /// bukan kolom). Ordering: active/monitoring menang, lalu `created_at`
+    /// terbaru — dipakai property "War room" & filter di web.
+    pub war_room_id: Option<uuid::Uuid>,
+    pub war_room_status: Option<String>,
+    pub war_room_severity: Option<String>,
 }
 
 /// Pure allow/deny decision for the project-level gate in `list_by_ids`,
@@ -424,6 +430,12 @@ pub struct IssueDetailRow {
     /// Fork key appended after the Django 25-key order (B10): drives the web
     /// work-item-type UI.
     pub type_id: Option<uuid::Uuid>,
+    /// Fork (2026-10-09): room terbaru non-deleted untuk issue ini (turunan,
+    /// bukan kolom). Ordering: active/monitoring menang, lalu `created_at`
+    /// terbaru — dipakai property "War room" & filter di web.
+    pub war_room_id: Option<uuid::Uuid>,
+    pub war_room_status: Option<String>,
+    pub war_room_severity: Option<String>,
 }
 
 /// One entry of the expanded `issue_relation[]` / `issue_related[]` arrays.
