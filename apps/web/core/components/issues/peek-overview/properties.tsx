@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 // ui icons
 import {
+  AlertOctagonOutline,
   CyclesOutline,
   DueDateOutline,
   EstimateOutline,
@@ -39,6 +40,7 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 // plane web components
 import { IssueParentSelectRoot } from "@/components/issues/parent-select-root";
 import { ServiceSelect } from "@/components/services/select/service-select";
+import { WarRoomProperty } from "@/components/war-rooms/war-room-property";
 import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
@@ -132,7 +134,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               userIds={createdByDetails?.display_name?.includes("-intake") ? null : createdByDetails?.id}
             />
             <span className="grow truncate text-body-xs-medium leading-5 text-secondary">
-              {createdByDetails?.display_name?.includes("-intake") ? "Terraline" : createdByDetails?.display_name}
+              {createdByDetails?.display_name?.includes("-intake") ? "Plane" : createdByDetails?.display_name}
             </span>
           </SidebarPropertyListItem>
         )}
@@ -225,6 +227,10 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
             />
           </SidebarPropertyListItem>
         )}
+
+        <SidebarPropertyListItem icon={AlertOctagonOutline} label={t("war_room.title")}>
+          <WarRoomProperty workspaceSlug={workspaceSlug} projectId={projectId} issue={issue} disabled={disabled} />
+        </SidebarPropertyListItem>
 
         {projectDetails?.cycle_view && (
           <SidebarPropertyListItem icon={CyclesOutline} label={t("common.cycle")} appendElement={null}>

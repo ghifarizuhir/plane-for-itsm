@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 // ui
 import {
+  AlertOctagonOutline,
   CyclesOutline,
   DueDateOutline,
   EstimateOutline,
@@ -43,6 +44,7 @@ import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import { ServiceSelect } from "@/components/services/select/service-select";
+import { WarRoomProperty } from "@/components/war-rooms/war-room-property";
 import type { TIssueOperations } from "./root";
 
 type Props = {
@@ -226,6 +228,17 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                   workspaceSlug={workspaceSlug}
                   projectId={projectId}
                   issueId={issueId}
+                  disabled={!isEditable}
+                />
+              </SidebarPropertyListItem>
+            )}
+
+            {issue && (
+              <SidebarPropertyListItem icon={AlertOctagonOutline} label={t("war_room.title")}>
+                <WarRoomProperty
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  issue={issue}
                   disabled={!isEditable}
                 />
               </SidebarPropertyListItem>

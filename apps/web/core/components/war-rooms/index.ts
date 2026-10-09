@@ -14,3 +14,4 @@ export * from "./list/war-rooms-board";
 export * from "./list/war-rooms-board-row";
 export * from "./list/war-rooms-list-view";
 export * from "./room/root";
+export * from "./war-room-property";
