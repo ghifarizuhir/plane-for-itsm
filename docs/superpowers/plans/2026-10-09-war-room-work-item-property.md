@@ -159,11 +159,11 @@ Di `issue_query.rs` (`DETAIL_SELECT_SQL`), ganti `     i.type_id \` pada baris t
        ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_status, \
      (SELECT wr.severity FROM war_rooms wr \
        WHERE wr.primary_issue_id = i.id AND wr.deleted_at IS NULL \
-       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity, \
+       ORDER BY (wr.status IN ('active','monitoring')) DESC, wr.created_at DESC LIMIT 1) AS war_room_severity \
      FROM issues i LEFT JOIN states s ON s.id = i.state_id";
 ```
 
-(Hapus `,` setelah `i.type_id` yang lama; blok baru sudah membawa koma sendiri.)
+(Hapus `,` setelah `i.type_id` yang lama; item SELECT terakhir tidak boleh ada koma sebelum `FROM`.)
 
 - [ ] **Step 6: Tambah subquery ke `list_by_ids`**
 
