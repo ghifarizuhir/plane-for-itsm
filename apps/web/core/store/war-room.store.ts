@@ -25,9 +25,15 @@ import type {
   TWarRoomRunbookUpdatePayload,
   TWarRoomSocketEvent,
   TWarRoomUpdatePayload,
+  TIssue,
 } from "@plane/types";
 // helpers
-import { isActiveWarRoomStatus, isTypingActive, upsertMessageInList } from "@/services/war-room.helpers";
+import {
+  isActiveWarRoomStatus,
+  isTypingActive,
+  severityFromPriority,
+  upsertMessageInList,
+} from "@/services/war-room.helpers";
 // services
 import { WarRoomService } from "@/services/war-room.service";
 // store
@@ -80,6 +86,12 @@ export interface IWarRoomStore {
     projectId: string,
     warRoomId: string,
     data: TWarRoomUpdatePayload
+  ) => Promise<IWarRoom>;
+  toggleWarRoom: (
+    workspaceSlug: string,
+    projectId: string,
+    issue: TIssue,
+    options?: { serviceIds?: string[] }
   ) => Promise<IWarRoom>;
   deleteWarRoom: (workspaceSlug: string, projectId: string, warRoomId: string) => Promise<void>;
   addServices: (workspaceSlug: string, projectId: string, warRoomId: string, serviceIds: string[]) => Promise<number>;
@@ -196,6 +208,7 @@ export class WarRoomStore implements IWarRoomStore {
       fetchWarRoomDetail: action,
       createWarRoom: action,
       updateWarRoom: action,
+      toggleWarRoom: action,
       deleteWarRoom: action,
       addServices: action,
       removeService: action,
@@ -345,6 +358,43 @@ export class WarRoomStore implements IWarRoomStore {
         });
       }
     });
+    return room;
+  };
+
+  toggleWarRoom = async (
+    workspaceSlug: string,
+    projectId: string,
+    issue: TIssue,
+    options?: { serviceIds?: string[] }
+  ) => {
+    const roomId = issue.war_room_id ?? null;
+    const status = issue.war_room_status ?? null;
+    let room: IWarRoom;
+    if (roomId && status && isActiveWarRoomStatus(status)) {
+      room = await this.updateWarRoom(workspaceSlug, projectId, roomId, { status: "resolved" });
+    } else if (roomId && status === "resolved") {
+      room = await this.updateWarRoom(workspaceSlug, projectId, roomId, { status: "active" });
+    } else {
+      try {
+        room = await this.createWarRoom(workspaceSlug, projectId, {
+          primary_issue_id: issue.id,
+          name: issue.name,
+          severity: severityFromPriority(issue.priority) ?? undefined,
+          service_ids: options?.serviceIds ?? [],
+        });
+      } catch (error) {
+        const duplicate = error as { error?: string; war_room_id?: string };
+        if (duplicate?.error === "active_war_room_exists" && duplicate.war_room_id) {
+          const existing = await this.fetchWarRoomDetail(workspaceSlug, projectId, duplicate.war_room_id);
+          if (!existing) throw error;
+          room = existing;
+        } else {
+          throw error;
+        }
+      }
+    }
+    // Kolom turunan war_room_* datang dari server; refetch list issue aktif.
+    this.rootStore.issue.projectIssues.fetchIssuesWithExistingPagination(workspaceSlug, projectId, "mutation");
     return room;
   };
 

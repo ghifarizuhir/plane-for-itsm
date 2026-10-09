@@ -13,6 +13,7 @@ import type {
   IWarRoomParticipant,
   IWarRoomRunbookItem,
   IWarRoomSummary,
+  TIssue,
 } from "@plane/types";
 // store
 import { WarRoomStore } from "./war-room.store";
@@ -43,6 +44,37 @@ const makeRoom = (overrides: Partial<IWarRoomListItem> = {}): IWarRoomListItem =
     last_activity_at: null,
     ...overrides,
   }) as IWarRoomListItem;
+
+const makeIssue = (overrides: Partial<TIssue> = {}): TIssue =>
+  ({
+    id: "issue-1",
+    name: "Checkout latency spike",
+    priority: "urgent",
+    type_id: "type-1",
+    project_id: "project-1",
+    sequence_id: 102,
+    sort_order: 0,
+    state_id: null,
+    label_ids: [],
+    assignee_ids: [],
+    estimate_point: null,
+    sub_issues_count: 0,
+    attachment_count: 0,
+    link_count: 0,
+    parent_id: null,
+    cycle_id: null,
+    module_ids: [],
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+    start_date: null,
+    target_date: null,
+    completed_at: null,
+    archived_at: null,
+    created_by: "user-1",
+    updated_by: "user-1",
+    is_draft: false,
+    ...overrides,
+  }) as TIssue;
 
 const makeDetail = (overrides: Partial<IWarRoom> = {}): IWarRoom =>
   ({
@@ -103,6 +135,7 @@ const makeEvent = (overrides: Partial<IWarRoomEvent> = {}): IWarRoomEvent =>
 
 const makeStore = () => {
   const store = new WarRoomStore({} as never);
+  const refetchIssues = vi.fn();
   const warRoomService = {
     getWarRooms: vi.fn(async () => [makeRoom()]),
     getWarRoomSummary: vi.fn(async (): Promise<IWarRoomSummary> => ({ active: 1, sev1_2: 0, resolved_7d: 0 })),
@@ -127,7 +160,10 @@ const makeStore = () => {
     getEvents: vi.fn(async () => [makeEvent()]),
   };
   (store as unknown as { warRoomService: typeof warRoomService }).warRoomService = warRoomService;
-  return { store, warRoomService };
+  (store as unknown as { rootStore: unknown }).rootStore = {
+    issue: { projectIssues: { fetchIssuesWithExistingPagination: refetchIssues } },
+  };
+  return { store, warRoomService, refetchIssues };
 };
 
 describe("WarRoomStore.fetchWarRooms", () => {
@@ -382,5 +418,59 @@ describe("WarRoomStore room mutations", () => {
     const participants = store.getWarRoomDetailById("room-1")?.participants ?? [];
     expect(participants.find((p) => p.id === "participant-2")?.role).toBe("commander");
     expect(participants.find((p) => p.id === "participant-1")?.role).toBe("responder");
+  });
+});
+
+describe("WarRoomStore.toggleWarRoom", () => {
+  it("resolves the active room when toggled off", async () => {
+    const { store, warRoomService, refetchIssues } = makeStore();
+
+    await store.toggleWarRoom(
+      "acme",
+      "project-1",
+      makeIssue({ war_room_id: "room-1", war_room_status: "active", war_room_severity: "sev1" })
+    );
+
+    expect(warRoomService.updateWarRoom).toHaveBeenCalledWith("acme", "project-1", "room-1", { status: "resolved" });
+    expect(warRoomService.createWarRoom).not.toHaveBeenCalled();
+    expect(refetchIssues).toHaveBeenCalledWith("acme", "project-1", "mutation");
+  });
+
+  it("reopens the resolved room when toggled on", async () => {
+    const { store, warRoomService } = makeStore();
+
+    await store.toggleWarRoom(
+      "acme",
+      "project-1",
+      makeIssue({ war_room_id: "room-1", war_room_status: "resolved", war_room_severity: "sev2" })
+    );
+
+    expect(warRoomService.updateWarRoom).toHaveBeenCalledWith("acme", "project-1", "room-1", { status: "active" });
+  });
+
+  it("creates a room when the issue has none", async () => {
+    const { store, warRoomService } = makeStore();
+
+    await store.toggleWarRoom("acme", "project-1", makeIssue({ war_room_id: null }), { serviceIds: ["service-1"] });
+
+    expect(warRoomService.createWarRoom).toHaveBeenCalledWith("acme", "project-1", {
+      primary_issue_id: "issue-1",
+      name: "Checkout latency spike",
+      severity: "sev1",
+      service_ids: ["service-1"],
+    });
+  });
+
+  it("adopts the existing room on a 409 duplicate", async () => {
+    const { store, warRoomService } = makeStore();
+    const duplicate = Object.assign(new Error("active_war_room_exists"), {
+      error: "active_war_room_exists",
+      war_room_id: "room-9",
+    });
+    warRoomService.createWarRoom.mockRejectedValueOnce(duplicate);
+
+    await store.toggleWarRoom("acme", "project-1", makeIssue({ war_room_id: null }));
+
+    expect(warRoomService.getWarRoom).toHaveBeenCalledWith("acme", "project-1", "room-9");
   });
 });
