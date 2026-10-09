@@ -656,7 +656,7 @@ useEffect(() => {
     projectId,
     [{ property: "war_room", operator: "in", value: [warRoomPreset] }],
     issuesFilter?.updateFilterExpression.bind(issuesFilter, workspaceSlug, projectId)
-  ).then(() => {
+  ).finally(() => {
     router.replace(`/${workspaceSlug}/projects/${projectId}/issues`);
   });
 }, [
