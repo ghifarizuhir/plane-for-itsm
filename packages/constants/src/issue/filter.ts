@@ -217,6 +217,7 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "label_id",
       "start_date",
       "target_date",
+      "war_room",
     ],
     layoutOptions: {
       list: {

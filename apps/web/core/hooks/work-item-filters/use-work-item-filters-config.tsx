@@ -6,6 +6,7 @@
 
 import { useCallback, useMemo } from "react";
 import {
+  AlertOctagonOutline,
   AtOutline,
   CalendarOutline,
   CyclesOutline,
@@ -52,6 +53,7 @@ import {
   getSubscriberFilterConfig,
   getTargetDateFilterConfig,
   getUpdatedAtFilterConfig,
+  getWarRoomFilterConfig,
   getWorkItemTypeFilterConfig,
   isLoaderReady,
 } from "@plane/utils";
@@ -391,6 +393,17 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     [isFilterEnabled, projects, operatorConfigs]
   );
 
+  // war room / incident bridge filter config (fork)
+  const warRoomFilterConfig = useMemo(
+    () =>
+      getWarRoomFilterConfig<TWorkItemFilterProperty>("war_room")({
+        isEnabled: isFilterEnabled("war_room"),
+        filterIcon: AlertOctagonOutline,
+        ...operatorConfigs,
+      }),
+    [isFilterEnabled, operatorConfigs]
+  );
+
   return {
     areAllConfigsInitialized,
     configs: [
@@ -410,6 +423,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       updatedAtFilterConfig,
       createdByFilterConfig,
       subscriberFilterConfig,
+      warRoomFilterConfig,
     ],
     configMap: {
       project_id: projectFilterConfig,
@@ -428,6 +442,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       target_date: targetDateFilterConfig,
       created_at: createdAtFilterConfig,
       updated_at: updatedAtFilterConfig,
+      war_room: warRoomFilterConfig,
     },
     isFilterEnabled,
     members: members ?? [],

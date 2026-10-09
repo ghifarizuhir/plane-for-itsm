@@ -12,4 +12,5 @@ export * from "./priority";
 export * from "./project";
 export * from "./state";
 export * from "./user";
+export * from "./war-room";
 export * from "./work-item-type";
