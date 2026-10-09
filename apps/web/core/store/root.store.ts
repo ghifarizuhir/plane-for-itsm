@@ -58,8 +58,7 @@ import type { IServiceFilterStore } from "./service_filter.store";
 import { ServiceFilterStore } from "./service_filter.store";
 import type { IWarRoomStore } from "./war-room.store";
 import { WarRoomStore } from "./war-room.store";
-import type { IWarRoomFilterStore } from "./war-room_filter.store";
-import { WarRoomFilterStore } from "./war-room_filter.store";
+
 import type { IReleaseStore } from "./release.store";
 import { ReleaseStore } from "./release.store";
 import type { IReviewStore } from "./review.store";
@@ -103,7 +102,6 @@ export class CoreRootStore {
   service: IServiceStore;
   serviceFilter: IServiceFilterStore;
   warRoom: IWarRoomStore;
-  warRoomFilter: IWarRoomFilterStore;
   release: IReleaseStore;
   review: IReviewStore;
   projectView: IProjectViewStore;
@@ -150,7 +148,6 @@ export class CoreRootStore {
     this.service = new ServicesStore(this);
     this.serviceFilter = new ServiceFilterStore(this);
     this.warRoom = new WarRoomStore(this);
-    this.warRoomFilter = new WarRoomFilterStore(this);
     this.release = new ReleaseStore(this);
     this.review = new ReviewStore(this);
     this.projectView = new ProjectViewStore(this);
@@ -195,7 +192,6 @@ export class CoreRootStore {
     this.service = new ServicesStore(this);
     this.serviceFilter = new ServiceFilterStore(this);
     this.warRoom = new WarRoomStore(this);
-    this.warRoomFilter = new WarRoomFilterStore(this);
     this.release = new ReleaseStore(this);
     this.review = new ReviewStore(this);
     this.projectView = new ProjectViewStore(this);

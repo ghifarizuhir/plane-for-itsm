@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { TWarRoomParticipantRole, TWarRoomSeverity, TWarRoomStatus, TWarRoomStatusTab } from "@plane/types";
+import type { TWarRoomParticipantRole, TWarRoomSeverity, TWarRoomStatus } from "@plane/types";
 
 export type TWarRoomToneConfig = {
   /** i18n key label */
@@ -73,13 +73,6 @@ export const WAR_ROOM_ROLE_LABEL_KEYS: Record<TWarRoomParticipantRole, string> =
   scribe: "war_room.roles.scribe",
   responder: "war_room.roles.responder",
 };
-
-/** Tab status → CSV `status` query param (kosong = tanpa filter). */
-export const WAR_ROOM_STATUS_TABS: { key: TWarRoomStatusTab; label_key: string; status: string }[] = [
-  { key: "active", label_key: "war_room.tabs.active", status: "active,monitoring" },
-  { key: "resolved", label_key: "war_room.tabs.resolved", status: "resolved" },
-  { key: "all", label_key: "war_room.tabs.all", status: "" },
-];
 
 export const getWarRoomLink = (workspaceSlug: string, projectId: string, warRoomId?: string): string =>
   warRoomId

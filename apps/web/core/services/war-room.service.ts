@@ -8,17 +8,14 @@ import { API_BASE_URL } from "@plane/constants";
 import type {
   IWarRoom,
   IWarRoomEvent,
-  IWarRoomListItem,
   IWarRoomMessage,
   IWarRoomParticipant,
   IWarRoomRunbookItem,
-  IWarRoomSummary,
   TWarRoomCreatePayload,
   TWarRoomEventsParams,
   TWarRoomLinkIssuesPayload,
   TWarRoomLinkResponse,
   TWarRoomLinkServicesPayload,
-  TWarRoomListParams,
   TWarRoomMessageCreatePayload,
   TWarRoomMessageUpdatePayload,
   TWarRoomMessagesParams,
@@ -63,26 +60,6 @@ export class WarRoomService extends APIService {
 
   private roomPath(workspaceSlug: string, projectId: string, warRoomId: string): string {
     return `${this.basePath(workspaceSlug, projectId)}/${warRoomId}`;
-  }
-
-  async getWarRooms(
-    workspaceSlug: string,
-    projectId: string,
-    params?: TWarRoomListParams
-  ): Promise<IWarRoomListItem[]> {
-    return this.get(`${this.basePath(workspaceSlug, projectId)}/`, { params })
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw toWarRoomError(error);
-      });
-  }
-
-  async getWarRoomSummary(workspaceSlug: string, projectId: string): Promise<IWarRoomSummary> {
-    return this.get(`${this.basePath(workspaceSlug, projectId)}/summary/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw toWarRoomError(error);
-      });
   }
 
   async getWarRoom(workspaceSlug: string, projectId: string, warRoomId: string): Promise<IWarRoom> {

@@ -17,7 +17,6 @@ import {
   serializeMentionTokens,
   severityFromPriority,
   shouldShowMessageHeader,
-  statusFilterForTab,
   upsertMessageInList,
 } from "./war-room.helpers";
 import type { IWarRoomMessage, IServiceDependency } from "@plane/types";
@@ -48,14 +47,6 @@ describe("isActiveWarRoomStatus", () => {
   it("treats resolved and archived as inactive", () => {
     expect(isActiveWarRoomStatus("resolved")).toBe(false);
     expect(isActiveWarRoomStatus("archived")).toBe(false);
-  });
-});
-
-describe("statusFilterForTab", () => {
-  it("maps tabs to the server status csv", () => {
-    expect(statusFilterForTab("active")).toBe("active,monitoring");
-    expect(statusFilterForTab("resolved")).toBe("resolved");
-    expect(statusFilterForTab("all")).toBeUndefined();
   });
 });
 

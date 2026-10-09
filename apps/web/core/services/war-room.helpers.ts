@@ -4,13 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type {
-  IWarRoomMessage,
-  IServiceDependency,
-  TWarRoomSeverity,
-  TWarRoomStatus,
-  TWarRoomStatusTab,
-} from "@plane/types";
+import type { IWarRoomMessage, IServiceDependency, TWarRoomSeverity, TWarRoomStatus } from "@plane/types";
 
 /** Mirrors the server-side `severity_from_priority` mapping. */
 export const severityFromPriority = (priority: string | null | undefined): TWarRoomSeverity | null => {
@@ -31,17 +25,6 @@ export const severityFromPriority = (priority: string | null | undefined): TWarR
 
 export const isActiveWarRoomStatus = (status: TWarRoomStatus): boolean =>
   status === "active" || status === "monitoring";
-
-export const statusFilterForTab = (tab: TWarRoomStatusTab): string | undefined => {
-  switch (tab) {
-    case "active":
-      return "active,monitoring";
-    case "resolved":
-      return "resolved";
-    case "all":
-      return undefined;
-  }
-};
 
 /** `HH:MM:SS`; `endAt` kosong = timer berjalan memakai `now`. */
 export const formatElapsed = (startedAt: string, endAt: string | null, now: number = Date.now()): string => {

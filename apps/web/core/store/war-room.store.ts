@@ -11,14 +11,11 @@ import { computedFn } from "mobx-utils";
 import type {
   IWarRoom,
   IWarRoomEvent,
-  IWarRoomListItem,
   IWarRoomMessage,
   IWarRoomParticipant,
   IWarRoomRunbookItem,
-  IWarRoomSummary,
   TWarRoomCreatePayload,
   TWarRoomEventsParams,
-  TWarRoomListParams,
   TWarRoomMessagesParams,
   TWarRoomParticipantCreatePayload,
   TWarRoomParticipantUpdatePayload,
@@ -44,13 +41,7 @@ const DEFAULT_MESSAGE_PAGE_SIZE = 50;
 const DEFAULT_EVENT_PAGE_SIZE = 50;
 
 export interface IWarRoomStore {
-  loader: boolean;
-  fetchedMap: Record<string, boolean>;
-  warRoomMap: Record<string, IWarRoomListItem>;
-  warRoomIdsMap: Record<string, string[]>;
   detailMap: Record<string, IWarRoom>;
-  summaryMap: Record<string, IWarRoomSummary>;
-  errorMap: Record<string, boolean>;
   detailErrorMap: Record<string, boolean>;
   messagesMap: Record<string, IWarRoomMessage[]>;
   messagesHasMoreMap: Record<string, boolean>;
@@ -61,11 +52,7 @@ export interface IWarRoomStore {
   unreadMap: Record<string, number>;
   typingMap: Record<string, Record<string, number>>;
   onlineUsersMap: Record<string, string[]>;
-  getWarRoomById: (warRoomId: string) => IWarRoomListItem | null;
-  getProjectWarRoomIds: (projectId: string) => string[] | null;
   getWarRoomDetailById: (warRoomId: string) => IWarRoom | null;
-  getProjectSummary: (projectId: string) => IWarRoomSummary | null;
-  getActiveWarRoomByIssue: (projectId: string, issueId: string) => IWarRoomListItem | null;
   getMessages: (warRoomId: string) => IWarRoomMessage[];
   hasMoreMessages: (warRoomId: string) => boolean;
   getEvents: (warRoomId: string) => IWarRoomEvent[];
@@ -73,12 +60,6 @@ export interface IWarRoomStore {
   getUnreadCount: (warRoomId: string) => number;
   getTypingUserIds: (warRoomId: string, now?: number) => string[];
   getOnlineUserIds: (warRoomId: string) => string[];
-  fetchWarRooms: (
-    workspaceSlug: string,
-    projectId: string,
-    params?: TWarRoomListParams
-  ) => Promise<IWarRoomListItem[] | undefined>;
-  fetchWarRoomSummary: (workspaceSlug: string, projectId: string) => Promise<IWarRoomSummary | undefined>;
   fetchWarRoomDetail: (workspaceSlug: string, projectId: string, warRoomId: string) => Promise<IWarRoom | undefined>;
   createWarRoom: (workspaceSlug: string, projectId: string, data: TWarRoomCreatePayload) => Promise<IWarRoom>;
   updateWarRoom: (
@@ -164,13 +145,7 @@ export interface IWarRoomStore {
 }
 
 export class WarRoomStore implements IWarRoomStore {
-  loader: boolean = false;
-  fetchedMap: Record<string, boolean> = {};
-  warRoomMap: Record<string, IWarRoomListItem> = {};
-  warRoomIdsMap: Record<string, string[]> = {};
   detailMap: Record<string, IWarRoom> = {};
-  summaryMap: Record<string, IWarRoomSummary> = {};
-  errorMap: Record<string, boolean> = {};
   detailErrorMap: Record<string, boolean> = {};
   messagesMap: Record<string, IWarRoomMessage[]> = {};
   messagesHasMoreMap: Record<string, boolean> = {};
@@ -186,13 +161,7 @@ export class WarRoomStore implements IWarRoomStore {
 
   constructor(_rootStore: CoreRootStore) {
     makeObservable(this, {
-      loader: observable.ref,
-      fetchedMap: observable,
-      warRoomMap: observable,
-      warRoomIdsMap: observable,
       detailMap: observable,
-      summaryMap: observable,
-      errorMap: observable,
       detailErrorMap: observable,
       messagesMap: observable,
       messagesHasMoreMap: observable,
@@ -203,8 +172,6 @@ export class WarRoomStore implements IWarRoomStore {
       unreadMap: observable,
       typingMap: observable,
       onlineUsersMap: observable,
-      fetchWarRooms: action,
-      fetchWarRoomSummary: action,
       fetchWarRoomDetail: action,
       createWarRoom: action,
       updateWarRoom: action,
@@ -235,25 +202,7 @@ export class WarRoomStore implements IWarRoomStore {
     this.warRoomService = new WarRoomService();
   }
 
-  getWarRoomById = computedFn((warRoomId: string) => this.warRoomMap[warRoomId] ?? null);
-
-  getProjectWarRoomIds = computedFn((projectId: string) =>
-    this.fetchedMap[projectId] ? (this.warRoomIdsMap[projectId] ?? []) : null
-  );
-
   getWarRoomDetailById = computedFn((warRoomId: string) => this.detailMap[warRoomId] ?? null);
-
-  getProjectSummary = computedFn((projectId: string) => this.summaryMap[projectId] ?? null);
-
-  getActiveWarRoomByIssue = computedFn((projectId: string, issueId: string) => {
-    const room = Object.values(this.warRoomMap).find(
-      (candidate) =>
-        candidate.project_id === projectId &&
-        candidate.primary_issue_id === issueId &&
-        isActiveWarRoomStatus(candidate.status)
-    );
-    return room ?? null;
-  });
 
   getMessages = (warRoomId: string): IWarRoomMessage[] => this.messagesMap[warRoomId] ?? [];
 
@@ -271,45 +220,6 @@ export class WarRoomStore implements IWarRoomStore {
       .map(([userId]) => userId);
 
   getOnlineUserIds = (warRoomId: string): string[] => this.onlineUsersMap[warRoomId] ?? [];
-
-  fetchWarRooms = async (workspaceSlug: string, projectId: string, params?: TWarRoomListParams) => {
-    try {
-      runInAction(() => {
-        set(this.errorMap, projectId, false);
-        this.loader = true;
-      });
-      const rooms = await this.warRoomService.getWarRooms(workspaceSlug, projectId, params);
-      runInAction(() => {
-        rooms.forEach((room) => set(this.warRoomMap, [room.id], room));
-        set(
-          this.warRoomIdsMap,
-          projectId,
-          rooms.map((room) => room.id)
-        );
-        set(this.fetchedMap, projectId, true);
-        this.loader = false;
-      });
-      return rooms;
-    } catch {
-      runInAction(() => {
-        this.loader = false;
-        set(this.errorMap, projectId, true);
-      });
-      return undefined;
-    }
-  };
-
-  fetchWarRoomSummary = async (workspaceSlug: string, projectId: string) => {
-    try {
-      const summary = await this.warRoomService.getWarRoomSummary(workspaceSlug, projectId);
-      runInAction(() => {
-        set(this.summaryMap, projectId, summary);
-      });
-      return summary;
-    } catch {
-      return undefined;
-    }
-  };
 
   fetchWarRoomDetail = async (workspaceSlug: string, projectId: string, warRoomId: string) => {
     try {
@@ -333,9 +243,6 @@ export class WarRoomStore implements IWarRoomStore {
     const room = await this.warRoomService.createWarRoom(workspaceSlug, projectId, data);
     runInAction(() => {
       set(this.detailMap, [room.id], room);
-      const currentIds = this.warRoomIdsMap[projectId] ?? [];
-      set(this.warRoomIdsMap, projectId, [room.id, ...currentIds.filter((id) => id !== room.id)]);
-      set(this.fetchedMap, projectId, true);
     });
     return room;
   };
@@ -344,19 +251,6 @@ export class WarRoomStore implements IWarRoomStore {
     const room = await this.warRoomService.updateWarRoom(workspaceSlug, projectId, warRoomId, data);
     runInAction(() => {
       set(this.detailMap, [warRoomId], room);
-      const listItem = this.warRoomMap[warRoomId];
-      if (listItem) {
-        set(this.warRoomMap, [warRoomId], {
-          ...listItem,
-          name: room.name,
-          description_html: room.description_html,
-          notes_html: room.notes_html,
-          severity: room.severity,
-          status: room.status,
-          resolved_at: room.resolved_at,
-          updated_at: room.updated_at,
-        });
-      }
     });
     return room;
   };
@@ -402,18 +296,10 @@ export class WarRoomStore implements IWarRoomStore {
     await this.warRoomService.deleteWarRoom(workspaceSlug, projectId, warRoomId);
     runInAction(() => {
       delete this.detailMap[warRoomId];
-      delete this.warRoomMap[warRoomId];
       delete this.messagesMap[warRoomId];
       delete this.messagesHasMoreMap[warRoomId];
       delete this.eventsMap[warRoomId];
       delete this.eventsHasMoreMap[warRoomId];
-      const currentIds = this.warRoomIdsMap[projectId];
-      if (currentIds)
-        set(
-          this.warRoomIdsMap,
-          projectId,
-          currentIds.filter((id) => id !== warRoomId)
-        );
     });
   };
 
@@ -720,7 +606,6 @@ export class WarRoomStore implements IWarRoomStore {
         if (event.data.reasons.includes("deleted")) {
           runInAction(() => {
             delete this.detailMap[warRoomId];
-            delete this.warRoomMap[warRoomId];
             delete this.messagesMap[warRoomId];
             delete this.eventsMap[warRoomId];
           });
