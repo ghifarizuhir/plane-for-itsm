@@ -77,32 +77,6 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/drafts", "./(all)/[workspaceSlug]/(projects)/drafts/page.tsx"),
         ]),
 
-        // Releases (RCB scope)
-        layout("./(all)/[workspaceSlug]/(projects)/releases/(list)/layout.tsx", [
-          route(":workspaceSlug/releases", "./(all)/[workspaceSlug]/(projects)/releases/(list)/page.tsx"),
-        ]),
-
-        // Release Detail
-        layout("./(all)/[workspaceSlug]/(projects)/releases/(detail)/layout.tsx", [
-          route(
-            ":workspaceSlug/releases/:releaseId",
-            "./(all)/[workspaceSlug]/(projects)/releases/(detail)/[releaseId]/page.tsx"
-          ),
-        ]),
-
-        // Release Control (RCB board)
-        layout("./(all)/[workspaceSlug]/(projects)/release-control/(list)/layout.tsx", [
-          route(":workspaceSlug/release-control", "./(all)/[workspaceSlug]/(projects)/release-control/(list)/page.tsx"),
-        ]),
-
-        // Release Control Session Detail
-        layout("./(all)/[workspaceSlug]/(projects)/release-control/(detail)/layout.tsx", [
-          route(
-            ":workspaceSlug/release-control/sessions/:sessionId",
-            "./(all)/[workspaceSlug]/(projects)/release-control/(detail)/sessions/[sessionId]/page.tsx"
-          ),
-        ]),
-
         // Notifications
         layout("./(all)/[workspaceSlug]/(projects)/notifications/layout.tsx", [
           route(":workspaceSlug/notifications", "./(all)/[workspaceSlug]/(projects)/notifications/page.tsx"),
@@ -217,25 +191,6 @@ export const coreRoutes: RouteConfigEntry[] = [
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(list)/page.tsx"
             ),
           ]),
-
-          // Testing Control (TCB board)
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(list)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/testing-control",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(list)/page.tsx"
-            ),
-          ]),
-
-          // Testing Control Session Detail
-          layout(
-            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(detail)/layout.tsx",
-            [
-              route(
-                ":workspaceSlug/projects/:projectId/testing-control/sessions/:sessionId",
-                "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/testing-control/(detail)/sessions/[sessionId]/page.tsx"
-              ),
-            ]
-          ),
 
           // War Room Detail
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/war-rooms/(detail)/layout.tsx", [
