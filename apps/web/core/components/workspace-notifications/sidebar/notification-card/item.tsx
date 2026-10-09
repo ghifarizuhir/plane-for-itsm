@@ -7,17 +7,10 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
-import { CalendarOutline, CheckDoneOutline, ClockOutline } from "@makeplane/propel/icons";
+import { CalendarOutline, ClockOutline } from "@makeplane/propel/icons";
 // plane imports
 import { Avatar } from "@makeplane/propel/components/avatar";
-import {
-  getReleaseControlLink,
-  getReviewSessionLink,
-  getTestingControlLink,
-  getWarRoomLink,
-  REVIEW_BOARD_LABEL_KEYS,
-  REVIEW_OUTCOME_CONFIG,
-} from "@plane/constants";
+import { getWarRoomLink } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Badge } from "@plane/propel/badge";
 import { Row } from "@plane/ui";
@@ -29,7 +22,6 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // lib
 import { isScheduleRunNotification, scheduleRunNotificationText, scheduleStatusLabel } from "@/lib/ai-schedule";
-import { isReviewRequestNotification, isReviewSessionNotification } from "@/lib/review-notification";
 import { isWarRoomNotification } from "@/lib/war-room-notification";
 // local imports
 import { NotificationContent } from "./content";
@@ -60,12 +52,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const workspace = getWorkspaceBySlug(workspaceSlug);
   const scheduleRun = isScheduleRunNotification(notification?.data) ? notification?.data?.ai_schedule : undefined;
   const warRoom = isWarRoomNotification(notification?.data) ? notification?.data?.war_room : undefined;
-  const reviewRequest = isReviewRequestNotification(notification?.data)
-    ? notification?.data?.review_request
-    : undefined;
-  const reviewSession = isReviewSessionNotification(notification?.data)
-    ? notification?.data?.review_session
-    : undefined;
 
   const notificationField = notification?.data?.issue_activity?.field || undefined;
   const notificationTriggeredBy = notification.triggered_by_details || undefined;
@@ -93,21 +79,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
     // schedule runs render their output in the right pane; nothing else to do
     if (scheduleRun) return;
 
-    // review notifications deep-link into the session (or the board)
-    if (reviewRequest || reviewSession) {
-      const boardType = reviewRequest?.board_type ?? reviewSession?.board_type ?? "tcb";
-      const boardProjectId = reviewRequest?.project_id ?? reviewSession?.project_id ?? undefined;
-      const sessionId = reviewRequest?.session_id ?? reviewSession?.id;
-      router.push(
-        sessionId
-          ? getReviewSessionLink(workspaceSlug, sessionId, boardType, boardProjectId ?? undefined)
-          : boardType === "rcb"
-            ? getReleaseControlLink(workspaceSlug)
-            : getTestingControlLink(workspaceSlug, boardProjectId ?? "")
-      );
-      return;
-    }
-
     setPeekIssue(undefined);
     if (projectId && issueId && notification?.is_inbox_issue === false && !getIsIssuePeeked(issueId)) {
       setPeekIssue({ workspaceSlug, projectId, issueId });
@@ -115,7 +86,7 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   };
 
   if (!workspaceSlug || !notificationId || !notification?.id || !workspace?.id) return <></>;
-  if (!scheduleRun && !warRoom && !reviewRequest && !reviewSession && (!notificationField || !projectId)) return <></>;
+  if (!scheduleRun && !warRoom && (!notificationField || !projectId)) return <></>;
 
   return (
     <Row
@@ -144,8 +115,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
             />
           ) : scheduleRun ? (
             <CalendarOutline className="h-5 w-5 text-tertiary" />
-          ) : reviewRequest || reviewSession ? (
-            <CheckDoneOutline className="h-5 w-5 text-tertiary" />
           ) : null}
         </div>
 
@@ -164,22 +133,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
                         t("war_room.activity.actor_unknown"),
                     room: warRoom.name,
                   })}
-                </span>
-              ) : reviewSession ? (
-                <span className="font-medium text-primary">
-                  {t("review.notification.session_scheduled", { session: reviewSession.title })}
-                </span>
-              ) : reviewRequest ? (
-                <span className="font-medium text-primary">
-                  {reviewRequest.outcome
-                    ? t("review.notification.decided", {
-                        subject: reviewRequest.subject_label,
-                        outcome: t(REVIEW_OUTCOME_CONFIG[reviewRequest.outcome].label_key),
-                      })
-                    : t("review.notification.agenda_added", {
-                        subject: reviewRequest.subject_label,
-                        session: reviewRequest.session_title ?? "",
-                      })}
                 </span>
               ) : (
                 <NotificationContent
@@ -215,8 +168,6 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
                 </span>
               ) : warRoom ? (
                 <span>WR-{warRoom.sequence_id}</span>
-              ) : reviewRequest || reviewSession ? (
-                <span>{t(REVIEW_BOARD_LABEL_KEYS[(reviewRequest ?? reviewSession)!.board_type])}</span>
               ) : (
                 <>
                   {notification?.data?.issue?.identifier}-{notification?.data?.issue?.sequence_id}&nbsp;
