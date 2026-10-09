@@ -4,8 +4,9 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 // plane constants
 import { ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
@@ -15,7 +16,9 @@ import { Spinner } from "@plane/ui";
 import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/project-level";
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
+import { useAppRouter } from "@/hooks/use-app-router";
 import { useIssues } from "@/hooks/store/use-issues";
+import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
 import { useMobileViewport } from "@/hooks/use-mobile-viewport";
 // local imports
@@ -65,6 +68,36 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
     },
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
+
+  // Preset nav "Incident bridge": `/issues?war_room=on|off` meng-apply rich
+  // filter sekali, lalu param di-strip supaya URL bersih dan bisa dibagikan.
+  const searchParams = useSearchParams();
+  const router = useAppRouter();
+  const { updateFilterExpressionFromConditions } = useWorkItemFilters();
+  const warRoomPreset = searchParams.get("war_room");
+  const presetApplied = useRef(false);
+
+  useEffect(() => {
+    if (presetApplied.current || !workspaceSlug || !projectId || !workItemFilters) return;
+    if (warRoomPreset !== "on" && warRoomPreset !== "off") return;
+    presetApplied.current = true;
+    void updateFilterExpressionFromConditions(
+      EIssuesStoreType.PROJECT,
+      projectId,
+      [{ property: "war_room", operator: "in", value: [warRoomPreset] }],
+      issuesFilter?.updateFilterExpression.bind(issuesFilter, workspaceSlug, projectId)
+    ).finally(() => {
+      router.replace(`/${workspaceSlug}/projects/${projectId}/issues`);
+    });
+  }, [
+    warRoomPreset,
+    workItemFilters,
+    workspaceSlug,
+    projectId,
+    issuesFilter,
+    updateFilterExpressionFromConditions,
+    router,
+  ]);
 
   if (!workspaceSlug || !projectId || !workItemFilters) return <></>;
   return (
