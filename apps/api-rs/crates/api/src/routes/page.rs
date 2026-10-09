@@ -259,6 +259,20 @@ pub fn parse_desc_binary_value(v: Option<&Value>) -> Result<Option<Vec<u8>>, Str
     }
 }
 
+/// Payload for the live-server `apply_document` admin command. The live server
+/// replaces the in-memory Yjs document content with this HTML + title so
+/// connected editors receive the AI edit as CRDT operations.
+pub fn build_apply_document_payload(page_id: uuid::Uuid, description_html: &str, name: &str) -> Value {
+    json!({
+        "command": "apply_document",
+        "docId": page_id.to_string(),
+        "descriptionHtml": description_html,
+        "name": name,
+        "originServer": "api-rs",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    })
+}
+
 /// Allowlist HTML sanitizer mirroring `nh3.clean` as configured by Django
 /// (`plane/utils/content_validator.py:72-160,211-243`):
 /// (a) tags outside `ALLOWED_TAGS` are dropped with inner text kept —
@@ -2409,6 +2423,53 @@ pub async fn desc_patch(
 }
 
 // ============================================================================
+// E4h — collab-apply: push an external description write into the live
+// collaborative document (AI article edits).
+// ============================================================================
+
+/// POST `/pages/:page_id/collab-apply/` — publishes an `apply_document`
+/// admin command on Redis (`hocuspocus:admin`) so the live server can update
+/// the in-memory Yjs document. No-op on the live side when the document is
+/// not loaded; the REST description write remains the source of truth.
+pub async fn collab_apply(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pid, page_id)): Path<(String, uuid::Uuid, uuid::Uuid)>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !project_in_workspace(&st.pool, pid, &slug).await? {
+        return Ok(missing());
+    }
+    if require_page_perm(&st.pool, auth.0, &slug, pid, page_id, "PATCH")
+        .await?
+        .is_err()
+    {
+        return Ok(deny_detail());
+    }
+    let description_html = body
+        .get("description_html")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let name = body.get("name").and_then(Value::as_str).unwrap_or("").trim().to_string();
+    if description_html.is_empty() || name.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "description_html and name are required"})),
+        ));
+    }
+    let mut conn = st.redis_client().await?;
+    let payload = build_apply_document_payload(page_id, &description_html, &name);
+    let _: i64 = redis::cmd("PUBLISH")
+        .arg("hocuspocus:admin")
+        .arg(payload.to_string())
+        .query_async(&mut conn)
+        .await?;
+    Ok((StatusCode::OK, Json(json!({"message": "ok"}))))
+}
+
+// ============================================================================
 // E4g — duplicate.
 // ============================================================================
 
@@ -3061,6 +3122,18 @@ mod page_e4_tests {
         );
         assert_eq!(parse_desc_binary_value(None).unwrap(), None);
         assert_eq!(parse_desc_binary_value(Some(&Value::Null)).unwrap(), None);
+    }
+
+    #[test]
+    fn apply_document_payload_shape() {
+        let page_id = uuid::Uuid::parse_str("78706c41-3994-4ef3-bf2e-4bdf92e10af8").unwrap();
+        let payload = build_apply_document_payload(page_id, "<p>Hi</p>", "Runbook");
+        assert_eq!(payload["command"], "apply_document");
+        assert_eq!(payload["docId"], "78706c41-3994-4ef3-bf2e-4bdf92e10af8");
+        assert_eq!(payload["descriptionHtml"], "<p>Hi</p>");
+        assert_eq!(payload["name"], "Runbook");
+        assert_eq!(payload["originServer"], "api-rs");
+        assert!(payload["timestamp"].as_str().unwrap().contains('T'));
     }
 
     #[test]

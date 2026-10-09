@@ -1207,6 +1207,10 @@ async fn main() {
             get(routes::page::desc_get).patch(routes::page::desc_patch),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/pages/:page_id/collab-apply/",
+            post(routes::page::collab_apply),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/pages/:page_id/versions/",
             get(routes::page::versions_list),
         )
