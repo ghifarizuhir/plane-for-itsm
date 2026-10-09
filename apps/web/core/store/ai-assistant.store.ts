@@ -541,7 +541,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         await this.pagesService
           .applyCollabDocument(slug, payload.projectId, payload.pageId, {
             description_html: mergedHtml,
-            name: page?.name ?? "",
+            name: effectiveTitle ?? "",
           })
           .catch(() => undefined);
       }

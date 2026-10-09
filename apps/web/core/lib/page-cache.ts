@@ -7,8 +7,9 @@
 const REV_KEY_PREFIX = "page-sync-rev:";
 
 /**
- * Deletes the IndexedDB cache of a page document. Best-effort: resolves on
- * success, error, or blocked (another tab still holds the database open).
+ * Deletes the IndexedDB cache of a page document. Best-effort: never rejects.
+ * Returns true only when the database was actually deleted (false when
+ * indexedDB is missing, the delete errors, or another tab blocks it).
  */
 export const clearPageCache = async (pageId: string): Promise<boolean> => {
   if (typeof indexedDB === "undefined") return false;

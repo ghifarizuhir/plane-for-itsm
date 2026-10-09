@@ -1988,6 +1988,10 @@ describe("article proposals", () => {
     );
     expect(formats.titleHTML).toContain("New Runbook");
     expect(formats.titleHTML).not.toContain("Old Runbook");
+    expect(services.pages.applyCollabDocument).toHaveBeenCalledWith("acme", "p1", "pg1", {
+      description_html: expect.stringContaining("Step 3"),
+      name: "New Runbook",
+    });
   });
 
   it("publishes the merged content to the live collaborative document", async () => {
