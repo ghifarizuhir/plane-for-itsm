@@ -39,8 +39,6 @@ export * from "./navigation-preferences";
 export * from "./page";
 export * from "./pragmatic";
 export * from "./project";
-export * from "./release";
-export * from "./review";
 export * from "./publish";
 export * from "./reaction";
 export * from "./intake";
