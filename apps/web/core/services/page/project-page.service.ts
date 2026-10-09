@@ -174,6 +174,19 @@ export class ProjectPageService extends APIService {
       });
   }
 
+  async applyCollabDocument(
+    workspaceSlug: string,
+    projectId: string,
+    pageId: string,
+    data: { description_html: string; name: string }
+  ): Promise<void> {
+    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/collab-apply/`, data)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async duplicate(workspaceSlug: string, projectId: string, pageId: string): Promise<TPage> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/duplicate/`)
       .then((response) => response?.data)

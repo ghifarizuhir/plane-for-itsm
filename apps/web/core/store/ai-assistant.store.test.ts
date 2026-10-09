@@ -121,8 +121,9 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
   pages: {
     create: vi.fn(async (_slug: string, projectId: string) => ({ id: "pg1", project_id: projectId })),
     update: vi.fn(async () => ({ id: "pg1" })),
-    fetchById: vi.fn(async () => ({ id: "pg1", description_html: "<p>Step 1</p>" })),
+    fetchById: vi.fn(async () => ({ id: "pg1", name: "Runbook", description_html: "<p>Step 1</p>" })),
     updateDescription: vi.fn(async () => ({ message: "Updated successfully" })),
+    applyCollabDocument: vi.fn(async () => undefined),
     ...overrides.pages,
   },
   inbox: {
@@ -1987,6 +1988,49 @@ describe("article proposals", () => {
     );
     expect(formats.titleHTML).toContain("New Runbook");
     expect(formats.titleHTML).not.toContain("Old Runbook");
+  });
+
+  it("publishes the merged content to the live collaborative document", async () => {
+    const services = makeServices({
+      pages: {
+        fetchById: vi.fn(async () => ({ id: "pg1", name: "Runbook", description_html: "<p>Step 1</p>" })),
+      },
+    });
+    const { store } = await openAgent(services, updateArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k13", {
+      kind: "update_article",
+      projectId: "p1",
+      pageId: "pg1",
+      action: "append",
+      descriptionHtml: "<p>Step 3</p>",
+    });
+    expect(services.pages.applyCollabDocument).toHaveBeenCalledWith("acme", "p1", "pg1", {
+      description_html: expect.stringContaining("Step 3"),
+      name: "Runbook",
+    });
+  });
+
+  it("still applies the decision when the collab apply call fails", async () => {
+    const services = makeServices({
+      pages: {
+        fetchById: vi.fn(async () => ({ id: "pg1", name: "Runbook", description_html: "<p>Step 1</p>" })),
+        applyCollabDocument: vi.fn(async () => {
+          throw new Error("live server down");
+        }),
+      },
+    });
+    const { store } = await openAgent(services, updateArticleMetadata);
+    await store.confirmProposal("srv-assistant", "k13", {
+      kind: "update_article",
+      projectId: "p1",
+      pageId: "pg1",
+      action: "append",
+      descriptionHtml: "<p>Step 3</p>",
+    });
+    expect(store.messages[0].proposalDecisions?.k13).toEqual({
+      kind: "update_article",
+      decision: "applied",
+    });
   });
 });
 

@@ -43,7 +43,10 @@ type TModulesService = Pick<
   "addIssuesToModule" | "removeIssuesFromModuleBulk" | "createModule" | "patchModule"
 >;
 type TCyclesService = Pick<CycleService, "createCycle" | "patchCycle">;
-type TPagesService = Pick<ProjectPageService, "create" | "update" | "fetchById" | "updateDescription">;
+type TPagesService = Pick<
+  ProjectPageService,
+  "create" | "update" | "fetchById" | "updateDescription" | "applyCollabDocument"
+>;
 type TInboxService = Pick<InboxIssueService, "applyTriageSuggestion" | "update">;
 
 export interface IAIAssistantStore {
@@ -535,6 +538,12 @@ export class AIAssistantStore implements IAIAssistantStore {
           title: effectiveTitle,
         });
         await this.pagesService.updateDescription(slug, payload.projectId, payload.pageId, document);
+        await this.pagesService
+          .applyCollabDocument(slug, payload.projectId, payload.pageId, {
+            description_html: mergedHtml,
+            name: page?.name ?? "",
+          })
+          .catch(() => undefined);
       }
     } else if (payload.kind === "apply_triage_suggestion") {
       await this.inboxService.applyTriageSuggestion(slug, payload.projectId, payload.issueId, payload.fields);
