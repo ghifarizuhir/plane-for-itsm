@@ -17,6 +17,7 @@ export * from "./cycle";
 export * from "./dashboard";
 export * from "./de-dupe";
 export * from "./description_version";
+export * from "./document-export";
 export * from "./editor";
 export * from "./enums";
 export * from "./epics";

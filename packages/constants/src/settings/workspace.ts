@@ -65,6 +65,13 @@ export const WORKSPACE_SETTINGS: Record<TWorkspaceSettingsTabs, TWorkspaceSettin
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/work-item-types`),
   },
+  document_export: {
+    key: "document_export",
+    i18n_label: "workspace_settings.settings.document_export.title",
+    href: `/settings/document-export`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/document-export/`,
+  },
 };
 
 export const WORKSPACE_SETTINGS_ACCESS = Object.fromEntries(
@@ -76,6 +83,7 @@ export const GROUPED_WORKSPACE_SETTINGS: Record<WORKSPACE_SETTINGS_CATEGORY, TWo
     WORKSPACE_SETTINGS["general"],
     WORKSPACE_SETTINGS["members"],
     WORKSPACE_SETTINGS["export"],
+    WORKSPACE_SETTINGS["document_export"],
   ],
   [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: [WORKSPACE_SETTINGS["work_item_types"]],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
