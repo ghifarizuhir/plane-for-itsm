@@ -679,6 +679,11 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/work-item-types/:type_id/",
             delete(routes::v1::work_item_type::unlink_type),
         )
+        // Workspace document export (DOCX) settings.
+        .route(
+            "/api/workspaces/:slug/document-export-settings/",
+            get(routes::document_export::get_settings).patch(routes::document_export::update_settings),
+        )
         // Services (ITSM catalog + dependency DAG + work-item links).
         // Session auth; project-scoped. GET = any active member (incl.
         // guest), writes = project ADMIN/MEMBER. Bodies/error strings follow
