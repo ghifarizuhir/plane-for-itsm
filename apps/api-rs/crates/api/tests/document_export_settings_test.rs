@@ -233,3 +233,74 @@ async fn patch_upserts_and_validates() {
     assert_eq!(count, 1);
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn mark_uploaded_binds_header_logo_to_settings() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+
+    let old_asset: Uuid = sqlx::query_scalar(
+        "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, created_by_id, \
+         entity_type, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
+         VALUES (gen_random_uuid(), '{}', 'key-old', 10, $1, $2, 'DOC_HEADER_LOGO', true, false, false, \
+         '{}', now(), now()) RETURNING id",
+    )
+    .bind(scratch.workspace_id)
+    .bind(scratch.admin_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_document_settings (id, workspace_id, header_logo_mode, \
+         header_logo_asset_id, header_text_lines, footer_text_lines, show_page_numbers, \
+         show_generated_by, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, 'custom', $2, '[]'::jsonb, '[]'::jsonb, true, true, now(), now())",
+    )
+    .bind(scratch.workspace_id)
+    .bind(old_asset)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let new_asset: Uuid = sqlx::query_scalar(
+        "INSERT INTO file_assets (id, attributes, asset, size, workspace_id, created_by_id, \
+         entity_type, is_uploaded, is_deleted, is_archived, storage_metadata, created_at, updated_at) \
+         VALUES (gen_random_uuid(), '{}', 'key-new', 10, $1, $2, 'DOC_HEADER_LOGO', false, false, false, \
+         '{}', now(), now()) RETURNING id",
+    )
+    .bind(scratch.workspace_id)
+    .bind(scratch.admin_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let (status, _) = api::routes::asset::mark_uploaded(
+        State(st.clone()),
+        AuthUser(scratch.admin_id),
+        Path((scratch.slug.clone(), new_asset)),
+        Json(api::routes::asset::PatchAsset { attributes: None }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (asset_id, mode): (Option<Uuid>, String) = sqlx::query_as(
+        "SELECT header_logo_asset_id, header_logo_mode FROM workspace_document_settings \
+         WHERE workspace_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(scratch.workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(asset_id, Some(new_asset));
+    assert_eq!(mode, "custom");
+
+    let old_deleted: bool = sqlx::query_scalar("SELECT is_deleted FROM file_assets WHERE id = $1")
+        .bind(old_asset)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(old_deleted);
+    scratch.purge(&pool).await;
+}

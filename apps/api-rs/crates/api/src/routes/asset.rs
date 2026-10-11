@@ -32,7 +32,7 @@ use crate::{
 pub const FILE_SIZE_LIMIT: i64 = 5_242_880;
 
 /// `plane/db/models/asset.py:36-46` (`EntityTypeContext.values`).
-pub const ENTITY_TYPES: [&str; 10] = [
+pub const ENTITY_TYPES: [&str; 11] = [
     "ISSUE_ATTACHMENT",
     "ISSUE_DESCRIPTION",
     "COMMENT_DESCRIPTION",
@@ -43,6 +43,7 @@ pub const ENTITY_TYPES: [&str; 10] = [
     "PROJECT_COVER",
     "DRAFT_ISSUE_ATTACHMENT",
     "DRAFT_ISSUE_DESCRIPTION",
+    "DOC_HEADER_LOGO",
 ];
 
 /// Images-only allowlist for user/ws/project presigns
@@ -698,7 +699,7 @@ fn asset_url_for(
     issue_id: Option<uuid::Uuid>,
 ) -> Value {
     match entity_type {
-        Some("WORKSPACE_LOGO" | "USER_AVATAR" | "USER_COVER" | "PROJECT_COVER") => {
+        Some("WORKSPACE_LOGO" | "USER_AVATAR" | "USER_COVER" | "PROJECT_COVER" | "DOC_HEADER_LOGO") => {
             json!(format!("/api/assets/v2/static/{id}/"))
         }
         Some("ISSUE_ATTACHMENT") => match (ws_slug, project_id, issue_id) {
@@ -873,7 +874,9 @@ pub async fn ws_presign(
             Json(json!({"error": INVALID_ENTITY_MSG, "status": false})),
         ));
     }
-    if entity_type == "WORKSPACE_LOGO" && !gate_ws_roles(&st.pool, auth.0, &slug, &[20]).await? {
+    if matches!(entity_type, "WORKSPACE_LOGO" | "DOC_HEADER_LOGO")
+        && !gate_ws_roles(&st.pool, auth.0, &slug, &[20]).await?
+    {
         return Ok((
             StatusCode::FORBIDDEN,
             Json(json!({"error": WS_LOGO_ADMIN_MSG})),
@@ -1358,6 +1361,50 @@ pub async fn mark_uploaded(
                     }
                     sqlx::query("UPDATE projects SET cover_image = '', cover_image_asset_id = $1 WHERE id = $2")
                         .bind(asset_id).bind(pid).execute(&st.pool).await?;
+                }
+            }
+            Some("DOC_HEADER_LOGO") => {
+                if let Some(wsid) = r.workspace_id {
+                    let existing: Option<(uuid::Uuid, Option<uuid::Uuid>)> = sqlx::query_as(
+                        "SELECT id, header_logo_asset_id FROM workspace_document_settings \
+                         WHERE workspace_id = $1 AND deleted_at IS NULL",
+                    )
+                    .bind(wsid)
+                    .fetch_optional(&st.pool)
+                    .await?;
+                    match existing {
+                        Some((settings_id, prev)) => {
+                            if let Some(p) = prev.filter(|p| *p != asset_id) {
+                                sqlx::query("UPDATE file_assets SET is_deleted = true, deleted_at = now() WHERE id = $1")
+                                    .bind(p).execute(&st.pool).await?;
+                            }
+                            sqlx::query(
+                                "UPDATE workspace_document_settings SET header_logo_mode = 'custom', \
+                                 header_logo_asset_id = $1, updated_by_id = $2, updated_at = now() \
+                                 WHERE id = $3",
+                            )
+                            .bind(asset_id)
+                            .bind(auth.0)
+                            .bind(settings_id)
+                            .execute(&st.pool)
+                            .await?;
+                        }
+                        None => {
+                            sqlx::query(
+                                "INSERT INTO workspace_document_settings (id, workspace_id, \
+                                 header_logo_mode, header_logo_asset_id, header_text_lines, \
+                                 footer_text_lines, show_page_numbers, show_generated_by, \
+                                 created_by_id, updated_by_id, created_at, updated_at) \
+                                 VALUES (gen_random_uuid(), $1, 'custom', $2, '[]'::jsonb, '[]'::jsonb, \
+                                 true, true, $3, $3, now(), now())",
+                            )
+                            .bind(wsid)
+                            .bind(asset_id)
+                            .bind(auth.0)
+                            .execute(&st.pool)
+                            .await?;
+                        }
+                    }
                 }
             }
             _ => {}
