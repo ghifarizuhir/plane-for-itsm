@@ -1077,16 +1077,21 @@ fn summary_sql() -> &'static str {
 
 /// `PageViewSet.list` SQL (`base.py:82-142,306-321`). Binds: `$1=slug`,
 /// `$2=pid`, `$3=user`, `$4=user` (the `PAGE_ROW_COLS` fav subquery),
-/// `$5=owned_only bool`, `$6=search text` — each `$N` binds the type its
-/// position is compared against (PG 42883 otherwise, plus a dead search).
-fn list_sql(order_expr: &str, desc: bool) -> String {
+/// `$5=owned_only bool`, `$6=search text`, `$7=parent id or NULL` — each `$N`
+/// binds the type its position is compared against (PG 42883 otherwise, plus
+/// a dead search).
+fn list_sql(order_expr: &str, desc: bool, parent: Option<uuid::Uuid>) -> String {
     let dir = if desc { "DESC" } else { "ASC" };
+    let parent_clause = match parent {
+        Some(_) => "AND p.parent_id = $7",
+        None => "AND p.parent_id IS NULL",
+    };
     format!(
         "SELECT {PAGE_ROW_COLS} FROM pages p \
          JOIN workspaces w ON w.id = p.workspace_id \
          JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $2 \
          {ARCHIVED_PROJECT_SCOPE} \
-         WHERE w.slug = $1 AND p.deleted_at IS NULL AND p.parent_id IS NULL \
+         WHERE w.slug = $1 AND p.deleted_at IS NULL {parent_clause} \
          AND (p.owned_by_id = $3 OR (p.access = 0 AND $5 = false)) \
          AND ($6 = '' OR p.name ILIKE '%' || $6 || '%') \
          ORDER BY is_favorite DESC, {order_expr} {dir}, p.id ASC"
@@ -1218,6 +1223,10 @@ pub struct PageListQuery {
     pub search: Option<String>,
     #[serde(default)]
     pub order_by: Option<String>,
+    /// Optional parent page id: when set, list direct children instead of
+    /// top-level pages (used by the DOCX exporter for sub-page sections).
+    #[serde(default)]
+    pub parent: Option<uuid::Uuid>,
 }
 
 /// Mirrors `PageViewSet.list` + `get_queryset`
@@ -1245,8 +1254,9 @@ pub async fn list(
     let (expr, desc) = sanitize_page_order_by(q.order_by.as_deref().unwrap_or("-created_at"));
     let search = q.search.as_deref().unwrap_or("").to_string();
     // `filter_queryset` SearchFilter: empty search matches everything.
-    // Bind order is slug, pid, user, user(fav $4), owned_only($5), search($6).
-    let sql = list_sql(expr, desc);
+    // Bind order is slug, pid, user, user(fav $4), owned_only($5), search($6),
+    // parent($7, NULL when top-level listing).
+    let sql = list_sql(expr, desc, q.parent);
     let rows: Vec<PageRow> = sqlx::query_as(&sql)
         .bind(&slug)
         .bind(pid)
@@ -1254,6 +1264,7 @@ pub async fn list(
         .bind(auth.0)
         .bind(owned_only)
         .bind(search)
+        .bind(q.parent)
         .fetch_all(&st.pool)
         .await?;
     Ok((
