@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import { orderBy } from "lodash-es";
 import type { TIssueActivity } from "@plane/types";
 
 export const MILESTONE_FIELDS = ["state", "priority", "assignees", "target_date", "start_date", "archived_at"] as const;
@@ -52,7 +53,7 @@ export function milestoneRows(
   labels: TMilestoneLabels
 ): TMilestoneRow[] {
   const rows: TMilestoneRow[] = [];
-  const sorted = [...activities].toSorted((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const sorted = orderBy(activities, (activity) => new Date(activity.created_at).getTime(), "asc");
 
   for (const activity of sorted) {
     const actor = activity.actor_detail?.display_name ?? "";
