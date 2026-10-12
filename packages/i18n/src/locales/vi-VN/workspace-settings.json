@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Xuất tài liệu",
+        "heading": "Xuất tài liệu",
+        "description": "Cấu hình tiêu đề thư được dùng khi xuất các mục công việc và bài viết wiki dưới dạng tài liệu DOCX.",
+        "logo": "Logo tiêu đề",
+        "logo_mode_none": "Không có logo",
+        "logo_mode_workspace": "Dùng logo của không gian làm việc",
+        "logo_mode_custom": "Logo tùy chỉnh",
+        "upload_logo": "Tải logo lên",
+        "header_lines": "Dòng văn bản tiêu đề",
+        "footer_lines": "Dòng văn bản chân trang",
+        "line_placeholder": "Văn bản hoặc trình giữ chỗ",
+        "add_line": "Thêm dòng",
+        "remove_line": "Xóa",
+        "align_left": "Trái",
+        "align_center": "Giữa",
+        "align_right": "Phải",
+        "show_page_numbers": "Hiển thị số trang",
+        "show_generated_by": "Hiển thị dòng thông tin tạo",
+        "placeholders": "Trình giữ chỗ khả dụng: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Tối đa 5 dòng, mỗi dòng 200 ký tự.",
+        "save": "Lưu thay đổi",
+        "saved": "Đã lưu cài đặt xuất tài liệu.",
+        "error": "Không thể lưu cài đặt xuất tài liệu. Vui lòng thử lại."
+      },
       "webhooks": {
         "heading": "Webhook",
         "description": "Tự động hóa thông báo đến các dịch vụ bên ngoài khi các sự kiện dự án xảy ra.",

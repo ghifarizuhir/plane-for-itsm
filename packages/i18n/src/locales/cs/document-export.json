@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Exportovat jako dokument",
+    "modal": {
+      "title": "Exportovat jako dokument",
+      "description": "Pracovní položka bude stažena jako soubor DOCX s použitím nastavení dokumentů pracovního prostoru.",
+      "include_history": "Zahrnout přílohu s historií",
+      "export": "Exportovat",
+      "exporting": "Exportuje se",
+      "success": "Dokument byl úspěšně exportován.",
+      "error": "Dokument se nepodařilo exportovat. Zkuste to prosím znovu."
+    },
+    "doc": {
+      "properties": "Vlastnosti",
+      "description": "Popis",
+      "linked_work_items": "Propojené pracovní položky",
+      "history": "Historie (milníky)",
+      "sub_pages": "Podstránky",
+      "versions": "Verze",
+      "generated_by": "Vygenerováno uživatelem {user} dne {date}",
+      "no_value": "—",
+      "relation_blocking": "Blokuje",
+      "relation_blocked_by": "Blokováno",
+      "relation_relates_to": "Související s",
+      "relation_duplicate": "Duplikát",
+      "event_created": "Vytvořeno",
+      "event_state": "Stav",
+      "event_priority": "Priorita",
+      "event_assignees": "Řešitel",
+      "event_target_date": "Cílové datum",
+      "event_start_date": "Datum zahájení",
+      "event_archived_at": "Archivováno",
+      "column_when": "Kdy",
+      "column_actor": "Uživatel",
+      "column_event": "Událost",
+      "column_change": "Změna"
+    }
+  }
+}

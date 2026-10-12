@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Eksportuj jako dokument",
+    "modal": {
+      "title": "Eksportuj jako dokument",
+      "description": "Element pracy zostanie pobrany jako plik DOCX przy użyciu ustawień dokumentów obszaru roboczego.",
+      "include_history": "Dołącz załącznik z historią",
+      "export": "Eksportuj",
+      "exporting": "Eksportowanie",
+      "success": "Dokument wyeksportowano pomyślnie.",
+      "error": "Nie można wyeksportować dokumentu. Spróbuj ponownie."
+    },
+    "doc": {
+      "properties": "Właściwości",
+      "description": "Opis",
+      "linked_work_items": "Powiązane elementy pracy",
+      "history": "Historia (kamienie milowe)",
+      "sub_pages": "Podstrony",
+      "versions": "Wersje",
+      "generated_by": "Wygenerowano przez {user} dnia {date}",
+      "no_value": "—",
+      "relation_blocking": "Blokuje",
+      "relation_blocked_by": "Zablokowane przez",
+      "relation_relates_to": "Powiązane z",
+      "relation_duplicate": "Duplikat",
+      "event_created": "Utworzono",
+      "event_state": "Stan",
+      "event_priority": "Priorytet",
+      "event_assignees": "Wykonawcy",
+      "event_target_date": "Termin",
+      "event_start_date": "Data rozpoczęcia",
+      "event_archived_at": "Zarchiwizowano",
+      "column_when": "Czas",
+      "column_actor": "Użytkownik",
+      "column_event": "Zdarzenie",
+      "column_change": "Zmiana"
+    }
+  }
+}

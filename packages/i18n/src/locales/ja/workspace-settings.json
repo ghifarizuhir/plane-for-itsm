@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "ドキュメントのエクスポート",
+        "heading": "ドキュメントのエクスポート",
+        "description": "作業項目やWiki記事をDOCXドキュメントとしてエクスポートする際に使用するレターヘッドを設定します。",
+        "logo": "ヘッダーロゴ",
+        "logo_mode_none": "ロゴなし",
+        "logo_mode_workspace": "ワークスペースのロゴを使用",
+        "logo_mode_custom": "カスタムロゴ",
+        "upload_logo": "ロゴをアップロード",
+        "header_lines": "ヘッダーのテキスト行",
+        "footer_lines": "フッターのテキスト行",
+        "line_placeholder": "テキストまたはプレースホルダー",
+        "add_line": "行を追加",
+        "remove_line": "削除",
+        "align_left": "左",
+        "align_center": "中央",
+        "align_right": "右",
+        "show_page_numbers": "ページ番号を表示",
+        "show_generated_by": "生成者情報を表示",
+        "placeholders": "利用可能なプレースホルダー：{workspace_name}、{document_title}、{document_id}、{export_date}、{exported_by}",
+        "limit_hint": "最大5行、各200文字まで。",
+        "save": "変更を保存",
+        "saved": "ドキュメントのエクスポート設定を保存しました。",
+        "error": "ドキュメントのエクスポート設定を保存できませんでした。もう一度お試しください。"
+      },
       "webhooks": {
         "heading": "Webhook",
         "description": "プロジェクトイベントが発生したときに、外部サービスへの通知を自動化します。",

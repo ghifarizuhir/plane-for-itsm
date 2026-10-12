@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "ドキュメントとしてエクスポート",
+    "modal": {
+      "title": "ドキュメントとしてエクスポート",
+      "description": "作業項目は、ワークスペースのドキュメント設定を使用してDOCXファイルとしてダウンロードされます。",
+      "include_history": "履歴の付録を含める",
+      "export": "エクスポート",
+      "exporting": "エクスポート中",
+      "success": "ドキュメントをエクスポートしました。",
+      "error": "ドキュメントをエクスポートできませんでした。もう一度お試しください。"
+    },
+    "doc": {
+      "properties": "プロパティ",
+      "description": "説明",
+      "linked_work_items": "リンクされた作業項目",
+      "history": "履歴（マイルストーン）",
+      "sub_pages": "サブページ",
+      "versions": "バージョン",
+      "generated_by": "{user} が {date} に生成しました",
+      "no_value": "—",
+      "relation_blocking": "ブロック",
+      "relation_blocked_by": "ブロック元",
+      "relation_relates_to": "関連",
+      "relation_duplicate": "重複元",
+      "event_created": "作成",
+      "event_state": "ステータス",
+      "event_priority": "優先度",
+      "event_assignees": "担当者",
+      "event_target_date": "期限",
+      "event_start_date": "開始日",
+      "event_archived_at": "アーカイブ済み",
+      "column_when": "日時",
+      "column_actor": "ユーザー",
+      "column_event": "イベント",
+      "column_change": "変更"
+    }
+  }
+}

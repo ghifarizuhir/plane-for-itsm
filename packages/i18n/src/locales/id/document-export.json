@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Ekspor sebagai dokumen",
+    "modal": {
+      "title": "Ekspor sebagai dokumen",
+      "description": "Item Kerja akan diunduh sebagai berkas DOCX menggunakan pengaturan dokumen ruang kerja.",
+      "include_history": "Sertakan lampiran riwayat",
+      "export": "Ekspor",
+      "exporting": "Mengekspor",
+      "success": "Dokumen berhasil diekspor.",
+      "error": "Dokumen tidak dapat diekspor. Silakan coba lagi."
+    },
+    "doc": {
+      "properties": "Properti",
+      "description": "Deskripsi",
+      "linked_work_items": "Item Kerja terkait",
+      "history": "Riwayat (tonggak)",
+      "sub_pages": "Subhalaman",
+      "versions": "Versi",
+      "generated_by": "Dibuat oleh {user} pada {date}",
+      "no_value": "—",
+      "relation_blocking": "Memblokir",
+      "relation_blocked_by": "Diblokir oleh",
+      "relation_relates_to": "Terkait dengan",
+      "relation_duplicate": "Duplikat dari",
+      "event_created": "Dibuat",
+      "event_state": "Status",
+      "event_priority": "Prioritas",
+      "event_assignees": "Penerima tugas",
+      "event_target_date": "Tanggal target",
+      "event_start_date": "Tanggal mulai",
+      "event_archived_at": "Diarsipkan",
+      "column_when": "Waktu",
+      "column_actor": "Pengguna",
+      "column_event": "Peristiwa",
+      "column_change": "Perubahan"
+    }
+  }
+}

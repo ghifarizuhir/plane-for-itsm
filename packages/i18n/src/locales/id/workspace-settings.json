@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Ekspor dokumen",
+        "heading": "Ekspor dokumen",
+        "description": "Konfigurasikan kop surat yang digunakan saat Item Kerja dan artikel wiki diekspor sebagai dokumen DOCX.",
+        "logo": "Logo kepala",
+        "logo_mode_none": "Tanpa logo",
+        "logo_mode_workspace": "Gunakan logo ruang kerja",
+        "logo_mode_custom": "Logo khusus",
+        "upload_logo": "Unggah logo",
+        "header_lines": "Baris teks kepala",
+        "footer_lines": "Baris teks kaki",
+        "line_placeholder": "Teks atau penampung",
+        "add_line": "Tambah baris",
+        "remove_line": "Hapus",
+        "align_left": "Kiri",
+        "align_center": "Tengah",
+        "align_right": "Kanan",
+        "show_page_numbers": "Tampilkan nomor halaman",
+        "show_generated_by": "Tampilkan baris pembuat",
+        "placeholders": "Penampung yang tersedia: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Maksimal 5 baris, masing-masing 200 karakter.",
+        "save": "Simpan perubahan",
+        "saved": "Pengaturan ekspor dokumen disimpan.",
+        "error": "Pengaturan ekspor dokumen tidak dapat disimpan. Silakan coba lagi."
+      },
       "webhooks": {
         "heading": "Webhook",
         "description": "Otomatiskan notifikasi ke layanan eksternal saat peristiwa proyek terjadi.",

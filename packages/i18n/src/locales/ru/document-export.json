@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Экспортировать как документ",
+    "modal": {
+      "title": "Экспортировать как документ",
+      "description": "Рабочий элемент будет загружен как файл DOCX с использованием настроек документов рабочей области.",
+      "include_history": "Включить приложение с историей",
+      "export": "Экспорт",
+      "exporting": "Экспорт…",
+      "success": "Документ успешно экспортирован.",
+      "error": "Не удалось экспортировать документ. Повторите попытку."
+    },
+    "doc": {
+      "properties": "Свойства",
+      "description": "Описание",
+      "linked_work_items": "Связанные рабочие элементы",
+      "history": "История (контрольные точки)",
+      "sub_pages": "Подстраницы",
+      "versions": "Версии",
+      "generated_by": "Создано пользователем {user}, {date}",
+      "no_value": "—",
+      "relation_blocking": "Блокирует",
+      "relation_blocked_by": "Заблокировано",
+      "relation_relates_to": "Связано с",
+      "relation_duplicate": "Дубликат",
+      "event_created": "Создано",
+      "event_state": "Статус",
+      "event_priority": "Приоритет",
+      "event_assignees": "Исполнители",
+      "event_target_date": "Целевая дата",
+      "event_start_date": "Дата начала",
+      "event_archived_at": "В архиве",
+      "column_when": "Время",
+      "column_actor": "Пользователь",
+      "column_event": "Событие",
+      "column_change": "Изменение"
+    }
+  }
+}

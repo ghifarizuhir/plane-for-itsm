@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "文件匯出",
+        "heading": "文件匯出",
+        "description": "設定將工作事項和 Wiki 文章匯出為 DOCX 文件時使用的信頭。",
+        "logo": "頁首標誌",
+        "logo_mode_none": "無標誌",
+        "logo_mode_workspace": "使用工作區標誌",
+        "logo_mode_custom": "自訂標誌",
+        "upload_logo": "上傳標誌",
+        "header_lines": "頁首文字行",
+        "footer_lines": "頁尾文字行",
+        "line_placeholder": "文字或預留位置",
+        "add_line": "新增行",
+        "remove_line": "刪除",
+        "align_left": "靠左",
+        "align_center": "置中",
+        "align_right": "靠右",
+        "show_page_numbers": "顯示頁碼",
+        "show_generated_by": "顯示產生資訊行",
+        "placeholders": "可用的預留位置：{workspace_name}、{document_title}、{document_id}、{export_date}、{exported_by}",
+        "limit_hint": "最多 5 行，每行 200 個字元。",
+        "save": "儲存變更",
+        "saved": "文件匯出設定已儲存。",
+        "error": "文件匯出設定儲存失敗，請重試。"
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "當專案事件發生時，自動向外部服務傳送通知。",

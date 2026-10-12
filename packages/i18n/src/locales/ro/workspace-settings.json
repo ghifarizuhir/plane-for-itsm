@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Export documente",
+        "heading": "Export documente",
+        "description": "Configurați antetul folosit la exportarea activităților și articolelor wiki ca documente DOCX.",
+        "logo": "Sigla antetului",
+        "logo_mode_none": "Fără siglă",
+        "logo_mode_workspace": "Folosește sigla spațiului de lucru",
+        "logo_mode_custom": "Siglă personalizată",
+        "upload_logo": "Încarcă sigla",
+        "header_lines": "Linii de text ale antetului",
+        "footer_lines": "Linii de text ale subsolului",
+        "line_placeholder": "Text sau substituenți",
+        "add_line": "Adaugă linie",
+        "remove_line": "Elimină",
+        "align_left": "Stânga",
+        "align_center": "Centru",
+        "align_right": "Dreapta",
+        "show_page_numbers": "Afișează numerele de pagină",
+        "show_generated_by": "Afișează linia de generare",
+        "placeholders": "Substituenți disponibili: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Maximum 5 linii, câte 200 de caractere.",
+        "save": "Salvează modificările",
+        "saved": "Setările de export documente au fost salvate.",
+        "error": "Setările de export documente nu au putut fi salvate. Încercați din nou."
+      },
       "webhooks": {
         "heading": "Webhook-uri",
         "description": "Automatizează notificările către servicii externe când se produc evenimente ale proiectului.",

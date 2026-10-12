@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Exportă ca document",
+    "modal": {
+      "title": "Exportă ca document",
+      "description": "Activitatea va fi descărcată ca fișier DOCX folosind setările de document ale spațiului de lucru.",
+      "include_history": "Include anexa cu istoric",
+      "export": "Exportă",
+      "exporting": "Se exportă",
+      "success": "Document exportat cu succes.",
+      "error": "Documentul nu a putut fi exportat. Încercați din nou."
+    },
+    "doc": {
+      "properties": "Proprietăți",
+      "description": "Descriere",
+      "linked_work_items": "Activități corelate",
+      "history": "Istoric (repere)",
+      "sub_pages": "Subpagini",
+      "versions": "Versiuni",
+      "generated_by": "Generat de {user} la {date}",
+      "no_value": "—",
+      "relation_blocking": "Blochează",
+      "relation_blocked_by": "Blocat de",
+      "relation_relates_to": "Legat de",
+      "relation_duplicate": "Duplicat al",
+      "event_created": "Creat",
+      "event_state": "Stare",
+      "event_priority": "Prioritate",
+      "event_assignees": "Responsabili",
+      "event_target_date": "Data țintă",
+      "event_start_date": "Data de început",
+      "event_archived_at": "Arhivat",
+      "column_when": "Data",
+      "column_actor": "Utilizator",
+      "column_event": "Eveniment",
+      "column_change": "Modificare"
+    }
+  }
+}

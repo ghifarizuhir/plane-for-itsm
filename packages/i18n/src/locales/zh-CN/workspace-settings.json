@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "文档导出",
+        "heading": "文档导出",
+        "description": "配置将工作项和 Wiki 文章导出为 DOCX 文档时使用的信头。",
+        "logo": "页眉徽标",
+        "logo_mode_none": "无徽标",
+        "logo_mode_workspace": "使用工作区徽标",
+        "logo_mode_custom": "自定义徽标",
+        "upload_logo": "上传徽标",
+        "header_lines": "页眉文本行",
+        "footer_lines": "页脚文本行",
+        "line_placeholder": "文本或占位符",
+        "add_line": "添加行",
+        "remove_line": "删除",
+        "align_left": "左对齐",
+        "align_center": "居中",
+        "align_right": "右对齐",
+        "show_page_numbers": "显示页码",
+        "show_generated_by": "显示生成信息行",
+        "placeholders": "可用占位符：{workspace_name}、{document_title}、{document_id}、{export_date}、{exported_by}",
+        "limit_hint": "最多 5 行，每行 200 个字符。",
+        "save": "保存更改",
+        "saved": "文档导出设置已保存。",
+        "error": "文档导出设置保存失败，请重试。"
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "在项目事件发生时自动向外部服务发送通知。",

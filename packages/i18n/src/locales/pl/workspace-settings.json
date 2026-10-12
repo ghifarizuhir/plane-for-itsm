@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Eksport dokumentów",
+        "heading": "Eksport dokumentów",
+        "description": "Skonfiguruj nagłówek firmowy używany podczas eksportowania elementów pracy i artykułów wiki jako dokumentów DOCX.",
+        "logo": "Logo nagłówka",
+        "logo_mode_none": "Bez logo",
+        "logo_mode_workspace": "Użyj logo obszaru roboczego",
+        "logo_mode_custom": "Własne logo",
+        "upload_logo": "Prześlij logo",
+        "header_lines": "Wiersze tekstu nagłówka",
+        "footer_lines": "Wiersze tekstu stopki",
+        "line_placeholder": "Tekst lub symbole zastępcze",
+        "add_line": "Dodaj wiersz",
+        "remove_line": "Usuń",
+        "align_left": "Do lewej",
+        "align_center": "Wyśrodkuj",
+        "align_right": "Do prawej",
+        "show_page_numbers": "Pokaż numery stron",
+        "show_generated_by": "Pokaż wiersz informacji o utworzeniu",
+        "placeholders": "Dostępne symbole zastępcze: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Maksymalnie 5 wierszy po 200 znaków.",
+        "save": "Zapisz zmiany",
+        "saved": "Zapisano ustawienia eksportu dokumentów.",
+        "error": "Nie można zapisać ustawień eksportu dokumentów. Spróbuj ponownie."
+      },
       "webhooks": {
         "heading": "Webhooki",
         "description": "Automatyzuj powiadomienia do usług zewnętrznych, gdy wystąpią zdarzenia projektowe.",

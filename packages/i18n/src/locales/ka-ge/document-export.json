@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "დოკუმენტად ექსპორტი",
+    "modal": {
+      "title": "დოკუმენტად ექსპორტი",
+      "description": "სამუშაო ელემენტი ჩამოიტვირთება DOCX ფაილის სახით სამუშაო სივრცის დოკუმენტის პარამეტრების გამოყენებით.",
+      "include_history": "ისტორიის დანართის ჩართვა",
+      "export": "ექსპორტი",
+      "exporting": "ექსპორტდება",
+      "success": "დოკუმენტი წარმატებით იქნა ექსპორტირებული.",
+      "error": "დოკუმენტის ექსპორტი ვერ მოხერხდა. გთხოვთ, სცადოთ ხელახლა."
+    },
+    "doc": {
+      "properties": "თვისებები",
+      "description": "აღწერა",
+      "linked_work_items": "დაკავშირებული სამუშაო ელემენტები",
+      "history": "ისტორია (მাইলსტოუნები)",
+      "sub_pages": "ქვეგვერდები",
+      "versions": "ვერსიები",
+      "generated_by": "ავტორი: {user}, თარიღი: {date}",
+      "no_value": "—",
+      "relation_blocking": "ბლოკავს",
+      "relation_blocked_by": "დაბლოკილია",
+      "relation_relates_to": "დაკავშირებულია",
+      "relation_duplicate": "დუბლიკატი",
+      "event_created": "შექმნილია",
+      "event_state": "სტატუსი",
+      "event_priority": "პრიორიტეტი",
+      "event_assignees": "შემსრულებლები",
+      "event_target_date": "სამიზნე თარიღი",
+      "event_start_date": "დაწყების თარიღი",
+      "event_archived_at": "დაარქივებულია",
+      "column_when": "დრო",
+      "column_actor": "მომხმარებელი",
+      "column_event": "მოვლენა",
+      "column_change": "ცვლილება"
+    }
+  }
+}

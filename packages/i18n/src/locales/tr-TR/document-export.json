@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Belge olarak dışa aktar",
+    "modal": {
+      "title": "Belge olarak dışa aktar",
+      "description": "İş öğesi, çalışma alanı belge ayarları kullanılarak DOCX dosyası olarak indirilecek.",
+      "include_history": "Geçmiş ekini dahil et",
+      "export": "Dışa aktar",
+      "exporting": "Dışa aktarılıyor",
+      "success": "Belge başarıyla dışa aktarıldı.",
+      "error": "Belge dışa aktarılamadı. Lütfen tekrar deneyin."
+    },
+    "doc": {
+      "properties": "Özellikler",
+      "description": "Açıklama",
+      "linked_work_items": "Bağlantılı iş öğeleri",
+      "history": "Geçmiş (kilometre taşları)",
+      "sub_pages": "Alt sayfalar",
+      "versions": "Sürümler",
+      "generated_by": "{user} tarafından {date} tarihinde oluşturuldu",
+      "no_value": "—",
+      "relation_blocking": "Engelliyor",
+      "relation_blocked_by": "Engellendi",
+      "relation_relates_to": "İlişkili",
+      "relation_duplicate": "Kopyası",
+      "event_created": "Oluşturuldu",
+      "event_state": "Durum",
+      "event_priority": "Öncelik",
+      "event_assignees": "Atananlar",
+      "event_target_date": "Hedef tarih",
+      "event_start_date": "Başlangıç tarihi",
+      "event_archived_at": "Arşivlendi",
+      "column_when": "Zaman",
+      "column_actor": "Kullanıcı",
+      "column_event": "Olay",
+      "column_change": "Değişiklik"
+    }
+  }
+}

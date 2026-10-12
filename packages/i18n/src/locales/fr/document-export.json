@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Exporter comme document",
+    "modal": {
+      "title": "Exporter comme document",
+      "description": "L’élément de travail sera téléchargé comme fichier DOCX en utilisant les paramètres de document de l’espace de travail.",
+      "include_history": "Inclure l’annexe d’historique",
+      "export": "Exporter",
+      "exporting": "Exportation",
+      "success": "Document exporté avec succès.",
+      "error": "Le document n’a pas pu être exporté. Veuillez réessayer."
+    },
+    "doc": {
+      "properties": "Propriétés",
+      "description": "Description",
+      "linked_work_items": "Éléments de travail liés",
+      "history": "Historique (jalons)",
+      "sub_pages": "Sous-pages",
+      "versions": "Versions",
+      "generated_by": "Généré par {user} le {date}",
+      "no_value": "—",
+      "relation_blocking": "Bloque",
+      "relation_blocked_by": "Bloqué par",
+      "relation_relates_to": "Lié à",
+      "relation_duplicate": "Doublon de",
+      "event_created": "Créé",
+      "event_state": "Statut",
+      "event_priority": "Priorité",
+      "event_assignees": "Assignés",
+      "event_target_date": "Date cible",
+      "event_start_date": "Date de début",
+      "event_archived_at": "Archivé",
+      "column_when": "Date",
+      "column_actor": "Utilisateur",
+      "column_event": "Événement",
+      "column_change": "Modification"
+    }
+  }
+}

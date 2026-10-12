@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "匯出為文件",
+    "modal": {
+      "title": "匯出為文件",
+      "description": "工作事項將使用工作區的文件設定下載為 DOCX 檔案。",
+      "include_history": "包含歷史附錄",
+      "export": "匯出",
+      "exporting": "匯出中",
+      "success": "文件匯出成功。",
+      "error": "文件匯出失敗，請重試。"
+    },
+    "doc": {
+      "properties": "屬性",
+      "description": "描述",
+      "linked_work_items": "關聯的工作事項",
+      "history": "歷史（里程碑）",
+      "sub_pages": "子頁面",
+      "versions": "版本",
+      "generated_by": "由 {user} 於 {date} 產生",
+      "no_value": "—",
+      "relation_blocking": "封鎖",
+      "relation_blocked_by": "被封鎖",
+      "relation_relates_to": "關聯",
+      "relation_duplicate": "重複項目",
+      "event_created": "已建立",
+      "event_state": "狀態",
+      "event_priority": "優先順序",
+      "event_assignees": "負責人",
+      "event_target_date": "目標日期",
+      "event_start_date": "開始日期",
+      "event_archived_at": "已封存",
+      "column_when": "時間",
+      "column_actor": "使用者",
+      "column_event": "事件",
+      "column_change": "變更"
+    }
+  }
+}

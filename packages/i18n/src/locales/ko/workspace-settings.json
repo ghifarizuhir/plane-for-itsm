@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "문서 내보내기",
+        "heading": "문서 내보내기",
+        "description": "작업 항목과 위키 문서를 DOCX 문서로 내보낼 때 사용하는 레터헤드를 구성합니다.",
+        "logo": "헤더 로고",
+        "logo_mode_none": "로고 없음",
+        "logo_mode_workspace": "워크스페이스 로고 사용",
+        "logo_mode_custom": "사용자 지정 로고",
+        "upload_logo": "로고 업로드",
+        "header_lines": "헤더 텍스트 줄",
+        "footer_lines": "푸터 텍스트 줄",
+        "line_placeholder": "텍스트 또는 자리 표시자",
+        "add_line": "줄 추가",
+        "remove_line": "제거",
+        "align_left": "왼쪽",
+        "align_center": "가운데",
+        "align_right": "오른쪽",
+        "show_page_numbers": "페이지 번호 표시",
+        "show_generated_by": "생성 정보 표시",
+        "placeholders": "사용 가능한 자리 표시자: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "최대 5줄, 각 200자.",
+        "save": "변경 사항 저장",
+        "saved": "문서 내보내기 설정을 저장했습니다.",
+        "error": "문서 내보내기 설정을 저장하지 못했습니다. 다시 시도해 주세요."
+      },
       "webhooks": {
         "heading": "웹훅",
         "description": "프로젝트 이벤트가 발생할 때 외부 서비스로 알림을 자동화하세요.",

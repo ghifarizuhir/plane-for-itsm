@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Xuất dưới dạng tài liệu",
+    "modal": {
+      "title": "Xuất dưới dạng tài liệu",
+      "description": "Mục công việc sẽ được tải xuống dưới dạng tệp DOCX bằng cài đặt tài liệu của không gian làm việc.",
+      "include_history": "Bao gồm phụ lục lịch sử",
+      "export": "Xuất",
+      "exporting": "Đang xuất",
+      "success": "Đã xuất tài liệu thành công.",
+      "error": "Không thể xuất tài liệu. Vui lòng thử lại."
+    },
+    "doc": {
+      "properties": "Thuộc tính",
+      "description": "Mô tả",
+      "linked_work_items": "Các mục công việc liên quan",
+      "history": "Lịch sử (cột mốc)",
+      "sub_pages": "Trang con",
+      "versions": "Phiên bản",
+      "generated_by": "Được tạo bởi {user} vào {date}",
+      "no_value": "—",
+      "relation_blocking": "Chặn",
+      "relation_blocked_by": "Bị chặn bởi",
+      "relation_relates_to": "Liên quan đến",
+      "relation_duplicate": "Bản sao của",
+      "event_created": "Đã tạo",
+      "event_state": "Trạng thái",
+      "event_priority": "Mức ưu tiên",
+      "event_assignees": "Người được giao",
+      "event_target_date": "Ngày mục tiêu",
+      "event_start_date": "Ngày bắt đầu",
+      "event_archived_at": "Đã lưu trữ",
+      "column_when": "Thời gian",
+      "column_actor": "Người dùng",
+      "column_event": "Sự kiện",
+      "column_change": "Thay đổi"
+    }
+  }
+}

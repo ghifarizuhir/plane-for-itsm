@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Esportazione documenti",
+        "heading": "Esportazione documenti",
+        "description": "Configura la carta intestata utilizzata per esportare elementi di lavoro e articoli wiki come documenti DOCX.",
+        "logo": "Logo dell’intestazione",
+        "logo_mode_none": "Nessun logo",
+        "logo_mode_workspace": "Usa il logo dell’area di lavoro",
+        "logo_mode_custom": "Logo personalizzato",
+        "upload_logo": "Carica logo",
+        "header_lines": "Righe di testo dell’intestazione",
+        "footer_lines": "Righe di testo del piè di pagina",
+        "line_placeholder": "Testo o segnaposto",
+        "add_line": "Aggiungi riga",
+        "remove_line": "Rimuovi",
+        "align_left": "Sinistra",
+        "align_center": "Centrato",
+        "align_right": "Destra",
+        "show_page_numbers": "Mostra i numeri di pagina",
+        "show_generated_by": "Mostra la riga di generazione",
+        "placeholders": "Segnaposto disponibili: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Fino a 5 righe, 200 caratteri ciascuna.",
+        "save": "Salva modifiche",
+        "saved": "Impostazioni di esportazione documenti salvate.",
+        "error": "Impossibile salvare le impostazioni di esportazione documenti. Riprova."
+      },
       "webhooks": {
         "heading": "Webhook",
         "description": "Automatizza le notifiche verso servizi esterni quando si verificano eventi del progetto.",

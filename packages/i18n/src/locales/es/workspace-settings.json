@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Exportación de documentos",
+        "heading": "Exportación de documentos",
+        "description": "Configure el membrete utilizado al exportar elementos de trabajo y artículos wiki como documentos DOCX.",
+        "logo": "Logotipo del encabezado",
+        "logo_mode_none": "Sin logotipo",
+        "logo_mode_workspace": "Usar logotipo del espacio de trabajo",
+        "logo_mode_custom": "Logotipo personalizado",
+        "upload_logo": "Subir logotipo",
+        "header_lines": "Líneas de texto del encabezado",
+        "footer_lines": "Líneas de texto del pie",
+        "line_placeholder": "Texto o marcadores",
+        "add_line": "Añadir línea",
+        "remove_line": "Eliminar",
+        "align_left": "Izquierda",
+        "align_center": "Centro",
+        "align_right": "Derecha",
+        "show_page_numbers": "Mostrar números de página",
+        "show_generated_by": "Mostrar línea de generación",
+        "placeholders": "Marcadores disponibles: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Hasta 5 líneas, 200 caracteres cada una.",
+        "save": "Guardar cambios",
+        "saved": "Configuración de exportación de documentos guardada.",
+        "error": "No se pudo guardar la configuración de exportación de documentos. Inténtelo de nuevo."
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "Automatiza las notificaciones a servicios externos cuando ocurren eventos del proyecto.",

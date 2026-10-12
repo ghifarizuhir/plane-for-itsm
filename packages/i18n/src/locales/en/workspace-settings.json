@@ -89,6 +89,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Document export",
+        "heading": "Document export",
+        "description": "Configure the letterhead used when work items and wiki articles are exported as DOCX documents.",
+        "logo": "Header logo",
+        "logo_mode_none": "No logo",
+        "logo_mode_workspace": "Use workspace logo",
+        "logo_mode_custom": "Custom logo",
+        "upload_logo": "Upload logo",
+        "header_lines": "Header text lines",
+        "footer_lines": "Footer text lines",
+        "line_placeholder": "Text or placeholders",
+        "add_line": "Add line",
+        "remove_line": "Remove",
+        "align_left": "Left",
+        "align_center": "Center",
+        "align_right": "Right",
+        "show_page_numbers": "Show page numbers",
+        "show_generated_by": "Show generated-by line",
+        "placeholders": "Available placeholders: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Up to 5 lines, 200 characters each.",
+        "save": "Save changes",
+        "saved": "Document export settings saved.",
+        "error": "Document export settings could not be saved. Please try again."
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "Automate notifications to external services when project events occur.",

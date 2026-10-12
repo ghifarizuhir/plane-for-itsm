@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Export dokumentov",
+        "heading": "Export dokumentov",
+        "description": "Nakonfigurujte hlavičku používanú pri exporte pracovných položiek a článkov wiki ako dokumentov DOCX.",
+        "logo": "Logo hlavičky",
+        "logo_mode_none": "Bez loga",
+        "logo_mode_workspace": "Použiť logo pracovného priestoru",
+        "logo_mode_custom": "Vlastné logo",
+        "upload_logo": "Nahrať logo",
+        "header_lines": "Textové riadky hlavičky",
+        "footer_lines": "Textové riadky päty",
+        "line_placeholder": "Text alebo zástupné symboly",
+        "add_line": "Pridať riadok",
+        "remove_line": "Odobrať",
+        "align_left": "Vľavo",
+        "align_center": "Na stred",
+        "align_right": "Vpravo",
+        "show_page_numbers": "Zobraziť číslovanie strán",
+        "show_generated_by": "Zobraziť riadok o vygenerovaní",
+        "placeholders": "Dostupné zástupné symboly: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Maximálne 5 riadkov, každý do 200 znakov.",
+        "save": "Uložiť zmeny",
+        "saved": "Nastavenia exportu dokumentov boli uložené.",
+        "error": "Nastavenia exportu dokumentov sa nepodarilo uložiť. Skúste to prosím znova."
+      },
       "webhooks": {
         "heading": "Webhooky",
         "description": "Automatizujte oznámenia do externých služieb pri udalostiach v projekte.",

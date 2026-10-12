@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "导出为文档",
+    "modal": {
+      "title": "导出为文档",
+      "description": "工作项将使用工作区的文档设置下载为 DOCX 文件。",
+      "include_history": "包含历史附录",
+      "export": "导出",
+      "exporting": "导出中",
+      "success": "文档导出成功。",
+      "error": "文档导出失败，请重试。"
+    },
+    "doc": {
+      "properties": "属性",
+      "description": "描述",
+      "linked_work_items": "关联的工作项",
+      "history": "历史（里程碑）",
+      "sub_pages": "子页面",
+      "versions": "版本",
+      "generated_by": "由 {user} 于 {date} 生成",
+      "no_value": "—",
+      "relation_blocking": "阻塞",
+      "relation_blocked_by": "被阻塞",
+      "relation_relates_to": "关联",
+      "relation_duplicate": "重复项",
+      "event_created": "已创建",
+      "event_state": "状态",
+      "event_priority": "优先级",
+      "event_assignees": "负责人",
+      "event_target_date": "目标日期",
+      "event_start_date": "开始日期",
+      "event_archived_at": "已归档",
+      "column_when": "时间",
+      "column_actor": "用户",
+      "column_event": "事件",
+      "column_change": "变更"
+    }
+  }
+}

@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Dokumentexport",
+        "heading": "Dokumentexport",
+        "description": "Konfigurieren Sie den Briefkopf für den Export von Arbeitselementen und Wiki-Artikeln als DOCX-Dokumente.",
+        "logo": "Kopfzeilenlogo",
+        "logo_mode_none": "Kein Logo",
+        "logo_mode_workspace": "Arbeitsbereichslogo verwenden",
+        "logo_mode_custom": "Eigenes Logo",
+        "upload_logo": "Logo hochladen",
+        "header_lines": "Kopfzeilentexte",
+        "footer_lines": "Fußzeilentexte",
+        "line_placeholder": "Text oder Platzhalter",
+        "add_line": "Zeile hinzufügen",
+        "remove_line": "Entfernen",
+        "align_left": "Links",
+        "align_center": "Zentriert",
+        "align_right": "Rechts",
+        "show_page_numbers": "Seitenzahlen anzeigen",
+        "show_generated_by": "Erstellungszeile anzeigen",
+        "placeholders": "Verfügbare Platzhalter: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Maximal 5 Zeilen mit jeweils bis zu 200 Zeichen.",
+        "save": "Änderungen speichern",
+        "saved": "Dokumentexport-Einstellungen gespeichert.",
+        "error": "Dokumentexport-Einstellungen konnten nicht gespeichert werden. Bitte versuchen Sie es erneut."
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "Automatisieren Sie Benachrichtigungen an externe Dienste, wenn Projektereignisse auftreten.",

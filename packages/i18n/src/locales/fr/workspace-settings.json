@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Export de documents",
+        "heading": "Export de documents",
+        "description": "Configurez le papier à en-tête utilisé lors de l’export des éléments de travail et des articles wiki comme documents DOCX.",
+        "logo": "Logo d’en-tête",
+        "logo_mode_none": "Aucun logo",
+        "logo_mode_workspace": "Utiliser le logo de l’espace de travail",
+        "logo_mode_custom": "Logo personnalisé",
+        "upload_logo": "Téléverser un logo",
+        "header_lines": "Lignes de texte d’en-tête",
+        "footer_lines": "Lignes de texte de pied de page",
+        "line_placeholder": "Texte ou espaces réservés",
+        "add_line": "Ajouter une ligne",
+        "remove_line": "Supprimer",
+        "align_left": "Gauche",
+        "align_center": "Centré",
+        "align_right": "Droite",
+        "show_page_numbers": "Afficher les numéros de page",
+        "show_generated_by": "Afficher la ligne de génération",
+        "placeholders": "Espaces réservés disponibles : {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "Jusqu’à 5 lignes, 200 caractères chacune.",
+        "save": "Enregistrer les modifications",
+        "saved": "Paramètres d’export de documents enregistrés.",
+        "error": "Impossible d’enregistrer les paramètres d’export de documents. Veuillez réessayer."
+      },
       "webhooks": {
         "heading": "Webhooks",
         "description": "Automatisez les notifications vers des services externes lors d’événements du projet.",

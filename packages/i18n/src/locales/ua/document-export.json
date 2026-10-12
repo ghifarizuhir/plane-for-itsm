@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Експортувати як документ",
+    "modal": {
+      "title": "Експортувати як документ",
+      "description": "Робоча одиниця буде завантажена як файл DOCX з використанням налаштувань документів робочої області.",
+      "include_history": "Включити додаток з історією",
+      "export": "Експорт",
+      "exporting": "Експорт…",
+      "success": "Документ успішно експортовано.",
+      "error": "Не вдалося експортувати документ. Спробуйте ще раз."
+    },
+    "doc": {
+      "properties": "Властивості",
+      "description": "Опис",
+      "linked_work_items": "Пов'язані робочі одиниці",
+      "history": "Історія (контрольні точки)",
+      "sub_pages": "Підсторінки",
+      "versions": "Версії",
+      "generated_by": "Створено користувачем {user}, {date}",
+      "no_value": "—",
+      "relation_blocking": "Блокує",
+      "relation_blocked_by": "Заблоковано",
+      "relation_relates_to": "Пов'язано з",
+      "relation_duplicate": "Дублікат",
+      "event_created": "Створено",
+      "event_state": "Статус",
+      "event_priority": "Пріоритет",
+      "event_assignees": "Виконавці",
+      "event_target_date": "Цільова дата",
+      "event_start_date": "Дата початку",
+      "event_archived_at": "В архіві",
+      "column_when": "Час",
+      "column_actor": "Користувач",
+      "column_event": "Подія",
+      "column_change": "Зміна"
+    }
+  }
+}

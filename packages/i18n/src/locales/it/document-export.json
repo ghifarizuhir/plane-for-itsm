@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "Esporta come documento",
+    "modal": {
+      "title": "Esporta come documento",
+      "description": "L’elemento di lavoro verrà scaricato come file DOCX utilizzando le impostazioni documento dell’area di lavoro.",
+      "include_history": "Includi appendice della cronologia",
+      "export": "Esporta",
+      "exporting": "Esportazione in corso",
+      "success": "Documento esportato correttamente.",
+      "error": "Impossibile esportare il documento. Riprova."
+    },
+    "doc": {
+      "properties": "Proprietà",
+      "description": "Descrizione",
+      "linked_work_items": "Elementi di lavoro collegati",
+      "history": "Cronologia (traguardi)",
+      "sub_pages": "Sottopagine",
+      "versions": "Versioni",
+      "generated_by": "Generato da {user} il {date}",
+      "no_value": "—",
+      "relation_blocking": "Blocca",
+      "relation_blocked_by": "Bloccato da",
+      "relation_relates_to": "Correlato a",
+      "relation_duplicate": "Duplicato di",
+      "event_created": "Creato",
+      "event_state": "Stato",
+      "event_priority": "Priorità",
+      "event_assignees": "Assegnatari",
+      "event_target_date": "Data di scadenza",
+      "event_start_date": "Data di inizio",
+      "event_archived_at": "Archiviato",
+      "column_when": "Data",
+      "column_actor": "Utente",
+      "column_event": "Evento",
+      "column_change": "Modifica"
+    }
+  }
+}

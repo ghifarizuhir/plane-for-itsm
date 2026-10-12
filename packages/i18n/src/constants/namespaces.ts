@@ -10,6 +10,7 @@ export const NAMESPACES = [
   "automation",
   "common",
   "cycle",
+  "document-export",
   "editor",
   "empty-state",
   "home",

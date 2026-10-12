@@ -1,0 +1,39 @@
+{
+  "document_export": {
+    "export_as_document": "문서로 내보내기",
+    "modal": {
+      "title": "문서로 내보내기",
+      "description": "작업 항목이 워크스페이스 문서 설정을 사용하여 DOCX 파일로 다운로드됩니다.",
+      "include_history": "기록 부록 포함",
+      "export": "내보내기",
+      "exporting": "내보내는 중",
+      "success": "문서를 성공적으로 내보냈습니다.",
+      "error": "문서를 내보내지 못했습니다. 다시 시도해 주세요."
+    },
+    "doc": {
+      "properties": "속성",
+      "description": "설명",
+      "linked_work_items": "연결된 작업 항목",
+      "history": "기록(마일스톤)",
+      "sub_pages": "하위 페이지",
+      "versions": "버전",
+      "generated_by": "생성자: {user}, 날짜: {date}",
+      "no_value": "—",
+      "relation_blocking": "차단함",
+      "relation_blocked_by": "차단됨",
+      "relation_relates_to": "관련됨",
+      "relation_duplicate": "중복",
+      "event_created": "생성됨",
+      "event_state": "상태",
+      "event_priority": "우선순위",
+      "event_assignees": "담당자",
+      "event_target_date": "목표 날짜",
+      "event_start_date": "시작 날짜",
+      "event_archived_at": "보관됨",
+      "column_when": "시간",
+      "column_actor": "사용자",
+      "column_event": "이벤트",
+      "column_change": "변경"
+    }
+  }
+}

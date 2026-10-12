@@ -97,6 +97,31 @@
           }
         }
       },
+      "document_export": {
+        "title": "Belge dışa aktarma",
+        "heading": "Belge dışa aktarma",
+        "description": "İş öğeleri ve wiki makaleleri DOCX belgesi olarak dışa aktarılırken kullanılan antetli kağıdı yapılandırın.",
+        "logo": "Üst bilgi logosu",
+        "logo_mode_none": "Logo yok",
+        "logo_mode_workspace": "Çalışma alanı logosunu kullan",
+        "logo_mode_custom": "Özel logo",
+        "upload_logo": "Logo yükle",
+        "header_lines": "Üst bilgi metin satırları",
+        "footer_lines": "Alt bilgi metin satırları",
+        "line_placeholder": "Metin veya yer tutucular",
+        "add_line": "Satır ekle",
+        "remove_line": "Kaldır",
+        "align_left": "Sol",
+        "align_center": "Orta",
+        "align_right": "Sağ",
+        "show_page_numbers": "Sayfa numaralarını göster",
+        "show_generated_by": "Oluşturma satırını göster",
+        "placeholders": "Kullanılabilir yer tutucular: {workspace_name}, {document_title}, {document_id}, {export_date}, {exported_by}",
+        "limit_hint": "En fazla 5 satır, her biri 200 karakter.",
+        "save": "Değişiklikleri kaydet",
+        "saved": "Belge dışa aktarma ayarları kaydedildi.",
+        "error": "Belge dışa aktarma ayarları kaydedilemedi. Lütfen tekrar deneyin."
+      },
       "webhooks": {
         "heading": "Webhook'lar",
         "description": "Proje olayları gerçekleştiğinde harici hizmetlere bildirimleri otomatikleştirin.",
