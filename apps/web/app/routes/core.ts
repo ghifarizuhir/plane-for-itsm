@@ -308,6 +308,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/work-item-types/:typeId",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/work-item-types/[typeId]/page.tsx"
           ),
+          route(
+            ":workspaceSlug/settings/document-export",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/document-export/page.tsx"
+          ),
         ]),
 
         // --------------------------------------------------------------------
