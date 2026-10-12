@@ -101,7 +101,9 @@ fn validate_text_lines(value: &Value, field: &str) -> Result<(), String> {
             return Err(format!("{field} line text is required"));
         };
         if text.chars().count() > MAX_LINE_LEN {
-            return Err(format!("{field} line text must be at most {MAX_LINE_LEN} characters"));
+            return Err(format!(
+                "{field} line text must be at most {MAX_LINE_LEN} characters"
+            ));
         }
         if let Some(align) = line.get("align") {
             match align.as_str() {

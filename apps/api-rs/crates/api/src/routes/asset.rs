@@ -699,7 +699,9 @@ fn asset_url_for(
     issue_id: Option<uuid::Uuid>,
 ) -> Value {
     match entity_type {
-        Some("WORKSPACE_LOGO" | "USER_AVATAR" | "USER_COVER" | "PROJECT_COVER" | "DOC_HEADER_LOGO") => {
+        Some(
+            "WORKSPACE_LOGO" | "USER_AVATAR" | "USER_COVER" | "PROJECT_COVER" | "DOC_HEADER_LOGO",
+        ) => {
             json!(format!("/api/assets/v2/static/{id}/"))
         }
         Some("ISSUE_ATTACHMENT") => match (ws_slug, project_id, issue_id) {

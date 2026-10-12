@@ -88,7 +88,8 @@ impl Scratch {
         let project_id = Uuid::new_v4();
         let parent_id = Uuid::new_v4();
         let child_id = Uuid::new_v4();
-        let identifier = format!("PPAR{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
+        let identifier =
+            format!("PPAR{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
 
         sqlx::query(
             "INSERT INTO users (id, password, username, email, first_name, last_name, avatar, \
@@ -159,8 +160,26 @@ impl Scratch {
         .await
         .expect("scratch project member");
 
-        insert_page(pool, parent_id, "Parent", user_id, workspace_id, None, project_id).await;
-        insert_page(pool, child_id, "Child", user_id, workspace_id, Some(parent_id), project_id).await;
+        insert_page(
+            pool,
+            parent_id,
+            "Parent",
+            user_id,
+            workspace_id,
+            None,
+            project_id,
+        )
+        .await;
+        insert_page(
+            pool,
+            child_id,
+            "Child",
+            user_id,
+            workspace_id,
+            Some(parent_id),
+            project_id,
+        )
+        .await;
 
         Self {
             slug,
