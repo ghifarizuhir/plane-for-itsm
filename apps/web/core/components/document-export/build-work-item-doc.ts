@@ -41,7 +41,7 @@ export type TWorkItemDocInput = {
   projectName: string;
   stateName?: string;
   typeName?: string;
-  priority?: string;
+  priority?: string | null;
   assigneeNames: string[];
   labelNames: string[];
   startDate?: string | null;

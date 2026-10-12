@@ -8,9 +8,11 @@ import { useState } from "react";
 import { omit } from "lodash-es";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { MoreHorizontalOutline } from "@makeplane/propel/icons";
+import { MoreHorizontalOutline, ExportOutline } from "@makeplane/propel/icons";
+import { Tooltip } from "@makeplane/propel/components/tooltip";
 // plane imports
 import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -27,6 +29,7 @@ import { CreateUpdateIssueModal } from "../../issue-modal/modal";
 import type { IQuickActionProps } from "../list/list-view-types";
 import type { MenuItemFactoryProps } from "./helper";
 import { useWorkItemDetailMenuItems } from "./helper";
+import { WorkItemExportModal } from "@/components/document-export/work-item-export-modal";
 import { IconButton } from "@plane/propel/icon-button";
 
 type TWorkItemDetailQuickActionProps = IQuickActionProps & {
@@ -58,12 +61,15 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
   } = props;
   // router
   const { workspaceSlug } = useParams();
+  // translation
+  const { t } = useTranslation();
   // states
   const [createUpdateIssueModal, setCreateUpdateIssueModal] = useState(false);
   const [issueToEdit, setIssueToEdit] = useState<TIssue | undefined>(undefined);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
   const [_, setDuplicateWorkItemModal] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
@@ -143,6 +149,7 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
     handleUpdate,
     handleArchive: customArchiveAction,
     handleRestore: customRestoreAction,
+    onExportDocument: () => setIsExportModalOpen(true),
     storeType: EIssuesStoreType.PROJECT,
   };
 
@@ -224,7 +231,14 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
         fetchIssueDetails={false}
       />
 
+      <WorkItemExportModal issue={issue} isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+
       <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
+      <div className="flex items-center gap-1">
+        <Tooltip label={t("document_export.export_as_document")}>
+          <IconButton size="lg" variant="secondary" icon={ExportOutline} onClick={() => setIsExportModalOpen(true)} />
+        </Tooltip>
+      </div>
       <CustomMenu
         ellipsis
         placement={placements}

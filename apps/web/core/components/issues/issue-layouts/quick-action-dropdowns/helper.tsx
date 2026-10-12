@@ -11,6 +11,7 @@ import {
   CopyOutline,
   DeleteOutline,
   EditOutline,
+  ExportOutline,
   LinkOutline,
   NewTabOutline,
   RestoreOutline,
@@ -77,6 +78,7 @@ export interface MenuItemFactoryProps {
   setDuplicateWorkItemModal?: (open: boolean) => void;
   handleRemoveFromView?: () => void;
   handleRestore?: () => Promise<void>;
+  onExportDocument?: () => void;
   // External handlers
   handleDelete?: () => Promise<void>;
   handleUpdate?: (data: TIssue) => Promise<void>;
@@ -259,6 +261,13 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     shouldRender: isDeletingAllowed,
   });
 
+  const createExportDocumentMenuItem = (): TContextMenuItem => ({
+    key: "export-document",
+    title: t("document_export.export_as_document"),
+    icon: ExportOutline,
+    action: () => handleOptionalAction(props.onExportDocument, "Export document"),
+  });
+
   return {
     ...actionHandlers,
     createEditMenuItem,
@@ -270,6 +279,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
     createArchiveMenuItem,
     createRestoreMenuItem,
     createDeleteMenuItem,
+    createExportDocumentMenuItem,
   };
 };
 
@@ -297,6 +307,7 @@ export const useWorkItemDetailMenuItems = (props: MenuItemFactoryProps): TContex
     () => [
       factory.createCopyMenuItem(props.workspaceSlug),
       factory.createOpenInNewTabMenuItem(),
+      factory.createExportDocumentMenuItem(),
       factory.createArchiveMenuItem(),
       factory.createRestoreMenuItem(),
       factory.createDeleteMenuItem(),

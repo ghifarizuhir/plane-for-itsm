@@ -32,7 +32,7 @@ const loadImage = async (src: string | null | undefined): Promise<TDocxImage | n
 
 export async function resolveDocumentLogo(
   settings: Pick<TDocumentExportSettings, "header_logo_mode" | "header_logo_url">,
-  workspace: IWorkspace | undefined
+  workspace: IWorkspace | null | undefined
 ): Promise<TDocxImage | null> {
   if (settings.header_logo_mode === "workspace") return loadImage(workspace?.logo_url);
   if (settings.header_logo_mode === "custom") return loadImage(settings.header_logo_url);
