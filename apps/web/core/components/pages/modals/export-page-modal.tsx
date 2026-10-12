@@ -9,6 +9,8 @@ import type { PageProps } from "@react-pdf/renderer";
 import { pdf } from "@react-pdf/renderer";
 import { Controller, useForm } from "react-hook-form";
 import { useParams } from "react-router";
+// plane i18n
+import { useTranslation } from "@plane/i18n";
 // plane editor
 import type { EditorRefApi } from "@plane/editor";
 // plane ui
@@ -16,9 +18,22 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // components
+import { buildPageDocument } from "@/components/document-export/build-page-doc";
+import { documentFileName, initiateDownload } from "@/components/document-export/download";
+import { resolveDocumentLogo } from "@/components/document-export/logo";
+import { resolvePlaceholders } from "@/components/document-export/resolve-placeholders";
 import { PDFDocument } from "@/components/editor/pdf";
 // hooks
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
+import { useLabel } from "@/hooks/store/use-label";
+import { useMember } from "@/hooks/store/use-member";
+import { useProject } from "@/hooks/store/use-project";
+import { useUser } from "@/hooks/store/user";
+import { useWorkspace } from "@/hooks/store/use-workspace";
+// services
+import { DocumentExportSettingsService } from "@/services/document-export/document-export-settings.service";
+import { ProjectPageService } from "@/services/page/project-page.service";
+import { ProjectPageVersionService } from "@/services/page/project-page-version.service";
 
 type Props = {
   editorRef: EditorRefApi | null;
@@ -27,7 +42,7 @@ type Props = {
   pageTitle: string;
 };
 
-type TExportFormats = "pdf" | "markdown";
+type TExportFormats = "pdf" | "markdown" | "docx";
 type TPageFormats = Exclude<PageProps["size"], undefined>;
 type TContentVariety = "everything" | "no-assets";
 
@@ -48,6 +63,10 @@ const EXPORT_FORMATS: {
   {
     key: "markdown",
     label: "Markdown",
+  },
+  {
+    key: "docx",
+    label: "DOCX (Formal document)",
   },
 ];
 
@@ -103,10 +122,18 @@ const defaultValues: TFormValues = {
 
 export function ExportPageModal(props: Props) {
   const { editorRef, isOpen, onClose, pageTitle } = props;
+  // translation
+  const { t } = useTranslation();
   // states
   const [isExporting, setIsExporting] = useState(false);
   // params
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, projectId, pageId } = useParams();
+  // store hooks
+  const { currentWorkspace } = useWorkspace();
+  const { getProjectById } = useProject();
+  const { memberMap } = useMember();
+  const { getLabelById } = useLabel();
+  const { data: currentUser } = useUser();
   // form info
   const { control, reset, watch } = useForm<TFormValues>({
     defaultValues,
@@ -133,17 +160,6 @@ export function ExportPageModal(props: Props) {
     }, 300);
   };
 
-  const initiateDownload = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(url);
-    }, 1000);
-  };
-
   // handle export as a PDF
   const handleExportAsPDF = async () => {
     try {
@@ -156,7 +172,7 @@ export function ExportPageModal(props: Props) {
       const blob = await pdf(<PDFDocument content={parsedPageContent} pageFormat={selectedPageFormat} />).toBlob();
       initiateDownload(blob, `${fileName}-${selectedPageFormat.toString().toLowerCase()}.pdf`);
     } catch (error) {
-      throw new Error(`Error in exporting as a PDF: ${error}`);
+      throw new Error("Error in exporting as a PDF", { cause: error });
     }
   };
   // handle export as markdown
@@ -171,7 +187,99 @@ export function ExportPageModal(props: Props) {
       const blob = new Blob([parsedMarkdownContent], { type: "text/markdown" });
       initiateDownload(blob, `${fileName}.md`);
     } catch (error) {
-      throw new Error(`Error in exporting as markdown: ${error}`);
+      throw new Error("Error in exporting as markdown", { cause: error });
+    }
+  };
+  // handle export as a formal DOCX document
+  const handleExportAsDocx = async () => {
+    if (!workspaceSlug || !projectId) return;
+    const slug = workspaceSlug.toString();
+    const projectIdString = projectId.toString();
+    const pageIdString = pageId?.toString();
+    try {
+      const settingsService = new DocumentExportSettingsService();
+      const pageService = new ProjectPageService();
+      const versionService = new ProjectPageVersionService();
+      const settings = await settingsService.fetchSettings(slug).catch(() => null);
+      const resolvedSettings = settings ?? {
+        header_logo_mode: "none" as const,
+        header_logo_url: null,
+        header_text_lines: [],
+        footer_text_lines: [],
+        show_page_numbers: true,
+        show_generated_by: true,
+      };
+      const exportedByName = currentUser?.display_name ?? "";
+      const today = new Date().toISOString().slice(0, 10);
+      const placeholderValues = {
+        workspace_name: currentWorkspace?.name ?? "",
+        document_title: pageTitle,
+        document_id: pageIdString ? pageIdString.slice(0, 8) : "",
+        export_date: today,
+        exported_by: exportedByName,
+      };
+      const headerLines = resolvedSettings.header_text_lines.map((line) => ({
+        ...line,
+        text: resolvePlaceholders(line.text, placeholderValues),
+      }));
+      const footerLines = resolvedSettings.footer_text_lines.map((line) => ({
+        ...line,
+        text: resolvePlaceholders(line.text, placeholderValues),
+      }));
+
+      const detail = pageIdString
+        ? await pageService.fetchById(slug, projectIdString, pageIdString, false).catch(() => null)
+        : null;
+      const subPages: { name: string; bodyHtml: string; level: number }[] = [];
+      const collectChildren = async (parentId: string, level: number): Promise<void> => {
+        if (level > 10 || subPages.length >= 50) return;
+        const children = await pageService.fetchAll(slug, projectIdString, parentId).catch(() => []);
+        for (const child of children) {
+          if (subPages.length >= 50 || !child.id) break;
+          // oxlint-disable-next-line no-await-in-loop -- sections must keep tree order
+          const childDetail = await pageService.fetchById(slug, projectIdString, child.id, false).catch(() => null);
+          subPages.push({ name: child.name ?? "", bodyHtml: childDetail?.description_html ?? "", level });
+          // oxlint-disable-next-line no-await-in-loop -- sections must keep tree order
+          await collectChildren(child.id, level + 1);
+        }
+      };
+      if (pageIdString) await collectChildren(pageIdString, 1);
+
+      const versions = pageIdString
+        ? await versionService.fetchAllVersions(slug, projectIdString, pageIdString).catch(() => [])
+        : [];
+      const logo = await resolveDocumentLogo(resolvedSettings, currentWorkspace);
+
+      const blob = await buildPageDocument({
+        title: pageTitle,
+        bodyHtml: `<h1 class="page-title">${pageTitle}</h1>${editorRef?.getDocument().html ?? "<p></p>"}`,
+        ownerName: memberMap?.[detail?.owned_by ?? ""]?.display_name,
+        createdBy: memberMap?.[detail?.created_by ?? ""]?.display_name,
+        createdAt: detail?.created_at ? new Date(detail.created_at).toISOString() : undefined,
+        updatedBy: memberMap?.[detail?.updated_by ?? ""]?.display_name,
+        updatedAt: detail?.updated_at ? new Date(detail.updated_at).toISOString() : undefined,
+        labelNames: (detail?.label_ids ?? []).map((id) => getLabelById(id)?.name ?? id),
+        projectName: getProjectById(projectIdString)?.name,
+        versionCount: versions.length || undefined,
+        subPages,
+        headerLines,
+        footerLines,
+        showPageNumbers: resolvedSettings.show_page_numbers,
+        generatedByLine: resolvedSettings.show_generated_by
+          ? t("document_export.doc.generated_by", { user: exportedByName, date: today })
+          : "",
+        creator: exportedByName,
+        logo,
+        labels: {
+          properties: t("document_export.doc.properties"),
+          subPages: t("document_export.doc.sub_pages"),
+          generatedBy: t("document_export.doc.generated_by"),
+          noValue: t("document_export.doc.no_value"),
+        },
+      });
+      initiateDownload(blob, documentFileName("article", pageTitle));
+    } catch (error) {
+      throw new Error("Error in exporting as a DOCX", { cause: error });
     }
   };
   // handle export
@@ -183,6 +291,9 @@ export function ExportPageModal(props: Props) {
       }
       if (selectedExportFormat === "markdown") {
         await handleExportAsMarkdown();
+      }
+      if (selectedExportFormat === "docx") {
+        await handleExportAsDocx();
       }
       setToast({
         type: TOAST_TYPE.SUCCESS,

@@ -21,8 +21,14 @@ export class ProjectPageService extends APIService {
     this.fileUploadService = new FileUploadService();
   }
 
-  async fetchAll(workspaceSlug: string, projectId: string): Promise<TPage[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/`)
+  async fetchAll(
+    workspaceSlug: string,
+    projectId: string,
+    parentId?: string
+  ): Promise<(TPage & { parent?: string | null })[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/`, {
+      params: parentId ? { parent: parentId } : undefined,
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
