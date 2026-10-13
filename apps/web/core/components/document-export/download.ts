@@ -9,9 +9,14 @@ export function initiateDownload(blob: Blob, filename: string) {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  // The anchor must be in the DOM: some browsers (notably Safari) silently
+  // ignore programmatic clicks on detached anchors, so no file downloads.
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
   setTimeout(() => {
     URL.revokeObjectURL(url);
+    link.remove();
   }, 1000);
 }
 
