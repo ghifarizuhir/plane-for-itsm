@@ -76,10 +76,16 @@ export const WorkItemExportModal = observer(function WorkItemExportModal({ issue
   const relationService = useMemo(() => new IssueRelationService(), []);
 
   const handleExport = async () => {
-    if (!workspaceSlug) return;
+    // Prefer the route param, but fall back to the workspace store: the
+    // modal can be opened from peek overview on routes without workspaceSlug
+    // (e.g. global search), where useParams() has no workspaceSlug.
+    const slug = workspaceSlug?.toString() ?? currentWorkspace?.slug;
+    if (!slug) {
+      setToast({ type: TOAST_TYPE.ERROR, title: t("document_export.modal.error") });
+      return;
+    }
     setIsExporting(true);
     try {
-      const slug = workspaceSlug.toString();
       const [settings, activities, relations] = await Promise.all([
         settingsService.fetchSettings(slug).catch(() => null),
         activityService.getIssueActivities(slug, issue.project_id ?? "", issue.id).catch(() => []),
