@@ -2991,7 +2991,7 @@ mod page_e4_tests {
         // $5=owned_only bool, $6=search text`. The owned-only flag must be
         // `$5` (bool) and the search predicate `$6` (text); `$4` belongs to
         // the `PAGE_ROW_COLS` fav subquery.
-        let sql = list_sql("p.created_at", true);
+        let sql = list_sql("p.created_at", true, None);
         assert!(
             sql.contains("$5 = false"),
             "owned-only flag must use $5, got: {sql}"
@@ -3016,7 +3016,7 @@ mod page_e4_tests {
         // (`projects__archived_at__isnull=True`) — list + summary + detail
         // paths must exclude pages linked via archived projects.
         for sql in [
-            list_sql("p.created_at", true),
+            list_sql("p.created_at", true, None),
             summary_sql().to_string(),
             scoped_detail_sql(),
             fetch_detail_sql(),
