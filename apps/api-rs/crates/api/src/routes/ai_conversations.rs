@@ -420,8 +420,36 @@ fn clean_metadata_patch(patch: &serde_json::Map<String, Value>) -> Result<Value,
             "proposal_decisions" => {
                 clean.insert(key.clone(), clean_proposal_decisions(value)?);
             }
+            "flow" => match value.as_str() {
+                Some("incident") => {
+                    clean.insert(key.clone(), value.clone());
+                }
+                None if value.is_null() => {
+                    clean.insert(key.clone(), Value::Null);
+                }
+                _ => return Err("flow must be 'incident' or null".to_string()),
+            },
+            "flow_ref" => match value.as_str() {
+                Some(raw) if ai::flows::is_valid_reference(raw) => {
+                    clean.insert(key.clone(), json!(raw.trim()));
+                }
+                None if value.is_null() => {
+                    clean.insert(key.clone(), Value::Null);
+                }
+                _ => return Err("flow_ref must be a work item reference or null".to_string()),
+            },
             _ => return Err(format!("metadata key not allowed: {key}")),
         }
+    }
+    let flow_present = clean.contains_key("flow");
+    let ref_present = clean.contains_key("flow_ref");
+    if flow_present != ref_present {
+        return Err("flow and flow_ref must be set or cleared together".to_string());
+    }
+    if clean.get("flow").is_some_and(Value::is_null)
+        != clean.get("flow_ref").is_some_and(Value::is_null)
+    {
+        return Err("flow and flow_ref must be set or cleared together".to_string());
     }
     if clean.is_empty() {
         return Err("metadata patch is empty".to_string());
@@ -632,6 +660,9 @@ pub async fn patch_message(
             return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
         }
     };
+    if clean.get("flow").is_some_and(Value::is_null) {
+        tracing::info!("ai-flow: ended via metadata patch");
+    }
     let row: Option<MessageRow> = sqlx::query_as(
         "UPDATE ai_messages SET metadata = metadata || $3::jsonb \
          WHERE id = $1 AND conversation_id = $2 \
@@ -715,6 +746,49 @@ mod tests {
         )]))
         .expect("valid patch");
         assert_eq!(clean["work_item_decisions"][&key]["decision"], json!("cancelled"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_flow_pair() {
+        let clean = clean_metadata_patch(&patch_map(vec![
+            ("flow", json!("incident")),
+            ("flow_ref", json!("OPS-123")),
+        ]))
+        .expect("valid flow pair");
+        assert_eq!(clean["flow"], json!("incident"));
+        assert_eq!(clean["flow_ref"], json!("OPS-123"));
+    }
+
+    #[test]
+    fn metadata_patch_accepts_flow_clear_pair() {
+        let clean = clean_metadata_patch(&patch_map(vec![
+            ("flow", json!(null)),
+            ("flow_ref", json!(null)),
+        ]))
+        .expect("valid clear pair");
+        assert!(clean["flow"].is_null());
+        assert!(clean["flow_ref"].is_null());
+    }
+
+    #[test]
+    fn metadata_patch_rejects_malformed_flows() {
+        assert!(clean_metadata_patch(&patch_map(vec![("flow", json!("problem"))])).is_err());
+        assert!(
+            clean_metadata_patch(&patch_map(vec![
+                ("flow", json!("incident")),
+                ("flow_ref", json!("not a ref")),
+            ]))
+            .is_err()
+        );
+        assert!(
+            clean_metadata_patch(&patch_map(vec![
+                ("flow", json!("incident")),
+                ("flow_ref", json!(null)),
+            ]))
+            .is_err()
+        );
+        assert!(clean_metadata_patch(&patch_map(vec![("flow", json!(null))])).is_err());
+        assert!(clean_metadata_patch(&patch_map(vec![("flow_ref", json!("OPS-1"))])).is_err());
     }
 
     #[test]
