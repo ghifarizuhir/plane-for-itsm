@@ -48,6 +48,7 @@ export type TPageDocInput = {
   logo: TDocxImage | null;
   labels: TPageDocLabels;
   imageFetcher?: TImageFetcher;
+  imageUnavailableText?: string;
 };
 
 const formatDate = (value?: string) => {
@@ -85,7 +86,12 @@ export async function buildPageDocument(input: TPageDocInput): Promise<Blob> {
   }
 
   if (input.bodyHtml?.trim()) {
-    children.push(...(await htmlToDocxBlocks(input.bodyHtml, { imageFetcher: input.imageFetcher })));
+    children.push(
+      ...(await htmlToDocxBlocks(input.bodyHtml, {
+        imageFetcher: input.imageFetcher,
+        imageUnavailableText: input.imageUnavailableText,
+      }))
+    );
   }
 
   if (input.subPages.length) {
@@ -110,8 +116,13 @@ export async function buildPageDocument(input: TPageDocInput): Promise<Blob> {
         })
       );
       if (subPage.bodyHtml?.trim()) {
-        // oxlint-disable-next-line no-await-in-loop -- sections must keep tree order
-        children.push(...(await htmlToDocxBlocks(subPage.bodyHtml, { imageFetcher: input.imageFetcher })));
+        children.push(
+          // oxlint-disable-next-line no-await-in-loop -- sections must keep tree order
+          ...(await htmlToDocxBlocks(subPage.bodyHtml, {
+            imageFetcher: input.imageFetcher,
+            imageUnavailableText: input.imageUnavailableText,
+          }))
+        );
       }
     }
   }

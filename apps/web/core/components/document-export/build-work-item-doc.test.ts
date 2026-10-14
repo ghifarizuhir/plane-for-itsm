@@ -5,8 +5,14 @@
  */
 
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { htmlToDocxBlocks } from "./html-to-docx";
 import { buildWorkItemDocument, type TWorkItemDocInput } from "./build-work-item-doc";
+
+vi.mock("./html-to-docx", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./html-to-docx")>();
+  return { ...actual, htmlToDocxBlocks: vi.fn(actual.htmlToDocxBlocks) };
+});
 
 const labels = {
   properties: "Properties",
@@ -60,5 +66,23 @@ describe("buildWorkItemDocument", () => {
     const withoutHistory = await buildWorkItemDocument({ ...baseInput(), includeHistory: false });
     expect(withoutHistory.size).toBeGreaterThan(0);
     expect(withHistory.size).not.toBe(withoutHistory.size);
+  });
+
+  it("forwards description image options to the html walker", async () => {
+    const requested: string[] = [];
+    await buildWorkItemDocument({
+      ...baseInput(),
+      descriptionHtml: '<image-component src="asset-1" width="200px" height="100px"></image-component>',
+      imageFetcher: async (src) => {
+        requested.push(src);
+        return { data: new Uint8Array([1, 2, 3]), width: 400, height: 200, type: "png" };
+      },
+      imageUnavailableText: "Gambar tidak tersedia",
+    });
+    expect(requested).toEqual(["asset-1"]);
+    expect(vi.mocked(htmlToDocxBlocks)).toHaveBeenCalledWith(
+      expect.stringContaining("image-component"),
+      expect.objectContaining({ imageUnavailableText: "Gambar tidak tersedia" })
+    );
   });
 });

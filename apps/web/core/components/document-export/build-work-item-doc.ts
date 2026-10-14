@@ -63,6 +63,7 @@ export type TWorkItemDocInput = {
   labels: TWorkItemDocLabels;
   workspaceName: string;
   imageFetcher?: TImageFetcher;
+  imageUnavailableText?: string;
 };
 
 const BORDER = { style: "single" as const, size: 4, color: "D9D9D9" };
@@ -167,7 +168,12 @@ export async function buildWorkItemDocument(input: TWorkItemDocInput): Promise<B
 
   if (input.descriptionHtml?.trim()) {
     children.push(sectionHeading(input.labels.description));
-    children.push(...(await htmlToDocxBlocks(input.descriptionHtml, { imageFetcher: input.imageFetcher })));
+    children.push(
+      ...(await htmlToDocxBlocks(input.descriptionHtml, {
+        imageFetcher: input.imageFetcher,
+        imageUnavailableText: input.imageUnavailableText,
+      }))
+    );
   }
 
   if (input.linkedItems.length) {
