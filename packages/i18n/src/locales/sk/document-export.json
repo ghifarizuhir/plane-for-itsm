@@ -19,6 +19,7 @@
       "versions": "Verzie",
       "generated_by": "Vygenerované používateľom {user}, {date}",
       "no_value": "—",
+      "image_unavailable": "Obrázok nie je k dispozícii",
       "relation_blocking": "Blokuje",
       "relation_blocked_by": "Blokované",
       "relation_relates_to": "Súvisiace s",

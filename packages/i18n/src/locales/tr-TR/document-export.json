@@ -19,6 +19,7 @@
       "versions": "Sürümler",
       "generated_by": "{user} tarafından {date} tarihinde oluşturuldu",
       "no_value": "—",
+      "image_unavailable": "Görsel kullanılamıyor",
       "relation_blocking": "Engelliyor",
       "relation_blocked_by": "Engellendi",
       "relation_relates_to": "İlişkili",

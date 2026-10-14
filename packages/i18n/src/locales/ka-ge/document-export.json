@@ -19,6 +19,7 @@
       "versions": "ვერსიები",
       "generated_by": "ავტორი: {user}, თარიღი: {date}",
       "no_value": "—",
+      "image_unavailable": "სურათი მიუწვდომელია",
       "relation_blocking": "ბლოკავს",
       "relation_blocked_by": "დაბლოკილია",
       "relation_relates_to": "დაკავშირებულია",

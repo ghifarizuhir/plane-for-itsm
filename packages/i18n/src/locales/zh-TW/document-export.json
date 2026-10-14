@@ -19,6 +19,7 @@
       "versions": "版本",
       "generated_by": "由 {user} 於 {date} 產生",
       "no_value": "—",
+      "image_unavailable": "圖片無法使用",
       "relation_blocking": "封鎖",
       "relation_blocked_by": "被封鎖",
       "relation_relates_to": "關聯",

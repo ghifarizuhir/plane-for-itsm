@@ -19,6 +19,7 @@
       "versions": "Versiuni",
       "generated_by": "Generat de {user} la {date}",
       "no_value": "—",
+      "image_unavailable": "Imagine indisponibilă",
       "relation_blocking": "Blochează",
       "relation_blocked_by": "Blocat de",
       "relation_relates_to": "Legat de",

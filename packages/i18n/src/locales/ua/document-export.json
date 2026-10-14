@@ -19,6 +19,7 @@
       "versions": "Версії",
       "generated_by": "Створено користувачем {user}, {date}",
       "no_value": "—",
+      "image_unavailable": "Зображення недоступне",
       "relation_blocking": "Блокує",
       "relation_blocked_by": "Заблоковано",
       "relation_relates_to": "Пов'язано з",

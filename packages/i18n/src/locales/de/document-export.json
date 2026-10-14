@@ -19,6 +19,7 @@
       "versions": "Versionen",
       "generated_by": "Erstellt von {user} am {date}",
       "no_value": "—",
+      "image_unavailable": "Bild nicht verfügbar",
       "relation_blocking": "Blockiert",
       "relation_blocked_by": "Blockiert von",
       "relation_relates_to": "Verwandt mit",

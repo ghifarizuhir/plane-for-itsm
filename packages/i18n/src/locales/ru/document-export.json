@@ -19,6 +19,7 @@
       "versions": "Версии",
       "generated_by": "Создано пользователем {user}, {date}",
       "no_value": "—",
+      "image_unavailable": "Изображение недоступно",
       "relation_blocking": "Блокирует",
       "relation_blocked_by": "Заблокировано",
       "relation_relates_to": "Связано с",

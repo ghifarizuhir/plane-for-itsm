@@ -19,6 +19,7 @@
       "versions": "Phiên bản",
       "generated_by": "Được tạo bởi {user} vào {date}",
       "no_value": "—",
+      "image_unavailable": "Không thể hiển thị hình ảnh",
       "relation_blocking": "Chặn",
       "relation_blocked_by": "Bị chặn bởi",
       "relation_relates_to": "Liên quan đến",

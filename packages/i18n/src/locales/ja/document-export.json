@@ -19,6 +19,7 @@
       "versions": "バージョン",
       "generated_by": "{user} が {date} に生成しました",
       "no_value": "—",
+      "image_unavailable": "画像を表示できません",
       "relation_blocking": "ブロック",
       "relation_blocked_by": "ブロック元",
       "relation_relates_to": "関連",

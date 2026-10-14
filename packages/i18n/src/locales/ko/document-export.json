@@ -19,6 +19,7 @@
       "versions": "버전",
       "generated_by": "생성자: {user}, 날짜: {date}",
       "no_value": "—",
+      "image_unavailable": "이미지를 표시할 수 없습니다",
       "relation_blocking": "차단함",
       "relation_blocked_by": "차단됨",
       "relation_relates_to": "관련됨",

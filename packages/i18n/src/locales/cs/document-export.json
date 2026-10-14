@@ -19,6 +19,7 @@
       "versions": "Verze",
       "generated_by": "Vygenerováno uživatelem {user} dne {date}",
       "no_value": "—",
+      "image_unavailable": "Obrázek není k dispozici",
       "relation_blocking": "Blokuje",
       "relation_blocked_by": "Blokováno",
       "relation_relates_to": "Související s",

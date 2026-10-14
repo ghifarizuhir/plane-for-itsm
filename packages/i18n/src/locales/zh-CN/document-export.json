@@ -19,6 +19,7 @@
       "versions": "版本",
       "generated_by": "由 {user} 于 {date} 生成",
       "no_value": "—",
+      "image_unavailable": "图片不可用",
       "relation_blocking": "阻塞",
       "relation_blocked_by": "被阻塞",
       "relation_relates_to": "关联",

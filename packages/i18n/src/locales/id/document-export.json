@@ -19,6 +19,7 @@
       "versions": "Versi",
       "generated_by": "Dibuat oleh {user} pada {date}",
       "no_value": "—",
+      "image_unavailable": "Gambar tidak tersedia",
       "relation_blocking": "Memblokir",
       "relation_blocked_by": "Diblokir oleh",
       "relation_relates_to": "Terkait dengan",
