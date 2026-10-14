@@ -21,6 +21,7 @@ import {
 import { getBase64Image } from "@plane/utils";
 
 export const MAX_IMAGE_WIDTH = 600;
+export const DEFAULT_IMAGE_UNAVAILABLE_TEXT = "Image unavailable";
 export const DOCX_BULLET_REFERENCE = "doc-export-bullet";
 export const DOCX_NUMBERED_REFERENCE = "doc-export-numbered";
 
@@ -38,6 +39,7 @@ export type TImageFetcher = (src: string) => Promise<TDocxImage | null>;
 export type THtmlToDocxOptions = {
   imageFetcher?: TImageFetcher;
   maxImageWidth?: number;
+  imageUnavailableText?: string;
 };
 
 const HEADING_BY_TAG: Record<string, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
@@ -83,10 +85,18 @@ const defaultImageFetcher: TImageFetcher = async (src) => {
   }
 };
 
-const scaledSize = (image: TDocxImage, maxWidth: number) => {
-  if (image.width <= maxWidth) return { width: image.width, height: image.height };
-  const ratio = maxWidth / image.width;
-  return { width: maxWidth, height: Math.round(image.height * ratio) };
+const scaledSize = (image: TDocxImage, maxWidth: number, widthHint?: number) => {
+  const targetWidth = Math.min(widthHint ?? image.width, maxWidth);
+  if (targetWidth === image.width) return { width: image.width, height: image.height };
+  const ratio = targetWidth / image.width;
+  return { width: targetWidth, height: Math.round(image.height * ratio) };
+};
+
+const isImageElement = (element: Element) => ["img", "image-component"].includes(element.tagName.toLowerCase());
+
+const pxWidthHint = (element: Element): number | undefined => {
+  const match = element.getAttribute("width")?.match(/^(\d+)px$/);
+  return match ? Number(match[1]) : undefined;
 };
 
 const isMention = (element: HTMLElement) =>
@@ -112,7 +122,7 @@ const collectRuns = (node: Node, style: TRunStyle): (TextRun | ExternalHyperlink
   const element = node;
   const tag = element.tagName.toLowerCase();
   if (tag === "br") return [new TextRun({ break: 1 })];
-  if (tag === "script" || tag === "style" || tag === "img") return [];
+  if (tag === "script" || tag === "style" || isImageElement(element)) return [];
   if (isMention(element)) {
     const label = element.getAttribute("data-label") ?? element.textContent ?? "";
     return [new TextRun({ text: `@${label.trim()}` })];
@@ -134,19 +144,24 @@ const collectRuns = (node: Node, style: TRunStyle): (TextRun | ExternalHyperlink
   return Array.from(element.childNodes).flatMap((child) => collectRuns(child, next));
 };
 
-type TWalkContext = { imageFetcher: TImageFetcher; maxImageWidth: number };
+type TWalkContext = { imageFetcher: TImageFetcher; maxImageWidth: number; imageUnavailableText: string };
 
-const imageParagraph = async (src: string, alt: string, ctx: TWalkContext): Promise<Paragraph> => {
-  const image = await ctx.imageFetcher(src);
+const imageParagraph = async (element: Element, ctx: TWalkContext): Promise<Paragraph> => {
+  const image = await ctx.imageFetcher(element.getAttribute("src") ?? "");
   if (!image) {
+    const alt = element.getAttribute("alt") ?? "";
     return new Paragraph({
-      children: [new TextRun({ text: `[${alt || src}]`, italics: true, color: "808080" })],
+      children: [new TextRun({ text: `[${alt || ctx.imageUnavailableText}]`, italics: true, color: "808080" })],
       spacing: { after: 120 },
     });
   }
   return new Paragraph({
     children: [
-      new ImageRun({ type: image.type, data: image.data, transformation: scaledSize(image, ctx.maxImageWidth) }),
+      new ImageRun({
+        type: image.type,
+        data: image.data,
+        transformation: scaledSize(image, ctx.maxImageWidth, pxWidthHint(element)),
+      }),
     ],
     spacing: { before: 120, after: 120 },
   });
@@ -176,9 +191,9 @@ const listBlocks = async (list: HTMLElement, level: number, ctx: TWalkContext): 
         spacing: { after: 40 },
       })
     );
-    for (const image of Array.from(item.querySelectorAll("img"))) {
+    for (const image of Array.from(item.querySelectorAll("img, image-component"))) {
       // oxlint-disable-next-line no-await-in-loop -- images must keep DOM order
-      blocks.push(await imageParagraph(image.getAttribute("src") ?? "", image.getAttribute("alt") ?? "", ctx));
+      blocks.push(await imageParagraph(image, ctx));
     }
     // oxlint-disable-next-line no-await-in-loop -- nested items must keep DOM order
     for (const child of nested) blocks.push(...(await listBlocks(child, level + 1, ctx)));
@@ -230,22 +245,22 @@ async function walkBlocks(nodes: Node[], ctx: TWalkContext): Promise<TDocumentBl
       continue;
     }
     if (tag === "p") {
-      const images = Array.from(element.querySelectorAll("img"));
+      const images = Array.from(element.querySelectorAll("img, image-component"));
       for (const image of images) {
         // oxlint-disable-next-line no-await-in-loop -- blocks must keep DOM order
-        blocks.push(await imageParagraph(image.getAttribute("src") ?? "", image.getAttribute("alt") ?? "", ctx));
+        blocks.push(await imageParagraph(image, ctx));
       }
       const runs = images.length
         ? Array.from(element.childNodes).flatMap((child) =>
-            isElement(child) && child.tagName.toLowerCase() === "img" ? [] : collectRuns(child, {})
+            isElement(child) && isImageElement(child) ? [] : collectRuns(child, {})
           )
         : collectRuns(element, {});
       if (runs.length) blocks.push(new Paragraph({ children: runs, spacing: { after: 120 } }));
       continue;
     }
-    if (tag === "img") {
+    if (isImageElement(element)) {
       // oxlint-disable-next-line no-await-in-loop -- blocks must keep DOM order
-      blocks.push(await imageParagraph(element.getAttribute("src") ?? "", element.getAttribute("alt") ?? "", ctx));
+      blocks.push(await imageParagraph(element, ctx));
       continue;
     }
     if (tag === "ul" || tag === "ol") {
@@ -297,9 +312,10 @@ async function walkBlocks(nodes: Node[], ctx: TWalkContext): Promise<TDocumentBl
 export async function htmlToDocxBlocks(html: string, options: THtmlToDocxOptions = {}): Promise<TDocumentBlock[]> {
   const imageFetcher = options.imageFetcher ?? defaultImageFetcher;
   const maxImageWidth = options.maxImageWidth ?? MAX_IMAGE_WIDTH;
+  const imageUnavailableText = options.imageUnavailableText ?? DEFAULT_IMAGE_UNAVAILABLE_TEXT;
   if (typeof DOMParser === "undefined") return [];
   const document = new DOMParser().parseFromString(html || "", "text/html");
-  return walkBlocks(Array.from(document.body.childNodes), { imageFetcher, maxImageWidth });
+  return walkBlocks(Array.from(document.body.childNodes), { imageFetcher, maxImageWidth, imageUnavailableText });
 }
 
 export const DOCX_NUMBERING_CONFIG = [
