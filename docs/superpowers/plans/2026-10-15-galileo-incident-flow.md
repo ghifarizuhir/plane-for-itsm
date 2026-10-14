@@ -597,15 +597,17 @@ First, add a fixture helper to `impl Scratch` in `apps/api-rs/crates/api/tests/a
     async fn add_project_with_work_item(&self, pool: &PgPool, type_name: &str) -> (Uuid, String) {
         let project_id = Uuid::new_v4();
         let identifier = format!("T{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
+        let name = format!("Ops {}", &identifier[1..]);
         sqlx::query(
             "INSERT INTO projects (id, created_at, updated_at, name, description, network, \
              identifier, workspace_id, cycle_view, module_view, issue_views_view, page_view, \
              intake_view, archive_in, close_in, logo_props, is_time_tracking_enabled, \
              is_issue_type_enabled, guest_view_all_features, timezone) \
-             VALUES ($1, now(), now(), 'Ops', '', 2, $2, $3, false, false, false, false, \
+             VALUES ($1, now(), now(), $2, '', 2, $3, $4, false, false, false, false, \
              false, 30, 30, '{}'::jsonb, false, true, false, 'UTC')",
         )
         .bind(project_id)
+        .bind(&name)
         .bind(&identifier)
         .bind(self.workspace_id)
         .execute(pool)

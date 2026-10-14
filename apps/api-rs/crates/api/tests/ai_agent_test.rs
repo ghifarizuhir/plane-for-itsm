@@ -676,7 +676,81 @@ impl Scratch {
         user_id
     }
 
+    /// One project (with the owner as project member), one work item type, and
+    /// one work item `IDENT-1` of that type. Returns (project_id, "IDENT-1").
+    async fn add_project_with_work_item(&self, pool: &PgPool, type_name: &str) -> (Uuid, String) {
+        let project_id = Uuid::new_v4();
+        let identifier = format!("T{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
+        let name = format!("Ops {}", &identifier[1..]);
+        sqlx::query(
+            "INSERT INTO projects (id, created_at, updated_at, name, description, network, \
+             identifier, workspace_id, cycle_view, module_view, issue_views_view, page_view, \
+             intake_view, archive_in, close_in, logo_props, is_time_tracking_enabled, \
+             is_issue_type_enabled, guest_view_all_features, timezone) \
+             VALUES ($1, now(), now(), $2, '', 2, $3, $4, false, false, false, false, \
+             false, 30, 30, '{}'::jsonb, false, true, false, 'UTC')",
+        )
+        .bind(project_id)
+        .bind(&name)
+        .bind(&identifier)
+        .bind(self.workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch project");
+        sqlx::query(
+            "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, \
+             is_active, view_props, default_props, sort_order, preferences, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, 20, $2, $3, true, '{}', '{}', 65535, '{}', now(), now())",
+        )
+        .bind(self.user_id)
+        .bind(project_id)
+        .bind(self.workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch project member");
+        let type_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO issue_types (id, name, description, logo_props, is_epic, is_default, \
+             is_active, level, requires_service, workspace_id, created_at, updated_at) \
+             VALUES ($1, $2, 'Something is broken', '{}'::jsonb, false, false, true, 0, false, \
+             $3, now(), now())",
+        )
+        .bind(type_id)
+        .bind(type_name)
+        .bind(self.workspace_id)
+        .execute(pool)
+        .await
+        .expect("scratch type");
+        sqlx::query(
+            "INSERT INTO issues (id, name, description_html, description_json, priority, \
+             sequence_id, is_draft, sort_order, project_id, workspace_id, created_by_id, type_id, \
+             description_stripped, created_at, updated_at) \
+             VALUES (gen_random_uuid(), 'Pump down', '<p>Pump down</p>', '{}', 'none', 1, false, \
+             65535, $1, $2, $3, $4, 'Pump down', now(), now())",
+        )
+        .bind(project_id)
+        .bind(self.workspace_id)
+        .bind(self.user_id)
+        .bind(type_id)
+        .execute(pool)
+        .await
+        .expect("scratch issue");
+        (project_id, format!("{identifier}-1"))
+    }
+
     async fn purge(&self, pool: &PgPool) {
+        for statement in [
+            "DELETE FROM issues WHERE workspace_id = $1",
+            "DELETE FROM issue_types WHERE workspace_id = $1",
+            "DELETE FROM project_members WHERE workspace_id = $1",
+            "DELETE FROM projects WHERE workspace_id = $1",
+        ] {
+            sqlx::query(statement)
+                .bind(self.workspace_id)
+                .execute(pool)
+                .await
+                .ok();
+        }
         sqlx::query("DELETE FROM ai_conversations WHERE workspace_id = $1")
             .bind(self.workspace_id)
             .execute(pool)
@@ -1893,5 +1967,168 @@ async fn triage_intake_item_proposal_roundtrip() {
         json!("2026-11-01T09:00:00+00:00")
     );
 
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn flow_turns_reject_unknown_flow_ids() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": "/problem OPS-1",
+            "conversation_id": conversation_id,
+            "flow": "problem",
+            "flow_ref": "OPS-1",
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_unknown"));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn flow_turns_reject_malformed_and_missing_pairs() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    // flow without flow_ref
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": "/incident",
+            "conversation_id": conversation_id,
+            "flow": "incident",
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_invalid"));
+
+    // malformed reference
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": "/incident nothing",
+            "conversation_id": conversation_id,
+            "flow": "incident",
+            "flow_ref": "nothing",
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_invalid"));
+
+    // no partial state: neither turn inserted a message
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_messages WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn flow_turns_reject_inaccessible_and_wrong_type_refs() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    // nonexistent
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": "/incident T00000000-1",
+            "conversation_id": conversation_id,
+            "flow": "incident",
+            "flow_ref": "T00000000-1",
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_ref_gone"));
+
+    // exists but is a Change, not an Incident
+    let (_, change_ref) = scratch.add_project_with_work_item(&pool, "Change").await;
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": format!("/incident {change_ref}"),
+            "conversation_id": conversation_id,
+            "flow": "incident",
+            "flow_ref": change_ref,
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_type_mismatch"));
+    assert!(body["error"].as_str().unwrap().contains("Change"));
+
+    // accessible to the workspace but not a project member
+    let (_, incident_ref) = scratch.add_project_with_work_item(&pool, "Incident").await;
+    let outsider = scratch.add_actor(&pool, 15).await;
+    let outsider_conversation = create_conversation(&st, &scratch.slug, outsider, "agent").await;
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(outsider),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": format!("/incident {incident_ref}"),
+            "conversation_id": outsider_conversation,
+            "flow": "incident",
+            "flow_ref": incident_ref,
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_ref_gone"));
+
+    // cross-workspace reference
+    let other = Scratch::new(&pool).await;
+    let (_, other_ref) = other.add_project_with_work_item(&pool, "Incident").await;
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": format!("/incident {other_ref}"),
+            "conversation_id": conversation_id,
+            "flow": "incident",
+            "flow_ref": other_ref,
+        })),
+    )
+    .await
+    .expect("agent call");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], json!("flow_ref_gone"));
+
+    other.purge(&pool).await;
     scratch.purge(&pool).await;
 }

@@ -26,6 +26,7 @@ use crate::routes::module::guard_am;
 use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};
 use ai::agent::{current_user_context, history_prompt, HistoryMessage, HISTORY_MESSAGE_LIMIT};
+use ai::flows;
 use ai::llm::{host_of, resolve_llm_config, LlmError};
 
 pub use ai::agent::{
@@ -164,6 +165,47 @@ pub async fn workspace_ai_agent(
             Json(json!({"error": "conversation mode does not match this endpoint"})),
         ));
     }
+    // Guided-flow turns: `flow` and `flow_ref` must come together and pass the
+    // full validation ladder before anything is inserted or the LLM is called.
+    let flow_id = body
+        .get("flow")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let flow_ref = body
+        .get("flow_ref")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let active_flow = match (flow_id, flow_ref) {
+        (None, None) => None,
+        (Some(id), Some(reference)) => match flows::validate(&st.pool, workspace_id, auth.0, id, reference).await {
+            Ok(active) => {
+                tracing::info!(
+                    flow_id = %active.id,
+                    flow_ref = %active.reference,
+                    "ai-agent: flow turn"
+                );
+                Some(active)
+            }
+            Err(error) => {
+                tracing::warn!(code = %error.code, "ai-agent: flow rejected");
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": error.message, "code": error.code})),
+                ));
+            }
+        },
+        _ => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": "flow and flow_ref must be provided together",
+                    "code": flows::CODE_INVALID,
+                })),
+            ));
+        }
+    };
     // Dipindah dari atas fungsi (lihat catatan urutan validasi di atas).
     let cfg = resolve_llm_config(&st.pool).await;
     if cfg.api_key.is_empty() || cfg.model.is_empty() {
