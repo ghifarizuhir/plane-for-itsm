@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Запланувати регулярний звіт AI",
+    "slash_task": "Створити робочу одиницю з чату",
+    "slash_incident": "Провести тріаж наявного інциденту",
+    "slash_incident_off": "Завершити процес інциденту",
+    "incident_ref_required": "Укажіть ID інциденту, наприклад: /incident OPS-123",
+    "incident_invalid_ref": "Схоже, це не ID робочої одиниці (наприклад, OPS-123)",
+    "incident_flow_ended": "Процес інциденту завершено"
+  }
+}

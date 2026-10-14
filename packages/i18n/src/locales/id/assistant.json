@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Jadwalkan laporan AI berkala",
+    "slash_task": "Buat item kerja dari chat",
+    "slash_incident": "Lakukan triase pada insiden yang ada",
+    "slash_incident_off": "Akhiri alur insiden",
+    "incident_ref_required": "Tambahkan ID insiden, mis. /incident OPS-123",
+    "incident_invalid_ref": "Itu tidak terlihat seperti ID item kerja (mis. OPS-123)",
+    "incident_flow_ended": "Alur insiden berakhir"
+  }
+}

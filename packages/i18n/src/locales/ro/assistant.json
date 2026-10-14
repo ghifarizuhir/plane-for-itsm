@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Programați un raport AI recurent",
+    "slash_task": "Creați o activitate din chat",
+    "slash_incident": "Efectuați triajul unui incident existent",
+    "slash_incident_off": "Încheiați fluxul incidentului",
+    "incident_ref_required": "Adăugați ID-ul incidentului, de ex. /incident OPS-123",
+    "incident_invalid_ref": "Nu pare a fi un ID de activitate (de ex. OPS-123)",
+    "incident_flow_ended": "Fluxul incidentului încheiat"
+  }
+}

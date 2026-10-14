@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Запланировать регулярный отчёт AI",
+    "slash_task": "Создать рабочий элемент из чата",
+    "slash_incident": "Провести триаж существующего инцидента",
+    "slash_incident_off": "Завершить процесс инцидента",
+    "incident_ref_required": "Укажите ID инцидента, например: /incident OPS-123",
+    "incident_invalid_ref": "Похоже, это не ID рабочего элемента (например, OPS-123)",
+    "incident_flow_ended": "Процесс инцидента завершён"
+  }
+}

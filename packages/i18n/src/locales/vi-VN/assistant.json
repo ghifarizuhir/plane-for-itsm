@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Lên lịch báo cáo AI định kỳ",
+    "slash_task": "Tạo mục công việc từ cuộc trò chuyện",
+    "slash_incident": "Phân loại một sự cố hiện có",
+    "slash_incident_off": "Kết thúc luồng sự cố",
+    "incident_ref_required": "Thêm ID sự cố, ví dụ: /incident OPS-123",
+    "incident_invalid_ref": "Đây không giống ID mục công việc (ví dụ: OPS-123)",
+    "incident_flow_ended": "Luồng sự cố đã kết thúc"
+  }
+}

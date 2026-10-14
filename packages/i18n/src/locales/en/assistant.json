@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Schedule a recurring AI report",
+    "slash_task": "Create a work item from chat",
+    "slash_incident": "Triage an existing incident",
+    "slash_incident_off": "End the incident flow",
+    "incident_ref_required": "Add an incident ID, e.g. /incident OPS-123",
+    "incident_invalid_ref": "That doesn't look like a work item ID (e.g. OPS-123)",
+    "incident_flow_ended": "Incident flow ended"
+  }
+}

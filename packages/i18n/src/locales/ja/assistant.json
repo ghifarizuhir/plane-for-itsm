@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "定期 AI レポートをスケジュール",
+    "slash_task": "チャットから作業項目を作成",
+    "slash_incident": "既存のインシデントをトリアージ",
+    "slash_incident_off": "インシデントフローを終了",
+    "incident_ref_required": "インシデント ID を入力（例：/incident OPS-123）",
+    "incident_invalid_ref": "作業項目 ID の形式ではありません（例：OPS-123）",
+    "incident_flow_ended": "インシデントフローを終了しました"
+  }
+}

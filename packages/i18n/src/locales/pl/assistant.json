@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Zaplanuj cykliczny raport AI",
+    "slash_task": "Utwórz element pracy z czatu",
+    "slash_incident": "Przeprowadź triaż istniejącego incydentu",
+    "slash_incident_off": "Zakończ przepływ incydentu",
+    "incident_ref_required": "Podaj identyfikator incydentu, np. /incident OPS-123",
+    "incident_invalid_ref": "To nie wygląda na identyfikator elementu pracy (np. OPS-123)",
+    "incident_flow_ended": "Przepływ incydentu zakończony"
+  }
+}

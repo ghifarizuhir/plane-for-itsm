@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Yinelenen bir AI raporu zamanla",
+    "slash_task": "Sohbetten iş öğesi oluştur",
+    "slash_incident": "Mevcut bir olayı triyajla",
+    "slash_incident_off": "Olay akışını sonlandır",
+    "incident_ref_required": "Olay kimliğini ekleyin, örn. /incident OPS-123",
+    "incident_invalid_ref": "Bu bir iş öğesi kimliğine benzemiyor (örn. OPS-123)",
+    "incident_flow_ended": "Olay akışı sonlandırıldı"
+  }
+}

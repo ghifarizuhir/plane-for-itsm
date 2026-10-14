@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Einen wiederkehrenden KI-Bericht planen",
+    "slash_task": "Arbeitselement aus dem Chat erstellen",
+    "slash_incident": "Vorhandene Störung triagieren",
+    "slash_incident_off": "Störungsablauf beenden",
+    "incident_ref_required": "ID der Störung angeben, z. B. /incident OPS-123",
+    "incident_invalid_ref": "Das sieht nicht wie eine Arbeitselement-ID aus (z. B. OPS-123)",
+    "incident_flow_ended": "Störungsablauf beendet"
+  }
+}

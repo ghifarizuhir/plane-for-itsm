@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Programar un informe de IA recurrente",
+    "slash_task": "Crear un elemento de trabajo desde el chat",
+    "slash_incident": "Realizar el triaje de un incidente existente",
+    "slash_incident_off": "Terminar el flujo del incidente",
+    "incident_ref_required": "Añada el ID del incidente, p. ej. /incident OPS-123",
+    "incident_invalid_ref": "Eso no parece un ID de elemento de trabajo (p. ej. OPS-123)",
+    "incident_flow_ended": "Flujo del incidente terminado"
+  }
+}

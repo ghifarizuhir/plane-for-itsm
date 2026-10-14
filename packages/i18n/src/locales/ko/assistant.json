@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "정기 AI 보고서 예약",
+    "slash_task": "채팅에서 작업 항목 만들기",
+    "slash_incident": "기존 인시던트 트리아지",
+    "slash_incident_off": "인시던트 플로우 종료",
+    "incident_ref_required": "인시던트 ID 입력 (예: /incident OPS-123)",
+    "incident_invalid_ref": "작업 항목 ID 형식이 아닙니다(예: OPS-123)",
+    "incident_flow_ended": "인시던트 플로우가 종료되었습니다"
+  }
+}

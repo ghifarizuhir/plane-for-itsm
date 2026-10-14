@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "დაგეგმეთ რეგულარული AI ანგარიში",
+    "slash_task": "შექმენით სამუშაო ელემენტი ჩატიდან",
+    "slash_incident": "არსებული ინციდენტის ტრიაჟი",
+    "slash_incident_off": "ინციდენტის ნაკადის დასრულება",
+    "incident_ref_required": "მიუთითეთ ინციდენტის ID, მაგ. /incident OPS-123",
+    "incident_invalid_ref": "ეს არ ჰგავს სამუშაო ელემენტის ID-ს (მაგ. OPS-123)",
+    "incident_flow_ended": "ინციდენტის ნაკადი დასრულდა"
+  }
+}

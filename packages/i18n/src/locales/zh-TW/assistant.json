@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "安排定期 AI 報告",
+    "slash_task": "從聊天建立工作事項",
+    "slash_incident": "對現有事件執行分類",
+    "slash_incident_off": "結束事件流程",
+    "incident_ref_required": "新增事件 ID，例如 /incident OPS-123",
+    "incident_invalid_ref": "這看起來不像工作事項 ID（例如 OPS-123）",
+    "incident_flow_ended": "事件流程已結束"
+  }
+}

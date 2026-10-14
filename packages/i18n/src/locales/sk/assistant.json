@@ -1,0 +1,11 @@
+{
+  "assistant": {
+    "slash_schedule": "Naplánovať pravidelný report AI",
+    "slash_task": "Vytvoriť pracovnú položku z chatu",
+    "slash_incident": "Vykonať triáž existujúceho incidentu",
+    "slash_incident_off": "Ukončiť priebeh incidentu",
+    "incident_ref_required": "Zadajte ID incidentu, napr. /incident OPS-123",
+    "incident_invalid_ref": "To nevyzerá ako ID pracovnej položky (napr. OPS-123)",
+    "incident_flow_ended": "Priebeh incidentu ukončený"
+  }
+}
