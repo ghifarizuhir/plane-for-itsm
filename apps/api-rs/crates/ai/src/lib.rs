@@ -4,6 +4,7 @@
 
 pub mod agent;
 pub mod decision;
+pub mod flows;
 pub mod llm;
 pub mod schedule;
 pub mod tools;
