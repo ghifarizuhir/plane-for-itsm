@@ -179,23 +179,25 @@ pub async fn workspace_ai_agent(
         .filter(|value| !value.is_empty());
     let active_flow = match (flow_id, flow_ref) {
         (None, None) => None,
-        (Some(id), Some(reference)) => match flows::validate(&st.pool, workspace_id, auth.0, id, reference).await {
-            Ok(active) => {
-                tracing::info!(
-                    flow_id = %active.id,
-                    flow_ref = %active.reference,
-                    "ai-agent: flow turn"
-                );
-                Some(active)
+        (Some(id), Some(reference)) => {
+            match flows::validate(&st.pool, workspace_id, auth.0, id, reference).await {
+                Ok(active) => {
+                    tracing::info!(
+                        flow_id = %active.id,
+                        flow_ref = %active.reference,
+                        "ai-agent: flow turn"
+                    );
+                    Some(active)
+                }
+                Err(error) => {
+                    tracing::warn!(code = %error.code, "ai-agent: flow rejected");
+                    return Ok((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": error.message, "code": error.code})),
+                    ));
+                }
             }
-            Err(error) => {
-                tracing::warn!(code = %error.code, "ai-agent: flow rejected");
-                return Ok((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": error.message, "code": error.code})),
-                ));
-            }
-        },
+        }
         _ => {
             return Ok((
                 StatusCode::BAD_REQUEST,

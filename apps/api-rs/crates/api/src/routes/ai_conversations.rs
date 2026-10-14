@@ -773,20 +773,16 @@ mod tests {
     #[test]
     fn metadata_patch_rejects_malformed_flows() {
         assert!(clean_metadata_patch(&patch_map(vec![("flow", json!("problem"))])).is_err());
-        assert!(
-            clean_metadata_patch(&patch_map(vec![
-                ("flow", json!("incident")),
-                ("flow_ref", json!("not a ref")),
-            ]))
-            .is_err()
-        );
-        assert!(
-            clean_metadata_patch(&patch_map(vec![
-                ("flow", json!("incident")),
-                ("flow_ref", json!(null)),
-            ]))
-            .is_err()
-        );
+        assert!(clean_metadata_patch(&patch_map(vec![
+            ("flow", json!("incident")),
+            ("flow_ref", json!("not a ref")),
+        ]))
+        .is_err());
+        assert!(clean_metadata_patch(&patch_map(vec![
+            ("flow", json!("incident")),
+            ("flow_ref", json!(null)),
+        ]))
+        .is_err());
         assert!(clean_metadata_patch(&patch_map(vec![("flow", json!(null))])).is_err());
         assert!(clean_metadata_patch(&patch_map(vec![("flow_ref", json!("OPS-1"))])).is_err());
     }

@@ -542,14 +542,32 @@ mod tool_roundtrip {
     #[tokio::test]
     async fn upstream_429_maps_to_rate_limited() {
         let base = super::spawn_fixed(429, json!({"error": {"message": "slow down"}})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
+        let out = run_agent(
+            &base,
+            "key",
+            "model",
+            ToolServer::new().run(),
+            None,
+            "hi",
+            None,
+        )
+        .await;
         assert_eq!(out, Err(LlmError::RateLimited));
     }
 
     #[tokio::test]
     async fn upstream_500_maps_to_upstream() {
         let base = super::spawn_fixed(500, json!({"error": "boom"})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
+        let out = run_agent(
+            &base,
+            "key",
+            "model",
+            ToolServer::new().run(),
+            None,
+            "hi",
+            None,
+        )
+        .await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 
@@ -569,7 +587,16 @@ mod tool_roundtrip {
         );
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let base = format!("http://{addr}/v1");
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
+        let out = run_agent(
+            &base,
+            "key",
+            "model",
+            ToolServer::new().run(),
+            None,
+            "hi",
+            None,
+        )
+        .await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 }
@@ -2037,11 +2064,12 @@ async fn flow_turns_reject_malformed_and_missing_pairs() {
     assert_eq!(body["code"], json!("flow_invalid"));
 
     // no partial state: neither turn inserted a message
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ai_messages WHERE conversation_id = $1")
-        .bind(conversation_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ai_messages WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(count, 0);
 
     scratch.purge(&pool).await;
@@ -2160,8 +2188,14 @@ async fn flow_turn_stamps_metadata_and_injects_the_playbook() {
     assert_eq!(status, StatusCode::OK);
 
     // Assistant message metadata carries the canonical reference.
-    assert_eq!(body["assistant_message"]["metadata"]["flow"], json!("incident"));
-    assert_eq!(body["assistant_message"]["metadata"]["flow_ref"], json!(incident_ref));
+    assert_eq!(
+        body["assistant_message"]["metadata"]["flow"],
+        json!("incident")
+    );
+    assert_eq!(
+        body["assistant_message"]["metadata"]["flow_ref"],
+        json!(incident_ref)
+    );
 
     // The stored row carries it too.
     let stored: Value = sqlx::query_scalar(

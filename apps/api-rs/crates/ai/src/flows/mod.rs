@@ -157,7 +157,8 @@ mod tests {
     }
 
     #[test]
-    fn incident_playbook_covers_every_locked_outcome_and_guardrail() {        let playbook = resolve("incident").unwrap().playbook;
+    fn incident_playbook_covers_every_locked_outcome_and_guardrail() {
+        let playbook = resolve("incident").unwrap().playbook;
         for marker in [
             "Orient",
             "Clarify",
@@ -193,18 +194,30 @@ mod tests {
     #[tokio::test]
     async fn validate_rejects_unknown_flows_before_touching_the_db() {
         let pool = crate::tools::lazy_pool();
-        let error = validate(&pool, uuid::Uuid::nil(), uuid::Uuid::nil(), "problem", "OPS-1")
-            .await
-            .expect_err("unknown flow");
+        let error = validate(
+            &pool,
+            uuid::Uuid::nil(),
+            uuid::Uuid::nil(),
+            "problem",
+            "OPS-1",
+        )
+        .await
+        .expect_err("unknown flow");
         assert_eq!(error.code, CODE_UNKNOWN);
     }
 
     #[tokio::test]
     async fn validate_rejects_malformed_references_before_touching_the_db() {
         let pool = crate::tools::lazy_pool();
-        let error = validate(&pool, uuid::Uuid::nil(), uuid::Uuid::nil(), "incident", "not-a-ref")
-            .await
-            .expect_err("malformed ref");
+        let error = validate(
+            &pool,
+            uuid::Uuid::nil(),
+            uuid::Uuid::nil(),
+            "incident",
+            "not-a-ref",
+        )
+        .await
+        .expect_err("malformed ref");
         assert_eq!(error.code, CODE_INVALID);
     }
 
