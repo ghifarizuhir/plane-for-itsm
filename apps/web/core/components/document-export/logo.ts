@@ -4,37 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import type { IWorkspace, TDocumentExportSettings } from "@plane/types";
-import { getBase64Image } from "@plane/utils";
-import type { TDocxImage } from "./html-to-docx";
-
-const dataUrlToUint8Array = (dataUrl: string): Uint8Array => {
-  const binary = atob(dataUrl.split(",")[1] ?? "");
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-};
-
-const loadImage = async (src: string | null | undefined): Promise<TDocxImage | null> => {
-  if (!src) return null;
-  try {
-    const dataUrl = await getBase64Image(src);
-    const mime = dataUrl.slice(5, dataUrl.indexOf(";"));
-    if (mime === "image/svg+xml") return null;
-    const type = mime === "image/jpeg" ? "jpg" : mime === "image/gif" ? "gif" : "png";
-    const data = dataUrlToUint8Array(dataUrl);
-    const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
-    return { data, width: bitmap.width, height: bitmap.height, type };
-  } catch {
-    return null;
-  }
-};
+import type { TDocumentExportSettings } from "@plane/types";
+import type { TDocxImage, TImageFetcher } from "./html-to-docx";
 
 export async function resolveDocumentLogo(
-  settings: Pick<TDocumentExportSettings, "header_logo_mode" | "header_logo_url">,
-  workspace: IWorkspace | null | undefined
+  settings: Pick<TDocumentExportSettings, "header_logo_mode" | "header_logo_url" | "header_logo_asset_id">,
+  workspace: { logo_url?: string | null } | null | undefined,
+  imageFetcher: TImageFetcher
 ): Promise<TDocxImage | null> {
-  if (settings.header_logo_mode === "workspace") return loadImage(workspace?.logo_url);
-  if (settings.header_logo_mode === "custom") return loadImage(settings.header_logo_url);
+  if (settings.header_logo_mode === "workspace") {
+    return workspace?.logo_url ? imageFetcher(workspace.logo_url) : null;
+  }
+  if (settings.header_logo_mode === "custom") {
+    const src = settings.header_logo_asset_id ?? settings.header_logo_url;
+    return src ? imageFetcher(src) : null;
+  }
   return null;
 }
