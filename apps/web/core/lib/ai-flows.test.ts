@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activeFlowFromMessages, INCIDENT_FLOW_ID, isIncidentCommand, parseIncidentCommand } from "./ai-flows";
+import { toAiMessage } from "./ai-conversations";
 
 describe("isIncidentCommand", () => {
   it("matches only leading /incident commands", () => {
@@ -58,5 +59,19 @@ describe("activeFlowFromMessages", () => {
 
   it("ignores an active flow without a reference", () => {
     expect(activeFlowFromMessages([{ flow: "incident", flowRef: null }])).toBeUndefined();
+  });
+});
+
+describe("toAiMessage flow mapping", () => {
+  it("maps flow metadata onto the message model", () => {
+    const mapped = toAiMessage({
+      id: "m1",
+      role: "assistant",
+      content: "ok",
+      metadata: { flow: "incident", flow_ref: "OPS-9" },
+      created_at: "2026-10-15T00:00:00Z",
+    });
+    expect(mapped.flow).toBe("incident");
+    expect(mapped.flowRef).toBe("OPS-9");
   });
 });

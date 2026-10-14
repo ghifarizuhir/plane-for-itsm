@@ -28,6 +28,8 @@ export type TAiMessageMetadata = {
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
   proposals?: TAiProposal[];
   proposal_decisions?: Record<string, TAiProposalDecision>;
+  flow?: string | null;
+  flow_ref?: string | null;
   is_error?: boolean;
 };
 
@@ -44,6 +46,8 @@ export type TAiStoredMessage = {
 export type TAiMessageMetadataPatch = Pick<TAiMessageMetadata, "schedule_decision" | "created_schedule_id"> & {
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
   proposal_decisions?: Record<string, TAiProposalDecision>;
+  flow?: "incident" | null;
+  flow_ref?: string | null;
 };
 
 /** Map a server-stored message onto the chat bubble model. */
@@ -60,5 +64,7 @@ export const toAiMessage = (stored: TAiStoredMessage): TAiMessage => ({
   workItemDecisions: stored.metadata?.work_item_decisions,
   proposals: stored.metadata?.proposals,
   proposalDecisions: stored.metadata?.proposal_decisions,
+  flow: stored.metadata?.flow,
+  flowRef: stored.metadata?.flow_ref,
   createdAt: stored.created_at,
 });

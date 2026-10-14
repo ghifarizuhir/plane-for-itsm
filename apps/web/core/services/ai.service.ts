@@ -28,6 +28,8 @@ export type TChatPayload = {
   prompt: string;
   context: string;
   conversation_id: string;
+  flow?: "incident";
+  flow_ref?: string;
 };
 
 export type TChatResponse = {

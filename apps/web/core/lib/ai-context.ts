@@ -29,6 +29,8 @@ export type TAiMessage = {
   workItemDecisions?: Record<string, TAiWorkItemDecision>;
   proposals?: TAiProposal[];
   proposalDecisions?: Record<string, TAiProposalDecision>;
+  flow?: string | null;
+  flowRef?: string | null;
   createdAt?: string;
 };
 
