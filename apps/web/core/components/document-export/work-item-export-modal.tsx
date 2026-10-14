@@ -16,6 +16,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // components
 import { buildWorkItemDocument } from "@/components/document-export/build-work-item-doc";
 import { documentFileName, initiateDownload } from "@/components/document-export/download";
+import { createDocumentImageFetcher } from "@/components/document-export/image-fetcher";
 import { resolveDocumentLogo } from "@/components/document-export/logo";
 import { milestoneRows } from "@/components/document-export/milestones";
 import { resolvePlaceholders } from "@/components/document-export/resolve-placeholders";
@@ -48,6 +49,7 @@ const RELATION_LABEL_KEYS: Record<TIssueRelationTypes, string> = {
 const DEFAULT_SETTINGS = {
   header_logo_mode: "none" as const,
   header_logo_url: null,
+  header_logo_asset_id: null,
   header_text_lines: [] as { text: string; align: "left" | "center" | "right" }[],
   footer_text_lines: [] as { text: string; align: "left" | "center" | "right" }[],
   show_page_numbers: true,
@@ -138,7 +140,12 @@ export const WorkItemExportModal = observer(function WorkItemExportModal({ issue
           stateName: getStateById(item.state_id)?.name,
         }))
       );
-      const logo = await resolveDocumentLogo(resolvedSettings, currentWorkspace);
+      const documentImageFetcher = createDocumentImageFetcher({
+        workspaceSlug: slug,
+        projectId: issue.project_id ?? undefined,
+      });
+      const logoImageFetcher = createDocumentImageFetcher({ workspaceSlug: slug });
+      const logo = await resolveDocumentLogo(resolvedSettings, currentWorkspace, logoImageFetcher);
 
       const blob = await buildWorkItemDocument({
         title: `${identifier} — ${issue.name}`,
@@ -155,6 +162,8 @@ export const WorkItemExportModal = observer(function WorkItemExportModal({ issue
         updatedBy: memberMap?.[issue.updated_by ?? ""]?.display_name,
         updatedAt: issue.updated_at,
         descriptionHtml: issue.description_html ?? "",
+        imageFetcher: documentImageFetcher,
+        imageUnavailableText: t("document_export.doc.image_unavailable"),
         linkedItems,
         milestones,
         includeHistory,
@@ -194,25 +203,27 @@ export const WorkItemExportModal = observer(function WorkItemExportModal({ issue
 
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.SM}>
-      <div className="space-y-5 p-5">
-        <h3 className="text-18 font-medium text-secondary">{t("document_export.modal.title")}</h3>
-        <p className="text-13 text-tertiary">{t("document_export.modal.description")}</p>
-        <label className="flex items-center gap-2 text-13 text-secondary">
-          <input
-            type="checkbox"
-            checked={includeHistory}
-            onChange={(event) => setIncludeHistory(event.target.checked)}
-          />
-          {t("document_export.modal.include_history")}
-        </label>
-      </div>
-      <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">
-        <Button variant="secondary" size="lg" onClick={onClose}>
-          {t("cancel")}
-        </Button>
-        <Button variant="primary" size="lg" loading={isExporting} onClick={handleExport}>
-          {isExporting ? t("document_export.modal.exporting") : t("document_export.modal.export")}
-        </Button>
+      <div data-prevent-outside-click>
+        <div className="space-y-5 p-5">
+          <h3 className="text-18 font-medium text-secondary">{t("document_export.modal.title")}</h3>
+          <p className="text-13 text-tertiary">{t("document_export.modal.description")}</p>
+          <label className="flex items-center gap-2 text-13 text-secondary">
+            <input
+              type="checkbox"
+              checked={includeHistory}
+              onChange={(event) => setIncludeHistory(event.target.checked)}
+            />
+            {t("document_export.modal.include_history")}
+          </label>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">
+          <Button variant="secondary" size="lg" onClick={onClose}>
+            {t("cancel")}
+          </Button>
+          <Button variant="primary" size="lg" loading={isExporting} onClick={handleExport}>
+            {isExporting ? t("document_export.modal.exporting") : t("document_export.modal.export")}
+          </Button>
+        </div>
       </div>
     </ModalCore>
   );

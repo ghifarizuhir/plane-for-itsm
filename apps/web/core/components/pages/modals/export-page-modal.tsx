@@ -20,6 +20,7 @@ import { CustomSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui"
 // components
 import { buildPageDocument } from "@/components/document-export/build-page-doc";
 import { documentFileName, initiateDownload } from "@/components/document-export/download";
+import { createDocumentImageFetcher } from "@/components/document-export/image-fetcher";
 import { resolveDocumentLogo } from "@/components/document-export/logo";
 import { resolvePlaceholders } from "@/components/document-export/resolve-placeholders";
 import { PDFDocument } from "@/components/editor/pdf";
@@ -204,6 +205,7 @@ export function ExportPageModal(props: Props) {
       const resolvedSettings = settings ?? {
         header_logo_mode: "none" as const,
         header_logo_url: null,
+        header_logo_asset_id: null,
         header_text_lines: [],
         footer_text_lines: [],
         show_page_numbers: true,
@@ -248,7 +250,11 @@ export function ExportPageModal(props: Props) {
       const versions = pageIdString
         ? await versionService.fetchAllVersions(slug, projectIdString, pageIdString).catch(() => [])
         : [];
-      const logo = await resolveDocumentLogo(resolvedSettings, currentWorkspace);
+      const logo = await resolveDocumentLogo(
+        resolvedSettings,
+        currentWorkspace,
+        createDocumentImageFetcher({ workspaceSlug: slug })
+      );
 
       const blob = await buildPageDocument({
         title: pageTitle,
@@ -262,6 +268,8 @@ export function ExportPageModal(props: Props) {
         projectName: getProjectById(projectIdString)?.name,
         versionCount: versions.length || undefined,
         subPages,
+        imageFetcher: createDocumentImageFetcher({ workspaceSlug: slug, projectId: projectIdString }),
+        imageUnavailableText: t("document_export.doc.image_unavailable"),
         headerLines,
         footerLines,
         showPageNumbers: resolvedSettings.show_page_numbers,
@@ -315,7 +323,7 @@ export function ExportPageModal(props: Props) {
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.SM}>
-      <div>
+      <div data-prevent-outside-click>
         <div className="space-y-5 p-5">
           <h3 className="text-18 font-medium text-secondary">Export page</h3>
           <div className="space-y-3">
