@@ -2145,3 +2145,126 @@ describe("triage proposals", () => {
     });
   });
 });
+
+describe("incident flow", () => {
+  it("starts the flow, switches to agent, and sends flow fields", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("/incident OPS-123");
+
+    expect(store.mode).toBe("agent");
+    expect(store.activeFlow).toEqual({ id: "incident", ref: "OPS-123" });
+    const call = (services.ai.createAgentTask as any).mock.calls[0];
+    expect(call[1].flow).toBe("incident");
+    expect(call[1].flow_ref).toBe("OPS-123");
+    expect((services.ai.createGptTask as any).mock.calls).toHaveLength(0);
+  });
+
+  it("does not send a normal agent turn with flow fields when no flow is active", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    await store.sendMessage("how many incidents?");
+
+    const call = (services.ai.createAgentTask as any).mock.calls[0];
+    expect(call[1].flow).toBeUndefined();
+    expect(call[1].flow_ref).toBeUndefined();
+  });
+
+  it("shows a hint and skips the API when the reference is missing or malformed", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("/incident");
+    expect(store.flowHint).toBe("incident_ref_required");
+
+    await store.sendMessage("/incident nothing");
+    expect(store.flowHint).toBe("incident_invalid_ref");
+
+    expect((services.ai.createAgentTask as any).mock.calls).toHaveLength(0);
+    expect((services.ai.createGptTask as any).mock.calls).toHaveLength(0);
+    expect(store.messages.some((message) => message.content.includes("/incident"))).toBe(false);
+  });
+
+  it("restores the active flow from message metadata and clears it on /incident off", async () => {
+    const services = makeServices({
+      conversations: {
+        listMessages: vi.fn(async () => [
+          { ...storedMessage("srv-1", "user", "/incident OPS-1"), metadata: {} },
+          {
+            ...storedMessage("srv-2", "assistant", "working on it"),
+            metadata: { flow: "incident", flow_ref: "OPS-1" },
+          },
+        ]),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+
+    expect(store.activeFlow).toEqual({ id: "incident", ref: "OPS-1" });
+
+    await store.sendMessage("/incident off");
+
+    expect(store.activeFlow).toBeUndefined();
+    expect(store.flowNotice).toBe("incident_flow_ended");
+    expect((services.conversations.updateMessageMetadata as any).mock.calls).toContainEqual([
+      "acme",
+      "c-agent",
+      "srv-2",
+      { flow: null, flow_ref: null },
+    ]);
+    expect((services.ai.createAgentTask as any).mock.calls).toHaveLength(0);
+  });
+
+  it("clears the flow when the server rejects it with a flow code", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async () => {
+          throw { status: 400, data: { error: "work item OPS-9 was not found", code: "flow_ref_gone" } };
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("/incident OPS-9");
+
+    expect(store.activeFlow).toBeUndefined();
+    expect(store.messages.at(-1)?.isError).toBe(true);
+    expect(
+      (services.conversations.updateMessageMetadata as any).mock.calls.some(
+        (args: any[]) => args[3] && args[3].flow === null
+      )
+    ).toBe(true);
+  });
+
+  it("keeps the flow when the turn fails for unrelated reasons", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async () => {
+          throw { status: 500, data: { error: "An internal error has occurred." } };
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await store.sendMessage("/incident OPS-9");
+
+    expect(store.activeFlow).toEqual({ id: "incident", ref: "OPS-9" });
+  });
+});

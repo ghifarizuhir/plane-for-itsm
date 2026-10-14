@@ -21,6 +21,7 @@ import { ServiceService } from "@/services/service.service";
 import { convertHTMLDocumentToAllFormats } from "@plane/editor";
 import { AI_ASSISTANT_TASK, buildAiContext } from "@/lib/ai-context";
 import { toAiMessage } from "@/lib/ai-conversations";
+import { activeFlowFromMessages, parseIncidentCommand, type TAiFlow, type TFlowFeedbackKey } from "@/lib/ai-flows";
 import type { TAiProposalConfirmPayload, TAiProposalDecision, TAiProposalDecisionResult } from "@/lib/ai-proposals";
 import { isScheduleCommand, type TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision } from "@/lib/ai-work-items";
@@ -59,10 +60,14 @@ export interface IAIAssistantStore {
   activeConversationId: string | undefined;
   conversationsLoading: boolean;
   historyOpen: boolean;
+  activeFlow: TAiFlow | undefined;
+  flowHint: TFlowFeedbackKey | undefined;
+  flowNotice: TFlowFeedbackKey | undefined;
   setWorkspace: (workspaceSlug: string | undefined) => void;
   setHistoryOpen: (open: boolean) => void;
   setMode: (mode: TAiAssistantMode) => void;
   setActiveIssueContext: (context: TAiIssueContext | undefined) => void;
+  clearFlowFeedback: () => void;
   loadConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<void>;
   newChat: () => void;
@@ -124,6 +129,9 @@ export class AIAssistantStore implements IAIAssistantStore {
   activeConversationId: string | undefined = undefined;
   conversationsLoading = false;
   historyOpen = false;
+  activeFlow: TAiFlow | undefined = undefined;
+  flowHint: TFlowFeedbackKey | undefined = undefined;
+  flowNotice: TFlowFeedbackKey | undefined = undefined;
 
   private workspaceSlug: string | undefined = undefined;
   private requestSeq = 0;
@@ -155,6 +163,9 @@ export class AIAssistantStore implements IAIAssistantStore {
       activeConversationId: observable.ref,
       conversationsLoading: observable.ref,
       historyOpen: observable.ref,
+      activeFlow: observable.ref,
+      flowHint: observable.ref,
+      flowNotice: observable.ref,
       hasActiveIssue: computed,
       setWorkspace: action,
       setHistoryOpen: action,
@@ -173,6 +184,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       resolveWorkItemProposal: action,
       confirmProposal: action,
       cancelProposal: action,
+      clearFlowFeedback: action,
+      endIncidentFlow: action,
     });
   }
 
@@ -192,6 +205,9 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.conversations = [];
       this.activeConversationId = undefined;
       this.messages = [];
+      this.activeFlow = undefined;
+      this.flowHint = undefined;
+      this.flowNotice = undefined;
     }
     this.workspaceSlug = workspaceSlug;
     this.mode = this.restoreMode();
@@ -260,6 +276,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       if (seq !== this.requestSeq) return;
       runInAction(() => {
         this.messages = messages.map(toAiMessage);
+        this.activeFlow = activeFlowFromMessages(this.messages);
       });
       this.persistActiveId();
     } catch (error: any) {
@@ -270,6 +287,7 @@ export class AIAssistantStore implements IAIAssistantStore {
           this.conversations = this.conversations.filter((candidate) => candidate.id !== conversationId);
           this.activeConversationId = undefined;
           this.messages = [];
+          this.activeFlow = undefined;
         });
         this.clearActiveId();
         return;
@@ -277,6 +295,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       runInAction(() => {
         this.activeConversationId = undefined;
         this.messages = [];
+        this.activeFlow = undefined;
       });
     }
   };
@@ -288,6 +307,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     runInAction(() => {
       this.activeConversationId = undefined;
       this.messages = [];
+      this.activeFlow = undefined;
     });
     this.clearActiveId();
   };
@@ -336,9 +356,28 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
   };
 
+  clearFlowFeedback = () => {
+    runInAction(() => {
+      this.flowHint = undefined;
+      this.flowNotice = undefined;
+    });
+  };
+
   sendMessage = async (question: string) => {
     const trimmed = question.trim();
     if (!trimmed || this.isGenerating || this.turnGuard || !this.workspaceSlug) return;
+    const incident = parseIncidentCommand(trimmed);
+    if (incident?.kind === "missing" || incident?.kind === "invalid") {
+      runInAction(() => {
+        this.flowHint = incident.kind === "missing" ? "incident_ref_required" : "incident_invalid_ref";
+        this.flowNotice = undefined;
+      });
+      return;
+    }
+    if (incident?.kind === "off") {
+      this.endIncidentFlow();
+      return;
+    }
     this.turnGuard = true;
     const turn = ++this.turnSeq;
     runInAction(() => {
@@ -346,9 +385,16 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
     try {
       this.interactionSeq += 1;
-      if (isScheduleCommand(trimmed) && this.mode !== "agent") {
+      if ((incident?.kind === "start" || isScheduleCommand(trimmed)) && this.mode !== "agent") {
         this.setMode("agent");
         await this.openLastForMode();
+      }
+      if (incident?.kind === "start") {
+        runInAction(() => {
+          this.activeFlow = { id: "incident", ref: incident.ref };
+          this.flowHint = undefined;
+          this.flowNotice = undefined;
+        });
       }
       const slug = this.workspaceSlug;
       const conversationId = await this.ensureConversation();
@@ -703,6 +749,31 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   };
 
+  endIncidentFlow = () => {
+    if (!this.activeFlow) return;
+    const conversationId = this.activeConversationId;
+    const last = this.messages[this.messages.length - 1];
+    runInAction(() => {
+      this.activeFlow = undefined;
+      this.flowHint = undefined;
+      this.flowNotice = "incident_flow_ended";
+    });
+    if (conversationId && last?.id) void this.persistFlowCleared(conversationId, last.id);
+  };
+
+  private persistFlowCleared = async (conversationId: string, messageId: string) => {
+    const slug = this.workspaceSlug;
+    if (!slug) return;
+    try {
+      await this.conversationsService.updateMessageMetadata(slug, conversationId, messageId, {
+        flow: null,
+        flow_ref: null,
+      });
+    } catch {
+      // best-effort: local state is already cleared
+    }
+  };
+
   private async request(question: string, slug: string, conversationId: string, optimisticId: string) {
     const mode = this.mode;
     const seq = ++this.requestSeq;
@@ -716,6 +787,7 @@ export class AIAssistantStore implements IAIAssistantStore {
         prompt: question,
         context: buildAiContext(this.activeIssueContext, userTimezone),
         conversation_id: conversationId,
+        ...(mode === "agent" && this.activeFlow ? { flow: this.activeFlow.id, flow_ref: this.activeFlow.ref } : {}),
       };
       const res =
         mode === "agent"
@@ -752,6 +824,13 @@ export class AIAssistantStore implements IAIAssistantStore {
           this.messages.push({ id: uuidv4(), role: "assistant", content: errorContent, isError: true });
         });
         return;
+      }
+      if (typeof err?.data?.code === "string" && err.data.code.startsWith("flow_")) {
+        const last = this.messages[this.messages.length - 1];
+        runInAction(() => {
+          this.activeFlow = undefined;
+        });
+        if (last?.id) void this.persistFlowCleared(conversationId, last.id);
       }
       const errorContent =
         err?.status === 429
