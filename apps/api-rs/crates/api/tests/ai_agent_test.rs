@@ -12,7 +12,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 
 use api::middleware::auth::AuthUser;
-use api::routes::ai_agent::run_agent;
+use api::routes::ai_agent::{run_agent, ActiveFlow};
 use api::state::AppState;
 use axum::{
     extract::{Path, State},
@@ -104,6 +104,7 @@ async fn task_folds_into_upstream_user_message() {
         ToolServer::new().run(),
         Some("be terse"),
         "hi",
+        None,
     )
     .await;
     assert_eq!(out, Ok("final answer".to_string()));
@@ -126,9 +127,49 @@ async fn prompt_without_tools_returns_content() {
         ToolServer::new().run(),
         None,
         "hi",
+        None,
     )
     .await;
     assert_eq!(out, Ok("final answer".to_string()));
+}
+
+#[tokio::test]
+async fn flow_preamble_lands_in_the_system_message() {
+    let (base, upstream) = spawn_capturing().await;
+    let active = ActiveFlow {
+        id: "incident",
+        reference: "OPS-123".to_string(),
+    };
+    let out = run_agent(
+        &base,
+        "key",
+        "model",
+        ToolServer::new().run(),
+        None,
+        "hi",
+        Some(&active),
+    )
+    .await;
+    assert_eq!(out, Ok("final answer".to_string()));
+    let bodies = upstream.bodies.lock().unwrap();
+    let messages = bodies[0]["messages"].as_array().unwrap();
+    let system = messages
+        .iter()
+        .find(|m| m["role"] == json!("system"))
+        .expect("upstream call must carry a system message");
+    // Rig sends the preamble as multipart content; join the text parts.
+    let content: String = system["content"]
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|part| part["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .unwrap_or_default();
+    assert!(content.contains("Active work item: OPS-123"));
+    assert!(content.contains("Incident triage"));
 }
 
 mod tool_roundtrip {
@@ -440,6 +481,7 @@ mod tool_roundtrip {
             ToolServer::new().tool(tool).run(),
             None,
             "say hi",
+            None,
         )
         .await;
         assert_eq!(out, Ok("final answer".to_string()));
@@ -477,6 +519,7 @@ mod tool_roundtrip {
             ToolServer::new().tool(tool).run(),
             None,
             "/schedule daily report",
+            None,
         )
         .await;
         assert_eq!(out, Ok("final answer".to_string()));
@@ -499,14 +542,14 @@ mod tool_roundtrip {
     #[tokio::test]
     async fn upstream_429_maps_to_rate_limited() {
         let base = super::spawn_fixed(429, json!({"error": {"message": "slow down"}})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
         assert_eq!(out, Err(LlmError::RateLimited));
     }
 
     #[tokio::test]
     async fn upstream_500_maps_to_upstream() {
         let base = super::spawn_fixed(500, json!({"error": "boom"})).await;
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 
@@ -526,7 +569,7 @@ mod tool_roundtrip {
         );
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let base = format!("http://{addr}/v1");
-        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi").await;
+        let out = run_agent(&base, "key", "model", ToolServer::new().run(), None, "hi", None).await;
         assert_eq!(out, Err(LlmError::Upstream));
     }
 }

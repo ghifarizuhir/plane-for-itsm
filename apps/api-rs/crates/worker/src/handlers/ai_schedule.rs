@@ -214,6 +214,7 @@ pub async fn run(pool: &PgPool, payload: Value) -> anyhow::Result<()> {
             handle,
             None,
             &run.prompt,
+            None,
         ),
     )
     .await;

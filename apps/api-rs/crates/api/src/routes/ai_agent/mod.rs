@@ -39,6 +39,8 @@ pub use ai::agent::{effective_prompt, record};
 // unused, so the lint is allowed there.
 #[allow(unused_imports)]
 pub use ai::agent::{ToolCallTrace, ToolTrace};
+#[allow(unused_imports)]
+pub use ai::flows::ActiveFlow;
 
 pub mod tools {
     pub use ai::tools::*;
@@ -216,6 +218,7 @@ pub async fn workspace_ai_agent(
             tool_server,
             task,
             &model_prompt,
+            None,
         ),
     )
     .await
@@ -353,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn success_body_maps_newlines_and_keeps_tool_calls() {
+    fn success_body_renders_markdown_and_keeps_tool_calls() {
         let body = success_body(
             "line1\nline2",
             vec![json!({"name": "list_projects"})],
@@ -361,7 +364,7 @@ mod tests {
             vec![],
         );
         assert_eq!(body["response"], json!("line1\nline2"));
-        assert_eq!(body["response_html"], json!("line1<br/>line2"));
+        assert_eq!(body["response_html"], json!("<p>line1<br />\nline2</p>"));
         assert_eq!(body["tool_calls"][0]["name"], json!("list_projects"));
         assert_eq!(body["pending_action"], json!(null));
         assert_eq!(body["pending_actions"], json!([]));

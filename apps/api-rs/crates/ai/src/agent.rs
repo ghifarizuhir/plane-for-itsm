@@ -11,6 +11,7 @@ use rig::providers::openai;
 use rig::tool::server::ToolServerHandle;
 use serde_json::{json, Value};
 
+use crate::flows::{self, ActiveFlow};
 use crate::llm::LlmError;
 use crate::tools::{CREATE_SCHEDULE_NAME, PROPOSAL_TOOL_NAMES};
 
@@ -213,6 +214,7 @@ pub async fn run_agent(
     tool_server: ToolServerHandle,
     task: Option<&str>,
     prompt: &str,
+    flow: Option<&ActiveFlow>,
 ) -> Result<String, LlmError> {
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
@@ -223,9 +225,13 @@ pub async fn run_agent(
             tracing::warn!(error = %e, "ai-agent: llm client build failed");
             LlmError::Upstream
         })?;
+    let preamble = match flow {
+        Some(active) => flows::preamble_with_flow(PREAMBLE, active),
+        None => PREAMBLE.to_string(),
+    };
     let agent = client
         .agent(model)
-        .preamble(PREAMBLE)
+        .preamble(preamble.as_str())
         .tool_server_handle(tool_server)
         .default_max_turns(MAX_TURNS)
         .build();
