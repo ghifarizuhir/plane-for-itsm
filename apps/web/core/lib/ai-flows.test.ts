@@ -54,7 +54,7 @@ describe("activeFlowFromMessages", () => {
   });
 
   it("returns undefined when no message carries a flow key", () => {
-    expect(activeFlowFromMessages([{ content: "hi" }, { flow: undefined }])).toBeUndefined();
+    expect(activeFlowFromMessages([{}, { flow: undefined }])).toBeUndefined();
   });
 
   it("ignores an active flow without a reference", () => {

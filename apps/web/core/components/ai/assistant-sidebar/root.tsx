@@ -20,6 +20,7 @@ import {
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { cn } from "@plane/utils";
 import type { TIssue } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
 // hooks
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
@@ -59,9 +60,12 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     mode,
     activeIssueContext,
     hasActiveIssue,
+    flowHint,
+    flowNotice,
     setWorkspace,
     setMode,
     setActiveIssueContext,
+    clearFlowFeedback,
     sendMessage,
     retryLast,
     newChat,
@@ -80,6 +84,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
+  const { t } = useTranslation();
   // local state
   const [question, setQuestion] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -133,7 +138,10 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
 
   const trimmedQuestion = question.trimStart().toLowerCase();
   const showSlashHint =
-    trimmedQuestion.startsWith("/") && !trimmedQuestion.startsWith("/schedule") && !trimmedQuestion.startsWith("/task");
+    trimmedQuestion.startsWith("/") &&
+    !trimmedQuestion.startsWith("/schedule") &&
+    !trimmedQuestion.startsWith("/task") &&
+    !trimmedQuestion.startsWith("/incident");
 
   return (
     <aside
@@ -370,6 +378,16 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               </div>
               {/* composer */}
               <div className="border-t border-subtle px-4 pt-2.5 pb-3">
+                {flowHint && (
+                  <p className="mb-2 text-12 text-danger-primary" role="alert">
+                    {t(`assistant.${flowHint}`)}
+                  </p>
+                )}
+                {flowNotice && (
+                  <p className="mb-2 text-12 text-tertiary" role="status">
+                    {t(`assistant.${flowNotice}`)}
+                  </p>
+                )}
                 <div className="focus-within:border-accent-primary rounded-lg border border-subtle bg-layer-1 transition-colors">
                   {showSlashHint && !isGenerating && (
                     <>
@@ -381,7 +399,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                         }}
                         className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
                       >
-                        /schedule — <span className="text-tertiary">Schedule a recurring AI report</span>
+                        /schedule — <span className="text-tertiary">{t("assistant.slash_schedule")}</span>
                       </button>
                       <button
                         type="button"
@@ -391,14 +409,37 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                         }}
                         className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
                       >
-                        /task — <span className="text-tertiary">Create a work item from chat</span>
+                        /task — <span className="text-tertiary">{t("assistant.slash_task")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuestion("/incident ");
+                          composerRef.current?.focus();
+                        }}
+                        className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
+                      >
+                        /incident <span className="text-tertiary">{t("assistant.slash_incident")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuestion("/incident off");
+                          composerRef.current?.focus();
+                        }}
+                        className="w-full border-b border-subtle px-3.5 py-2 text-left text-12 text-secondary transition-colors hover:text-primary"
+                      >
+                        /incident off <span className="text-tertiary">{t("assistant.slash_incident_off")}</span>
                       </button>
                     </>
                   )}
                   <textarea
                     ref={composerRef}
                     value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
+                    onChange={(event) => {
+                      clearFlowFeedback();
+                      setQuestion(event.target.value);
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
