@@ -2132,3 +2132,67 @@ async fn flow_turns_reject_inaccessible_and_wrong_type_refs() {
     other.purge(&pool).await;
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn flow_turn_stamps_metadata_and_injects_the_playbook() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+    let (_, incident_ref) = scratch.add_project_with_work_item(&pool, "Incident").await;
+
+    let (base_url, upstream) = spawn_capturing().await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "prompt": format!("/incident {incident_ref}"),
+            "conversation_id": conversation_id,
+            "flow": "incident",
+            "flow_ref": incident_ref,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+
+    // Assistant message metadata carries the canonical reference.
+    assert_eq!(body["assistant_message"]["metadata"]["flow"], json!("incident"));
+    assert_eq!(body["assistant_message"]["metadata"]["flow_ref"], json!(incident_ref));
+
+    // The stored row carries it too.
+    let stored: Value = sqlx::query_scalar(
+        "SELECT metadata FROM ai_messages WHERE conversation_id = $1 AND role = 'assistant'",
+    )
+    .bind(conversation_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored["flow"], json!("incident"));
+    assert_eq!(stored["flow_ref"], json!(incident_ref));
+
+    // The upstream prompt carried the playbook with the canonical reference.
+    let bodies = upstream.bodies.lock().unwrap();
+    let messages = bodies[0]["messages"].as_array().unwrap();
+    let system = messages
+        .iter()
+        .find(|m| m["role"] == json!("system"))
+        .expect("system message");
+    let content: String = system["content"]
+        .as_array()
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|part| part["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        })
+        .unwrap_or_default();
+    assert!(content.contains(&format!("Active work item: {incident_ref}")));
+    assert!(content.contains("Incident triage"));
+
+    scratch.purge(&pool).await;
+}

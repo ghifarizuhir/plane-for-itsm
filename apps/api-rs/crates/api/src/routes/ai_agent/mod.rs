@@ -260,7 +260,7 @@ pub async fn workspace_ai_agent(
             tool_server,
             task,
             &model_prompt,
-            None,
+            active_flow.as_ref(),
         ),
     )
     .await
@@ -294,6 +294,10 @@ pub async fn workspace_ai_agent(
             }
             if !proposals.is_empty() {
                 metadata["proposals"] = json!(proposals);
+            }
+            if let Some(active) = active_flow.as_ref() {
+                metadata["flow"] = json!(active.id);
+                metadata["flow_ref"] = json!(active.reference);
             }
             // Assistant message + prune + updated_at in ONE transaction. A
             // conversation deleted mid-turn (row gone / FK violation) → 404.
