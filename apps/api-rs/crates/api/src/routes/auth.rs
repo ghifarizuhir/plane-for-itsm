@@ -24,6 +24,10 @@ use common::auth as authn;
 
 const ACCESS_TTL_SECS: i64 = 900;
 const REFRESH_TTL_SECS: i64 = 30 * 24 * 3600;
+/// Grace window for refresh rotation: the previous hash stays usable this
+/// long so a concurrent refresh from another tab (same old token) still
+/// succeeds instead of 401. Standard single-use-with-grace rotation.
+const REFRESH_GRACE_SECS: i64 = 60;
 
 #[derive(Deserialize)]
 pub struct LoginBody {
@@ -296,15 +300,9 @@ pub async fn refresh(
         Ok(u) => u,
         Err(_) => return Ok(unauthorized()),
     };
-    // Hapus hash lama + keluarkan dari SET keluarga.
-    redis::cmd("DEL")
-        .arg(authn::refresh_key(&old_hash))
-        .query_async::<()>(&mut conn)
-        .await
-        .map_err(|e| {
-            tracing::warn!(error=%e, "auth refresh: del failed");
-            common::errors::AppError::internal()
-        })?;
+    // Keluarkan hash lama dari SET keluarga, tapi biarkan hash-nya hidup
+    // selama REFRESH_GRACE_SECS agar refresh konkuren dari tab lain dengan
+    // token lama yang sama tetap sukses (bukan 401).
     redis::cmd("SREM")
         .arg(family_key(family))
         .arg(&old_hash)
@@ -312,6 +310,15 @@ pub async fn refresh(
         .await
         .map_err(|e| {
             tracing::warn!(error=%e, "auth refresh: srem failed");
+            common::errors::AppError::internal()
+        })?;
+    redis::cmd("EXPIRE")
+        .arg(authn::refresh_key(&old_hash))
+        .arg(REFRESH_GRACE_SECS)
+        .query_async::<()>(&mut conn)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error=%e, "auth refresh: grace expire failed");
             common::errors::AppError::internal()
         })?;
     let row: Option<(String,)> = sqlx::query_as("SELECT email FROM users WHERE id = $1")
