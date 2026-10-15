@@ -8,6 +8,7 @@ import type { AxiosInstance } from "axios";
 import { create } from "axios";
 import { env } from "@/env";
 import { AppError } from "@/lib/errors";
+import { mergeRefreshedCookies } from "@/utils/cookies";
 
 export const buildDefaultHeaders = (webBaseUrl?: string): Record<string, string> => {
   const origin = webBaseUrl?.trim();
@@ -45,6 +46,25 @@ export abstract class APIService {
 
   getHeader() {
     return this.header;
+  }
+
+  /**
+   * Rotate the session using the refresh cookie embedded in `cookie`.
+   * Returns the merged `Cookie` header value, or `null` when rotation
+   * failed (caller must keep the old cookie and surface the error).
+   */
+  async refreshAccessCookie(cookie: string): Promise<string | null> {
+    try {
+      const response = await this.axiosInstance.post("/api/auth/refresh/", null, {
+        headers: { Cookie: cookie },
+      });
+      const setCookies = response.headers?.["set-cookie"] as unknown;
+      const list = Array.isArray(setCookies) ? (setCookies as string[]) : [];
+      if (list.length === 0) return null;
+      return mergeRefreshedCookies(cookie, list);
+    } catch {
+      return null;
+    }
   }
 
   get(url: string, params = {}, config = {}) {

@@ -91,6 +91,30 @@ const storeDocument = async ({
     await service.updateDescriptionBinary(pageId, payload);
   } catch (error) {
     const appError = new AppError(error, { context: { pageId } });
+    // The WS-connection-time cookie expires 15 min after connect
+    // (api-rs ACCESS_TTL_SECS). Refresh once and retry instead of
+    // dropping the save, then persist the fresh cookie on context.
+    if (appError.statusCode === 401) {
+      try {
+        const refreshed = await getPageService(context.documentType, context).refreshAccessCookie(context.cookie);
+        if (refreshed) {
+          context.cookie = refreshed;
+          const { contentBinaryEncoded, contentHTML, contentJSON } = getAllDocumentFormatsFromDocumentEditorBinaryData(
+            pageBinaryData,
+            true
+          );
+          const retryService = getPageService(context.documentType, context);
+          await retryService.updateDescriptionBinary(pageId, {
+            description_binary: contentBinaryEncoded,
+            description_html: contentHTML,
+            description_json: contentJSON,
+          });
+          return;
+        }
+      } catch {
+        // fall through to the broadcast below
+      }
+    }
     logger.error("Error in updating document:", appError);
 
     // Check error types
