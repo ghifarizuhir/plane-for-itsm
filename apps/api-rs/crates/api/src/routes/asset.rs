@@ -538,10 +538,22 @@ fn presign_get(
 /// dependency). Copy failures are logged and ignored — Django's duplicate
 /// view ignores `copy_object`'s `None` the same way (`v2.py:861-863` still
 /// mark the row uploaded and return 200).
+/// Region used for server-side copy signing. Production sets
+/// `AWS_REGION=""`; MinIO rejects header-auth SigV4 with an empty region
+/// scope (403 on copy), while presigned POST/GET work — so default ONLY
+/// the copy path to `us-east-1` (MinIO default) and leave presigns untouched.
+pub fn default_s3_region(region: &str) -> &str {
+    if region.is_empty() {
+        "us-east-1"
+    } else {
+        region
+    }
+}
+
 async fn s3_copy_object(conf: &S3Conf, endpoint: &str, src_key: &str, dst_key: &str) {
     let now = Utc::now();
     let (amzdate, datestamp) = amz_dates(now);
-    let scope = format!("{datestamp}/{}/s3/aws4_request", conf.region);
+    let scope = format!("{datestamp}/{}/s3/aws4_request", default_s3_region(&conf.region));
     let host = endpoint_authority(endpoint).to_string();
     let copy_source = format!(
         "/{}/{}",
@@ -564,7 +576,7 @@ async fn s3_copy_object(conf: &S3Conf, endpoint: &str, src_key: &str, dst_key: &
         "AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}",
         sha256_hex(canonical_req.as_bytes())
     );
-    let signing = derive_signing_key(&conf.secret, &datestamp, &conf.region, "s3");
+    let signing = derive_signing_key(&conf.secret, &datestamp, default_s3_region(&conf.region), "s3");
     let signature = hex::encode(hmac_sha256(&signing, string_to_sign.as_bytes()));
     let auth = format!(
         "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",

@@ -1,4 +1,4 @@
-use api::routes::asset::{validate_upload_init, clamp_size, CreateAssetInit, FILE_SIZE_LIMIT};
+use api::routes::asset::{clamp_size, default_s3_region, validate_upload_init, CreateAssetInit, FILE_SIZE_LIMIT};
 
 #[test]
 fn rejects_invalid_entity_type() {
@@ -28,7 +28,13 @@ fn rejects_invalid_file_type() {
 
 #[test]
 fn accepts_valid_init() {
-    for t in ["image/jpeg", "image/png", "image/webp", "image/jpg", "image/gif"] {
+    for t in [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/jpg",
+        "image/gif",
+    ] {
         let a = CreateAssetInit {
             name: Some("a".to_string()),
             file_type: Some(t.to_string()),
@@ -44,4 +50,10 @@ fn accepts_valid_init() {
 fn clamps_size_to_limit() {
     assert_eq!(clamp_size(FILE_SIZE_LIMIT as i64 * 10), FILE_SIZE_LIMIT);
     assert_eq!(clamp_size(100), 100);
+}
+
+#[test]
+fn copy_defaults_empty_region_to_us_east_1() {
+    assert_eq!(default_s3_region(""), "us-east-1");
+    assert_eq!(default_s3_region("ap-southeast-1"), "ap-southeast-1");
 }
