@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 // local imports
 import type { CustomImageExtensionType, TCustomImageAttributes } from "../types";
 import { ECustomImageAttributeNames, ECustomImageStatus } from "../types";
-import { hasImageDuplicationFailed } from "../utils";
+import { getImageComponentImageFileMap, hasImageDuplicationFailed } from "../utils";
 import { CustomImageBlock } from "./block";
 import { CustomImageUploader } from "./uploader";
 
@@ -36,6 +36,17 @@ export function CustomImageNodeView(props: CustomImageNodeViewProps) {
   const imageComponentRef = useRef<HTMLDivElement>(null);
   const hasRetriedOnMount = useRef(false);
   const isDuplicatingRef = useRef(false);
+
+  const nodeEntityId = node.attrs[ECustomImageAttributeNames.ID];
+  // A node stuck in "uploading" with no src and no in-flight upload in this
+  // session is a leftover from a failed upload (e.g. 401 on mark-uploaded):
+  // show the error state instead of an eternal loader so the user can
+  // delete the block and re-upload.
+  useEffect(() => {
+    if (status !== ECustomImageStatus.UPLOADING || imgNodeSrc) return;
+    const inFlight = nodeEntityId ? getImageComponentImageFileMap(editor)?.has(nodeEntityId) : false;
+    if (!inFlight) setFailedToLoadImage(true);
+  }, [status, imgNodeSrc, nodeEntityId, editor]);
 
   useEffect(() => {
     const closestEditorContainer = imageComponentRef.current?.closest(".editor-container");
