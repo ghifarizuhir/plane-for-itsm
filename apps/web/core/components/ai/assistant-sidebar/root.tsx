@@ -19,16 +19,18 @@ import {
 } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { cn } from "@plane/utils";
-import type { TIssue } from "@plane/types";
+import { EPageAccess, type TIssue } from "@plane/types";
 import { useTranslation } from "@plane/i18n";
 // hooks
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useInstance } from "@/hooks/store/use-instance";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { EPageStoreType, usePageStore } from "@/hooks/store/use-page-store";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { useService } from "@/hooks/store/use-service";
 // lib
-import { sanitizeAssistantHtml, type TAiIssueContext } from "@/lib/ai-context";
+import { sanitizeAssistantHtml, type TAiAssistantContext } from "@/lib/ai-context";
 // components
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
@@ -46,11 +48,32 @@ const MODES = [
   { value: "agent", label: "Agent", hint: "Looks up projects and work items in this workspace" },
 ] as const;
 
+const CONTEXT_KIND_LABEL: Record<TAiAssistantContext["kind"], string> = {
+  work_item: "Ticket",
+  service: "Service",
+  article: "Article",
+};
+
+const CONTEXT_KIND_NOUN: Record<TAiAssistantContext["kind"], string> = {
+  work_item: "work item",
+  service: "service",
+  article: "article",
+};
+
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // router
-  const { workspaceSlug, workItem } = useParams<{ workspaceSlug: string; workItem?: string }>();
+  const { workspaceSlug, workItem, projectId, serviceId, pageId } = useParams<{
+    workspaceSlug: string;
+    workItem?: string;
+    projectId?: string;
+    serviceId?: string;
+    pageId?: string;
+  }>();
   const rawWorkspaceSlug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
   const rawWorkItem = Array.isArray(workItem) ? workItem[0] : workItem;
+  const rawProjectId = Array.isArray(projectId) ? projectId[0] : projectId;
+  const rawServiceId = Array.isArray(serviceId) ? serviceId[0] : serviceId;
+  const rawPageId = Array.isArray(pageId) ? pageId[0] : pageId;
   // store hooks
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
   const { config } = useInstance();
@@ -58,13 +81,13 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     messages,
     isGenerating,
     mode,
-    activeIssueContext,
-    hasActiveIssue,
+    activeContext,
+    hasActiveContext,
     flowHint,
     flowNotice,
     setWorkspace,
     setMode,
-    setActiveIssueContext,
+    setActiveContext,
     clearFlowFeedback,
     sendMessage,
     retryLast,
@@ -84,6 +107,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
+  const { peekService, getServiceById } = useService();
+  const projectPageStore = usePageStore(EPageStoreType.PROJECT);
   const { t } = useTranslation();
   // local state
   const [question, setQuestion] = useState("");
@@ -97,7 +122,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     if (rawWorkspaceSlug) setWorkspace(rawWorkspaceSlug.toString());
   }, [rawWorkspaceSlug, setWorkspace]);
 
-  // resolve active issue: peek view first, then browse route identifier
+  // resolve active context: issue peek, issue browse route, service peek, service route, article route
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
   const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
   const shouldFetchRouteIssue =
@@ -108,19 +133,66 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   );
   const issue = peekedIssue ?? (routeIssueMeta?.id ? getIssueById(routeIssueMeta.id) : undefined);
   const stateName = getStateById(issue?.state_id ?? null)?.name;
+  const peekedService =
+    peekService && peekService.workspaceSlug === rawWorkspaceSlug && peekService.projectId === rawProjectId
+      ? getServiceById(peekService.serviceId)
+      : undefined;
+  const service = peekedService ?? (rawServiceId ? getServiceById(rawServiceId) : undefined);
+  const article = rawPageId ? projectPageStore.getPageById(rawPageId) : undefined;
+  const contextStatus = issue
+    ? stateName
+    : service
+      ? service.status
+      : article?.access !== undefined
+        ? article.access === EPageAccess.PRIVATE
+          ? "Private"
+          : "Public"
+        : undefined;
 
   useEffect(() => {
-    const context: TAiIssueContext | undefined = issue
+    const context: TAiAssistantContext | undefined = issue
       ? {
+          kind: "work_item",
           name: issue.name ?? "",
           descriptionHtml: issue.description_html ?? "",
           state: stateName,
           priority: issue.priority ?? undefined,
         }
-      : undefined;
-    setActiveIssueContext(context);
+      : service
+        ? {
+            kind: "service",
+            id: service.id,
+            name: service.name,
+            descriptionHtml: service.description_html ?? "",
+            status: service.status,
+          }
+        : article?.id
+          ? {
+              kind: "article",
+              id: article.id,
+              name: article.name ?? "",
+              descriptionHtml: article.description_html ?? "",
+              access: article.access,
+            }
+          : undefined;
+    setActiveContext(context);
     // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
-  }, [issue?.id, issue?.name, issue?.description_html, issue?.priority, stateName, setActiveIssueContext]);
+  }, [
+    issue?.id,
+    issue?.name,
+    issue?.description_html,
+    issue?.priority,
+    stateName,
+    service?.id,
+    service?.name,
+    service?.description_html,
+    service?.status,
+    article?.id,
+    article?.name,
+    article?.description_html,
+    article?.access,
+    setActiveContext,
+  ]);
 
   // keep newest message visible
   useEffect(() => {
@@ -243,20 +315,34 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               {/* context strip */}
               <div className="flex items-center gap-2 border-b border-subtle px-4 py-2">
                 <span className="font-mono shrink-0 text-10 font-medium tracking-wide text-tertiary">Context</span>
-                {hasActiveIssue && activeIssueContext ? (
+                {hasActiveContext && activeContext ? (
                   <>
-                    {stateName && (
+                    <span className="flex shrink-0 items-center rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-11 text-secondary">
+                      {CONTEXT_KIND_LABEL[activeContext.kind]}
+                    </span>
+                    {contextStatus && (
                       <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-subtle bg-layer-1 px-2 py-0.5 text-11 text-secondary">
                         <span className="size-1.5 rounded-full bg-accent-primary" />
-                        {stateName}
+                        {contextStatus}
                       </span>
                     )}
-                    <span className="truncate text-12 text-secondary" title={activeIssueContext.name}>
-                      {activeIssueContext.name}
+                    <span className="truncate text-12 text-secondary" title={activeContext.name}>
+                      {activeContext.name}
                     </span>
+                    {mode === "classic" && activeContext.kind !== "work_item" && (
+                      <button
+                        type="button"
+                        onClick={() => setMode("agent")}
+                        className="ml-auto shrink-0 text-11 font-medium text-accent-primary transition-opacity hover:opacity-80"
+                      >
+                        Switch to Agent
+                      </button>
+                    )}
                   </>
                 ) : (
-                  <span className="truncate text-12 text-tertiary">No work item in view — general answers</span>
+                  <span className="truncate text-12 text-tertiary">
+                    No ticket, service, or article in view — general answers
+                  </span>
                 )}
               </div>
               {/* messages */}
@@ -272,12 +358,14 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                       <AiStar1Outline className="size-4.5 text-accent-primary" />
                     </span>
                     <p className="mt-3 text-13 font-medium text-primary">
-                      {hasActiveIssue ? "Ask about this work item" : "Ask Galileo anything"}
+                      {hasActiveContext && activeContext
+                        ? `Ask about this ${CONTEXT_KIND_NOUN[activeContext.kind]}`
+                        : "Ask Galileo anything"}
                     </p>
                     <p className="mt-1 text-12 leading-relaxed text-tertiary">
-                      {hasActiveIssue
-                        ? "Summaries, descriptions, comment drafts — grounded in the work item on screen."
-                        : "Summaries, drafts, or any question — open a work item to ground answers in it."}
+                      {hasActiveContext && activeContext
+                        ? `Summaries, descriptions, comment drafts — grounded in the ${CONTEXT_KIND_NOUN[activeContext.kind]} on screen.`
+                        : "Summaries, drafts, or any question — open a ticket, service, or article to ground answers."}
                     </p>
                     <div className="mt-4 flex flex-col gap-1.5 self-stretch">
                       {SUGGESTIONS.map((suggestion) => (
