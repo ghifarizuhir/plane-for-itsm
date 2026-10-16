@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { convertBase64StringToBinaryData, getAllDocumentFormatsFromDocumentEditorBinaryData } from "@plane/editor";
+import { EPageAccess } from "@plane/types";
 import { AIAssistantStore, AI_ASSISTANT_ACTIVE_PREFIX, clearPersistedAiConversations } from "./ai-assistant.store";
-import type { TAiIssueContext } from "@/lib/ai-context";
+import type { TAiAssistantContext } from "@/lib/ai-context";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiConversation, TAiStoredMessage } from "@/lib/ai-conversations";
 import type { TAiProposalConfirmPayload } from "@/lib/ai-proposals";
@@ -149,11 +150,28 @@ const makeStore = (services = makeServices()) =>
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-const CONTEXT: TAiIssueContext = {
+const CONTEXT: TAiAssistantContext = {
+  kind: "work_item",
   name: "Login fails with SSO",
   descriptionHtml: "<p>SSO broken.</p>",
   state: "In Progress",
   priority: "high",
+};
+
+const SERVICE_CONTEXT: TAiAssistantContext = {
+  kind: "service",
+  id: "svc-1",
+  name: "Payments API",
+  descriptionHtml: "<p>Handles card payments.</p>",
+  status: "active",
+};
+
+const ARTICLE_CONTEXT: TAiAssistantContext = {
+  kind: "article",
+  id: "art-1",
+  name: "On-call runbook",
+  descriptionHtml: "<p>Steps.</p>",
+  access: EPageAccess.PUBLIC,
 };
 
 const scheduleProposal = {
@@ -294,7 +312,7 @@ describe("stateful send flow", () => {
     const payload = services.ai.createAgentTask.mock.calls[0][1];
     expect(payload.conversation_id).toBe("c-new");
     expect(payload.prompt).toBe("hello");
-    expect(payload.context).toContain("No active work item context");
+    expect(payload.context).toContain("No active context");
     expect(store.messages.map((m) => m.id)).toEqual(["srv-user", "srv-assistant"]);
     expect(store.conversations[0].id).toBe("c-new");
     expect(store.activeConversationId).toBe("c-new");
@@ -453,7 +471,7 @@ describe("AIAssistantStore", () => {
     const store = makeStore(services);
     store.setWorkspace("acme");
     await flush();
-    store.setActiveIssueContext(CONTEXT);
+    store.setActiveContext(CONTEXT);
 
     await store.sendMessage("what is wrong?");
     expect(store.isGenerating).toBe(false);
@@ -465,12 +483,38 @@ describe("AIAssistantStore", () => {
 
     const call = (services.ai.createGptTask as any).mock.calls[0];
     expect(call[0]).toBe("acme");
-    expect(call[1].task).toContain("ITSM work-item assistant");
+    expect(call[1].task).toContain("ITSM assistant");
     expect(call[1].prompt).toBe("what is wrong?");
     expect(call[1].context).toContain("Work item context:");
     expect(call[1].context).toContain("Work item: Login fails with SSO");
     expect(call[1].context).toContain("Description: SSO broken.");
     expect(call[1].context).not.toContain("User timezone:");
+  });
+
+  it("attaches service and article context in agent mode only", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setActiveContext(SERVICE_CONTEXT);
+
+    await store.sendMessage("first");
+    const classicCall = (services.ai.createGptTask as any).mock.calls[0];
+    expect(classicCall[1].context).toContain("No active context");
+
+    store.setActiveContext(ARTICLE_CONTEXT);
+    store.setMode("agent");
+    await flush();
+
+    await store.sendMessage("second");
+    const articleCall = (services.ai.createAgentTask as any).mock.calls[0];
+    expect(articleCall[1].context).toContain("Article context:");
+
+    store.setActiveContext(SERVICE_CONTEXT);
+    await store.sendMessage("third");
+    const serviceCall = (services.ai.createAgentTask as any).mock.calls[1];
+    expect(serviceCall[1].context).toContain("Service context:");
+    expect((services.ai.createGptTask as any).mock.calls).toHaveLength(1);
   });
 
   it("sendMessage ignores empty or whitespace questions", async () => {
@@ -601,12 +645,12 @@ describe("AIAssistantStore", () => {
     const store = makeStore(services);
     store.setWorkspace("acme");
     await flush();
-    store.setActiveIssueContext(CONTEXT);
+    store.setActiveContext(CONTEXT);
     const pending = store.sendMessage("q1");
     await flush();
     expect(store.isGenerating).toBe(true);
     store.setWorkspace("other");
-    expect(store.hasActiveIssue).toBe(false);
+    expect(store.hasActiveContext).toBe(false);
     expect(store.isGenerating).toBe(false);
     resolvePending(chatResponse("c-classic", "q1", "late"));
     await pending;
@@ -670,7 +714,7 @@ describe("AIAssistantStore", () => {
     const store = makeStore(services);
     store.setWorkspace("acme");
     await flush();
-    store.setActiveIssueContext(CONTEXT);
+    store.setActiveContext(CONTEXT);
     store.setMode("agent");
     await flush();
 
@@ -682,7 +726,7 @@ describe("AIAssistantStore", () => {
 
     const call = (services.ai.createAgentTask as any).mock.calls[0];
     expect(call[0]).toBe("acme");
-    expect(call[1].task).toContain("ITSM work-item assistant");
+    expect(call[1].task).toContain("ITSM assistant");
     expect(call[1].prompt).toBe("how many urgent?");
     expect(call[1].context).toContain("Work item context:");
     expect(call[1].context).toContain("User timezone:");

@@ -25,7 +25,7 @@ import { activeFlowFromMessages, parseIncidentCommand, type TAiFlow, type TFlowF
 import type { TAiProposalConfirmPayload, TAiProposalDecision, TAiProposalDecisionResult } from "@/lib/ai-proposals";
 import { isScheduleCommand, type TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision } from "@/lib/ai-work-items";
-import type { TAiIssueContext, TAiMessage } from "@/lib/ai-context";
+import type { TAiAssistantContext, TAiMessage } from "@/lib/ai-context";
 import type { TAiConversation, TAiConversationMode } from "@/lib/ai-conversations";
 
 export type TAiAssistantMode = TAiConversationMode;
@@ -54,8 +54,8 @@ export interface IAIAssistantStore {
   messages: TAiMessage[];
   isGenerating: boolean;
   mode: TAiAssistantMode;
-  activeIssueContext: TAiIssueContext | undefined;
-  hasActiveIssue: boolean;
+  activeContext: TAiAssistantContext | undefined;
+  hasActiveContext: boolean;
   conversations: TAiConversation[];
   activeConversationId: string | undefined;
   conversationsLoading: boolean;
@@ -66,7 +66,7 @@ export interface IAIAssistantStore {
   setWorkspace: (workspaceSlug: string | undefined) => void;
   setHistoryOpen: (open: boolean) => void;
   setMode: (mode: TAiAssistantMode) => void;
-  setActiveIssueContext: (context: TAiIssueContext | undefined) => void;
+  setActiveContext: (context: TAiAssistantContext | undefined) => void;
   clearFlowFeedback: () => void;
   loadConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<void>;
@@ -124,7 +124,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   messages: TAiMessage[] = [];
   isGenerating = false;
   mode: TAiAssistantMode = "classic";
-  activeIssueContext: TAiIssueContext | undefined = undefined;
+  activeContext: TAiAssistantContext | undefined = undefined;
   conversations: TAiConversation[] = [];
   activeConversationId: string | undefined = undefined;
   conversationsLoading = false;
@@ -158,7 +158,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       messages: observable.deep,
       isGenerating: observable.ref,
       mode: observable.ref,
-      activeIssueContext: observable.ref,
+      activeContext: observable.ref,
       conversations: observable.deep,
       activeConversationId: observable.ref,
       conversationsLoading: observable.ref,
@@ -166,11 +166,11 @@ export class AIAssistantStore implements IAIAssistantStore {
       activeFlow: observable.ref,
       flowHint: observable.ref,
       flowNotice: observable.ref,
-      hasActiveIssue: computed,
+      hasActiveContext: computed,
       setWorkspace: action,
       setHistoryOpen: action,
       setMode: action,
-      setActiveIssueContext: action,
+      setActiveContext: action,
       loadConversations: action,
       openConversation: action,
       newChat: action,
@@ -189,13 +189,13 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
   }
 
-  get hasActiveIssue(): boolean {
-    return !!this.activeIssueContext;
+  get hasActiveContext(): boolean {
+    return !!this.activeContext;
   }
 
   setWorkspace = (workspaceSlug: string | undefined) => {
     if (workspaceSlug !== this.workspaceSlug) {
-      this.activeIssueContext = undefined;
+      this.activeContext = undefined;
       this.isGenerating = false;
       this.requestSeq += 1;
       this.listSeq += 1;
@@ -350,9 +350,9 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.historyOpen = open;
   };
 
-  setActiveIssueContext = (context: TAiIssueContext | undefined) => {
+  setActiveContext = (context: TAiAssistantContext | undefined) => {
     runInAction(() => {
-      this.activeIssueContext = context;
+      this.activeContext = context;
     });
   };
 
@@ -782,10 +782,11 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
     try {
       const userTimezone = mode === "agent" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
+      const attachable = mode === "agent" || this.activeContext?.kind === "work_item" ? this.activeContext : undefined;
       const payload = {
         task: AI_ASSISTANT_TASK,
         prompt: question,
-        context: buildAiContext(this.activeIssueContext, userTimezone),
+        context: buildAiContext(attachable, userTimezone),
         conversation_id: conversationId,
         ...(mode === "agent" && this.activeFlow ? { flow: this.activeFlow.id, flow_ref: this.activeFlow.ref } : {}),
       };
