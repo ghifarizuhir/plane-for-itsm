@@ -2069,7 +2069,9 @@ mod tests {
                 action: "link".into(),
             })
             .unwrap_err();
-        assert!(blank_depends_on.to_string().contains("depends_on is required"));
+        assert!(blank_depends_on
+            .to_string()
+            .contains("depends_on is required"));
 
         let same_service =
             manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
