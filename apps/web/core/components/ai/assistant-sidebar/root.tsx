@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { observer } from "mobx-react";
 import {
@@ -24,8 +24,10 @@ import { useTranslation } from "@plane/i18n";
 // hooks
 import { useAiAssistant } from "@/hooks/store/use-ai-assistant";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useCycle } from "@/hooks/store/use-cycle";
 import { useInstance } from "@/hooks/store/use-instance";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { useModule } from "@/hooks/store/use-module";
 import { EPageStoreType, usePageStore } from "@/hooks/store/use-page-store";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useService } from "@/hooks/store/use-service";
@@ -45,35 +47,46 @@ const SUGGESTIONS = [
 
 const MODES = [
   { value: "classic", label: "Classic", hint: "Single model call grounded in the work item on screen" },
-  { value: "agent", label: "Agent", hint: "Looks up projects and work items in this workspace" },
+  { value: "agent", label: "Agent", hint: "Looks up projects, work items, sprints, and tracks in this workspace" },
 ] as const;
 
 const CONTEXT_KIND_LABEL: Record<TAiAssistantContext["kind"], string> = {
   work_item: "Ticket",
   service: "Service",
   article: "Article",
+  cycle: "Sprint",
+  module: "Track",
 };
 
 const CONTEXT_KIND_NOUN: Record<TAiAssistantContext["kind"], string> = {
   work_item: "work item",
   service: "service",
   article: "article",
+  cycle: "sprint",
+  module: "track",
 };
 
 export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
   // router
-  const { workspaceSlug, workItem, projectId, serviceId, pageId } = useParams<{
+  const { workspaceSlug, workItem, projectId, serviceId, pageId, cycleId, moduleId } = useParams<{
     workspaceSlug: string;
     workItem?: string;
     projectId?: string;
     serviceId?: string;
     pageId?: string;
+    cycleId?: string;
+    moduleId?: string;
   }>();
+  const searchParams = useSearchParams();
   const rawWorkspaceSlug = Array.isArray(workspaceSlug) ? workspaceSlug[0] : workspaceSlug;
   const rawWorkItem = Array.isArray(workItem) ? workItem[0] : workItem;
   const rawProjectId = Array.isArray(projectId) ? projectId[0] : projectId;
   const rawServiceId = Array.isArray(serviceId) ? serviceId[0] : serviceId;
   const rawPageId = Array.isArray(pageId) ? pageId[0] : pageId;
+  const rawCycleId = Array.isArray(cycleId) ? cycleId[0] : cycleId;
+  const rawModuleId = Array.isArray(moduleId) ? moduleId[0] : moduleId;
+  const peekCycleId = searchParams.get("peekCycle");
+  const peekModuleId = searchParams.get("peekModule");
   // store hooks
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
   const { config } = useInstance();
@@ -107,6 +120,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     issue: { getIssueById },
   } = useIssueDetail();
   const { getStateById } = useProjectState();
+  const { getCycleById } = useCycle();
+  const { getModuleById } = useModule();
   const { peekService, getServiceById } = useService();
   const projectPageStore = usePageStore(EPageStoreType.PROJECT);
   const { t } = useTranslation();
@@ -122,7 +137,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     if (rawWorkspaceSlug) setWorkspace(rawWorkspaceSlug.toString());
   }, [rawWorkspaceSlug, setWorkspace]);
 
-  // resolve active context: issue peek, issue browse route, service peek, service route, article route
+  // resolve active context: issue peek, issue route, service peek, service route, article route,
+  // cycle peek, cycle route, module peek, module route
   const peekedIssue = peekIssue ? getIssueById(peekIssue.issueId) : undefined;
   const [projectIdentifier, sequenceId] = (rawWorkItem ?? "").split("-");
   const shouldFetchRouteIssue =
@@ -139,6 +155,12 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
       : undefined;
   const service = peekedService ?? (rawServiceId ? getServiceById(rawServiceId) : undefined);
   const article = rawPageId ? projectPageStore.getPageById(rawPageId) : undefined;
+  const peekingCycle = peekCycleId ? getCycleById(peekCycleId) : undefined;
+  const peekedCycle = peekingCycle && peekingCycle.project_id === rawProjectId ? peekingCycle : undefined;
+  const cycle = peekedCycle ?? (rawCycleId ? getCycleById(rawCycleId) : undefined);
+  const peekingModule = peekModuleId ? getModuleById(peekModuleId) : undefined;
+  const peekedModule = peekingModule && peekingModule.project_id === rawProjectId ? peekingModule : undefined;
+  const module = peekedModule ?? (rawModuleId ? getModuleById(rawModuleId) : undefined);
   const contextStatus = issue
     ? stateName
     : service
@@ -147,7 +169,11 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
         ? article.access === EPageAccess.PRIVATE
           ? "Private"
           : "Public"
-        : undefined;
+        : cycle
+          ? cycle.status
+          : module
+            ? module.status
+            : undefined;
 
   useEffect(() => {
     const context: TAiAssistantContext | undefined = issue
@@ -174,7 +200,27 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
               descriptionHtml: article.description_html ?? "",
               access: article.access,
             }
-          : undefined;
+          : cycle
+            ? {
+                kind: "cycle",
+                id: cycle.id,
+                name: cycle.name,
+                descriptionHtml: cycle.description ?? "",
+                status: cycle.status,
+                startDate: cycle.start_date,
+                endDate: cycle.end_date,
+              }
+            : module?.id
+              ? {
+                  kind: "module",
+                  id: module.id,
+                  name: module.name,
+                  descriptionHtml: module.description_html ?? "",
+                  status: module.status,
+                  startDate: module.start_date,
+                  endDate: module.target_date,
+                }
+              : undefined;
     setActiveContext(context);
     // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
   }, [
@@ -191,6 +237,18 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     article?.name,
     article?.description_html,
     article?.access,
+    cycle?.id,
+    cycle?.name,
+    cycle?.description,
+    cycle?.status,
+    cycle?.start_date,
+    cycle?.end_date,
+    module?.id,
+    module?.name,
+    module?.description_html,
+    module?.status,
+    module?.start_date,
+    module?.target_date,
     setActiveContext,
   ]);
 
@@ -341,7 +399,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                   </>
                 ) : (
                   <span className="truncate text-12 text-tertiary">
-                    No ticket, service, or article in view — general answers
+                    No ticket, service, article, sprint, or track in view — general answers
                   </span>
                 )}
               </div>
@@ -365,7 +423,7 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                     <p className="mt-1 text-12 leading-relaxed text-tertiary">
                       {hasActiveContext && activeContext
                         ? `Summaries, descriptions, comment drafts — grounded in the ${CONTEXT_KIND_NOUN[activeContext.kind]} on screen.`
-                        : "Summaries, drafts, or any question — open a ticket, service, or article to ground answers."}
+                        : "Summaries, drafts, or any question — open a ticket, service, article, sprint, or track to ground answers."}
                     </p>
                     <div className="mt-4 flex flex-col gap-1.5 self-stretch">
                       {SUGGESTIONS.map((suggestion) => (
