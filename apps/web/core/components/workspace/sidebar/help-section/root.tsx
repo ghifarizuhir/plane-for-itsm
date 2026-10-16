@@ -6,7 +6,8 @@
 
 import React, { useState } from "react";
 import { observer } from "mobx-react";
-import { HelpOutline, UserOutline } from "@makeplane/propel/icons";
+import { useParams, useRouter } from "next/navigation";
+import { DocumentationOutline, HelpOutline, UserOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 // ui
 import { CustomMenu } from "@plane/ui";
@@ -21,6 +22,9 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
   // store hooks
   const { t } = useTranslation();
   const { toggleShortcutsListModal } = usePowerK();
+  // routers
+  const { workspaceSlug } = useParams();
+  const router = useRouter();
   // states
   const [isNeedHelpOpen, setIsNeedHelpOpen] = useState(false);
   const [isProductUpdatesModalOpen, setProductUpdatesModalOpen] = useState(false);
@@ -53,6 +57,12 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
           </div>
         </CustomMenu.MenuItem>
         <div className="my-1 border-t border-subtle" />
+        <CustomMenu.MenuItem onClick={() => router.push(`/${workspaceSlug}/docs`)}>
+          <div className="flex items-center gap-x-2 rounded-sm text-11">
+            <DocumentationOutline className="h-3.5 w-3.5 text-secondary" width={14} height={14} />
+            <span className="text-11">{t("documentation")}</span>
+          </div>
+        </CustomMenu.MenuItem>
         <CustomMenu.MenuItem>
           <button
             type="button"
