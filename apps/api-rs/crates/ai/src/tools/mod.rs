@@ -39,12 +39,13 @@ pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
 /// database and never schedule-eligible.
-pub const PROPOSAL_TOOL_NAMES: [&str; 17] = [
+pub const PROPOSAL_TOOL_NAMES: [&str; 18] = [
     CREATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
     ADD_COMMENT_NAME,
     MANAGE_SERVICE_LINKS_NAME,
+    MANAGE_SERVICE_DEPENDENCIES_NAME,
     MANAGE_SPRINT_ITEMS_NAME,
     MANAGE_TRACK_ITEMS_NAME,
     CREATE_SERVICE_NAME,
@@ -495,6 +496,9 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(ManageServiceLinks {
+            trace: trace.clone(),
+        })
+        .tool(ManageServiceDependencies {
             trace: trace.clone(),
         })
         .tool(ManageSprintItems {
@@ -1581,6 +1585,19 @@ mod tests {
         assert_eq!(ManageTrackItems::NAME, "manage_track_items");
         assert!(track.parameters()["properties"]["track"].is_object());
         assert!(!track.description().is_empty());
+
+        let dependencies = ManageServiceDependencies {
+            trace: crate::agent::new_trace(),
+        };
+        assert_eq!(
+            ManageServiceDependencies::NAME,
+            "manage_service_dependencies"
+        );
+        assert!(dependencies.parameters()["properties"]["service"].is_object());
+        assert!(dependencies.parameters()["properties"]["depends_on"].is_object());
+        assert!(dependencies.parameters()["properties"]["action"].is_object());
+        assert!(!dependencies.description().is_empty());
+        assert!(PROPOSAL_TOOL_NAMES.contains(&MANAGE_SERVICE_DEPENDENCIES_NAME));
     }
 
     #[tokio::test]

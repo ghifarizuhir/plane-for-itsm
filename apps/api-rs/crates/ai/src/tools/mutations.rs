@@ -617,6 +617,7 @@ pub fn mutation_kind_for_tool(name: &str) -> Option<&'static str> {
         UPDATE_WORK_ITEM_NAME => Some("update_work_item"),
         ADD_COMMENT_NAME => Some("add_comment"),
         MANAGE_SERVICE_LINKS_NAME => Some("manage_service_links"),
+        MANAGE_SERVICE_DEPENDENCIES_NAME => Some("manage_service_dependencies"),
         MANAGE_SPRINT_ITEMS_NAME => Some("manage_sprint_items"),
         MANAGE_TRACK_ITEMS_NAME => Some("manage_track_items"),
         CREATE_SERVICE_NAME => Some("create_service"),
@@ -2219,6 +2220,14 @@ mod tests {
         assert_eq!(
             mutation_kind_for_tool(MANAGE_TRACK_ITEMS_NAME),
             Some("manage_track_items")
+        );
+    }
+
+    #[test]
+    fn mutation_kind_mapping_covers_service_dependencies() {
+        assert_eq!(
+            mutation_kind_for_tool(MANAGE_SERVICE_DEPENDENCIES_NAME),
+            Some("manage_service_dependencies")
         );
     }
 

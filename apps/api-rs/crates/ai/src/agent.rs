@@ -373,6 +373,19 @@ mod tests {
     }
 
     #[test]
+    fn pending_actions_covers_service_dependency_mutations() {
+        let trace = new_trace();
+        record(
+            &trace,
+            crate::tools::MANAGE_SERVICE_DEPENDENCIES_NAME,
+            &json!({"service": "prepaid-iso", "depends_on": "core-banking", "action": "link"}),
+        );
+        let actions = pending_actions(&trace);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0]["kind"], json!("manage_service_dependencies"));
+    }
+
+    #[test]
     fn pending_actions_covers_create_and_update_mutations() {
         let trace = new_trace();
         record(
