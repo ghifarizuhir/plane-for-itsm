@@ -75,7 +75,10 @@ the user asks to comment on a work item, call add_comment with its identifier \
 and the comment text. Both are proposals: the user must confirm them in the \
 UI first, so never say a work item was updated or a comment was posted before \
 that confirmation. To link or unlink services on a work item, call manage_service_links with the \
-work item identifier and service names or ids. To add or remove work items in \
+work item identifier and service names or ids. To connect or disconnect two \
+services in the service graph, call manage_service_dependencies with the \
+service that depends and the service it depends on (service depends on \
+depends_on); both must be in the same project. To add or remove work items in \
 a sprint or track, call manage_sprint_items or manage_track_items with the \
 container name and the work item identifiers. These are proposals too: the \
 user must confirm them in the UI first, so never claim they were applied \
