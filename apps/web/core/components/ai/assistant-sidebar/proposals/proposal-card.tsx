@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  * See the LICENSE file for details.
  */
-
 import type { TAiProposal, TAiProposalConfirmPayload, TAiProposalDecision } from "@/lib/ai-proposals";
+
 import { ArticleProposalCard } from "./article-proposal-card";
 import { CommentProposalCard } from "./comment-proposal-card";
+import { DependencyProposalCard } from "./dependency-proposal-card";
 import { LinkItemsProposalCard } from "./link-items-proposal-card";
 import { ProposalFormCard } from "./proposal-form-card";
 import { TriageProposalCard } from "./triage-proposal-card";
@@ -42,6 +43,11 @@ export const ProposalCard = ({ entry, decision, onConfirm, onCancel }: Props) =>
         onConfirm={onConfirm}
         onCancel={onCancel}
       />
+    );
+
+  if (entry.kind === "manage_service_dependencies")
+    return (
+      <DependencyProposalCard proposal={entry.proposal} decision={decision} onConfirm={onConfirm} onCancel={onCancel} />
     );
   if (entry.kind === "manage_sprint_items")
     return (

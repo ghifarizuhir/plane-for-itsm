@@ -100,6 +100,8 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
   services: {
     linkWorkItem: vi.fn(async () => ({ id: "l1" })),
     unlinkWorkItem: vi.fn(async () => undefined),
+    createDependency: vi.fn(async () => ({ id: "d1" })),
+    deleteDependency: vi.fn(async () => undefined),
     createService: vi.fn(async (_slug: string, _workspaceId: string, projectId: string) => ({
       id: "srv1",
       project_id: projectId,
@@ -1608,6 +1610,26 @@ const serviceLinksMetadata = {
   ],
 };
 
+const serviceDependencyLinkMetadata = {
+  proposals: [
+    {
+      key: "k3c",
+      kind: "manage_service_dependencies",
+      proposal: { service: "prepaid-iso", depends_on: "core-banking", action: "link" },
+    },
+  ],
+};
+
+const serviceDependencyUnlinkMetadata = {
+  proposals: [
+    {
+      key: "k3d",
+      kind: "manage_service_dependencies",
+      proposal: { service: "prepaid-iso", depends_on: "core-banking", action: "unlink" },
+    },
+  ],
+};
+
 const sprintItemsMetadata = {
   proposals: [
     {
@@ -1674,6 +1696,54 @@ describe("link proposals", () => {
       links: [{ serviceId: "s1", linkId: "l1" }],
     });
     expect(services.services.unlinkWorkItem).toHaveBeenCalledWith("acme", "", "p1", "l1");
+  });
+
+  it("connects two services", async () => {
+    const { store, services } = await openAgent(makeServices(), serviceDependencyLinkMetadata);
+    await store.confirmProposal("srv-assistant", "k3c", {
+      kind: "manage_service_dependencies",
+      projectId: "p1",
+      action: "link",
+      fromServiceId: "s1",
+      toServiceId: "s2",
+    });
+    expect(services.services.createDependency).toHaveBeenCalledWith("acme", "", "p1", "s1", "s2");
+    expect(store.messages[0].proposalDecisions?.k3c).toEqual({
+      kind: "manage_service_dependencies",
+      decision: "applied",
+    });
+  });
+
+  it("disconnects two services with the dependency id", async () => {
+    const { store, services } = await openAgent(makeServices(), serviceDependencyUnlinkMetadata);
+    await store.confirmProposal("srv-assistant", "k3d", {
+      kind: "manage_service_dependencies",
+      projectId: "p1",
+      action: "unlink",
+      fromServiceId: "s1",
+      toServiceId: "s2",
+      dependencyId: "d1",
+    });
+    expect(services.services.deleteDependency).toHaveBeenCalledWith("acme", "", "p1", "d1");
+    expect(store.messages[0].proposalDecisions?.k3d).toEqual({
+      kind: "manage_service_dependencies",
+      decision: "applied",
+    });
+  });
+
+  it("rejects an unlink without the dependency id and stays pending", async () => {
+    const { store, services } = await openAgent(makeServices(), serviceDependencyUnlinkMetadata);
+    await expect(
+      store.confirmProposal("srv-assistant", "k3d", {
+        kind: "manage_service_dependencies",
+        projectId: "p1",
+        action: "unlink",
+        fromServiceId: "s1",
+        toServiceId: "s2",
+      })
+    ).rejects.toThrow("dependency id");
+    expect(services.services.deleteDependency).not.toHaveBeenCalled();
+    expect(store.messages[0].proposalDecisions?.k3d).toBeUndefined();
   });
 
   it("adds work items to a sprint", async () => {

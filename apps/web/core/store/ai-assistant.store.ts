@@ -38,7 +38,10 @@ type TAiConversationsService = Pick<
 >;
 type TIssueService = Pick<IssueService, "createIssue" | "patchIssue" | "addIssueToCycle" | "removeIssueFromCycle">;
 type TCommentsService = Pick<IssueCommentService, "createIssueComment">;
-type TServicesService = Pick<ServiceService, "linkWorkItem" | "unlinkWorkItem" | "createService" | "updateService">;
+type TServicesService = Pick<
+  ServiceService,
+  "linkWorkItem" | "unlinkWorkItem" | "createService" | "updateService" | "createDependency" | "deleteDependency"
+>;
 type TModulesService = Pick<
   ModuleService,
   "addIssuesToModule" | "removeIssuesFromModuleBulk" | "createModule" | "patchModule"
@@ -616,6 +619,19 @@ export class AIAssistantStore implements IAIAssistantStore {
             this.servicesService.unlinkWorkItem(slug, "", payload.projectId, link.linkId ?? "")
           )
         );
+      }
+    } else if (payload.kind === "manage_service_dependencies") {
+      if (payload.action === "link") {
+        await this.servicesService.createDependency(
+          slug,
+          "",
+          payload.projectId,
+          payload.fromServiceId,
+          payload.toServiceId
+        );
+      } else {
+        if (!payload.dependencyId) throw new Error("Unlink target is missing its dependency id");
+        await this.servicesService.deleteDependency(slug, "", payload.projectId, payload.dependencyId);
       }
     } else if (payload.kind === "manage_sprint_items") {
       if (payload.action === "add") {
