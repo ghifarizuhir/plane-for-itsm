@@ -388,6 +388,13 @@ export const coreRoutes: RouteConfigEntry[] = [
           ]),
         ]),
       ]),
+      // ====================================================================
+      // DOCS SECTION
+      // ====================================================================
+      layout("./(all)/[workspaceSlug]/(docs)/layout.tsx", [
+        route(":workspaceSlug/docs", "./(all)/[workspaceSlug]/(docs)/docs/page.tsx"),
+        route(":workspaceSlug/docs/:topicSlug", "./(all)/[workspaceSlug]/(docs)/docs/[topicSlug]/page.tsx"),
+      ]),
     ]),
     // ======================================================================
     // STANDALONE ROUTES (outside workspace context)
