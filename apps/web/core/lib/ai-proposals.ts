@@ -11,6 +11,7 @@ export const PROPOSAL_KINDS = [
   "update_work_item",
   "add_comment",
   "manage_service_links",
+  "manage_service_dependencies",
   "manage_sprint_items",
   "manage_track_items",
   "create_service",
@@ -72,6 +73,13 @@ export type TAiAddCommentProposal = {
 export type TAiManageServiceLinksProposal = {
   work_item: string;
   services: string[];
+  action: "link" | "unlink";
+};
+
+export type TAiManageServiceDependenciesProposal = {
+  service: string;
+  depends_on: string;
+  project?: string | null;
   action: "link" | "unlink";
 };
 
@@ -197,6 +205,7 @@ export type TAiProposal =
   | { key: string; kind: "update_work_item"; proposal: TAiUpdateWorkItemProposal }
   | { key: string; kind: "add_comment"; proposal: TAiAddCommentProposal }
   | { key: string; kind: "manage_service_links"; proposal: TAiManageServiceLinksProposal }
+  | { key: string; kind: "manage_service_dependencies"; proposal: TAiManageServiceDependenciesProposal }
   | { key: string; kind: "manage_sprint_items"; proposal: TAiManageSprintItemsProposal }
   | { key: string; kind: "manage_track_items"; proposal: TAiManageTrackItemsProposal }
   | { key: string; kind: "create_service"; proposal: TAiCreateServiceProposal }
@@ -233,6 +242,14 @@ export type TAiProposalConfirmPayload =
       issueId: string;
       action: "link" | "unlink";
       links: { serviceId: string; linkId?: string }[];
+    }
+  | {
+      kind: "manage_service_dependencies";
+      projectId: string;
+      action: "link" | "unlink";
+      fromServiceId: string;
+      toServiceId: string;
+      dependencyId?: string;
     }
   | {
       kind: "manage_sprint_items";
@@ -341,6 +358,42 @@ export const validateManageServiceLinksProposal = (proposal: Partial<TAiManageSe
   if (services.length === 0) return "At least one service is required.";
   if (services.length > PROPOSAL_LIMITS.services) return `At most ${PROPOSAL_LIMITS.services} services are allowed.`;
   return null;
+};
+
+/** Mirrors `manage_service_dependencies_proposal_from_args` on the backend. */
+export const validateManageServiceDependenciesProposal = (
+  proposal: Partial<TAiManageServiceDependenciesProposal>
+): string | null => {
+  const service = proposal.service?.trim() ?? "";
+  const dependsOn = proposal.depends_on?.trim() ?? "";
+  if (!service) return "Service is required.";
+  if (!dependsOn) return "Depends on is required.";
+  if (service.toLowerCase() === dependsOn.toLowerCase()) return "Service and depends on must be different services.";
+  if (proposal.action !== "link" && proposal.action !== "unlink") return "Action must be link or unlink.";
+  return null;
+};
+
+/** True when adding `fromId -> toId` creates a cycle: `fromId` is reachable
+ * from `toId` following the existing edges (or the edge is a self-edge). */
+export const createsDependencyCycle = (
+  edges: { from_service_id: string; to_service_id: string }[],
+  fromId: string,
+  toId: string
+): boolean => {
+  if (fromId === toId) return true;
+  const seen = new Set<string>();
+  const stack = [toId];
+  while (stack.length > 0) {
+    const node = stack.pop() as string;
+    if (seen.has(node)) continue;
+    seen.add(node);
+    for (const edge of edges) {
+      if (edge.from_service_id !== node) continue;
+      if (edge.to_service_id === fromId) return true;
+      stack.push(edge.to_service_id);
+    }
+  }
+  return false;
 };
 
 /** Mirrors `manage_sprint_items_proposal_from_args` on the backend. */

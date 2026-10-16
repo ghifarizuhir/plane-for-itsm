@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changedFieldCount,
+  createsDependencyCycle,
   matchByNameOrId,
   validateAddCommentProposal,
   validateApplyTriageSuggestionProposal,
@@ -8,6 +9,7 @@ import {
   validateCreateServiceProposal,
   validateCreateSprintProposal,
   validateCreateTrackProposal,
+  validateManageServiceDependenciesProposal,
   validateManageServiceLinksProposal,
   validateManageSprintItemsProposal,
   validateManageTrackItemsProposal,
@@ -82,6 +84,36 @@ describe("link proposal validators", () => {
     expect(validateManageServiceLinksProposal({ services: ["Email"], action: "link" })).toBe("Work item is required.");
   });
 
+  it("validates service dependency proposals", () => {
+    expect(
+      validateManageServiceDependenciesProposal({
+        service: "prepaid-iso",
+        depends_on: "core-banking",
+        action: "link",
+      })
+    ).toBeNull();
+    expect(validateManageServiceDependenciesProposal({ depends_on: "core-banking", action: "link" })).toBe(
+      "Service is required."
+    );
+    expect(validateManageServiceDependenciesProposal({ service: "prepaid-iso", action: "link" })).toBe(
+      "Depends on is required."
+    );
+    expect(
+      validateManageServiceDependenciesProposal({
+        service: "Core-Banking",
+        depends_on: "core-banking",
+        action: "link",
+      })
+    ).toBe("Service and depends on must be different services.");
+    expect(
+      validateManageServiceDependenciesProposal({
+        service: "prepaid-iso",
+        depends_on: "core-banking",
+        action: "attach" as never,
+      })
+    ).toBe("Action must be link or unlink.");
+  });
+
   it("validates sprint and track item proposals", () => {
     expect(validateManageSprintItemsProposal({ sprint: "Sprint 3", work_items: ["LTS-1"], action: "add" })).toBeNull();
     expect(validateManageSprintItemsProposal({ sprint: "Sprint 3", work_items: [], action: "add" })).toBe(
@@ -91,6 +123,26 @@ describe("link proposal validators", () => {
       validateManageTrackItemsProposal({ track: "Onboarding", work_items: ["LTS-1"], action: "remove" })
     ).toBeNull();
     expect(validateManageTrackItemsProposal({ work_items: ["LTS-1"], action: "remove" })).toBe("Track is required.");
+  });
+});
+
+describe("createsDependencyCycle", () => {
+  const edges = [
+    { from_service_id: "a", to_service_id: "b" },
+    { from_service_id: "b", to_service_id: "c" },
+  ];
+
+  it("flags direct and transitive cycles", () => {
+    expect(createsDependencyCycle(edges, "b", "a")).toBe(true);
+    expect(createsDependencyCycle(edges, "c", "a")).toBe(true);
+    expect(createsDependencyCycle(edges, "c", "b")).toBe(true);
+  });
+
+  it("flags self-edges and allows independent edges", () => {
+    expect(createsDependencyCycle(edges, "a", "a")).toBe(true);
+    expect(createsDependencyCycle(edges, "a", "c")).toBe(false);
+    expect(createsDependencyCycle(edges, "d", "a")).toBe(false);
+    expect(createsDependencyCycle([], "a", "b")).toBe(false);
   });
 });
 
