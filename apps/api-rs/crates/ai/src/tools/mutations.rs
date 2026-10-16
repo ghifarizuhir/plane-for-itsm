@@ -319,6 +319,85 @@ impl Tool for ManageServiceLinks {
     }
 }
 
+pub const MANAGE_SERVICE_DEPENDENCIES_NAME: &str = "manage_service_dependencies";
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ManageServiceDependenciesArgs {
+    /// The dependent service (name or id). Required.
+    pub service: String,
+    /// The service it depends on (name or id). Required.
+    pub depends_on: String,
+    /// Project identifier or name; use it when a service name is not unique.
+    pub project: Option<String>,
+    /// One of: link, unlink.
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ManageServiceDependenciesProposal {
+    pub service: String,
+    pub depends_on: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub action: String,
+}
+
+/// Validate raw tool args into a normalized service dependency proposal.
+pub fn manage_service_dependencies_proposal_from_args(
+    args: ManageServiceDependenciesArgs,
+) -> Result<ManageServiceDependenciesProposal, ToolExecutionError> {
+    let service = required_text(&args.service, "service", CONTAINER_REF_MAX)?;
+    let depends_on = required_text(&args.depends_on, "depends_on", CONTAINER_REF_MAX)?;
+    if service.eq_ignore_ascii_case(&depends_on) {
+        return Err(ToolExecutionError::invalid_args(
+            "service and depends_on must be different services",
+        ));
+    }
+    let project = optional_container_project(args.project)?;
+    let action = enum_arg(&args.action, &["link", "unlink"], "action")?;
+    Ok(ManageServiceDependenciesProposal {
+        service,
+        depends_on,
+        project,
+        action,
+    })
+}
+
+pub struct ManageServiceDependencies {
+    pub trace: ToolTrace,
+}
+
+impl Tool for ManageServiceDependencies {
+    const NAME: &'static str = MANAGE_SERVICE_DEPENDENCIES_NAME;
+    type Args = ManageServiceDependenciesArgs;
+    type Output = String;
+    type Error = ToolExecutionError;
+
+    fn description(&self) -> String {
+        "Propose connecting or disconnecting two services in the service \
+         graph: service depends on depends_on. Only call this when the user \
+         asks to connect or disconnect two services. Both service names (or \
+         ids) are required; never guess them, and both must be in the same \
+         project. The user must confirm the card in the UI before anything is \
+         saved. Never claim the connection was changed until they confirm."
+            .to_string()
+    }
+
+    fn parameters(&self) -> Value {
+        schema_of::<ManageServiceDependenciesArgs>()
+    }
+
+    async fn call(
+        &self,
+        _context: &mut ToolContext,
+        args: Self::Args,
+    ) -> Result<Self::Output, Self::Error> {
+        let proposal = manage_service_dependencies_proposal_from_args(args)?;
+        record(&self.trace, Self::NAME, &proposal);
+        Ok(serde_json::to_string(&proposal).expect("ManageServiceDependenciesProposal serializes"))
+    }
+}
+
 pub const MANAGE_SPRINT_ITEMS_NAME: &str = "manage_sprint_items";
 pub const MAX_BULK_ITEMS: usize = 25;
 pub const CONTAINER_REF_MAX: usize = 255;
@@ -1954,6 +2033,79 @@ mod tests {
         })
         .unwrap_err();
         assert!(bad_action.to_string().contains("link, unlink"));
+    }
+
+    #[test]
+    fn service_dependencies_normalize_and_validate() {
+        let proposal =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: " prepaid-iso ".into(),
+                depends_on: " core-banking ".into(),
+                project: Some(" PRE ".into()),
+                action: " LINK ".into(),
+            })
+            .unwrap();
+        assert_eq!(proposal.service, "prepaid-iso");
+        assert_eq!(proposal.depends_on, "core-banking");
+        assert_eq!(proposal.project.as_deref(), Some("PRE"));
+        assert_eq!(proposal.action, "link");
+
+        let blank_service =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: "  ".into(),
+                depends_on: "core-banking".into(),
+                project: None,
+                action: "link".into(),
+            })
+            .unwrap_err();
+        assert!(blank_service.to_string().contains("service is required"));
+
+        let blank_depends_on =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: "prepaid-iso".into(),
+                depends_on: " ".into(),
+                project: None,
+                action: "link".into(),
+            })
+            .unwrap_err();
+        assert!(blank_depends_on.to_string().contains("depends_on is required"));
+
+        let same_service =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: "Core-Banking".into(),
+                depends_on: "core-banking".into(),
+                project: None,
+                action: "link".into(),
+            })
+            .unwrap_err();
+        assert!(same_service.to_string().contains("different services"));
+
+        let bad_action =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: "prepaid-iso".into(),
+                depends_on: "core-banking".into(),
+                project: None,
+                action: "attach".into(),
+            })
+            .unwrap_err();
+        assert!(bad_action.to_string().contains("link, unlink"));
+    }
+
+    #[test]
+    fn service_dependencies_proposal_serializes_keys() {
+        let proposal =
+            manage_service_dependencies_proposal_from_args(ManageServiceDependenciesArgs {
+                service: "prepaid-iso".into(),
+                depends_on: "core-banking".into(),
+                project: None,
+                action: "unlink".into(),
+            })
+            .unwrap();
+        let value = serde_json::to_value(&proposal).unwrap();
+        assert_eq!(value["service"], serde_json::json!("prepaid-iso"));
+        assert_eq!(value["depends_on"], serde_json::json!("core-banking"));
+        assert_eq!(value["action"], serde_json::json!("unlink"));
+        assert!(value.get("project").is_none());
     }
 
     #[test]
