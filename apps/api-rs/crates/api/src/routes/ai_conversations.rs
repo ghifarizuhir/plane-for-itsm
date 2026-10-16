@@ -531,6 +531,7 @@ fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
         | "update_track"
         |         "update_article"
         | "manage_service_links"
+        | "manage_service_dependencies"
         | "manage_sprint_items"
         | "manage_track_items"
         | "apply_triage_suggestion"
@@ -936,6 +937,22 @@ mod tests {
             "proposal_decisions",
             json!({
                 (key.clone()): {"kind": "manage_service_links", "decision": "applied"},
+            }),
+        )]))
+        .expect("valid patch");
+        assert_eq!(
+            clean["proposal_decisions"][key.as_str()]["decision"],
+            json!("applied")
+        );
+    }
+
+    #[test]
+    fn metadata_patch_accepts_service_dependency_decisions() {
+        let key = Uuid::new_v4().to_string();
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "proposal_decisions",
+            json!({
+                (key.clone()): {"kind": "manage_service_dependencies", "decision": "applied"},
             }),
         )]))
         .expect("valid patch");
