@@ -33,6 +33,11 @@ describe("AI_ASSISTANT_TASK", () => {
     expect(AI_ASSISTANT_TASK).toContain("ITSM assistant");
     expect(AI_ASSISTANT_TASK).not.toContain("work-item");
   });
+
+  it("mentions sprints and tracks", () => {
+    expect(AI_ASSISTANT_TASK).toContain("sprint");
+    expect(AI_ASSISTANT_TASK).toContain("track");
+  });
 });
 
 describe("sanitizeAssistantHtml", () => {
@@ -127,6 +132,74 @@ describe("buildAiContext", () => {
     expect(privateArticle).toContain("Access: Private");
   });
 
+  it("builds a sprint context block with status and date range", () => {
+    const result = buildAiContext({
+      kind: "cycle",
+      id: "cyc-1",
+      name: "Sprint 12",
+      descriptionHtml: "Stabilize billing",
+      status: "CURRENT",
+      startDate: "2026-10-01",
+      endDate: "2026-10-14",
+    });
+    expect(result).toContain("Sprint context:");
+    expect(result).toContain("Sprint: Sprint 12");
+    expect(result).toContain("Sprint id: cyc-1");
+    expect(result).toContain("Status: CURRENT");
+    expect(result).toContain("Dates: 2026-10-01 → 2026-10-14");
+    expect(result).toContain("Description: Stabilize billing");
+  });
+
+  it("renders one-sided or missing sprint dates", () => {
+    const startOnly = buildAiContext({
+      kind: "cycle",
+      id: "cyc-1",
+      name: "Sprint 12",
+      descriptionHtml: "",
+      startDate: "2026-10-01",
+      endDate: null,
+    });
+    expect(startOnly).toContain("Dates: from 2026-10-01");
+
+    const endOnly = buildAiContext({
+      kind: "cycle",
+      id: "cyc-1",
+      name: "Sprint 12",
+      descriptionHtml: "",
+      startDate: null,
+      endDate: "2026-10-14",
+    });
+    expect(endOnly).toContain("Dates: until 2026-10-14");
+
+    const noDates = buildAiContext({
+      kind: "cycle",
+      id: "cyc-1",
+      name: "Sprint 12",
+      descriptionHtml: "",
+      startDate: null,
+      endDate: null,
+    });
+    expect(noDates).not.toContain("Dates:");
+  });
+
+  it("builds a track context block with status and date range", () => {
+    const result = buildAiContext({
+      kind: "module",
+      id: "mod-1",
+      name: "Onboarding",
+      descriptionHtml: "<p>Guided setup</p>",
+      status: "in-progress",
+      startDate: "2026-09-01",
+      endDate: "2026-12-31",
+    });
+    expect(result).toContain("Track context:");
+    expect(result).toContain("Track: Onboarding");
+    expect(result).toContain("Track id: mod-1");
+    expect(result).toContain("Status: in-progress");
+    expect(result).toContain("Dates: 2026-09-01 → 2026-12-31");
+    expect(result).toContain("Description: Guided setup");
+  });
+
   it("truncates long descriptions for every kind", () => {
     const longDescription = "x".repeat(CONTEXT_DESCRIPTION_LIMIT + 500);
     const service = buildAiContext({
@@ -144,6 +217,14 @@ describe("buildAiContext", () => {
       descriptionHtml: `<p>${longDescription}</p>`,
     });
     expect(workItem).toContain(`${"x".repeat(CONTEXT_DESCRIPTION_LIMIT)}…`);
+
+    const cycle = buildAiContext({
+      kind: "cycle",
+      id: "cyc-1",
+      name: "Sprint 12",
+      descriptionHtml: `<p>${longDescription}</p>`,
+    });
+    expect(cycle).toContain(`${"x".repeat(CONTEXT_DESCRIPTION_LIMIT)}…`);
   });
 
   it("falls back to general knowledge without an active context", () => {

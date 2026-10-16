@@ -10,7 +10,7 @@ import type { TAiProposal, TAiProposalDecision } from "@/lib/ai-proposals";
 import type { TAiScheduleProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision, TAiWorkItemProposalEntry } from "@/lib/ai-work-items";
 
-export type TAiContextKind = "work_item" | "service" | "article";
+export type TAiContextKind = "work_item" | "service" | "article" | "cycle" | "module";
 
 export type TAiWorkItemContext = {
   kind: "work_item";
@@ -36,7 +36,32 @@ export type TAiArticleContext = {
   access?: EPageAccess;
 };
 
-export type TAiAssistantContext = TAiWorkItemContext | TAiServiceContext | TAiArticleContext;
+export type TAiCycleContext = {
+  kind: "cycle";
+  id: string; // uuid, usable with the get_sprint tool
+  name: string;
+  descriptionHtml: string; // cycle.description is plain text; stripHtml is a no-op
+  status?: string; // CURRENT | UPCOMING | COMPLETED | DRAFT (server-computed)
+  startDate?: string | null;
+  endDate?: string | null;
+};
+
+export type TAiModuleContext = {
+  kind: "module";
+  id: string; // uuid, usable with the get_track tool
+  name: string;
+  descriptionHtml: string;
+  status?: string; // backlog | planned | in-progress | paused | completed | cancelled
+  startDate?: string | null;
+  endDate?: string | null; // module.target_date
+};
+
+export type TAiAssistantContext =
+  | TAiWorkItemContext
+  | TAiServiceContext
+  | TAiArticleContext
+  | TAiCycleContext
+  | TAiModuleContext;
 
 export type TAiMessage = {
   id: string;
@@ -57,7 +82,7 @@ export type TAiMessage = {
 };
 
 export const AI_ASSISTANT_TASK =
-  "You are an ITSM assistant. Answer using the context below when present — the work item, service, or knowledge base article the user is viewing. Be concise, use bullet points. If generating text (description/comment), output the text only.";
+  "You are an ITSM assistant. Answer using the context below when present — the work item, service, sprint, track, or knowledge base article the user is viewing. Be concise, use bullet points. If generating text (description/comment), output the text only.";
 
 export const stripHtml = (html: string): string =>
   html
@@ -75,6 +100,13 @@ export const CONTEXT_DESCRIPTION_LIMIT = 2000;
 
 const truncateDescription = (text: string): string =>
   text.length <= CONTEXT_DESCRIPTION_LIMIT ? text : `${text.slice(0, CONTEXT_DESCRIPTION_LIMIT)}…`;
+
+const formatDateRange = (startDate?: string | null, endDate?: string | null): string | undefined => {
+  if (startDate && endDate) return `Dates: ${startDate} → ${endDate}`;
+  if (startDate) return `Dates: from ${startDate}`;
+  if (endDate) return `Dates: until ${endDate}`;
+  return undefined;
+};
 
 const ASSISTANT_ALLOWED_TAGS = [
   "b",
@@ -141,6 +173,22 @@ const buildContextBlock = (context: TAiAssistantContext | undefined): string => 
       }
       if (description) parts.push(`Description: ${description}`);
       return `Article context:\n${parts.join("\n")}`;
+    }
+    case "cycle": {
+      const parts = [`Sprint: ${context.name}`, `Sprint id: ${context.id}`];
+      if (context.status) parts.push(`Status: ${context.status}`);
+      const dates = formatDateRange(context.startDate, context.endDate);
+      if (dates) parts.push(dates);
+      if (description) parts.push(`Description: ${description}`);
+      return `Sprint context:\n${parts.join("\n")}`;
+    }
+    case "module": {
+      const parts = [`Track: ${context.name}`, `Track id: ${context.id}`];
+      if (context.status) parts.push(`Status: ${context.status}`);
+      const dates = formatDateRange(context.startDate, context.endDate);
+      if (dates) parts.push(dates);
+      if (description) parts.push(`Description: ${description}`);
+      return `Track context:\n${parts.join("\n")}`;
     }
   }
 };
