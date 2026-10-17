@@ -9,9 +9,11 @@ import { action, observable, makeObservable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
 import type {
+  ILiteService,
   IService,
   IServiceDependency,
   IServiceHealthSnapshot,
+  IServiceProjectLink,
   TServiceGraphData,
   TServiceHealthSummary,
   TServiceWorkItemLink,
@@ -32,6 +34,7 @@ export type TServicePeek = {
 
 export interface IServiceStore {
   loader: boolean;
+  workspaceFetched: boolean;
   fetchedMap: Record<string, boolean>;
   serviceMap: Record<string, IService>;
   dependencyMap: Record<string, IServiceDependency>;
@@ -44,18 +47,26 @@ export interface IServiceStore {
   getProjectHealthSummary: (projectId: string) => TServiceHealthSummary;
   getProjectServiceIds: (projectId: string) => string[] | null;
   getFilteredServiceIds: (projectId: string) => string[] | null;
+  getWorkspaceServiceIds: () => string[];
   getDependenciesByProject: (projectId: string) => IServiceDependency[];
   getWorkItemLinksByService: (serviceId: string) => TServiceWorkItemLink[];
   getGraphData: (projectId: string) => TServiceGraphData;
+  getWorkspaceGraphData: (projectId?: string) => TServiceGraphData;
   getIsServicePeeked: (serviceId: string) => boolean;
-  fetchServices: (workspaceSlug: string, workspaceId: string, projectId: string) => Promise<IService[] | undefined>;
   setPeekService: (peek?: TServicePeek) => void;
+  fetchServices: (workspaceSlug: string, workspaceId: string, projectId: string) => Promise<IService[] | undefined>;
+  fetchWorkspaceServices: (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId?: string
+  ) => Promise<IService[] | undefined>;
   createService: (
     workspaceSlug: string,
     workspaceId: string,
     projectId: string,
     data: Partial<IService>
   ) => Promise<IService>;
+  createWorkspaceService: (workspaceSlug: string, workspaceId: string, data: Partial<IService>) => Promise<IService>;
   updateService: (
     workspaceSlug: string,
     workspaceId: string,
@@ -64,6 +75,7 @@ export interface IServiceStore {
     data: Partial<IService>
   ) => Promise<IService>;
   deleteService: (workspaceSlug: string, workspaceId: string, projectId: string, serviceId: string) => Promise<void>;
+  deleteWorkspaceService: (workspaceSlug: string, workspaceId: string, serviceId: string) => Promise<void>;
   addDependency: (
     workspaceSlug: string,
     workspaceId: string,
@@ -84,6 +96,19 @@ export interface IServiceStore {
     serviceId: string,
     position: { x: number; y: number }
   ) => Promise<void>;
+  addProjectLink: (
+    workspaceSlug: string,
+    workspaceId: string,
+    serviceId: string,
+    projectId: string
+  ) => Promise<IServiceProjectLink>;
+  removeProjectLink: (workspaceSlug: string, workspaceId: string, serviceId: string, linkId: string) => Promise<void>;
+  transferOwner: (
+    workspaceSlug: string,
+    workspaceId: string,
+    serviceId: string,
+    projectId: string
+  ) => Promise<IService>;
   linkWorkItem: (
     workspaceSlug: string,
     workspaceId: string,
@@ -103,6 +128,7 @@ export interface IServiceStore {
 
 export class ServicesStore implements IServiceStore {
   loader: boolean = false;
+  workspaceFetched: boolean = false;
   fetchedMap: Record<string, boolean> = {};
   serviceMap: Record<string, IService> = {};
   dependencyMap: Record<string, IServiceDependency> = {};
@@ -117,6 +143,7 @@ export class ServicesStore implements IServiceStore {
   constructor(_rootStore: CoreRootStore) {
     makeObservable(this, {
       loader: observable.ref,
+      workspaceFetched: observable.ref,
       fetchedMap: observable,
       serviceMap: observable,
       dependencyMap: observable,
@@ -125,13 +152,19 @@ export class ServicesStore implements IServiceStore {
       errorMap: observable,
       peekService: observable.ref,
       fetchServices: action,
+      fetchWorkspaceServices: action,
       setPeekService: action,
       createService: action,
+      createWorkspaceService: action,
       updateService: action,
       deleteService: action,
+      deleteWorkspaceService: action,
       addDependency: action,
       removeDependency: action,
       updateNodePosition: action,
+      addProjectLink: action,
+      removeProjectLink: action,
+      transferOwner: action,
       linkWorkItem: action,
       linkWorkItems: action,
       unlinkWorkItem: action,
@@ -162,7 +195,9 @@ export class ServicesStore implements IServiceStore {
   getProjectServiceIds = computedFn((projectId: string) => {
     if (!this.fetchedMap[projectId]) return null;
     const services = sortBy(
-      Object.values(this.serviceMap).filter((s) => s.project_id === projectId),
+      Object.values(this.serviceMap).filter(
+        (s) => s.project_id === projectId || s.project_links?.some((l) => l.project_id === projectId)
+      ),
       [(s) => s.sort_order]
     );
     return services.map((s) => s.id);
@@ -173,7 +208,9 @@ export class ServicesStore implements IServiceStore {
     const displayFilters = this.rootStore.serviceFilter.getDisplayFiltersByProjectId(projectId);
     const filters = this.rootStore.serviceFilter.getFiltersByProjectId(projectId);
     const searchQuery = this.rootStore.serviceFilter.searchQuery;
-    const services = Object.values(this.serviceMap).filter((s) => s.project_id === projectId);
+    const services = Object.values(this.serviceMap).filter(
+      (s) => s.project_id === projectId || s.project_links?.some((l) => l.project_id === projectId)
+    );
     const filtered = filterServices(services, filters, searchQuery, this.healthMap);
     return orderServices(filtered, displayFilters?.order_by, this.healthMap).map((s) => s.id);
   });
@@ -204,6 +241,40 @@ export class ServicesStore implements IServiceStore {
   });
 
   getIsServicePeeked = computedFn((serviceId: string) => this.peekService?.serviceId === serviceId);
+
+  getWorkspaceServiceIds = computedFn(() => {
+    if (!this.workspaceFetched) return [];
+    return sortBy(Object.values(this.serviceMap), [(s) => s.sort_order]).map((s) => s.id);
+  });
+
+  getWorkspaceGraphData = computedFn((projectId?: string): TServiceGraphData => {
+    const serviceIds = this.getWorkspaceServiceIds();
+    const services = serviceIds
+      .map((id) => this.serviceMap[id])
+      .filter((service): service is IService => Boolean(service))
+      .filter((service) => !projectId || service.project_links?.some((l) => l.project_id === projectId));
+    const visible = new Set(services.map((s) => s.id));
+    const dependencies = Object.values(this.dependencyMap).filter(
+      (d) => visible.has(d.from_service_id) || visible.has(d.to_service_id)
+    );
+    const endpoints = new Map<string, IService | ILiteService>();
+    for (const dep of dependencies) {
+      if (dep.from_service && !visible.has(dep.from_service_id)) endpoints.set(dep.from_service_id, dep.from_service);
+      if (dep.to_service && !visible.has(dep.to_service_id)) endpoints.set(dep.to_service_id, dep.to_service);
+    }
+    const allServices: (IService | ILiteService)[] = [...services, ...endpoints.values()];
+    const allIds = new Set(allServices.map((s) => s.id));
+    const health: Record<string, IServiceHealthSnapshot> = {};
+    services.forEach((service) => {
+      const snapshot = this.healthMap[service.id];
+      if (snapshot) health[service.id] = snapshot;
+    });
+    return {
+      services: allServices,
+      dependencies: dependencies.filter((d) => allIds.has(d.from_service_id) && allIds.has(d.to_service_id)),
+      health,
+    };
+  });
 
   setPeekService = (peek?: TServicePeek) => {
     this.peekService = peek;
@@ -244,8 +315,49 @@ export class ServicesStore implements IServiceStore {
     }
   };
 
+  fetchWorkspaceServices = async (workspaceSlug: string, workspaceId: string, projectId?: string) => {
+    try {
+      this.loader = true;
+      const [services, dependencies, links] = await Promise.all([
+        this.serviceService.getWorkspaceServices(workspaceSlug, projectId ? { project: projectId } : undefined),
+        this.serviceService.getWorkspaceDependencies(workspaceSlug),
+        this.serviceService.getWorkspaceWorkItemLinks(workspaceSlug),
+      ]);
+      runInAction(() => {
+        services.forEach((s) => set(this.serviceMap, [s.id], s));
+        dependencies.forEach((d) => set(this.dependencyMap, [d.id], d));
+        links.forEach((l) => set(this.workItemLinkMap, [l.id], l));
+        this.workspaceFetched = true;
+        this.loader = false;
+      });
+      try {
+        const health = await this.serviceHealthService.getHealth(workspaceSlug, workspaceId, "", services);
+        runInAction(() => {
+          health.forEach((snapshot) => set(this.healthMap, [snapshot.service_id], snapshot));
+        });
+      } catch (error) {
+        // Health is supplementary; the board falls back to "unknown" without it.
+        console.error("Failed to derive service health", error);
+      }
+      return services;
+    } catch {
+      runInAction(() => {
+        this.loader = false;
+      });
+      return undefined;
+    }
+  };
+
   createService = async (workspaceSlug: string, workspaceId: string, projectId: string, data: Partial<IService>) => {
     const service = await this.serviceService.createService(workspaceSlug, workspaceId, projectId, data);
+    runInAction(() => {
+      set(this.serviceMap, [service.id], service);
+    });
+    return service;
+  };
+
+  createWorkspaceService = async (workspaceSlug: string, _workspaceId: string, data: Partial<IService>) => {
+    const service = await this.serviceService.createWorkspaceService(workspaceSlug, data);
     runInAction(() => {
       set(this.serviceMap, [service.id], service);
     });
@@ -279,18 +391,61 @@ export class ServicesStore implements IServiceStore {
     }
   };
 
+  private removeLocalService = (serviceId: string) => {
+    delete this.serviceMap[serviceId];
+    Object.values(this.dependencyMap).forEach((d) => {
+      if (d.from_service_id === serviceId || d.to_service_id === serviceId) delete this.dependencyMap[d.id];
+    });
+    Object.values(this.workItemLinkMap).forEach((l) => {
+      if (l.service_id === serviceId) delete this.workItemLinkMap[l.id];
+    });
+    if (this.peekService?.serviceId === serviceId) this.peekService = undefined;
+  };
+
   deleteService = async (workspaceSlug: string, workspaceId: string, projectId: string, serviceId: string) => {
     await this.serviceService.deleteService(workspaceSlug, workspaceId, projectId, serviceId);
     runInAction(() => {
-      delete this.serviceMap[serviceId];
-      Object.values(this.dependencyMap).forEach((d) => {
-        if (d.from_service_id === serviceId || d.to_service_id === serviceId) delete this.dependencyMap[d.id];
-      });
-      Object.values(this.workItemLinkMap).forEach((l) => {
-        if (l.service_id === serviceId) delete this.workItemLinkMap[l.id];
-      });
-      if (this.peekService?.serviceId === serviceId) this.peekService = undefined;
+      this.removeLocalService(serviceId);
     });
+  };
+
+  deleteWorkspaceService = async (workspaceSlug: string, _workspaceId: string, serviceId: string) => {
+    await this.serviceService.deleteWorkspaceService(workspaceSlug, serviceId);
+    runInAction(() => {
+      this.removeLocalService(serviceId);
+    });
+  };
+
+  addProjectLink = async (workspaceSlug: string, _workspaceId: string, serviceId: string, projectId: string) => {
+    const link = await this.serviceService.addProjectLink(workspaceSlug, serviceId, projectId);
+    const service = this.getServiceById(serviceId);
+    if (service) {
+      runInAction(() => {
+        set(this.serviceMap, [serviceId], { ...service, project_links: [...service.project_links, link] });
+      });
+    }
+    return link;
+  };
+
+  removeProjectLink = async (workspaceSlug: string, _workspaceId: string, serviceId: string, linkId: string) => {
+    await this.serviceService.removeProjectLink(workspaceSlug, serviceId, linkId);
+    const service = this.getServiceById(serviceId);
+    if (service) {
+      runInAction(() => {
+        set(this.serviceMap, [serviceId], {
+          ...service,
+          project_links: service.project_links.filter((l) => l.id !== linkId),
+        });
+      });
+    }
+  };
+
+  transferOwner = async (workspaceSlug: string, _workspaceId: string, serviceId: string, projectId: string) => {
+    const updated = await this.serviceService.transferServiceOwner(workspaceSlug, serviceId, projectId);
+    runInAction(() => {
+      set(this.serviceMap, [serviceId], updated);
+    });
+    return updated;
   };
 
   addDependency = async (
