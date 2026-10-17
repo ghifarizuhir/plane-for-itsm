@@ -28,10 +28,12 @@ import { ServiceWorkItems } from "./work-items";
 
 type Props = {
   serviceId: string;
+  /** When rendering outside a project route (workspace catalog detail). */
+  fetched?: boolean;
 };
 
 export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Props) {
-  const { serviceId } = props;
+  const { serviceId, fetched } = props;
   // states
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
   // router
@@ -42,12 +44,12 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   // unsaved changes guard
   const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
   // store hooks
-  const { fetchedMap, getServiceById, errorMap, fetchServices } = useService();
+  const { fetchedMap, getServiceById, errorMap, fetchServices, fetchWorkspaceServices } = useService();
   const { currentWorkspace } = useWorkspace();
   // derived values
   const pid = projectId?.toString();
   const service = getServiceById(serviceId);
-  const hasFetched = pid ? fetchedMap[pid] : undefined;
+  const hasFetched = pid ? fetchedMap[pid] : fetched;
 
   const workspaceId = currentWorkspace?.id;
   const hasError = pid ? errorMap[pid] : false;
@@ -62,8 +64,9 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
   }, [isSubmitting, setShowAlert]);
 
   const handleRetry = () => {
-    if (!workspaceSlug || !workspaceId || !pid) return;
-    fetchServices(workspaceSlug.toString(), workspaceId, pid);
+    if (!workspaceSlug || !workspaceId) return;
+    if (pid) void fetchServices(workspaceSlug.toString(), workspaceId, pid);
+    else void fetchWorkspaceServices(workspaceSlug.toString(), workspaceId);
   };
 
   if (!service) {

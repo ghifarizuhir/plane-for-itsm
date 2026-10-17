@@ -9,58 +9,49 @@ import { useParams } from "next/navigation";
 import { Outlet } from "react-router";
 // icons
 import { ServerOutline } from "@makeplane/propel/icons";
-// plane imports
 import { useTranslation } from "@plane/i18n";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
-import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ServiceDetailQuickActions } from "@/components/services/detail/quick-actions";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useAppRouter } from "@/hooks/use-app-router";
 
-const ServiceDetailBreadcrumbs = observer(function ServiceDetailBreadcrumbs() {
-  // router
+const WorkspaceServicesBreadcrumbs = observer(function WorkspaceServicesBreadcrumbs() {
   const router = useAppRouter();
-  const { workspaceSlug, projectId, serviceId } = useParams();
-  // plane hooks
+  const { workspaceSlug, serviceId } = useParams();
   const { t } = useTranslation();
-  // store hooks
   const { getServiceById } = useService();
-  // derived values
   const service = serviceId ? getServiceById(serviceId.toString()) : null;
 
   return (
     <Header>
       <Header.LeftItem>
         <Breadcrumbs onBack={router.back}>
-          <CommonProjectBreadcrumbs workspaceSlug={workspaceSlug?.toString()} projectId={projectId?.toString()} />
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label={t("service.title")}
-                href={`/${workspaceSlug}/projects/${projectId}/services/`}
+                label={t("service.catalog_title")}
+                href={`/${workspaceSlug}/services/`}
                 icon={<ServerOutline className="h-4 w-4 text-tertiary" />}
+                isLast={!serviceId}
               />
             }
+            isLast={!serviceId}
           />
-          <Breadcrumbs.Item component={<BreadcrumbLink label={service?.name ?? ""} isLast />} isLast />
+          {serviceId && <Breadcrumbs.Item component={<BreadcrumbLink label={service?.name ?? ""} isLast />} isLast />}
         </Breadcrumbs>
       </Header.LeftItem>
-      <Header.RightItem>
-        <ServiceDetailQuickActions serviceId={serviceId?.toString() ?? ""} />
-      </Header.RightItem>
     </Header>
   );
 });
 
-export default function ProjectServiceDetailLayout() {
+export default function WorkspaceServicesLayout() {
   return (
     <>
-      <AppHeader header={<ServiceDetailBreadcrumbs />} />
+      <AppHeader header={<WorkspaceServicesBreadcrumbs />} />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>

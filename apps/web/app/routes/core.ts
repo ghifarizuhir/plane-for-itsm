@@ -120,6 +120,15 @@ export const coreRoutes: RouteConfigEntry[] = [
           ),
         ]),
 
+        // Workspace Service Catalog
+        layout("./(all)/[workspaceSlug]/(projects)/services/layout.tsx", [
+          route(":workspaceSlug/services", "./(all)/[workspaceSlug]/(projects)/services/page.tsx"),
+          route(
+            ":workspaceSlug/services/:serviceId",
+            "./(all)/[workspaceSlug]/(projects)/services/[serviceId]/page.tsx"
+          ),
+        ]),
+
         // --------------------------------------------------------------------
         // PROJECT LEVEL ROUTES
         // --------------------------------------------------------------------
@@ -173,22 +182,6 @@ export const coreRoutes: RouteConfigEntry[] = [
             route(
               ":workspaceSlug/projects/:projectId/modules",
               "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/modules/(list)/page.tsx"
-            ),
-          ]),
-
-          // Service Detail
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(detail)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/services/:serviceId",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(detail)/[serviceId]/page.tsx"
-            ),
-          ]),
-
-          // Services List
-          layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(list)/layout.tsx", [
-            route(
-              ":workspaceSlug/projects/:projectId/services",
-              "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/services/(list)/page.tsx"
             ),
           ]),
 
@@ -432,6 +425,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Inbox redirect: /:workspaceSlug/projects/:projectId/inbox
   // → /:workspaceSlug/projects/:projectId/intake
   route(":workspaceSlug/projects/:projectId/inbox", "routes/redirects/core/inbox.tsx"),
+
+  // Legacy service redirects → workspace catalog/detail
+  route(":workspaceSlug/projects/:projectId/services", "routes/redirects/core/project-services.tsx"),
+  route(":workspaceSlug/projects/:projectId/services/:serviceId", "routes/redirects/core/project-service-detail.tsx"),
 
   // War rooms list redirect: /:workspaceSlug/projects/:projectId/war-rooms
   // → /:workspaceSlug/projects/:projectId/issues?war_room=on

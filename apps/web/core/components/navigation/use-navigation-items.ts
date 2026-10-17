@@ -75,7 +75,7 @@ export const useNavigationItems = ({
         i18n_key: "sidebar.services",
         key: "services",
         name: "Services",
-        href: `/${workspaceSlug}/projects/${projectId}/services`,
+        href: `/${workspaceSlug}/services?project=${projectId}`,
         icon: ServerOutline,
         access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         // temporary: always visible until the backend ships service_view

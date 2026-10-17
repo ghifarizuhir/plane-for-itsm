@@ -14,6 +14,7 @@ import {
   InboxOutline,
   MultipleStickyOutline,
   ProjectsOutline,
+  ServerOutline,
   ViewsOutline,
   YourWorkOutline,
 } from "@makeplane/propel/icons";
@@ -27,6 +28,8 @@ export const getSidebarNavigationItemIcon = (key: string, className: string = ""
       return <InboxOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "projects":
       return <ProjectsOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "services":
+      return <ServerOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "views":
       return <ViewsOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "analytics":
