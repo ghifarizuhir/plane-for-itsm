@@ -1,0 +1,330 @@
+//! Workspace-level services backend integration tests (design 2026-10-17).
+//! DB-backed; run serially:
+//! `DATABASE_URL=postgres://plane:plane@localhost:5432/plane \
+//!  cargo test -p api --test service_workspace_test -- --test-threads=1`
+
+use api::state::AppState;
+use common::config::AppConfig;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+fn database_url() -> String {
+    std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://plane:plane@localhost:5432/plane".into())
+}
+
+async fn pool() -> PgPool {
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url())
+        .await
+        .expect("test database must be reachable (set DATABASE_URL)")
+}
+
+#[allow(dead_code)] // used from Task BE-3 onward
+async fn state() -> AppState {
+    AppState {
+        pool: pool().await,
+        redis: redis::Client::open("redis://127.0.0.1:6379").expect("redis client"),
+        config: AppConfig::from_env(),
+    }
+}
+
+async fn insert_user(pool: &PgPool, user_id: Uuid, username: &str) {
+    sqlx::query(
+        "INSERT INTO users (id, password, username, email, first_name, last_name, avatar, \
+         date_joined, created_at, updated_at, last_location, created_location, is_superuser, \
+         is_managed, is_password_expired, is_active, is_staff, is_email_verified, \
+         is_password_autoset, token, user_timezone, last_login_ip, last_logout_ip, \
+         last_login_medium, last_login_uagent, is_bot, display_name, is_email_valid, \
+         is_password_reset_required) \
+         VALUES ($1, '', $2, $3, '', '', '', now(), now(), now(), '', '', false, false, \
+         false, true, false, false, true, $4, 'UTC', '', '', '', '', false, $2, true, false)",
+    )
+    .bind(user_id)
+    .bind(username)
+    .bind(format!("{username}@example.invalid"))
+    .bind(Uuid::new_v4().simple().to_string())
+    .execute(pool)
+    .await
+    .expect("scratch user");
+}
+
+async fn insert_workspace_member(pool: &PgPool, user_id: Uuid, workspace_id: Uuid, role: i16) {
+    sqlx::query(
+        "INSERT INTO workspace_members (id, created_at, updated_at, role, member_id, \
+         workspace_id, view_props, default_props, issue_props, explored_features, \
+         getting_started_checklist, tips, is_active) \
+         VALUES (gen_random_uuid(), now(), now(), $1, $2, $3, '{}', '{}', '{}', '{}', '{}', \
+         '{}', true)",
+    )
+    .bind(role)
+    .bind(user_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch workspace member");
+}
+
+async fn insert_project_member(
+    pool: &PgPool,
+    user_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    role: i16,
+) {
+    sqlx::query(
+        "INSERT INTO project_members (id, member_id, role, project_id, workspace_id, is_active, \
+         view_props, default_props, sort_order, preferences, created_at, updated_at) \
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, true, '{}', '{}', 65535, '{}', now(), now())",
+    )
+    .bind(user_id)
+    .bind(role)
+    .bind(project_id)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch project member");
+}
+
+async fn insert_project(
+    pool: &PgPool,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    name: &str,
+    identifier: &str,
+) {
+    sqlx::query(
+        "INSERT INTO projects (id, created_at, updated_at, name, description, network, \
+         identifier, workspace_id, cycle_view, module_view, issue_views_view, page_view, \
+         intake_view, archive_in, close_in, logo_props, is_time_tracking_enabled, \
+         is_issue_type_enabled, guest_view_all_features, timezone) \
+         VALUES ($1, now(), now(), $2, '', 2, $3, $4, false, false, false, \
+         false, false, 30, 30, '{}'::jsonb, false, false, false, 'UTC')",
+    )
+    .bind(project_id)
+    .bind(name)
+    .bind(identifier)
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch project");
+}
+
+async fn insert_service(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO services (id, workspace_id, name, description, description_html, status, \
+         criticality, \"type\", sort_order, created_at, updated_at) \
+         VALUES ($1, $2, $3, '', '', 'active', 'medium', 'internal', 65535, now(), now())",
+    )
+    .bind(id)
+    .bind(workspace_id)
+    .bind(name)
+    .execute(pool)
+    .await
+    .expect("scratch service");
+    id
+}
+
+async fn link_service(
+    pool: &PgPool,
+    service_id: Uuid,
+    project_id: Uuid,
+    workspace_id: Uuid,
+    link_type: &str,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, link_type, \
+         created_at, updated_at) VALUES ($1, $2, $3, $4, $5, now(), now())",
+    )
+    .bind(id)
+    .bind(workspace_id)
+    .bind(service_id)
+    .bind(project_id)
+    .bind(link_type)
+    .execute(pool)
+    .await
+    .expect("scratch service link");
+    id
+}
+
+struct Scratch {
+    slug: String,
+    workspace_id: Uuid,
+    p1: Uuid,
+    p2: Uuid,
+    p4: Uuid,
+    admin: Uuid,
+    owner_admin: Uuid,
+    owner_member: Uuid,
+    consumer_admin: Uuid,
+    guest: Uuid,
+    outsider: Uuid,
+    s1: Uuid, // owned by P1, consumer link P2
+    s2: Uuid, // owned by P2
+    s4: Uuid, // owned by P4
+}
+
+impl Scratch {
+    async fn new(pool: &PgPool) -> Self {
+        let slug = format!("svc-{}", Uuid::new_v4().simple());
+        let workspace_id = Uuid::new_v4();
+        let p1 = Uuid::new_v4();
+        let p2 = Uuid::new_v4();
+        let p4 = Uuid::new_v4();
+        let admin = Uuid::new_v4();
+        let owner_admin = Uuid::new_v4();
+        let owner_member = Uuid::new_v4();
+        let consumer_admin = Uuid::new_v4();
+        let guest = Uuid::new_v4();
+        let outsider = Uuid::new_v4();
+
+        for (id, name) in [
+            (admin, "admin"),
+            (owner_admin, "owner-admin"),
+            (owner_member, "owner-member"),
+            (consumer_admin, "consumer-admin"),
+            (guest, "guest"),
+            (outsider, "outsider"),
+        ] {
+            insert_user(pool, id, &format!("{slug}-{name}")).await;
+        }
+
+        sqlx::query(
+            "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, \
+             background_color) VALUES ($1, 'Svc Scratch', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+        )
+        .bind(workspace_id)
+        .bind(&slug)
+        .bind(admin)
+        .execute(pool)
+        .await
+        .expect("scratch workspace");
+
+        // Workspace roles: admin = ws admin (no project rows); owner/consumer/outsider
+        // are ws members (15); guest is ws guest (5).
+        insert_workspace_member(pool, admin, workspace_id, 20).await;
+        for user in [owner_admin, owner_member, consumer_admin, outsider] {
+            insert_workspace_member(pool, user, workspace_id, 15).await;
+        }
+        insert_workspace_member(pool, guest, workspace_id, 5).await;
+
+        let project_specs: [(Uuid, &str, &str); 3] = [
+            (p1, "Scratch One", "P1"),
+            (p2, "Scratch Two", "P2"),
+            (p4, "Scratch Four", "P4"),
+        ];
+        for (project_id, name, ident) in project_specs {
+            insert_project(pool, project_id, workspace_id, name, ident).await;
+        }
+        insert_project_member(pool, owner_admin, p1, workspace_id, 20).await;
+        insert_project_member(pool, owner_member, p1, workspace_id, 15).await;
+        insert_project_member(pool, guest, p1, workspace_id, 5).await;
+        insert_project_member(pool, consumer_admin, p2, workspace_id, 20).await;
+        insert_project_member(pool, outsider, p4, workspace_id, 15).await;
+
+        let s1 = insert_service(pool, workspace_id, "ISO Switch").await;
+        link_service(pool, s1, p1, workspace_id, "owner").await;
+        link_service(pool, s1, p2, workspace_id, "consumer").await;
+        let s2 = insert_service(pool, workspace_id, "Core Banking").await;
+        link_service(pool, s2, p2, workspace_id, "owner").await;
+        let s4 = insert_service(pool, workspace_id, "P4 Widget").await;
+        link_service(pool, s4, p4, workspace_id, "owner").await;
+
+        Self {
+            slug,
+            workspace_id,
+            p1,
+            p2,
+            p4,
+            admin,
+            owner_admin,
+            owner_member,
+            consumer_admin,
+            guest,
+            outsider,
+            s1,
+            s2,
+            s4,
+        }
+    }
+}
+
+#[tokio::test]
+async fn visibility_matrix_and_gates() {
+    use api::routes::service_access::{
+        full_visible, gate_admin, gate_writer, linked_to_project, visible_service_ids,
+    };
+
+    let pool = pool().await;
+    let sc = Scratch::new(&pool).await;
+
+    let mut admin = visible_service_ids(&pool, sc.admin, &sc.slug).await.unwrap();
+    admin.sort();
+    let mut all = vec![sc.s1, sc.s2, sc.s4];
+    all.sort();
+    assert_eq!(admin, all, "ws admin sees every service");
+
+    assert_eq!(
+        visible_service_ids(&pool, sc.owner_member, &sc.slug).await.unwrap(),
+        vec![sc.s1],
+        "P1 member sees only S1"
+    );
+    let mut consumer = visible_service_ids(&pool, sc.consumer_admin, &sc.slug).await.unwrap();
+    consumer.sort();
+    let mut consumer_expected = vec![sc.s1, sc.s2];
+    consumer_expected.sort();
+    assert_eq!(consumer, consumer_expected, "P2 admin sees S1 (consumer) + S2 (owner)");
+    assert_eq!(
+        visible_service_ids(&pool, sc.guest, &sc.slug).await.unwrap(),
+        vec![sc.s1],
+        "guest sees linked services read-only"
+    );
+    assert_eq!(
+        visible_service_ids(&pool, sc.outsider, &sc.slug).await.unwrap(),
+        vec![sc.s4],
+        "outsider sees only P4"
+    );
+
+    assert!(full_visible(&pool, sc.admin, &sc.slug, sc.s4).await.unwrap());
+    assert!(full_visible(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
+    assert!(full_visible(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!full_visible(&pool, sc.outsider, &sc.slug, sc.s1).await.unwrap());
+    assert!(!full_visible(&pool, sc.guest, &sc.slug, sc.s2).await.unwrap());
+
+    assert!(gate_writer(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
+    assert!(gate_writer(&pool, sc.admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_writer(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_writer(&pool, sc.guest, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_writer(&pool, sc.outsider, &sc.slug, sc.s1).await.unwrap());
+
+    assert!(gate_admin(&pool, sc.owner_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(gate_admin(&pool, sc.admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_admin(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_admin(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
+
+    assert!(linked_to_project(&pool, sc.s1, sc.p2).await.unwrap());
+    assert!(!linked_to_project(&pool, sc.s1, sc.p4).await.unwrap());
+}
+
+#[tokio::test]
+async fn full_visible_rejects_inactive_membership() {
+    use api::routes::service_access::full_visible;
+
+    let pool = pool().await;
+    let sc = Scratch::new(&pool).await;
+
+    sqlx::query("UPDATE project_members SET is_active = false WHERE member_id = $1 AND project_id = $2")
+        .bind(sc.owner_member)
+        .bind(sc.p1)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        !full_visible(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap(),
+        "inactive project membership grants no visibility"
+    );
+}
