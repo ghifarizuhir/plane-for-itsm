@@ -777,6 +777,48 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/war-rooms/:pk/messages/:message_id/",
             patch(routes::war_room::messages_patch).delete(routes::war_room::messages_destroy),
         )
+        // Workspace-level service catalog (canonical, design 2026-10-17).
+        // Project-scoped routes above remain as a compat layer.
+        .route(
+            "/api/workspaces/:slug/services/",
+            get(routes::service::list_workspace).post(routes::service::create_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/",
+            get(routes::service::detail_workspace)
+                .put(routes::service::patch_workspace)
+                .patch(routes::service::patch_workspace)
+                .delete(routes::service::destroy_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/transfer-owner/",
+            post(routes::service::transfer_owner),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/project-links/",
+            get(routes::service::project_links_list).post(routes::service::project_links_create),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/project-links/:link_id/",
+            delete(routes::service::project_links_destroy),
+        )
+        .route(
+            "/api/workspaces/:slug/service-dependencies/",
+            get(routes::service::dependencies_list_workspace)
+                .post(routes::service::dependencies_create_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/service-dependencies/:pk/",
+            delete(routes::service::dependency_destroy_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/service-issues/",
+            get(routes::service::issues_list_workspace).post(routes::service::issues_create_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/service-issues/:pk/",
+            delete(routes::service::issue_destroy_workspace),
+        )
         // Parity with `StateViewSet.mark_as_default`
         // (`views/state/base.py:104-110`, `urls/state.py:27-31`):
         // POST blind clear+set → 204 for unknown/triage pks; a typed-mirror
