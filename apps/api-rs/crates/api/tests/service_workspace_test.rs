@@ -686,6 +686,137 @@ async fn project_links_and_transfer_owner() {
 }
 
 #[tokio::test]
+async fn canonical_dependencies_cross_project_with_lite() {
+    use api::routes::service::{
+        dependencies_create_workspace, dependencies_list_workspace, CreateDependency,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // S1 -> S4: S4 is not full-visible to a P1 member -> rejected
+    let denied = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s4,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::BAD_REQUEST);
+
+    // S2 -> S1 by P2 admin: S1 is consumer-linked to P2, so both endpoints are full
+    let (status, Json(edge)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s2,
+            to_service_id: sc.s1,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(edge["from_service"]["access_level"], "full");
+    assert_eq!(edge["to_service"]["access_level"], "full");
+
+    // outsider sees no edges (neither endpoint visible to P4)
+    let (_, Json(rows)) = dependencies_list_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 0);
+
+    // P1 member sees the S2 -> S1 edge with S2 projected lite
+    let (_, Json(rows)) = dependencies_list_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["from_service_id"], sc.s2.to_string());
+    assert_eq!(rows[0]["to_service_id"], sc.s1.to_string());
+    assert_eq!(rows[0]["from_service"]["access_level"], "lite");
+    assert_eq!(rows[0]["from_service"]["name"], "Core Banking");
+    assert!(rows[0]["from_service"].get("owner_id").is_none(), "lite hides details");
+    assert_eq!(rows[0]["to_service"]["access_level"], "full");
+
+    // cycle: P1 subscribes to S2, then S1 -> S2 closes S2 -> S1
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+    let cycle = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(cycle.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(cycle.1["error"], "This dependency would create a cycle.");
+}
+
+#[tokio::test]
+async fn canonical_dependency_destroy_by_from_writer() {
+    use api::routes::service::{
+        dependencies_create_workspace, dependency_destroy_workspace, CreateDependency,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // P1 subscribes to S2 so its member may create S1 -> S2
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+    let (status, Json(edge)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let edge_id = Uuid::parse_str(edge["id"].as_str().unwrap()).unwrap();
+
+    // outsider cannot delete it
+    let denied = dependency_destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), edge_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    // from-side writer can
+    let (status, _) = dependency_destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), edge_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
 
