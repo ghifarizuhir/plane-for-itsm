@@ -1193,6 +1193,58 @@ async fn intake_accept_gate_requires_linked_service() {
 }
 
 #[tokio::test]
+async fn ai_list_services_respects_visibility() {
+    use ai::agent::new_trace;
+    use ai::tools::services::{ListServices, ListServicesArgs};
+    use rig::tool::{Tool, ToolContext};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let args = |query: Option<&str>| ListServicesArgs {
+        query: query.map(str::to_string),
+        status: None,
+        criticality: None,
+        service_type: None,
+        project: None,
+        limit: None,
+    };
+
+    // P1 member: only S1
+    let tool = ListServices {
+        pool: st.pool.clone(),
+        workspace_id: sc.workspace_id,
+        user_id: sc.owner_member,
+        trace: new_trace(),
+    };
+    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    assert!(out.contains("ISO Switch"));
+    assert!(!out.contains("Core Banking"), "S2 is not linked to P1");
+    assert!(!out.contains("P4 Widget"));
+
+    // P2 admin sees S1 (consumer) + S2 (owner)
+    let tool = ListServices {
+        pool: st.pool.clone(),
+        workspace_id: sc.workspace_id,
+        user_id: sc.consumer_admin,
+        trace: new_trace(),
+    };
+    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    assert!(out.contains("ISO Switch"));
+    assert!(out.contains("Core Banking"));
+
+    // ws admin sees all
+    let tool = ListServices {
+        pool: st.pool.clone(),
+        workspace_id: sc.workspace_id,
+        user_id: sc.admin,
+        trace: new_trace(),
+    };
+    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    assert!(out.contains("P4 Widget"));
+}
+
+#[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
 

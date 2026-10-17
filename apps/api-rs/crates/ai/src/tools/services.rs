@@ -10,7 +10,8 @@ use uuid::Uuid;
 use super::{clamp_limit, db_error, optional_text, resolve_project, schema_of, ProjectRow};
 use crate::agent::{record, ToolTrace};
 
-pub const SERVICE_STATUSES: [&str; 5] = ["active", "planned", "maintenance", "deprecated", "retired"];
+pub const SERVICE_STATUSES: [&str; 5] =
+    ["active", "planned", "maintenance", "deprecated", "retired"];
 pub const SERVICE_CRITICALITIES: [&str; 4] = ["critical", "high", "medium", "low"];
 pub const SERVICE_TYPES: [&str; 4] = ["internal", "external", "infrastructure", "third_party"];
 
@@ -51,11 +52,18 @@ pub const SERVICES_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.status
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
-     JOIN projects p ON p.id = sv.project_id AND p.deleted_at IS NULL \
+     JOIN service_project_links owner_link ON owner_link.service_id = sv.id \
+       AND owner_link.link_type = 'owner' AND owner_link.deleted_at IS NULL \
+     JOIN projects p ON p.id = owner_link.project_id AND p.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = sv.owner_id \
      WHERE sv.workspace_id = $1 AND sv.deleted_at IS NULL \
-     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
-       AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+     AND (EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = sv.workspace_id \
+            AND wm.member_id = $2 AND wm.role = 20 AND wm.is_active = true \
+            AND wm.deleted_at IS NULL) \
+       OR EXISTS (SELECT 1 FROM service_project_links spl \
+            JOIN project_members pm ON pm.project_id = spl.project_id \
+            WHERE spl.service_id = sv.id AND spl.deleted_at IS NULL \
+            AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL)) \
      AND ($3::text IS NULL OR sv.name ILIKE '%' || $3 || '%') \
      AND ($4::text IS NULL OR sv.status = $4) \
      AND ($5::text IS NULL OR sv.criticality = $5) \
@@ -111,9 +119,10 @@ impl Tool for ListServices {
     type Error = ToolExecutionError;
 
     fn description(&self) -> String {
-        "List services in the service catalog the caller can access, optionally \
+        "List services in the workspace-scoped service catalog the caller can access, optionally \
          filtered by name substring, lifecycle status, criticality, type, and \
-         project. Returns name, project, status, criticality, type, and owner."
+         project. Returns name, project, status, criticality, type, and owner. \
+         Dependencies may cross projects."
             .to_string()
     }
 
@@ -129,10 +138,12 @@ impl Tool for ListServices {
         record(&self.trace, Self::NAME, &args);
         let query = optional_text(args.query.as_deref());
         let status = service_allowlist(args.status.as_deref(), &SERVICE_STATUSES, "status")?;
-        let criticality =
-            service_allowlist(args.criticality.as_deref(), &SERVICE_CRITICALITIES, "criticality")?;
-        let service_type =
-            service_allowlist(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
+        let criticality = service_allowlist(
+            args.criticality.as_deref(),
+            &SERVICE_CRITICALITIES,
+            "criticality",
+        )?;
+        let service_type = service_allowlist(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
         let project = optional_text(args.project.as_deref());
         let limit = clamp_limit(args.limit);
         let rows: Vec<ServiceRow> = sqlx::query_as(SERVICES_SQL)
@@ -156,20 +167,31 @@ pub const SERVICE_BY_ID_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.s
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
-     JOIN projects p ON p.id = sv.project_id AND p.deleted_at IS NULL \
+     JOIN service_project_links owner_link ON owner_link.service_id = sv.id \
+       AND owner_link.link_type = 'owner' AND owner_link.deleted_at IS NULL \
+     JOIN projects p ON p.id = owner_link.project_id AND p.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = sv.owner_id \
      WHERE sv.id = $1 AND sv.workspace_id = $2 AND sv.deleted_at IS NULL \
-     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
-       AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL)";
+     AND (EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = sv.workspace_id \
+            AND wm.member_id = $3 AND wm.role = 20 AND wm.is_active = true \
+            AND wm.deleted_at IS NULL) \
+       OR EXISTS (SELECT 1 FROM service_project_links spl \
+            JOIN project_members pm ON pm.project_id = spl.project_id \
+            WHERE spl.service_id = sv.id AND spl.deleted_at IS NULL \
+            AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL))";
 
 pub const SERVICES_BY_NAME_PROJECT_SQL: &str = "SELECT sv.id, sv.name, sv.description, \
      sv.status, sv.criticality, sv.\"type\" AS service_type, \
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
-     JOIN projects p ON p.id = sv.project_id AND p.deleted_at IS NULL \
+     JOIN service_project_links owner_link ON owner_link.service_id = sv.id \
+       AND owner_link.link_type = 'owner' AND owner_link.deleted_at IS NULL \
+     JOIN projects p ON p.id = owner_link.project_id AND p.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = sv.owner_id \
-     WHERE sv.project_id = $1 AND sv.workspace_id = $2 AND sv.deleted_at IS NULL \
+     WHERE sv.workspace_id = $2 AND sv.deleted_at IS NULL \
+     AND EXISTS (SELECT 1 FROM service_project_links spl WHERE spl.service_id = sv.id \
+       AND spl.project_id = $1 AND spl.deleted_at IS NULL) \
      AND (lower(sv.name) = lower($3) OR sv.name ILIKE '%' || $3 || '%') \
      ORDER BY sv.name LIMIT 10";
 
@@ -178,11 +200,18 @@ pub const SERVICES_BY_NAME_SQL: &str = "SELECT sv.id, sv.name, sv.description, s
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
-     JOIN projects p ON p.id = sv.project_id AND p.deleted_at IS NULL \
+     JOIN service_project_links owner_link ON owner_link.service_id = sv.id \
+       AND owner_link.link_type = 'owner' AND owner_link.deleted_at IS NULL \
+     JOIN projects p ON p.id = owner_link.project_id AND p.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = sv.owner_id \
      WHERE sv.workspace_id = $1 AND sv.deleted_at IS NULL \
-     AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
-       AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+     AND (EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = sv.workspace_id \
+            AND wm.member_id = $2 AND wm.role = 20 AND wm.is_active = true \
+            AND wm.deleted_at IS NULL) \
+       OR EXISTS (SELECT 1 FROM service_project_links spl \
+            JOIN project_members pm ON pm.project_id = spl.project_id \
+            WHERE spl.service_id = sv.id AND spl.deleted_at IS NULL \
+            AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL)) \
      AND (lower(sv.name) = lower($3) OR sv.name ILIKE '%' || $3 || '%') \
      ORDER BY sv.name LIMIT 10";
 
@@ -376,7 +405,7 @@ impl Tool for GetService {
         "Get one service from the catalog by name or id: status, criticality, \
          type, owner, description, links, its dependencies (depends_on / \
          needed_by), the open work items linked to it, and the count of linked \
-         work items per state group."
+         work items per state group. Dependencies may cross projects."
             .to_string()
     }
 
@@ -419,7 +448,12 @@ impl Tool for GetService {
             .fetch_all(&self.pool)
             .await
             .map_err(db_error)?;
-        Ok(service_detail_json(&row, &dependencies, &open_items, &counts))
+        Ok(service_detail_json(
+            &row,
+            &dependencies,
+            &open_items,
+            &counts,
+        ))
     }
 }
 
@@ -430,11 +464,22 @@ mod tests {
 
     #[test]
     fn service_allowlist_rejects_unknown_values() {
-        assert!(service_allowlist(Some("Active"), &SERVICE_STATUSES, "status").unwrap().is_some());
+        assert!(
+            service_allowlist(Some("Active"), &SERVICE_STATUSES, "status")
+                .unwrap()
+                .is_some()
+        );
         assert!(service_allowlist(Some("burning"), &SERVICE_STATUSES, "status").is_err());
-        assert!(service_allowlist(Some("CRITICAL"), &SERVICE_CRITICALITIES, "criticality").unwrap().is_some());
+        assert!(
+            service_allowlist(Some("CRITICAL"), &SERVICE_CRITICALITIES, "criticality")
+                .unwrap()
+                .is_some()
+        );
         assert!(service_allowlist(Some("nope"), &SERVICE_TYPES, "type").is_err());
-        assert_eq!(service_allowlist(None, &SERVICE_TYPES, "type").unwrap(), None);
+        assert_eq!(
+            service_allowlist(None, &SERVICE_TYPES, "type").unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -451,8 +496,7 @@ mod tests {
             repository_url: None,
             documentation_url: None,
         }];
-        let parsed: serde_json::Value =
-            serde_json::from_str(&services_json(&rows)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&services_json(&rows)).unwrap();
         assert_eq!(parsed["returned"], json!(1));
         assert_eq!(parsed["items"][0]["name"], json!("API"));
         assert_eq!(parsed["items"][0]["type"], json!("internal"));
@@ -485,7 +529,10 @@ mod tests {
     fn pick_service_prefers_exact_then_unique_substring() {
         let rows = vec![service("API", "LTS"), service("API Gateway", "OPS")];
         assert_eq!(pick_service(rows.clone(), "api").unwrap().name, "API");
-        assert_eq!(pick_service(rows.clone(), "gateway").unwrap().name, "API Gateway");
+        assert_eq!(
+            pick_service(rows.clone(), "gateway").unwrap().name,
+            "API Gateway"
+        );
         assert!(pick_service(rows, "a").is_err());
         assert!(pick_service(vec![], "api").is_err());
     }
@@ -518,7 +565,8 @@ mod tests {
             count: 3,
         }];
         let parsed: serde_json::Value =
-            serde_json::from_str(&service_detail_json(&row, &dependencies, &items, &counts)).unwrap();
+            serde_json::from_str(&service_detail_json(&row, &dependencies, &items, &counts))
+                .unwrap();
         assert_eq!(parsed["name"], json!("API"));
         assert_eq!(parsed["dependencies"][0]["direction"], json!("depends_on"));
         assert_eq!(parsed["open_work_items"][0]["identifier"], json!("LTS-42"));
