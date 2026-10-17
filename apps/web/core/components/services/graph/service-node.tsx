@@ -5,6 +5,7 @@
  */
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { LockOutline } from "@makeplane/propel/icons";
 // plane imports
 import type { ILiteService, IService, IServiceIncident, TServiceHealth } from "@plane/types";
 import { cn } from "@plane/utils";
@@ -26,18 +27,29 @@ export type TServiceNodeData = {
 export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
   const service = (data as TServiceNodeData | undefined)?.service;
   if (!service) return null;
-  const { statusLabel, criticalityLabel, health, incidents, dimmed } = data as TServiceNodeData;
+  const { statusLabel, criticalityLabel, health, incidents, dimmed, accessLevel } = data as TServiceNodeData;
   const state = health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
+  const isLite = accessLevel === "lite";
 
   return (
-    <div className={cn("relative w-[220px]", dimmed && "opacity-60")}>
+    <div className={cn("relative w-[220px]", dimmed && "opacity-60", isLite && "opacity-80")}>
       <Handle type="target" position={Position.Left} />
-      <div className="service-node-card shadow-sm relative overflow-hidden rounded-md border border-subtle bg-surface-1 px-3 py-2 transition-colors">
+      <div
+        className={cn(
+          "service-node-card shadow-sm relative overflow-hidden rounded-md border border-subtle bg-surface-1 px-3 py-2 transition-colors",
+          isLite && "border-dashed"
+        )}
+        title={isLite ? `${service.name} — Restricted` : service.name}
+      >
         <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
         <div className="flex min-w-0 items-center gap-2 pl-1">
           <ServiceHealthDot health={state} />
-          <span className="text-sm min-w-0 flex-1 truncate font-medium text-primary" title={service.name}>
+          {isLite && <LockOutline className="h-3 w-3 shrink-0 text-tertiary" />}
+          <span
+            className={cn("text-sm min-w-0 flex-1 truncate font-medium", isLite ? "text-tertiary" : "text-primary")}
+            title={service.name}
+          >
             {service.name}
           </span>
         </div>

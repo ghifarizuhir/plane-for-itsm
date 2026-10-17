@@ -23,6 +23,7 @@ import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 import { ServiceLoadErrorState } from "../service-load-error-state";
 import { ServiceDescription } from "./description";
 import { ServiceDetailSidebar } from "./sidebar";
+import { ServiceProjectLinks } from "./project-links";
 import { ServiceTitleInput } from "./title-input";
 import { ServiceWorkItems } from "./work-items";
 
@@ -79,7 +80,7 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
         description={t("service.detail.not_found_description")}
         primaryButton={{
           text: t("service.detail.view_other_services"),
-          onClick: () => router.push(`/${workspaceSlug}/projects/${projectId}/services`),
+          onClick: () => router.push(`/${workspaceSlug}/services`),
         }}
       />
     );
@@ -90,6 +91,7 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
       <div className="w-full space-y-6 px-9 py-5 md:h-full md:min-w-0 md:flex-1 md:overflow-y-auto">
         <ServiceTitleInput serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
         <ServiceDescription serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
+        <ServiceProjectLinks serviceId={serviceId} />
         <ServiceWorkItems serviceId={serviceId} />
       </div>
       <div className="w-full shrink-0 border-t border-subtle bg-surface-1 md:h-full md:w-1/4 md:min-w-80 md:border-t-0 md:border-l xl:min-w-96">

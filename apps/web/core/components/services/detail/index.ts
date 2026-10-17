@@ -8,4 +8,5 @@ export * from "./root";
 export * from "./quick-actions";
 export * from "./description";
 export * from "./dependencies";
+export * from "./project-links";
 export * from "./work-items";

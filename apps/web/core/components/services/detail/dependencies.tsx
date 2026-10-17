@@ -11,9 +11,13 @@ import { useParams } from "next/navigation";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { IService } from "@plane/types";
+import { LockOutline } from "@makeplane/propel/icons";
+import type { IService, IServiceDependency } from "@plane/types";
+import { cn } from "@plane/utils";
 // ui
 import { CustomSelect } from "@plane/ui";
+// helpers
+import { isLiteService } from "@/services/service.helpers";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -83,23 +87,30 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
     }
   };
 
-  const renderEdgeRow = (dependencyId: string, otherServiceId: string) => {
+  const renderEdgeRow = (dependency: IServiceDependency, otherServiceId: string) => {
+    const embedded = dependency.from_service_id === otherServiceId ? dependency.from_service : dependency.to_service;
+    const isLite = !!embedded && isLiteService(embedded);
     const other = getServiceById(otherServiceId);
+    const name = embedded?.name ?? other?.name ?? otherServiceId;
     return (
       <div
-        key={dependencyId}
+        key={dependency.id}
         className="flex items-center justify-between gap-2 rounded-sm border border-subtle px-2 py-1.5"
       >
-        <span className="truncate text-12 text-primary" title={other?.name ?? otherServiceId}>
-          {other?.name ?? otherServiceId}
+        <span className="flex min-w-0 items-center gap-1.5" title={name}>
+          {isLite && <LockOutline className="h-3 w-3 shrink-0 text-tertiary" />}
+          <span className={cn("truncate text-12", isLite ? "text-tertiary" : "text-primary")}>{name}</span>
+          {isLite && <span className="shrink-0 text-10 text-tertiary">{t("service.lite.restricted")}</span>}
         </span>
-        <button
-          type="button"
-          onClick={() => handleRemove(dependencyId)}
-          className="shrink-0 text-11 text-tertiary hover:text-primary"
-        >
-          {t("remove")}
-        </button>
+        {!isLite && (
+          <button
+            type="button"
+            onClick={() => handleRemove(dependency.id)}
+            className="shrink-0 text-11 text-tertiary hover:text-primary"
+          >
+            {t("remove")}
+          </button>
+        )}
       </div>
     );
   };
@@ -136,7 +147,7 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
         {outgoing.length === 0 ? (
           <p className="text-12 text-tertiary">{t("service.detail.no_dependencies")}</p>
         ) : (
-          outgoing.map((d) => renderEdgeRow(d.id, d.to_service_id))
+          outgoing.map((d) => renderEdgeRow(d, d.to_service_id))
         )}
       </div>
       <div className="flex flex-col gap-1.5">
@@ -144,7 +155,7 @@ export const ServiceDependencies = observer(function ServiceDependencies(props: 
         {incoming.length === 0 ? (
           <p className="text-12 text-tertiary">{t("service.detail.no_dependents")}</p>
         ) : (
-          incoming.map((d) => renderEdgeRow(d.id, d.from_service_id))
+          incoming.map((d) => renderEdgeRow(d, d.from_service_id))
         )}
       </div>
     </div>
