@@ -31,6 +31,7 @@ import {
   UpgradeOutline,
   ViewsOutline,
   WarningCircleOutline,
+  WorkflowsOutline,
   WorkItemsOutline,
   YourWorkOutline,
 } from "@makeplane/propel/icons";
@@ -256,6 +257,14 @@ export const DOC_TOPICS: TDocTopic[] = [
     group: "itil4",
     icon: UpgradeOutline,
     component: lazy(() => import("./content/itil4-change-improvement")),
+  },
+  {
+    slug: "itil4-flow",
+    title: "Alur organisasi end-to-end",
+    description: "Contoh penerapan dari nol: struktur, ritual, dan siklus kerja organisasi.",
+    group: "itil4",
+    icon: WorkflowsOutline,
+    component: lazy(() => import("./content/itil4-flow")),
   },
   {
     slug: "project-settings",
