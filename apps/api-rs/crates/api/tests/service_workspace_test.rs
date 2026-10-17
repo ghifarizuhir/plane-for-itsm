@@ -534,6 +534,158 @@ async fn canonical_create_patch_destroy() {
 }
 
 #[tokio::test]
+async fn project_links_and_transfer_owner() {
+    use api::routes::service::{
+        project_links_create, project_links_destroy, project_links_list, transfer_owner,
+        CreateProjectLink, TransferOwner,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // P4 member (15) cannot self-serve a consumer link
+    let denied = project_links_create(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(CreateProjectLink {
+            project_id: sc.p4,
+            link_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    // promote to P4 admin, retry -> self-serve works
+    sqlx::query("UPDATE project_members SET role = 20 WHERE member_id = $1 AND project_id = $2")
+        .bind(sc.outsider)
+        .bind(sc.p4)
+        .execute(&st.pool)
+        .await
+        .unwrap();
+    let (status, Json(link)) = project_links_create(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(CreateProjectLink {
+            project_id: sc.p4,
+            link_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(link["link_type"], "consumer");
+    let link_id = Uuid::parse_str(link["id"].as_str().unwrap()).unwrap();
+
+    // duplicate active link rejected
+    let dup = project_links_create(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(CreateProjectLink {
+            project_id: sc.p4,
+            link_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(dup.0, axum::http::StatusCode::BAD_REQUEST);
+
+    // owner admin can revoke it
+    let (status, _) = project_links_destroy(
+        State(st.clone()),
+        AuthUser(sc.owner_admin),
+        Path((sc.slug.clone(), sc.s1, link_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+    assert!(!api::routes::service_access::linked_to_project(&st.pool, sc.s1, sc.p4)
+        .await
+        .unwrap());
+
+    // owner link cannot be deleted directly
+    let (_, Json(links)) = project_links_list(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), sc.s1)),
+    )
+    .await
+    .unwrap();
+    let owner_link_id = links
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["link_type"] == "owner")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let owner_del = project_links_destroy(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), sc.s1, Uuid::parse_str(&owner_link_id).unwrap())),
+    )
+    .await
+    .unwrap();
+    assert_eq!(owner_del.0, axum::http::StatusCode::BAD_REQUEST);
+
+    // transfer: non ws-admin denied
+    let denied = transfer_owner(
+        State(st.clone()),
+        AuthUser(sc.owner_admin),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(TransferOwner { project_id: sc.p4 }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    // re-add P4 consumer link so transfer can absorb it
+    project_links_create(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(CreateProjectLink {
+            project_id: sc.p4,
+            link_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+
+    // ws admin transfers; old owner demoted to consumer; target link absorbed
+    let (status, Json(after)) = transfer_owner(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), sc.s1)),
+        Json(TransferOwner { project_id: sc.p4 }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(after["owner_project_id"], sc.p4.to_string());
+    let links = after["project_links"].as_array().unwrap();
+    assert_eq!(
+        links.iter().filter(|l| l["project_id"] == sc.p4.to_string()).count(),
+        1,
+        "absorbed consumer link: exactly one P4 link (owner)"
+    );
+    assert!(links
+        .iter()
+        .any(|l| l["project_id"] == sc.p4.to_string() && l["link_type"] == "owner"));
+    assert!(links
+        .iter()
+        .any(|l| l["project_id"] == sc.p1.to_string() && l["link_type"] == "consumer"));
+    assert!(links
+        .iter()
+        .any(|l| l["project_id"] == sc.p2.to_string() && l["link_type"] == "consumer"));
+}
+
+#[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
 

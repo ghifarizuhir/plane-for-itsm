@@ -750,6 +750,215 @@ pub async fn destroy(
     destroy_service_core(&st, pk).await
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateProjectLink {
+    pub project_id: Uuid,
+    pub link_type: Option<String>,
+}
+
+pub async fn project_links_list(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !service_access::full_visible(&st.pool, auth.0, &slug, pk).await? {
+        return Ok(missing());
+    }
+    let links = links_for_services(&st.pool, &[pk]).await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(
+            links
+                .iter()
+                .map(|l| json!({"id": l.id, "project_id": l.project_id, "link_type": l.link_type}))
+                .collect(),
+        )),
+    ))
+}
+
+pub async fn project_links_create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<CreateProjectLink>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    let owner = service_access::owner_project(&st.pool, pk).await?;
+    let actor_admin_target =
+        service_access::is_project_admin(&st.pool, auth.0, &slug, body.project_id).await?;
+    let actor_admin_owner = match owner {
+        Some(owner_id) => service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?,
+        None => false,
+    };
+    if !(ws_admin || actor_admin_target || actor_admin_owner) {
+        return Ok(deny());
+    }
+    if body.link_type.as_deref().unwrap_or("consumer") != "consumer" {
+        return Ok(bad_request(
+            "Only consumer links can be added; ownership is transferred.",
+        ));
+    }
+    let project_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL)",
+    )
+    .bind(body.project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_ok {
+        return Ok(bad_request("Invalid project_id - object does not exist."));
+    }
+    let existing_active: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM service_project_links \
+         WHERE service_id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .bind(body.project_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if existing_active {
+        return Ok(bad_request("This project is already linked to the service."));
+    }
+    let link_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, link_type, \
+         created_at, updated_at, created_by_id, updated_by_id) \
+         SELECT $1, s.workspace_id, s.id, $2, 'consumer', now(), now(), $3, $3 \
+         FROM services s WHERE s.id = $4",
+    )
+    .bind(link_id)
+    .bind(body.project_id)
+    .bind(auth.0)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"id": link_id, "project_id": body.project_id, "link_type": "consumer"})),
+    ))
+}
+
+pub async fn project_links_destroy(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk, link_id)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let link: Option<ServiceLinkRow> = sqlx::query_as(
+        "SELECT id, service_id, project_id, link_type FROM service_project_links \
+         WHERE id = $1 AND service_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(link_id)
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(link) = link else {
+        return Ok(missing());
+    };
+    if link.link_type == "owner" {
+        return Ok(bad_request(
+            "The owner link cannot be removed. Transfer ownership instead.",
+        ));
+    }
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    let actor_admin_link_project =
+        service_access::is_project_admin(&st.pool, auth.0, &slug, link.project_id).await?;
+    let actor_admin_owner = match service_access::owner_project(&st.pool, pk).await? {
+        Some(owner_id) => service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?,
+        None => false,
+    };
+    if !(ws_admin || actor_admin_link_project || actor_admin_owner) {
+        return Ok(deny());
+    }
+    sqlx::query(
+        "UPDATE service_project_links SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(link_id)
+    .execute(&st.pool)
+    .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+pub async fn transfer_owner(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<TransferOwner>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(old_owner) = service_access::owner_project(&st.pool, pk).await? else {
+        return Ok(missing());
+    };
+    let project_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL)",
+    )
+    .bind(body.project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_ok {
+        return Ok(bad_request("Invalid project_id - object does not exist."));
+    }
+    let mut tx = st.pool.begin().await?;
+    // absorb an existing consumer link for the new owner
+    sqlx::query(
+        "UPDATE service_project_links SET deleted_at = now(), updated_at = now() \
+         WHERE service_id = $1 AND project_id = $2 AND link_type = 'consumer' AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .bind(body.project_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE service_project_links SET project_id = $1, updated_at = now(), updated_by_id = $2 \
+         WHERE service_id = $3 AND link_type = 'owner' AND deleted_at IS NULL",
+    )
+    .bind(body.project_id)
+    .bind(auth.0)
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    if old_owner != body.project_id {
+        let revived = sqlx::query(
+            "UPDATE service_project_links SET deleted_at = NULL, updated_at = now(), updated_by_id = $1 \
+             WHERE service_id = $2 AND project_id = $3 AND link_type = 'consumer' AND deleted_at IS NOT NULL",
+        )
+        .bind(auth.0)
+        .bind(pk)
+        .bind(old_owner)
+        .execute(&mut *tx)
+        .await?;
+        if revived.rows_affected() == 0 {
+            sqlx::query(
+                "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, \
+                 link_type, created_at, updated_at, created_by_id, updated_by_id) \
+                 SELECT gen_random_uuid(), s.workspace_id, s.id, $1, 'consumer', now(), now(), $2, $2 \
+                 FROM services s WHERE s.id = $3",
+            )
+            .bind(old_owner)
+            .bind(auth.0)
+            .bind(pk)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    // dual-write the legacy column
+    sqlx::query("UPDATE services SET project_id = $1, updated_at = now() WHERE id = $2")
+        .bind(body.project_id)
+        .bind(pk)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    let json = service_json_by_id(&st.pool, pk, "full")
+        .await?
+        .ok_or_else(|| common::errors::AppError::from(sqlx::Error::RowNotFound))?;
+    Ok((StatusCode::OK, Json(json)))
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DependencyRow {
     pub id: Uuid,
