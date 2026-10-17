@@ -114,6 +114,69 @@ export function DocsTermTable({ terms }: { terms: { term: string; meaning: strin
   );
 }
 
+export type TPracticeUsage = "primary" | "secondary" | "none";
+
+const PRACTICE_USAGE_STYLES: Record<TPracticeUsage, { symbol: string; className: string; label: string }> = {
+  primary: { symbol: "●", className: "text-accent-primary", label: "sering dipakai" },
+  secondary: { symbol: "○", className: "text-tertiary", label: "kadang dipakai" },
+  none: { symbol: "–", className: "text-placeholder", label: "tidak dipakai" },
+};
+
+export function DocsPracticeMatrix({
+  columns,
+  rows,
+  legend = "● sering dipakai · ○ kadang dipakai · – tidak dipakai",
+}: {
+  columns: string[];
+  rows: { practice: string; cells: TPracticeUsage[] }[];
+  legend?: string;
+}) {
+  return (
+    <div className="mt-4">
+      <div className="overflow-x-auto rounded-lg border border-subtle">
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="bg-layer-1">
+              <th className="tracking-wider border-b border-subtle px-4 py-2 text-11 font-semibold text-tertiary uppercase">
+                Praktik
+              </th>
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  className="tracking-wider border-b border-subtle px-4 py-2 text-center text-11 font-semibold text-tertiary uppercase"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.practice} className="border-b border-subtle last:border-b-0">
+                <th scope="row" className="px-4 py-2.5 text-left align-top text-13 font-medium text-primary">
+                  {row.practice}
+                </th>
+                {columns.map((column, index) => {
+                  const usage = PRACTICE_USAGE_STYLES[row.cells[index] ?? "none"];
+                  return (
+                    <td key={column} className="px-4 py-2.5 text-center align-top">
+                      <span aria-hidden className={cn("text-13", usage.className)}>
+                        {usage.symbol}
+                      </span>
+                      <span className="sr-only">{usage.label}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-11 text-tertiary">{legend}</p>
+    </div>
+  );
+}
+
 export function DocsTopicLink({ slug, children }: { slug: string; children: ReactNode }) {
   const { workspaceSlug } = useParams();
   return (
