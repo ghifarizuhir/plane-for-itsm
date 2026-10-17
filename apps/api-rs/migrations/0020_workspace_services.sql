@@ -26,10 +26,14 @@ CREATE INDEX IF NOT EXISTS service_project_links_service_idx
     ON public.service_project_links (service_id) WHERE deleted_at IS NULL;
 
 -- Backfill: every existing service's project becomes its owner link.
+-- Rows with a NULL legacy project_id (possible only on dev DBs that ran the
+-- new test fixtures) are skipped: they stay ownerless until an admin assigns
+-- an owner. The JOIN also guarantees the referenced project still exists.
 INSERT INTO public.service_project_links
     (id, workspace_id, service_id, project_id, link_type, created_at, updated_at)
 SELECT gen_random_uuid(), s.workspace_id, s.id, s.project_id, 'owner', now(), now()
 FROM public.services s
+JOIN public.projects p ON p.id = s.project_id
 WHERE s.deleted_at IS NULL
 ON CONFLICT DO NOTHING;
 
