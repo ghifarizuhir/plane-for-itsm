@@ -1029,19 +1029,6 @@ pub struct CreateDependency {
     pub to_service_id: Uuid,
 }
 
-async fn service_exists(
-    pool: &sqlx::PgPool,
-    project_id: Uuid,
-    id: Uuid,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
-    )
-    .bind(id)
-    .bind(project_id)
-    .fetch_one(pool)
-    .await
-}
 
 pub(crate) async fn create_dependency_core(
     st: &AppState,
@@ -1374,12 +1361,27 @@ pub async fn issues_create(
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    if !service_exists(&st.pool, project_id, body.service_id).await? {
+    if !service_access::linked_to_project(&st.pool, body.service_id, project_id).await? {
         return Ok((
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Service not found."})),
         ));
     }
+    issues_create_core(&st, auth.0, project_id, &body).await
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ServiceIssueListParams {
+    pub service_id: Option<Uuid>,
+    pub project_id: Option<Uuid>,
+}
+
+pub(crate) async fn issues_create_core(
+    st: &AppState,
+    user_id: Uuid,
+    project_id: Uuid,
+    body: &CreateServiceIssue,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let issue_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM issues WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
     )
@@ -1409,13 +1411,13 @@ pub async fn issues_create(
     sqlx::query(
         "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
          created_at, updated_at, created_by_id, updated_by_id) \
-         SELECT $1, p.workspace_id, p.id, $2, $3, now(), now(), $4, $4 FROM projects p WHERE p.id = $5",
+         SELECT $1, i.workspace_id, i.project_id, $2, $3, now(), now(), $4, $4 \
+         FROM issues i WHERE i.id = $3",
     )
     .bind(id)
     .bind(body.service_id)
     .bind(body.issue_id)
-    .bind(auth.0)
-    .bind(project_id)
+    .bind(user_id)
     .execute(&st.pool)
     .await?;
     let row: ServiceIssueRow = sqlx::query_as(&format!("{SERVICE_ISSUE_SELECT} WHERE si.id = $1"))
@@ -1423,6 +1425,98 @@ pub async fn issues_create(
         .fetch_one(&st.pool)
         .await?;
     Ok((StatusCode::CREATED, Json(service_issue_json(&row))))
+}
+
+pub async fn issues_create_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<CreateServiceIssue>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let issue_project: Option<Uuid> = sqlx::query_scalar(
+        "SELECT i.project_id FROM issues i JOIN workspaces w ON w.id = i.workspace_id \
+         WHERE i.id = $1 AND w.slug = $2 AND i.deleted_at IS NULL",
+    )
+    .bind(body.issue_id)
+    .bind(&slug)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(project_id) = issue_project else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Issue not found."})),
+        ));
+    };
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !(ws_admin || matches!(role, Some(20) | Some(15))) {
+        return Ok(deny());
+    }
+    if !service_access::linked_to_project(&st.pool, body.service_id, project_id).await? {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Service not found."})),
+        ));
+    }
+    issues_create_core(&st, auth.0, project_id, &body).await
+}
+
+pub async fn issues_list_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(params): Query<ServiceIssueListParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    let visible: Option<Vec<Uuid>> = if ws_admin {
+        None
+    } else {
+        Some(service_access::visible_service_ids(&st.pool, auth.0, &slug).await?)
+    };
+    let rows: Vec<ServiceIssueRow> = sqlx::query_as(&format!(
+        "{SERVICE_ISSUE_SELECT} \
+         WHERE si.workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND si.deleted_at IS NULL \
+         AND ($2::uuid IS NULL OR si.service_id = $2) \
+         AND ($3::uuid IS NULL OR si.project_id = $3) \
+         AND ($4::uuid[] IS NULL OR si.service_id = ANY($4)) \
+         ORDER BY si.created_at ASC"
+    ))
+    .bind(&slug)
+    .bind(params.service_id)
+    .bind(params.project_id)
+    .bind(visible)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(service_issue_json).collect())),
+    ))
+}
+
+pub async fn issue_destroy_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<ServiceIssueRow> = sqlx::query_as(&format!(
+        "{SERVICE_ISSUE_SELECT} WHERE si.id = $1 AND si.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(missing());
+    };
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, row.project_id).await?;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    if !(ws_admin || matches!(role, Some(20) | Some(15))) {
+        return Ok(deny());
+    }
+    sqlx::query("UPDATE service_issues SET deleted_at = now(), updated_at = now() WHERE id = $1")
+        .bind(pk)
+        .execute(&st.pool)
+        .await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
 pub async fn issue_destroy(

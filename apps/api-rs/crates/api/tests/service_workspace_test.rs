@@ -926,6 +926,157 @@ async fn compat_dependencies_echo_and_link_scope() {
     assert_eq!(rows[0]["project_id"], sc.p1.to_string());
 }
 
+async fn insert_issue(pool: &PgPool, sc: &Scratch, project_id: Uuid, name: &str) -> Uuid {
+    let state_id = Uuid::new_v4();
+    let type_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, \
+         sequence, \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, 'Open', '', '#cccccc', $2, $3, $4, 65535, 'unstarted', true, false, now(), now())",
+    )
+    .bind(state_id)
+    .bind(format!("open-{}", Uuid::new_v4().simple()))
+    .bind(project_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch state");
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
+         is_default, level, is_epic, requires_service, created_at, updated_at) \
+         VALUES ($1, 'Incident', '', '{}'::jsonb, $2, true, true, 0, false, true, now(), now())",
+    )
+    .bind(type_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch type");
+    let issue_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, \
+         priority, is_draft, sort_order, sequence_id, state_id, type_id, project_id, workspace_id, \
+         created_at, updated_at) \
+         VALUES ($1, $2, '<p></p>', '{}', '', 'none', false, 65535, \
+         (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM issues WHERE project_id = $4), \
+         $3, $7, $4, $5, now(), now())",
+    )
+    .bind(issue_id)
+    .bind(name)
+    .bind(state_id)
+    .bind(project_id)
+    .bind(sc.workspace_id)
+    .bind(1_i64)
+    .bind(type_id)
+    .execute(pool)
+    .await
+    .expect("scratch issue");
+    issue_id
+}
+
+#[tokio::test]
+async fn service_issues_require_linked_service() {
+    use api::routes::service::{issues_create as compat_issues_create, CreateServiceIssue};
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+    let issue_id = insert_issue(&st.pool, &sc, sc.p1, "ISO one").await;
+
+    // S2 is not linked to P1 -> 404
+    let denied = compat_issues_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateServiceIssue {
+            service_id: sc.s2,
+            issue_id,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::NOT_FOUND);
+
+    // S1 is linked -> ok
+    let (status, Json(link)) = compat_issues_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateServiceIssue {
+            service_id: sc.s1,
+            issue_id,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(link["service_id"], sc.s1.to_string());
+}
+
+#[tokio::test]
+async fn canonical_service_issues_resolve_project_from_issue() {
+    use api::routes::service::{
+        issue_destroy_workspace, issues_create_workspace, issues_list_workspace, CreateServiceIssue,
+        ServiceIssueListParams,
+    };
+    use axum::extract::{Path, Query, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+    let issue_id = insert_issue(&st.pool, &sc, sc.p1, "ISO two").await;
+
+    // outsider is not a member of P1
+    let denied = issues_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path(sc.slug.clone()),
+        Json(CreateServiceIssue {
+            service_id: sc.s1,
+            issue_id,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    let (status, Json(link)) = issues_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateServiceIssue {
+            service_id: sc.s1,
+            issue_id,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let link_id = Uuid::parse_str(link["id"].as_str().unwrap()).unwrap();
+
+    // canonical list filtered by service_id
+    let (_, Json(rows)) = issues_list_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Query(ServiceIssueListParams {
+            service_id: Some(sc.s1),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+
+    // destroy: consumer admin is not a member of the issue's project (P1) -> denied
+    let denied = issue_destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), link_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+}
+
 #[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
