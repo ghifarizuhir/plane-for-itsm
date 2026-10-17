@@ -225,6 +225,18 @@ impl Scratch {
         .execute(pool)
         .await
         .expect("scratch service");
+        // New world order (design 2026-10-17): gates require an owner link.
+        sqlx::query(
+            "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, \
+             link_type, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, 'owner', now(), now())",
+        )
+        .bind(self.workspace_id)
+        .bind(service_id)
+        .bind(self.project_id)
+        .execute(pool)
+        .await
+        .expect("scratch service owner link");
         service_id
     }
 
@@ -342,13 +354,17 @@ async fn classify_stores_suggestion_and_apply_dismiss_work() {
     set_decision_env(&base_url);
 
     let (row_id, issue_id) = scratch.create_item(&st, "Login is broken").await;
-    ai::triage_job::classify(&pool, row_id).await.expect("classify");
+    ai::triage_job::classify(&pool, row_id)
+        .await
+        .expect("classify");
 
     // Request terkirim ke `{base}/systemone` dengan pertanyaan bertipe.
     let sent = bodies.lock().unwrap().clone();
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["model"], "typesafe/jev-1.13");
-    assert!(sent[0]["questions"]["category"]["criteria"].get("Incident").is_some());
+    assert!(sent[0]["questions"]["category"]["criteria"]
+        .get("Incident")
+        .is_some());
     assert_eq!(
         sent[0]["questions"]["severity"]["criteria"][3],
         "Major functionality blocked for users"
@@ -599,7 +615,9 @@ async fn suggestion_includes_service_and_apply_writes_type_and_link() {
     set_decision_env(&base_url);
 
     let (row_id, issue_id) = scratch.create_item(&st, "Payments failing").await;
-    ai::triage_job::classify(&pool, row_id).await.expect("classify");
+    ai::triage_job::classify(&pool, row_id)
+        .await
+        .expect("classify");
 
     let sent = bodies.lock().unwrap().clone();
     assert!(sent[0]["questions"]["service"]["criteria"]
@@ -679,7 +697,9 @@ async fn service_abstain_stores_sentinel_and_rejects_apply() {
     set_decision_env(&base_url);
 
     let (row_id, issue_id) = scratch.create_item(&st, "General question").await;
-    ai::triage_job::classify(&pool, row_id).await.expect("classify");
+    ai::triage_job::classify(&pool, row_id)
+        .await
+        .expect("classify");
 
     let (status, Json(body)) = get_triage_suggestion(
         State(st.clone()),

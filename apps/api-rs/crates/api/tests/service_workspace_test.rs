@@ -1151,6 +1151,48 @@ async fn war_room_attach_requires_linked_service() {
 }
 
 #[tokio::test]
+async fn intake_accept_gate_requires_linked_service() {
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+    let issue_id = insert_issue(&st.pool, &sc, sc.p1, "Intake item").await;
+
+    // service linked to another project only -> gate message
+    sqlx::query(
+        "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now())",
+    )
+    .bind(sc.workspace_id)
+    .bind(sc.p1)
+    .bind(sc.s2)
+    .bind(issue_id)
+    .execute(&st.pool)
+    .await
+    .unwrap();
+
+    let gate = api::routes::intake::accept_gate_for_test(&st.pool, sc.p1, issue_id)
+        .await
+        .unwrap();
+    assert_eq!(gate, Some("Select a service before accepting this work item"));
+
+    // linked service -> gate passes
+    sqlx::query(
+        "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now())",
+    )
+    .bind(sc.workspace_id)
+    .bind(sc.p1)
+    .bind(sc.s1)
+    .bind(issue_id)
+    .execute(&st.pool)
+    .await
+    .unwrap();
+    let gate = api::routes::intake::accept_gate_for_test(&st.pool, sc.p1, issue_id)
+        .await
+        .unwrap();
+    assert_eq!(gate, None);
+}
+
+#[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
 

@@ -1378,6 +1378,15 @@ const INBOX_ISSUE_SELECT_SQL: &str = "SELECT i.id, i.name, i.state_id, i.sort_or
 
 /// Accept gate ITSM: type wajib bila project punya tipe live non-epic;
 /// service wajib bila tipe terpilih ber-flag `requires_service`.
+#[doc(hidden)]
+pub async fn accept_gate_for_test(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    issue_id: uuid::Uuid,
+) -> Result<Option<&'static str>, sqlx::Error> {
+    accept_gate(pool, project_id, issue_id).await
+}
+
 async fn accept_gate(
     pool: &sqlx::PgPool,
     project_id: uuid::Uuid,
@@ -1411,10 +1420,13 @@ async fn accept_gate(
     }
     if requires_service == Some(true) {
         let (has_service,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM service_issues \
-             WHERE issue_id = $1 AND deleted_at IS NULL)",
+            "SELECT EXISTS(SELECT 1 FROM service_issues si \
+             JOIN service_project_links spl ON spl.service_id = si.service_id \
+               AND spl.project_id = $2 AND spl.deleted_at IS NULL \
+             WHERE si.issue_id = $1 AND si.deleted_at IS NULL)",
         )
         .bind(issue_id)
+        .bind(project_id)
         .fetch_one(pool)
         .await?;
         if !has_service {
@@ -2154,7 +2166,12 @@ pub async fn apply_triage_suggestion(
     if row.status != "ready" {
         return Ok(triage_bad_request("Triage suggestion is not ready"));
     }
-    if body.fields.is_empty() || body.fields.iter().any(|f| !TRIAGE_FIELDS.contains(&f.as_str())) {
+    if body.fields.is_empty()
+        || body
+            .fields
+            .iter()
+            .any(|f| !TRIAGE_FIELDS.contains(&f.as_str()))
+    {
         return Ok(triage_bad_request("Invalid triage fields"));
     }
     if body
@@ -2194,19 +2211,23 @@ pub async fn apply_triage_suggestion(
             None => false,
         };
         if !type_ok {
-            return Ok(triage_bad_request("Category suggestion is no longer available"));
+            return Ok(triage_bad_request(
+                "Category suggestion is no longer available",
+            ));
         }
     }
     if apply_service {
         let service_ok: bool = match row.service_id {
-            Some(service_id) => sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 \
+            Some(service_id) => {
+                sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM services WHERE id = $1 AND project_id = $2 \
                  AND deleted_at IS NULL AND status <> 'retired')",
-            )
-            .bind(service_id)
-            .bind(project_id)
-            .fetch_one(&st.pool)
-            .await?,
+                )
+                .bind(service_id)
+                .bind(project_id)
+                .fetch_one(&st.pool)
+                .await?
+            }
             None => false,
         };
         if !service_ok {
@@ -2272,8 +2293,13 @@ pub async fn apply_triage_suggestion(
         .await?;
         tx.commit().await?;
     }
-    let refreshed = fetch_triage_row(&st.pool, scope.row_id).await?.unwrap_or(row);
-    Ok((StatusCode::OK, Json(json!({"data": triage_json(&refreshed)}))))
+    let refreshed = fetch_triage_row(&st.pool, scope.row_id)
+        .await?
+        .unwrap_or(row);
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": triage_json(&refreshed)})),
+    ))
 }
 
 /// POST `.../triage-suggestion/dismiss/` — tandai field diabaikan; idempotent.
@@ -2302,7 +2328,12 @@ pub async fn dismiss_triage_suggestion(
     if row.status != "ready" {
         return Ok(triage_bad_request("Triage suggestion is not ready"));
     }
-    if body.fields.is_empty() || body.fields.iter().any(|f| !TRIAGE_FIELDS.contains(&f.as_str())) {
+    if body.fields.is_empty()
+        || body
+            .fields
+            .iter()
+            .any(|f| !TRIAGE_FIELDS.contains(&f.as_str()))
+    {
         return Ok(triage_bad_request("Invalid triage fields"));
     }
     if body
@@ -2325,6 +2356,11 @@ pub async fn dismiss_triage_suggestion(
     .bind(&merged)
     .execute(&st.pool)
     .await?;
-    let refreshed = fetch_triage_row(&st.pool, scope.row_id).await?.unwrap_or(row);
-    Ok((StatusCode::OK, Json(json!({"data": triage_json(&refreshed)}))))
+    let refreshed = fetch_triage_row(&st.pool, scope.row_id)
+        .await?
+        .unwrap_or(row);
+    Ok((
+        StatusCode::OK,
+        Json(json!({"data": triage_json(&refreshed)})),
+    ))
 }
