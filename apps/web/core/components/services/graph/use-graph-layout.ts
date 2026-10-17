@@ -7,13 +7,15 @@
 import type { Edge, Node } from "@xyflow/react";
 import { MarkerType, Position } from "@xyflow/react";
 import dagre from "dagre";
-import type { IService, IServiceDependency } from "@plane/types";
+import type { ILiteService, IService, IServiceDependency } from "@plane/types";
+// helpers
+import { isLiteService } from "@/services/service.helpers";
 
 export const SERVICE_NODE_WIDTH = 220;
 export const SERVICE_NODE_HEIGHT = 72;
 
 export const getLayoutedElements = (
-  services: IService[],
+  services: (IService | ILiteService)[],
   dependencies: IServiceDependency[]
 ): { nodes: Node[]; edges: Edge[] } => {
   const graph = new dagre.graphlib.Graph();
@@ -30,11 +32,12 @@ export const getLayoutedElements = (
 
   const nodes: Node[] = services.map((service) => {
     const pos = graph.node(service.id);
+    const storedPosition = isLiteService(service) ? null : service.position;
     return {
       id: service.id,
       type: "service",
-      data: { service },
-      position: service.position ?? {
+      data: { service, accessLevel: isLiteService(service) ? "lite" : "full" },
+      position: storedPosition ?? {
         x: (pos?.x ?? 0) - SERVICE_NODE_WIDTH / 2,
         y: (pos?.y ?? 0) - SERVICE_NODE_HEIGHT / 2,
       },

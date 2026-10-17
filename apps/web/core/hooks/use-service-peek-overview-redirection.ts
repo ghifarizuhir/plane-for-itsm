@@ -23,9 +23,9 @@ const useServicePeekOverviewRedirection = () => {
       if (!workspaceSlug || !service) return;
       const { project_id, id } = service;
       if (getIsServicePeeked(id)) return;
-      const serviceLink = `/${workspaceSlug}/projects/${project_id}/services/${id}`;
+      const serviceLink = `/${workspaceSlug}/services/${id}`;
       if (isMobile) router.push(serviceLink);
-      else setPeekService({ workspaceSlug, projectId: project_id, serviceId: id });
+      else setPeekService({ workspaceSlug, projectId: project_id ?? "", serviceId: id });
     },
     [getIsServicePeeked, router, setPeekService]
   );

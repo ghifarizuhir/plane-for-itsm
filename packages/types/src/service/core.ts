@@ -41,10 +41,31 @@ export type TServicePosition = {
   y: number;
 };
 
+export type TServiceAccessLevel = "full" | "lite";
+
+export interface IServiceProjectLink {
+  id: string;
+  project_id: string;
+  link_type: "owner" | "consumer";
+}
+
+/** Restricted projection returned for dependency endpoints the caller cannot fully access. */
+export interface ILiteService {
+  id: string;
+  name: string;
+  status: TServiceStatus;
+  criticality: TServiceCriticality;
+  access_level: "lite";
+}
+
 export interface IService {
   id: string;
   workspace_id: string;
-  project_id: string;
+  /** @deprecated equals `owner_project_id`; kept for backward compatibility. */
+  project_id: string | null;
+  owner_project_id: string | null;
+  project_links: IServiceProjectLink[];
+  access_level: "full";
   name: string;
   description: string;
   description_html: string;
@@ -65,10 +86,13 @@ export interface IService {
 export interface IServiceDependency {
   id: string;
   workspace_id: string;
-  project_id: string;
+  /** Legacy dual-write column; compat endpoints echo the queried project. */
+  project_id: string | null;
   from_service_id: string;
   to_service_id: string;
   created_at: string;
+  from_service?: IService | ILiteService;
+  to_service?: IService | ILiteService;
 }
 
 export interface TServiceWorkItemLink {
@@ -82,7 +106,7 @@ export interface TServiceWorkItemLink {
 }
 
 export type TServiceGraphData = {
-  services: IService[];
+  services: (IService | ILiteService)[];
   dependencies: IServiceDependency[];
   health: Record<string, IServiceHealthSnapshot>;
 };

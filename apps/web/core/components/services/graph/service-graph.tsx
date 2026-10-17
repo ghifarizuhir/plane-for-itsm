@@ -17,6 +17,8 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 import useServicePeekOverviewRedirection from "@/hooks/use-service-peek-overview-redirection";
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+// helpers
+import { isLiteService } from "@/services/service.helpers";
 // components
 import { ServiceGraphCanvas } from "./service-graph-canvas";
 
@@ -104,7 +106,7 @@ export const ServiceGraph = observer(function ServiceGraph() {
 
   const handleReLayout = useCallback(async () => {
     if (!slug || !workspaceId || !pid) return;
-    const positioned = graphData.services.filter((service) => service.position !== null);
+    const positioned = graphData.services.filter((service) => !isLiteService(service) && service.position !== null);
     if (positioned.length === 0) return;
     setIsReLayouting(true);
     try {

@@ -22,7 +22,7 @@ import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { IService, TServiceGraphData, TServiceHealth } from "@plane/types";
+import type { ILiteService, IService, TServiceGraphData, TServiceHealth } from "@plane/types";
 // components
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceNode } from "./service-node";
@@ -81,7 +81,7 @@ export function ServiceGraphCanvas({
   const translatedNodes = useMemo(
     () =>
       layoutNodes.map((node) => {
-        const service = (node.data as { service?: IService } | undefined)?.service;
+        const service = (node.data as { service?: IService | ILiteService } | undefined)?.service;
         if (!service) return node;
         const health = graphData.health[service.id];
         return {

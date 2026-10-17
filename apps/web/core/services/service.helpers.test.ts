@@ -6,7 +6,14 @@
 
 import { describe, expect, it } from "vitest";
 // local imports
-import { isValidServiceUrl, normalizeServiceUrl } from "./service.helpers";
+import { isLiteService, isValidServiceUrl, normalizeServiceUrl } from "./service.helpers";
+
+describe("isLiteService", () => {
+  it("detects lite projections", () => {
+    expect(isLiteService({ access_level: "lite" } as never)).toBe(true);
+    expect(isLiteService({ access_level: "full" } as never)).toBe(false);
+  });
+});
 
 describe("normalizeServiceUrl", () => {
   it("returns null for empty and whitespace-only values", () => {
@@ -19,7 +26,7 @@ describe("normalizeServiceUrl", () => {
   });
 
   it("keeps a normal URL unchanged", () => {
-    expect(normalizeServiceUrl("https://docs.plane.so")).toBe("https://docs.plane.so");
+    expect(normalizeServiceUrl("https://docs.terraline.space")).toBe("https://docs.terraline.space");
   });
 });
 

@@ -6,6 +6,7 @@
 
 import type { TExtensions } from "@plane/editor";
 import type {
+  ILiteService,
   IService,
   IServiceDependency,
   IServiceHealthSnapshot,
@@ -14,6 +15,10 @@ import type {
 } from "@plane/types";
 // helpers
 import { HEALTH_WEIGHT } from "@/services/service-health.helpers";
+
+/** True when the service is the restricted (lite) projection. */
+export const isLiteService = (service: IService | ILiteService): service is ILiteService =>
+  service.access_level === "lite";
 
 /**
  * Adding `from -> to` is invalid if it is a self-loop.

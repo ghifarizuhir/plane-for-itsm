@@ -6,14 +6,15 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 // plane imports
-import type { IService, IServiceIncident, TServiceHealth } from "@plane/types";
+import type { ILiteService, IService, IServiceIncident, TServiceHealth } from "@plane/types";
 import { cn } from "@plane/utils";
 // local imports
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceHealthDot } from "../health/service-health-dot";
 
 export type TServiceNodeData = {
-  service: IService;
+  service: IService | ILiteService;
+  accessLevel?: "full" | "lite";
   statusLabel: string;
   criticalityLabel: string;
   health: TServiceHealth;
