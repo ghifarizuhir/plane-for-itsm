@@ -5,6 +5,7 @@
 
 use api::middleware::auth::AuthUser;
 use api::state::AppState;
+use axum::Json;
 use common::config::AppConfig;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -405,6 +406,131 @@ async fn canonical_detail_is_full_only() {
     assert_eq!(status, axum::http::StatusCode::OK);
     assert_eq!(body["access_level"], "full");
     assert_eq!(body["owner_project_id"], sc.p1.to_string());
+}
+
+#[tokio::test]
+async fn canonical_create_patch_destroy() {
+    use api::routes::service::{
+        create_workspace, destroy_workspace, detail_workspace, patch_workspace, CreateService,
+        CreateWorkspaceService, PatchService,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let new_service = |name: &str| CreateWorkspaceService {
+        owner_project_id: sc.p1,
+        service: CreateService {
+            name: Some(name.into()),
+            description: None,
+            description_html: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            owner_id: None,
+            repository_url: None,
+            documentation_url: None,
+        },
+    };
+
+    // outsider cannot create in P1
+    let denied = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path(sc.slug.clone()),
+        Json(new_service("Nope")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    // P1 member creates; owner link is created atomically
+    let (status, axum::Json(created)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("Payments API")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(created["owner_project_id"], sc.p1.to_string());
+    let new_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    assert!(
+        api::routes::service_access::linked_to_project(&st.pool, new_id, sc.p1)
+            .await
+            .unwrap(),
+        "owner link exists"
+    );
+
+    // duplicate name inside the workspace (renamed case) is rejected
+    let (status, axum::Json(dup)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("payments api")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(dup["error"], "A service with this name already exists.");
+
+    // writer patch; consumer admin cannot
+    let consumer_patch = patch_workspace(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), new_id)),
+        Json(PatchService {
+            status: Some("maintenance".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(consumer_patch.0, axum::http::StatusCode::FORBIDDEN);
+
+    let (status, axum::Json(patched)) = patch_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), new_id)),
+        Json(PatchService {
+            status: Some("maintenance".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(patched["status"], "maintenance");
+
+    // delete: member+ denied, project admin allowed
+    let member_delete = destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), new_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(member_delete.0, axum::http::StatusCode::FORBIDDEN);
+
+    let admin_delete = destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_admin),
+        Path((sc.slug.clone(), new_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(admin_delete.0, axum::http::StatusCode::NO_CONTENT);
+
+    let gone = detail_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), new_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(gone.0, axum::http::StatusCode::NOT_FOUND, "soft-deleted service is invisible");
 }
 
 #[tokio::test]

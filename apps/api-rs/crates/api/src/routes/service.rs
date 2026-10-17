@@ -187,7 +187,9 @@ pub(crate) async fn service_json_by_id(
     service_id: Uuid,
     access_level: &str,
 ) -> Result<Option<Value>, sqlx::Error> {
-    let row: Option<ServiceRow> = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
+    let row: Option<ServiceRow> = sqlx::query_as(&format!(
+        "{SERVICE_SELECT} WHERE s.id = $1 AND s.deleted_at IS NULL"
+    ))
         .bind(service_id)
         .fetch_optional(pool)
         .await?;
@@ -386,15 +388,26 @@ pub async fn list(
     json_service_list(&st.pool, &rows, "full").await
 }
 
-pub async fn create(
-    State(st): State<AppState>,
-    auth: AuthUser,
-    Path((slug, project_id)): Path<(String, Uuid)>,
-    Json(body): Json<CreateService>,
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateWorkspaceService {
+    pub owner_project_id: Uuid,
+    #[serde(flatten)]
+    pub service: CreateService,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransferOwner {
+    pub project_id: Uuid,
+}
+
+/// Shared create used by canonical + compat handlers. Gates are enforced by
+/// the callers; `owner_project_id` is the owner project.
+pub(crate) async fn create_service_core(
+    st: &AppState,
+    user_id: Uuid,
+    owner_project_id: Uuid,
+    body: &CreateService,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
-        return Ok(deny());
-    }
     let name = body
         .name
         .clone()
@@ -419,18 +432,18 @@ pub async fn create(
         return Ok(bad_request(e));
     }
     let dup: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM services WHERE project_id = $1 \
-         AND lower(btrim(name)) = lower(btrim($2)) AND deleted_at IS NULL)",
+        "SELECT EXISTS(SELECT 1 FROM services s \
+         WHERE s.workspace_id = (SELECT p.workspace_id FROM projects p WHERE p.id = $1) \
+         AND lower(btrim(s.name)) = lower(btrim($2)) AND s.deleted_at IS NULL)",
     )
-    .bind(project_id)
+    .bind(owner_project_id)
     .bind(&name)
     .fetch_one(&st.pool)
     .await?;
     if dup {
         return Ok(bad_request("A service with this name already exists."));
     }
-    let owner_id = body.owner_id;
-    if let Some(owner) = owner_id {
+    if let Some(owner) = body.owner_id {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
             .bind(owner)
             .fetch_one(&st.pool)
@@ -442,12 +455,16 @@ pub async fn create(
         }
     }
     let max_order: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sort_order), 0) FROM services WHERE project_id = $1 AND deleted_at IS NULL",
+        "SELECT COALESCE(MAX(sv.sort_order), 0) FROM services sv \
+         JOIN service_project_links spl ON spl.service_id = sv.id \
+           AND spl.project_id = $1 AND spl.deleted_at IS NULL \
+         WHERE sv.deleted_at IS NULL",
     )
-    .bind(project_id)
+    .bind(owner_project_id)
     .fetch_one(&st.pool)
     .await?;
     let id = Uuid::new_v4();
+    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "INSERT INTO services (id, workspace_id, project_id, name, description, description_html, \
          status, criticality, \"type\", owner_id, repository_url, documentation_url, position, \
@@ -462,20 +479,68 @@ pub async fn create(
     .bind(&status)
     .bind(&criticality)
     .bind(&service_type)
-    .bind(owner_id)
+    .bind(body.owner_id)
     .bind(body.repository_url.clone())
     .bind(body.documentation_url.clone())
     .bind(next_sort_order(max_order))
-    .bind(auth.0)
-    .bind(project_id)
-    .execute(&st.pool)
+    .bind(user_id)
+    .bind(owner_project_id)
+    .execute(&mut *tx)
     .await?;
-    let row: ServiceRow = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
-        .bind(id)
-        .fetch_one(&st.pool)
-        .await?;
-    let links = links_for_services(&st.pool, &[id]).await?;
-    Ok((StatusCode::CREATED, Json(service_json(&row, &links, "full"))))
+    sqlx::query(
+        "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, link_type, \
+         created_at, updated_at, created_by_id, updated_by_id) \
+         SELECT gen_random_uuid(), s.workspace_id, s.id, $1, 'owner', now(), now(), $2, $2 \
+         FROM services s WHERE s.id = $3",
+    )
+    .bind(owner_project_id)
+    .bind(user_id)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    let json = service_json_by_id(&st.pool, id, "full")
+        .await?
+        .ok_or_else(|| common::errors::AppError::from(sqlx::Error::RowNotFound))?;
+    Ok((StatusCode::CREATED, Json(json)))
+}
+
+pub async fn create_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<CreateWorkspaceService>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let owner_project_id = body.owner_project_id;
+    let ws_admin = is_workspace_admin(&st.pool, auth.0, &slug).await?;
+    let role = fetch_project_member_role(&st.pool, auth.0, &slug, owner_project_id).await?;
+    if !(ws_admin || matches!(role, Some(20) | Some(15))) {
+        return Ok(deny());
+    }
+    let project_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM projects p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL)",
+    )
+    .bind(owner_project_id)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !project_ok {
+        return Ok(bad_request("Invalid owner_project_id - object does not exist."));
+    }
+    create_service_core(&st, auth.0, owner_project_id, &body.service).await
+}
+
+pub async fn create(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id)): Path<(String, Uuid)>,
+    Json(body): Json<CreateService>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    create_service_core(&st, auth.0, project_id, &body).await
 }
 
 pub async fn detail(
@@ -508,37 +573,55 @@ pub async fn detail(
     }
 }
 
-pub async fn patch(
+pub async fn patch_workspace(
     State(st): State<AppState>,
     auth: AuthUser,
-    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Path((slug, pk)): Path<(String, Uuid)>,
     Json(body): Json<PatchService>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
-    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+    if !service_access::gate_writer(&st.pool, auth.0, &slug, pk).await? {
         return Ok(deny());
     }
+    patch_service_core(&st, auth.0, pk, &body).await
+}
+
+/// Shared update used by canonical + compat handlers (gate first).
+pub(crate) async fn patch_service_core(
+    st: &AppState,
+    user_id: Uuid,
+    pk: Uuid,
+    body: &PatchService,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let current: Option<ServiceRow> = sqlx::query_as(&format!(
-        "{SERVICE_SELECT} WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL"
+        "{SERVICE_SELECT} WHERE s.id = $1 AND s.deleted_at IS NULL"
     ))
     .bind(pk)
-    .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
     let Some(current) = current else {
-        return Ok((
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": "Service not found"})),
-        ));
+        return Ok(missing());
     };
-
-    let name = body.name.clone().unwrap_or_else(|| current.name.clone());
-    if name.trim().is_empty() {
-        return Ok(bad_request("Invalid name"));
+    let name = match body.name.clone() {
+        Some(v) => {
+            let trimmed = v.trim().to_string();
+            if trimmed.is_empty() { current.name.clone() } else { trimmed }
+        }
+        None => current.name.clone(),
+    };
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM services s \
+         WHERE s.workspace_id = $1 AND lower(btrim(s.name)) = lower(btrim($2)) \
+         AND s.id <> $3 AND s.deleted_at IS NULL)",
+    )
+    .bind(current.workspace_id)
+    .bind(&name)
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup {
+        return Ok(bad_request("A service with this name already exists."));
     }
-    let status = body
-        .status
-        .clone()
-        .unwrap_or_else(|| current.status.clone());
+    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
     let criticality = body
         .criticality
         .clone()
@@ -556,60 +639,32 @@ pub async fn patch(
     if let Err(e) = validate_enum("type", &service_type, SERVICE_TYPES) {
         return Ok(bad_request(e));
     }
-    let dup: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM services WHERE project_id = $1 \
-         AND lower(btrim(name)) = lower(btrim($2)) AND id != $3 AND deleted_at IS NULL)",
-    )
-    .bind(project_id)
-    .bind(&name)
-    .bind(pk)
-    .fetch_one(&st.pool)
-    .await?;
-    if dup {
-        return Ok(bad_request("A service with this name already exists."));
-    }
-
-    let description = body
-        .description
-        .clone()
-        .unwrap_or_else(|| current.description.clone());
-    let description_html = body
-        .description_html
-        .clone()
-        .unwrap_or_else(|| current.description_html.clone());
     let owner_id = match body.owner_id {
         Some(v) => v,
         None => current.owner_id,
     };
-    if let Some(owner) = owner_id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-            .bind(owner)
-            .fetch_one(&st.pool)
-            .await?;
-        if !exists {
-            return Ok(bad_request(format!(
-                "Invalid owner_id \"{owner}\" - object does not exist."
-            )));
-        }
-    }
-    let repository_url = match body.repository_url {
+    let description = body.description.clone().unwrap_or_else(|| current.description.clone());
+    let description_html = body
+        .description_html
+        .clone()
+        .unwrap_or_else(|| current.description_html.clone());
+    let repository_url = match body.repository_url.clone() {
         Some(v) => v,
         None => current.repository_url.clone(),
     };
-    let documentation_url = match body.documentation_url {
+    let documentation_url = match body.documentation_url.clone() {
         Some(v) => v,
         None => current.documentation_url.clone(),
     };
-    let position = match body.position {
+    let position = match body.position.clone() {
         Some(v) => v,
         None => current.position.clone(),
     };
-
     sqlx::query(
         "UPDATE services SET name = $1, description = $2, description_html = $3, status = $4, \
          criticality = $5, \"type\" = $6, owner_id = $7, repository_url = $8, documentation_url = $9, \
          position = $10, updated_at = now(), updated_by_id = $11 \
-         WHERE id = $12 AND project_id = $13 AND deleted_at IS NULL",
+         WHERE id = $12 AND deleted_at IS NULL",
     )
     .bind(&name)
     .bind(&description)
@@ -621,21 +676,67 @@ pub async fn patch(
     .bind(&repository_url)
     .bind(&documentation_url)
     .bind(&position)
-    .bind(auth.0)
+    .bind(user_id)
     .bind(pk)
-    .bind(project_id)
     .execute(&st.pool)
     .await?;
+    let json = service_json_by_id(&st.pool, pk, "full")
+        .await?
+        .ok_or_else(|| common::errors::AppError::from(sqlx::Error::RowNotFound))?;
+    Ok((StatusCode::OK, Json(json)))
+}
 
-    let row: Option<ServiceRow> = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
-        .bind(pk)
-        .fetch_optional(&st.pool)
-        .await?;
-    let links = links_for_services(&st.pool, &[pk]).await?;
-    match row {
-        Some(r) => Ok((StatusCode::OK, Json(service_json(&r, &links, "full")))),
-        None => Ok(missing()),
+pub async fn patch(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, _project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<PatchService>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, _project_id).await? {
+        return Ok(deny());
     }
+    patch_service_core(&st, auth.0, pk, &body).await
+}
+
+pub async fn destroy_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !service_access::gate_admin(&st.pool, auth.0, &slug, pk).await? {
+        return Ok(deny());
+    }
+    destroy_service_core(&st, pk).await
+}
+
+pub(crate) async fn destroy_service_core(
+    st: &AppState,
+    pk: Uuid,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let mut tx = st.pool.begin().await?;
+    sqlx::query(
+        "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
+         WHERE (from_service_id = $1 OR to_service_id = $1) AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE service_issues SET deleted_at = now(), updated_at = now() \
+         WHERE service_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE services SET deleted_at = now(), updated_at = now() \
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(pk)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
 pub async fn destroy(
@@ -646,34 +747,7 @@ pub async fn destroy(
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    let mut tx = st.pool.begin().await?;
-    sqlx::query(
-        "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
-         WHERE project_id = $1 AND (from_service_id = $2 OR to_service_id = $2) AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(pk)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "UPDATE service_issues SET deleted_at = now(), updated_at = now() \
-         WHERE project_id = $1 AND service_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(pk)
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "UPDATE services SET deleted_at = now(), updated_at = now() \
-         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
-    )
-    .bind(pk)
-    .bind(project_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    // Idempotent: a missing service still returns 204 (matches the mock).
-    Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+    destroy_service_core(&st, pk).await
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
