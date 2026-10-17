@@ -34,6 +34,13 @@ type Props = {
   projectId: string;
   workspaceSlug: string;
   data?: IService;
+  /** Optional owner-project picker (workspace-level create). */
+  ownerProjectField?: {
+    value: string;
+    onChange: (projectId: string) => void;
+    projects: { id: string; name: string }[];
+    disabled?: boolean;
+  };
 };
 
 const SERVICE_STATUS_OPTIONS: IService["status"][] = ["active", "planned", "maintenance", "deprecated", "retired"];
@@ -102,7 +109,7 @@ const defaultValues: Partial<IService> = {
 };
 
 export function ServiceForm(props: Props) {
-  const { handleFormSubmit, handleClose, status, projectId, workspaceSlug, data } = props;
+  const { handleFormSubmit, handleClose, status, projectId, workspaceSlug, data, ownerProjectField } = props;
   // form info
   const {
     formState: { errors, isSubmitting },
@@ -178,6 +185,31 @@ export function ServiceForm(props: Props) {
           <h3 className="text-18 font-medium text-secondary">{status ? t("common.update") : t("service.create")}</h3>
         </div>
         <div className="space-y-3">
+          {ownerProjectField && (
+            <div className="space-y-1">
+              <label htmlFor="owner_project" className="text-11 font-medium text-secondary">
+                {t("service.fields.owner_project")}
+              </label>
+              <CustomSelect
+                value={ownerProjectField.value}
+                onChange={(val: string) => ownerProjectField.onChange(val)}
+                disabled={ownerProjectField.disabled}
+                label={
+                  <span className="flex items-center gap-2 py-0.5 text-12">
+                    {ownerProjectField.projects.find((p) => p.id === ownerProjectField.value)?.name ?? (
+                      <span className="text-secondary">{t("service.select_owner_project")}</span>
+                    )}
+                  </span>
+                }
+              >
+                {ownerProjectField.projects.map((project) => (
+                  <CustomSelect.Option key={project.id} value={project.id}>
+                    <span className="truncate">{project.name}</span>
+                  </CustomSelect.Option>
+                ))}
+              </CustomSelect>
+            </div>
+          )}
           <div className="space-y-1">
             <Controller
               control={control}

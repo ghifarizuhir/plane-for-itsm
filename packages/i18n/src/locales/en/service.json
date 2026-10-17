@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "Services",
+    "catalog_title": "Service catalog",
+    "catalog_all_projects": "All projects",
+    "catalog_search_placeholder": "Search services",
+    "select_owner_project": "Select owner project",
     "add": "Add service",
     "create": "Create service",
     "empty_state": {
@@ -18,6 +22,7 @@
       "criticality": "Business criticality",
       "type": "Service type",
       "owner": "Service owner",
+      "owner_project": "Owner project",
       "repository": "Repository / runbook",
       "documentation": "Documentation / SOP",
       "health": "Operational health",
@@ -114,6 +119,18 @@
       "load_error_title": "Couldn't load services",
       "load_error_description": "Something went wrong while fetching services. Please try again.",
       "retry": "Retry"
+    },
+    "project_links": {
+      "owner": "Owner",
+      "transfer": "Transfer owner…",
+      "add_project": "Add project",
+      "hint": "Owner manages the service. Consumer projects can link tickets to it but cannot edit it.",
+      "add_error": "Could not add project link. Please try again.",
+      "remove_error": "Could not remove project link. Please try again.",
+      "transfer_error": "Could not transfer ownership. Please try again."
+    },
+    "lite": {
+      "restricted": "Restricted"
     }
   }
 }
