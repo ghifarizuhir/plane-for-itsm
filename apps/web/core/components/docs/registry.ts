@@ -11,6 +11,7 @@ import {
   AlertOctagonOutline,
   AnalyticsOutline,
   CalendarOutline,
+  ConnectionsOutline,
   CyclesOutline,
   DraftsOutline,
   FilterOutline,
@@ -30,12 +31,13 @@ import {
   YourWorkOutline,
 } from "@makeplane/propel/icons";
 
-export type TDocGroupKey = "getting-started" | "member" | "project" | "settings";
+export type TDocGroupKey = "getting-started" | "member" | "project" | "itil4" | "settings";
 
 export const DOC_TOPIC_GROUPS: { key: TDocGroupKey; label: string }[] = [
   { key: "getting-started", label: "Memulai" },
   { key: "member", label: "Untuk Member" },
   { key: "project", label: "Untuk Project" },
+  { key: "itil4", label: "ITIL4" },
   { key: "settings", label: "Pengaturan" },
 ];
 
@@ -210,6 +212,14 @@ export const DOC_TOPICS: TDocTopic[] = [
     group: "project",
     icon: IntakeOutline,
     component: lazy(() => import("./content/intake")),
+  },
+  {
+    slug: "itil4-overview",
+    title: "ITIL4 di platform ini",
+    description: "Peta praktik ITIL4 ke fitur platform dan bagaimana semuanya saling terhubung.",
+    group: "itil4",
+    icon: ConnectionsOutline,
+    component: lazy(() => import("./content/itil4-overview")),
   },
   {
     slug: "project-settings",
