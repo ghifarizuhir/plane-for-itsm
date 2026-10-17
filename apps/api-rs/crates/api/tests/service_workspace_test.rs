@@ -1077,6 +1077,79 @@ async fn canonical_service_issues_resolve_project_from_issue() {
     assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
 }
 
+async fn insert_war_room(pool: &PgPool, sc: &Scratch, project_id: Uuid) -> Uuid {
+    let issue_id = insert_issue(pool, sc, project_id, "War room primary").await;
+    let room_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO war_rooms (id, workspace_id, project_id, sequence_id, name, severity, \
+         status, primary_issue_id, created_at, updated_at) \
+         VALUES ($1, $2, $3, $4, 'Incident room', 'sev3', 'active', $5, now(), now())",
+    )
+    .bind(room_id)
+    .bind(sc.workspace_id)
+    .bind(project_id)
+    .bind(1_i64)
+    .bind(issue_id)
+    .execute(pool)
+    .await
+    .expect("scratch war room");
+    room_id
+}
+
+#[tokio::test]
+async fn war_room_attach_requires_linked_service() {
+    use api::routes::war_room::{services_create, LinkServices};
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+    let room_id = insert_war_room(&st.pool, &sc, sc.p1).await;
+
+    // S2 is not linked to P1 -> rejected
+    let denied = services_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1, room_id)),
+        Json(LinkServices {
+            service_ids: vec![sc.s2],
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::BAD_REQUEST);
+
+    // S1 is linked -> allowed
+    let (status, _) = services_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1, room_id)),
+        Json(LinkServices {
+            service_ids: vec![sc.s1],
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+
+    // S1 (consumer-linked to P2) can be attached to a P2 war room
+    let p2_room = insert_war_room(&st.pool, &sc, sc.p2).await;
+    let (status, _) = services_create(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), sc.p2, p2_room)),
+        Json(LinkServices {
+            service_ids: vec![sc.s1],
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        status,
+        axum::http::StatusCode::CREATED,
+        "consumer-linked service is attachable by the consumer project"
+    );
+}
+
 #[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;

@@ -1047,8 +1047,15 @@ pub async fn patch(
             _ => None,
         };
         if let Some(event_type) = specific {
-            record_and_publish(&st, &current, auth.0, event_type, serde_json::json!({}), &[])
-                .await?;
+            record_and_publish(
+                &st,
+                &current,
+                auth.0,
+                event_type,
+                serde_json::json!({}),
+                &[],
+            )
+            .await?;
         }
     }
     let mut detail_reasons: Vec<&str> = Vec::new();
@@ -1189,10 +1196,13 @@ pub async fn services_create(
     };
     if !body.service_ids.is_empty() {
         let valid: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM services WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM services sv \
+             WHERE sv.id = ANY($1) AND sv.deleted_at IS NULL \
+             AND EXISTS (SELECT 1 FROM service_project_links spl \
+               WHERE spl.service_id = sv.id AND spl.project_id = $2 AND spl.deleted_at IS NULL)",
         )
-        .bind(project_id)
         .bind(&body.service_ids)
+        .bind(project_id)
         .fetch_one(&st.pool)
         .await?;
         if valid as usize != body.service_ids.len() {
@@ -2112,9 +2122,7 @@ mod tests {
     fn mentions_parse_valid_uuids_only_once() {
         let a = Uuid::new_v4();
         let b = Uuid::new_v4();
-        let body = format!(
-            "hey @{{{a}}} and @{{{b}}} and @{{{a}}} bad @{{nope}} tail @{{"
-        );
+        let body = format!("hey @{{{a}}} and @{{{b}}} and @{{{a}}} bad @{{nope}} tail @{{");
         assert_eq!(parse_mentions(&body), vec![a, b]);
     }
 

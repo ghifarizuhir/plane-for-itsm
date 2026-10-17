@@ -258,7 +258,7 @@ impl Scratch {
     }
 
     async fn insert_service(&self, pool: &PgPool, name: &str) -> Uuid {
-        sqlx::query_scalar(
+        let service_id: Uuid = sqlx::query_scalar(
             "INSERT INTO services (id, workspace_id, project_id, name, description, \
              description_html, status, criticality, \"type\", sort_order, created_at, updated_at) \
              VALUES (gen_random_uuid(), $1, $2, $3, '', '', 'active', 'high', 'internal', 65535, \
@@ -269,7 +269,20 @@ impl Scratch {
         .bind(name)
         .fetch_one(pool)
         .await
-        .expect("scratch service")
+        .expect("scratch service");
+        // New world order (design 2026-10-17): attach gates require an owner link.
+        sqlx::query(
+            "INSERT INTO service_project_links (id, workspace_id, service_id, project_id, \
+             link_type, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, 'owner', now(), now())",
+        )
+        .bind(self.workspace_id)
+        .bind(service_id)
+        .bind(self.project_id)
+        .execute(pool)
+        .await
+        .expect("scratch service owner link");
+        service_id
     }
 
     async fn cleanup(&self, pool: &PgPool) {
@@ -987,7 +1000,10 @@ async fn messages_cursor_pagination_returns_chronological_pages() {
             State(st.clone()),
             AuthUser(scratch.user_id),
             Path((scratch.slug.clone(), scratch.project_id, pk)),
-            Json(MessageCreate { body: body.into(), client_id: None }),
+            Json(MessageCreate {
+                body: body.into(),
+                client_id: None,
+            }),
         )
         .await
         .expect("create message");
@@ -1000,7 +1016,10 @@ async fn messages_cursor_pagination_returns_chronological_pages() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Query(MessagesParams { before_id: None, limit: Some(2) }),
+        Query(MessagesParams {
+            before_id: None,
+            limit: Some(2),
+        }),
     )
     .await
     .expect("list page");
@@ -1018,7 +1037,10 @@ async fn messages_cursor_pagination_returns_chronological_pages() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Query(MessagesParams { before_id: Some(oldest_id), limit: Some(2) }),
+        Query(MessagesParams {
+            before_id: Some(oldest_id),
+            limit: Some(2),
+        }),
     )
     .await
     .expect("list older");
@@ -1039,12 +1061,18 @@ async fn message_mentions_notify_workspace_members_only() {
     let room = create_room(&st, &scratch, issue_id).await;
     let pk = room_id(&room);
 
-    let body = format!("halo @{{{teammate}}} @{{{outsider}}} @{{{}}}", scratch.user_id);
+    let body = format!(
+        "halo @{{{teammate}}} @{{{outsider}}} @{{{}}}",
+        scratch.user_id
+    );
     let (status, Json(message)) = messages_create(
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(MessageCreate { body, client_id: Some("client-1".into()) }),
+        Json(MessageCreate {
+            body,
+            client_id: Some("client-1".into()),
+        }),
     )
     .await
     .expect("create mention");
@@ -1086,7 +1114,10 @@ async fn message_mentions_notify_workspace_members_only() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(MessageCreate { body: "   ".into(), client_id: None }),
+        Json(MessageCreate {
+            body: "   ".into(),
+            client_id: None,
+        }),
     )
     .await
     .expect("empty body");
@@ -1109,7 +1140,10 @@ async fn message_edit_and_delete_are_author_only() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(MessageCreate { body: "original".into(), client_id: None }),
+        Json(MessageCreate {
+            body: "original".into(),
+            client_id: None,
+        }),
     )
     .await
     .expect("create");
@@ -1119,7 +1153,9 @@ async fn message_edit_and_delete_are_author_only() {
         State(st.clone()),
         AuthUser(teammate),
         Path((scratch.slug.clone(), scratch.project_id, pk, message_id)),
-        Json(MessagePatch { body: "hijack".into() }),
+        Json(MessagePatch {
+            body: "hijack".into(),
+        }),
     )
     .await
     .expect("teammate edit");
@@ -1138,7 +1174,9 @@ async fn message_edit_and_delete_are_author_only() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk, message_id)),
-        Json(MessagePatch { body: "edited".into() }),
+        Json(MessagePatch {
+            body: "edited".into(),
+        }),
     )
     .await
     .expect("author edit");
@@ -1159,7 +1197,10 @@ async fn message_edit_and_delete_are_author_only() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Query(MessagesParams { before_id: None, limit: None }),
+        Query(MessagesParams {
+            before_id: None,
+            limit: None,
+        }),
     )
     .await
     .expect("list after delete");
@@ -1196,7 +1237,10 @@ async fn archived_room_rejects_message_writes() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(MessageCreate { body: "too late".into(), client_id: None }),
+        Json(MessageCreate {
+            body: "too late".into(),
+            client_id: None,
+        }),
     )
     .await
     .expect("archived message");
@@ -1232,7 +1276,10 @@ async fn message_create_publishes_realtime_event() {
         State(st.clone()),
         AuthUser(scratch.user_id),
         Path((scratch.slug.clone(), scratch.project_id, pk)),
-        Json(MessageCreate { body: "ping room".into(), client_id: Some("client-9".into()) }),
+        Json(MessageCreate {
+            body: "ping room".into(),
+            client_id: Some("client-9".into()),
+        }),
     )
     .await
     .expect("create message");
