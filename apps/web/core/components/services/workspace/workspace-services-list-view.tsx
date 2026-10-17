@@ -14,6 +14,8 @@ import { Button } from "@plane/propel/button";
 import { CustomSelect } from "@plane/ui";
 // components
 import { ServicesBoardRow } from "@/components/services/board/services-board-row";
+import { ServiceGraph } from "@/components/services/graph/service-graph";
+import { ServiceLayoutIcon, SERVICE_VIEW_LAYOUTS } from "@/components/services/service-layout-icon";
 import { WorkspaceCreateServiceModal } from "@/components/services/workspace/create-service-modal";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
@@ -35,6 +37,7 @@ export const WorkspaceServicesListView = observer(function WorkspaceServicesList
   const { workspaceProjectIds, getProjectById } = useProject();
   // states
   const [search, setSearch] = useState("");
+  const [layout, setLayout] = useState<"board" | "graph">("board");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const serviceIds = getWorkspaceServiceIds();
@@ -86,6 +89,20 @@ export const WorkspaceServicesListView = observer(function WorkspaceServicesList
             placeholder={t("service.catalog_search_placeholder")}
             className="h-7 rounded-sm border border-subtle bg-layer-1 px-2 text-12 text-primary outline-none"
           />
+          <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">
+            {SERVICE_VIEW_LAYOUTS.map((layoutOption) => (
+              <button
+                key={layoutOption.key}
+                type="button"
+                title={t(layoutOption.i18n_label)}
+                disabled={layoutOption.key === "graph" && !projectFilter}
+                className="grid h-5.5 w-7 place-items-center overflow-hidden rounded-sm transition-colors hover:bg-layer-transparent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => setLayout(layoutOption.key as "board" | "graph")}
+              >
+                <ServiceLayoutIcon layoutType={layoutOption.key} />
+              </button>
+            ))}
+          </div>
         </div>
         <Button variant="primary" size="sm" onClick={() => setIsCreateModalOpen(true)}>
           {t("service.add")}
@@ -95,6 +112,10 @@ export const WorkspaceServicesListView = observer(function WorkspaceServicesList
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.description")}</p>
+        </div>
+      ) : layout === "graph" && projectFilter ? (
+        <div className="min-h-0 w-full flex-1">
+          <ServiceGraph scope="workspace" projectIdOverride={projectFilter} />
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">

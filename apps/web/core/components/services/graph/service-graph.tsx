@@ -22,26 +22,44 @@ import { isLiteService } from "@/services/service.helpers";
 // components
 import { ServiceGraphCanvas } from "./service-graph-canvas";
 
-export const ServiceGraph = observer(function ServiceGraph() {
+export const ServiceGraph = observer(function ServiceGraph({
+  scope = "project",
+  projectIdOverride,
+}: {
+  scope?: "project" | "workspace";
+  projectIdOverride?: string;
+}) {
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getGraphData, getServiceById, addDependency, removeDependency, updateNodePosition, updateService } =
-    useService();
+  const {
+    getGraphData,
+    getWorkspaceGraphData,
+    getServiceById,
+    addDependency,
+    removeDependency,
+    updateNodePosition,
+    updateService,
+  } = useService();
   const { currentWorkspace } = useWorkspace();
   // peek overview
   const { isMobile } = usePlatformOS();
   const { handleRedirection } = useServicePeekOverviewRedirection();
   // derived values
   const slug = workspaceSlug?.toString();
-  const pid = projectId?.toString();
+  const pid = projectIdOverride ?? projectId?.toString();
   const workspaceId = currentWorkspace?.id;
   // states
   const [isReLayouting, setIsReLayouting] = useState(false);
 
-  const graphData: TServiceGraphData = pid ? getGraphData(pid) : { services: [], dependencies: [], health: {} };
+  const graphData: TServiceGraphData =
+    scope === "workspace"
+      ? getWorkspaceGraphData(projectIdOverride)
+      : pid
+        ? getGraphData(pid)
+        : { services: [], dependencies: [], health: {} };
 
   const handleConnect = useCallback(
     async (source: string, target: string) => {

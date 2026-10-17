@@ -29,9 +29,9 @@ export const DeleteServiceModal = observer(function DeleteServiceModal(props: Pr
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   // router
   const router = useAppRouter();
-  const { workspaceSlug, projectId, serviceId } = useParams();
+  const { workspaceSlug, serviceId } = useParams();
   // store hooks
-  const { deleteService } = useService();
+  const { deleteWorkspaceService } = useService();
   const { currentWorkspace } = useWorkspace();
 
   const handleClose = () => {
@@ -40,13 +40,13 @@ export const DeleteServiceModal = observer(function DeleteServiceModal(props: Pr
   };
 
   const handleDeletion = async () => {
-    if (!workspaceSlug || !projectId || !currentWorkspace?.id) return;
+    if (!workspaceSlug || !currentWorkspace?.id) return;
 
     setIsDeleteLoading(true);
 
     try {
-      await deleteService(workspaceSlug.toString(), currentWorkspace.id, projectId.toString(), data.id);
-      if (serviceId) router.push(`/${workspaceSlug}/projects/${data.project_id}/services`);
+      await deleteWorkspaceService(workspaceSlug.toString(), currentWorkspace.id, data.id);
+      if (serviceId) router.push(`/${workspaceSlug}/services`);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Success!",

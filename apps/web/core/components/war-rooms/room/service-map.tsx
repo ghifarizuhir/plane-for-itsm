@@ -90,7 +90,7 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
   };
 
   const handleNodeClick = (serviceId: string) => {
-    window.open(`/${workspaceSlug}/projects/${projectId}/services/${serviceId}`, "_blank", "noopener,noreferrer");
+    window.open(`/${workspaceSlug}/services/${serviceId}`, "_blank", "noopener,noreferrer");
   };
 
   return (

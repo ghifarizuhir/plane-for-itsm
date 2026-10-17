@@ -15,6 +15,7 @@ import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import useServicePeekOverviewRedirection from "@/hooks/use-service-peek-overview-redirection";
+import { useProject } from "@/hooks/store/use-project";
 import { useService } from "@/hooks/store/use-service";
 // local imports
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
@@ -35,6 +36,7 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
   const { t } = useTranslation();
   // store hooks
   const { getServiceById, getServiceHealth } = useService();
+  const { getProjectById } = useProject();
   // peek overview
   const { isMobile } = usePlatformOS();
   const { handleRedirection } = useServicePeekOverviewRedirection();
@@ -46,7 +48,8 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
 
   const state = health?.health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
-  const serviceLink = `/${workspaceSlug?.toString()}/projects/${service.project_id}/services/${service.id}`;
+  const serviceLink = `/${workspaceSlug?.toString()}/services/${service.id}`;
+  const ownerProject = service.owner_project_id ? getProjectById(service.owner_project_id) : undefined;
   const isCritical = service.criticality === "critical";
 
   return (
@@ -60,6 +63,14 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <ServiceHealthDot health={state} />
         <span className="truncate text-13 font-medium text-primary">{service.name}</span>
+        {ownerProject && (
+          <span
+            className="shrink-0 rounded-xs border border-subtle px-1 text-10 font-medium tracking-wide text-tertiary"
+            title={ownerProject.name}
+          >
+            {ownerProject.identifier}
+          </span>
+        )}
         <span
           className={cn(
             "shrink-0 rounded-xs border px-1 text-10 font-medium tracking-wide uppercase",
