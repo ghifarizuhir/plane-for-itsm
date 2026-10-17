@@ -817,6 +817,116 @@ async fn canonical_dependency_destroy_by_from_writer() {
 }
 
 #[tokio::test]
+async fn compat_services_scope_to_linked_and_owner_gates() {
+    use api::routes::service::{detail as compat_detail, list as compat_list, patch as compat_patch};
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // consumer project list includes the consumer-linked service
+    let (status, Json(rows)) = compat_list(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), sc.p2)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let s1 = rows.iter().find(|r| r["id"] == sc.s1.to_string()).unwrap();
+    assert_eq!(s1["project_id"], sc.p1.to_string(), "deprecated field = owner project");
+
+    // consumer cannot patch through the compat route (owner-only writer)
+    let denied = compat_patch(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), sc.p2, sc.s1)),
+        Json(api::routes::service::PatchService {
+            status: Some("maintenance".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    // outsider is a P4 member: gate passes, linked assertion 404s
+    let not_linked = compat_detail(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.p4, sc.s1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(not_linked.0, axum::http::StatusCode::NOT_FOUND);
+
+    // non-member is denied at the gate
+    let stranger = compat_detail(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p4, sc.s4)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(stranger.0, axum::http::StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn compat_dependencies_echo_and_link_scope() {
+    use api::routes::service::{
+        dependencies_create as compat_deps_create, dependencies_list as compat_deps_list,
+        CreateDependency,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // S2 is not linked to P1 -> target rejected
+    let denied = compat_deps_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(denied.1["error"], "Target service not found.");
+
+    // link S2 to P1 as consumer, then the same create succeeds
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+    let (status, Json(edge)) = compat_deps_create(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(edge["project_id"], sc.p1.to_string(), "compat echo");
+
+    let (_, Json(rows)) = compat_deps_list(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    assert_eq!(rows[0]["project_id"], sc.p1.to_string());
+}
+
+#[tokio::test]
 async fn full_visible_rejects_inactive_membership() {
     use api::routes::service_access::full_visible;
 

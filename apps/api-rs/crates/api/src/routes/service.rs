@@ -379,7 +379,9 @@ pub async fn list(
         return Ok(deny());
     }
     let rows: Vec<ServiceRow> = sqlx::query_as(&format!(
-        "{SERVICE_SELECT} WHERE s.project_id = $1 AND s.deleted_at IS NULL \
+        "{SERVICE_SELECT} WHERE s.deleted_at IS NULL AND EXISTS ( \
+           SELECT 1 FROM service_project_links spl WHERE spl.service_id = s.id \
+           AND spl.project_id = $1 AND spl.deleted_at IS NULL) \
          ORDER BY s.sort_order ASC, s.created_at ASC"
     ))
     .bind(project_id)
@@ -551,20 +553,13 @@ pub async fn detail(
     if !gate_member(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    let row: Option<ServiceRow> = sqlx::query_as(&format!(
-        "{SERVICE_SELECT} WHERE s.id = $1 AND s.project_id = $2 AND s.deleted_at IS NULL"
-    ))
-    .bind(pk)
-    .bind(project_id)
-    .fetch_optional(&st.pool)
-    .await?;
-    match service_json_by_id(&st.pool, pk, "full").await? {
-        // Preserve the old not-found semantics when the id exists but is not
-        // in this project.
-        Some(_) if row.is_none() => Ok((
+    if !service_access::linked_to_project(&st.pool, pk, project_id).await? {
+        return Ok((
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Service not found"})),
-        )),
+        ));
+    }
+    match service_json_by_id(&st.pool, pk, "full").await? {
         Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok((
             StatusCode::NOT_FOUND,
@@ -695,6 +690,12 @@ pub async fn patch(
     if !gate_writer(&st.pool, auth.0, &slug, _project_id).await? {
         return Ok(deny());
     }
+    if !service_access::linked_to_project(&st.pool, pk, _project_id).await? {
+        return Ok(missing());
+    }
+    if !service_access::gate_writer(&st.pool, auth.0, &slug, pk).await? {
+        return Ok(deny());
+    }
     patch_service_core(&st, auth.0, pk, &body).await
 }
 
@@ -745,6 +746,12 @@ pub async fn destroy(
     Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    if !service_access::linked_to_project(&st.pool, pk, project_id).await? {
+        return Ok(missing());
+    }
+    if !service_access::gate_admin(&st.pool, auth.0, &slug, pk).await? {
         return Ok(deny());
     }
     destroy_service_core(&st, pk).await
@@ -1215,8 +1222,15 @@ pub async fn dependencies_list(
         return Ok(deny());
     }
     let rows: Vec<DependencyRow> = sqlx::query_as(&format!(
-        "{DEPENDENCY_SELECT} WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC"
+        "{DEPENDENCY_SELECT} \
+         WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND deleted_at IS NULL \
+         AND (from_service_id IN (SELECT service_id FROM service_project_links \
+                WHERE project_id = $2 AND deleted_at IS NULL) \
+           OR to_service_id IN (SELECT service_id FROM service_project_links \
+                WHERE project_id = $2 AND deleted_at IS NULL)) \
+         ORDER BY created_at ASC"
     ))
+    .bind(&slug)
     .bind(project_id)
     .fetch_all(&st.pool)
     .await?;
@@ -1244,10 +1258,10 @@ pub async fn dependencies_create(
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
-    if !service_exists(&st.pool, project_id, body.from_service_id).await? {
+    if !service_access::linked_to_project(&st.pool, body.from_service_id, project_id).await? {
         return Ok(bad_request("Source service not found."));
     }
-    if !service_exists(&st.pool, project_id, body.to_service_id).await? {
+    if !service_access::linked_to_project(&st.pool, body.to_service_id, project_id).await? {
         return Ok(bad_request("Target service not found."));
     }
     create_dependency_core(
@@ -1269,12 +1283,24 @@ pub async fn dependency_destroy(
     if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
         return Ok(deny());
     }
+    let row: Option<DependencyRow> = sqlx::query_as(&format!("{DEPENDENCY_SELECT} WHERE id = $1"))
+        .bind(pk)
+        .fetch_optional(&st.pool)
+        .await?;
+    let Some(row) = row else {
+        return Ok(missing());
+    };
+    if !service_access::linked_to_project(&st.pool, row.from_service_id, project_id).await? {
+        return Ok(missing());
+    }
+    if !service_access::gate_writer(&st.pool, auth.0, &slug, row.from_service_id).await? {
+        return Ok(deny());
+    }
     sqlx::query(
         "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
-         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+         WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
-    .bind(project_id)
     .execute(&st.pool)
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
