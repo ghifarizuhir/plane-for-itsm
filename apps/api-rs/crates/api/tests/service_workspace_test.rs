@@ -3,6 +3,7 @@
 //! `DATABASE_URL=postgres://plane:plane@localhost:5432/plane \
 //!  cargo test -p api --test service_workspace_test -- --test-threads=1`
 
+use api::middleware::auth::AuthUser;
 use api::state::AppState;
 use common::config::AppConfig;
 use sqlx::PgPool;
@@ -307,6 +308,103 @@ async fn visibility_matrix_and_gates() {
 
     assert!(linked_to_project(&pool, sc.s1, sc.p2).await.unwrap());
     assert!(!linked_to_project(&pool, sc.s1, sc.p4).await.unwrap());
+}
+
+#[tokio::test]
+async fn canonical_list_scopes_and_filters() {
+    use api::routes::service::{list_workspace, WorkspaceServiceListParams};
+    use axum::extract::{Path, Query, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let (status, axum::Json(body)) = list_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path(sc.slug.clone()),
+        Query(WorkspaceServiceListParams::default()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 1, "outsider sees only P4-owned service");
+    assert_eq!(rows[0]["name"], "P4 Widget");
+    assert_eq!(rows[0]["owner_project_id"], sc.p4.to_string());
+    assert_eq!(rows[0]["project_id"], sc.p4.to_string(), "deprecated alias");
+    assert_eq!(rows[0]["access_level"], "full");
+
+    let (_, axum::Json(body)) = list_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Query(WorkspaceServiceListParams::default()),
+    )
+    .await
+    .unwrap();
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 3, "ws admin sees all");
+    let s1 = rows.iter().find(|r| r["id"] == sc.s1.to_string()).unwrap();
+    assert_eq!(s1["project_links"].as_array().unwrap().len(), 2);
+
+    let (_, axum::Json(body)) = list_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Query(WorkspaceServiceListParams {
+            project: Some(sc.p2),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 2, "P2 links: S1 (consumer) + S2 (owner)");
+
+    let (_, axum::Json(body)) = list_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Query(WorkspaceServiceListParams {
+            project: Some(sc.p2),
+            link: Some("owner".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], sc.s2.to_string());
+}
+
+#[tokio::test]
+async fn canonical_detail_is_full_only() {
+    use api::routes::service::detail_workspace;
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let (status, _) = detail_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.s1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND, "outsider cannot read S1 (404, not 403)");
+
+    let (status, axum::Json(body)) = detail_workspace(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), sc.s1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(body["access_level"], "full");
+    assert_eq!(body["owner_project_id"], sc.p1.to_string());
 }
 
 #[tokio::test]

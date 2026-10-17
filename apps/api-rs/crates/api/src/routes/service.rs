@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -13,7 +13,10 @@ use crate::{
     state::AppState,
 };
 
-use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
+use super::issue_common::{
+    fetch_project_member_role, is_workspace_admin, project_gate_allows,
+};
+use super::service_access;
 
 /// Allowed `status` values (`packages/types/src/service/core.ts`).
 pub const SERVICE_STATUSES: &[&str] =
@@ -71,12 +74,11 @@ pub fn next_sort_order(max_existing: f64) -> f64 {
 // Row + serializer
 // ---------------------------------------------------------------------------
 
-/// Full `services` row. `type` is aliased to `service_type` (Rust keyword).
+/// Full `services` row (no `project_id`: ownership is link-derived).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ServiceRow {
     pub id: Uuid,
     pub workspace_id: Uuid,
-    pub project_id: Uuid,
     pub name: String,
     pub description: String,
     pub description_html: String,
@@ -94,16 +96,62 @@ pub struct ServiceRow {
     pub updated_by_id: Option<Uuid>,
 }
 
-const SERVICE_SELECT: &str = "SELECT s.id, s.workspace_id, s.project_id, s.name, s.description, \
+const SERVICE_SELECT: &str = "SELECT s.id, s.workspace_id, s.name, s.description, \
     s.description_html, s.status, s.criticality, s.\"type\" AS service_type, s.owner_id, \
     s.repository_url, s.documentation_url, s.position, s.sort_order, s.created_at, s.updated_at, \
     s.created_by_id, s.updated_by_id FROM services s";
 
-fn service_json(row: &ServiceRow) -> Value {
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ServiceLinkRow {
+    pub id: Uuid,
+    pub service_id: Uuid,
+    pub project_id: Uuid,
+    pub link_type: String,
+}
+
+pub async fn links_for_services(
+    pool: &sqlx::PgPool,
+    ids: &[Uuid],
+) -> Result<Vec<ServiceLinkRow>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_as(
+        "SELECT id, service_id, project_id, link_type FROM service_project_links \
+         WHERE service_id = ANY($1) AND deleted_at IS NULL ORDER BY link_type, created_at",
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+}
+
+pub fn owner_project_of(links: &[ServiceLinkRow]) -> Option<Uuid> {
+    links
+        .iter()
+        .find(|l| l.link_type == "owner")
+        .map(|l| l.project_id)
+}
+
+/// Full service JSON. `project_id` is retained (deprecated) = owner project id.
+pub fn service_json(row: &ServiceRow, links: &[ServiceLinkRow], access_level: &str) -> Value {
+    let owner_project_id = owner_project_of(links);
+    let project_links: Vec<Value> = links
+        .iter()
+        .map(|l| {
+            json!({
+                "id": l.id,
+                "project_id": l.project_id,
+                "link_type": l.link_type,
+            })
+        })
+        .collect();
     json!({
         "id": row.id,
         "workspace_id": row.workspace_id,
-        "project_id": row.project_id,
+        "project_id": owner_project_id,
+        "owner_project_id": owner_project_id,
+        "project_links": project_links,
+        "access_level": access_level,
         "name": row.name,
         "description": row.description,
         "description_html": row.description_html,
@@ -120,6 +168,117 @@ fn service_json(row: &ServiceRow) -> Value {
         "created_by": row.created_by_id,
         "updated_by": row.updated_by_id,
     })
+}
+
+/// Lite projection used for dependency endpoints outside the caller's
+/// full-visibility set (design §3).
+pub fn lite_service_json(id: Uuid, name: &str, status: &str, criticality: &str) -> Value {
+    json!({
+        "id": id,
+        "name": name,
+        "status": status,
+        "criticality": criticality,
+        "access_level": "lite",
+    })
+}
+
+pub(crate) async fn service_json_by_id(
+    pool: &sqlx::PgPool,
+    service_id: Uuid,
+    access_level: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    let row: Option<ServiceRow> = sqlx::query_as(&format!("{SERVICE_SELECT} WHERE s.id = $1"))
+        .bind(service_id)
+        .fetch_optional(pool)
+        .await?;
+    match row {
+        Some(row) => {
+            let links = links_for_services(pool, &[row.id]).await?;
+            Ok(Some(service_json(&row, &links, access_level)))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Shared list serializer: fetch links once, group per service.
+pub(crate) async fn json_service_list(
+    pool: &sqlx::PgPool,
+    rows: &[ServiceRow],
+    access_level: &str,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let links = links_for_services(pool, &ids).await?;
+    let payload: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            let row_links: Vec<ServiceLinkRow> = links
+                .iter()
+                .filter(|l| l.service_id == row.id)
+                .cloned()
+                .collect();
+            service_json(row, &row_links, access_level)
+        })
+        .collect();
+    Ok((StatusCode::OK, Json(Value::Array(payload))))
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct WorkspaceServiceListParams {
+    pub project: Option<Uuid>,
+    pub q: Option<String>,
+    pub status: Option<String>,
+    pub criticality: Option<String>,
+    pub link: Option<String>,
+}
+
+pub async fn list_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(params): Query<WorkspaceServiceListParams>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let visible: Option<Vec<Uuid>> = if is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        None
+    } else {
+        Some(service_access::visible_service_ids(&st.pool, auth.0, &slug).await?)
+    };
+    let rows: Vec<ServiceRow> = sqlx::query_as(&format!(
+        "{SERVICE_SELECT} \
+         WHERE s.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
+         AND s.deleted_at IS NULL \
+         AND ($2::uuid[] IS NULL OR s.id = ANY($2)) \
+         AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM service_project_links spl \
+               WHERE spl.service_id = s.id AND spl.project_id = $3 AND spl.deleted_at IS NULL \
+               AND ($4::text IS NULL OR spl.link_type = $4))) \
+         AND ($5::text IS NULL OR s.name ILIKE '%' || $5 || '%') \
+         AND ($6::text IS NULL OR s.status = $6) \
+         AND ($7::text IS NULL OR s.criticality = $7) \
+         ORDER BY s.sort_order, s.name"
+    ))
+    .bind(&slug)
+    .bind(visible)
+    .bind(params.project)
+    .bind(params.link)
+    .bind(params.q)
+    .bind(params.status)
+    .bind(params.criticality)
+    .fetch_all(&st.pool)
+    .await?;
+    json_service_list(&st.pool, &rows, "full").await
+}
+
+pub async fn detail_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !service_access::full_visible(&st.pool, auth.0, &slug, pk).await? {
+        return Ok(missing());
+    }
+    match service_json_by_id(&st.pool, pk, "full").await? {
+        Some(v) => Ok((StatusCode::OK, Json(v))),
+        None => Ok(missing()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -224,10 +383,7 @@ pub async fn list(
     .bind(project_id)
     .fetch_all(&st.pool)
     .await?;
-    Ok((
-        StatusCode::OK,
-        Json(Value::Array(rows.iter().map(service_json).collect())),
-    ))
+    json_service_list(&st.pool, &rows, "full").await
 }
 
 pub async fn create(
@@ -318,7 +474,8 @@ pub async fn create(
         .bind(id)
         .fetch_one(&st.pool)
         .await?;
-    Ok((StatusCode::CREATED, Json(service_json(&row))))
+    let links = links_for_services(&st.pool, &[id]).await?;
+    Ok((StatusCode::CREATED, Json(service_json(&row, &links, "full"))))
 }
 
 pub async fn detail(
@@ -336,8 +493,14 @@ pub async fn detail(
     .bind(project_id)
     .fetch_optional(&st.pool)
     .await?;
-    match row {
-        Some(r) => Ok((StatusCode::OK, Json(service_json(&r)))),
+    match service_json_by_id(&st.pool, pk, "full").await? {
+        // Preserve the old not-found semantics when the id exists but is not
+        // in this project.
+        Some(_) if row.is_none() => Ok((
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "Service not found"})),
+        )),
+        Some(v) => Ok((StatusCode::OK, Json(v))),
         None => Ok((
             StatusCode::NOT_FOUND,
             Json(json!({"error": "Service not found"})),
@@ -468,8 +631,9 @@ pub async fn patch(
         .bind(pk)
         .fetch_optional(&st.pool)
         .await?;
+    let links = links_for_services(&st.pool, &[pk]).await?;
     match row {
-        Some(r) => Ok((StatusCode::OK, Json(service_json(&r)))),
+        Some(r) => Ok((StatusCode::OK, Json(service_json(&r, &links, "full")))),
         None => Ok(missing()),
     }
 }
