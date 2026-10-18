@@ -31,6 +31,12 @@
     "epics": "Epics",
     "upgrade_plan": "Upgrade plan",
     "plane_pro": "Terraline Pro",
-    "business": "Business"
+    "business": "Business",
+    "groups": {
+      "general": "ზოგადი",
+      "delivery": "მიწოდება",
+      "services": "სერვისები და მხარდაჭერა",
+      "knowledge": "ცოდნა"
+    }
   }
 }

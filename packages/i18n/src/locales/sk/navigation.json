@@ -31,6 +31,12 @@
     "epics": "Epiky",
     "upgrade_plan": "Apgrejd plán",
     "plane_pro": "Plejn Pro",
-    "business": "Biznis"
+    "business": "Biznis",
+    "groups": {
+      "general": "Všeobecné",
+      "delivery": "Realizácia",
+      "services": "Služby a podpora",
+      "knowledge": "Znalosti"
+    }
   }
 }

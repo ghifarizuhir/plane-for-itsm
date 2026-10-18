@@ -31,6 +31,12 @@
     "epics": "Epiche",
     "upgrade_plan": "Piano di aggiornamento",
     "plane_pro": "Terraline Pro",
-    "business": "Business"
+    "business": "Business",
+    "groups": {
+      "general": "Generale",
+      "delivery": "Consegna",
+      "services": "Servizi e supporto",
+      "knowledge": "Conoscenza"
+    }
   }
 }

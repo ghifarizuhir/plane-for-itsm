@@ -31,6 +31,12 @@
     "epics": "史詩",
     "upgrade_plan": "升級方案",
     "plane_pro": "平面專業版",
-    "business": "商業"
+    "business": "商業",
+    "groups": {
+      "general": "一般",
+      "delivery": "執行",
+      "services": "服務與支援",
+      "knowledge": "知識"
+    }
   }
 }

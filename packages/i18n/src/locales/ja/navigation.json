@@ -31,6 +31,12 @@
     "epics": "エピック",
     "upgrade_plan": "プランをアップグレード",
     "plane_pro": "Terraline Pro",
-    "business": "ビジネス"
+    "business": "ビジネス",
+    "groups": {
+      "general": "一般",
+      "delivery": "実行",
+      "services": "サービスとサポート",
+      "knowledge": "ナレッジ"
+    }
   }
 }

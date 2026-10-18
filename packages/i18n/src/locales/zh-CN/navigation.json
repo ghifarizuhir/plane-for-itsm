@@ -31,6 +31,12 @@
     "epics": "史诗",
     "upgrade_plan": "升级计划",
     "plane_pro": "Terraline Pro",
-    "business": "商业版"
+    "business": "商业版",
+    "groups": {
+      "general": "通用",
+      "delivery": "执行",
+      "services": "服务与支持",
+      "knowledge": "知识"
+    }
   }
 }

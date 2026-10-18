@@ -31,6 +31,12 @@
     "epics": "Epics",
     "upgrade_plan": "Nâng cấp gói",
     "plane_pro": "Terraline Pro",
-    "business": "Doanh nghiệp"
+    "business": "Doanh nghiệp",
+    "groups": {
+      "general": "Chung",
+      "delivery": "Triển khai",
+      "services": "Dịch vụ & Hỗ trợ",
+      "knowledge": "Kiến thức"
+    }
   }
 }

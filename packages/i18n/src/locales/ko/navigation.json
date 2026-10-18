@@ -31,6 +31,12 @@
     "epics": "에픽스",
     "upgrade_plan": "업그레이드 플랜",
     "plane_pro": "플레인 프로",
-    "business": "비즈니스"
+    "business": "비즈니스",
+    "groups": {
+      "general": "일반",
+      "delivery": "실행",
+      "services": "서비스 및 지원",
+      "knowledge": "지식"
+    }
   }
 }

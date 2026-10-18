@@ -8,11 +8,13 @@ import React, { useMemo } from "react";
 import { observer } from "mobx-react";
 import { ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
+import { useParams } from "next/navigation";
 // plane imports
 import {
+  EUserPermissionsLevel,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
-  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -21,6 +23,7 @@ import { cn } from "@plane/utils";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // store hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
+import { useUserPermissions } from "@/hooks/store/user";
 import useLocalStorage from "@/hooks/use-local-storage";
 import {
   usePersonalNavigationPreferences,
@@ -37,6 +40,9 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
   // store hooks
   const { isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
+  const { allowPermissions } = useUserPermissions();
+  // router params
+  const { workspaceSlug } = useParams();
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { preferences: workspacePreferences } = useWorkspaceNavigationPreferences();
@@ -47,37 +53,51 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     toggleWorkspaceMenu(isOpen);
   };
 
-  // Filter static navigation items based on personal preferences
-  const filteredStaticNavigationItems = useMemo(() => {
-    const items = [...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS];
-    const personalItems: Array<(typeof items)[0] & { sort_order: number }> = [];
+  // Static navigation items grouped by domain. Groups with no visible
+  // items for the current role are hidden entirely (e.g. guests).
+  const visibleStaticGroups = useMemo(() => {
+    const slug = workspaceSlug?.toString() || "";
+    return WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS.map((group) => ({
+      key: group.key,
+      labelTranslationKey: group.labelTranslationKey,
+      items: group.itemKeys
+        .map((key) => WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS[key])
+        .filter((item) => allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, slug)),
+    })).filter((group) => group.items.length > 0);
+  }, [workspaceSlug, allowPermissions]);
 
+  // Personal navigation items appended after the groups, unchanged behaviour
+  const personalItems = useMemo(() => {
+    type TPersonalItem =
+      (typeof WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS)[keyof typeof WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS] & {
+        sort_order: number;
+      };
+    const items: TPersonalItem[] = [];
     // Add personal items based on preferences with their sort_order
     const stickiesItem = WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["stickies"];
     if (personalPreferences.items.stickies?.enabled && stickiesItem) {
-      personalItems.push({
+      items.push({
         ...stickiesItem,
         sort_order: personalPreferences.items.stickies.sort_order,
       });
     }
     if (personalPreferences.items.your_work?.enabled && WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["your-work"]) {
-      personalItems.push({
+      items.push({
         ...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["your-work"],
         sort_order: personalPreferences.items.your_work.sort_order,
       });
     }
     if (personalPreferences.items.drafts?.enabled && WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["drafts"]) {
-      personalItems.push({
+      items.push({
         ...WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["drafts"],
         sort_order: personalPreferences.items.drafts.sort_order,
       });
     }
 
     // Sort personal items by sort_order
-    personalItems.sort((a, b) => a.sort_order - b.sort_order);
+    items.sort((a, b) => a.sort_order - b.sort_order);
 
-    // Merge static items with sorted personal items
-    return [...items, ...personalItems];
+    return items;
   }, [personalPreferences]);
 
   const sortedNavigationItems = useMemo(
@@ -95,10 +115,21 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
 
   return (
     <>
-      <div className="flex flex-col gap-0.5">
-        {filteredStaticNavigationItems.map((item, _index) => (
+      <div className="flex flex-col gap-3">
+        {visibleStaticGroups.map((group) => (
+          <div key={group.key} className="flex flex-col gap-0.5">
+            <p className="tracking-wider px-2 text-[11px] font-semibold text-placeholder uppercase">
+              {t(group.labelTranslationKey)}
+            </p>
+            {group.items.map((item, _index) => (
+              // oxlint-disable-next-line react/no-array-index-key
+              <SidebarItemBase key={`static_${group.key}_${_index}`} item={item} />
+            ))}
+          </div>
+        ))}
+        {personalItems.map((item, _index) => (
           // oxlint-disable-next-line react/no-array-index-key
-          <SidebarItemBase key={`static_${_index}`} item={item} />
+          <SidebarItemBase key={`personal_${_index}`} item={item} />
         ))}
       </div>
       <Disclosure as="div" className="flex flex-col" defaultOpen={!!isWorkspaceMenuOpen}>

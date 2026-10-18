@@ -345,6 +345,35 @@ export const WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS: IWorkspaceS
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["projects"],
 ];
 
+export type TWorkspaceSidebarStaticGroup = {
+  key: string;
+  labelTranslationKey: string;
+  itemKeys: Array<keyof typeof WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS>;
+};
+
+export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS: TWorkspaceSidebarStaticGroup[] = [
+  {
+    key: "general",
+    labelTranslationKey: "sidebar.groups.general",
+    itemKeys: ["home", "ai_scheduler"],
+  },
+  {
+    key: "delivery",
+    labelTranslationKey: "sidebar.groups.delivery",
+    itemKeys: ["tickets", "sprints", "tracks"],
+  },
+  {
+    key: "services",
+    labelTranslationKey: "sidebar.groups.services",
+    itemKeys: ["services", "intake"],
+  },
+  {
+    key: "knowledge",
+    labelTranslationKey: "sidebar.groups.knowledge",
+    itemKeys: ["kb", "docs"],
+  },
+];
+
 export const IS_FAVORITE_MENU_OPEN = "is_favorite_menu_open";
 export const WORKSPACE_DEFAULT_SEARCH_RESULT: IWorkspaceSearchResults = {
   results: {

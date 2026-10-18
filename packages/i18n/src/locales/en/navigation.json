@@ -33,6 +33,12 @@
     "hide": "Hide",
     "more": "More",
     "pin": "Pin",
-    "unpin": "Unpin"
+    "unpin": "Unpin",
+    "groups": {
+      "general": "General",
+      "delivery": "Delivery",
+      "services": "Services & Support",
+      "knowledge": "Knowledge"
+    }
   }
 }

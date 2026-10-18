@@ -31,6 +31,12 @@
     "epics": "Epiki",
     "upgrade_plan": "Apgrejduj plan",
     "plane_pro": "Plejn Pro",
-    "business": "Biznes"
+    "business": "Biznes",
+    "groups": {
+      "general": "Ogólne",
+      "delivery": "Realizacja",
+      "services": "Usługi i wsparcie",
+      "knowledge": "Wiedza"
+    }
   }
 }

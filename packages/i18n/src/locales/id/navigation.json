@@ -32,6 +32,12 @@
     "epics": "Epics",
     "upgrade_plan": "Tingkatkan paket",
     "plane_pro": "Terraline Pro",
-    "business": "Bisnis"
+    "business": "Bisnis",
+    "groups": {
+      "general": "Umum",
+      "delivery": "Pelaksanaan",
+      "services": "Layanan & Dukungan",
+      "knowledge": "Pengetahuan"
+    }
   }
 }

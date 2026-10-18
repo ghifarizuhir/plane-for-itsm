@@ -31,6 +31,12 @@
     "epics": "Epiky",
     "upgrade_plan": "Plán upgradu",
     "plane_pro": "Terraline Pro",
-    "business": "Byznys"
+    "business": "Byznys",
+    "groups": {
+      "general": "Obecné",
+      "delivery": "Realizace",
+      "services": "Služby a podpora",
+      "knowledge": "Znalosti"
+    }
   }
 }

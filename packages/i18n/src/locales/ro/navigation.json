@@ -31,6 +31,12 @@
     "epics": "Epice",
     "upgrade_plan": "Actualizare plan",
     "plane_pro": "Terraline Pro",
-    "business": "Business"
+    "business": "Business",
+    "groups": {
+      "general": "Generale",
+      "delivery": "Livrare",
+      "services": "Servicii și asistență",
+      "knowledge": "Cunoștințe"
+    }
   }
 }

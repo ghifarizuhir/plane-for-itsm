@@ -31,6 +31,12 @@
     "epics": "Epiks",
     "upgrade_plan": "Apgreyd plen",
     "plane_pro": "Pleyn Pro",
-    "business": "Biznis"
+    "business": "Biznis",
+    "groups": {
+      "general": "Genel",
+      "delivery": "Teslimat",
+      "services": "Hizmetler ve Destek",
+      "knowledge": "Bilgi"
+    }
   }
 }

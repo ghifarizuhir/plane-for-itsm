@@ -31,6 +31,12 @@
     "epics": "Epics",
     "upgrade_plan": "Mettre à niveau",
     "plane_pro": "Terraline Pro",
-    "business": "Business"
+    "business": "Business",
+    "groups": {
+      "general": "Général",
+      "delivery": "Livraison",
+      "services": "Services et assistance",
+      "knowledge": "Connaissances"
+    }
   }
 }
