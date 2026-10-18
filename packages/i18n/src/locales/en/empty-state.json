@@ -23,6 +23,12 @@
       "cta_primary": "Try reloading"
     }
   },
+  "workspace_empty_state": {
+    "sprints": {
+      "title": "No sprints yet",
+      "description": "Sprints from projects you are a member of will show up here."
+    }
+  },
   "project_empty_state": {
     "no_access": {
       "title": "Seems like you don’t have access to this Project",
