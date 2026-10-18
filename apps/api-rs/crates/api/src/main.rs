@@ -692,6 +692,11 @@ async fn main() {
             "/api/workspaces/:slug/document-export-settings/",
             get(routes::document_export::get_settings).patch(routes::document_export::update_settings),
         )
+        // Workspace feature settings (program P1/S2: single config set).
+        .route(
+            "/api/workspaces/:slug/settings/",
+            get(routes::workspace_settings::get_settings).patch(routes::workspace_settings::update_settings),
+        )
         // Services (ITSM catalog + dependency DAG + work-item links).
         // Session auth; project-scoped. GET = any active member (incl.
         // guest), writes = project ADMIN/MEMBER. Bodies/error strings follow

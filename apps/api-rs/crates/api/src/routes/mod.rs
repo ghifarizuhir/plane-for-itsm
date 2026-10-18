@@ -59,3 +59,4 @@ pub mod war_room;
 pub mod webhook;
 pub mod work_item;
 pub mod workspace;
+pub mod workspace_settings;
