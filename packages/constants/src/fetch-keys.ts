@@ -133,6 +133,9 @@ export const EXPORT_SERVICES_LIST = (workspaceSlug: string, cursor: string, per_
 export const DOCUMENT_EXPORT_SETTINGS = (workspaceSlug: string) =>
   `DOCUMENT_EXPORT_SETTINGS_${workspaceSlug.toUpperCase()}`;
 
+// workspace settings
+export const WORKSPACE_SETTINGS = (workspaceSlug: string) => `WORKSPACE_SETTINGS_${workspaceSlug.toUpperCase()}`;
+
 // github-importer
 export const GITHUB_REPOSITORY_INFO = (workspaceSlug: string, repoName: string) =>
   `GITHUB_REPO_INFO_${workspaceSlug.toString().toUpperCase()}_${repoName.toUpperCase()}`;

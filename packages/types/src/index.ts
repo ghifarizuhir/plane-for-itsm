@@ -59,6 +59,7 @@ export * from "./waitlist";
 export * from "./war-room";
 export * from "./webhook";
 export * from "./workspace";
+export * from "./workspace-settings";
 export * from "./workspace-draft-issues/base";
 export * from "./workspace-notifications";
 export * from "./workspace-views";

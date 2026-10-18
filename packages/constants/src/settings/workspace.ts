@@ -65,6 +65,13 @@ export const WORKSPACE_SETTINGS: Record<TWorkspaceSettingsTabs, TWorkspaceSettin
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/work-item-types`),
   },
+  features: {
+    key: "features",
+    i18n_label: "workspace_settings.settings.features.title",
+    href: `/settings/features`,
+    access: [EUserWorkspaceRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname === `${baseUrl}/settings/features/`,
+  },
   document_export: {
     key: "document_export",
     i18n_label: "workspace_settings.settings.document_export.title",
@@ -86,6 +93,6 @@ export const GROUPED_WORKSPACE_SETTINGS: Record<WORKSPACE_SETTINGS_CATEGORY, TWo
     WORKSPACE_SETTINGS["document_export"],
   ],
   [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: [WORKSPACE_SETTINGS["work_item_types"]],
-  [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [],
+  [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [WORKSPACE_SETTINGS["features"]],
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"]],
 };
