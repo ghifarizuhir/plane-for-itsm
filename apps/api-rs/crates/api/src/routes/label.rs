@@ -55,12 +55,14 @@ pub fn validate_create(body: &CreateLabel) -> Result<(), String> {
 pub async fn list(
     State(st): State<AppState>,
     _auth: AuthUser,
-    axum::extract::Path((_slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<Json<Vec<LabelOut>>, common::errors::AppError> {
+    // Program P1/S3: labels are workspace-level. The project-scoped URL is
+    // kept for compat; the project segment no longer scopes the result.
     let rows = sqlx::query_as::<_, common::models::label::Label>(
-        "SELECT id, name FROM labels WHERE project_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
+        "SELECT id, name FROM labels WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND deleted_at IS NULL ORDER BY created_at DESC",
     )
-    .bind(_project_id)
+    .bind(&slug)
     .fetch_all(&st.pool)
     .await?;
     Ok(Json(
@@ -76,17 +78,18 @@ pub async fn list(
 pub async fn create(
     State(st): State<AppState>,
     _auth: AuthUser,
-    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
     Json(body): Json<CreateLabel>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     validate_create(&body).map_err(|e| anyhow::anyhow!(e))?;
 
     // External-id idempotency guard (Django returns the existing label with 409).
+    // Workspace scope (program P1/S3).
     if let (Some(source), Some(external_id)) = (&body.external_source, &body.external_id) {
         let existing = sqlx::query_as::<_, common::models::label::Label>(
-            "SELECT id, name FROM labels WHERE project_id = $1 AND external_source = $2 AND external_id = $3 AND deleted_at IS NULL",
+            "SELECT id, name FROM labels WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND external_source = $2 AND external_id = $3 AND deleted_at IS NULL",
         )
-        .bind(project_id)
+        .bind(&slug)
         .bind(source)
         .bind(external_id)
         .fetch_optional(&st.pool)
@@ -101,11 +104,12 @@ pub async fn create(
         }
     }
 
-    // Unique (project, name) guard → 409 mirrors IntegrityError branch.
+    // Unique (workspace, name) guard → 409 mirrors IntegrityError branch.
+    // Case-insensitive to match the workspace unique index (S3).
     let existing = sqlx::query_as::<_, common::models::label::Label>(
-        "SELECT id, name FROM labels WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL",
+        "SELECT id, name FROM labels WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND lower(name) = lower($2) AND deleted_at IS NULL",
     )
-    .bind(project_id)
+    .bind(&slug)
     .bind(&body.name)
     .fetch_optional(&st.pool)
     .await?;
@@ -113,14 +117,15 @@ pub async fn create(
         return Ok((
             StatusCode::CONFLICT,
             Json(
-                json!({"error": "Label with the same name already exists in the project", "id": label.id}),
+                json!({"error": "Label with the same name already exists in the workspace", "id": label.id}),
             ),
         ));
     }
 
-    // sort_order mirrors Label.save(): max + 10000, default 65535.
+    // sort_order mirrors Label.save(): max + 10000 (workspace scope, S3), default 65535.
+    // project_id is NULL: labels are workspace-level (program P1/S3).
     let row = sqlx::query_as::<_, common::models::label::Label>(
-        "INSERT INTO labels (id, name, color, description, external_source, external_id, parent_id, sort_order, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, (SELECT MAX(sort_order) + 10000 FROM labels WHERE project_id = $8), 65535), $8, w.id, now(), now() FROM workspaces w WHERE w.slug = $9 RETURNING id, name",
+        "INSERT INTO labels (id, name, color, description, external_source, external_id, parent_id, sort_order, project_id, workspace_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, $5, $6, COALESCE($7, (SELECT MAX(sort_order) + 10000 FROM labels WHERE workspace_id = w.id), 65535), NULL, w.id, now(), now() FROM workspaces w WHERE w.slug = $8 RETURNING id, name",
     )
     .bind(&body.name)
     .bind(body.color.clone().unwrap_or_default())
@@ -129,7 +134,6 @@ pub async fn create(
     .bind(&body.external_id)
     .bind(body.parent_id)
     .bind(body.sort_order)
-    .bind(project_id)
     .bind(&slug)
     .fetch_one(&st.pool)
     .await?;
@@ -143,7 +147,7 @@ pub async fn create(
 /// existing sibling name is rejected with 400.
 pub fn guard_patch(name_exists: bool) -> Result<(), String> {
     if name_exists {
-        return Err("Label with the same name already exists in the project".to_string());
+        return Err("Label with the same name already exists in the workspace".to_string());
     }
     Ok(())
 }
@@ -215,17 +219,18 @@ async fn gate_label_admin(
 pub async fn detail(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id, pk)): axum::extract::Path<(
+    axum::extract::Path((slug, _project_id, pk)): axum::extract::Path<(
         String,
         uuid::Uuid,
         uuid::Uuid,
     )>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `retrieve` (DRF-default + `ProjectBasePermission`, SAFE branch
-    // `permissions/project.py:18-22`): any ACTIVE WORKSPACE member passes
-    // the permission — the per-project scoping lives in the queryset
-    // (`label.py:28-40`, project membership), so a ws-member who is NOT a
-    // project member 404s (not 403). Non-ws-member → 403 `deny()`.
+    // `permissions/project.py:18-22`): any ACTIVE WORKSPACE member passes.
+    // Program P1/S3: labels are workspace-level, so the per-project scoping
+    // (and its implicit 404 for project outsiders) is gone: the project
+    // segment of the URL is kept for compat but no longer scopes the lookup.
+    // Non-ws-member → 403 `deny()`.
     let ws_member: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM workspace_members wm JOIN workspaces w ON w.id = wm.workspace_id WHERE w.slug = $1 AND wm.member_id = $2 AND wm.is_active = true AND wm.deleted_at IS NULL)",
     )
@@ -237,10 +242,9 @@ pub async fn detail(
         return Ok(deny());
     }
     let row: Option<LabelRow> = sqlx::query_as(
-        "SELECT l.id, l.parent_id, l.name, l.color, l.project_id, l.workspace_id, l.sort_order FROM labels l JOIN workspaces w ON w.id = l.workspace_id WHERE l.id = $1 AND l.project_id = $2 AND w.slug = $3 AND l.deleted_at IS NULL",
+        "SELECT l.id, l.parent_id, l.name, l.color, l.project_id, l.workspace_id, l.sort_order FROM labels l JOIN workspaces w ON w.id = l.workspace_id WHERE l.id = $1 AND w.slug = $2 AND l.deleted_at IS NULL",
     )
     .bind(pk)
-    .bind(project_id)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
@@ -330,11 +334,12 @@ pub async fn destroy(
         return Ok(deny());
     }
     // DRF `destroy` 404s on miss (`get_object`); the old blind 204 is fixed.
+    // Program P1/S3: workspace scope; project URL segment is compat-only.
     let n = sqlx::query(
-        "UPDATE labels SET deleted_at = now() WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL",
+        "UPDATE labels SET deleted_at = now() WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
     )
     .bind(pk)
-    .bind(project_id)
+    .bind(&slug)
     .execute(&st.pool)
     .await?
     .rows_affected();
@@ -349,7 +354,7 @@ pub async fn destroy(
 /// Quoted from `plane/app/views/issue/label.py:51-55`
 /// (`LabelViewSet.create` IntegrityError branch): duplicate (project, name)
 /// → 400 with this body.
-pub(crate) const DUP_LABEL_MSG: &str = "Label with the same name already exists in the project";
+pub(crate) const DUP_LABEL_MSG: &str = "Label with the same name already exists in the workspace";
 
 /// D11a gate — `WorkspaceViewerPermission`
 /// (`plane/app/permissions/workspace.py:93-100`): any ACTIVE ws member
@@ -446,14 +451,12 @@ pub async fn ws_labels(
     }
     let rows: Vec<LabelSerializerRow> = sqlx::query_as(
         "SELECT l.id, l.project_id, l.workspace_id, l.parent_id AS parent, l.name, l.color, l.sort_order \
-         FROM labels l JOIN projects p ON p.id = l.project_id \
+         FROM labels l \
          WHERE l.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
-         AND l.deleted_at IS NULL AND p.archived_at IS NULL \
-         AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = l.project_id AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+         AND l.deleted_at IS NULL \
          ORDER BY l.created_at DESC",
     )
     .bind(&slug)
-    .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
     Ok((
@@ -483,23 +486,22 @@ pub async fn ws_labels(
 pub async fn issue_labels_list(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let role = ws_role(&st.pool, auth.0, &slug).await?;
     if guard_issue_labels_read(role).is_err() {
         return Ok(deny());
     }
+    // Program P1/S3: labels are workspace-level. Project URL segment kept
+    // for compat; any active workspace member sees the workspace set.
     let rows: Vec<LabelSerializerRow> = sqlx::query_as(
         "SELECT l.id, l.project_id, l.workspace_id, l.parent_id AS parent, l.name, l.color, l.sort_order \
          FROM labels l \
          WHERE l.workspace_id = (SELECT w.id FROM workspaces w WHERE w.slug = $1) \
-         AND l.project_id = $2 AND l.deleted_at IS NULL \
-         AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = $2 AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL) \
+         AND l.deleted_at IS NULL \
          ORDER BY l.sort_order ASC",
     )
     .bind(&slug)
-    .bind(project_id)
-    .bind(auth.0)
     .fetch_all(&st.pool)
     .await?;
     Ok((
@@ -613,13 +615,12 @@ pub async fn issue_labels_create(
     }
     let inserted: Result<LabelSerializerRow, sqlx::Error> = sqlx::query_as(
         "INSERT INTO labels (id, name, color, description, project_id, workspace_id, parent_id, sort_order, created_by_id, updated_by_id, created_at, updated_at) \
-         SELECT gen_random_uuid(), $1, COALESCE($2, ''), '', $3, w.id, $4, COALESCE((SELECT MAX(sort_order) + 10000 FROM labels WHERE project_id = $3), 65535), $5, $5, now(), now() \
-         FROM workspaces w WHERE w.slug = $6 \
+         SELECT gen_random_uuid(), $1, COALESCE($2, ''), '', NULL, w.id, $3, COALESCE((SELECT MAX(sort_order) + 10000 FROM labels WHERE workspace_id = w.id), 65535), $4, $4, now(), now() \
+         FROM workspaces w WHERE w.slug = $5 \
          RETURNING id, project_id, workspace_id, parent_id AS parent, name, color, sort_order",
     )
     .bind(&name)
     .bind(&body.color)
-    .bind(project_id)
     .bind(body.parent)
     .bind(auth.0)
     .bind(&slug)
@@ -737,13 +738,12 @@ pub async fn bulk_create_labels(
         let color = random_label_color();
         let id: Option<uuid::Uuid> = sqlx::query_scalar(
             "INSERT INTO labels (id, name, color, description, project_id, workspace_id, parent_id, sort_order, created_by_id, updated_by_id, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NULL, COALESCE((SELECT MAX(sort_order) + 10000 FROM labels WHERE project_id = $4), 65535), $6, $6, now(), now()) \
+             VALUES (gen_random_uuid(), $1, $2, $3, NULL, $4, NULL, COALESCE((SELECT MAX(sort_order) + 10000 FROM labels WHERE workspace_id = $4), 65535), $5, $5, now(), now()) \
              ON CONFLICT DO NOTHING RETURNING id",
         )
         .bind(&name)
         .bind(&color)
         .bind(&description)
-        .bind(project_id)
         .bind(workspace_id)
         .bind(auth.0)
         .fetch_optional(&st.pool)
@@ -755,10 +755,10 @@ pub async fn bulk_create_labels(
     let rows: Vec<LabelSerializerRow> = sqlx::query_as(
         "SELECT l.id, l.project_id, l.workspace_id, l.parent_id AS parent, l.name, l.color, l.sort_order \
          FROM labels l \
-         WHERE l.project_id = $1 AND l.id = ANY($2) AND l.deleted_at IS NULL \
+         WHERE l.workspace_id = $1 AND l.id = ANY($2) AND l.deleted_at IS NULL \
          ORDER BY l.sort_order ASC",
     )
-    .bind(project_id)
+    .bind(workspace_id)
     .bind(&ids)
     .fetch_all(&st.pool)
     .await?;
@@ -777,10 +777,10 @@ mod batch_d_d11_tests {
         // Quoted from `plane/app/views/issue/label.py:51-55`
         // (`LabelViewSet.create` IntegrityError branch): duplicate
         // (project, name) → 400 with this body.
-        assert_eq!(
-            DUP_LABEL_MSG,
-            "Label with the same name already exists in the project"
-        );
+    assert_eq!(
+        DUP_LABEL_MSG,
+        "Label with the same name already exists in the workspace"
+    );
     }
 
     #[test]
