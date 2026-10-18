@@ -15,6 +15,7 @@ import {
   InboxOutline,
   ModuleOutline,
   MultipleStickyOutline,
+  PagesOutline,
   ProjectsOutline,
   ServerOutline,
   ViewsOutline,
@@ -55,5 +56,7 @@ export const getSidebarNavigationItemIcon = (key: string, className: string = ""
       return <CalendarOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "docs":
       return <DocumentationOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "kb":
+      return <PagesOutline className={cn("size-4 flex-shrink-0", className)} />;
   }
 };
