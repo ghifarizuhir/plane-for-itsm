@@ -23,16 +23,6 @@
       "cta_primary": "Try reloading"
     }
   },
-  "workspace_empty_state": {
-    "sprints": {
-      "title": "No sprints yet",
-      "description": "Sprints from projects you are a member of will show up here."
-    },
-    "tracks": {
-      "title": "No tracks yet",
-      "description": "Tracks from projects you are a member of will show up here."
-    }
-  },
   "project_empty_state": {
     "no_access": {
       "title": "Seems like you don’t have access to this Project",
@@ -133,6 +123,14 @@
     "archive_modules": {
       "title": "No archived tracks yet",
       "description": "To tidy up your project, archive completed or cancelled tracks. Find them here once archived."
+    },
+    "sprints": {
+      "title": "No sprints yet",
+      "description": "Sprints from projects you are a member of will show up here."
+    },
+    "tracks": {
+      "title": "No tracks yet",
+      "description": "Tracks from projects you are a member of will show up here."
     },
     "home_widget_quick_links": {
       "title": "Keep important references, resources, or docs handy for your work"
