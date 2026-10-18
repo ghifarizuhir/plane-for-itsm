@@ -179,7 +179,7 @@ async fn member_gate(
     ))
 }
 
-/// Type harus live, non-epic, dan ter-link ke project.
+/// Type harus live, non-epic, dan ada di workspace (program P1/S3: tanpa cek project_issue_types).
 async fn valid_type(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -187,8 +187,8 @@ async fn valid_type(
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM issue_types t \
-         JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
-         WHERE t.id = $1 AND pit.project_id = $2 AND t.deleted_at IS NULL AND t.is_epic = false)",
+         WHERE t.id = $1 AND t.workspace_id = (SELECT workspace_id FROM projects WHERE id = $2) \
+         AND t.deleted_at IS NULL AND t.is_epic = false)",
     )
     .bind(type_id)
     .bind(project_id)
@@ -264,13 +264,12 @@ pub async fn create(
     .bind(auth.0)
     .execute(&st.pool)
     .await?;
-    let row: IntakeSourceRow =
-        sqlx::query_as(&format!(
-            "SELECT {SOURCE_COLS} FROM intake_sources s WHERE s.id = $1"
-        ))
-        .bind(id)
-        .fetch_one(&st.pool)
-        .await?;
+    let row: IntakeSourceRow = sqlx::query_as(&format!(
+        "SELECT {SOURCE_COLS} FROM intake_sources s WHERE s.id = $1"
+    ))
+    .bind(id)
+    .fetch_one(&st.pool)
+    .await?;
     Ok((StatusCode::CREATED, Json(source_json(&row))))
 }
 

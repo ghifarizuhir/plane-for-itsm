@@ -20,10 +20,12 @@ use crate::{middleware::auth::AuthUser, state::AppState};
 
 type R = Result<(StatusCode, Json<Value>), common::errors::AppError>;
 
-/// Column list for `issue_types t` (workspace-owned types; project links come
-/// from `project_issue_types`). `level` is `double precision` in the DB, cast
+/// Column list for `issue_types t` (workspace-owned types). `project_ids`
+/// lists every live project in the type's workspace (program P1/S3: types
+/// are enabled workspace-wide; the legacy `project_issue_types` links are
+/// no longer read). `level` is `double precision` in the DB, cast
 /// to int for the SDK shape.
-pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.requires_service, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(pit.project_id) FROM project_issue_types pit WHERE pit.issue_type_id = t.id AND pit.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
+pub const TYPE_COLS: &str = "t.id, t.name, t.description, t.logo_props, t.is_epic, t.requires_service, t.is_default, t.is_active, t.level::int AS level, t.external_id, t.external_source, t.created_by_id AS created_by, t.updated_by_id AS updated_by, t.workspace_id AS workspace, t.created_at, t.updated_at, t.deleted_at, COALESCE((SELECT array_agg(p.id) FROM projects p WHERE p.workspace_id = t.workspace_id AND p.deleted_at IS NULL), ARRAY[]::uuid[]) AS project_ids";
 
 #[derive(Debug, Clone, FromRow)]
 pub struct V1WorkItemTypeRow {
@@ -541,10 +543,12 @@ pub async fn list_project(
     if let Some(gate) = project_readable(&st, auth.0, &slug, project_id).await? {
         return Ok(gate);
     }
+    // Program P1/S3: types are workspace-level. The project URL segment is
+    // compat-only; every non-deleted workspace type is listed.
     let sql = format!(
         "SELECT {TYPE_COLS} FROM issue_types t \
-         JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
-         WHERE pit.project_id = $1 AND t.deleted_at IS NULL ORDER BY t.created_at ASC"
+         WHERE t.workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) \
+         AND t.deleted_at IS NULL ORDER BY t.created_at ASC"
     );
     let rows: Vec<V1WorkItemTypeRow> = sqlx::query_as(&sql)
         .bind(project_id)

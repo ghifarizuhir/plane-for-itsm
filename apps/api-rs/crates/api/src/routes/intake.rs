@@ -1553,9 +1553,8 @@ async fn accept_gate(
     };
     if type_id.is_none() {
         let (has_types,): (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM project_issue_types pit \
-             JOIN issue_types t ON t.id = pit.issue_type_id \
-             WHERE pit.project_id = $1 AND pit.deleted_at IS NULL \
+            "SELECT EXISTS(SELECT 1 FROM issue_types t \
+             WHERE t.workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) \
              AND t.deleted_at IS NULL AND t.is_epic = false)",
         )
         .bind(project_id)
@@ -1703,8 +1702,8 @@ pub async fn patch_issue(
         if let Some(type_id) = new_type {
             let (type_ok,): (bool,) = sqlx::query_as(
                 "SELECT EXISTS(SELECT 1 FROM issue_types t \
-                 JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
-                 WHERE t.id = $1 AND pit.project_id = $2 AND t.deleted_at IS NULL AND t.is_epic = false)",
+                 WHERE t.id = $1 AND t.workspace_id = (SELECT workspace_id FROM projects WHERE id = $2) \
+                 AND t.deleted_at IS NULL AND t.is_epic = false)",
             )
             .bind(type_id)
             .bind(project_id)
@@ -2349,8 +2348,8 @@ pub async fn apply_triage_suggestion(
         let type_ok: bool = match row.category_type_id {
             Some(type_id) => sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM issue_types t \
-                 JOIN project_issue_types pit ON pit.issue_type_id = t.id AND pit.deleted_at IS NULL \
-                 WHERE t.id = $1 AND pit.project_id = $2 AND t.deleted_at IS NULL AND t.is_epic = false)",
+                 WHERE t.id = $1 AND t.workspace_id = (SELECT workspace_id FROM projects WHERE id = $2) \
+                 AND t.deleted_at IS NULL AND t.is_epic = false)",
             )
             .bind(type_id)
             .bind(project_id)

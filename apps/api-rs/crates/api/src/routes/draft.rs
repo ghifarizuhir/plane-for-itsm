@@ -10,7 +10,6 @@ use super::issue_common::{
     DetailEnvelope, PageWindow,
 };
 
-
 /// Workspace drafts + draft-to-issue — parity with Django
 /// `WorkspaceDraftIssueViewSet` (`plane/app/views/workspace/draft.py:46-311`,
 /// `plane/app/urls/workspace.py:202-216`):
@@ -1245,17 +1244,17 @@ pub async fn create_draft_to_issue(
     // diterima HANYA saat body meng-echo type draft sendiri (FE menyebar
     // payload draft).
     if let Some(t) = b.type_id {
+        // Program P1/S3: work item types are workspace-level. The project
+        // enablement join is gone; any live, non-epic workspace type (or the
+        // draft's own epic type echo) is accepted.
         let (ok,): (bool,) = sqlx::query_as(
             "SELECT EXISTS(SELECT 1 FROM issue_types t \
              WHERE t.id = $1 AND t.deleted_at IS NULL \
-               AND ((t.is_epic = false AND EXISTS( \
-                       SELECT 1 FROM project_issue_types pit \
-                       WHERE pit.issue_type_id = t.id AND pit.project_id = $2 \
-                         AND pit.deleted_at IS NULL)) \
-                 OR (t.is_epic = true AND t.id = $3)))",
+             AND t.workspace_id = (SELECT id FROM workspaces WHERE slug = $2) \
+             AND (t.is_epic = false OR (t.is_epic = true AND t.id = $3)))",
         )
         .bind(t)
-        .bind(project_id)
+        .bind(&slug)
         .bind(d.type_id)
         .fetch_one(&st.pool)
         .await?;
