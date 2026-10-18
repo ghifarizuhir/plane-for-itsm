@@ -149,6 +149,11 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/kb", "./(all)/[workspaceSlug]/(projects)/kb/page.tsx"),
         ]),
 
+        // Workspace Intake
+        layout("./(all)/[workspaceSlug]/(projects)/intake/layout.tsx", [
+          route(":workspaceSlug/intake", "./(all)/[workspaceSlug]/(projects)/intake/page.tsx"),
+        ]),
+
         // --------------------------------------------------------------------
         // PROJECT LEVEL ROUTES
         // --------------------------------------------------------------------

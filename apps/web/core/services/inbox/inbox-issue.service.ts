@@ -33,6 +33,14 @@ export class InboxIssueService extends APIService {
       });
   }
 
+  async listWorkspace(workspaceSlug: string, params?: Record<string, string | number>, config = {}) {
+    return this.get(`/api/workspaces/${workspaceSlug}/intake-issues/`, { params }, config)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async retrieve(workspaceSlug: string, projectId: string, inboxIssueId: string): Promise<TInboxIssue> {
     return this.get(
       `/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/?expand=issue_inbox`
