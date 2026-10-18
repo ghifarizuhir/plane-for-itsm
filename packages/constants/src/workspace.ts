@@ -365,7 +365,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS: TWorkspaceSidebarStatic
   {
     key: "knowledge",
     labelTranslationKey: "sidebar.groups.knowledge",
-    itemKeys: ["kb", "docs"],
+    itemKeys: ["kb"],
   },
 ];
 

@@ -19,7 +19,8 @@ import { useAppRailPreferences } from "@/hooks/use-navigation-preferences";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { IconButton } from "@plane/propel/icon-button";
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
-import { InboxOutline, SearchOutline } from "@makeplane/propel/icons";
+import { DocumentationOutline, InboxOutline, SearchOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 import useSWR from "swr";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 
@@ -33,6 +34,7 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
   const { preferences } = useAppRailPreferences();
   const { config } = useInstance();
   const { togglePowerKModal } = usePowerK();
+  const { t } = useTranslation();
 
   const showLabel = preferences.displayMode === "icon_with_label";
 
@@ -87,6 +89,16 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
                 </div>
               ),
               isActive: pathname?.includes("/notifications/"),
+            }}
+          />
+        </Tooltip>
+        <Tooltip label={t("sidebar.docs")} side="bottom">
+          <AppSidebarItem
+            variant="link"
+            item={{
+              href: `/${workspaceSlug?.toString()}/docs/`,
+              icon: <DocumentationOutline className="size-5" />,
+              isActive: pathname?.includes("/docs"),
             }}
           />
         </Tooltip>
