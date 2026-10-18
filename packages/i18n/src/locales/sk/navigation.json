@@ -33,10 +33,10 @@
     "plane_pro": "Plejn Pro",
     "business": "Biznis",
     "groups": {
-      "general": "Všeobecné",
       "delivery": "Realizácia",
       "services": "Služby a podpora",
-      "knowledge": "Znalosti"
+      "knowledge": "Znalosti",
+      "personal": "Osobné"
     }
   }
 }

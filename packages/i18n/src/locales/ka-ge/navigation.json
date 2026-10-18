@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
-      "general": "ზოგადი",
       "delivery": "მიწოდება",
       "services": "სერვისები და მხარდაჭერა",
-      "knowledge": "ცოდნა"
+      "knowledge": "ცოდნა",
+      "personal": "პირადი"
     }
   }
 }

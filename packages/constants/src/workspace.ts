@@ -353,11 +353,6 @@ export type TWorkspaceSidebarStaticGroup = {
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS: TWorkspaceSidebarStaticGroup[] = [
   {
-    key: "general",
-    labelTranslationKey: "sidebar.groups.general",
-    itemKeys: ["home", "ai_scheduler"],
-  },
-  {
     key: "delivery",
     labelTranslationKey: "sidebar.groups.delivery",
     itemKeys: ["tickets", "sprints", "tracks"],
@@ -373,6 +368,13 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS: TWorkspaceSidebarStatic
     itemKeys: ["kb", "docs"],
   },
 ];
+
+// Personal group (scheduler + opt-in personal items) is assembled in the
+// sidebar component because its items depend on user preferences.
+export const WORKSPACE_SIDEBAR_PERSONAL_GROUP = {
+  key: "personal",
+  labelTranslationKey: "sidebar.groups.personal",
+} as const;
 
 export const IS_FAVORITE_MENU_OPEN = "is_favorite_menu_open";
 export const WORKSPACE_DEFAULT_SEARCH_RESULT: IWorkspaceSearchResults = {

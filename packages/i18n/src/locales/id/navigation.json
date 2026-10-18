@@ -34,10 +34,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Bisnis",
     "groups": {
-      "general": "Umum",
       "delivery": "Pelaksanaan",
       "services": "Layanan & Dukungan",
-      "knowledge": "Pengetahuan"
+      "knowledge": "Pengetahuan",
+      "personal": "Pribadi"
     }
   }
 }

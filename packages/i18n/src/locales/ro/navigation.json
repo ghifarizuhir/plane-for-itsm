@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
-      "general": "Generale",
       "delivery": "Livrare",
       "services": "Servicii și asistență",
-      "knowledge": "Cunoștințe"
+      "knowledge": "Cunoștințe",
+      "personal": "Personal"
     }
   }
 }

@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Doanh nghiệp",
     "groups": {
-      "general": "Chung",
       "delivery": "Triển khai",
       "services": "Dịch vụ & Hỗ trợ",
-      "knowledge": "Kiến thức"
+      "knowledge": "Kiến thức",
+      "personal": "Cá nhân"
     }
   }
 }

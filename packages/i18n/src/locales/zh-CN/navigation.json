@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "商业版",
     "groups": {
-      "general": "通用",
       "delivery": "执行",
       "services": "服务与支持",
-      "knowledge": "知识"
+      "knowledge": "知识",
+      "personal": "个人"
     }
   }
 }

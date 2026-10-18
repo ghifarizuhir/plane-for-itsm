@@ -35,10 +35,10 @@
     "pin": "Pin",
     "unpin": "Unpin",
     "groups": {
-      "general": "General",
       "delivery": "Delivery",
       "services": "Services & Support",
-      "knowledge": "Knowledge"
+      "knowledge": "Knowledge",
+      "personal": "Personal"
     }
   }
 }

@@ -33,10 +33,10 @@
     "plane_pro": "Pleyn Pro",
     "business": "Biznis",
     "groups": {
-      "general": "Genel",
       "delivery": "Teslimat",
       "services": "Hizmetler ve Destek",
-      "knowledge": "Bilgi"
+      "knowledge": "Bilgi",
+      "personal": "Kişisel"
     }
   }
 }

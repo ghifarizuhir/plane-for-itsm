@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Byznys",
     "groups": {
-      "general": "Obecné",
       "delivery": "Realizace",
       "services": "Služby a podpora",
-      "knowledge": "Znalosti"
+      "knowledge": "Znalosti",
+      "personal": "Osobní"
     }
   }
 }

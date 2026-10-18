@@ -33,10 +33,10 @@
     "plane_pro": "Plejn Pro",
     "business": "Biznes",
     "groups": {
-      "general": "Ogólne",
       "delivery": "Realizacja",
       "services": "Usługi i wsparcie",
-      "knowledge": "Wiedza"
+      "knowledge": "Wiedza",
+      "personal": "Osobiste"
     }
   }
 }

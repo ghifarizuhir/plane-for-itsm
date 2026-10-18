@@ -33,10 +33,10 @@
     "plane_pro": "Плейн Про",
     "business": "Бізнес",
     "groups": {
-      "general": "Загальне",
       "delivery": "Виконання",
       "services": "Сервіси та підтримка",
-      "knowledge": "Знання"
+      "knowledge": "Знання",
+      "personal": "Особисте"
     }
   }
 }

@@ -13,6 +13,7 @@ import { useParams } from "next/navigation";
 import {
   EUserPermissionsLevel,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
+  WORKSPACE_SIDEBAR_PERSONAL_GROUP,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS,
   WORKSPACE_SIDEBAR_STATIC_PINNED_NAVIGATION_ITEMS_LINKS,
@@ -100,6 +101,19 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
     return items;
   }, [personalPreferences]);
 
+  // Home stays solo on top (workspace landing, not personal). The personal
+  // group (scheduler + opt-in personal items) hides entirely when empty.
+  const homeItem = WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["home"];
+
+  const personalGroupItems = useMemo(() => {
+    const slug = workspaceSlug?.toString() || "";
+    const schedulerItem = WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["ai_scheduler"];
+    return [
+      ...(allowPermissions(schedulerItem.access, EUserPermissionsLevel.WORKSPACE, slug) ? [schedulerItem] : []),
+      ...personalItems.filter((item) => allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, slug)),
+    ];
+  }, [workspaceSlug, allowPermissions, personalItems]);
+
   const sortedNavigationItems = useMemo(
     () =>
       // oxlint-disable-next-line oxc/no-map-spread
@@ -116,6 +130,20 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   return (
     <>
       <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-0.5">
+          <SidebarItemBase key="static_home" item={homeItem} />
+        </div>
+        {personalGroupItems.length > 0 && (
+          <div className="flex flex-col gap-0.5">
+            <p className="tracking-wider px-2 text-[11px] font-semibold text-placeholder uppercase">
+              {t(WORKSPACE_SIDEBAR_PERSONAL_GROUP.labelTranslationKey)}
+            </p>
+            {personalGroupItems.map((item, _index) => (
+              // oxlint-disable-next-line react/no-array-index-key
+              <SidebarItemBase key={`personal_${_index}`} item={item} />
+            ))}
+          </div>
+        )}
         {visibleStaticGroups.map((group) => (
           <div key={group.key} className="flex flex-col gap-0.5">
             <p className="tracking-wider px-2 text-[11px] font-semibold text-placeholder uppercase">
@@ -126,10 +154,6 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
               <SidebarItemBase key={`static_${group.key}_${_index}`} item={item} />
             ))}
           </div>
-        ))}
-        {personalItems.map((item, _index) => (
-          // oxlint-disable-next-line react/no-array-index-key
-          <SidebarItemBase key={`personal_${_index}`} item={item} />
         ))}
       </div>
       <Disclosure as="div" className="flex flex-col" defaultOpen={!!isWorkspaceMenuOpen}>

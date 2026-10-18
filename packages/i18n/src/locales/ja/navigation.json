@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "ビジネス",
     "groups": {
-      "general": "一般",
       "delivery": "実行",
       "services": "サービスとサポート",
-      "knowledge": "ナレッジ"
+      "knowledge": "ナレッジ",
+      "personal": "パーソナル"
     }
   }
 }

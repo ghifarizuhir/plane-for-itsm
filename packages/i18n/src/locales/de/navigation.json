@@ -33,10 +33,10 @@
     "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
-      "general": "Allgemein",
       "delivery": "Umsetzung",
       "services": "Services & Support",
-      "knowledge": "Wissen"
+      "knowledge": "Wissen",
+      "personal": "Persönlich"
     }
   }
 }

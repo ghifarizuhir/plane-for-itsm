@@ -33,10 +33,10 @@
     "plane_pro": "平面專業版",
     "business": "商業",
     "groups": {
-      "general": "一般",
       "delivery": "執行",
       "services": "服務與支援",
-      "knowledge": "知識"
+      "knowledge": "知識",
+      "personal": "個人"
     }
   }
 }
