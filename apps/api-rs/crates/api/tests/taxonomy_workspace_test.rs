@@ -67,7 +67,7 @@ impl Scratch {
         let admin_id = Uuid::new_v4();
         let member_id = Uuid::new_v4();
         let guest_id = Uuid::new_v4();
-        let workspace_id = Uuid::new_v4();
+    let workspace_id = Uuid::new_v4();
         insert_user(pool, admin_id, &format!("{slug}-admin")).await;
         insert_user(pool, member_id, &format!("{slug}-member")).await;
         insert_user(pool, guest_id, &format!("{slug}-guest")).await;
@@ -152,23 +152,59 @@ impl Scratch {
         label_id
     }
 
-    async fn insert_issue(&self, pool: &PgPool, project_id: Uuid, name: &str) -> Uuid {
+    async fn insert_issue(&self, pool: &PgPool, project_id: Uuid, name: &str, seq: i32) -> Uuid {
         let issue_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO issues (id, name, description_html, description_json, is_draft, \
              priority, project_id, sequence_id, sort_order, workspace_id, created_by_id, \
              updated_by_id, created_at, updated_at) \
-             VALUES ($1, $2, '', '{}', false, 'none', $3, 1, 0, $4, $5, $5, now(), now())",
+             VALUES ($1, $2, '', '{}', false, 'none', $3, $4, 0, $5, $6, $6, now(), now())",
         )
         .bind(issue_id)
         .bind(name)
         .bind(project_id)
+        .bind(seq)
         .bind(self.workspace_id)
         .bind(self.admin_id)
         .execute(pool)
         .await
         .expect("scratch issue");
         issue_id
+    }
+
+    async fn purge_stale_scratch(pool: &PgPool) {
+        // A prior interrupted run may have left wst-* rows (and a dropped
+        // unique index) behind. Wipe them so this test starts clean. Other
+        // test binaries use different workspace slug prefixes, and DB suites
+        // in this repo run serially, so this is race-free in practice.
+        for table in [
+            "issue_labels",
+            "issues",
+            "labels",
+            "estimate_points",
+            "estimates",
+            "project_issue_types",
+            "issue_types",
+            "workspace_settings",
+            "project_members",
+            "workspace_members",
+            "projects",
+        ] {
+            sqlx::query(&format!(
+                "DELETE FROM {table} WHERE workspace_id IN (SELECT id FROM workspaces WHERE slug LIKE 'wst-%')"
+            ))
+            .execute(pool)
+            .await
+            .ok();
+        }
+        sqlx::query("DELETE FROM workspaces WHERE slug LIKE 'wst-%'")
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM users WHERE username LIKE 'wst-%'")
+            .execute(pool)
+            .await
+            .ok();
     }
 
     async fn purge(&self, pool: &PgPool) {
@@ -209,10 +245,18 @@ impl Scratch {
 #[tokio::test]
 async fn labels_merge_dedupes_across_projects() {
     let pool = pool().await;
+    Scratch::purge_stale_scratch(&pool).await;
     let scratch = Scratch::new(&pool).await;
 
     let app_a = scratch.insert_project(&pool, "App A", "APPA").await;
     let app_b = scratch.insert_project(&pool, "App B", "APPB").await;
+    // Legacy duplicates cannot be inserted while the workspace unique index
+    // stands, so drop it to seed the pre-S3 state, then backfill and prove
+    // the merged set satisfies uniqueness by re-creating it.
+    sqlx::query("DROP INDEX IF EXISTS labels_ws_name_unique")
+        .execute(&pool)
+        .await
+        .expect("drop labels unique index");
     // Same name (different case) in two projects + a child under B's copy.
     let bug_a = scratch
         .insert_label(&pool, Some(app_a), "Bug", None)
@@ -226,7 +270,7 @@ async fn labels_merge_dedupes_across_projects() {
     let child = scratch
         .insert_label(&pool, Some(app_b), "Crash", Some(bug_b))
         .await;
-    let issue_id = scratch.insert_issue(&pool, app_b, "broken thing").await;
+    let issue_id = scratch.insert_issue(&pool, app_b, "broken thing", 1).await;
     sqlx::query(
         "INSERT INTO issue_labels (id, issue_id, label_id, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $5, now(), now())",
@@ -276,6 +320,14 @@ async fn labels_merge_dedupes_across_projects() {
     .await
     .expect("fetch child");
     assert_eq!(reparented, Some(Some(bug_a)));
+    // Re-create the unique index: success proves the merged set is unique.
+    sqlx::query(
+        "CREATE UNIQUE INDEX labels_ws_name_unique \
+         ON labels (workspace_id, lower(btrim(name))) WHERE deleted_at IS NULL",
+    )
+    .execute(&pool)
+    .await
+    .expect("recreate labels unique index");
     scratch.purge(&pool).await;
 }
 
@@ -398,9 +450,9 @@ impl Scratch {
         .expect("scratch issue type");
         if let Some(project_id) = link_to {
             sqlx::query(
-                "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, \
-                 created_by_id, updated_by_id, created_at, updated_at) \
-                 VALUES (gen_random_uuid(), $1, $2, $3, $4, $4, now(), now())",
+            "INSERT INTO project_issue_types (id, issue_type_id, project_id, workspace_id, level, \
+             is_default, created_by_id, updated_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, 0, false, $4, $4, now(), now())",
             )
             .bind(type_id)
             .bind(project_id)
@@ -416,8 +468,9 @@ impl Scratch {
     async fn add_project_member(&self, pool: &PgPool, project_id: Uuid, user_id: Uuid, role: i16) {
         sqlx::query(
             "INSERT INTO project_members (id, workspace_id, project_id, member_id, role, \
-             is_active, created_by_id, updated_by_id, created_at, updated_at) \
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, true, $5, $5, now(), now())",
+             view_props, default_props, preferences, sort_order, is_active, created_by_id, \
+             updated_by_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, '{}', '{}', '{}', 0, true, $5, $5, now(), now())",
         )
         .bind(self.workspace_id)
         .bind(project_id)
@@ -438,14 +491,13 @@ async fn list_project_returns_workspace_types() {
 
     let app_a = scratch.insert_project(&pool, "App A", "APPA").await;
     let app_b = scratch.insert_project(&pool, "App B", "APPB").await;
+    // list_project keeps its membership gate: admin joins B (the query project).
+    scratch.add_project_member(&pool, app_b, scratch.admin_id, 20).await;
     // Incident linked only to A; Request linked nowhere.
     scratch
         .insert_issue_type(&pool, "Incident", Some(app_a))
         .await;
     scratch.insert_issue_type(&pool, "Request", None).await;
-    scratch
-        .add_project_member(&pool, app_b, scratch.admin_id, 20)
-        .await;
 
     // Project B (no direct links) still sees the whole workspace set.
     let (status, Json(body)) = api::routes::v1::work_item_type::list_project(
@@ -534,35 +586,51 @@ impl Scratch {
 #[tokio::test]
 async fn estimates_merge_unions_points() {
     let pool = pool().await;
+    Scratch::purge_stale_scratch(&pool).await;
     let scratch = Scratch::new(&pool).await;
     let st = state(&pool).await;
     let _ = st;
 
     let app_a = scratch.insert_project(&pool, "App A", "APPA").await;
     let app_b = scratch.insert_project(&pool, "App B", "APPB").await;
-    let (_ea, _pa) = scratch
+    // Legacy duplicates cannot be inserted while the workspace unique index
+    // stands, so drop it to seed the pre-S3 state (re-created + asserted
+    // below, proving the merged set is unique).
+    sqlx::query("DROP INDEX IF EXISTS estimates_ws_name_unique")
+        .execute(&pool)
+        .await
+        .expect("drop estimates unique index");
+    let (_ea, pa) = scratch
         .insert_estimate(&pool, Some(app_a), "Points", "points", &[(1, "1"), (2, "2"), (3, "3")], false)
         .await;
     let (_eb, pb) = scratch
         .insert_estimate(&pool, Some(app_b), "points", "points", &[(1, "1"), (2, "2"), (5, "5"), (8, "8")], false)
         .await;
-    // Issue on B's 5-point (value "5" exists only in B).
-    let issue_id = scratch.insert_issue(&pool, app_b, "sized ticket").await;
+    // B has 2 issues vs A's 1 → B is the canonical estimate.
+    let issue_id = scratch.insert_issue(&pool, app_b, "sized ticket", 1).await;
     let five_point = pb[2];
     scratch.point_issue_at(&pool, issue_id, five_point).await;
+    let issue_b2 = scratch.insert_issue(&pool, app_b, "another ticket", 2).await;
+    scratch.point_issue_at(&pool, issue_b2, pb[1]).await;
+    // Issue on A's 2-point: A's 2-point is a dupe and gets deleted, so this
+    // issue exercises the remap path onto B's 2-point.
+    let issue2_id = scratch.insert_issue(&pool, app_a, "small ticket", 1).await;
+    let two_point_a = pa[1];
+    scratch.point_issue_at(&pool, issue2_id, two_point_a).await;
 
     api::routes::taxonomy_backfill::backfill_estimates(&pool, scratch.workspace_id)
         .await
         .expect("backfill estimates");
 
     // One surviving estimate; union of points {1,2,3,5,8}.
+    // Canonical = B's "points" (most issues).
     let names: Vec<String> =
         sqlx::query_scalar("SELECT name FROM estimates WHERE workspace_id = $1 AND deleted_at IS NULL")
             .bind(scratch.workspace_id)
             .fetch_all(&pool)
             .await
             .expect("list estimates");
-    assert_eq!(names, vec!["Points".to_string()]);
+    assert_eq!(names, vec!["points".to_string()]);
     let mut values: Vec<String> = sqlx::query_scalar(
         "SELECT ep.value FROM estimate_points ep JOIN estimates e ON e.id = ep.estimate_id \
          WHERE e.workspace_id = $1 AND ep.deleted_at IS NULL ORDER BY ep.value",
@@ -608,6 +676,33 @@ async fn estimates_merge_unions_points() {
     .await
     .expect("settings pointer");
     assert_eq!(pointed, Some(canonical));
+    // Issue2's point (A's "2") was deleted as a dupe; the issue moved to B's "2".
+    let (point2_est, point2_val): (Uuid, String) = sqlx::query_as(
+        "SELECT e.id, ep.value FROM issues i JOIN estimate_points ep ON ep.id = i.estimate_point_id \
+         JOIN estimates e ON e.id = ep.estimate_id WHERE i.id = $1",
+    )
+    .bind(issue2_id)
+    .fetch_one(&pool)
+    .await
+    .expect("issue2 point");
+    assert_eq!(point2_val, "2");
+    assert_eq!(point2_est, canonical);
+    // Remap (not re-home): the issue now points at B's 2-point, a different
+    // row than A's deleted 2-point.
+    let point2_id: Uuid = sqlx::query_scalar("SELECT estimate_point_id FROM issues WHERE id = $1")
+        .bind(issue2_id)
+        .fetch_one(&pool)
+        .await
+        .expect("issue2 point id");
+    assert_ne!(point2_id, two_point_a);
+    // Re-create the unique index: success proves the merged set is unique.
+    sqlx::query(
+        "CREATE UNIQUE INDEX estimates_ws_name_unique \
+         ON estimates (workspace_id, lower(btrim(name)), type) WHERE deleted_at IS NULL",
+    )
+    .execute(&pool)
+    .await
+    .expect("recreate estimates unique index");
     scratch.purge(&pool).await;
 }
 
@@ -622,6 +717,8 @@ async fn project_estimate_endpoints_serve_workspace_set() {
     scratch
         .insert_estimate(&pool, Some(app_a), "T-Shirt", "categories", &[(1, "XS"), (2, "S")], true)
         .await;
+    // Estimate endpoints keep the project-membership gate: admin joins B.
+    scratch.add_project_member(&pool, app_b, scratch.admin_id, 20).await;
     api::routes::taxonomy_backfill::backfill_estimates(&pool, scratch.workspace_id)
         .await
         .expect("backfill estimates");

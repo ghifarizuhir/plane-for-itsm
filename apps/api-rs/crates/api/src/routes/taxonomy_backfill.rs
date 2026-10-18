@@ -14,7 +14,7 @@ use uuid::Uuid;
 /// dupes, and null surviving `project_id`s.
 pub async fn backfill_labels(pool: &PgPool, ws: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE labels il SET label_id = m.canonical_id, updated_at = now() \
+        "UPDATE issue_labels il SET label_id = m.canonical_id, updated_at = now() \
          FROM (SELECT id AS old_id, FIRST_VALUE(id) OVER w AS canonical_id \
                FROM labels WHERE deleted_at IS NULL AND workspace_id = $1 \
                WINDOW w AS (PARTITION BY workspace_id, lower(btrim(name)) ORDER BY created_at, id)) m \
@@ -58,6 +58,15 @@ pub async fn backfill_labels(pool: &PgPool, ws: Uuid) -> Result<(), sqlx::Error>
 /// `last_used` per workspace, and point `workspace_settings.estimate_id`
 /// at the canonical estimate (NULL when the workspace has none).
 pub async fn backfill_estimates(pool: &PgPool, ws: Uuid) -> Result<(), sqlx::Error> {
+    // Ensure a settings row exists (scratch workspaces created after the
+    // migrations have none yet; GET auto-ensure covers this in production).
+    sqlx::query(
+        "INSERT INTO workspace_settings (id, workspace_id) VALUES (gen_random_uuid(), $1) \
+         ON CONFLICT (workspace_id) DO NOTHING",
+    )
+    .bind(ws)
+    .execute(pool)
+    .await?;
     let ranked_cte = "WITH ranked AS (SELECT e.id, e.workspace_id, lower(btrim(e.name)) AS norm_name, \
          e.type, COUNT(i.id) AS use_count, e.created_at, \
          ROW_NUMBER() OVER (PARTITION BY e.workspace_id, lower(btrim(e.name)), e.type \
