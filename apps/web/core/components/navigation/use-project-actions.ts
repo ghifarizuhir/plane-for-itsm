@@ -31,7 +31,7 @@ export const useProjectActions = ({ workspaceSlug, projectId, activeItem }: UseP
       setToast({
         type: TOAST_TYPE.INFO,
         title: "Link copied!",
-        message: "Project link copied to clipboard.",
+        message: "Application link copied to clipboard.",
       });
     } catch (_error) {
       setToast({

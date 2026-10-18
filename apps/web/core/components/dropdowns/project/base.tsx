@@ -71,7 +71,7 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
     multiple,
     onChange,
     onClose,
-    placeholder = "Project",
+    placeholder = "Application",
     placement,
     projectIds,
     renderByDefault = true,
@@ -204,8 +204,8 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
       <DropdownButton
         className={buttonClassName}
         isActive={isOpen}
-        tooltipHeading="Project"
-        tooltipContent={value?.length ? `${value.length} project${value.length !== 1 ? "s" : ""}` : placeholder}
+        tooltipHeading="Application"
+        tooltipContent={value?.length ? `${value.length} application${value.length !== 1 ? "s" : ""}` : placeholder}
         showTooltip={showTooltip}
         variant={buttonVariant}
         renderToolTipByDefault={renderByDefault}

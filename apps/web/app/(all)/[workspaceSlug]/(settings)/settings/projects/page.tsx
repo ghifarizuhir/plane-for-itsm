@@ -24,17 +24,17 @@ function ProjectSettingsPage() {
   const resolvedPath = resolvedTheme === "dark" ? ProjectDarkEmptyState : ProjectLightEmptyState;
   return (
     <div className="mx-auto flex h-full max-w-[480px] flex-col items-center justify-center gap-4">
-      <img src={resolvedPath} alt="No projects yet" />
-      <div className="text-16 font-semibold text-tertiary">No projects yet</div>
+      <img src={resolvedPath} alt="No applications yet" />
+      <div className="text-16 font-semibold text-tertiary">No applications yet</div>
       <div className="text-center text-13 text-tertiary">
-        Projects act as the foundation for goal-driven work. They let you manage your teams, tasks, and everything you
-        need to get things done.
+        Applications act as the foundation for goal-driven work. They let you manage your teams, tasks, and everything
+        you need to get things done.
       </div>
       <div className="flex gap-2">
         <Link href="https://terraline.space/" target="_blank" className={cn(getButtonStyling("secondary", "base"))}>
-          Learn more about projects
+          Learn more about applications
         </Link>
-        <Button onClick={() => toggleCreateProjectModal(true)}>Start your first project</Button>
+        <Button onClick={() => toggleCreateProjectModal(true)}>Start your first application</Button>
       </div>
     </div>
   );
