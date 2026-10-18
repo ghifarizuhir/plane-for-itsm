@@ -116,6 +116,18 @@ export class ProjectPageService extends APIService {
       });
   }
 
+  async getWorkspacePages(
+    workspaceSlug: string,
+    params?: Record<string, string | number>,
+    config = {}
+  ): Promise<{ results: any[]; next_cursor: string | null; next_page_results: boolean; total_results: number }> {
+    return this.get(`/api/workspaces/${workspaceSlug}/pages/`, { params }, config)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   async archive(
     workspaceSlug: string,
     projectId: string,

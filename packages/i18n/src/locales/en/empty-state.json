@@ -136,6 +136,10 @@
       "title": "No tickets yet",
       "description": "Tickets from projects you are a member of will show up here."
     },
+    "kb": {
+      "title": "No pages yet",
+      "description": "Knowledge base pages from projects you are a member of will show up here."
+    },
     "home_widget_quick_links": {
       "title": "Keep important references, resources, or docs handy for your work"
     },

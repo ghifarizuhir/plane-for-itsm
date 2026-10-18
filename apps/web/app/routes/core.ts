@@ -144,6 +144,11 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/tickets", "./(all)/[workspaceSlug]/(projects)/tickets/page.tsx"),
         ]),
 
+        // Workspace KB
+        layout("./(all)/[workspaceSlug]/(projects)/kb/layout.tsx", [
+          route(":workspaceSlug/kb", "./(all)/[workspaceSlug]/(projects)/kb/page.tsx"),
+        ]),
+
         // --------------------------------------------------------------------
         // PROJECT LEVEL ROUTES
         // --------------------------------------------------------------------
