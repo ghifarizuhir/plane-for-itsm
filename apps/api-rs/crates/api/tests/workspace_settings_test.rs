@@ -36,7 +36,7 @@ async fn insert_user(pool: &PgPool, user_id: Uuid, username: &str) {
          date_joined, created_at, updated_at, last_location, created_location, is_superuser, \
          is_managed, is_password_expired, is_active, is_staff, is_email_verified, \
          is_password_autoset, token, user_timezone, last_login_ip, last_logout_ip, \
-         last_login_medium, last_logout_uagent, is_bot, display_name, is_email_valid, \
+         last_login_medium, last_login_uagent, is_bot, display_name, is_email_valid, \
          is_password_reset_required) \
          VALUES ($1, '', $2, $3, '', '', '', now(), now(), now(), '', '', false, false, \
          false, true, false, false, true, $4, 'UTC', '', '', '', '', false, $2, true, false)",
@@ -174,13 +174,14 @@ async fn backfill_union_across_projects() {
     let scratch = Scratch::new(&pool).await;
     let st = state(&pool).await;
 
-    // Project A: cycles/modules/intake on, archive rule, member as default assignee.
+    // Project A (older): cycles on, archive rule 3.
+    // Project B (newer): modules + intake on, archive rule 5, guest flag,
+    // member as default assignee.
     scratch
-        .insert_project(&pool, "App A", "APPA", true, true, true, 3, 0, false)
+        .insert_project(&pool, "App A", "APPA", true, false, false, 3, 7, false)
         .await;
-    // Project B: everything off except close rule + guest flag.
     scratch
-        .insert_project(&pool, "App B", "APPB", false, false, false, 0, 6, true)
+        .insert_project(&pool, "App B", "APPB", false, true, true, 5, 7, true)
         .await;
     sqlx::query(
         "UPDATE projects SET default_assignee_id = $1 WHERE workspace_id = $2 AND identifier = 'APPA'",
@@ -204,8 +205,10 @@ async fn backfill_union_across_projects() {
     assert_eq!(body["module_view"], true);
     assert_eq!(body["intake_view"], true);
     assert_eq!(body["guest_view_all_features"], true);
+    // archive 3 vs 5 ties 1-1 with no issues: oldest project (A) wins.
     assert_eq!(body["archive_in"], 3);
-    assert_eq!(body["close_in"], 6);
+    // close 7 vs 7 is unanimous.
+    assert_eq!(body["close_in"], 7);
     assert_eq!(
         body["default_assignee_id"],
         serde_json::json!(scratch.member_id.to_string())
