@@ -1146,6 +1146,13 @@ async fn main() {
             "/api/workspaces/:slug/projects/:project_id/user-favorite-views/:view_id/",
             delete(routes::favorite::view_fav_destroy),
         )
+        // Parity with a workspace-level pages collection: GET flat,
+        // member-project-scoped, cursor-paginated `page_list_json` rows
+        // (E2h; the project `list` visibility shape, aggregated).
+        .route(
+            "/api/workspaces/:slug/pages/",
+            get(routes::page::workspace_pages),
+        )
         .route(
             "/api/workspaces/:slug/projects/:project_id/pages/",
             get(routes::page::list).post(routes::page::create),

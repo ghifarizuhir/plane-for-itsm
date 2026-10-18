@@ -8,12 +8,17 @@ use axum::{
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sqlx::{Postgres, QueryBuilder};
 
 use crate::routes::cycle::format_archived_at;
-use crate::routes::project::{deny, missing, FORBIDDEN_MSG};
+use crate::routes::project::{deny, missing, ws_role, FORBIDDEN_MSG};
 use crate::{middleware::auth::AuthUser, state::AppState};
 
-use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
+use super::issue_common::{
+    fetch_project_member_role, is_workspace_admin, project_gate_allows, DetailEnvelope, PageWindow,
+    next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str, total_pages,
+};
+use super::page_version_write::record_page_version;
 
 // ============================================================================
 // Error strings — every literal quoted from Django with file:line.
@@ -262,7 +267,11 @@ pub fn parse_desc_binary_value(v: Option<&Value>) -> Result<Option<Vec<u8>>, Str
 /// Payload for the live-server `apply_document` admin command. The live server
 /// replaces the in-memory Yjs document content with this HTML + title so
 /// connected editors receive the AI edit as CRDT operations.
-pub fn build_apply_document_payload(page_id: uuid::Uuid, description_html: &str, name: &str) -> Value {
+pub fn build_apply_document_payload(
+    page_id: uuid::Uuid,
+    description_html: &str,
+    name: &str,
+) -> Value {
     json!({
         "command": "apply_document",
         "docId": page_id.to_string(),
@@ -1215,6 +1224,187 @@ pub async fn summary(
             .into(),
     )
     .map(|j| (StatusCode::OK, j))
+}
+
+/// Query for `GET /api/workspaces/:slug/pages/`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WsPagesQuery {
+    #[serde(default, rename = "type")]
+    pub type_: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub per_page: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub order_by: Option<String>,
+}
+
+fn ws_bad_request(body: Value) -> (StatusCode, Json<Value>) {
+    (StatusCode::BAD_REQUEST, Json(body))
+}
+
+/// Shared WHERE-tail for the workspace pages COUNT + page queries (E2h).
+/// Assumes the caller already emitted `SELECT ... WHERE w.slug = $1`
+/// (bound) plus `AND p.deleted_at IS NULL`. Textual bind order inside the
+/// tail: user (membership), user (owner), user (restricted guest), optional
+/// project_id, optional search.
+fn push_ws_pages_tail(
+    qb: &mut QueryBuilder<Postgres>,
+    user: uuid::Uuid,
+    tab: &str,
+    project_id: Option<uuid::Uuid>,
+    search: &str,
+) {
+    match tab {
+        "public" => qb.push(" AND p.access = 0 AND p.archived_at IS NULL "),
+        "private" => qb.push(" AND p.access = 1 AND p.archived_at IS NULL "),
+        "archived" => qb.push(" AND p.archived_at IS NOT NULL "),
+        _ => qb.push(" AND p.archived_at IS NULL "),
+    };
+    qb.push(
+        " AND EXISTS(SELECT 1 FROM project_pages ppv \
+         JOIN projects prv ON prv.id = ppv.project_id AND prv.workspace_id = w.id \
+         AND prv.archived_at IS NULL AND prv.deleted_at IS NULL \
+         JOIN project_members mv ON mv.project_id = ppv.project_id AND mv.member_id = ",
+    );
+    qb.push_bind(user);
+    qb.push(
+        " AND mv.is_active = true AND mv.deleted_at IS NULL \
+         WHERE ppv.page_id = p.id AND ppv.deleted_at IS NULL \
+         AND (p.owned_by_id = ",
+    );
+    qb.push_bind(user);
+    qb.push(" OR (p.access = 0 AND NOT EXISTS( \
+         SELECT 1 FROM project_members rg JOIN projects rp ON rp.id = rg.project_id \
+         WHERE rg.project_id = ppv.project_id AND rg.member_id = ");
+    qb.push_bind(user);
+    qb.push(
+        " AND rg.role = 5 AND rg.is_active = true AND rg.deleted_at IS NULL \
+         AND rp.guest_view_all_features = false AND rp.deleted_at IS NULL))) ",
+    );
+    if let Some(pid) = project_id {
+        qb.push(
+            " AND EXISTS(SELECT 1 FROM project_pages ppf \
+             WHERE ppf.page_id = p.id AND ppf.deleted_at IS NULL AND ppf.project_id = ",
+        );
+        qb.push_bind(pid);
+        qb.push(") ");
+    }
+    if !search.is_empty() {
+        qb.push(" AND p.name ILIKE '%' || ");
+        qb.push_bind(search.to_string());
+        qb.push(" || '%' ");
+    }
+}
+
+/// GET `/api/workspaces/:slug/pages/` — workspace-level page listing.
+/// Visibility mirrors the project `list` (`owned OR (public AND
+/// not-restricted-guest)`, per linked project), aggregated over the
+/// requester's member projects. Rows reuse `page_list_json` except
+/// `project_ids` is member-project-scoped; the envelope is the issue-style
+/// cursor envelope (`DetailEnvelope`).
+pub async fn workspace_pages(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<WsPagesQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if ws_role(&st.pool, auth.0, &slug).await?.is_none() {
+        return Ok(deny_detail());
+    }
+    let per_page = match parse_per_page(Some(q.per_page.as_deref().unwrap_or("100"))) {
+        Ok(v) => v,
+        Err(msg) => return Ok(ws_bad_request(json!({"detail": msg}))),
+    };
+    // per_page=0/negative behaves as 1 (explicit, documented deviation: the
+    // project list has no pagination at all, so there is no Django behavior
+    // to mirror for these degenerate values).
+    let limit = per_page.clamp(1, 1000);
+    let cursor = match parse_cursor(&q.cursor.clone().unwrap_or_else(|| format!("{limit}:0:0"))) {
+        Ok(c) => c,
+        Err(msg) => return Ok(ws_bad_request(json!({"detail": msg}))),
+    };
+    let tab = q.type_.as_deref().unwrap_or("all");
+    let search = q.search.clone().unwrap_or_default();
+    let (order_expr, desc) = sanitize_page_order_by(q.order_by.as_deref().unwrap_or("-updated_at"));
+    let order_dir = if desc { "DESC" } else { "ASC" };
+
+    let mut count_qb: QueryBuilder<Postgres> = QueryBuilder::new(
+        "SELECT COUNT(*) FROM pages p JOIN workspaces w ON w.id = p.workspace_id WHERE w.slug = ",
+    );
+    count_qb.push_bind(slug.clone());
+    count_qb.push(" AND p.deleted_at IS NULL ");
+    push_ws_pages_tail(&mut count_qb, auth.0, tab, q.project_id, &search);
+    let total: i64 = count_qb.build_query_scalar().fetch_one(&st.pool).await?;
+
+    let mut page_qb: QueryBuilder<Postgres> = QueryBuilder::new(
+        "SELECT p.id, p.name, p.owned_by_id, p.access, p.color, p.parent_id, \
+         EXISTS(SELECT 1 FROM user_favorites uf WHERE uf.entity_type = 'page' \
+         AND uf.entity_identifier = p.id AND uf.user_id = ",
+    );
+    page_qb.push_bind(auth.0);
+    page_qb.push(
+        " AND uf.workspace_id = p.workspace_id AND uf.deleted_at IS NULL) AS is_favorite, \
+         p.is_locked, p.archived_at, p.workspace_id, p.created_at, p.updated_at, \
+         p.created_by_id, p.updated_by_id, p.view_props, p.logo_props, p.description_html, \
+         COALESCE(ARRAY(SELECT DISTINCT pl.label_id FROM page_labels pl \
+             WHERE pl.page_id = p.id AND pl.deleted_at IS NULL AND pl.label_id IS NOT NULL), '{}') AS label_ids, \
+         COALESCE(ARRAY(SELECT DISTINCT pp2.project_id FROM project_pages pp2 \
+             JOIN project_members m2 ON m2.project_id = pp2.project_id AND m2.member_id = ",
+    );
+    page_qb.push_bind(auth.0);
+    page_qb.push(
+        " AND m2.is_active = true AND m2.deleted_at IS NULL \
+         JOIN projects px ON px.id = pp2.project_id AND px.workspace_id = p.workspace_id \
+         AND px.archived_at IS NULL AND px.deleted_at IS NULL \
+         WHERE pp2.page_id = p.id AND pp2.deleted_at IS NULL), '{}') AS project_ids \
+         FROM pages p JOIN workspaces w ON w.id = p.workspace_id \
+         WHERE w.slug = ",
+    );
+    page_qb.push_bind(slug);
+    page_qb.push(" AND p.deleted_at IS NULL ");
+    push_ws_pages_tail(&mut page_qb, auth.0, tab, q.project_id, &search);
+    page_qb
+        .push(" ORDER BY ")
+        .push(order_expr)
+        .push(" ")
+        .push(order_dir)
+        .push(", p.id ASC LIMIT ")
+        .push_bind(limit + 1);
+    let window = match page_window(cursor.page, limit) {
+        Ok(w) => w,
+        Err(()) => return Ok(ws_bad_request(json!({"detail": "Error in parsing"}))),
+    };
+    let mut rows: Vec<PageRow> = match window {
+        PageWindow::Rows(offset) => {
+            page_qb.push(" OFFSET ").push_bind(offset);
+            page_qb.build_query_as().fetch_all(&st.pool).await?
+        }
+        PageWindow::BeyondEnd => Vec::new(),
+    };
+    let _ = (cursor.limit_value, cursor.is_prev);
+    let next_page_results = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let results: Vec<Value> = rows.iter().map(page_list_json).collect::<Vec<_>>();
+    let envelope = DetailEnvelope {
+        grouped_by: None,
+        sub_grouped_by: None,
+        total_count: total,
+        next_cursor: next_cursor_str(limit, cursor.page),
+        prev_cursor: prev_cursor_str(limit, cursor.page),
+        next_page_results,
+        prev_page_results: cursor.page > 0,
+        count: rows.len() as i64,
+        total_pages: total_pages(total, limit),
+        total_results: total,
+        extra_stats: None,
+        results,
+    };
+    Ok((StatusCode::OK, Json(json!(envelope))))
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -2324,8 +2514,10 @@ pub async fn desc_get(
 /// (`serializers/page.py:173-224`): base64→bytes (≤10 MB, ≥4 B, no
 /// `<html/<!doctype/<script/javascript:/data:/<iframe`,
 /// `content_validator.py:29-68,211-243`), html sanitize ≤10 MB, json
-/// passthrough. 200 `{"message": "Updated successfully"}` (`:588`).
-/// Celery tasks skipped.
+/// passthrough. 200 `{"message": "Updated successfully"}` (`:588`). The
+/// `page_transaction` task (`:576-581`, page mentions) is skipped;
+/// `track_page_version` (`:583-587`) is mirrored inline via
+/// `record_page_version`.
 pub async fn desc_patch(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -2345,8 +2537,8 @@ pub async fn desc_patch(
         let (s, j) = deny_detail();
         return desc_err(s, j.0);
     }
-    let cur: Option<(bool, Option<NaiveDate>)> = sqlx::query_as(
-        "SELECT p.is_locked, p.archived_at FROM pages p \
+    let cur: Option<(bool, Option<NaiveDate>, String, uuid::Uuid)> = sqlx::query_as(
+        "SELECT p.is_locked, p.archived_at, p.description_html, p.workspace_id FROM pages p \
          JOIN workspaces w ON w.id = p.workspace_id \
          JOIN project_pages pp ON pp.page_id = p.id AND pp.deleted_at IS NULL \
          WHERE p.id = $1 AND w.slug = $2 AND pp.project_id = $3 AND p.deleted_at IS NULL \
@@ -2358,7 +2550,7 @@ pub async fn desc_patch(
     .bind(auth.0)
     .fetch_optional(&st.pool)
     .await?;
-    let Some((is_locked, archived_at)) = cur else {
+    let Some((is_locked, archived_at, old_html, workspace_id)) = cur else {
         return desc_err(
             StatusCode::NOT_FOUND,
             json!({"error": "The required object does not exist."}),
@@ -2409,7 +2601,8 @@ pub async fn desc_patch(
         .map(|h| strip_tags_text(h))
         .filter(|s| !s.is_empty());
     let html_provided = html.is_some();
-    sqlx::query(
+    let mut tx = st.pool.begin().await?;
+    let updated: Option<(Option<Vec<u8>>, String, Value, Option<String>)> = sqlx::query_as(
         "UPDATE pages p SET description_binary = COALESCE($1, description_binary), \
          description_html = COALESCE($2, description_html), \
          description_json = COALESCE($3, description_json), \
@@ -2418,7 +2611,9 @@ pub async fn desc_patch(
          FROM workspaces w, project_pages pp \
          WHERE p.id = $4 AND p.workspace_id = w.id AND w.slug = $5 \
          AND pp.page_id = p.id AND pp.deleted_at IS NULL AND pp.project_id = $6 \
-         AND p.deleted_at IS NULL",
+         AND p.deleted_at IS NULL \
+         RETURNING p.description_binary, p.description_html, p.description_json, \
+         p.description_stripped",
     )
     .bind(&binary)
     .bind(&html)
@@ -2428,8 +2623,28 @@ pub async fn desc_patch(
     .bind(pid)
     .bind(html_provided)
     .bind(&stripped)
-    .execute(&st.pool)
+    .fetch_optional(&mut *tx)
     .await?;
+    if let Some((stored_binary, stored_html, stored_json, stored_stripped)) = updated {
+        // `track_page_version.delay(page_id, existing_instance, user_id)`
+        // (`views/page/base.py:583-587`): the task only writes when the html
+        // captured before the save differs from the stored one
+        // (`page_version_task.py:33`), and the row is owned by the editor.
+        if stored_html != old_html {
+            record_page_version(
+                &mut tx,
+                page_id,
+                workspace_id,
+                auth.0,
+                stored_binary.as_deref(),
+                &stored_html,
+                stored_stripped.as_deref(),
+                &stored_json,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+    }
     desc_err(StatusCode::OK, json!({"message": DESC_UPDATED_MSG}))
 }
 
@@ -2463,7 +2678,12 @@ pub async fn collab_apply(
         .unwrap_or("")
         .trim()
         .to_string();
-    let name = body.get("name").and_then(Value::as_str).unwrap_or("").trim().to_string();
+    let name = body
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if description_html.is_empty() || name.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
