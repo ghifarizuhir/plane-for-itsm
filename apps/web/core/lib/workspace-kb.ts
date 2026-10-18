@@ -96,14 +96,18 @@ export function groupWorkspaceKbPages(
   }
   const byProject = new Map<string, TWorkspaceKbPage[]>();
   for (const page of unique) {
-    const linked = [...(page.project_ids ?? [])].toSorted((a, b) => projectName(a).localeCompare(projectName(b)));
+    // oxlint-disable-next-line no-array-sort -- sorting a fresh copy; toSorted() is unavailable in this TS lib target
+    const linked = [...(page.project_ids ?? [])].sort((a, b) => projectName(a).localeCompare(projectName(b)));
     const primary = linked[0];
     if (!primary) continue;
     const list = byProject.get(primary) ?? [];
     list.push(page);
     byProject.set(primary, list);
   }
-  return [...byProject.entries()]
-    .map(([key, list]) => ({ key, label: projectName(key), pages: list }))
-    .toSorted((a, b) => a.label.localeCompare(b.label));
+  return (
+    [...byProject.entries()]
+      .map(([key, list]) => ({ key, label: projectName(key), pages: list }))
+      // oxlint-disable-next-line no-array-sort -- sorting a fresh copy; toSorted() is unavailable in this TS lib target
+      .sort((a, b) => a.label.localeCompare(b.label))
+  );
 }
