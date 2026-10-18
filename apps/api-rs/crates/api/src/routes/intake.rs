@@ -1,4 +1,8 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -551,6 +555,150 @@ pub async fn list_issues(
         .await?,
         PageWindow::BeyondEnd => Vec::new(),
     };
+    let next_page_results = rows.len() as i64 > limit;
+    rows.truncate(limit as usize);
+    let envelope = DetailEnvelope {
+        grouped_by: None,
+        sub_grouped_by: None,
+        total_count: total,
+        next_cursor: next_cursor_str(limit, cursor.page),
+        prev_cursor: prev_cursor_str(limit, cursor.page),
+        next_page_results,
+        prev_page_results: cursor.page > 0,
+        count: rows.len() as i64,
+        total_pages: total_pages(total, limit),
+        total_results: total,
+        extra_stats: None,
+        results: rows.iter().map(inbox_list_json).collect(),
+    };
+    Ok((StatusCode::OK, Json(json!(envelope))))
+}
+
+/// Query for `GET /api/workspaces/:slug/intake-issues/`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WsIntakeIssuesQuery {
+    #[serde(default, rename = "type")]
+    pub type_: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<uuid::Uuid>,
+    #[serde(default)]
+    pub search: Option<String>,
+    #[serde(default)]
+    pub per_page: Option<String>,
+    #[serde(default)]
+    pub cursor: Option<String>,
+}
+
+/// Open tab = pending + snoozed (matches the project's effective behavior);
+/// closed tab = accepted, rejected, duplicate. Anything else falls back to
+/// open.
+fn ws_intake_statuses(tab: Option<&str>) -> Vec<i32> {
+    match tab {
+        Some("closed") => vec![1, -1, 2],
+        _ => vec![-2, 0],
+    }
+}
+
+/// GET `/api/workspaces/:slug/intake-issues/` — workspace-level intake
+/// queue. Same row shape (`inbox_list_json`) and cursor envelope as the
+/// project `list_issues`, unioned across all intakes of the requester's
+/// member projects. Per-row project scoping is deliberately stricter than
+/// the project endpoint (active membership required); guests restricted on a
+/// project only see requests they created there.
+pub async fn workspace_intake_issues(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Query(q): Query<WsIntakeIssuesQuery>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    use super::issue_common::{
+        next_cursor_str, page_window, parse_cursor, parse_per_page, prev_cursor_str,
+        total_pages, DetailEnvelope, PageWindow,
+    };
+    if crate::routes::project::ws_role(&st.pool, auth.0, &slug)
+        .await?
+        .is_none()
+    {
+        return Ok(crate::routes::member::deny_detail());
+    }
+    let statuses = ws_intake_statuses(q.type_.as_deref());
+    let per_page = match parse_per_page(Some(q.per_page.as_deref().unwrap_or("100"))) {
+        Ok(v) => v,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let limit = per_page.min(1000);
+    if limit <= 0 {
+        return Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "invalid limit"})),
+        ));
+    }
+    let cursor = match parse_cursor(&q.cursor.clone().unwrap_or_else(|| format!("{limit}:0:0"))) {
+        Ok(c) => c,
+        Err(e) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": e})))),
+    };
+    let window = match page_window(cursor.page, limit) {
+        Ok(w) => w,
+        Err(()) => return Ok((StatusCode::BAD_REQUEST, Json(json!({"detail": "Error in parsing"})))),
+    };
+    let search = q.search.clone().unwrap_or_default();
+    // NOTE: binds must stay in textual $N order.
+    let base_from = "FROM intake_issues ii \
+         JOIN workspaces w ON w.id = ii.workspace_id \
+         JOIN issues i ON i.id = ii.issue_id AND i.deleted_at IS NULL \
+         JOIN intakes it ON it.id = ii.intake_id AND it.deleted_at IS NULL \
+         JOIN projects pr ON pr.id = ii.project_id AND pr.workspace_id = w.id \
+         AND pr.archived_at IS NULL AND pr.deleted_at IS NULL \
+         WHERE w.slug = $1 AND ii.deleted_at IS NULL \
+         AND ii.status = ANY($2) \
+         AND ($3::uuid IS NULL OR pr.id = $3) \
+         AND ($4::text IS NULL OR i.name ILIKE '%' || $4 || '%') \
+         AND EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id = pr.id \
+           AND pm.member_id = $5 AND pm.is_active = true AND pm.deleted_at IS NULL \
+           AND (pm.role <> 5 \
+             OR COALESCE((SELECT gp.guest_view_all_features FROM projects gp WHERE gp.id = pr.id), false) = true \
+             OR ii.created_by_id = $6))";
+    let total: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {base_from}"))
+        .bind(&slug)
+        .bind(&statuses)
+        .bind(q.project_id)
+        .bind(if search.is_empty() {
+            None::<String>
+        } else {
+            Some(search.clone())
+        })
+        .bind(auth.0)
+        .bind(auth.0)
+        .fetch_one(&st.pool)
+        .await?;
+    let mut rows: Vec<InboxListRow> = match window {
+        PageWindow::Rows(offset) => sqlx::query_as(&format!(
+            "SELECT ii.id, ii.status, ii.duplicate_to_id, ii.snoozed_till, ii.source, \
+             ii.created_by_id, i.id AS issue_id, i.name AS issue_name, i.priority AS issue_priority, \
+             i.sequence_id AS issue_sequence_id, i.project_id AS issue_project_id, \
+             i.created_at AS issue_created_at, \
+             COALESCE((SELECT array_agg(il.label_id ORDER BY il.created_at DESC) FROM issue_labels il \
+               WHERE il.issue_id = i.id AND il.deleted_at IS NULL), '{{}}'::uuid[]) AS issue_label_ids, \
+             i.created_by_id AS issue_created_by_id \
+             {base_from} ORDER BY i.created_at DESC, ii.id ASC LIMIT $7 OFFSET $8"
+        ))
+        .bind(&slug)
+        .bind(&statuses)
+        .bind(q.project_id)
+        .bind(if search.is_empty() {
+            None::<String>
+        } else {
+            Some(search.clone())
+        })
+        .bind(auth.0)
+        .bind(auth.0)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&st.pool)
+        .await?,
+        PageWindow::BeyondEnd => Vec::new(),
+    };
+    let _ = (cursor.limit_value, cursor.is_prev);
     let next_page_results = rows.len() as i64 > limit;
     rows.truncate(limit as usize);
     let envelope = DetailEnvelope {

@@ -78,6 +78,14 @@ async fn main() {
         // (`_get_project_permission_filters`, `view/base.py:155-171`).
         // Gate WORKSPACE ADMIN/MEMBER/GUEST (any active ws member 20/15/5).
         .route("/api/workspaces/:slug/issues/", get(routes::issue_lists::workspace_issues))
+        // Workspace intake triage queue (E2h): GET flat `inbox_list_json`
+        // rows across the requester's member projects, Open/Closed tab via
+        // `?type=` (invalid falls back to open), server-side `project_id`
+        // + name search, cursor pagination. Gate any active ws member.
+        .route(
+            "/api/workspaces/:slug/intake-issues/",
+            get(routes::intake::workspace_intake_issues),
+        )
         // Parity with `WorkspaceUserProfileIssuesEndpoint.get`
         // (`views/workspace/user.py:98-203`,
         // `urls/workspace.py:152-156`): GET 200 flat `issue_on_results`
