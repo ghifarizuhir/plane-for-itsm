@@ -164,7 +164,7 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
           </Loader>
         )}
       </DefaultSettingItem>
-      <DefaultSettingItem title="Default Assignee" description="Select the default assignee for the project.">
+      <DefaultSettingItem title="Default Assignee" description="Select the default assignee for the application.">
         {currentProjectDetails ? (
           <Controller
             control={control}

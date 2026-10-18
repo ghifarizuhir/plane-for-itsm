@@ -29,7 +29,7 @@ const PROJECT_FEATURES_LIST = {
     key: "cycles",
     property: "cycle_view",
     title: "Cycles",
-    description: "Timebox work as you see fit per project and change frequency from one period to the next.",
+    description: "Timebox work as you see fit per application and change frequency from one period to the next.",
     icon: <CyclesOutline className="h-5 w-5 flex-shrink-0 rotate-180 text-tertiary" />,
     isEnabled: true,
   },
@@ -37,7 +37,7 @@ const PROJECT_FEATURES_LIST = {
     key: "modules",
     property: "module_view",
     title: "Modules",
-    description: "Group work into sub-project-like set-ups with their own leads and assignees.",
+    description: "Group work into sub-application-like set-ups with their own leads and assignees.",
     icon: <ModuleOutline width={20} height={20} className="flex-shrink-0 text-tertiary" />,
     isEnabled: true,
   },
@@ -61,7 +61,7 @@ const PROJECT_FEATURES_LIST = {
     key: "intake",
     property: "inbox_view",
     title: "Intake",
-    description: "Consider and discuss work items before you add them to your project.",
+    description: "Consider and discuss work items before you add them to your application.",
     icon: <IntakeOutline className="h-5 w-5 flex-shrink-0 text-tertiary" />,
     isEnabled: true,
   },
@@ -85,14 +85,14 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
     const updateProjectPromise = updateProject(workspaceSlug, projectId, settingsPayload);
 
     setPromiseToast(updateProjectPromise, {
-      loading: "Updating project feature...",
+      loading: "Updating application feature...",
       success: {
         title: "Success!",
         message: () => "Application feature updated successfully.",
       },
       error: {
         title: "Error!",
-        message: () => "Something went wrong while updating project feature. Please try again.",
+        message: () => "Something went wrong while updating application feature. Please try again.",
       },
     });
     void updateProjectPromise.then(() => {

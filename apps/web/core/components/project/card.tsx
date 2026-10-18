@@ -88,7 +88,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
 
     const addToFavoritePromise = addProjectToFavorites(workspaceSlug.toString(), project.id);
     setPromiseToast(addToFavoritePromise, {
-      loading: "Adding project to favorites...",
+      loading: "Adding application to favorites...",
       success: {
         title: "Success!",
         message: () => "Application added to favorites.",
@@ -99,7 +99,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       },
       error: {
         title: "Error!",
-        message: () => "Couldn't add the project to favorites. Please try again.",
+        message: () => "Couldn't add the application to favorites. Please try again.",
       },
     });
   };
@@ -109,14 +109,14 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
 
     const removeFromFavoritePromise = removeProjectFromFavorites(workspaceSlug.toString(), project.id);
     setPromiseToast(removeFromFavoritePromise, {
-      loading: "Removing project from favorites...",
+      loading: "Removing application from favorites...",
       success: {
         title: "Success!",
         message: () => "Application removed from favorites.",
       },
       error: {
         title: "Error!",
-        message: () => "Couldn't remove the project from favorites. Please try again.",
+        message: () => "Couldn't remove the application from favorites. Please try again.",
       },
     });
   };

@@ -201,7 +201,7 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
           value={projectId ?? ""}
           onChange={(event) => setProjectId(event.target.value)}
         >
-          <option value="">Select a project</option>
+          <option value="">Select an application</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
               {project.identifier} — {project.name}

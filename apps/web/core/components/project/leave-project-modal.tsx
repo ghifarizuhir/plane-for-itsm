@@ -82,7 +82,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
-          message: "Please enter the project name as shown in the description.",
+          message: "Please enter the application name as shown in the description.",
         });
       }
     } else {
@@ -135,7 +135,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
                     value={value}
                     onChange={onChange}
                     ref={ref}
-                    placeholder="Enter project name"
+                    placeholder="Enter application name"
                   />
                 </InputGroup>
               </Field>
@@ -161,7 +161,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
                     value={value}
                     onChange={onChange}
                     ref={ref}
-                    placeholder="Enter 'leave project'"
+                    placeholder="Enter 'leave application'"
                   />
                 </InputGroup>
               </Field>

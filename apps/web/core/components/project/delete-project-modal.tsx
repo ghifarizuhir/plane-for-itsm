@@ -152,7 +152,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
             Cancel
           </Button>
           <Button variant="error-fill" size="lg" type="submit" disabled={!canDelete} loading={isSubmitting}>
-            {isSubmitting ? "Deleting" : "Delete project"}
+            {isSubmitting ? "Deleting" : "Delete application"}
           </Button>
         </div>
       </form>
