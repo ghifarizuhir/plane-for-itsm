@@ -66,7 +66,8 @@ export const InboxIssueContentProperties = observer(function InboxIssueContentPr
   // store hooks
   const { workItemTypes } = useWorkItemType();
   const projectTypes = (workItemTypes ?? []).filter(
-    (type) => !type.is_epic && type.is_active && type.project_ids.includes(projectId?.toString() ?? "")
+    // Program P1/S3: work item types are workspace-level; no per-project filtering.
+    (type) => !type.is_epic && type.is_active
   );
   const selectedType = projectTypes.find((type) => type.id === issue?.type_id);
 
@@ -109,7 +110,6 @@ export const InboxIssueContentProperties = observer(function InboxIssueContentPr
                   issue?.id && issueOperations.update(workspaceSlug, projectId, issue?.id, { type_id: typeId })
                 }
                 disabled={!isEditable}
-                projectId={projectId?.toString()}
                 buttonVariant="border-with-text"
                 className="w-3/5 flex-grow rounded-sm px-2 hover:bg-layer-1"
                 buttonContainerClassName="w-full text-left"

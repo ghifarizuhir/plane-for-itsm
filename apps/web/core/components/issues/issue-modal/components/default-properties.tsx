@@ -83,7 +83,8 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   // derived values
   const projectDetails = getProjectById(projectId);
   const hasProjectTypes = (workItemTypes ?? []).some(
-    (type) => !type.is_epic && type.is_active && (!projectId || type.project_ids.includes(projectId))
+    // Program P1/S3: work item types are workspace-level; no per-project filtering.
+    (type) => !type.is_epic && type.is_active
   );
 
   // the type list is usually fetched with the workspace sidebar, but the create
@@ -137,7 +138,6 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                   onChange(newTypeId);
                   handleFormChange();
                 }}
-                projectId={projectId ?? undefined}
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("type_id")}
               />

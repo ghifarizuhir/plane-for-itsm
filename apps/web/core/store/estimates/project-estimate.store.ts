@@ -131,36 +131,43 @@ export class ProjectEstimateStore implements IProjectEstimateStore {
   /**
    * @description get estimates are enabled in the project or not
    * @returns { boolean }
+   * Program P1/S3: estimates are workspace-level; enabled iff the workspace
+   * has at least one estimate. The project argument is kept for call-site
+   * compatibility until the S9 rename.
    */
   areEstimateEnabledByProjectId = computedFn((projectId: string) => {
     if (!projectId) return false;
-    const projectDetails = this.store.projectRoot.project.getProjectById(projectId);
-    if (!projectDetails) return false;
-    return Boolean(projectDetails.estimate) || false;
+    return (this.estimateIdsByProjectId(projectId)?.length ?? 0) > 0;
   });
 
   /**
    * @description get all estimate ids for a project
    * @returns { string[] | undefined }
    */
-  estimateIdsByProjectId = computedFn((projectId: string) => {
+  estimateIdsByProjectId = computedFn((projectId: string | undefined) => {
     if (!projectId) return undefined;
-    const projectEstimatesIds = Object.values(this.estimates || {})
-      .filter((p) => p.project === projectId)
+    const workspaceSlug = this.store.router.workspaceSlug || "";
+    const workspaceDetails = this.store.workspaceRoot.getWorkspaceBySlug(workspaceSlug);
+    if (!workspaceDetails) return undefined;
+    const workspaceEstimateIds = Object.values(this.estimates || {})
+      .filter((p) => p.workspace === workspaceDetails.id)
       .map((p) => p.id) as string[];
-    return projectEstimatesIds ?? undefined;
+    return workspaceEstimateIds ?? undefined;
   });
 
   /**
    * @description get current active estimate id for a project
    * @returns { string | undefined }
    */
-  currentActiveEstimateIdByProjectId = computedFn((projectId: string): string | undefined => {
+  currentActiveEstimateIdByProjectId = computedFn((projectId: string | undefined): string | undefined => {
     if (!projectId) return undefined;
-    const currentActiveEstimateId = Object.values(this.estimates || {}).find(
-      (p) => p.project === projectId && p.last_used
+    const workspaceSlug = this.store.router.workspaceSlug || "";
+    const workspaceDetails = this.store.workspaceRoot.getWorkspaceBySlug(workspaceSlug);
+    if (!workspaceDetails) return undefined;
+    const currentActiveEstimate = Object.values(this.estimates || {}).find(
+      (p) => p.workspace === workspaceDetails.id && p.last_used
     );
-    return currentActiveEstimateId?.id ?? undefined;
+    return currentActiveEstimate?.id ?? undefined;
   });
 
   /**

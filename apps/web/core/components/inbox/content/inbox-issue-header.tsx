@@ -101,7 +101,8 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   }, [workItemTypes, workspaceSlug, fetchWorkItemTypes]);
 
   const projectTypes = (workItemTypes ?? []).filter(
-    (type) => !type.is_epic && type.is_active && type.project_ids.includes(projectId)
+    // Program P1/S3: work item types are workspace-level; no per-project filtering.
+    (type) => !type.is_epic && type.is_active
   );
   const selectedType = projectTypes.find((type) => type.id === issue?.type_id);
   const hasLinkedService = Object.values(workItemLinkMap).some(

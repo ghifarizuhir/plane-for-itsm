@@ -94,16 +94,11 @@ export class LabelStore implements ILabelStore {
   }
 
   /**
-   * Returns the labelMap belonging to the current project
+   * Returns the labelMap belonging to the current project.
+   * Program P1/S3: labels are workspace-level; project scoping removed.
    */
   get projectLabels() {
-    const projectId = this.rootStore.router.projectId;
-    const workspaceSlug = this.rootStore.router.workspaceSlug || "";
-    if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortBy(
-      Object.values(this.labelMap).filter((label) => label?.project_id === projectId),
-      "sort_order"
-    );
+    return this.getProjectLabels(this.rootStore.router.projectId);
   }
 
   /**
@@ -128,12 +123,11 @@ export class LabelStore implements ILabelStore {
   );
 
   getProjectLabels = computedFn((projectId: string | undefined | null) => {
+    // Program P1/S3: labels are workspace-level; the project argument is
+    // kept for call-site compatibility until the S9 rename.
     const workspaceSlug = this.rootStore.router.workspaceSlug || "";
     if (!projectId || !(this.fetchedMap[projectId] || this.fetchedMap[workspaceSlug])) return;
-    return sortBy(
-      Object.values(this.labelMap).filter((label) => label?.project_id === projectId),
-      "sort_order"
-    );
+    return this.getWorkspaceLabels(workspaceSlug);
   });
 
   /**
@@ -300,10 +294,10 @@ export class LabelStore implements ILabelStore {
    */
   deleteLabel = async (workspaceSlug: string, projectId: string, labelId: string) => {
     if (!this.labelMap[labelId]) return;
-    await this.issueLabelService.deleteIssueLabel(workspaceSlug, projectId, labelId).then(() => {
+    await this.issueLabelService.deleteIssueLabel(workspaceSlug, projectId, labelId).then(() =>
       runInAction(() => {
         delete this.labelMap[labelId];
-      });
-    });
+      })
+    );
   };
 }

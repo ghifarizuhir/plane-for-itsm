@@ -112,12 +112,13 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const workItemTypes = useMemo(
     () =>
       (allWorkItemTypes ?? [])
-        .filter((type) => !projectId || type.project_ids.includes(projectId))
+        // Program P1/S3: work item types are workspace-level; no per-project filtering.
+        .filter((type) => !type.is_epic && type.is_active)
         .map((type) => ({
           type_id: type.id,
           type_name: type.name,
         })),
-    [projectId, allWorkItemTypes]
+    [allWorkItemTypes]
   );
   const members: IUserLite[] | undefined = useMemo(
     () =>

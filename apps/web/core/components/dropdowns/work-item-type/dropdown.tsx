@@ -29,7 +29,6 @@ export type TWorkItemTypeDropdownProps = TDropdownProps & {
   dropdownArrowClassName?: string;
   onChange: (typeId: string) => void;
   onClose?: () => void;
-  projectId: string | undefined;
   value: string | null | undefined;
 };
 
@@ -45,7 +44,6 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
     onChange,
     onClose,
     placement,
-    projectId,
     showTooltip = false,
     tabIndex,
     value,
@@ -64,7 +62,8 @@ export const WorkItemTypeDropdown = observer(function WorkItemTypeDropdown(props
   const { workItemTypes } = useWorkItemType();
   // derived values: types enabled in this project, excluding epics and inactive types
   const projectTypes = (workItemTypes ?? []).filter(
-    (type) => !type.is_epic && type.is_active && (!projectId || type.project_ids.includes(projectId))
+    // Program P1/S3: work item types are workspace-level; no per-project filtering.
+    (type) => !type.is_epic && type.is_active
   );
   const selectedType = projectTypes.find((type) => type.id === value);
   const options = projectTypes.map((type) => ({

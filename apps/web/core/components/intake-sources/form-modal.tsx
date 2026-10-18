@@ -44,7 +44,8 @@ export const IntakeSourceFormModal = observer(function IntakeSourceFormModal(pro
   const { workItemTypes } = useWorkItemType();
   // derived values
   const projectTypes = (workItemTypes ?? []).filter(
-    (type) => !type.is_epic && type.is_active && type.project_ids.includes(projectId)
+    // Program P1/S3: work item types are workspace-level; no per-project filtering.
+    (type) => !type.is_epic && type.is_active
   );
   const serviceIds = getProjectServiceIds(projectId) ?? [];
 
