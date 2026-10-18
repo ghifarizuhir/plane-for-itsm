@@ -163,7 +163,7 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
   }
 
   const patch = (fields: Partial<TAiWorkItemProposal>) => setDraft((current) => ({ ...current, ...fields }));
-  const validationError = projectId ? validateWorkItemProposal(draft) : "Project is required.";
+  const validationError = projectId ? validateWorkItemProposal(draft) : "Application is required.";
 
   const toggleAssignee = (id: string, checked: boolean) =>
     setAssigneeIds((current) => (checked ? [...current, id] : current.filter((value) => value !== id)));
@@ -252,7 +252,7 @@ export const WorkItemProposalCard = observer(function WorkItemProposalCard({
           value={stateId}
           onChange={(event) => setStateId(event.target.value)}
         >
-          <option value="">Project default</option>
+          <option value="">Application default</option>
           {(states ?? []).map((state) => (
             <option key={state.id} value={state.id}>
               {state.name}

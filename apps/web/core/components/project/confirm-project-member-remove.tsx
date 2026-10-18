@@ -61,14 +61,14 @@ export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMember
           </div>
           <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
             <h3 className="text-16 leading-6 font-medium text-primary">
-              {isCurrentUser ? "Leave project?" : `Remove ${data?.display_name}?`}
+              {isCurrentUser ? "Leave application?" : `Remove ${data?.display_name}?`}
             </h3>
             <div className="mt-2">
               <p className="text-13 text-secondary">
                 {isCurrentUser ? (
                   <>
                     Are you sure you want to leave the <span className="font-bold">{currentProjectDetails?.name}</span>{" "}
-                    project? You will be able to join the project if invited again or if it{"'"}s public.
+                    application? You will be able to join the application if invited again or if it{"'"}s public.
                   </>
                 ) : (
                   <>
@@ -85,6 +85,7 @@ export const ConfirmProjectMemberRemove = observer(function ConfirmProjectMember
         <Button variant="secondary" size="lg" onClick={handleClose}>
           Cancel
         </Button>
+        {/* oxlint-disable-next-line jsx-a11y/tabindex-no-positive -- pre-existing legacy pattern, unchanged in S1 */}
         <Button variant="error-fill" size="lg" tabIndex={1} onClick={handleDeletion} loading={isDeleteLoading}>
           {isCurrentUser ? (isDeleteLoading ? "Leaving..." : "Leave") : isDeleteLoading ? "Removing..." : "Remove"}
         </Button>

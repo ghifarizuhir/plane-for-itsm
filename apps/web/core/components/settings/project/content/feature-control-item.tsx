@@ -44,7 +44,7 @@ export const ProjectSettingsFeatureControlItem = observer(function ProjectSettin
       loading: "Updating project feature...",
       success: {
         title: "Success!",
-        message: () => "Project feature updated successfully.",
+        message: () => "Application feature updated successfully.",
       },
       error: {
         title: "Error!",
@@ -66,7 +66,7 @@ export const ProjectSettingsFeatureControlItem = observer(function ProjectSettin
           checked={value}
           onCheckedChange={handleSubmit}
           disabled={disabled}
-          aria-label={typeof title === "string" ? title : "Toggle project feature"}
+          aria-label={typeof title === "string" ? title : "Toggle application feature"}
         />
       }
     />

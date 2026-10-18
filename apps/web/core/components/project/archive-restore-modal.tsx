@@ -56,7 +56,7 @@ export function ArchiveRestoreProjectModal(props: Props) {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
-          message: "Project could not be archived. Please try again.",
+          message: "Application could not be archived. Please try again.",
         })
       )
       .finally(() => setIsLoading(false));
@@ -79,7 +79,7 @@ export function ArchiveRestoreProjectModal(props: Props) {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
-          message: "Project could not be restored. Please try again.",
+          message: "Application could not be restored. Please try again.",
         })
       )
       .finally(() => setIsLoading(false));
@@ -103,6 +103,7 @@ export function ArchiveRestoreProjectModal(props: Props) {
           <Button
             variant="primary"
             size="lg"
+            // oxlint-disable-next-line jsx-a11y/tabindex-no-positive -- pre-existing legacy pattern, unchanged in S1
             tabIndex={1}
             onClick={archive ? handleArchiveProject : handleRestoreProject}
             loading={isLoading}

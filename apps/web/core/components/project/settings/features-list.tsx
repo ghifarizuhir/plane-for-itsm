@@ -88,7 +88,7 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
       loading: "Updating project feature...",
       success: {
         title: "Success!",
-        message: () => "Project feature updated successfully.",
+        message: () => "Application feature updated successfully.",
       },
       error: {
         title: "Error!",

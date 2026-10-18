@@ -45,7 +45,7 @@ export function ArchiveCycleModal(props: Props) {
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: "Archive success",
-          message: "Your archives can be found in project archives.",
+          message: "Your archives can be found in application archives.",
         });
         onClose();
         router.push(`/${workspaceSlug}/projects/${projectId}/cycles`);
@@ -72,6 +72,7 @@ export function ArchiveCycleModal(props: Props) {
           <Button variant="secondary" size="lg" onClick={onClose}>
             Cancel
           </Button>
+          {/* oxlint-disable-next-line jsx-a11y/tabindex-no-positive -- pre-existing legacy pattern, unchanged in S1 */}
           <Button variant="primary" size="lg" tabIndex={1} onClick={handleArchiveCycle} loading={isArchiving}>
             {isArchiving ? "Archiving" : "Archive"}
           </Button>

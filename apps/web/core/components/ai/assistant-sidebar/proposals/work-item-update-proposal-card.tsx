@@ -277,7 +277,7 @@ export const WorkItemUpdateProposalCard = observer(function WorkItemUpdatePropos
             value={stateId}
             onChange={(event) => setStateId(event.target.value)}
           >
-            <option value="">Project default</option>
+            <option value="">Application default</option>
             {(states ?? []).map((state) => (
               <option key={state.id} value={state.id}>
                 {state.name}

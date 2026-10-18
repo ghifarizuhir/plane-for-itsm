@@ -7,7 +7,7 @@
 import { useParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { WarningTriangleOutline } from "@makeplane/propel/icons";
-// Terraline imports
+// Plane imports
 import { Field } from "@makeplane/propel/components/field";
 import { Input, InputGroup } from "@makeplane/propel/components/input";
 import { Button } from "@plane/propel/button";
@@ -45,7 +45,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
     watch,
   } = useForm({ defaultValues });
 
-  const canDelete = watch("projectName") === project?.name && watch("confirmDelete") === "delete my project";
+  const canDelete = watch("projectName") === project?.name && watch("confirmDelete") === "delete my application";
 
   const handleClose = () => {
     const timer = setTimeout(() => {
@@ -66,7 +66,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Success!",
-        message: "Project deleted successfully.",
+        message: "Application deleted successfully.",
       });
     } catch (_error) {
       setToast({
@@ -85,18 +85,19 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
             <WarningTriangleOutline className="h-6 w-6 text-danger-primary" aria-hidden="true" />
           </span>
           <span className="flex items-center justify-start">
-            <h3 className="text-18 font-medium 2xl:text-20">Delete project</h3>
+            <h3 className="text-18 font-medium 2xl:text-20">Delete application</h3>
           </span>
         </div>
         <span>
           <p className="text-13 leading-7 text-secondary">
-            Are you sure you want to delete project <span className="font-semibold break-words">{project?.name}</span>?
-            All of the data related to the project will be permanently removed. This action cannot be undone
+            Are you sure you want to delete application{" "}
+            <span className="font-semibold break-words">{project?.name}</span>? All of the data related to the project
+            will be permanently removed. This action cannot be undone
           </p>
         </span>
         <div className="text-secondary">
           <p className="text-13 break-words">
-            Enter the project name <span className="font-medium text-primary">{project?.name}</span> to continue:
+            Enter the application name <span className="font-medium text-primary">{project?.name}</span> to continue:
           </p>
           <Controller
             control={control}
@@ -112,7 +113,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
                     value={value}
                     onChange={onChange}
                     ref={ref}
-                    placeholder="Project name"
+                    placeholder="Application name"
                     autoComplete="off"
                   />
                 </InputGroup>
@@ -122,7 +123,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
         </div>
         <div className="text-secondary">
           <p className="text-13">
-            To confirm, type <span className="font-medium text-primary">delete my project</span> below:
+            To confirm, type <span className="font-medium text-primary">delete my application</span> below:
           </p>
           <Controller
             control={control}
@@ -138,7 +139,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
                     value={value}
                     onChange={onChange}
                     ref={ref}
-                    placeholder="Enter 'delete my project'"
+                    placeholder="Enter 'delete my application'"
                     autoComplete="off"
                   />
                 </InputGroup>

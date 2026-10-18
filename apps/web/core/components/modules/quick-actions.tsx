@@ -55,13 +55,13 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
 
   const moduleLink = `${workspaceSlug}/projects/${projectId}/modules/${moduleId}`;
   const handleCopyText = () =>
-    copyUrlToClipboard(moduleLink).then(() => {
+    copyUrlToClipboard(moduleLink).then(() =>
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Link Copied!",
         message: "Module link copied to clipboard.",
-      });
-    });
+      })
+    );
   const handleOpenInNewTab = () => window.open(`/${moduleLink}`, "_blank");
 
   const handleRestoreModule = async () => {
@@ -70,7 +70,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: "Restore success",
-        message: "Your module can be found in project modules.",
+        message: "Your module can be found in application modules.",
       });
       router.push(`/${workspaceSlug}/projects/${projectId}/archives/modules`);
     } catch (_error) {

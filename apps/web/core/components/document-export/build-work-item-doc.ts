@@ -161,7 +161,7 @@ export async function buildWorkItemDocument(input: TWorkItemDocInput): Promise<B
   push("Labels", input.labelNames.join(", "));
   push("Start date", formatDate(input.startDate));
   push("Target date", formatDate(input.targetDate));
-  push("Project", input.projectName);
+  push("Application", input.projectName);
   push("Created", [input.createdBy, formatDate(input.createdAt)].filter(Boolean).join(" · "));
   push("Last updated", [input.updatedBy, formatDate(input.updatedAt)].filter(Boolean).join(" · "));
   children.push(gridTable(propertyRows));

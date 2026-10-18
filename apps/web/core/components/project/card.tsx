@@ -91,7 +91,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       loading: "Adding project to favorites...",
       success: {
         title: "Success!",
-        message: () => "Project added to favorites.",
+        message: () => "Application added to favorites.",
         actionItems: () => {
           if (!isFavoriteMenuOpen) toggleFavoriteMenu(true);
           return <></>;
@@ -112,7 +112,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       loading: "Removing project from favorites...",
       success: {
         title: "Success!",
-        message: () => "Project removed from favorites.",
+        message: () => "Application removed from favorites.",
       },
       error: {
         title: "Error!",
@@ -127,7 +127,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       setToast({
         type: TOAST_TYPE.INFO,
         title: "Link Copied!",
-        message: "Project link copied to clipboard.",
+        message: "Application link copied to clipboard.",
       })
     );
   const handleOpenInNewTab = () => window.open(`/${projectLink}`, "_blank");
@@ -319,6 +319,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
             {isArchived ? (
               hasAdminRole && (
                 <div className="flex items-center justify-center gap-2">
+                  {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- pre-existing legacy pattern, unchanged in S1 */}
                   <div
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {
@@ -332,6 +333,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       Restore
                     </div>
                   </div>
+                  {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- pre-existing legacy pattern, unchanged in S1 */}
                   <div
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {

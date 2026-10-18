@@ -120,7 +120,7 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
-          message: "Something went wrong while unpublishing the project.",
+          message: "Something went wrong while unpublishing the application.",
         })
       )
       .finally(() => setIsUnPublishing(false));
@@ -138,7 +138,7 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
       setToast({
         type: TOAST_TYPE.ERROR,
         title: "Error!",
-        message: "Please select at least one view layout to publish the project.",
+        message: "Please select at least one view layout to publish the application.",
       });
       return;
     }
@@ -181,7 +181,7 @@ export const PublishProjectModal = observer(function PublishProjectModal(props: 
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.XXL}>
       <form onSubmit={handleSubmit(handleFormSubmit)}>
         <div className="flex items-center justify-between gap-2 p-5">
-          <h5 className="text-18 font-medium text-secondary">Publish project</h5>
+          <h5 className="text-18 font-medium text-secondary">Publish application</h5>
           {isProjectPublished && (
             <Button
               variant="error-fill"

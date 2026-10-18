@@ -79,7 +79,7 @@ export async function buildPageDocument(input: TPageDocInput): Promise<Blob> {
     propertyLine("Created", [input.createdBy, formatDate(input.createdAt)].filter(Boolean).join(" · ")),
     propertyLine("Last updated", [input.updatedBy, formatDate(input.updatedAt)].filter(Boolean).join(" · ")),
     propertyLine("Labels", input.labelNames.join(", ")),
-    propertyLine("Project", input.projectName),
+    propertyLine("Application", input.projectName),
     propertyLine("Versions", input.versionCount !== undefined ? String(input.versionCount) : undefined),
   ]) {
     if (line) children.push(line);
