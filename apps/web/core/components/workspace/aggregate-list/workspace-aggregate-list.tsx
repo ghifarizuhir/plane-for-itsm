@@ -30,6 +30,7 @@ type Props = {
   isLoading?: boolean;
   emptyTitle: string;
   emptyDescription: string;
+  footer?: ReactNode;
 };
 
 export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
@@ -43,6 +44,7 @@ export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
   isLoading = false,
   emptyTitle,
   emptyDescription,
+  footer,
 }: Props) {
   const { t } = useTranslation();
   const { workspaceProjectIds, getProjectById } = useProject();
@@ -98,6 +100,7 @@ export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
               {group.items}
             </div>
           ))}
+          {footer}
         </div>
       )}
     </div>
