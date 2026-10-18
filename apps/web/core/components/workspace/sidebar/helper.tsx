@@ -8,10 +8,12 @@ import {
   AnalyticsOutline,
   ArchiveOutline,
   CalendarOutline,
+  CyclesOutline,
   DocumentationOutline,
   DraftsOutline,
   HomeOutline,
   InboxOutline,
+  ModuleOutline,
   MultipleStickyOutline,
   ProjectsOutline,
   ServerOutline,
@@ -30,6 +32,10 @@ export const getSidebarNavigationItemIcon = (key: string, className: string = ""
       return <ProjectsOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "services":
       return <ServerOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "sprints":
+      return <CyclesOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "tracks":
+      return <ModuleOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "views":
       return <ViewsOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "analytics":
