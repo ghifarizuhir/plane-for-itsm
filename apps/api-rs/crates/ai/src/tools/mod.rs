@@ -96,11 +96,7 @@ pub fn priority_arg(value: Option<&str>) -> Result<Option<String>, ToolExecution
 }
 
 /// Normalize a small enum argument (e.g. `action`) against an allowlist.
-pub fn enum_arg(
-    value: &str,
-    allowed: &[&str],
-    label: &str,
-) -> Result<String, ToolExecutionError> {
+pub fn enum_arg(value: &str, allowed: &[&str], label: &str) -> Result<String, ToolExecutionError> {
     let normalized = value.trim().to_ascii_lowercase();
     if allowed.contains(&normalized.as_str()) {
         Ok(normalized)
@@ -327,7 +323,19 @@ pub async fn ensure_feature(
     feature: ProjectFeature,
 ) -> Result<(), ToolExecutionError> {
     let (column, label) = feature_column(feature);
-    let sql = format!("SELECT {column} FROM projects WHERE id = $1 AND deleted_at IS NULL");
+    // Workspace-level gate (program P1/S2): the flag lives on
+    // `workspace_settings`, resolved through the project. Missing rows fall
+    // back to fresh-workspace defaults (S2 migration + GET ensure).
+    let default_lit = match feature {
+        ProjectFeature::Cycles | ProjectFeature::Modules | ProjectFeature::Pages => "true",
+        ProjectFeature::Intake => "false",
+    };
+    let sql = format!(
+        "SELECT COALESCE(ws.{column}, {default_lit}) FROM projects p \
+         LEFT JOIN workspace_settings ws ON ws.workspace_id = p.workspace_id \
+         AND ws.deleted_at IS NULL \
+         WHERE p.id = $1 AND p.deleted_at IS NULL"
+    );
     let enabled: Option<bool> = sqlx::query_scalar(&sql)
         .bind(project_id)
         .fetch_optional(pool)
@@ -336,7 +344,7 @@ pub async fn ensure_feature(
     match enabled {
         Some(true) => Ok(()),
         Some(false) => Err(ToolExecutionError::invalid_args(format!(
-            "the {label} feature is disabled in this project"
+            "the {label} feature is disabled in this workspace"
         ))),
         None => Err(ToolExecutionError::invalid_args("project was not found")),
     }
@@ -935,7 +943,12 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle() {
-        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
+        let _handle = workspace_tools(
+            lazy_pool(),
+            Uuid::nil(),
+            Uuid::nil(),
+            crate::agent::new_trace(),
+        );
     }
 
     #[tokio::test]
@@ -1293,7 +1306,12 @@ mod tests {
 
     #[tokio::test]
     async fn workspace_tools_builds_a_server_handle_with_create_work_item() {
-        let _handle = workspace_tools(lazy_pool(), Uuid::nil(), Uuid::nil(), crate::agent::new_trace());
+        let _handle = workspace_tools(
+            lazy_pool(),
+            Uuid::nil(),
+            Uuid::nil(),
+            crate::agent::new_trace(),
+        );
     }
 
     #[tokio::test]
@@ -1496,18 +1514,32 @@ mod tests {
         );
         assert_eq!(parse_work_item_ref(" lts-7 ").unwrap().project, "lts");
         for bad in ["LTS", "LTS-0", "LTS--1", "LTS-abc", "-5"] {
-            assert!(parse_work_item_ref(bad).is_err(), "{bad} should be rejected");
+            assert!(
+                parse_work_item_ref(bad).is_err(),
+                "{bad} should be rejected"
+            );
         }
     }
 
     #[test]
     fn pick_project_prefers_identifier_then_exact_name_then_unique_substring() {
         let rows = vec![
-            ProjectRow { id: Uuid::from_u128(1), identifier: "LTS".into(), name: "Logistics".into() },
-            ProjectRow { id: Uuid::from_u128(2), identifier: "OPS".into(), name: "Operations".into() },
+            ProjectRow {
+                id: Uuid::from_u128(1),
+                identifier: "LTS".into(),
+                name: "Logistics".into(),
+            },
+            ProjectRow {
+                id: Uuid::from_u128(2),
+                identifier: "OPS".into(),
+                name: "Operations".into(),
+            },
         ];
         assert_eq!(pick_project(&rows, "lts").unwrap().id, Uuid::from_u128(1));
-        assert_eq!(pick_project(&rows, "logistics").unwrap().id, Uuid::from_u128(1));
+        assert_eq!(
+            pick_project(&rows, "logistics").unwrap().id,
+            Uuid::from_u128(1)
+        );
         assert_eq!(pick_project(&rows, "oper").unwrap().id, Uuid::from_u128(2));
         assert!(pick_project(&rows, "o").is_err());
         assert!(pick_project(&[], "lts").is_err());
@@ -1532,8 +1564,14 @@ mod tests {
             feature_column(ProjectFeature::Modules),
             ("module_view", "tracks")
         );
-        assert_eq!(feature_column(ProjectFeature::Pages), ("page_view", "knowledge base"));
-        assert_eq!(feature_column(ProjectFeature::Intake), ("intake_view", "intake"));
+        assert_eq!(
+            feature_column(ProjectFeature::Pages),
+            ("page_view", "knowledge base")
+        );
+        assert_eq!(
+            feature_column(ProjectFeature::Intake),
+            ("intake_view", "intake")
+        );
     }
 
     #[tokio::test]

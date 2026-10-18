@@ -32,8 +32,9 @@ pub const ARTICLE_SEARCH_SQL: &str = "SELECT pa.id, pa.name, \
      JOIN project_pages pp ON pp.page_id = pa.id AND pp.deleted_at IS NULL \
      JOIN projects p ON p.id = pp.project_id AND p.deleted_at IS NULL \
        AND p.archived_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = pa.workspace_id AND ws_flags.deleted_at IS NULL \
      WHERE pa.workspace_id = $1 AND pa.deleted_at IS NULL AND pa.archived_at IS NULL \
-     AND p.page_view = true \
+     AND COALESCE(ws_flags.page_view, true) = true \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND (pa.access = 0 OR pa.owned_by_id = $2) \
@@ -139,11 +140,12 @@ pub struct ArticleDetailRow {
 }
 
 pub const ARTICLE_DETAIL_SQL: &str = "SELECT pa.id, pa.name, \
-     p.identifier AS project, pa.access, p.page_view AS page_view, \
+     p.identifier AS project, pa.access, COALESCE(ws_flags.page_view, true) AS page_view, \
      COALESCE(pa.description_stripped, '') AS description \
      FROM pages pa \
      JOIN project_pages pp ON pp.page_id = pa.id AND pp.deleted_at IS NULL \
      JOIN projects p ON p.id = pp.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = pa.workspace_id AND ws_flags.deleted_at IS NULL \
      WHERE pa.id = $1 AND pa.workspace_id = $2 AND pa.deleted_at IS NULL \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL) \
@@ -243,7 +245,7 @@ impl Tool for GetArticle {
         };
         if !row.page_view {
             return Err(ToolExecutionError::invalid_args(
-                "the knowledge base feature is disabled in this project",
+                "the knowledge base feature is disabled in this workspace",
             ));
         }
         let sub_pages: Vec<String> = sqlx::query_scalar(ARTICLE_SUBPAGES_SQL)
@@ -261,7 +263,12 @@ impl Tool for GetArticle {
             .fetch_all(&self.pool)
             .await
             .map_err(db_error)?;
-        Ok(article_detail_json(&row, &sub_pages, &labels, &linked_issues))
+        Ok(article_detail_json(
+            &row,
+            &sub_pages,
+            &labels,
+            &linked_issues,
+        ))
     }
 }
 
@@ -279,11 +286,13 @@ mod tests {
             updated_at: "2026-10-01 00:00:00+00".to_string(),
             snippet: "How to restart the API".to_string(),
         }];
-        let parsed: serde_json::Value =
-            serde_json::from_str(&articles_json(&rows)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&articles_json(&rows)).unwrap();
         assert_eq!(parsed["returned"], json!(1));
         assert_eq!(parsed["items"][0]["name"], json!("Runbook: restart API"));
-        assert_eq!(parsed["items"][0]["snippet"], json!("How to restart the API"));
+        assert_eq!(
+            parsed["items"][0]["snippet"],
+            json!("How to restart the API")
+        );
     }
 
     #[test]
@@ -366,6 +375,7 @@ mod tests {
             assert!(sql.contains("project_members"));
             assert!(sql.contains("pa.access = 0 OR pa.owned_by_id"));
         }
-        assert!(ARTICLE_SEARCH_SQL.contains("p.page_view = true"));
+        assert!(ARTICLE_SEARCH_SQL.contains("COALESCE(ws_flags.page_view, true)"));
+        assert!(ARTICLE_DETAIL_SQL.contains("COALESCE(ws_flags.page_view, true)"));
     }
 }

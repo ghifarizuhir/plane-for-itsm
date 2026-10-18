@@ -284,10 +284,11 @@ pub const INTAKE_DETAIL_SQL: &str = "SELECT ii.id AS intake_issue_id, \
      p.identifier || '-' || i.sequence_id AS identifier, i.name, i.priority, \
      COALESCE(ii.source, '') AS source, ii.status AS intake_status, \
      ii.snoozed_till::text AS snoozed_till, ii.created_at::text AS created_at, \
-     p.identifier AS project, p.intake_view AS intake_view \
+     p.identifier AS project, COALESCE(ws_flags.intake_view, false) AS intake_view \
      FROM intake_issues ii \
      JOIN issues i ON i.id = ii.issue_id AND i.deleted_at IS NULL \
      JOIN projects p ON p.id = ii.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = ii.workspace_id AND ws_flags.deleted_at IS NULL \
      WHERE ii.issue_id = $1 AND ii.workspace_id = $2 AND ii.deleted_at IS NULL \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL)";
@@ -383,7 +384,7 @@ impl Tool for GetIntakeItem {
         };
         if !row.intake_view {
             return Err(ToolExecutionError::invalid_args(
-                "the intake feature is disabled in this project",
+                "the intake feature is disabled in this workspace",
             ));
         }
         let suggestion: Option<SuggestionRow> = sqlx::query_as(INTAKE_SUGGESTION_SQL)
@@ -451,7 +452,10 @@ mod tests {
         let parsed: serde_json::Value =
             serde_json::from_str(&intake_items_json(&rows, "pending")).unwrap();
         assert_eq!(parsed["status"], json!("pending"));
-        assert_eq!(parsed["items"][0]["suggestion"]["category"], json!("Incident"));
+        assert_eq!(
+            parsed["items"][0]["suggestion"]["category"],
+            json!("Incident")
+        );
         assert_eq!(parsed["items"][0]["suggestion"]["service"], json!("API"));
         assert_eq!(parsed["items"][1]["suggestion"], json!(null));
     }

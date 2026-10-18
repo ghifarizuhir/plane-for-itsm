@@ -60,9 +60,10 @@ pub const SPRINTS_SQL: &str = "SELECT * FROM (SELECT c.id, c.name, \
      FROM cycles c \
      JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL \
        AND p.archived_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = c.workspace_id AND ws_flags.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = c.owned_by_id \
      WHERE c.workspace_id = $1 AND c.deleted_at IS NULL AND c.archived_at IS NULL \
-     AND p.cycle_view = true \
+     AND COALESCE(ws_flags.cycle_view, true) = true \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND ($3::uuid IS NULL OR p.id = $3) \
@@ -204,9 +205,10 @@ pub const SPRINTS_BY_NAME_SQL: &str = "SELECT c.id, c.name, p.identifier AS proj
      0::int8 AS completed \
      FROM cycles c \
      JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = c.workspace_id AND ws_flags.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = c.owned_by_id \
      WHERE c.workspace_id = $1 AND c.deleted_at IS NULL AND c.archived_at IS NULL \
-     AND p.cycle_view = true \
+     AND COALESCE(ws_flags.cycle_view, true) = true \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND (lower(c.name) = lower($3) OR c.name ILIKE '%' || $3 || '%') \
@@ -478,17 +480,16 @@ impl Tool for ListSprintWorkItems {
             project.as_ref(),
         )
         .await?;
-        let rows: Vec<crate::tools::work_items::SearchRow> =
-            sqlx::query_as(SPRINT_ITEMS_SQL)
-                .bind(sprint.id)
-                .bind(&state_group)
-                .bind(&assignee)
-                .bind(assignee_me)
-                .bind(self.user_id)
-                .bind(limit)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(db_error)?;
+        let rows: Vec<crate::tools::work_items::SearchRow> = sqlx::query_as(SPRINT_ITEMS_SQL)
+            .bind(sprint.id)
+            .bind(&state_group)
+            .bind(&assignee)
+            .bind(assignee_me)
+            .bind(self.user_id)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_error)?;
         Ok(crate::tools::work_items::search_json(&rows))
     }
 }
@@ -521,8 +522,7 @@ mod tests {
             total: 12,
             completed: 5,
         }];
-        let parsed: serde_json::Value =
-            serde_json::from_str(&sprints_json(&rows)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&sprints_json(&rows)).unwrap();
         assert_eq!(parsed["returned"], json!(1));
         assert_eq!(parsed["items"][0]["name"], json!("Sprint 3"));
         assert_eq!(parsed["items"][0]["status"], json!("current"));
@@ -533,7 +533,8 @@ mod tests {
     fn sprints_sql_is_scoped_guarded_and_gated() {
         assert!(SPRINTS_SQL.contains("workspace_id = $1"));
         assert!(SPRINTS_SQL.contains("project_members"));
-        assert!(SPRINTS_SQL.contains("p.cycle_view = true"));
+        assert!(SPRINTS_SQL.contains("COALESCE(ws_flags.cycle_view, true)"));
+        assert!(SPRINTS_BY_NAME_SQL.contains("COALESCE(ws_flags.cycle_view, true)"));
         assert!(SPRINTS_SQL.contains("c.deleted_at IS NULL"));
     }
 
@@ -554,7 +555,10 @@ mod tests {
     #[test]
     fn pick_sprint_prefers_exact_then_unique_substring() {
         let rows = vec![sprint("Sprint 3", "LTS"), sprint("Sprint 30", "LTS")];
-        assert_eq!(pick_sprint(rows.clone(), "sprint 3").unwrap().name, "Sprint 3");
+        assert_eq!(
+            pick_sprint(rows.clone(), "sprint 3").unwrap().name,
+            "Sprint 3"
+        );
         assert!(pick_sprint(rows, "sprint").is_err());
         assert!(pick_sprint(vec![], "sprint 3").is_err());
     }

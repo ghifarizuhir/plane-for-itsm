@@ -66,9 +66,10 @@ pub const TRACKS_SQL: &str = "SELECT m.id, m.name, p.identifier AS project, m.st
      FROM modules m \
      JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL \
        AND p.archived_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = m.workspace_id AND ws_flags.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = m.lead_id \
      WHERE m.workspace_id = $1 AND m.deleted_at IS NULL AND m.archived_at IS NULL \
-     AND p.module_view = true \
+     AND COALESCE(ws_flags.module_view, true) = true \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND ($3::uuid IS NULL OR p.id = $3) \
@@ -135,9 +136,10 @@ pub const TRACKS_BY_NAME_SQL: &str = "SELECT m.id, m.name, p.identifier AS proje
      m.start_date::text AS start_date, m.target_date::text AS target_date \
      FROM modules m \
      JOIN projects p ON p.id = m.project_id AND p.deleted_at IS NULL \
+     LEFT JOIN workspace_settings ws_flags ON ws_flags.workspace_id = m.workspace_id AND ws_flags.deleted_at IS NULL \
      LEFT JOIN users u ON u.id = m.lead_id \
      WHERE m.workspace_id = $1 AND m.deleted_at IS NULL AND m.archived_at IS NULL \
-     AND p.module_view = true \
+     AND COALESCE(ws_flags.module_view, true) = true \
      AND EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id \
        AND pm.member_id = $2 AND pm.is_active = true AND pm.deleted_at IS NULL) \
      AND (lower(m.name) = lower($3) OR m.name ILIKE '%' || $3 || '%') \
@@ -414,7 +416,11 @@ impl Tool for GetTrack {
                 .await
                 .map_err(db_error)?;
         Ok(track_detail_json(
-            &row, &members, &links, &counts, &open_items,
+            &row,
+            &members,
+            &links,
+            &counts,
+            &open_items,
         ))
     }
 }
@@ -554,18 +560,18 @@ mod tests {
     #[test]
     fn pick_track_prefers_exact_then_unique_substring() {
         let rows = vec![track("Payments", "LTS"), track("Payments v2", "LTS")];
-        assert_eq!(pick_track(rows.clone(), "payments").unwrap().name, "Payments");
+        assert_eq!(
+            pick_track(rows.clone(), "payments").unwrap().name,
+            "Payments"
+        );
         assert!(pick_track(rows, "pay").is_err());
         assert!(pick_track(vec![], "payments").is_err());
     }
 
     #[test]
     fn tracks_json_shape() {
-        let parsed: serde_json::Value = serde_json::from_str(&tracks_json(&[track(
-            "Payments",
-            "LTS",
-        )]))
-        .unwrap();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&tracks_json(&[track("Payments", "LTS")])).unwrap();
         assert_eq!(parsed["returned"], json!(1));
         assert_eq!(parsed["items"][0]["status"], json!("planned"));
     }
@@ -605,7 +611,8 @@ mod tests {
     fn tracks_sql_is_scoped_guarded_and_gated() {
         assert!(TRACKS_SQL.contains("workspace_id = $1"));
         assert!(TRACKS_SQL.contains("project_members"));
-        assert!(TRACKS_SQL.contains("p.module_view = true"));
+        assert!(TRACKS_SQL.contains("COALESCE(ws_flags.module_view, true)"));
+        assert!(TRACKS_BY_NAME_SQL.contains("COALESCE(ws_flags.module_view, true)"));
     }
 
     #[tokio::test]
