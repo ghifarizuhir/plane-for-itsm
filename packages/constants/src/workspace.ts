@@ -196,6 +196,7 @@ export interface IWorkspaceSidebarNavigationItem {
   href: string;
   access: EUserWorkspaceRoles[];
   highlight: (pathname: string, url: string) => boolean;
+  flag?: "cycle_view" | "module_view" | "page_view" | "intake_view";
 }
 
 export const WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS: Record<string, IWorkspaceSidebarNavigationItem> = {
@@ -256,6 +257,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     href: `/sprints/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
+    flag: "cycle_view",
   },
   tracks: {
     key: "tracks",
@@ -263,6 +265,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     href: `/tracks/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
+    flag: "module_view",
   },
   services: {
     key: "services",
@@ -277,6 +280,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     href: `/kb/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
+    flag: "page_view",
   },
   intake: {
     key: "intake",
@@ -284,6 +288,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     href: `/intake/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
+    flag: "intake_view",
   },
   "your-work": {
     key: "your_work",

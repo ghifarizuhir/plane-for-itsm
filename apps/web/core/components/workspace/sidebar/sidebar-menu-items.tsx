@@ -6,12 +6,14 @@
 
 import React, { useMemo } from "react";
 import { observer } from "mobx-react";
+import useSWR from "swr";
 import { ChevronRightOutline, MoreHorizontalOutline } from "@makeplane/propel/icons";
 import { Disclosure, Transition } from "@headlessui/react";
 import { useParams } from "next/navigation";
 // plane imports
 import {
   EUserPermissionsLevel,
+  WORKSPACE_SETTINGS_KEY,
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
   WORKSPACE_SIDEBAR_PERSONAL_GROUP,
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS,
@@ -31,6 +33,9 @@ import {
   useWorkspaceNavigationPreferences,
 } from "@/hooks/use-navigation-preferences";
 import { SidebarItemBase } from "./sidebar-item";
+import { isNavItemVisibleByFlag } from "./sidebar-flag-gating";
+// services
+import { WorkspaceSettingsService } from "@/services/workspace/workspace-settings.service";
 
 export const SidebarMenuItems = observer(function SidebarMenuItems() {
   // routers
@@ -44,6 +49,12 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   const { allowPermissions } = useUserPermissions();
   // router params
   const { workspaceSlug } = useParams();
+  // workspace feature settings (fail-open: missing row keeps every item visible)
+  const workspaceSettingsService = useMemo(() => new WorkspaceSettingsService(), []);
+  const wsSlug = workspaceSlug?.toString() || "";
+  const { data: workspaceSettings } = useSWR(wsSlug ? WORKSPACE_SETTINGS_KEY(wsSlug) : null, () =>
+    workspaceSettingsService.fetchSettings(wsSlug)
+  );
   // hooks
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { preferences: workspacePreferences } = useWorkspaceNavigationPreferences();
@@ -57,15 +68,18 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   // Static navigation items grouped by domain. Groups with no visible
   // items for the current role are hidden entirely (e.g. guests).
   const visibleStaticGroups = useMemo(() => {
-    const slug = workspaceSlug?.toString() || "";
     return WORKSPACE_SIDEBAR_STATIC_NAVIGATION_GROUPS.map((group) => ({
       key: group.key,
       labelTranslationKey: group.labelTranslationKey,
       items: group.itemKeys
         .map((key) => WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS[key])
-        .filter((item) => allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, slug)),
+        .filter(
+          (item) =>
+            allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, wsSlug) &&
+            isNavItemVisibleByFlag(item, workspaceSettings)
+        ),
     })).filter((group) => group.items.length > 0);
-  }, [workspaceSlug, allowPermissions]);
+  }, [wsSlug, allowPermissions, workspaceSettings]);
 
   // Personal navigation items appended after the groups, unchanged behaviour
   const personalItems = useMemo(() => {
