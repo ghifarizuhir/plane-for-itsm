@@ -168,7 +168,7 @@
       "confirm_message": "Are you sure you want to archive the ticket? All your archived tickets can be restored later.",
       "success": {
         "label": "Archive success",
-        "message": "Your archives can be found in project archives."
+        "message": "Your archives can be found in application archives."
       },
       "failed": {
         "message": "Ticket could not be archived. Please try again."
@@ -177,7 +177,7 @@
     "restore": {
       "success": {
         "title": "Restore success",
-        "message": "Your ticket can be found in project tickets."
+        "message": "Your ticket can be found in application tickets."
       },
       "failed": {
         "message": "Ticket could not be restored. Please try again."
@@ -216,10 +216,10 @@
     "open_in_full_screen": "Open ticket in full screen",
     "duplicate": {
       "modal": {
-        "title": "Make a copy to another project",
+        "title": "Make a copy to another application",
         "description1": "This creates a copy of the ticket.",
         "description2": "All property data will be removed while duplicating.",
-        "placeholder": "Select a project"
+        "placeholder": "Select an application"
       }
     },
     "toast": {
@@ -355,7 +355,7 @@
       },
       "create_button": {
         "label": "Create recurring ticket",
-        "no_permission": "Contact your project admin to create recurring tickets"
+        "no_permission": "Contact your application admin to create recurring tickets"
       }
     },
     "empty_state": {

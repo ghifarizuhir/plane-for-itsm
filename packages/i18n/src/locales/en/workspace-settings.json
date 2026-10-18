@@ -3,7 +3,7 @@
     "label": "Workspace settings",
     "page_label": "{workspace} - General settings",
     "key_created": "Key created",
-    "copy_key": "Copy and save this secret key in Terraline Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
+    "copy_key": "Copy and save this secret key in Plane Pages. You can't see this key after you hit Close. A CSV file containing the key has been downloaded.",
     "token_copied": "Token copied to clipboard.",
     "settings": {
       "general": {
@@ -67,12 +67,12 @@
       },
       "exports": {
         "heading": "Exports",
-        "description": "Export your project data in various formats and access your export history with download links.",
+        "description": "Export your application data in various formats and access your export history with download links.",
         "title": "Exports",
         "exporting": "Exporting",
         "previous_exports": "Previous exports",
         "export_separate_files": "Export the data into separate files",
-        "exporting_projects": "Exporting project",
+        "exporting_projects": "Exporting application",
         "format": "Format",
         "filters_info": "Apply filters to export specific work items based on your criteria.",
         "modal": {
@@ -116,7 +116,7 @@
       },
       "webhooks": {
         "heading": "Webhooks",
-        "description": "Automate notifications to external services when project events occur.",
+        "description": "Automate notifications to external services when application events occur.",
         "title": "Webhooks",
         "add_webhook": "Add webhook",
         "modal": {
@@ -178,7 +178,7 @@
         "generating": "Generating",
         "delete": {
           "title": "Delete access token",
-          "description": "Any application using this token will no longer have the access to Terraline data. This action cannot be undone.",
+          "description": "Any application using this token will no longer have the access to Plane data. This action cannot be undone.",
           "success": {
             "title": "Success!",
             "message": "The token has been successfully deleted"
@@ -193,33 +193,33 @@
         "title": "Integrations",
         "heading": "Integrations",
         "description": "Connect with popular tools and services to sync your work across your entire workflow ecosystem.",
-        "page_title": "Work with your Terraline data in available apps or your own.",
+        "page_title": "Work with your Plane data in available apps or your own.",
         "page_description": "View all the integrations in use by this workspace or you."
       },
       "imports": {
         "title": "Imports",
         "heading": "Imports",
-        "description": "Connect and import data from your existing project management tools to streamline your workflow integration."
+        "description": "Connect and import data from your existing application management tools to streamline your workflow integration."
       },
       "worklogs": {
         "title": "Worklogs",
         "heading": "Worklogs",
-        "description": "Download worklogs AKA timesheets for anyone in any project."
+        "description": "Download worklogs AKA timesheets for anyone in any application."
       },
       "group_syncing": {
         "title": "Group syncing",
         "heading": "Group syncing",
-        "description": "Link identity provider groups to projects and roles. User access updates automatically when group membership changes in your IdP, simplifying onboarding and offboarding.",
+        "description": "Link identity provider groups to applications and roles. User access updates automatically when group membership changes in your IdP, simplifying onboarding and offboarding.",
         "enable": {
           "title": "Enable group syncing",
-          "description": "Automatically add users to projects based on identity provider groups."
+          "description": "Automatically add users to applications based on identity provider groups."
         },
         "config": {
           "title": "Configure group sync",
-          "description": "Set up how identity provider groups are mapped to projects and roles.",
+          "description": "Set up how identity provider groups are mapped to applications and roles.",
           "sync_on_login": {
             "title": "Sync on login",
-            "description": "Update group membership and project access when a user signs in."
+            "description": "Update group membership and application access when a user signs in."
           },
           "sync_offline": {
             "title": "Offline sync",
@@ -227,7 +227,7 @@
           },
           "auto_remove": {
             "title": "Auto remove",
-            "description": "Automatically remove users from projects when they no longer match the group."
+            "description": "Automatically remove users from applications when they no longer match the group."
           },
           "group_attribute_key": {
             "title": "Group attribute key",
@@ -237,7 +237,7 @@
         },
         "group_mapping": {
           "title": "Group mapping",
-          "description": "Link identity provider groups to projects and roles.",
+          "description": "Link identity provider groups to applications and roles.",
           "button_text": "Add new group sync"
         },
         "toast": {
@@ -247,7 +247,7 @@
         },
         "delete_modal": {
           "title": "Delete group sync",
-          "content": "New users from this identity group will no longer be added to the project. Users already added will keep their current role."
+          "content": "New users from this identity group will no longer be added to the application. Users already added will keep their current role."
         },
         "modal": {
           "idp_group_name": {
@@ -256,14 +256,14 @@
             "placeholder": "Enter the IdP group names"
           },
           "project": {
-            "text": "Project",
-            "required": "Project is required",
-            "placeholder": "Select a project"
+            "text": "Application",
+            "required": "Application is required",
+            "placeholder": "Select an application"
           },
           "default_role": {
-            "text": "Project role",
-            "required": "Project role is required",
-            "placeholder": "Select a project role"
+            "text": "Application role",
+            "required": "Application role is required",
+            "placeholder": "Select an application role"
           }
         }
       },
@@ -273,23 +273,23 @@
         "description": "Configure your domain and enable Single sign-on"
       },
       "project_states": {
-        "title": "Project states",
-        "heading": "See progress overview for all projects.",
-        "description": "Project States is a Terraline-only feature for tracking progress of all your projects by any project property.",
+        "title": "Application states",
+        "heading": "See progress overview for all applications.",
+        "description": "Application States is a Plane-only feature for tracking progress of all your applications by any application property.",
         "go_to_settings": "Go to settings"
       },
       "projects": {
-        "title": "Projects",
-        "description": "Manage project states, and enable project labels, and other configuration.",
+        "title": "Applications",
+        "description": "Manage application states, and enable application labels, and other configuration.",
         "tabs": {
-          "states": "Project states",
-          "labels": "Project labels"
+          "states": "Application states",
+          "labels": "Application labels"
         }
       },
       "templates": {
         "title": "Templates",
         "heading": "Templates",
-        "description": "Save 80% time spent on creating projects, work items, and pages when you use templates."
+        "description": "Save 80% time spent on creating applications, work items, and pages when you use templates."
       },
       "relations": {
         "title": "Relations",
@@ -320,14 +320,14 @@
         "install": "Install",
         "installed": "Installed",
         "configure": "Configure",
-        "app_available": "You have made this app available to use with a Terraline workspace",
+        "app_available": "You have made this app available to use with a Plane workspace",
         "app_credentials_regenrated": {
           "title": "App credentials successfully re-generated",
           "description": "Replace the client secret everywhere it's used. The previous secret is no longer valid."
         },
         "app_created": {
           "title": "App created successfully",
-          "description": "Use the credentials to install the app in a Terraline workspace"
+          "description": "Use the credentials to install the app in a Plane workspace"
         },
         "installed_apps": "Installed apps",
         "all_apps": "All apps",
@@ -368,10 +368,10 @@
         },
         "redirect_uris": {
           "label": "Redirect URIs (space separated)",
-          "description": "Users will be redirected to this path after they have authenticated with Terraline.",
+          "description": "Users will be redirected to this path after they have authenticated with Plane.",
           "placeholder": "https://example.com https://example.com/"
         },
-        "app_available_description": "Connect a Terraline workspace to start using it",
+        "app_available_description": "Connect a Plane workspace to start using it",
         "client_id_and_secret": "Client ID and Secret",
         "client_id_and_secret_description": "Copy and save this secret key in Pages. You can't see this key again after you hit Close.",
         "client_id_and_secret_download": "You can download a CSV with the key from here.",
@@ -420,12 +420,12 @@
         "workspace_permissions": "Workspace permissions",
         "workspace_permissions_description": "Workspace permissions are used to grant access to the workspace.",
         "with_the_permissions": "with the permissions",
-        "app_consent_title": "{app} is requesting access to your Terraline workspace and profile.",
+        "app_consent_title": "{app} is requesting access to your Plane workspace and profile.",
         "choose_workspace_to_connect_app_with": "Choose a workspace to connect the app with",
         "app_consent_workspace_permissions_title": "{app} would like",
         "app_consent_user_permissions_title": "{app} can also request a user's permission to the following resources. These permissions will be requested and authorized of and by a user only.",
         "app_consent_accept_title": "By accepting, you",
-        "app_consent_accept_1": "Grant the app access to your Terraline data wherever you can use the app in or outside Terraline",
+        "app_consent_accept_1": "Grant the app access to your Plane data wherever you can use the app in or outside Plane",
         "app_consent_accept_2": "Agree to {app}'s Privacy Policy and Terms Of Use",
         "accepting": "Accepting...",
         "accept": "Accept",
@@ -467,7 +467,7 @@
         "upload_and_save": "Upload & Save",
         "app_consent_no_access_title": "Request to install",
         "app_consent_no_access_description": "This app can only be installed after a workspace admin installs it. Contact your workspace admin to proceed.",
-        "app_consent_unapproved_title": "This app hasn't been reviewed or approved by Terraline yet.",
+        "app_consent_unapproved_title": "This app hasn't been reviewed or approved by Plane yet.",
         "app_consent_unapproved_description": "Make sure you trust this app before connecting it to your workspace.",
         "go_to_app": "Go to app",
         "enable_app_mentions": "Enable App Mentions",
@@ -476,13 +476,13 @@
         "select_scopes": "Select Scopes",
         "read_access_to": "Read-only access to",
         "write_access_to": "Write access to",
-        "global_permission_expiration": "Global scopes are expiring soon. Use granular scopes instead. For example, use project:read instead of a global read.",
+        "global_permission_expiration": "Global scopes are expiring soon. Use granular scopes instead. For example, use application:read instead of a global read.",
         "selected_scopes": "{count} selected",
         "scopes_and_permissions": "Scopes & Permissions",
         "read": "Read",
         "write": "Write",
         "scope_description": {
-          "projects": "Access to projects, and all project related entities",
+          "projects": "Access to applications, and all application related entities",
           "wiki": "Access to wiki, and all wiki related entities",
           "workspaces": "Access to workspaces, and all workspace related entities",
           "stickies": "Access to stickies, and all sticky related entities",
@@ -492,12 +492,12 @@
         }
       },
       "plane-intelligence": {
-        "title": "Terraline AI",
-        "heading": "Terraline AI",
+        "title": "Plane AI",
+        "heading": "Plane AI",
         "description": "See your work get smarter and faster with AI that is natively connected to your work and knowledge base. "
       },
       "runners": {
-        "title": "Terraline Runner",
+        "title": "Plane Runner",
         "heading": "Scripts",
         "new_script": "New Script",
         "description": "Automate your workflows with custom scripts and automation rules."
@@ -530,7 +530,7 @@
     "empty_state": {
       "api_tokens": {
         "title": "No access tokens created",
-        "description": "Terraline APIs can be used to integrate your data in Terraline with any external system. Create a token to get started."
+        "description": "Plane APIs can be used to integrate your data in Plane with any external system. Create a token to get started."
       },
       "webhooks": {
         "title": "No webhooks added",

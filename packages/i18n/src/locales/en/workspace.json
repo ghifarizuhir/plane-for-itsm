@@ -53,13 +53,13 @@
   "workspace_dashboard": {
     "empty_state": {
       "general": {
-        "title": "Overview of your projects, activity, and metrics",
-        "description": "Welcome to Plane. Create your first project, add your services, and start tracking requests and work items — this page will turn into your operations overview.",
+        "title": "Overview of your applications, activity, and metrics",
+        "description": "Welcome to Plane. Create your first application, add your services, and start tracking requests and work items — this page will turn into your operations overview.",
         "primary_button": {
-          "text": "Build your first project",
+          "text": "Build your first application",
           "comic": {
-            "title": "Everything starts with a project in Plane",
-            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
+            "title": "Everything starts with an application in Plane",
+            "description": "An application could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       }
@@ -71,7 +71,7 @@
     "open_tasks": "Total open tickets",
     "error": "There was some error in fetching the data.",
     "work_items_closed_in": "Tickets closed in",
-    "selected_projects": "Selected projects",
+    "selected_projects": "Selected applications",
     "total_members": "Total members",
     "total_cycles": "Total sprints",
     "total_modules": "Total tracks",
@@ -100,11 +100,11 @@
     "backlog_work_items": "Backlog {entity}",
     "un_started_work_items": "Unstarted {entity}",
     "completed_work_items": "Completed {entity}",
-    "project_insights": "Project Insights",
-    "summary_of_projects": "Summary of Projects",
-    "all_projects": "All Projects",
+    "project_insights": "Application Insights",
+    "summary_of_projects": "Summary of Applications",
+    "all_projects": "All Applications",
     "trend_on_charts": "Trend on charts",
-    "active_projects": "Active Projects",
+    "active_projects": "Active Applications",
     "customized_insights": "Customized Insights",
     "created_vs_resolved": "Opened vs Resolved",
     "empty_state": {
@@ -124,7 +124,7 @@
         "title": "Track ticket throughput, on-call load, and SLA trends",
         "description": "See how tickets move from open to resolved, where time goes, and how your service team performs — so services stay on track.",
         "primary_button": {
-          "text": "Start your first project",
+          "text": "Start your first application",
           "comic": {
             "title": "Reports work best with Sprints + Tracks",
             "description": "First, timebox your tickets into Sprints and group longer efforts into Tracks. Check out both on the left nav."
@@ -146,14 +146,14 @@
     },
     "upgrade_to_plan": "Upgrade to {plan} to unlock {tab}",
     "workitem_resolved_vs_pending": "Tickets resolved vs pending",
-    "projects_by_status": "Projects by status",
+    "projects_by_status": "Applications by status",
     "active_users": "Active users",
     "intake_trends": "Intake Trends"
   },
   "workspace_projects": {
-    "label": "{count, plural, one {Project} other {Projects}}",
+    "label": "{count, plural, one {Application} other {Applications}}",
     "create": {
-      "label": "Add Project"
+      "label": "Add Application"
     },
     "network": {
       "label": "Network",
@@ -186,7 +186,7 @@
       "members_length": "Number of members"
     },
     "scope": {
-      "my_projects": "My projects",
+      "my_projects": "My applications",
       "archived_projects": "Archived"
     },
     "common": {
@@ -195,33 +195,33 @@
     },
     "empty_state": {
       "general": {
-        "title": "No active projects",
-        "description": "Think of each project as the home for a service or an initiative. Projects are where services, requests, and work items live, and where your team keeps everything on track. Create a new project or filter for archived projects.",
+        "title": "No active applications",
+        "description": "Think of each application as the home for a service or an initiative. Applications are where services, requests, and work items live, and where your team keeps everything on track. Create a new application or filter for archived applications.",
         "primary_button": {
-          "text": "Start your first project",
+          "text": "Start your first application",
           "comic": {
-            "title": "Everything starts with a project in Plane",
-            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
+            "title": "Everything starts with an application in Plane",
+            "description": "An application could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       },
       "no_projects": {
-        "title": "No project",
-        "description": "To create work items or manage your work, you need to create a project or be a part of one.",
+        "title": "No application",
+        "description": "To create work items or manage your work, you need to create an application or be a part of one.",
         "primary_button": {
-          "text": "Start your first project",
+          "text": "Start your first application",
           "comic": {
-            "title": "Everything starts with a project in Plane",
-            "description": "A project could be a customer-facing API, an internal HR portal, or a payroll service."
+            "title": "Everything starts with an application in Plane",
+            "description": "An application could be a customer-facing API, an internal HR portal, or a payroll service."
           }
         }
       },
       "filter": {
-        "title": "No matching projects",
-        "description": "No projects detected with the matching criteria.\n Create a new project instead."
+        "title": "No matching applications",
+        "description": "No applications detected with the matching criteria.\n Create a new application instead."
       },
       "search": {
-        "description": "No projects detected with the matching criteria.\nCreate a new project instead"
+        "description": "No applications detected with the matching criteria.\nCreate a new application instead"
       }
     }
   },
@@ -229,8 +229,8 @@
     "add_view": "Add view",
     "empty_state": {
       "all-issues": {
-        "title": "No work items in the project",
-        "description": "First project done! Now break your work into trackable pieces with work items.",
+        "title": "No work items in the application",
+        "description": "First application done! Now break your work into trackable pieces with work items.",
         "primary_button": {
           "text": "Create new work item"
         }
@@ -290,7 +290,7 @@
     "empty_state": {
       "general": {
         "title": "Write a note, a doc, or a full knowledge base. Get Galileo, Plane's AI assistant, to help you get started",
-        "description": "Pages are your team's knowledge base in Plane. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your project's context. To make short work of any doc, invoke Galileo, Plane's AI, with a shortcut or the click of a button.",
+        "description": "Pages are your team's knowledge base in Plane. Write runbooks, SOPs, and postmortems, format them easily, embed work items, lay them out using a library of components, and keep them in your application's context. To make short work of any doc, invoke Galileo, Plane's AI, with a shortcut or the click of a button.",
         "primary_button": {
           "text": "Create your first page"
         }
@@ -323,7 +323,7 @@
     "empty_state": {
       "active": {
         "title": "No active cycles",
-        "description": "Cycles of your projects that includes any period that encompasses today's date within its range. Find the progress and details of all your active cycle here."
+        "description": "Cycles of your applications that includes any period that encompasses today's date within its range. Find the progress and details of all your active cycle here."
       }
     }
   },

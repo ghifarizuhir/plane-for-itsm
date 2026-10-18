@@ -132,7 +132,7 @@
       },
       "archived": {
         "title": "No archived sprints yet",
-        "description": "To tidy up your project, archive completed sprints. Find them here once archived."
+        "description": "To tidy up your application, archive completed sprints. Find them here once archived."
       }
     }
   },
@@ -140,7 +140,7 @@
     "empty_state": {
       "general": {
         "title": "Save queues for your service team. Create as many as you need",
-        "description": "Queues are saved ticket filters that you use frequently. All your colleagues in a project can see everyone's queues and choose whichever suits their on-call needs best.",
+        "description": "Queues are saved ticket filters that you use frequently. All your colleagues in an application can see everyone's queues and choose whichever suits their on-call needs best.",
         "primary_button": {
           "text": "Create your first queue",
           "comic": {
@@ -168,7 +168,7 @@
       },
       "public": {
         "title": "No public pages yet",
-        "description": "See pages shared with everyone in your project right here.",
+        "description": "See pages shared with everyone in your application right here.",
         "primary_button": {
           "text": "Create your first page"
         }
@@ -246,7 +246,7 @@
       },
       "archived": {
         "title": "No archived tracks yet",
-        "description": "To tidy up your project, archive completed or cancelled tracks. Find them here once archived."
+        "description": "To tidy up your application, archive completed or cancelled tracks. Find them here once archived."
       },
       "sidebar": {
         "in_active": "This module isn't active yet.",
@@ -286,7 +286,7 @@
       },
       "public": {
         "title": "No public pages yet",
-        "description": "See pages shared with everyone in your project right here.",
+        "description": "See pages shared with everyone in your application right here.",
         "primary_button": {
           "text": "Create your first page"
         }
@@ -300,36 +300,36 @@
   "disabled_project": {
     "empty_state": {
       "inbox": {
-        "title": "Service desk intake is not enabled for the project.",
-        "description": "Intake is the front door for service requests and incidents. Enable intake from project settings to triage them into tickets.",
+        "title": "Service desk intake is not enabled for the application.",
+        "description": "Intake is the front door for service requests and incidents. Enable intake from application settings to triage them into tickets.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "cycle": {
-        "title": "Sprints are not enabled for this project.",
+        "title": "Sprints are not enabled for this application.",
         "description": "Break tickets into 1-2 week sprints, work backwards from maintenance windows, and make tangible progress as a team. Enable sprints to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "module": {
-        "title": "Tracks are not enabled for the project.",
-        "description": "Tracks group tickets per service or program. Enable tracks from project settings to start using them.",
+        "title": "Tracks are not enabled for the application.",
+        "description": "Tracks group tickets per service or program. Enable tracks from application settings to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "page": {
-        "title": "Knowledge base is not enabled for the project.",
-        "description": "Articles hold runbooks, SOPs, and postmortems. Enable knowledge base from project settings to start using it.",
+        "title": "Knowledge base is not enabled for the application.",
+        "description": "Articles hold runbooks, SOPs, and postmortems. Enable knowledge base from application settings to start using it.",
         "primary_button": {
           "text": "Manage features"
         }
       },
       "view": {
-        "title": "Queues are not enabled for the project.",
-        "description": "Queues are saved ticket filters for on-call. Enable queues from project settings to start using them.",
+        "title": "Queues are not enabled for the application.",
+        "description": "Queues are saved ticket filters for on-call. Enable queues from application settings to start using them.",
         "primary_button": {
           "text": "Manage features"
         }
@@ -392,7 +392,7 @@
           "complete": "Import Complete"
         },
         "message": {
-          "success": "Successfully imported {count} member{plural} to the project.",
+          "success": "Successfully imported {count} member{plural} to the application.",
           "no_imports": "No new members were imported from the CSV file."
         },
         "stats": {

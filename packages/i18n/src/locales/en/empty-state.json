@@ -6,7 +6,7 @@
     },
     "updates": {
       "title": "No updates yet.",
-      "description": "Once project members add updates it will appear here"
+      "description": "Once application members add updates it will appear here"
     },
     "search": {
       "title": "No matching results.",
@@ -25,15 +25,15 @@
   },
   "project_empty_state": {
     "no_access": {
-      "title": "Seems like you don’t have access to this Project",
+      "title": "Seems like you don’t have access to this Application",
       "restricted_description": "Contact admin to request for access and you can continue here.",
       "join_description": "Click the button below to join it.",
-      "cta_primary": "Join project",
-      "cta_loading": "Joining project"
+      "cta_primary": "Join application",
+      "cta_loading": "Joining application"
     },
     "invalid_project": {
-      "title": "Project not found",
-      "description": "The project you are looking for does not exist."
+      "title": "Application not found",
+      "description": "The application you are looking for does not exist."
     },
     "work_items": {
       "title": "Start with your first ticket.",
@@ -68,8 +68,8 @@
       "cta_primary": "Create queue"
     },
     "no_work_items_in_project": {
-      "title": "No tickets in the project yet",
-      "description": "Add tickets to your project and slice service work into trackable queues.",
+      "title": "No tickets in the application yet",
+      "description": "Add tickets to your application and slice service work into trackable queues.",
       "cta_primary": "Add ticket"
     },
     "work_item_filter": {
@@ -118,31 +118,31 @@
     },
     "archive_cycles": {
       "title": "No archived sprints yet",
-      "description": "To tidy up your project, archive completed sprints. Find them here once archived."
+      "description": "To tidy up your application, archive completed sprints. Find them here once archived."
     },
     "archive_modules": {
       "title": "No archived tracks yet",
-      "description": "To tidy up your project, archive completed or cancelled tracks. Find them here once archived."
+      "description": "To tidy up your application, archive completed or cancelled tracks. Find them here once archived."
     },
     "sprints": {
       "title": "No sprints yet",
-      "description": "Sprints from projects you are a member of will show up here."
+      "description": "Sprints from applications you are a member of will show up here."
     },
     "tracks": {
       "title": "No tracks yet",
-      "description": "Tracks from projects you are a member of will show up here."
+      "description": "Tracks from applications you are a member of will show up here."
     },
     "tickets": {
       "title": "No tickets yet",
-      "description": "Tickets from projects you are a member of will show up here."
+      "description": "Tickets from applications you are a member of will show up here."
     },
     "kb": {
       "title": "No pages yet",
-      "description": "Knowledge base pages from projects you are a member of will show up here."
+      "description": "Knowledge base pages from applications you are a member of will show up here."
     },
     "intake": {
       "title": "No requests yet",
-      "description": "Incoming service requests from projects you are a member of will show up here."
+      "description": "Incoming service requests from applications you are a member of will show up here."
     },
     "home_widget_quick_links": {
       "title": "Keep important references, resources, or docs handy for your work"
@@ -161,7 +161,7 @@
     },
     "views": {
       "title": "No queues yet",
-      "description": "Add tickets to your project and use queues to filter, sort, and monitor SLA effortlessly.",
+      "description": "Add tickets to your application and use queues to filter, sort, and monitor SLA effortlessly.",
       "cta_primary": "Add ticket"
     },
     "drafts": {
@@ -170,14 +170,14 @@
       "cta_primary": "Create draft ticket"
     },
     "projects_archived": {
-      "title": "No projects archived",
-      "description": "Looks like all your projects are still active—great job!"
+      "title": "No applications archived",
+      "description": "Looks like all your applications are still active—great job!"
     },
     "analytics_projects": {
-      "title": "Create projects to visualize service metrics here."
+      "title": "Create applications to visualize service metrics here."
     },
     "analytics_work_items": {
-      "title": "Create projects with tickets and assignees to start tracking SLA, throughput, and on-call load here."
+      "title": "Create applications with tickets and assignees to start tracking SLA, throughput, and on-call load here."
     },
     "analytics_no_cycle": {
       "title": "Create sprints to organize tickets into time-bound periods and track delivery progress."
@@ -208,8 +208,8 @@
       "cta_primary": "Create your article"
     },
     "project_overview_state_sidebar": {
-      "title": "Enable project states",
-      "description": "Enable Project States to view and manage properties like state, priority, due dates and more."
+      "title": "Enable application states",
+      "description": "Enable Application States to view and manage properties like state, priority, due dates and more."
     }
   },
   "settings_empty_state": {
@@ -239,16 +239,16 @@
     },
     "webhooks": {
       "title": "No Webhook added yet",
-      "description": "Automate notifications to external services when project events occur.",
+      "description": "Automate notifications to external services when application events occur.",
       "cta_primary": "Add webhook"
     },
     "work_item_types": {
       "title": "Create and customize work item types",
-      "description": "Define unique work item types for your project. Each type can have its own properties, workflows, and fields - tailored to your project and team's needs.",
+      "description": "Define unique work item types for your application. Each type can have its own properties, workflows, and fields - tailored to your application and team's needs.",
       "cta_primary": "Enable"
     },
     "work_item_type_properties": {
-      "title": "Define the property and details you want to capture for this work item type. Customize it to match your project's workflow.",
+      "title": "Define the property and details you want to capture for this work item type. Customize it to match your application's workflow.",
       "cta_secondary": "Add property"
     },
     "templates": {
@@ -263,14 +263,14 @@
     },
     "worklogs": {
       "title": "Track timesheets for all members",
-      "description": "Log time on work items to view detailed timesheets for any team member across projects."
+      "description": "Log time on work items to view detailed timesheets for any team member across applications."
     },
     "group_syncing": {
       "title": "No group mappings yet"
     },
     "template_setting": {
       "title": "No templates yet",
-      "description": "Reduce setup time by creating templates for projects, work items, and pages — and start new work in seconds.",
+      "description": "Reduce setup time by creating templates for applications, work items, and pages — and start new work in seconds.",
       "cta_primary": "Create template"
     }
   }

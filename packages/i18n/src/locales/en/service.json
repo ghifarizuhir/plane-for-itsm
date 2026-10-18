@@ -2,9 +2,9 @@
   "service": {
     "title": "Services",
     "catalog_title": "Service catalog",
-    "catalog_all_projects": "All projects",
+    "catalog_all_projects": "All applications",
     "catalog_search_placeholder": "Search services",
-    "select_owner_project": "Select owner project",
+    "select_owner_project": "Select owner application",
     "add": "Add service",
     "create": "Create service",
     "empty_state": {
@@ -22,7 +22,7 @@
       "criticality": "Business criticality",
       "type": "Service type",
       "owner": "Service owner",
-      "owner_project": "Owner project",
+      "owner_project": "Owner application",
       "repository": "Repository / runbook",
       "documentation": "Documentation / SOP",
       "health": "Operational health",
@@ -123,10 +123,10 @@
     "project_links": {
       "owner": "Owner",
       "transfer": "Transfer owner…",
-      "add_project": "Add project",
-      "hint": "Owner manages the service. Consumer projects can link tickets to it but cannot edit it.",
-      "add_error": "Could not add project link. Please try again.",
-      "remove_error": "Could not remove project link. Please try again.",
+      "add_project": "Add application",
+      "hint": "Owner manages the service. Consumer applications can link tickets to it but cannot edit it.",
+      "add_error": "Could not add application link. Please try again.",
+      "remove_error": "Could not remove application link. Please try again.",
       "transfer_error": "Could not transfer ownership. Please try again."
     },
     "lite": {

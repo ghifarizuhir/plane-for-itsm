@@ -4,12 +4,12 @@
     "label_lowercase": "work item types",
     "settings": {
       "description": "Customize and add your own properties to tailor it to your team's needs.",
-      "cant_delete_default_message": "This work item type cannot be deleted because it's set as the default for this project",
+      "cant_delete_default_message": "This work item type cannot be deleted because it's set as the default for this application",
       "set_as_default": "Set as default",
       "cant_set_default_inactive_message": "Activate this type before setting it as default",
       "set_default_confirmation": {
         "title": "Set as default work item type",
-        "description": "Setting {name} as the default will import it to all projects in this workspace. All new work items will use this type by default.",
+        "description": "Setting {name} as the default will import it to all applications in this workspace. All new work items will use this type by default.",
         "confirm_button": "Set as default"
       },
       "properties": {
@@ -195,7 +195,7 @@
           "validation_success_with_refs": "Formula is valid! Returns {resultType} ({count} field(s) referenced)",
           "error": {
             "empty": "Please enter a formula",
-            "missing_context": "Missing workspace, project, or work item type context",
+            "missing_context": "Missing workspace, application, or work item type context",
             "validation_failed": "Validation failed"
           },
           "picker": {
@@ -235,7 +235,7 @@
         "title": "Types",
         "description": "Create and customize work item types with properties.",
         "sort_options": {
-          "project_count": "Number of projects part of"
+          "project_count": "Number of applications part of"
         },
         "filter_options": {
           "show_active": "Show active",
@@ -361,13 +361,13 @@
     "empty_state": {
       "enable": {
         "title": "Enable Work item Types",
-        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this project.",
+        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this application.",
         "primary_button": {
           "text": "Enable"
         },
         "confirmation": {
           "title": "Once enabled, Work item Types can't be disabled.",
-          "description": "Terraline's Work Item will become the default work item type for this project and will show up with its icon and background in this project.",
+          "description": "Plane's Work Item will become the default work item type for this application and will show up with its icon and background in this application.",
           "button": {
             "default": "Enable",
             "loading": "Setting up"
@@ -376,14 +376,14 @@
       },
       "get_pro": {
         "title": "Get Pro to enable Work item types.",
-        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this project.",
+        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this application.",
         "primary_button": {
           "text": "Get Pro"
         }
       },
       "upgrade": {
         "title": "Upgrade to enable Work item types.",
-        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this project.",
+        "description": "Shape work items to your work with Work item types. Customize with icons, backgrounds, and properties and configure them for this application.",
         "primary_button": {
           "text": "Upgrade"
         }

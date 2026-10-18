@@ -14,7 +14,7 @@
       "sidebar_header": "Trigger configuration",
       "input_label": "What’s the trigger for this automation?",
       "input_placeholder": "Select an option",
-      "section_plane_events": "Terraline events",
+      "section_plane_events": "Plane events",
       "section_time_based": "Time based",
       "fixed_schedule": "Fixed schedule",
       "schedule": {
@@ -123,7 +123,7 @@
     "table": {
       "title": "Automation title",
       "scope": "Scope",
-      "projects": "Projects",
+      "projects": "Applications",
       "last_run_on": "Last run on",
       "created_on": "Created on",
       "last_updated_on": "Last updated on",
@@ -207,7 +207,7 @@
       "delete": {
         "success": {
           "title": "Automation deleted",
-          "message": "{name}, the automation, has now been deleted from your project."
+          "message": "{name}, the automation, has now been deleted from your application."
         },
         "error": {
           "title": "We couldn't delete that automation this time.",
@@ -236,21 +236,21 @@
       },
       "upgrade": {
         "title": "Automations",
-        "description": "Automations are a way to automate tasks in your project.",
+        "description": "Automations are a way to automate tasks in your application.",
         "sub_description": "Get 80% of your admin time back when you use Automations."
       }
     },
     "global_automations": {
       "project_select": {
-        "label": "Select projects to run this automation on",
+        "label": "Select applications to run this automation on",
         "all_projects": {
-          "label": "All projects",
-          "description": "Automation will run for all projects in the workspace."
+          "label": "All applications",
+          "description": "Automation will run for all applications in the workspace."
         },
         "select_projects": {
-          "label": "Select projects",
-          "description": "Automation will run for selected projects in the workspace.",
-          "placeholder": "Select projects"
+          "label": "Select applications",
+          "description": "Automation will run for selected applications in the workspace.",
+          "placeholder": "Select applications"
         }
       },
       "settings": {
@@ -262,7 +262,7 @@
         "scope": {
           "global": "Global",
           "project": {
-            "label": "Project",
+            "label": "Application",
             "multiple": "Multiple",
             "all": "All"
           }

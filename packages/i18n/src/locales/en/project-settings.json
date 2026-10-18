@@ -1,38 +1,38 @@
 {
   "project_settings": {
     "general": {
-      "enter_project_id": "Enter project ID",
+      "enter_project_id": "Enter application ID",
       "please_select_a_timezone": "Please select a timezone",
       "archive_project": {
-        "title": "Archive project",
-        "description": "Archiving a project will unlist your project from your side navigation although you will still be able to access it from your projects page. You can restore the project or delete it whenever you want.",
-        "button": "Archive project"
+        "title": "Archive application",
+        "description": "Archiving an application will unlist your application from your side navigation although you will still be able to access it from your applications page. You can restore the application or delete it whenever you want.",
+        "button": "Archive application"
       },
       "delete_project": {
-        "title": "Delete project",
-        "description": "When deleting a project, all of the data and resources within that project will be permanently removed and cannot be recovered.",
-        "button": "Delete my project"
+        "title": "Delete application",
+        "description": "When deleting an application, all of the data and resources within that application will be permanently removed and cannot be recovered.",
+        "button": "Delete my application"
       },
       "toast": {
-        "success": "Project updated successfully",
-        "error": "Project could not be updated. Please try again."
+        "success": "Application updated successfully",
+        "error": "Application could not be updated. Please try again."
       }
     },
     "members": {
       "label": "Members",
-      "project_lead": "Project lead",
-      "project_lead_description": "Select the project lead for the project.",
+      "project_lead": "Application lead",
+      "project_lead_description": "Select the application lead for the application.",
       "default_assignee": "Default assignee",
-      "default_assignee_description": "Select the default assignee for the project.",
-      "project_subscribers": "Project subscribers",
-      "project_subscribers_description": "Select members who will receive notifications for this project.",
+      "default_assignee_description": "Select the default assignee for the application.",
+      "project_subscribers": "Application subscribers",
+      "project_subscribers_description": "Select members who will receive notifications for this application.",
       "guest_super_permissions": {
         "title": "Grant view access to all work items for guest users:",
-        "sub_heading": "This will allow guests to have view access to all the project work items."
+        "sub_heading": "This will allow guests to have view access to all the application work items."
       },
       "invite_members": {
         "title": "Invite members",
-        "sub_heading": "Invite members to work on your project.",
+        "sub_heading": "Invite members to work on your application.",
         "select_co_worker": "Select co-worker"
       }
     },
@@ -59,7 +59,7 @@
       "heading": "Estimates",
       "description": "Set up estimation systems to track and communicate the effort required for each work item.",
       "label": "Estimates",
-      "title": "Enable estimates for my project",
+      "title": "Enable estimates for my application",
       "enable_description": "They help you in communicating complexity and workload of the team.",
       "no_estimate": "No estimate",
       "new": "New estimate system",
@@ -86,7 +86,7 @@
         "updated": {
           "success": {
             "title": "Estimate modified",
-            "message": "The estimate has been updated in your project."
+            "message": "The estimate has been updated in your application."
           },
           "error": {
             "title": "Estimate modification failed",
@@ -112,7 +112,7 @@
         "reorder": {
           "success": {
             "title": "Estimates re-ordered",
-            "message": "Estimates have been re-ordered in your project."
+            "message": "Estimates have been re-ordered in your application."
           },
           "error": {
             "title": "Estimate re-order failed",
@@ -179,7 +179,7 @@
     "automations": {
       "label": "Automations",
       "heading": "Automations",
-      "description": "Configure automated actions to streamline your project management workflow and reduce manual tasks.",
+      "description": "Configure automated actions to streamline your application management workflow and reduce manual tasks.",
       "auto-archive": {
         "title": "Auto-archive closed work items",
         "description": "Plane will auto archive work items that have been completed or canceled.",
@@ -200,7 +200,7 @@
     "empty_state": {
       "labels": {
         "title": "No labels yet",
-        "description": "Create labels to help organize and filter work items in you project."
+        "description": "Create labels to help organize and filter work items in you application."
       },
       "estimates": {
         "title": "No estimate systems yet",
@@ -209,7 +209,7 @@
       },
       "integrations": {
         "title": "No integrations configured",
-        "description": "Configure GitHub and other integrations to sync your project work items."
+        "description": "Configure GitHub and other integrations to sync your application work items."
       }
     },
     "work_item_types": {
@@ -266,21 +266,21 @@
         "short_title": "Tracks",
         "description": "Group tickets per service or program with dedicated leads.",
         "toggle_title": "Enable tracks",
-        "toggle_description": "Project members will be able to create and edit tracks."
+        "toggle_description": "Application members will be able to create and edit tracks."
       },
       "views": {
         "title": "Queues",
         "short_title": "Queues",
         "description": "Saved ticket queues for on-call: sorts, filters, and display options shared with the team.",
         "toggle_title": "Enable queues",
-        "toggle_description": "Project members will be able to create and edit queues."
+        "toggle_description": "Application members will be able to create and edit queues."
       },
       "pages": {
         "title": "Knowledge base",
         "short_title": "Knowledge base",
         "description": "Runbooks, SOPs, shift notes, and postmortems for this service.",
         "toggle_title": "Enable knowledge base",
-        "toggle_description": "Project members will be able to create and edit articles."
+        "toggle_description": "Application members will be able to create and edit articles."
       },
       "intake": {
         "intake_responsibility": "Intake responsibility",
@@ -289,9 +289,9 @@
         "short_title": "Intake",
         "description": "Single front door for service requests, incidents, and changes; triaged into tickets.",
         "toggle_title": "Enable intake",
-        "toggle_description": "Let project members create in-app intake requests.",
-        "toggle_tooltip_on": "Ask your Project Admin to turn this on.",
-        "toggle_tooltip_off": "Ask your Project Admin to turn this off.",
+        "toggle_description": "Let application members create in-app intake requests.",
+        "toggle_tooltip_on": "Ask your Application Admin to turn this on.",
+        "toggle_tooltip_off": "Ask your Application Admin to turn this off.",
         "notify_assignee": {
           "title": "Notify assignees",
           "description": "For a new request to intake, default assignees will be alerted via notifications"
@@ -344,9 +344,9 @@
       "time_tracking": {
         "title": "Time tracking",
         "short_title": "Time tracking",
-        "description": "Log time spent on tickets and projects.",
+        "description": "Log time spent on tickets and applications.",
         "toggle_title": "Enable time tracking",
-        "toggle_description": "Project members will be able to log time worked."
+        "toggle_description": "Application members will be able to log time worked."
       },
       "milestones": {
         "title": "Milestones",
@@ -356,18 +356,18 @@
         "toggle_description": "Organize work items by milestone deadlines."
       },
       "toasts": {
-        "loading": "Updating project feature...",
-        "success": "Project feature updated successfully.",
-        "error": "Something went wrong while updating project feature. Please try again."
+        "loading": "Updating application feature...",
+        "success": "Application feature updated successfully.",
+        "error": "Something went wrong while updating application feature. Please try again."
       }
     },
     "project_updates": {
-      "heading": "Project Updates",
-      "description": "Consolidated tracking and progress monitoring for this project"
+      "heading": "Application Updates",
+      "description": "Consolidated tracking and progress monitoring for this application"
     },
     "templates": {
       "heading": "Templates",
-      "description": "Save 80% time spent on creating projects, work items, and pages when you use templates."
+      "description": "Save 80% time spent on creating applications, work items, and pages when you use templates."
     },
     "cycles": {
       "auto_schedule": {

@@ -4,8 +4,8 @@
       "quickstart_guide": "Your quickstart guide",
       "not_right_now": "Not right now",
       "create_project": {
-        "title": "Create your first project",
-        "description": "A project is home to your services, incidents, and work items in Terraline.",
+        "title": "Create your first application",
+        "description": "An application is home to your services, incidents, and work items in Plane.",
         "cta": "Get started",
         "cta_view_services": "View services"
       },
@@ -20,7 +20,7 @@
         "cta": "Configure this workspace"
       },
       "personalize_account": {
-        "title": "Make Terraline yours.",
+        "title": "Make Plane yours.",
         "description": "Choose your picture, colors, and more.",
         "cta": "Personalize now"
       },
@@ -41,20 +41,20 @@
     "recents": {
       "title": "Recents",
       "empty": {
-        "project": "Your recent projects will show up here after you visit one.",
+        "project": "Your recent applications will show up here after you visit one.",
         "page": "Your recent pages will appear here once you visit one.",
         "issue": "Your recent work items will appear here once you visit one.",
         "default": "You don't have any recents yet."
       },
       "filters": {
         "all": "All",
-        "projects": "Projects",
+        "projects": "Applications",
         "pages": "Pages",
         "issues": "Work items"
       }
     },
     "new_at_plane": {
-      "title": "New at Terraline"
+      "title": "New at Plane"
     },
     "quick_tutorial": {
       "title": "Quick tutorial"

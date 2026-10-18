@@ -84,12 +84,12 @@
       },
       "cannot_move_to_teamspace": "Private and shared pages cannot be moved to a teamspace.",
       "placeholders": {
-        "workspace_to_all": "Search for projects and teamspaces",
-        "workspace_to_project": "Search for projects",
-        "project_to_all": "Search for projects and teamspaces",
-        "project_to_project": "Search for projects",
-        "project_to_all_with_wiki": "Search for wiki collections, projects, and teamspaces",
-        "project_to_project_with_wiki": "Search for wiki collections and projects"
+        "workspace_to_all": "Search for applications and teamspaces",
+        "workspace_to_project": "Search for applications",
+        "project_to_all": "Search for applications and teamspaces",
+        "project_to_project": "Search for applications",
+        "project_to_all_with_wiki": "Search for wiki collections, applications, and teamspaces",
+        "project_to_project_with_wiki": "Search for wiki collections and applications"
       },
       "toasts": {
         "success": {
