@@ -134,7 +134,10 @@ export const coreRoutes: RouteConfigEntry[] = [
           route(":workspaceSlug/sprints", "./(all)/[workspaceSlug]/(projects)/sprints/page.tsx"),
         ]),
 
-        // Workspace Tracks (route added in Task 4)
+        // Workspace Tracks
+        layout("./(all)/[workspaceSlug]/(projects)/tracks/layout.tsx", [
+          route(":workspaceSlug/tracks", "./(all)/[workspaceSlug]/(projects)/tracks/page.tsx"),
+        ]),
 
         // --------------------------------------------------------------------
         // PROJECT LEVEL ROUTES

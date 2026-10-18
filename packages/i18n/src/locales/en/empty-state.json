@@ -27,6 +27,10 @@
     "sprints": {
       "title": "No sprints yet",
       "description": "Sprints from projects you are a member of will show up here."
+    },
+    "tracks": {
+      "title": "No tracks yet",
+      "description": "Tracks from projects you are a member of will show up here."
     }
   },
   "project_empty_state": {
