@@ -1581,18 +1581,14 @@ pub async fn ws_estimates(
     if !gate_ws_any(&st.pool, auth.0, &slug).await? {
         return Ok(deny_detail());
     }
-    // Project-estimate ids for the slug, then those estimates with
-    // prefetched points (`estimate.py:25-32`).
+    // Program P1/S3: estimates are workspace-level — list the whole set
+    // with prefetched points (`estimate.py:25-32`).
     let rows: Vec<WsEstimateRow> = sqlx::query_as(
         "SELECT e.id, e.created_at, e.updated_at, e.created_by_id, e.project_id, \
          e.updated_by_id, e.workspace_id, e.name, e.description, e.type AS estimate_type, \
          e.last_used, e.deleted_at FROM estimates e \
          JOIN workspaces w ON w.id = e.workspace_id \
          WHERE w.slug = $1 AND e.deleted_at IS NULL \
-         AND e.id IN (SELECT p.estimate_id FROM projects p \
-                      JOIN workspaces w2 ON w2.id = p.workspace_id \
-                      WHERE w2.slug = $1 AND p.estimate_id IS NOT NULL \
-                      AND p.deleted_at IS NULL) \
          ORDER BY e.name",
     )
     .bind(&slug)

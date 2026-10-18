@@ -201,16 +201,18 @@ pub fn validate_point_create(body: &CreateEstimatePoint) -> Result<(), String> {
 pub async fn list(
     State(st): State<AppState>,
     auth: AuthUser,
-    axum::extract::Path((slug, project_id)): axum::extract::Path<(String, uuid::Uuid)>,
+    axum::extract::Path((slug, _project_id)): axum::extract::Path<(String, uuid::Uuid)>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     // Django `list` (`base.py:54-61`): any project member reads.
-    if !gate_estimate_read(&st.pool, auth.0, &slug, project_id).await? {
+    // Program P1/S3: estimates are workspace-level; the project URL segment
+    // is compat-only and no longer scopes the result.
+    if !gate_estimate_read(&st.pool, auth.0, &slug, _project_id).await? {
         return Ok((StatusCode::FORBIDDEN, Json(json!({"error": FORBIDDEN_MSG}))));
     }
     let rows: Vec<EstimateFull> = sqlx::query_as(&format!(
-        "SELECT {ESTIMATE_COLS} FROM estimates WHERE project_id = $1 AND deleted_at IS NULL ORDER BY name ASC"
+        "SELECT {ESTIMATE_COLS} FROM estimates WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND deleted_at IS NULL ORDER BY name ASC"
     ))
-    .bind(project_id)
+    .bind(&slug)
     .fetch_all(&st.pool)
     .await?;
     let mut out = Vec::with_capacity(rows.len());
@@ -310,19 +312,7 @@ pub async fn create(
     // partial unique constraint → `IntegrityError` → 400
     // `{"error": "The payload is not valid"}` via `views/base.py:80-84`
     // (NOT 500 — the handler maps it).
-    let dup: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL)",
-    )
-    .bind(project_id)
-    .bind(&final_name)
-    .fetch_one(&st.pool)
-    .await?;
-    if dup {
-        return Ok((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": INVALID_PAYLOAD_MSG})),
-        ));
-    }
+    // Program P1/S3: uniqueness is workspace-wide (case-insensitive).
     let workspace_id: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
             .bind(&slug)
@@ -331,29 +321,68 @@ pub async fn create(
     let Some(workspace_id) = workspace_id else {
         return Ok(missing());
     };
+    let dup: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM estimates WHERE workspace_id = $1 AND lower(name) = lower($2) AND type = $3 AND deleted_at IS NULL)",
+    )
+    .bind(workspace_id)
+    .bind(&final_name)
+    .bind(estimate_type)
+    .fetch_one(&st.pool)
+    .await?;
+    if dup {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": INVALID_PAYLOAD_MSG})),
+        ));
+    }
+    // Program P1/S3: exactly one active estimate per workspace. A create
+    // with last_used clears the previous active estimate first.
+    if last_used {
+        sqlx::query(
+            "UPDATE estimates SET last_used = false, updated_at = now() WHERE workspace_id = $1 AND deleted_at IS NULL AND last_used IS DISTINCT FROM false",
+        )
+        .bind(workspace_id)
+        .execute(&st.pool)
+        .await?;
+    }
     let created: EstimateFull = sqlx::query_as(&format!(
-        "INSERT INTO estimates (id, name, description, type, last_used, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $7, now(), now()) RETURNING {ESTIMATE_COLS}"
+        "INSERT INTO estimates (id, name, description, type, last_used, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, NULL, $5, $6, $6, now(), now()) RETURNING {ESTIMATE_COLS}"
     ))
     .bind(&final_name)
     .bind(body.get("description").and_then(Value::as_str).unwrap_or(""))
     .bind(estimate_type)
     .bind(last_used)
-    .bind(project_id)
     .bind(workspace_id)
     .bind(auth.0)
     .fetch_one(&st.pool)
     .await?;
     for (key, value, description) in &points {
         sqlx::query(
-            "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $7, now(), now())",
+            "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, NULL, $5, $6, $6, now(), now())",
         )
         .bind(created.id)
         .bind(key)
         .bind(value)
         .bind(description)
-        .bind(project_id)
         .bind(workspace_id)
         .bind(auth.0)
+        .execute(&st.pool)
+        .await?;
+    }
+    // Point the workspace at the newly activated estimate (S2 settings row
+    // is created lazily here if the workspace never opened settings).
+    if last_used {
+        sqlx::query(
+            "INSERT INTO workspace_settings (id, workspace_id) VALUES (gen_random_uuid(), $1) ON CONFLICT (workspace_id) DO NOTHING",
+        )
+        .bind(workspace_id)
+        .execute(&st.pool)
+        .await?;
+        sqlx::query(
+            "UPDATE workspace_settings SET estimate_id = $1, updated_at = now() WHERE workspace_id = $2",
+        )
+        .bind(created.id)
+        .bind(workspace_id)
         .execute(&st.pool)
         .await?;
     }
@@ -382,14 +411,14 @@ pub async fn create_point(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
 
-    // Django scopes the estimate to this workspace+project
-    // (`base.py:163-172` `.filter(...).first()` → 404 "Estimate not found");
-    // an estimate from another project must NOT accept points here.
+    // Django scopes the estimate to this workspace (`base.py:163-172`
+    // `.filter(...).first()` → 404 "Estimate not found").
+    // Program P1/S3: estimates are workspace-level; the project URL segment
+    // is compat-only.
     let estimate = sqlx::query_as::<_, common::models::estimate::Estimate>(
-        "SELECT id, name FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL",
+        "SELECT id, name FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
     )
     .bind(estimate_id)
-    .bind(project_id)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
@@ -401,7 +430,7 @@ pub async fn create_point(
     }
 
     let row: EstimatePointFull = sqlx::query_as(&format!(
-        "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, e.project_id, e.workspace_id, $5, $5, now(), now() FROM estimates e WHERE e.id = $1 RETURNING {POINT_COLS}"
+        "INSERT INTO estimate_points (id, estimate_id, key, value, description, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) SELECT gen_random_uuid(), $1, $2, $3, $4, NULL, e.workspace_id, $5, $5, now(), now() FROM estimates e WHERE e.id = $1 RETURNING {POINT_COLS}"
     ))
     .bind(estimate_id)
     .bind(body.key)
@@ -449,10 +478,10 @@ pub async fn detail(
         return Ok(deny());
     }
     let row: Option<EstimateFull> = sqlx::query_as(&format!(
-        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL"
+        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL"
     ))
     .bind(estimate_id)
-    .bind(project_id)
+    .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
     match row {
@@ -483,10 +512,9 @@ pub async fn patch(
         return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": e}))));
     }
     let exists: Option<(uuid::Uuid,)> = sqlx::query_as(
-        "SELECT id FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL",
+        "SELECT id FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL",
     )
     .bind(estimate_id)
-    .bind(project_id)
     .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
@@ -514,9 +542,9 @@ pub async fn patch(
     // create. Checked up front (no partial writes on dup).
     if let Some(name) = &body.name {
         let dup: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM estimates WHERE project_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL)",
+            "SELECT EXISTS(SELECT 1 FROM estimates WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND lower(name) = lower($2) AND id != $3 AND deleted_at IS NULL)",
         )
-        .bind(project_id)
+        .bind(&slug)
         .bind(name)
         .bind(estimate_id)
         .fetch_one(&st.pool)
@@ -529,12 +557,11 @@ pub async fn patch(
         }
     }
     sqlx::query(
-        "UPDATE estimates SET name = COALESCE($1, name), type = COALESCE($2, type), updated_at = now() WHERE id = $3 AND project_id = $4 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $5)",
+        "UPDATE estimates SET name = COALESCE($1, name), type = COALESCE($2, type), updated_at = now() WHERE id = $3 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $4)",
     )
     .bind(&body.name)
     .bind(&body.estimate_type)
     .bind(estimate_id)
-    .bind(project_id)
     .bind(&slug)
     .execute(&st.pool)
     .await?;
@@ -543,23 +570,22 @@ pub async fn patch(
     // saved as-is (unlike single-create). No length check here.
     for point in &body.estimate_points {
         sqlx::query(
-            "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), updated_at = now() WHERE id = $3 AND estimate_id = $4 AND project_id = $5 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $6)",
+            "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), updated_at = now() WHERE id = $3 AND estimate_id = $4 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $5)",
         )
         .bind(point.key)
         .bind(&point.value)
         .bind(point.id)
         .bind(estimate_id)
-        .bind(project_id)
         .bind(&slug)
         .execute(&st.pool)
         .await?;
     }
     // Django `partial_update` (`base.py:143-144`) returns 200 full row.
     let row: Option<EstimateFull> = sqlx::query_as(&format!(
-        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL"
+        "SELECT {ESTIMATE_COLS} FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL"
     ))
     .bind(estimate_id)
-    .bind(project_id)
+    .bind(&slug)
     .fetch_optional(&st.pool)
     .await?;
     match row {
@@ -588,9 +614,8 @@ pub async fn destroy(
     // Django `.get` (`base.py:148`) miss → 404 (generic via `views/base.py:92-96`
     // or sane-mapped) with NO side effects. Check existence FIRST: the old order
     // deleted points before the estimate check, so a miss still wiped points.
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimates WHERE id = $1 AND project_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL)")
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2) AND deleted_at IS NULL)")
         .bind(estimate_id)
-        .bind(project_id)
         .bind(&slug)
         .fetch_one(&st.pool)
         .await?;
@@ -601,19 +626,55 @@ pub async fn destroy(
         .bind(estimate_id)
         .execute(&st.pool)
         .await?;
-    sqlx::query("DELETE FROM estimates WHERE id = $1 AND project_id = $2")
+    sqlx::query("DELETE FROM estimates WHERE id = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $2)")
         .bind(estimate_id)
-        .bind(project_id)
+        .bind(&slug)
         .execute(&st.pool)
         .await?;
-    // `Project.estimate` FK is `on_delete=SET_NULL`
-    // (`models/project.py:109`): deleting the active estimate clears the
-    // project pointer (Django does this via the collector, not code).
-    sqlx::query("UPDATE projects SET estimate_id = NULL WHERE estimate_id = $1 AND id = $2")
-        .bind(estimate_id)
-        .bind(project_id)
-        .execute(&st.pool)
+    // Program P1/S3: the active estimate pointer lives on workspace_settings.
+    // If the destroyed estimate was active, promote the oldest remaining one;
+    // with none left the pointer is cleared. (Replaces the legacy
+    // `projects.estimate_id` FK cleanup, which is now vestigial.)
+    let was_active: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workspace_settings WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND estimate_id = $2)",
+    )
+    .bind(&slug)
+    .bind(estimate_id)
+    .fetch_one(&st.pool)
+    .await?;
+    if was_active {
+        let next: Option<uuid::Uuid> = sqlx::query_scalar(
+            "SELECT id FROM estimates WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND deleted_at IS NULL ORDER BY created_at, id LIMIT 1",
+        )
+        .bind(&slug)
+        .fetch_optional(&st.pool)
         .await?;
+        match next {
+            Some(next_id) => {
+                sqlx::query(
+                    "UPDATE estimates SET last_used = true, updated_at = now() WHERE id = $1",
+                )
+                .bind(next_id)
+                .execute(&st.pool)
+                .await?;
+                sqlx::query(
+                    "UPDATE workspace_settings SET estimate_id = $1, updated_at = now() WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $2)",
+                )
+                .bind(next_id)
+                .bind(&slug)
+                .execute(&st.pool)
+                .await?;
+            }
+            None => {
+                sqlx::query(
+                    "UPDATE workspace_settings SET estimate_id = NULL, updated_at = now() WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1)",
+                )
+                .bind(&slug)
+                .execute(&st.pool)
+                .await?;
+            }
+        }
+    }
     Ok((StatusCode::NO_CONTENT, Json(json!(null))))
 }
 
@@ -641,14 +702,14 @@ pub async fn patch_point(
         }
     }
     let n = sqlx::query(
-        "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), description = COALESCE($3, description), updated_at = now() WHERE id = $4 AND estimate_id = $5 AND project_id = $6",
+        "UPDATE estimate_points SET key = COALESCE($1, key), value = COALESCE($2, value), description = COALESCE($3, description), updated_at = now() WHERE id = $4 AND estimate_id = $5 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $6)",
     )
     .bind(body.key)
     .bind(&body.value)
     .bind(&body.description)
     .bind(point_id)
     .bind(estimate_id)
-    .bind(project_id)
+    .bind(&slug)
     .execute(&st.pool)
     .await?
     .rows_affected();
@@ -699,10 +760,9 @@ pub async fn destroy_point(
     // FIRST so a miss has no destructive side effects (sane-mapping precedent,
     // ADR `2026-09-10-f1-group3-delete-semantics.md`); the miss string itself
     // is Django-verbatim.
-    let old_key: Option<i32> = sqlx::query_scalar("SELECT key FROM estimate_points WHERE id = $1 AND estimate_id = $2 AND project_id = $3 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $4)")
+    let old_key: Option<i32> = sqlx::query_scalar("SELECT key FROM estimate_points WHERE id = $1 AND estimate_id = $2 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $3) AND deleted_at IS NULL")
         .bind(point_id)
         .bind(estimate_id)
-        .bind(project_id)
         .bind(&slug)
         .fetch_optional(&st.pool)
         .await?;
@@ -825,17 +885,25 @@ pub async fn project_estimates(
     ) {
         return Ok(deny());
     }
-    let row: Option<(Option<uuid::Uuid>,)> = sqlx::query_as(
-        "SELECT p.estimate_id FROM projects p JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = $1 AND w.slug = $2 AND p.deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .bind(&slug)
-    .fetch_optional(&st.pool)
-    .await?;
-    let Some((estimate_id,)) = row else {
+    // Program P1/S3: the active estimate is workspace-level
+    // (workspace_settings.estimate_id). The project URL segment and the
+    // membership gate are compat-only; Django `estimate/base.py:38-46`
+    // NULL estimate → 200 `[]` behavior is preserved.
+    let ws: Option<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1 AND deleted_at IS NULL")
+            .bind(&slug)
+            .fetch_optional(&st.pool)
+            .await?;
+    let Some(ws) = ws else {
         return Ok(missing());
     };
-    // Django `estimate/base.py:38-46`: NULL estimate → 200 `[]`.
+    let estimate_id: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT estimate_id FROM workspace_settings WHERE workspace_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(ws)
+    .fetch_optional(&st.pool)
+    .await?
+    .flatten();
     let Some(estimate_id) = estimate_id else {
         let body: Value =
             serde_json::from_str(&project_estimates_shape(None)).unwrap_or(Value::Null);
@@ -846,13 +914,11 @@ pub async fn project_estimates(
          ep.project_id AS project, ep.key, ep.value, ep.description, \
          ep.created_by_id AS created_by, ep.updated_by_id AS updated_by, \
          ep.created_at, ep.updated_at FROM estimate_points ep \
-         JOIN workspaces w ON w.id = ep.workspace_id \
-         WHERE ep.estimate_id = $1 AND ep.project_id = $2 AND w.slug = $3 \
+         WHERE ep.estimate_id = $1 AND ep.workspace_id = $2 \
          AND ep.deleted_at IS NULL ORDER BY ep.value ASC",
     )
     .bind(estimate_id)
-    .bind(project_id)
-    .bind(&slug)
+    .bind(ws)
     .fetch_all(&st.pool)
     .await?;
     Ok((StatusCode::OK, Json(json!(rows))))
