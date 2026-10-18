@@ -243,6 +243,13 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
+  tickets: {
+    key: "tickets",
+    labelTranslationKey: "sidebar.work_items",
+    href: `/tickets/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
+    highlight: (pathname: string, url: string) => pathname.includes(url),
+  },
   sprints: {
     key: "sprints",
     labelTranslationKey: "sidebar.cycles",
@@ -310,6 +317,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
 
 export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarNavigationItem[] = [
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["home"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["tickets"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["sprints"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["tracks"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["services"],
