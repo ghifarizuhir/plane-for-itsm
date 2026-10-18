@@ -94,7 +94,7 @@ Rules apply per workspace, over live (`deleted_at IS NULL`) rows only.
 
 ## Execution waves
 
-- **W0 — Rename UI (S1):** copy, icons, i18n "Application" everywhere user-facing. Zero schema. Quick win.
+- **W0 — Rename UI (S1):** copy, icons, i18n "Application" everywhere user-facing. Zero schema. Quick win. Copy scope = EN only; non-EN locales ship as S1b (user decision 2026-10-18: all active profiles use en).
 - **W1 — Config to workspace, per domain (S2→S7), smallest risk first:**
   1. S2 — workspace settings + feature flags (foundation: storage + endpoint + backfill)
   2. S3 — taxonomy: labels, estimates, work item types
@@ -109,17 +109,17 @@ Rules apply per workspace, over live (`deleted_at IS NULL`) rows only.
 
 Each sub-project gets its own spec → plan → implementation. Execution order equals S order.
 
-| #   | Sub-project                                  | Wave | Scope highlights                                                                                                                       | Exit criteria                                                                               |
-| --- | -------------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| S1  | Rename UI                                    | W0   | Sidebar/nav/modals/settings/empty states copy → "Application"; icons; i18n (~20 locales); no schema/API change                         | Typecheck, lint, build, prod smoke; no "project" user-facing copy left in the main surfaces |
-| S2  | Workspace settings + feature flags           | W1①  | Workspace settings storage + GET/PATCH endpoint; backfill union of per-project flags; nav gating reads workspace settings              | Tests (union backfill, defaults), web reads workspace, prod smoke                           |
-| S3  | Taxonomy: labels, estimates, work item types | W1②③ | Workspace uniques + dedupe/remap backfill; workspace pickers in web; type enablement workspace-wide                                    | Collision-fixture tests; dry-run report; issue label/estimate/create flows smoke            |
-| S4  | Views                                        | W1④  | `project_id → NULL` backfill; workspace views already readable                                                                         | Tests; views list/detail smoke                                                              |
-| S5  | States/workflow                              | W1⑤  | Dedupe/remap backfill incl. saved-filter rewrites; default + intake state; seeder and AI updates                                       | Collision-fixture tests; create/filter/intake smoke; AI tool smoke                          |
-| S6  | Cycles + modules                             | W1⑥  | Unnest backfill with name-collision suffixing; workspace pages are canonical (read endpoints exist)                                    | Tests; sprint/track pages + issue cycle/module pickers smoke                                |
-| S7  | Intake                                       | W1⑦  | Single workspace front door; sources merge; form application picker; triage assigns application                                        | Tests; intake submit/accept smoke incl. `requires_service`                                  |
-| S8  | IA final + redirects + docs                  | W2   | App nav minimal; workspace settings complete; `/applications/` URLs + redirects; PowerK; favorites/recent link builders; guide rewrite | Vitest, build, full smoke of both URL families (old → redirect)                             |
-| S9  | Cleanup                                      | W3   | Drop per-project config columns/tables/joins; integrations/importers decision; optional internal rename                                | Tests green after drops; smoke; no dead code                                                |
+| #   | Sub-project                                  | Wave | Scope highlights                                                                                                                                       | Exit criteria                                                                               |
+| --- | -------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| S1  | Rename UI                                    | W0   | Sidebar/nav/modals/settings/empty states copy → "Application"; icons; i18n EN + copy-guard (19 locale lain = S1b, plan terpisah); no schema/API change | Typecheck, lint, build, prod smoke; no "project" user-facing copy left in the main surfaces |
+| S2  | Workspace settings + feature flags           | W1①  | Workspace settings storage + GET/PATCH endpoint; backfill union of per-project flags; nav gating reads workspace settings                              | Tests (union backfill, defaults), web reads workspace, prod smoke                           |
+| S3  | Taxonomy: labels, estimates, work item types | W1②③ | Workspace uniques + dedupe/remap backfill; workspace pickers in web; type enablement workspace-wide                                                    | Collision-fixture tests; dry-run report; issue label/estimate/create flows smoke            |
+| S4  | Views                                        | W1④  | `project_id → NULL` backfill; workspace views already readable                                                                                         | Tests; views list/detail smoke                                                              |
+| S5  | States/workflow                              | W1⑤  | Dedupe/remap backfill incl. saved-filter rewrites; default + intake state; seeder and AI updates                                                       | Collision-fixture tests; create/filter/intake smoke; AI tool smoke                          |
+| S6  | Cycles + modules                             | W1⑥  | Unnest backfill with name-collision suffixing; workspace pages are canonical (read endpoints exist)                                                    | Tests; sprint/track pages + issue cycle/module pickers smoke                                |
+| S7  | Intake                                       | W1⑦  | Single workspace front door; sources merge; form application picker; triage assigns application                                                        | Tests; intake submit/accept smoke incl. `requires_service`                                  |
+| S8  | IA final + redirects + docs                  | W2   | App nav minimal; workspace settings complete; `/applications/` URLs + redirects; PowerK; favorites/recent link builders; guide rewrite                 | Vitest, build, full smoke of both URL families (old → redirect)                             |
+| S9  | Cleanup                                      | W3   | Drop per-project config columns/tables/joins; integrations/importers decision; optional internal rename                                                | Tests green after drops; smoke; no dead code                                                |
 
 ## Open decisions delegated to sub-specs (with defaults)
 
