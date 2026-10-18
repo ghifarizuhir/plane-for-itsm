@@ -58,5 +58,7 @@ export const getSidebarNavigationItemIcon = (key: string, className: string = ""
       return <DocumentationOutline className={cn("size-4 flex-shrink-0", className)} />;
     case "kb":
       return <PagesOutline className={cn("size-4 flex-shrink-0", className)} />;
+    case "intake":
+      return <InboxOutline className={cn("size-4 flex-shrink-0", className)} />;
   }
 };

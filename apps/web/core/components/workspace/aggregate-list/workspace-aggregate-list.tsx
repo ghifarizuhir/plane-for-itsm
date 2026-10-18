@@ -31,6 +31,7 @@ type Props = {
   emptyTitle: string;
   emptyDescription: string;
   footer?: ReactNode;
+  flat?: boolean;
 };
 
 export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
@@ -45,6 +46,7 @@ export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
   emptyTitle,
   emptyDescription,
   footer,
+  flat = false,
 }: Props) {
   const { t } = useTranslation();
   const { workspaceProjectIds, getProjectById } = useProject();
@@ -91,15 +93,19 @@ export const WorkspaceAggregateList = observer(function WorkspaceAggregateList({
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {groups.map((group) => (
-            <div key={group.key}>
-              <div className="flex items-center gap-2 border-b border-subtle bg-layer-1 px-4 py-2">
-                <span className="text-12 font-medium text-secondary">{group.label}</span>
-                <span className="text-11 text-tertiary">{group.count}</span>
+          {flat ? (
+            <>{groups.flatMap((group) => group.items)}</>
+          ) : (
+            groups.map((group) => (
+              <div key={group.key}>
+                <div className="flex items-center gap-2 border-b border-subtle bg-layer-1 px-4 py-2">
+                  <span className="text-12 font-medium text-secondary">{group.label}</span>
+                  <span className="text-11 text-tertiary">{group.count}</span>
+                </div>
+                {group.items}
               </div>
-              {group.items}
-            </div>
-          ))}
+            ))
+          )}
           {footer}
         </div>
       )}

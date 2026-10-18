@@ -278,6 +278,13 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
+  intake: {
+    key: "intake",
+    labelTranslationKey: "sidebar.intake",
+    href: `/intake/`,
+    access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+    highlight: (pathname: string, url: string) => pathname.includes(url),
+  },
   "your-work": {
     key: "your_work",
     labelTranslationKey: "your_work",
@@ -329,6 +336,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS_LINKS: IWorkspaceSidebarN
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["tracks"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["services"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["kb"],
+  WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["intake"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["ai_scheduler"],
   WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS["docs"],
 ];
