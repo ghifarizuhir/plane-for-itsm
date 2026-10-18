@@ -13,7 +13,7 @@ import { Combobox } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
-import { ChevronDownOutline, ProjectsOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
+import { ChevronDownOutline, CubeOutline, SearchOutline, TickOutline } from "@makeplane/propel/icons";
 import { ComboDropDown } from "@plane/ui";
 import { cn, sortBySelectedFirst } from "@plane/utils";
 // components
@@ -166,7 +166,7 @@ export const ProjectDropdownBase = observer(function ProjectDropdownBase(props: 
               return projectDetails?.logo_props ? renderIcon(projectDetails.logo_props) : null;
             })
           ) : (
-            <ProjectsOutline className="size-3 text-tertiary" />
+            <CubeOutline className="size-3 text-tertiary" />
           )}
         </div>
       );
