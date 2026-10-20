@@ -21,6 +21,7 @@ import { useUser, useUserPermissions } from "@/hooks/store/user";
 // lib
 import { RUN_STATUS_BADGE_VARIANTS, humanizeSchedule, scheduleStatusLabel, type TAiSchedule } from "@/lib/ai-schedule";
 // local imports
+import { ScheduleEditModal } from "./schedule-edit-modal";
 import { ScheduleRunsList } from "./schedule-runs-list";
 
 type Props = {
@@ -43,6 +44,7 @@ export const ScheduleDetailModal = observer(function ScheduleDetailModal({ sched
   // local state
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [loadingRuns, setLoadingRuns] = useState(false);
@@ -169,6 +171,11 @@ export const ScheduleDetailModal = observer(function ScheduleDetailModal({ sched
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-subtle p-4">
           {canManage && (
+            <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
+              Edit
+            </Button>
+          )}
+          {canManage && (
             <Button
               size="sm"
               variant="secondary"
@@ -193,6 +200,7 @@ export const ScheduleDetailModal = observer(function ScheduleDetailModal({ sched
           </Button>
         </div>
       </ModalCore>
+      {editOpen && <ScheduleEditModal schedule={schedule} isOpen={editOpen} onClose={() => setEditOpen(false)} />}
       <AlertModalCore
         isOpen={deleteOpen}
         handleClose={() => setDeleteOpen(false)}
