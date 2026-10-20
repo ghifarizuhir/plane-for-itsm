@@ -122,7 +122,7 @@ Tambah objek `service`, sejajar `category`:
 **4.2 Gate di FE** (`apps/web/core/components/inbox/content/inbox-issue-header.tsx`, accept di baris ~140):
 
 - Hitung `missingType` (project punya tipe live non-epic && `issue.type_id` null) dan `missingService` (`type.requires_service` && tidak ada link service live); tombol Accept disabled + tooltip/hint.
-- Modal konfirmasi accept menampilkan checklist syarat yang belum terpenuhi.
+- Modal accept (existing `CreateUpdateIssueModal`) hanya terbuka saat gate lolos, jadi checklist terpisah di modal tidak diperlukan; hint cukup di tooltip tombol.
 
 **4.3 Panel saran** (`apps/web/core/components/inbox/content/triage-suggestion.tsx`):
 
