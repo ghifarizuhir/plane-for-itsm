@@ -1159,6 +1159,68 @@ async fn schedule_update_metadata_carries_before_and_permission() {
 }
 
 #[tokio::test]
+async fn schedule_update_roundtrip_surfaces_before_and_after() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let st = state(&pool).await;
+    let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
+
+    let (_, Json(created)) = api::routes::ai_schedule::create(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "Daily report",
+            "description": "Summarize overdue work items for the team",
+            "how_to": ["Count overdue work items", "List the top five by priority"],
+            "tools": ["count_work_items", "search_work_items"],
+            "expected_output": "A short markdown list with identifiers and owners",
+            "frequency": "daily",
+            "time": "09:00",
+            "timezone": "UTC",
+            "proposal_key": Uuid::new_v4(),
+        })),
+    )
+    .await
+    .unwrap();
+    let schedule_id = created["id"].as_str().unwrap().to_string();
+
+    let arguments: &'static str = Box::leak(
+        json!({"schedule_id": schedule_id, "frequency": "weekly", "day_of_week": 2}).to_string()
+            .into_boxed_str(),
+    );
+    let base_url = tool_roundtrip::tool_roundtrip_url("update_schedule", arguments).await;
+    set_llm_env(&base_url);
+    let (status, Json(body)) = api::routes::ai_agent::workspace_ai_agent(
+        State(st.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "task": "be helpful",
+            "prompt": "make the daily report weekly instead",
+            "context": "ctx",
+            "conversation_id": conversation_id,
+        })),
+    )
+    .await
+    .expect("agent call");
+    clear_llm_env();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["pending_action"]["kind"], json!("update_schedule"));
+    let proposal = &body["assistant_message"]["metadata"]["schedule_update_proposal"];
+    assert_eq!(proposal["schedule_id"], json!(schedule_id));
+    assert_eq!(proposal["before"]["frequency"], json!("daily"));
+    assert_eq!(proposal["changes"]["frequency"], json!("weekly"));
+    assert_eq!(proposal["changes"]["day_of_week"], json!(2));
+    assert_eq!(
+        body["assistant_message"]["metadata"]["schedule_update_decision"],
+        json!("pending")
+    );
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn work_item_proposal_metadata_and_decisions_roundtrip() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;
