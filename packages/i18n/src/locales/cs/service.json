@@ -114,6 +114,21 @@
       "load_error_title": "Služby se nepodařilo načíst",
       "load_error_description": "Při načítání služeb došlo k chybě. Zkuste to prosím znovu.",
       "retry": "Zkusit znovu"
+    },
+    "relationships": {
+      "title": "Vztahy",
+      "empty": "Zatím žádné vztahy",
+      "update_error": "Vztah se nepodařilo aktualizovat. Zkuste to prosím znovu.",
+      "required_by": "Vyžadováno",
+      "uses": "Používá",
+      "used_by": "Využíváno",
+      "runs_on": "Běží na",
+      "hosts": "Hostuje",
+      "connects_to": "Připojuje se k",
+      "connected_from": "Připojeno z",
+      "replicates_to": "Replikuje na",
+      "replicated_from": "Replikováno z",
+      "related_to": "Související"
     }
   }
 }

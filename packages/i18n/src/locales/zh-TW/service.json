@@ -114,6 +114,21 @@
       "load_error_title": "無法載入服務",
       "load_error_description": "擷取服務時發生錯誤，請重試。",
       "retry": "重試"
+    },
+    "relationships": {
+      "title": "關係",
+      "empty": "尚無關係",
+      "update_error": "無法更新關係。請再試一次。",
+      "required_by": "被需要",
+      "uses": "使用",
+      "used_by": "被使用",
+      "runs_on": "執行於",
+      "hosts": "託管",
+      "connects_to": "連線到",
+      "connected_from": "連線自",
+      "replicates_to": "複製到",
+      "replicated_from": "複製自",
+      "related_to": "相關"
     }
   }
 }

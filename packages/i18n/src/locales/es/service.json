@@ -114,6 +114,21 @@
       "load_error_title": "No se pudieron cargar los servicios",
       "load_error_description": "Se produjo un error al cargar los servicios. Inténtelo de nuevo.",
       "retry": "Reintentar"
+    },
+    "relationships": {
+      "title": "Relaciones",
+      "empty": "Aún no hay relaciones",
+      "update_error": "No se pudo actualizar la relación. Inténtelo de nuevo.",
+      "required_by": "Requerido por",
+      "uses": "Usa",
+      "used_by": "Usado por",
+      "runs_on": "Se ejecuta en",
+      "hosts": "Aloja",
+      "connects_to": "Se conecta a",
+      "connected_from": "Conectado desde",
+      "replicates_to": "Replica en",
+      "replicated_from": "Replicado desde",
+      "related_to": "Relacionado con"
     }
   }
 }

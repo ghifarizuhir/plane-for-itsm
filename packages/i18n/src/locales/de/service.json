@@ -114,6 +114,21 @@
       "load_error_title": "Services konnten nicht geladen werden",
       "load_error_description": "Beim Laden der Services ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
       "retry": "Erneut versuchen"
+    },
+    "relationships": {
+      "title": "Beziehungen",
+      "empty": "Noch keine Beziehungen",
+      "update_error": "Die Beziehung konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+      "required_by": "Wird benötigt von",
+      "uses": "Verwendet",
+      "used_by": "Verwendet von",
+      "runs_on": "Läuft auf",
+      "hosts": "Hostet",
+      "connects_to": "Verbindet mit",
+      "connected_from": "Verbunden von",
+      "replicates_to": "Repliziert auf",
+      "replicated_from": "Repliziert von",
+      "related_to": "Verwandt mit"
     }
   }
 }

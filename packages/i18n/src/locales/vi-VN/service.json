@@ -114,6 +114,21 @@
       "load_error_title": "Không thể tải dịch vụ",
       "load_error_description": "Đã xảy ra lỗi khi tải dịch vụ. Vui lòng thử lại.",
       "retry": "Thử lại"
+    },
+    "relationships": {
+      "title": "Mối quan hệ",
+      "empty": "Chưa có mối quan hệ nào",
+      "update_error": "Không thể cập nhật mối quan hệ. Vui lòng thử lại.",
+      "required_by": "Được yêu cầu bởi",
+      "uses": "Sử dụng",
+      "used_by": "Được sử dụng bởi",
+      "runs_on": "Chạy trên",
+      "hosts": "Lưu trữ",
+      "connects_to": "Kết nối đến",
+      "connected_from": "Kết nối từ",
+      "replicates_to": "Sao chép đến",
+      "replicated_from": "Sao chép từ",
+      "related_to": "Liên quan đến"
     }
   }
 }

@@ -114,6 +114,21 @@
       "load_error_title": "サービスを読み込めませんでした",
       "load_error_description": "サービスの取得中にエラーが発生しました。もう一度お試しください。",
       "retry": "再試行"
+    },
+    "relationships": {
+      "title": "関係",
+      "empty": "関係はまだありません",
+      "update_error": "関係を更新できませんでした。もう一度お試しください。",
+      "required_by": "必要とされています",
+      "uses": "使用",
+      "used_by": "使用されています",
+      "runs_on": "実行環境",
+      "hosts": "ホスト",
+      "connects_to": "接続先",
+      "connected_from": "接続元",
+      "replicates_to": "複製先",
+      "replicated_from": "複製元",
+      "related_to": "関連"
     }
   }
 }

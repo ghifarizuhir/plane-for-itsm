@@ -114,6 +114,21 @@
       "load_error_title": "Hizmetler yüklenemedi",
       "load_error_description": "Hizmetler yüklenirken bir hata oluştu. Lütfen tekrar deneyin.",
       "retry": "Tekrar dene"
+    },
+    "relationships": {
+      "title": "İlişkiler",
+      "empty": "Henüz ilişki yok",
+      "update_error": "İlişki güncellenemedi. Lütfen tekrar deneyin.",
+      "required_by": "Gerektiren",
+      "uses": "Kullanır",
+      "used_by": "Kullanılıyor",
+      "runs_on": "Üzerinde çalışır",
+      "hosts": "Barındırır",
+      "connects_to": "Bağlanır",
+      "connected_from": "Bağlantı kaynağı",
+      "replicates_to": "Çoğaltır",
+      "replicated_from": "Çoğaltıldığı yer",
+      "related_to": "İlgili"
     }
   }
 }

@@ -120,6 +120,21 @@
       "load_error_description": "Something went wrong while fetching services. Please try again.",
       "retry": "Retry"
     },
+    "relationships": {
+      "title": "Relationships",
+      "empty": "No relationships yet",
+      "update_error": "Could not update relationship. Please try again.",
+      "required_by": "Required by",
+      "uses": "Uses",
+      "used_by": "Used by",
+      "runs_on": "Runs on",
+      "hosts": "Hosts",
+      "connects_to": "Connects to",
+      "connected_from": "Connected from",
+      "replicates_to": "Replicates to",
+      "replicated_from": "Replicated from",
+      "related_to": "Related to"
+    },
     "project_links": {
       "owner": "Owner",
       "transfer": "Transfer owner…",

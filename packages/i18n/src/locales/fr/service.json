@@ -114,6 +114,21 @@
       "load_error_title": "Impossible de charger les services",
       "load_error_description": "Une erreur s'est produite lors du chargement des services. Veuillez réessayer.",
       "retry": "Réessayer"
+    },
+    "relationships": {
+      "title": "Relations",
+      "empty": "Aucune relation pour le moment",
+      "update_error": "La relation n'a pas pu être mise à jour. Veuillez réessayer.",
+      "required_by": "Requis par",
+      "uses": "Utilise",
+      "used_by": "Utilisé par",
+      "runs_on": "S'exécute sur",
+      "hosts": "Héberge",
+      "connects_to": "Se connecte à",
+      "connected_from": "Connecté depuis",
+      "replicates_to": "Réplique vers",
+      "replicated_from": "Répliqué depuis",
+      "related_to": "Lié à"
     }
   }
 }

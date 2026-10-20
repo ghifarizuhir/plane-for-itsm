@@ -114,6 +114,21 @@
       "load_error_title": "Nie można wczytać usług",
       "load_error_description": "Wystąpił błąd podczas wczytywania usług. Spróbuj ponownie.",
       "retry": "Ponów"
+    },
+    "relationships": {
+      "title": "Relacje",
+      "empty": "Brak relacji",
+      "update_error": "Nie udało się zaktualizować relacji. Spróbuj ponownie.",
+      "required_by": "Wymagane przez",
+      "uses": "Używa",
+      "used_by": "Używane przez",
+      "runs_on": "Działa na",
+      "hosts": "Hostuje",
+      "connects_to": "Łączy się z",
+      "connected_from": "Połączone z",
+      "replicates_to": "Replikuje do",
+      "replicated_from": "Replikowane z",
+      "related_to": "Powiązane"
     }
   }
 }

@@ -114,6 +114,21 @@
       "load_error_title": "Impossibile caricare i servizi",
       "load_error_description": "Si è verificato un errore durante il caricamento dei servizi. Riprova.",
       "retry": "Riprova"
+    },
+    "relationships": {
+      "title": "Relazioni",
+      "empty": "Ancora nessuna relazione",
+      "update_error": "Impossibile aggiornare la relazione. Riprovi.",
+      "required_by": "Richiesto da",
+      "uses": "Utilizza",
+      "used_by": "Utilizzato da",
+      "runs_on": "Eseguito su",
+      "hosts": "Ospita",
+      "connects_to": "Si connette a",
+      "connected_from": "Connesso da",
+      "replicates_to": "Replica su",
+      "replicated_from": "Replicato da",
+      "related_to": "Correlato a"
     }
   }
 }

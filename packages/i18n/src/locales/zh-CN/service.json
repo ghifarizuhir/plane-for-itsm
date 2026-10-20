@@ -114,6 +114,21 @@
       "load_error_title": "无法加载服务",
       "load_error_description": "获取服务时出错，请重试。",
       "retry": "重试"
+    },
+    "relationships": {
+      "title": "关系",
+      "empty": "暂无关系",
+      "update_error": "无法更新关系。请重试。",
+      "required_by": "被需要",
+      "uses": "使用",
+      "used_by": "被使用",
+      "runs_on": "运行于",
+      "hosts": "托管",
+      "connects_to": "连接到",
+      "connected_from": "连接自",
+      "replicates_to": "复制到",
+      "replicated_from": "复制自",
+      "related_to": "相关"
     }
   }
 }

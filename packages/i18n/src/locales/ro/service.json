@@ -114,6 +114,21 @@
       "load_error_title": "Serviciile nu au putut fi încărcate",
       "load_error_description": "A apărut o eroare la încărcarea serviciilor. Încercați din nou.",
       "retry": "Reîncearcă"
+    },
+    "relationships": {
+      "title": "Relații",
+      "empty": "Încă nu există relații",
+      "update_error": "Relația nu a putut fi actualizată. Vă rugăm să încercați din nou.",
+      "required_by": "Necesar pentru",
+      "uses": "Utilizează",
+      "used_by": "Utilizat de",
+      "runs_on": "Rulează pe",
+      "hosts": "Găzduiește",
+      "connects_to": "Se conectează la",
+      "connected_from": "Conectat de la",
+      "replicates_to": "Replică către",
+      "replicated_from": "Replicat de la",
+      "related_to": "Legat de"
     }
   }
 }

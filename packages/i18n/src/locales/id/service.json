@@ -114,6 +114,21 @@
       "load_error_title": "Layanan tidak dapat dimuat",
       "load_error_description": "Terjadi kesalahan saat memuat layanan. Silakan coba lagi.",
       "retry": "Coba lagi"
+    },
+    "relationships": {
+      "title": "Hubungan",
+      "empty": "Belum ada hubungan",
+      "update_error": "Hubungan tidak dapat diperbarui. Silakan coba lagi.",
+      "required_by": "Dibutuhkan oleh",
+      "uses": "Menggunakan",
+      "used_by": "Digunakan oleh",
+      "runs_on": "Berjalan di atas",
+      "hosts": "Menghosting",
+      "connects_to": "Terhubung ke",
+      "connected_from": "Terhubung dari",
+      "replicates_to": "Mereplikasi ke",
+      "replicated_from": "Direplikasi dari",
+      "related_to": "Terkait dengan"
     }
   }
 }
