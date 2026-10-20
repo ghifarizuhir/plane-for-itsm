@@ -1,4 +1,6 @@
-use api::routes::estimate::{validate_create, validate_point_create, CreateEstimate, CreateEstimatePoint};
+use api::routes::estimate::{
+    validate_create, validate_point_create, CreateEstimate, CreateEstimatePoint,
+};
 
 #[test]
 fn rejects_empty_name() {
@@ -34,7 +36,11 @@ fn rejects_invalid_type() {
 
 #[test]
 fn accepts_valid_estimate() {
-    for t in [None, Some("categories".to_string()), Some("points".to_string())] {
+    for t in [
+        None,
+        Some("categories".to_string()),
+        Some("points".to_string()),
+    ] {
         let e = CreateEstimate {
             name: "Fib".to_string(),
             description: Some("fib scale".to_string()),

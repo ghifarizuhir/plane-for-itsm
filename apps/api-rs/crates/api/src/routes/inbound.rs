@@ -104,7 +104,10 @@ pub async fn alertmanager(
             Json(json!({"error": "alerts must be an array"})),
         ));
     };
-    let common_labels = body.get("commonLabels").cloned().unwrap_or_else(|| json!({}));
+    let common_labels = body
+        .get("commonLabels")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let common_annotations = body
         .get("commonAnnotations")
         .cloned()
@@ -155,16 +158,18 @@ pub async fn alertmanager(
             if pending {
                 let (row_id, issue_id) = match &existing {
                     Some(series) => (series.row_id, series.issue_id),
-                    None => sqlx::query_as::<_, (Uuid, Uuid)>(
-                        "SELECT ii.id, ii.issue_id FROM issues i \
+                    None => {
+                        sqlx::query_as::<_, (Uuid, Uuid)>(
+                            "SELECT ii.id, ii.issue_id FROM issues i \
                          JOIN intake_issues ii ON ii.issue_id = i.id \
                          WHERE i.intake_source_id = $1 AND i.intake_fingerprint = $2 \
                          AND i.deleted_at IS NULL",
-                    )
-                    .bind(source.id)
-                    .bind(&fingerprint)
-                    .fetch_one(&st.pool)
-                    .await?,
+                        )
+                        .bind(source.id)
+                        .bind(&fingerprint)
+                        .fetch_one(&st.pool)
+                        .await?
+                    }
                 };
                 match accept_intake_issue(
                     &st.pool,
@@ -566,7 +571,8 @@ async fn create_series(
 
     let mut tx = st.pool.begin().await?;
     let triage_id = resolve_or_create_triage(&mut tx, source.project_id, workspace_id).await?;
-    let intake_id = resolve_or_create_intake(&mut tx, source.project_id, workspace_id, actor).await?;
+    let intake_id =
+        resolve_or_create_intake(&mut tx, source.project_id, workspace_id, actor).await?;
     let issue = super::issue_write::insert_issue(
         &mut tx,
         super::issue_write::NewIssue {

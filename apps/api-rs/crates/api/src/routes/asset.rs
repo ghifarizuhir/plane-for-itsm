@@ -553,7 +553,10 @@ pub fn default_s3_region(region: &str) -> &str {
 async fn s3_copy_object(conf: &S3Conf, endpoint: &str, src_key: &str, dst_key: &str) {
     let now = Utc::now();
     let (amzdate, datestamp) = amz_dates(now);
-    let scope = format!("{datestamp}/{}/s3/aws4_request", default_s3_region(&conf.region));
+    let scope = format!(
+        "{datestamp}/{}/s3/aws4_request",
+        default_s3_region(&conf.region)
+    );
     let host = endpoint_authority(endpoint).to_string();
     let copy_source = format!(
         "/{}/{}",
@@ -576,7 +579,12 @@ async fn s3_copy_object(conf: &S3Conf, endpoint: &str, src_key: &str, dst_key: &
         "AWS4-HMAC-SHA256\n{amzdate}\n{scope}\n{}",
         sha256_hex(canonical_req.as_bytes())
     );
-    let signing = derive_signing_key(&conf.secret, &datestamp, default_s3_region(&conf.region), "s3");
+    let signing = derive_signing_key(
+        &conf.secret,
+        &datestamp,
+        default_s3_region(&conf.region),
+        "s3",
+    );
     let signature = hex::encode(hmac_sha256(&signing, string_to_sign.as_bytes()));
     let auth = format!(
         "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",

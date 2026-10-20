@@ -1,5 +1,6 @@
 use api::routes::misc::{
-    api_token_created_json, api_token_read_json, default_token_label, token_is_active, validate_export_provider,
+    api_token_created_json, api_token_read_json, default_token_label, token_is_active,
+    validate_export_provider,
 };
 use chrono::{TimeZone, Utc};
 use common::models::misc::ApiToken;
@@ -57,8 +58,14 @@ fn sample_token(description: &str, expired_at: Option<chrono::DateTime<Utc>>) ->
 fn token_is_active_handles_never_and_boundaries() {
     let now = Utc.with_ymd_and_hms(2026, 9, 18, 8, 0, 0).unwrap();
     assert!(token_is_active(None, now), "null expiry never expires");
-    assert!(token_is_active(Some(now + chrono::Duration::seconds(1)), now));
-    assert!(!token_is_active(Some(now - chrono::Duration::seconds(1)), now));
+    assert!(token_is_active(
+        Some(now + chrono::Duration::seconds(1)),
+        now
+    ));
+    assert!(!token_is_active(
+        Some(now - chrono::Duration::seconds(1)),
+        now
+    ));
 }
 
 #[test]
@@ -90,7 +97,10 @@ fn read_json_matches_django_read_serializer_shape() {
     ] {
         assert!(obj.contains_key(key), "missing key {key}");
     }
-    assert!(!obj.contains_key("token"), "read shape must not leak the secret");
+    assert!(
+        !obj.contains_key("token"),
+        "read shape must not leak the secret"
+    );
     assert_eq!(obj["description"], Value::String("deploy bot".into()));
     assert_eq!(obj["is_active"], Value::Bool(true));
 }
@@ -118,7 +128,10 @@ async fn timezones_envelope_with_offsets_sorted() {
     // `{"timezones": [{utc_offset, gmt_offset, value, label}]}` sorted by
     // (offset, label); offsets are DST-aware live values.
     let data = api::routes::misc::timezones().await.0;
-    let arr = data.get("timezones").and_then(|v| v.as_array()).expect("envelope");
+    let arr = data
+        .get("timezones")
+        .and_then(|v| v.as_array())
+        .expect("envelope");
     assert!(arr.len() > 100, "codegen list intact: {}", arr.len());
     let mut prev: Option<(i32, String)> = None;
     for tz in arr {
@@ -138,7 +151,10 @@ async fn timezones_envelope_with_offsets_sorted() {
         };
         let label = tz["label"].as_str().unwrap().to_string();
         if let Some((po, pl)) = prev {
-            assert!((secs, label.clone()) >= (po, pl), "sorted by (offset,label)");
+            assert!(
+                (secs, label.clone()) >= (po, pl),
+                "sorted by (offset,label)"
+            );
         }
         prev = Some((secs, label));
     }

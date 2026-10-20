@@ -89,7 +89,10 @@ pub async fn gate_writer(
     let Some(owner) = owner_project(pool, service_id).await? else {
         return Ok(false);
     };
-    Ok(matches!(project_role(pool, user_id, slug, owner).await?, Some(20) | Some(15)))
+    Ok(matches!(
+        project_role(pool, user_id, slug, owner).await?,
+        Some(20) | Some(15)
+    ))
 }
 
 /// Admin: ws admin, or project admin (20) of the owner project.
@@ -105,7 +108,10 @@ pub async fn gate_admin(
     let Some(owner) = owner_project(pool, service_id).await? else {
         return Ok(false);
     };
-    Ok(matches!(project_role(pool, user_id, slug, owner).await?, Some(20)))
+    Ok(matches!(
+        project_role(pool, user_id, slug, owner).await?,
+        Some(20)
+    ))
 }
 
 pub async fn owner_project(
@@ -145,5 +151,8 @@ pub async fn is_project_admin(
     slug: &str,
     project_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    Ok(matches!(project_role(pool, user_id, slug, project_id).await?, Some(20)))
+    Ok(matches!(
+        project_role(pool, user_id, slug, project_id).await?,
+        Some(20)
+    ))
 }

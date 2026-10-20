@@ -10,27 +10,36 @@ const ITERATIONS: u32 = 1_000_000;
 /// False untuk format tak dikenal — tidak pernah panic pada input asing.
 pub fn verify_django_password(password: &str, encoded: &str) -> bool {
     let mut parts = encoded.split('$');
-    match (parts.next(), parts.next(), parts.next(), parts.next(), parts.next()) {
+    match (
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+    ) {
         (Some("pbkdf2_sha256"), Some(iter), Some(salt), Some(hash), None) => {
             let iter: u32 = match iter.parse() {
                 Ok(n) => n,
                 Err(_) => return false,
             };
-            let expected = match base64::Engine::decode(
-                &base64::engine::general_purpose::STANDARD,
-                hash,
-            ) {
-                Ok(b) => b,
-                Err(_) => return false,
-            };
+            let expected =
+                match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, hash) {
+                    Ok(b) => b,
+                    Err(_) => return false,
+                };
             // Django SHA-256 digests are always 32 bytes: reject empty and
             // wrong-length digests (empty vec compared true via empty fold).
-            if expected.len() != 32 /* SHA-256 output */ {
+            if expected.len() != 32
+            /* SHA-256 output */
+            {
                 return false;
             }
             let mut out = [0u8; 32];
             pbkdf2_hmac::<Sha256>(password.as_bytes(), salt.as_bytes(), iter, &mut out);
-            out.iter().zip(expected.iter()).fold(0, |a, (x, y)| a | (x ^ y)) == 0
+            out.iter()
+                .zip(expected.iter())
+                .fold(0, |a, (x, y)| a | (x ^ y))
+                == 0
         }
         _ => false,
     }
@@ -63,8 +72,12 @@ pub fn encode_access(user_id: &uuid::Uuid, secret: &str, ttl_secs: i64) -> Strin
         iat: now as usize,
         jti: uuid::Uuid::new_v4().to_string(),
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(secret.as_bytes()))
-        .expect("jwt encode")
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("jwt encode")
 }
 
 pub fn decode_access(token: &str, secret: &str) -> Result<uuid::Uuid, String> {

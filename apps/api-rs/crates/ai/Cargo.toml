@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 common = { path = "../common" }
+comrak = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 rig = { workspace = true }

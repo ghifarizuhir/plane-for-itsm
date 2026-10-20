@@ -100,11 +100,22 @@ pub enum LlmError {
     Upstream,
 }
 
-/// Django parity: `/ai-assistant/` returns the raw text plus a copy with
-/// newlines mapped to `<br/>`. Shared with the agent route so both chat modes
-/// render identically.
+/// Render model output (GitHub-flavored Markdown) as HTML for the clients.
+///
+/// Raw HTML is escaped (`render.escape`) so the fragment only contains tags the
+/// renderer emits; the web app still allowlist-sanitizes before injection. Soft
+/// breaks stay `<br />`, preserving the plain-text newline behavior the Django
+/// endpoint had. Shared by chat, editor completion, and scheduled runs.
 pub fn response_html(text: &str) -> String {
-    text.replace('\n', "<br/>")
+    let mut options = comrak::Options::default();
+    options.extension.table = true;
+    options.extension.strikethrough = true;
+    options.extension.autolink = true;
+    options.render.hardbreaks = true;
+    options.render.escape = true;
+    comrak::markdown_to_html(text, &options)
+        .trim_end()
+        .to_string()
 }
 
 /// `host` for the 429 body, e.g. `api.openai.com`.
@@ -116,4 +127,51 @@ pub fn host_of(base_url: &str) -> String {
         .next()
         .unwrap_or("")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::response_html;
+
+    #[test]
+    fn response_html_empty_is_empty() {
+        assert_eq!(response_html(""), "");
+    }
+
+    #[test]
+    fn response_html_renders_paragraphs_and_soft_breaks() {
+        assert_eq!(response_html("plain"), "<p>plain</p>");
+        assert_eq!(response_html("a\nb"), "<p>a<br />\nb</p>");
+        assert_eq!(response_html("a\n\nb"), "<p>a</p>\n<p>b</p>");
+    }
+
+    #[test]
+    fn response_html_renders_inline_markdown() {
+        assert!(response_html("**bold**").contains("<strong>bold</strong>"));
+        assert!(response_html("`code`").contains("<code>code</code>"));
+        assert!(response_html("[x](https://example.com)")
+            .contains("<a href=\"https://example.com\">x</a>"));
+    }
+
+    #[test]
+    fn response_html_renders_blocks_and_gfm_tables() {
+        assert!(response_html("## Title").contains("<h2>Title</h2>"));
+        assert!(response_html("- one\n- two").contains("<li>one</li>"));
+        assert!(response_html("1. one\n2. two").contains("<ol>"));
+        assert!(response_html("> quote").contains("<blockquote>"));
+        assert!(response_html("```\ncode\n```").contains("<pre><code>code"));
+        assert!(response_html("| a | b |\n| - | - |\n| 1 | 2 |").contains("<table>"));
+    }
+
+    #[test]
+    fn response_html_escapes_raw_html() {
+        assert_eq!(
+            response_html("<script>alert(1)</script>"),
+            "&lt;script&gt;alert(1)&lt;/script&gt;"
+        );
+        assert_eq!(
+            response_html("a <b>bold</b>"),
+            "<p>a &lt;b&gt;bold&lt;/b&gt;</p>"
+        );
+    }
 }

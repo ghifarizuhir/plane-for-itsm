@@ -55,7 +55,10 @@ async fn migrate_fails_fast_when_lock_is_held() {
         .unwrap();
 
     let result = outcome.expect("migrate() hung waiting for the migration advisory lock");
-    assert!(result.is_err(), "migrate() should fail while the lock is held");
+    assert!(
+        result.is_err(),
+        "migrate() should fail while the lock is held"
+    );
     assert!(
         elapsed < Duration::from_secs(25),
         "migrate() took too long to fail ({elapsed:?})"

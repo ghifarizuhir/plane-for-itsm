@@ -1,6 +1,4 @@
-use api::routes::member::{
-    validate_create, validate_invite_create, CreateMember, CreateInvite,
-};
+use api::routes::member::{validate_create, validate_invite_create, CreateInvite, CreateMember};
 
 #[test]
 fn rejects_invalid_role() {

@@ -1,4 +1,6 @@
-use api::routes::asset::{clamp_size, default_s3_region, validate_upload_init, CreateAssetInit, FILE_SIZE_LIMIT};
+use api::routes::asset::{
+    clamp_size, default_s3_region, validate_upload_init, CreateAssetInit, FILE_SIZE_LIMIT,
+};
 
 #[test]
 fn rejects_invalid_entity_type() {

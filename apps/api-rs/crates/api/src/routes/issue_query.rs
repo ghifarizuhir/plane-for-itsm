@@ -2302,17 +2302,33 @@ mod issue_list_tests {
     fn complex_war_room_on_off_render_exists_checks() {
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
         apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":"on"}]})).unwrap();
-        assert!(qb.sql().contains("EXISTS(SELECT 1 FROM war_rooms wr"), "{}", qb.sql());
+        assert!(
+            qb.sql().contains("EXISTS(SELECT 1 FROM war_rooms wr"),
+            "{}",
+            qb.sql()
+        );
 
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
-        apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":"off"}]})).unwrap();
-        assert!(qb.sql().contains("NOT EXISTS(SELECT 1 FROM war_rooms wr"), "{}", qb.sql());
+        apply_complex_filter(
+            &mut qb,
+            &serde_json::json!({"and":[{"war_room__in":"off"}]}),
+        )
+        .unwrap();
+        assert!(
+            qb.sql().contains("NOT EXISTS(SELECT 1 FROM war_rooms wr"),
+            "{}",
+            qb.sql()
+        );
     }
 
     #[test]
     fn complex_war_room_both_values_match_all_and_unknown_400s() {
         let mut qb = QueryBuilder::<Postgres>::new("SELECT 1 FROM issues i");
-        apply_complex_filter(&mut qb, &serde_json::json!({"and":[{"war_room__in":["on","off"]}]})).unwrap();
+        apply_complex_filter(
+            &mut qb,
+            &serde_json::json!({"and":[{"war_room__in":["on","off"]}]}),
+        )
+        .unwrap();
         assert!(qb.sql().contains("TRUE"), "{}", qb.sql());
 
         let err = apply_complex_leaf(

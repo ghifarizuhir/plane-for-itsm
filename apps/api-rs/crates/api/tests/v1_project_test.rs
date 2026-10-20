@@ -22,12 +22,25 @@ fn row() -> ProjectLiteRow {
 fn project_lite_json_has_sdk_required_fields_and_keys() {
     let v = v1_project_lite_json(&row());
     let o = v.as_object().expect("object");
-    for key in ["id", "identifier", "name", "cover_image", "icon_prop", "emoji", "description", "cover_image_url", "archived_at"] {
+    for key in [
+        "id",
+        "identifier",
+        "name",
+        "cover_image",
+        "icon_prop",
+        "emoji",
+        "description",
+        "cover_image_url",
+        "archived_at",
+    ] {
         assert!(o.contains_key(key), "missing key {key}");
     }
     assert_eq!(o["identifier"], Value::String("PREPAID".into()));
     assert_eq!(o["name"], Value::String("Ne".into()));
-    assert_eq!(o["cover_image_url"], Value::String("https://cdn/cover.png".into()));
+    assert_eq!(
+        o["cover_image_url"],
+        Value::String("https://cdn/cover.png".into())
+    );
     let _ = Utc::now();
 }
 

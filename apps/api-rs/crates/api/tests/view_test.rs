@@ -1,4 +1,4 @@
-use api::routes::view::{validate_create, validate_favorite_create, CreateView, CreateFavorite};
+use api::routes::view::{validate_create, validate_favorite_create, CreateFavorite, CreateView};
 
 #[test]
 fn rejects_empty_name() {

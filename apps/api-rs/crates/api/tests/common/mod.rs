@@ -20,9 +20,13 @@ pub fn load_inventory() -> serde_json::Value {
 /// Flatten inventory into `(domain, endpoint)` pairs.
 pub fn endpoints(inv: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
     let mut out = Vec::new();
-    let domains = inv["domains"].as_object().expect("domains must be an object");
+    let domains = inv["domains"]
+        .as_object()
+        .expect("domains must be an object");
     for (domain, d) in domains {
-        let eps = d["endpoints"].as_array().expect("endpoints must be an array");
+        let eps = d["endpoints"]
+            .as_array()
+            .expect("endpoints must be an array");
         for ep in eps {
             out.push((domain.clone(), ep.clone()));
         }
@@ -34,7 +38,8 @@ pub fn endpoints(inv: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
 /// skipping `.route(` occurrences inside `//` line comments. Multi-line
 /// `.route(` calls are supported (path is the first string after the call).
 pub fn rust_routes() -> Vec<String> {
-    let src = std::fs::read_to_string(Path::new(MANIFEST_DIR).join("src/main.rs")).expect("main.rs");
+    let src =
+        std::fs::read_to_string(Path::new(MANIFEST_DIR).join("src/main.rs")).expect("main.rs");
     let mut out = Vec::new();
     let mut i = 0;
     while let Some(p) = src[i..].find(".route(") {
@@ -83,7 +88,9 @@ pub fn segments_match(fe: &[String], matrix: &[String]) -> bool {
     if fe.len() != matrix.len() {
         return false;
     }
-    fe.iter().zip(matrix.iter()).all(|(f, m)| f == "*" || m == "*" || f == m)
+    fe.iter()
+        .zip(matrix.iter())
+        .all(|(f, m)| f == "*" || m == "*" || f == m)
 }
 
 /// Strip the query string from an extracted FE URL template.
@@ -121,12 +128,18 @@ pub fn fe_urls_in_file(path: &Path) -> Vec<String> {
     let src = std::fs::read_to_string(path).unwrap_or_default();
     let mut out = Vec::new();
     for line in src.lines() {
-        let Some(start) = line.find("/api/") else { continue };
+        let Some(start) = line.find("/api/") else {
+            continue;
+        };
         let rest = &line[start..];
-        let end = rest.find('`').or_else(|| rest.find('"')).unwrap_or(rest.len());
+        let end = rest
+            .find('`')
+            .or_else(|| rest.find('"'))
+            .unwrap_or(rest.len());
         let url = &rest[..end];
-        let url = url
-            .trim_end_matches(|c: char| c.is_whitespace() || c == ',' || c == ')' || c == '`' || c == '"');
+        let url = url.trim_end_matches(|c: char| {
+            c.is_whitespace() || c == ',' || c == ')' || c == '`' || c == '"'
+        });
         let url = strip_fe_query(url);
         if url.starts_with("/api/") && url.len() > 5 {
             out.push(url.to_string());

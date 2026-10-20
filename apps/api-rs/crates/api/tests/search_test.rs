@@ -1,4 +1,6 @@
-use api::routes::search::{build_search_issue_item, parse_entities, SearchIssueRow, SEARCH_ENTITIES};
+use api::routes::search::{
+    build_search_issue_item, parse_entities, SearchIssueRow, SEARCH_ENTITIES,
+};
 
 #[test]
 fn filters_unknown_entities() {

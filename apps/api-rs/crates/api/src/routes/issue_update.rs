@@ -171,8 +171,11 @@ async fn validate_patch_refs(
         }
     }
     if !labels.is_empty() {
+        // Program P1/S3: labels are workspace-level (project_id NULL).
+        // Validate against the project's workspace so both legacy
+        // project-scoped rows and workspace rows pass.
         let (n,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM labels WHERE workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) AND id = ANY($2) AND deleted_at IS NULL",
         )
         .bind(project_id)
         .bind(labels)

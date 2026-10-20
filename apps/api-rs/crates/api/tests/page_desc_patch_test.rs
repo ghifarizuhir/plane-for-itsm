@@ -1,7 +1,10 @@
 //! Regression tests for the page description PATCH handler
 //! (`page::desc_patch`): Django's `Page.save()` recomputes
 //! `description_stripped` on every save (`db/models/page.py:70-77`), so a
-//! description update must refresh the stored stripped text.
+//! description update must refresh the stored stripped text; the
+//! `track_page_version` task (`bgtasks/page_version_task.py:22-81`) records a
+//! `page_versions` row owned by the editor, so "Edited by" follows the last
+//! editor (merge within 600 s, skip unchanged, trim to 20).
 
 use api::middleware::auth::AuthUser;
 use api::routes::page::desc_patch;
@@ -9,6 +12,7 @@ use api::state::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
+use chrono::{DateTime, Utc};
 use common::config::AppConfig;
 use serde_json::json;
 use sqlx::PgPool;
@@ -39,6 +43,9 @@ struct Scratch {
     slug: String,
     workspace_id: Uuid,
     user_id: Uuid,
+    /// Second project member: the page is owned by `user_id`, so this is the
+    /// "another member edited the page" fixture.
+    editor_id: Uuid,
     project_id: Uuid,
     page_id: Uuid,
 }
@@ -104,6 +111,7 @@ impl Scratch {
     async fn new(pool: &PgPool) -> Self {
         let slug = format!("pdsc-{}", Uuid::new_v4().simple());
         let user_id = Uuid::new_v4();
+        let editor_id = Uuid::new_v4();
         let workspace_id = Uuid::new_v4();
         let project_id = Uuid::new_v4();
         let page_id = Uuid::new_v4();
@@ -111,6 +119,7 @@ impl Scratch {
             format!("PDSC{}", &Uuid::new_v4().simple().to_string()[..8]).to_uppercase();
 
         insert_user(pool, user_id, &slug).await;
+        insert_user(pool, editor_id, &format!("{slug}-editor")).await;
 
         sqlx::query(
             "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, \
@@ -124,6 +133,7 @@ impl Scratch {
         .expect("scratch workspace");
 
         insert_workspace_member(pool, user_id, workspace_id, 20).await;
+        insert_workspace_member(pool, editor_id, workspace_id, 20).await;
 
         sqlx::query(
             "INSERT INTO projects (id, created_at, updated_at, name, description, network, \
@@ -141,6 +151,7 @@ impl Scratch {
         .expect("scratch project");
 
         insert_project_member(pool, user_id, project_id, workspace_id, 20).await;
+        insert_project_member(pool, editor_id, project_id, workspace_id, 20).await;
 
         sqlx::query(
             "INSERT INTO pages (id, name, description_json, description_binary, description_html, \
@@ -174,6 +185,7 @@ impl Scratch {
             slug,
             workspace_id,
             user_id,
+            editor_id,
             project_id,
             page_id,
         }
@@ -182,6 +194,11 @@ impl Scratch {
     async fn cleanup(&self, pool: &PgPool) {
         sqlx::query("DELETE FROM project_pages WHERE project_id = $1")
             .bind(self.project_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM page_versions WHERE workspace_id = $1")
+            .bind(self.workspace_id)
             .execute(pool)
             .await
             .ok();
@@ -212,6 +229,11 @@ impl Scratch {
             .ok();
         sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(self.user_id)
+            .execute(pool)
+            .await
+            .ok();
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(self.editor_id)
             .execute(pool)
             .await
             .ok();
@@ -296,6 +318,224 @@ async fn desc_patch_clearing_html_clears_stripped() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     assert_eq!(stripped_of(&pool, scratch.page_id).await, None);
+
+    scratch.cleanup(&pool).await;
+}
+
+// ============================================================================
+// Version recording — mirrors `track_page_version`
+// (`bgtasks/page_version_task.py:22-81`), scheduled by
+// `PagesDescriptionViewSet.partial_update` (`views/page/base.py:583-587`).
+// ============================================================================
+
+async fn live_version_count(pool: &PgPool, page_id: Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM page_versions WHERE page_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(page_id)
+    .fetch_one(pool)
+    .await
+    .expect("version count")
+}
+
+#[tokio::test]
+async fn desc_patch_records_version_owned_by_editor() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    // Another member edits the page the first member owns: the version row
+    // must be attributed to the editor, not to the page owner/creator
+    // (`page_version_task.py:67`).
+    let resp = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_html": "<p>edited by member 2</p>"})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let rows: Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        Uuid,
+        Option<Uuid>,
+        Option<Uuid>,
+    )> = sqlx::query_as(
+        "SELECT page_id, description_html, description_stripped, owned_by_id, \
+             created_by_id, updated_by_id FROM page_versions WHERE page_id = $1 \
+             AND deleted_at IS NULL",
+    )
+    .bind(scratch.page_id)
+    .fetch_all(&pool)
+    .await
+    .expect("version rows");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, scratch.page_id);
+    assert_eq!(rows[0].1, "<p>edited by member 2</p>");
+    assert_eq!(rows[0].2.as_deref(), Some("edited by member 2"));
+    assert_eq!(rows[0].3, scratch.editor_id);
+    // `PageVersion.objects.create` (`page_version_task.py:60-70`) sets neither
+    // audit column, and the task runs outside a request (`crum` → None).
+    assert_eq!(rows[0].4, None);
+    assert_eq!(rows[0].5, None);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn desc_patch_merges_rapid_same_owner_edits() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    let first = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_html": "<p>v2</p>"})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(first.status(), StatusCode::OK);
+    let first_saved: DateTime<Utc> =
+        sqlx::query_scalar("SELECT last_saved_at FROM page_versions WHERE page_id = $1")
+            .bind(scratch.page_id)
+            .fetch_one(&pool)
+            .await
+            .expect("first version");
+
+    let second = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_html": "<p>v3</p>"})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(second.status(), StatusCode::OK);
+
+    // Same owner within 600 s → the same row is refreshed in place
+    // (`page_version_task.py:38-57`), and `last_saved_at` is NOT in
+    // `update_fields`, so it keeps the original value.
+    let rows: Vec<(String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT description_html, last_saved_at FROM page_versions WHERE page_id = $1",
+    )
+    .bind(scratch.page_id)
+    .fetch_all(&pool)
+    .await
+    .expect("version rows");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, "<p>v3</p>");
+    assert_eq!(rows[0].1, first_saved);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn desc_patch_identical_html_skips_version() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    // `page_version_task.py:33`: unchanged html → no version write. The
+    // scratch page stores `<p>old</p>`.
+    let resp = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_html": "<p>old</p>"})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    assert_eq!(live_version_count(&pool, scratch.page_id).await, 0);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn desc_patch_binary_only_skips_version() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    // The binary-only patch (live-server first conversion) does not carry
+    // html, so the stored html is unchanged → no version write.
+    let resp = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_binary": ""})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    assert_eq!(live_version_count(&pool, scratch.page_id).await, 0);
+
+    scratch.cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn desc_patch_trims_versions_beyond_20() {
+    let st = state().await;
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+
+    // Seed 20 versions, newest first (hour 1) to oldest (hour 20), all older
+    // than the 600 s merge window.
+    for hour in 1..=20i32 {
+        sqlx::query(
+            "INSERT INTO page_versions (id, last_saved_at, description_binary, \
+             description_html, description_stripped, description_json, sub_pages_data, \
+             owned_by_id, page_id, workspace_id, created_at, updated_at) \
+             VALUES (gen_random_uuid(), now() - make_interval(hours => $1), NULL, $2, \
+             $3, '{}'::jsonb, '{}'::jsonb, $4, $5, $6, now(), now())",
+        )
+        .bind(hour)
+        .bind(format!("<p>seed-{hour}</p>"))
+        .bind(format!("seed-{hour}"))
+        .bind(scratch.user_id)
+        .bind(scratch.page_id)
+        .bind(scratch.workspace_id)
+        .execute(&pool)
+        .await
+        .expect("seed version");
+    }
+
+    let resp = desc_patch(
+        State(st.clone()),
+        AuthUser(scratch.editor_id),
+        Path((scratch.slug.clone(), scratch.project_id, scratch.page_id)),
+        Json(json!({"description_html": "<p>v21</p>"})),
+    )
+    .await
+    .expect("desc_patch");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // 21 versions → the oldest (`last_saved_at` asc, seed-20) is soft-deleted
+    // (`page_version_task.py:71-74`; `SoftDeletionManager` hides it).
+    assert_eq!(live_version_count(&pool, scratch.page_id).await, 20);
+    let (oldest_deleted, newest_present): (Option<DateTime<Utc>>, i64) = sqlx::query_as(
+        "SELECT \
+         (SELECT deleted_at FROM page_versions WHERE page_id = $1 AND description_html = '<p>seed-20</p>'), \
+         (SELECT COUNT(*) FROM page_versions WHERE page_id = $1 AND description_html = '<p>v21</p>' \
+          AND deleted_at IS NULL)",
+    )
+    .bind(scratch.page_id)
+    .fetch_one(&pool)
+    .await
+    .expect("trim check");
+    assert!(
+        oldest_deleted.is_some(),
+        "oldest version must be soft-deleted"
+    );
+    assert_eq!(newest_present, 1);
 
     scratch.cleanup(&pool).await;
 }

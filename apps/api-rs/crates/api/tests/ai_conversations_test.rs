@@ -897,7 +897,7 @@ async fn ai_complete_is_stateless_and_persists_nothing() {
     .expect("ai-complete");
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["response"], json!("editor answer"));
-    assert_eq!(body["response_html"], json!("editor answer"));
+    assert_eq!(body["response_html"], json!("<p>editor answer</p>"));
 
     // Old parity: task and prompt are folded, nothing else is added, and the
     // upstream is called exactly once.

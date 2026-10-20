@@ -53,7 +53,16 @@ fn relation_rejects_empty_issues() {
 
 #[test]
 fn relation_accepts_valid_types() {
-    for t in ["blocking", "blocked_by", "duplicate", "relates_to", "start_before", "start_after", "finish_before", "finish_after"] {
+    for t in [
+        "blocking",
+        "blocked_by",
+        "duplicate",
+        "relates_to",
+        "start_before",
+        "start_after",
+        "finish_before",
+        "finish_after",
+    ] {
         let r = CreateRelation {
             issues: vec![uuid::Uuid::new_v4()],
             relation_type: Some(t.to_string()),

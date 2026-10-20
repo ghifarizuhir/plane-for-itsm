@@ -1,4 +1,7 @@
-use sqlx::{postgres::{PgConnection, PgPoolOptions}, PgPool};
+use sqlx::{
+    postgres::{PgConnection, PgPoolOptions},
+    PgPool,
+};
 
 use crate::config::AppConfig;
 
@@ -22,7 +25,10 @@ pub async fn migrate(database_url: &str) -> anyhow::Result<()> {
     migrate_with_statement_timeout(database_url, "60s").await
 }
 
-pub async fn migrate_with_statement_timeout(database_url: &str, statement_timeout: &str) -> anyhow::Result<()> {
+pub async fn migrate_with_statement_timeout(
+    database_url: &str,
+    statement_timeout: &str,
+) -> anyhow::Result<()> {
     let timeout = statement_timeout.to_string();
     let pool = PgPoolOptions::new()
         .max_connections(1)

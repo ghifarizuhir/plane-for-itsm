@@ -494,24 +494,20 @@ pub const WORK_ITEM_ASSIGNEES_SQL: &str =
      JOIN users u ON u.id = ia.assignee_id \
      WHERE ia.issue_id = $1 AND ia.deleted_at IS NULL ORDER BY 1";
 
-pub const WORK_ITEM_LABELS_SQL: &str =
-    "SELECT l.name FROM issue_labels il \
+pub const WORK_ITEM_LABELS_SQL: &str = "SELECT l.name FROM issue_labels il \
      JOIN labels l ON l.id = il.label_id AND l.deleted_at IS NULL \
      WHERE il.issue_id = $1 AND il.deleted_at IS NULL ORDER BY l.name";
 
-pub const WORK_ITEM_SPRINT_SQL: &str =
-    "SELECT c.name FROM cycle_issues ci \
+pub const WORK_ITEM_SPRINT_SQL: &str = "SELECT c.name FROM cycle_issues ci \
      JOIN cycles c ON c.id = ci.cycle_id AND c.deleted_at IS NULL \
      WHERE ci.issue_id = $1 AND ci.deleted_at IS NULL \
      ORDER BY ci.created_at DESC, ci.id DESC LIMIT 1";
 
-pub const WORK_ITEM_TRACKS_SQL: &str =
-    "SELECT m.name FROM module_issues mi \
+pub const WORK_ITEM_TRACKS_SQL: &str = "SELECT m.name FROM module_issues mi \
      JOIN modules m ON m.id = mi.module_id AND m.deleted_at IS NULL \
      WHERE mi.issue_id = $1 AND mi.deleted_at IS NULL ORDER BY m.name";
 
-pub const WORK_ITEM_SERVICES_SQL: &str =
-    "SELECT sv.name FROM service_issues si \
+pub const WORK_ITEM_SERVICES_SQL: &str = "SELECT sv.name FROM service_issues si \
      JOIN services sv ON sv.id = si.service_id AND sv.deleted_at IS NULL \
      WHERE si.issue_id = $1 AND si.deleted_at IS NULL ORDER BY sv.name";
 
@@ -884,7 +880,11 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.to_string().contains("PROJ-123"));
-        assert_eq!(trace.lock().unwrap().len(), 1, "read tools trace before validation");
+        assert_eq!(
+            trace.lock().unwrap().len(),
+            1,
+            "read tools trace before validation"
+        );
     }
 
     #[test]
@@ -1004,7 +1004,16 @@ mod tests {
     #[test]
     fn work_item_filters_keep_a_named_assignee() {
         let filters = WorkItemFilters::normalize(
-            None, None, None, None, None, None, Some("Budi"), None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("Budi"),
+            None,
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(filters.assignee.as_deref(), Some("Budi"));
@@ -1013,18 +1022,32 @@ mod tests {
 
     #[test]
     fn work_item_filters_validate_allowlists() {
-        assert!(
-            WorkItemFilters::normalize(
-                None, None, Some("nope"), None, None, None, None, None, None, None
-            )
-            .is_err()
-        );
-        assert!(
-            WorkItemFilters::normalize(
-                None, None, None, Some("p0"), None, None, None, None, None, None
-            )
-            .is_err()
-        );
+        assert!(WorkItemFilters::normalize(
+            None,
+            None,
+            Some("nope"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None
+        )
+        .is_err());
+        assert!(WorkItemFilters::normalize(
+            None,
+            None,
+            None,
+            Some("p0"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None
+        )
+        .is_err());
     }
 
     #[test]

@@ -77,13 +77,21 @@ impl Answer {
         };
         match self {
             Answer::Noul { probability } => json!({"type": "noul", "noul": probability}),
-            Answer::Choice { choice, confidence, probabilities: p } => json!({
+            Answer::Choice {
+                choice,
+                confidence,
+                probabilities: p,
+            } => json!({
                 "type": "choice",
                 "choice": choice,
                 "confidence": confidence,
                 "probabilities": probabilities(p),
             }),
-            Answer::Score { score, confidence, probabilities: p } => json!({
+            Answer::Score {
+                score,
+                confidence,
+                probabilities: p,
+            } => json!({
                 "type": "score",
                 "score": score,
                 "confidence": confidence,
@@ -113,7 +121,10 @@ pub struct DecisionOutcome {
 impl Question {
     fn to_json(&self) -> Value {
         match self {
-            Question::Noul { instructions, criteria } => {
+            Question::Noul {
+                instructions,
+                criteria,
+            } => {
                 let mut obj = Map::new();
                 obj.insert("type".into(), json!("noul"));
                 obj.insert("instructions".into(), json!(instructions));
@@ -122,7 +133,10 @@ impl Question {
                 }
                 Value::Object(obj)
             }
-            Question::Choice { instructions, criteria } => json!({
+            Question::Choice {
+                instructions,
+                criteria,
+            } => json!({
                 "type": "choice",
                 "instructions": instructions,
                 "criteria": Value::Object(
@@ -132,7 +146,10 @@ impl Question {
                         .collect(),
                 ),
             }),
-            Question::Score { instructions, criteria } => json!({
+            Question::Score {
+                instructions,
+                criteria,
+            } => json!({
                 "type": "score",
                 "instructions": instructions,
                 "criteria": criteria,
@@ -185,13 +202,9 @@ pub async fn resolve_decision_config(pool: &PgPool) -> Option<DecisionConfig> {
     let (env_api_key, _, env_base_url) = llm_config_from_env();
     let env_model = std::env::var("LLM_DECISION_MODEL").unwrap_or_default();
     if !skip_env_vars() {
-        return decision_config_from_rows(
-            &[],
-            env_api_key,
-            env_model,
-            env_base_url,
-            |_| String::new(),
-        );
+        return decision_config_from_rows(&[], env_api_key, env_model, env_base_url, |_| {
+            String::new()
+        });
     }
     let rows: Vec<(String, Option<String>, bool)> = sqlx::query_as(
         "SELECT key, value, is_encrypted FROM instance_configurations \
@@ -266,8 +279,14 @@ pub fn parse_outcome(value: &Value) -> Result<DecisionOutcome, DecisionError> {
     Ok(DecisionOutcome {
         model,
         answers,
-        input_tokens: usage.get("input_tokens").and_then(Value::as_i64).unwrap_or(0),
-        output_tokens: usage.get("output_tokens").and_then(Value::as_i64).unwrap_or(0),
+        input_tokens: usage
+            .get("input_tokens")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        output_tokens: usage
+            .get("output_tokens")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
     })
 }
 
@@ -338,13 +357,17 @@ mod tests {
     fn config_requires_model_and_key() {
         let missing_model = rows(&[("LLM_DECISION_MODEL", None, false)]);
         assert_eq!(
-            decision_config_from_rows(&missing_model, String::new(), String::new(), None, |_| String::new()),
+            decision_config_from_rows(&missing_model, String::new(), String::new(), None, |_| {
+                String::new()
+            }),
             None
         );
 
         let missing_key = rows(&[("LLM_DECISION_MODEL", Some("typesafe/jev-1.13"), false)]);
         assert_eq!(
-            decision_config_from_rows(&missing_key, String::new(), String::new(), None, |_| String::new()),
+            decision_config_from_rows(&missing_key, String::new(), String::new(), None, |_| {
+                String::new()
+            }),
             None
         );
 
@@ -368,13 +391,9 @@ mod tests {
     #[test]
     fn config_decrypts_key_and_falls_back_to_env_model() {
         let r = rows(&[("LLM_API_KEY", Some("enc"), true)]);
-        let cfg = decision_config_from_rows(
-            &r,
-            "env-key".into(),
-            "env-model".into(),
-            None,
-            |v| format!("plain-{v}"),
-        )
+        let cfg = decision_config_from_rows(&r, "env-key".into(), "env-model".into(), None, |v| {
+            format!("plain-{v}")
+        })
         .unwrap();
         assert_eq!(cfg.api_key, "plain-enc");
         assert_eq!(cfg.model, "env-model");
@@ -435,7 +454,9 @@ mod tests {
             Some(&Answer::Noul { probability: 0.78 })
         );
         match &outcome.answers["category"] {
-            Answer::Choice { choice, confidence, .. } => {
+            Answer::Choice {
+                choice, confidence, ..
+            } => {
                 assert_eq!(choice, "Incident");
                 assert!((confidence - 0.87).abs() < 1e-9);
             }

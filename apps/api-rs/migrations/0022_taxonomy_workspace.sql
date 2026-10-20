@@ -3,14 +3,11 @@
 -- columns stay (nulled on survivors) until the S9 cleanup.
 
 -- Labels: workspace-level uniqueness.
--- Drop the legacy table-wide unique on name for project-less labels: it
--- contradicts workspace-level labels (same name legitimately exists in many
--- workspaces; "incident" alone occurs in 60+ workspaces on this instance).
--- Zero live project-less rows exist today, so the drop is a no-op for data.
-DROP INDEX IF EXISTS public.unique_name_when_project_null_and_not_deleted;
-CREATE UNIQUE INDEX IF NOT EXISTS labels_ws_name_unique
-    ON public.labels (workspace_id, lower(btrim(name)))
-    WHERE deleted_at IS NULL;
+-- Drop the legacy table-wide unique on name for project-less labels first:
+-- it contradicts workspace-level labels (same name legitimately exists in
+-- many workspaces). Zero live project-less rows exist today, so the drop is
+-- a no-op for data. The per-workspace unique index is created AFTER the
+-- dedupe below so pre-existing within-workspace duplicates cannot fail it.
 
 -- (1) Remap issue_labels to the canonical label (oldest) per (workspace, name).
 UPDATE public.issue_labels il SET label_id = m.canonical_id, updated_at = now()
@@ -39,6 +36,11 @@ WHERE l.deleted_at IS NULL AND l.id NOT IN (
     FROM public.labels WHERE deleted_at IS NULL
     WINDOW w AS (PARTITION BY workspace_id, lower(btrim(name)) ORDER BY created_at, id)
 );
+
+-- (3b) Workspace-level uniqueness, now that duplicates are gone.
+CREATE UNIQUE INDEX IF NOT EXISTS labels_ws_name_unique
+    ON public.labels (workspace_id, lower(btrim(name)))
+    WHERE deleted_at IS NULL;
 
 -- (4) Survivors become workspace-level.
 UPDATE public.labels SET project_id = NULL, updated_at = now()
@@ -139,6 +141,13 @@ UPDATE public.estimates e SET deleted_at = now(), updated_at = now()
 WHERE e.id IN (SELECT id FROM ranked WHERE rn > 1) AND e.deleted_at IS NULL;
 
 -- (6) Exactly one last_used per workspace + active pointer on workspace_settings.
+-- Ensure settings rows exist first (defensive: 0021 backfilled all live
+-- workspaces, so this is normally a no-op).
+INSERT INTO public.workspace_settings (id, workspace_id)
+SELECT gen_random_uuid(), w.id FROM public.workspaces w
+WHERE w.deleted_at IS NULL
+AND NOT EXISTS (SELECT 1 FROM public.workspace_settings s WHERE s.workspace_id = w.id AND s.deleted_at IS NULL)
+ON CONFLICT (workspace_id) DO NOTHING;
 UPDATE public.estimates e SET last_used = false, updated_at = now()
 WHERE e.deleted_at IS NULL AND e.last_used IS DISTINCT FROM false;
 WITH canon AS (

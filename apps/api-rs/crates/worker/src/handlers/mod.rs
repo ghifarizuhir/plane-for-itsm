@@ -3,8 +3,8 @@ pub mod cleanup;
 pub mod email;
 pub mod export;
 pub mod file_asset;
-pub mod issue_automation;
 pub mod intake_triage;
+pub mod issue_automation;
 pub mod webhook;
 
 use serde_json::Value;

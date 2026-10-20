@@ -57,7 +57,14 @@ fn issue_rejects_invalid_priority() {
 
 #[test]
 fn issue_accepts_valid() {
-    for p in [None, Some("low"), Some("medium"), Some("high"), Some("urgent"), Some("none")] {
+    for p in [
+        None,
+        Some("low"),
+        Some("medium"),
+        Some("high"),
+        Some("urgent"),
+        Some("none"),
+    ] {
         let ii = CreateIntakeIssue {
             issue: IntakeIssuePayload {
                 name: Some("Bug".to_string()),

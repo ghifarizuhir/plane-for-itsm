@@ -2,11 +2,7 @@
 //! success, 429, 5xx, malformed JSON, empty content. No DB, no env.
 
 use api::routes::ai::{chat_completion, LlmError};
-use axum::{
-    http::StatusCode,
-    routing::post,
-    Json, Router,
-};
+use axum::{http::StatusCode, routing::post, Json, Router};
 use serde_json::{json, Value};
 
 fn fake_upstream(status: u16, body: Value) -> Router {
@@ -24,7 +20,9 @@ async fn spawn(status: u16, body: Value) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, fake_upstream(status, body)).await.unwrap();
+        axum::serve(listener, fake_upstream(status, body))
+            .await
+            .unwrap();
     });
     format!("http://{addr}/v1")
 }

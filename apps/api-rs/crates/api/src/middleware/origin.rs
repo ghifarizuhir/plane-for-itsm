@@ -118,6 +118,8 @@ mod tests {
     #[test]
     fn inbound_paths_are_exempt_from_origin_check() {
         assert!(inbound_path_exempt("/api/inbound/alertmanager/abc/"));
-        assert!(!inbound_path_exempt("/api/workspaces/acme/projects/1/intake-sources/"));
+        assert!(!inbound_path_exempt(
+            "/api/workspaces/acme/projects/1/intake-sources/"
+        ));
     }
 }

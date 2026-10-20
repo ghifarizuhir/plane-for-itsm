@@ -60,6 +60,7 @@ fn create_body_accepts_missing_fields() {
 #[test]
 fn create_body_accepts_requires_service() {
     let body: V1CreateWorkItemType =
-        serde_json::from_value(serde_json::json!({"name": "Incident", "requires_service": true})).unwrap();
+        serde_json::from_value(serde_json::json!({"name": "Incident", "requires_service": true}))
+            .unwrap();
     assert_eq!(body.requires_service, Some(true));
 }

@@ -1284,7 +1284,7 @@ fn push_ws_pages_tail(
     qb.push_bind(user);
     qb.push(
         " AND rg.role = 5 AND rg.is_active = true AND rg.deleted_at IS NULL \
-         AND rp.guest_view_all_features = false AND rp.deleted_at IS NULL))) ",
+         AND rp.guest_view_all_features = false AND rp.deleted_at IS NULL)))) ",
     );
     if let Some(pid) = project_id {
         qb.push(

@@ -604,10 +604,12 @@ async fn auto_accept_only_when_classification_complete() {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("UPDATE issues SET deleted_at = now() WHERE intake_fingerprint IN ('fp-auto', 'fp-nosvc')")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE issues SET deleted_at = now() WHERE intake_fingerprint IN ('fp-auto', 'fp-nosvc')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let scratch = Scratch::new(&pool).await;
     scratch.add_intake(&pool).await;
     let service_id = scratch.add_service(&pool, "Payment API").await;

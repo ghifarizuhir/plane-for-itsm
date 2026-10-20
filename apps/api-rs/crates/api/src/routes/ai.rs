@@ -348,9 +348,9 @@ mod tests {
     }
 
     #[test]
-    fn response_html_maps_newlines_only() {
-        assert_eq!(response_html("a\nb"), "a<br/>b");
-        assert_eq!(response_html("plain"), "plain");
+    fn response_html_renders_markdown() {
+        assert_eq!(response_html("a\nb"), "<p>a<br />\nb</p>");
+        assert_eq!(response_html("**bold**"), "<p><strong>bold</strong></p>");
         assert_eq!(response_html(""), "");
     }
 

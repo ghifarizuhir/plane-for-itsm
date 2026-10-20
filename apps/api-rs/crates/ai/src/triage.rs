@@ -60,7 +60,10 @@ const SEVERITY_CRITERIA: [&str; 5] = [
     "Critical outage, security incident, or data loss",
 ];
 
-pub fn build_questions(types: &[TypeOption], services: &[ServiceOption]) -> Vec<(String, Question)> {
+pub fn build_questions(
+    types: &[TypeOption],
+    services: &[ServiceOption],
+) -> Vec<(String, Question)> {
     let mut questions = Vec::new();
     if !types.is_empty() {
         let criteria = types
@@ -91,7 +94,8 @@ pub fn build_questions(types: &[TypeOption], services: &[ServiceOption]) -> Vec<
             .collect();
         criteria.push((
             NO_SERVICE_CHOICE.to_string(),
-            "This request does not concern a specific service or the service is unknown".to_string(),
+            "This request does not concern a specific service or the service is unknown"
+                .to_string(),
         ));
         questions.push((
             "service".to_string(),
@@ -143,26 +147,48 @@ pub struct TriageOutcome {
     pub output_tokens: i64,
 }
 
-pub fn triage_outcome(outcome: DecisionOutcome, types: &[TypeOption], services: &[ServiceOption]) -> TriageOutcome {
+pub fn triage_outcome(
+    outcome: DecisionOutcome,
+    types: &[TypeOption],
+    services: &[ServiceOption],
+) -> TriageOutcome {
     let mut category: Option<(Option<Uuid>, String, f64)> = None;
     let mut severity: Option<(String, f64, f64)> = None;
     let mut service: Option<(Option<Uuid>, String, f64)> = None;
     let mut needs_human = None;
     for (id, answer) in &outcome.answers {
         match (id.as_str(), answer) {
-            ("category", Answer::Choice { choice, confidence, .. }) => {
+            (
+                "category",
+                Answer::Choice {
+                    choice, confidence, ..
+                },
+            ) => {
                 let type_id = types.iter().find(|t| &t.name == choice).map(|t| t.type_id);
                 category = Some((type_id, choice.clone(), *confidence));
             }
-            ("service", Answer::Choice { choice, confidence, .. }) => {
+            (
+                "service",
+                Answer::Choice {
+                    choice, confidence, ..
+                },
+            ) => {
                 if choice == NO_SERVICE_CHOICE {
                     service = Some((None, NO_SERVICE_SENTINEL.to_string(), *confidence));
                 } else {
-                    let service_id = services.iter().find(|s| &s.name == choice).map(|s| s.service_id);
+                    let service_id = services
+                        .iter()
+                        .find(|s| &s.name == choice)
+                        .map(|s| s.service_id);
                     service = Some((service_id, choice.clone(), *confidence));
                 }
             }
-            ("severity", Answer::Score { score, confidence, .. }) => {
+            (
+                "severity",
+                Answer::Score {
+                    score, confidence, ..
+                },
+            ) => {
                 severity = Some((priority_from_score(*score).to_string(), *score, *confidence));
             }
             ("needs_human", Answer::Noul { probability }) => needs_human = Some(*probability),
@@ -221,7 +247,11 @@ mod tests {
         });
         assert_eq!(state["work_item"]["name"], "Login is broken");
         assert_eq!(
-            state["work_item"]["description"].as_str().unwrap().chars().count(),
+            state["work_item"]["description"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count(),
             DESCRIPTION_LIMIT
         );
         assert_eq!(state["project"]["name"], "Support");

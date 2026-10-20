@@ -403,11 +403,7 @@ pub const MAX_BULK_ITEMS: usize = 25;
 pub const CONTAINER_REF_MAX: usize = 255;
 pub const CONTAINER_PROJECT_MAX: usize = 100;
 
-fn required_text(
-    value: &str,
-    label: &str,
-    max: usize,
-) -> Result<String, ToolExecutionError> {
+fn required_text(value: &str, label: &str, max: usize) -> Result<String, ToolExecutionError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(ToolExecutionError::invalid_args(format!(
@@ -422,9 +418,7 @@ fn required_text(
     Ok(trimmed.to_string())
 }
 
-fn optional_container_project(
-    value: Option<String>,
-) -> Result<Option<String>, ToolExecutionError> {
+fn optional_container_project(value: Option<String>) -> Result<Option<String>, ToolExecutionError> {
     match value.as_deref().map(str::trim) {
         None | Some("") => Ok(None),
         Some(project) if project.chars().count() > CONTAINER_PROJECT_MAX => {
@@ -437,9 +431,7 @@ fn optional_container_project(
 }
 
 /// Validate and dedupe a bulk list of `PROJ-123` references.
-pub fn work_item_refs_arg(
-    values: Vec<String>,
-) -> Result<Vec<String>, ToolExecutionError> {
+pub fn work_item_refs_arg(values: Vec<String>) -> Result<Vec<String>, ToolExecutionError> {
     if values.is_empty() {
         return Err(ToolExecutionError::invalid_args(
             "at least one work item is required",
@@ -675,10 +667,18 @@ pub const SERVICE_NAME_MAX: usize = 255;
 pub const SERVICE_DESCRIPTION_MAX: usize = 5000;
 pub const SERVICE_URL_MAX: usize = 2048;
 pub const MAX_MEMBER_REFS: usize = 10;
-pub const SERVICE_STATUSES: [&str; 5] = ["active", "planned", "maintenance", "deprecated", "retired"];
+pub const SERVICE_STATUSES: [&str; 5] =
+    ["active", "planned", "maintenance", "deprecated", "retired"];
 pub const SERVICE_CRITICALITIES: [&str; 4] = ["critical", "high", "medium", "low"];
 pub const SERVICE_TYPES: [&str; 4] = ["internal", "external", "infrastructure", "third_party"];
-pub const MODULE_STATUSES: [&str; 6] = ["backlog", "planned", "in-progress", "paused", "completed", "cancelled"];
+pub const MODULE_STATUSES: [&str; 6] = [
+    "backlog",
+    "planned",
+    "in-progress",
+    "paused",
+    "completed",
+    "cancelled",
+];
 
 fn optional_bounded_text(
     value: Option<&str>,
@@ -764,11 +764,17 @@ pub fn create_service_proposal_from_args(
 ) -> Result<CreateServiceProposal, ToolExecutionError> {
     let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
     let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
-    let description =
-        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let description = optional_bounded_text(
+        args.description.as_deref(),
+        "description",
+        SERVICE_DESCRIPTION_MAX,
+    )?;
     let status = optional_enum_arg(args.status.as_deref(), &SERVICE_STATUSES, "status")?;
-    let criticality =
-        optional_enum_arg(args.criticality.as_deref(), &SERVICE_CRITICALITIES, "criticality")?;
+    let criticality = optional_enum_arg(
+        args.criticality.as_deref(),
+        &SERVICE_CRITICALITIES,
+        "criticality",
+    )?;
     let service_type = optional_enum_arg(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
     let owner = optional_bounded_text(args.owner.as_deref(), "owner", CONTAINER_REF_MAX)?;
     let repository_url = optional_url(args.repository_url.as_deref(), "repository_url")?;
@@ -831,9 +837,9 @@ fn required_when_present(
         Some("") => Err(ToolExecutionError::invalid_args(format!(
             "{label} must not be empty when provided"
         ))),
-        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(
-            format!("{label} must be at most {max} characters"),
-        )),
+        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be at most {max} characters"
+        ))),
         Some(text) => Ok(Some(text.to_string())),
     }
 }
@@ -847,9 +853,9 @@ fn clearable_text(
     match value.map(str::trim) {
         None => Ok(None),
         Some("") => Ok(Some(String::new())),
-        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(
-            format!("{label} must be at most {max} characters"),
-        )),
+        Some(text) if text.chars().count() > max => Err(ToolExecutionError::invalid_args(format!(
+            "{label} must be at most {max} characters"
+        ))),
         Some(text) => Ok(Some(text.to_string())),
     }
 }
@@ -859,12 +865,16 @@ fn clearable_url(value: Option<&str>, label: &str) -> Result<Option<String>, Too
     match value.map(str::trim) {
         None => Ok(None),
         Some("") => Ok(Some(String::new())),
-        Some(url) if url.chars().count() > SERVICE_URL_MAX => Err(ToolExecutionError::invalid_args(
-            format!("{label} must be at most {SERVICE_URL_MAX} characters"),
-        )),
-        Some(url) if !(url.starts_with("http://") || url.starts_with("https://")) => Err(
-            ToolExecutionError::invalid_args(format!("{label} must start with http:// or https://")),
-        ),
+        Some(url) if url.chars().count() > SERVICE_URL_MAX => {
+            Err(ToolExecutionError::invalid_args(format!(
+                "{label} must be at most {SERVICE_URL_MAX} characters"
+            )))
+        }
+        Some(url) if !(url.starts_with("http://") || url.starts_with("https://")) => {
+            Err(ToolExecutionError::invalid_args(format!(
+                "{label} must start with http:// or https://"
+            )))
+        }
         Some(url) => Ok(Some(url.to_string())),
     }
 }
@@ -914,7 +924,10 @@ fn normalize_service_changes(
             SERVICE_DESCRIPTION_MAX,
         )?,
         repository_url: clearable_url(changes.repository_url.as_deref(), "repository_url")?,
-        documentation_url: clearable_url(changes.documentation_url.as_deref(), "documentation_url")?,
+        documentation_url: clearable_url(
+            changes.documentation_url.as_deref(),
+            "documentation_url",
+        )?,
     };
     if normalized == UpdateServiceChanges::default() {
         return Err(ToolExecutionError::invalid_args(
@@ -1041,8 +1054,11 @@ pub fn create_sprint_proposal_from_args(
 ) -> Result<CreateSprintProposal, ToolExecutionError> {
     let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
     let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
-    let description =
-        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let description = optional_bounded_text(
+        args.description.as_deref(),
+        "description",
+        SERVICE_DESCRIPTION_MAX,
+    )?;
     let start_date = date_change(args.start_date.as_deref(), "start_date", false)?;
     let end_date = date_change(args.end_date.as_deref(), "end_date", false)?;
     if start_date.is_some() != end_date.is_some() {
@@ -1260,8 +1276,11 @@ pub fn create_track_proposal_from_args(
 ) -> Result<CreateTrackProposal, ToolExecutionError> {
     let project = required_text(&args.project, "project", CONTAINER_PROJECT_MAX)?;
     let name = required_text(&args.name, "name", SERVICE_NAME_MAX)?;
-    let description =
-        optional_bounded_text(args.description.as_deref(), "description", SERVICE_DESCRIPTION_MAX)?;
+    let description = optional_bounded_text(
+        args.description.as_deref(),
+        "description",
+        SERVICE_DESCRIPTION_MAX,
+    )?;
     let start_date = date_change(args.start_date.as_deref(), "start_date", false)?;
     let target_date = date_change(args.target_date.as_deref(), "target_date", false)?;
     if let (Some(start), Some(target)) = (&start_date, &target_date) {
@@ -1906,31 +1925,26 @@ mod tests {
 
     #[test]
     fn update_work_item_rejects_invalid_values() {
-        let blank_name = update_work_item_proposal_from_args(update_args(
-            UpdateWorkItemChanges {
-                name: Some("   ".into()),
-                ..Default::default()
-            },
-        ))
+        let blank_name = update_work_item_proposal_from_args(update_args(UpdateWorkItemChanges {
+            name: Some("   ".into()),
+            ..Default::default()
+        }))
         .unwrap_err();
         assert!(blank_name.to_string().contains("name"));
 
-        let bad_priority = update_work_item_proposal_from_args(update_args(
-            UpdateWorkItemChanges {
+        let bad_priority =
+            update_work_item_proposal_from_args(update_args(UpdateWorkItemChanges {
                 priority: Some("p0".into()),
                 ..Default::default()
-            },
-        ))
-        .unwrap_err();
+            }))
+            .unwrap_err();
         assert!(bad_priority.to_string().contains("priority"));
 
-        let bad_dates = update_work_item_proposal_from_args(update_args(
-            UpdateWorkItemChanges {
-                start_date: Some("2026-10-05".into()),
-                target_date: Some("2026-10-01".into()),
-                ..Default::default()
-            },
-        ))
+        let bad_dates = update_work_item_proposal_from_args(update_args(UpdateWorkItemChanges {
+            start_date: Some("2026-10-05".into()),
+            target_date: Some("2026-10-01".into()),
+            ..Default::default()
+        }))
         .unwrap_err();
         assert!(bad_dates.to_string().contains("start_date"));
 
@@ -2595,7 +2609,11 @@ mod tests {
             target_date: None,
             status: None,
             lead: None,
-            members: Some((0..=MAX_MEMBER_REFS).map(|index| format!("u{index}")).collect()),
+            members: Some(
+                (0..=MAX_MEMBER_REFS)
+                    .map(|index| format!("u{index}"))
+                    .collect(),
+            ),
         })
         .unwrap_err();
         assert!(too_many.to_string().contains("at most"));
@@ -2763,7 +2781,11 @@ mod tests {
     fn apply_triage_suggestion_normalizes_fields() {
         let proposal = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
             intake_item: " lts-42 ".into(),
-            fields: Some(vec![" Category ".into(), "category".into(), "severity".into()]),
+            fields: Some(vec![
+                " Category ".into(),
+                "category".into(),
+                "severity".into(),
+            ]),
         })
         .unwrap();
         assert_eq!(proposal.intake_item, "lts-42");
@@ -2779,7 +2801,11 @@ mod tests {
         .unwrap();
         assert_eq!(
             defaulted.fields,
-            vec!["category".to_string(), "service".to_string(), "severity".to_string()]
+            vec![
+                "category".to_string(),
+                "service".to_string(),
+                "severity".to_string()
+            ]
         );
 
         let bad_ref = apply_triage_suggestion_proposal_from_args(ApplyTriageSuggestionArgs {
@@ -2824,7 +2850,10 @@ mod tests {
             duplicate_of: None,
         })
         .unwrap();
-        assert_eq!(snooze.snoozed_till.as_deref(), Some("2026-11-01T09:00:00+00:00"));
+        assert_eq!(
+            snooze.snoozed_till.as_deref(),
+            Some("2026-11-01T09:00:00+00:00")
+        );
 
         let duplicate = triage_intake_item_proposal_from_args(TriageIntakeItemArgs {
             intake_item: "LTS-42".into(),

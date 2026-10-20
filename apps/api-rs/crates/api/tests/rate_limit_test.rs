@@ -4,7 +4,10 @@ use api::middleware::rate_limit::bucket_allows;
 
 #[test]
 fn bucket_allows_burst_within_quota() {
-    assert_eq!(bucket_allows(2, Duration::from_secs(60), 2, Duration::from_secs(0)), vec![true, true]);
+    assert_eq!(
+        bucket_allows(2, Duration::from_secs(60), 2, Duration::from_secs(0)),
+        vec![true, true]
+    );
 }
 
 #[test]

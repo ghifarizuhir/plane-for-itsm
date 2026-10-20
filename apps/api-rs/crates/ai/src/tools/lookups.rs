@@ -347,7 +347,10 @@ impl Tool for ListWorkItemTypes {
                     .fetch_all(&self.pool)
                     .await
                     .map_err(db_error)?;
-                Ok(types_json(&format!("project {}", project.identifier), &rows))
+                Ok(types_json(
+                    &format!("project {}", project.identifier),
+                    &rows,
+                ))
             }
             None => {
                 let rows: Vec<TypeRow> = sqlx::query_as(WORKSPACE_TYPES_SQL)
@@ -412,8 +415,7 @@ mod tests {
                 is_triage: false,
             },
         ];
-        let parsed: serde_json::Value =
-            serde_json::from_str(&states_json("LTS", &rows)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&states_json("LTS", &rows)).unwrap();
         assert_eq!(parsed["project"], json!("LTS"));
         assert_eq!(parsed["returned"], json!(2));
         assert_eq!(parsed["states"][0]["name"], json!("Backlog"));

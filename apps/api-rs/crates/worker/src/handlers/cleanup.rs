@@ -20,9 +20,11 @@ pub async fn page_versions(pool: &sqlx::PgPool) -> anyhow::Result<()> {
 }
 
 pub async fn issue_description_versions(pool: &sqlx::PgPool) -> anyhow::Result<()> {
-    sqlx::query("DELETE FROM issue_description_version WHERE created_at < now() - interval '30 days'")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "DELETE FROM issue_description_version WHERE created_at < now() - interval '30 days'",
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

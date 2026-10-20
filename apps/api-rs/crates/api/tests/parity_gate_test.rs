@@ -19,7 +19,8 @@ fn shadow_file() -> String {
 /// Quoted `/api/...` paths from shadow.sh with `$WS`/`$P` substituted.
 fn shadow_paths() -> Vec<String> {
     let ws = std::env::var("WS").unwrap_or_else(|_| "test-ws".to_string());
-    let p = std::env::var("P").unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string());
+    let p =
+        std::env::var("P").unwrap_or_else(|_| "00000000-0000-0000-0000-000000000000".to_string());
     shadow_file()
         .lines()
         .filter_map(|line| {
@@ -29,7 +30,14 @@ fn shadow_paths() -> Vec<String> {
             if !path.starts_with("/api/") {
                 return None;
             }
-            Some(path.replace("$WS", &ws).replace("$P", &p).split('?').next().unwrap_or(path).to_string())
+            Some(
+                path.replace("$WS", &ws)
+                    .replace("$P", &p)
+                    .split('?')
+                    .next()
+                    .unwrap_or(path)
+                    .to_string(),
+            )
         })
         .collect()
 }
@@ -58,16 +66,34 @@ fn gate_covers_detail_routes() {
 fn gate_covers_all_domains() {
     // Regression tripwire: adding a route without shadow coverage must fail.
     let paths = shadow_paths();
-    assert!(paths.len() >= 55, "expected >= 55 shadow paths, got {}", paths.len());
+    assert!(
+        paths.len() >= 55,
+        "expected >= 55 shadow paths, got {}",
+        paths.len()
+    );
 }
 
 fn get_status_and_body(addr: &str, path: &str) -> (u16, String) {
     let mut stream = TcpStream::connect(addr).expect("rust-api must be running for live gate");
-    stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-    write!(stream, "GET {path} HTTP/1.0\r\nHost: gate\r\nConnection: close\r\n\r\n").unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        stream,
+        "GET {path} HTTP/1.0\r\nHost: gate\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
     let mut raw = String::new();
     stream.read_to_string(&mut raw).unwrap();
-    let status: u16 = raw.lines().next().unwrap_or("").split_whitespace().nth(1).unwrap_or("0").parse().unwrap_or(0);
+    let status: u16 = raw
+        .lines()
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("0")
+        .parse()
+        .unwrap_or(0);
     let body = raw.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
     (status, body)
 }
@@ -85,5 +111,9 @@ fn live_gate_no_404s_or_empty_bodies() {
             failures.push(format!("{path} -> {status} body={body:?}"));
         }
     }
-    assert!(failures.is_empty(), "live gate failures:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "live gate failures:\n{}",
+        failures.join("\n")
+    );
 }

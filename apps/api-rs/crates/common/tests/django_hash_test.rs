@@ -1,8 +1,12 @@
-const VECTOR: &str = "pbkdf2_sha256$1000000$smokesalt12345678$NyV386oOw4JpTzGNeUTSCrrCWBd/LOQxHJY3lHfakhI=";
+const VECTOR: &str =
+    "pbkdf2_sha256$1000000$smokesalt12345678$NyV386oOw4JpTzGNeUTSCrrCWBd/LOQxHJY3lHfakhI=";
 
 #[test]
 fn accepts_correct_password() {
-    assert!(common::auth::verify_django_password("plan-vector-ok", VECTOR));
+    assert!(common::auth::verify_django_password(
+        "plan-vector-ok",
+        VECTOR
+    ));
 }
 
 #[test]

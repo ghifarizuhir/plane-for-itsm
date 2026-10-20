@@ -20,8 +20,7 @@ impl AppConfig {
         Self {
             database_url: env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://plane:plane@plane-db:5432/plane".into()),
-            redis_url: env::var("REDIS_URL")
-                .unwrap_or_else(|_| "redis://plane-redis:6379".into()),
+            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://plane-redis:6379".into()),
             port: env::var("PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())

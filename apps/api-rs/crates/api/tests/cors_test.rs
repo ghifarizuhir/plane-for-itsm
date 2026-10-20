@@ -1,22 +1,24 @@
 use api::middleware::cors::{build_cors_layer, parse_cors_origins};
-use axum::{body::Body, http::{Method, Request, StatusCode}, routing::get, Router};
+use axum::{
+    body::Body,
+    http::{Method, Request, StatusCode},
+    routing::get,
+    Router,
+};
 use tower::ServiceExt as _;
 
 #[test]
 fn parse_splits_trims_and_skips_empty_and_invalid() {
     let out = parse_cors_origins("http://a:3000, http://b:3000 ,,  ,http://c:3000");
-    let strs: Vec<String> = out
-        .iter()
-        .map(|v| v.to_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(strs, vec!["http://a:3000", "http://b:3000", "http://c:3000"]);
+    let strs: Vec<String> = out.iter().map(|v| v.to_str().unwrap().to_owned()).collect();
+    assert_eq!(
+        strs,
+        vec!["http://a:3000", "http://b:3000", "http://c:3000"]
+    );
 
     // invalid entries are skipped with a warn, empties ignored
     let out = parse_cors_origins("http://ok:3000, not a valid origin \n\t, ,");
-    let strs: Vec<String> = out
-        .iter()
-        .map(|v| v.to_str().unwrap().to_owned())
-        .collect();
+    let strs: Vec<String> = out.iter().map(|v| v.to_str().unwrap().to_owned()).collect();
     assert_eq!(strs, vec!["http://ok:3000"]);
 
     assert!(parse_cors_origins("").is_empty());

@@ -715,7 +715,7 @@ async fn validate_write(
     }
     if let Some(ids) = body.labels.as_ref().filter(|v| !v.is_empty()) {
         let (n,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM labels WHERE workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) AND id = ANY($2) AND deleted_at IS NULL",
         ).bind(project_id).bind(ids).fetch_one(&st.pool).await.map_err(internal)?;
         if n != ids.len() as i64 {
             return Err(bad("invalid label: not in project".into()));
@@ -920,14 +920,15 @@ pub async fn update(
     // (validated above) or auto-moves to the project default; otherwise the
     // explicit state (if any) is written as-is. The resolved value is what
     // the SET list writes.
-    let state_write: Option<Option<uuid::Uuid>> = if body.type_id.is_some() && body.type_id != current_type {
-        Some(match body.state {
-            Some(explicit) => Some(explicit),
-            None => resolve_issue_state(&st.pool, project_id, None).await?,
-        })
-    } else {
-        body.state.map(Some)
-    };
+    let state_write: Option<Option<uuid::Uuid>> =
+        if body.type_id.is_some() && body.type_id != current_type {
+            Some(match body.state {
+                Some(explicit) => Some(explicit),
+                None => resolve_issue_state(&st.pool, project_id, None).await?,
+            })
+        } else {
+            body.state.map(Some)
+        };
 
     // `_sync_completed_at` (C3 parity, `issue_update.rs:942-957`): only a REAL
     // state change syncs `completed_at` — an explicit same-state write leaves

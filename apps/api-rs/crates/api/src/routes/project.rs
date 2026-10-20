@@ -1050,8 +1050,8 @@ pub async fn patch(
             .fetch_one(&mut *tx)
             .await?;
         sqlx::query(
-            "INSERT INTO intakes (id, name, project_id, workspace_id, is_default, created_by_id, updated_by_id, created_at, updated_at) \
-             SELECT gen_random_uuid(), $1, $2, $3, true, $4, $4, now(), now() \
+            "INSERT INTO intakes (id, name, description, is_default, view_props, logo_props, project_id, workspace_id, created_by_id, updated_by_id, created_at, updated_at) \
+             SELECT gen_random_uuid(), $1, '', true, '{}'::jsonb, '{}'::jsonb, $2, $3, $4, $4, now(), now() \
              WHERE NOT EXISTS(SELECT 1 FROM intakes WHERE project_id = $2 AND is_default = true AND deleted_at IS NULL)",
         )
         .bind(format!("{} Intake", pname.0))

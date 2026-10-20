@@ -195,7 +195,10 @@ async fn workspace_create_seeds_itsm_demo() {
     .fetch_one(&pool)
     .await
     .expect("seeded issue types");
-    assert_eq!(type_names, vec!["Change", "Improvement", "Incident", "Problem"]);
+    assert_eq!(
+        type_names,
+        vec!["Change", "Improvement", "Incident", "Problem"]
+    );
     let (epic_count,): (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM issue_types WHERE workspace_id = $1 \
          AND external_source = 'plane-default-itsm' AND is_epic = true",

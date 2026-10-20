@@ -89,7 +89,7 @@ async fn validate_create_refs(
     }
     if !labels.is_empty() {
         let (n,): (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT COUNT(*) FROM labels WHERE workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) AND id = ANY($2) AND deleted_at IS NULL",
         )
         .bind(project_id)
         .bind(labels)

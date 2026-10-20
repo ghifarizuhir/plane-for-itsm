@@ -280,9 +280,9 @@ pub async fn patch(
             ));
         }
         let dup: Option<(uuid::Uuid,)> = sqlx::query_as(
-            "SELECT id FROM labels WHERE project_id = $1 AND name = $2 AND id != $3 AND deleted_at IS NULL",
+            "SELECT id FROM labels WHERE workspace_id = (SELECT id FROM workspaces WHERE slug = $1) AND name = $2 AND id != $3 AND deleted_at IS NULL",
         )
-        .bind(project_id)
+        .bind(&slug)
         .bind(name)
         .bind(pk)
         .fetch_optional(&st.pool)
@@ -292,13 +292,13 @@ pub async fn patch(
         }
     }
     let n = sqlx::query(
-        "UPDATE labels SET name = COALESCE($1, name), color = COALESCE($2, color), description = COALESCE($3, description), updated_at = now() WHERE id = $4 AND project_id = $5 AND deleted_at IS NULL",
+        "UPDATE labels SET name = COALESCE($1, name), color = COALESCE($2, color), description = COALESCE($3, description), updated_at = now() WHERE id = $4 AND workspace_id = (SELECT id FROM workspaces WHERE slug = $5) AND deleted_at IS NULL",
     )
     .bind(&body.name)
     .bind(&body.color)
     .bind(&body.description)
     .bind(pk)
-    .bind(project_id)
+    .bind(&slug)
     .execute(&st.pool)
     .await?
     .rows_affected();

@@ -366,7 +366,14 @@ pub async fn insert_work_item_types(
     bot_id: Uuid,
 ) -> Result<(), sqlx::Error> {
     for type_name in TYPE_SEEDS {
-        seed_issue_type_id(tx, workspace_id, bot_id, type_name, *type_name == "Incident").await?;
+        seed_issue_type_id(
+            tx,
+            workspace_id,
+            bot_id,
+            type_name,
+            *type_name == "Incident",
+        )
+        .await?;
     }
     Ok(())
 }
@@ -779,7 +786,11 @@ mod tests {
     #[test]
     fn type_seeds_are_unique_and_ascii() {
         let names: std::collections::HashSet<&str> = TYPE_SEEDS.iter().copied().collect();
-        assert_eq!(names.len(), TYPE_SEEDS.len(), "type seed names must be unique");
+        assert_eq!(
+            names.len(),
+            TYPE_SEEDS.len(),
+            "type seed names must be unique"
+        );
         for name in TYPE_SEEDS {
             assert!(
                 name.is_ascii() && !name.trim().is_empty(),

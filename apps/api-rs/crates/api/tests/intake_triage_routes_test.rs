@@ -7,8 +7,8 @@ mod common;
 
 #[test]
 fn fe_triage_urls_are_routed() {
-    let service = crate::common::repo_root()
-        .join("apps/web/core/services/inbox/inbox-issue.service.ts");
+    let service =
+        crate::common::repo_root().join("apps/web/core/services/inbox/inbox-issue.service.ts");
     let urls = crate::common::fe_urls_in_file(&service);
     let triage_urls: Vec<String> = urls
         .into_iter()

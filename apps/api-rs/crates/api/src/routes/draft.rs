@@ -547,9 +547,9 @@ async fn filter_assignees(
     .await
 }
 
-/// Filters candidate labels to the project, mirroring
-/// `serializers/draft.py:103-109` (silent drop, no 400). `None` project →
-/// empty.
+/// Filters candidate labels to the workspace (Program P1/S3: labels are
+/// workspace-level), mirroring `serializers/draft.py:103-109` (silent drop,
+/// no 400). `None` project → empty.
 async fn filter_labels(
     pool: &sqlx::PgPool,
     project_id: Option<uuid::Uuid>,
@@ -562,7 +562,7 @@ async fn filter_labels(
         return Ok(vec![]);
     };
     sqlx::query_scalar::<_, uuid::Uuid>(
-        "SELECT id FROM labels WHERE project_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        "SELECT id FROM labels WHERE workspace_id = (SELECT workspace_id FROM projects WHERE id = $1) AND id = ANY($2) AND deleted_at IS NULL",
     )
     .bind(pid)
     .bind(ids)

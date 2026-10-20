@@ -22,7 +22,10 @@ struct PendingItem {
     project_name: String,
 }
 
-async fn load_item(pool: &PgPool, intake_issue_id: Uuid) -> Result<Option<PendingItem>, sqlx::Error> {
+async fn load_item(
+    pool: &PgPool,
+    intake_issue_id: Uuid,
+) -> Result<Option<PendingItem>, sqlx::Error> {
     sqlx::query_as(
         "SELECT ii.id AS intake_issue_id, ii.project_id, ii.workspace_id, \
                 i.name, i.description_stripped AS description, ii.source, p.name AS project_name \
@@ -50,11 +53,18 @@ async fn load_types(pool: &PgPool, project_id: Uuid) -> Result<Vec<TypeOption>, 
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(type_id, name, description)| TypeOption { type_id, name, description })
+        .map(|(type_id, name, description)| TypeOption {
+            type_id,
+            name,
+            description,
+        })
         .collect())
 }
 
-async fn load_services(pool: &PgPool, project_id: Uuid) -> Result<Vec<triage::ServiceOption>, sqlx::Error> {
+async fn load_services(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Vec<triage::ServiceOption>, sqlx::Error> {
     let rows: Vec<(Uuid, String, String, String, String)> = sqlx::query_as(
         "SELECT id, name, \"type\", criticality, status FROM services \
          WHERE project_id = $1 AND deleted_at IS NULL AND status <> 'retired' \
@@ -66,11 +76,15 @@ async fn load_services(pool: &PgPool, project_id: Uuid) -> Result<Vec<triage::Se
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(service_id, name, service_type, criticality, status)| triage::ServiceOption {
-            criteria: format!("{name} — {service_type}, criticality {criticality}, status {status}"),
-            service_id,
-            name,
-        })
+        .map(
+            |(service_id, name, service_type, criticality, status)| triage::ServiceOption {
+                criteria: format!(
+                    "{name} — {service_type}, criticality {criticality}, status {status}"
+                ),
+                service_id,
+                name,
+            },
+        )
         .collect())
 }
 
@@ -142,7 +156,11 @@ async fn save_ready(
     Ok(())
 }
 
-async fn save_failed(pool: &PgPool, intake_issue_id: Uuid, message: &str) -> Result<(), sqlx::Error> {
+async fn save_failed(
+    pool: &PgPool,
+    intake_issue_id: Uuid,
+    message: &str,
+) -> Result<(), sqlx::Error> {
     let truncated: String = message.chars().take(500).collect();
     sqlx::query(
         "UPDATE intake_triage_suggestions SET status = 'failed', attempts = attempts + 1, \
@@ -176,7 +194,14 @@ pub async fn classify(pool: &PgPool, intake_issue_id: Uuid) -> Result<(), sqlx::
         tracing::debug!(intake_issue_id=%intake_issue_id, "ai.intake.triage: item not pending");
         return Ok(());
     };
-    if !claim(pool, item.intake_issue_id, item.project_id, item.workspace_id).await? {
+    if !claim(
+        pool,
+        item.intake_issue_id,
+        item.project_id,
+        item.workspace_id,
+    )
+    .await?
+    {
         tracing::debug!(intake_issue_id=%intake_issue_id, "ai.intake.triage: already claimed");
         return Ok(());
     }

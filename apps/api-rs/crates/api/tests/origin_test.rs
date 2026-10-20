@@ -14,7 +14,11 @@ fn headers(origin: Option<&str>, referer: Option<&str>) -> HeaderMap {
 
 #[test]
 fn get_always_allowed() {
-    assert!(origin_allowed(&Method::GET, &headers(None, None), "https://app.example.com"));
+    assert!(origin_allowed(
+        &Method::GET,
+        &headers(None, None),
+        "https://app.example.com"
+    ));
 }
 
 #[test]
@@ -26,7 +30,11 @@ fn post_matching_origin_allowed() {
 #[test]
 fn post_foreign_origin_rejected() {
     let h = headers(Some("https://evil.example"), None);
-    assert!(!origin_allowed(&Method::POST, &h, "https://app.example.com"));
+    assert!(!origin_allowed(
+        &Method::POST,
+        &h,
+        "https://app.example.com"
+    ));
 }
 
 #[test]
@@ -37,7 +45,11 @@ fn post_referer_fallback_allowed() {
 
 #[test]
 fn post_no_origin_no_referer_rejected() {
-    assert!(!origin_allowed(&Method::POST, &headers(None, None), "https://app.example.com"));
+    assert!(!origin_allowed(
+        &Method::POST,
+        &headers(None, None),
+        "https://app.example.com"
+    ));
 }
 
 #[test]
