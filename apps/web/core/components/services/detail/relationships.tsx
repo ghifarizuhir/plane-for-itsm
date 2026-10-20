@@ -26,6 +26,7 @@ import { dependencyExists, isLiteService, SERVICE_DEPENDENCY_TYPES } from "@/ser
 
 type Props = {
   serviceId: string;
+  layout?: "page" | "pane";
 };
 
 type TDirection = "out" | "in";
@@ -72,7 +73,9 @@ const TYPE_LABEL_KEYS: Record<TServiceDependencyType, string> = {
 };
 
 export const ServiceRelationships = observer(function ServiceRelationships(props: Props) {
-  const { serviceId } = props;
+  const { serviceId, layout = "page" } = props;
+  // derived values
+  const isPane = layout === "pane";
   // states
   const [selectedType, setSelectedType] = useState<TServiceDependencyType>("depends_on");
   const [selectedId, setSelectedId] = useState("");
@@ -171,9 +174,12 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
     return (
       <div
         key={dependency.id}
-        className="flex items-center justify-between gap-2 rounded-sm border border-subtle px-2 py-1.5"
+        className={cn(
+          "flex gap-2 rounded-sm border border-subtle px-2 py-1.5",
+          isPane ? "flex-col" : "items-center justify-between"
+        )}
       >
-        <span className="flex min-w-0 items-center gap-1.5" title={name}>
+        <span className={cn("flex min-w-0 items-center gap-1.5", isPane && "flex-wrap")} title={name}>
           {lite && <LockOutline className="h-3 w-3 shrink-0 text-tertiary" />}
           <ControlLink
             href={href}
@@ -203,7 +209,7 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
           )}
         </span>
         {!lite && (
-          <span className="flex shrink-0 items-center gap-2">
+          <span className={cn("flex shrink-0 items-center gap-2", isPane && "justify-between")}>
             <CustomSelect
               value={dependencyType}
               onChange={(value: TServiceDependencyType) => void handleTypeChange(dependency, value)}
@@ -232,12 +238,12 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
 
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="text-13 font-medium text-secondary">{t("service.relationships.title")}</h4>
-      <div className="flex items-center gap-2">
+      {!isPane && <h4 className="text-13 font-medium text-secondary">{t("service.relationships.title")}</h4>}
+      <div className={cn("flex items-center gap-2", isPane && "flex-col items-stretch")}>
         <CustomSelect
           value={selectedType}
           onChange={(value: TServiceDependencyType) => setSelectedType(value)}
-          className="h-7.5 w-[160px] shrink-0"
+          className={cn("h-7.5 shrink-0", isPane ? "w-full" : "w-[160px]")}
           label={<span className="truncate text-12">{t(TYPE_LABEL_KEYS[selectedType])}</span>}
         >
           {SERVICE_DEPENDENCY_TYPES.map((type) => (
@@ -249,7 +255,7 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
         <CustomSelect
           value={selectedId}
           onChange={(value: string) => setSelectedId(value)}
-          className="h-7.5 min-w-0 grow basis-0"
+          className={cn("h-7.5 min-w-0", isPane ? "w-full" : "grow basis-0")}
           label={
             <span className="flex items-center gap-2 py-0.5 text-12">
               {selectedService ? (
@@ -266,7 +272,14 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
             </CustomSelect.Option>
           ))}
         </CustomSelect>
-        <Button variant="secondary" size="sm" onClick={handleAdd} disabled={!canAdd} loading={isAdding}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleAdd}
+          disabled={!canAdd}
+          loading={isAdding}
+          className={cn(isPane && "w-full")}
+        >
           {t("add")}
         </Button>
       </div>
