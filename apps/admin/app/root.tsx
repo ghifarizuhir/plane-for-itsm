@@ -24,7 +24,7 @@ import "@fontsource/material-symbols-rounded";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Terraline | Open-source IT service management platform.";
+const APP_TITLE = "Plane | Open-source IT service management platform.";
 const APP_DESCRIPTION = "Open-source IT service management platform for services, requests, and delivery work.";
 
 export const links: LinksFunction = () => [
@@ -65,12 +65,13 @@ export const meta: Route.MetaFunction = () => [
   { name: "description", content: APP_DESCRIPTION },
   { property: "og:title", content: APP_TITLE },
   { property: "og:description", content: APP_DESCRIPTION },
-  { property: "og:url", content: "https://terraline.space/" },
+  { property: "og:url", content: "https://plane.so/" },
   {
     name: "keywords",
     content:
       "IT service management, ITSM, service desk, helpdesk, service catalog, service map, service health, IT operations, incident tracking, knowledge base, work items",
   },
+  { name: "twitter:site", content: "@planepowers" },
 ];
 
 export default function Root() {

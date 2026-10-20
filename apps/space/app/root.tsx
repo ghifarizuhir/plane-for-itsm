@@ -27,9 +27,9 @@ import "@fontsource/material-symbols-rounded";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Terraline Publish | Share your Terraline projects publicly with one click";
+const APP_TITLE = "Plane Publish | Share your Plane projects publicly with one click";
 const APP_DESCRIPTION =
-  "Terraline Publish is a public publishing tool for your Terraline projects, built on top of terraline.space";
+  "Plane Publish is a public publishing tool for your Plane projects, built on top of plane.so";
 
 export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", sizes: "180x180", href: appleTouchIcon },
@@ -78,12 +78,13 @@ export const meta: Route.MetaFunction = () => [
   { name: "description", content: APP_DESCRIPTION },
   { property: "og:title", content: APP_TITLE },
   { property: "og:description", content: APP_DESCRIPTION },
-  { property: "og:url", content: "https://sites.terraline.space/" },
+  { property: "og:url", content: "https://sites.plane.so/" },
   {
     name: "keywords",
     content:
       "IT service management, ITSM, service desk, public service status, customer feedback, service catalog, IT operations, knowledge base, collaboration",
   },
+  { name: "twitter:site", content: "@planepowers" },
 ];
 
 export default function Root() {

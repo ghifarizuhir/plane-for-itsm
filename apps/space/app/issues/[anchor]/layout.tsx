@@ -19,9 +19,9 @@ import { usePublish, usePublishList } from "@/hooks/store/publish";
 import { useIssueFilter } from "@/hooks/store/use-issue-filter";
 import type { Route } from "./+types/layout";
 
-const DEFAULT_TITLE = "Terraline";
+const DEFAULT_TITLE = "Plane";
 const DEFAULT_DESCRIPTION =
-  "Made with Terraline, an AI-powered IT service management platform with publishing capabilities.";
+  "Made with Plane, an AI-powered IT service management platform with publishing capabilities.";
 
 interface IssueMetadata {
   name?: string;
