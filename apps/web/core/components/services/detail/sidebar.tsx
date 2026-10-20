@@ -40,7 +40,7 @@ const SERVICE_TYPE_OPTIONS: IService["type"][] = ["internal", "external", "infra
 
 type Props = {
   serviceId: string;
-  layout?: "sidebar" | "stacked";
+  layout?: "sidebar" | "stacked" | "pane";
 };
 
 export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props: Props) {
@@ -59,6 +59,8 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
   const pid = projectId?.toString() ?? service.project_id;
   const workspaceId = getWorkspaceBySlug(slug)?.id;
   const health = getServiceHealth(serviceId);
+  // derived values
+  const showHeading = layout !== "pane";
 
   const update = async (data: Partial<IService>) => {
     if (!slug || !workspaceId) return;
@@ -74,9 +76,14 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
   };
 
   return (
-    <div className={cn("w-full", layout === "sidebar" ? "px-6 md:h-full md:overflow-y-auto" : "px-0")}>
-      <h5 className="mt-5 text-body-xs-medium">{t("common.properties")}</h5>
-      <div className="mt-4 mb-2 space-y-2.5 truncate">
+    <div
+      className={cn("w-full", {
+        "px-6 md:h-full md:overflow-y-auto": layout === "sidebar",
+        "px-0": layout === "stacked" || layout === "pane",
+      })}
+    >
+      {showHeading && <h5 className="mt-5 text-body-xs-medium">{t("common.properties")}</h5>}
+      <div className={cn("mb-2 space-y-2.5 truncate", showHeading ? "mt-4" : "mt-0")}>
         <SidebarPropertyListItem icon={ActivityOutline} label={t("service.fields.health")}>
           <div className="flex flex-wrap items-center gap-2 px-2">
             <ServiceHealthPill health={health?.health} />
