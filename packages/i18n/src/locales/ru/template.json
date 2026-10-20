@@ -162,7 +162,7 @@
           },
           "website": {
             "label": "URL веб-сайта",
-            "placeholder": "https://terraline.space",
+            "placeholder": "https://plane.so",
             "validation": {
               "invalid": "Некорректный URL",
               "maxLength": "URL должен быть менее 800 символов"
@@ -170,7 +170,7 @@
           },
           "company_name": {
             "label": "Название компании",
-            "placeholder": "Terraline",
+            "placeholder": "Plane",
             "validation": {
               "required": "Название компании обязательно",
               "maxLength": "Название компании должно быть менее 255 символов"
@@ -178,7 +178,7 @@
           },
           "contact_email": {
             "label": "Email поддержки",
-            "placeholder": "help@terraline.space",
+            "placeholder": "help@plane.so",
             "validation": {
               "invalid": "Некорректный email адрес",
               "maxLength": "Email поддержки должен быть менее 255 символов"
@@ -186,7 +186,7 @@
           },
           "privacy_policy_url": {
             "label": "Ссылка на вашу политику конфиденциальности",
-            "placeholder": "https://terraline.space/privacy-policy",
+            "placeholder": "https://plane.so/privacy-policy",
             "validation": {
               "invalid": "Некорректный URL",
               "maxLength": "URL должен быть менее 800 символов"
@@ -194,7 +194,7 @@
           },
           "terms_of_service_url": {
             "label": "Ссылка на ваши условия использования",
-            "placeholder": "https://terraline.space/terms-of-use",
+            "placeholder": "https://plane.so/terms-of-use",
             "validation": {
               "invalid": "Некорректный URL",
               "maxLength": "URL должен быть менее 800 символов"
@@ -227,7 +227,7 @@
     "empty_state": {
       "upgrade": {
         "title": "Шаблоны",
-        "description": "С шаблонами проектов, рабочих элементов и страниц в Terraline вам не нужно создавать проект с нуля или вручную устанавливать свойства рабочих элементов.",
+        "description": "С шаблонами проектов, рабочих элементов и страниц в Plane вам не нужно создавать проект с нуля или вручную устанавливать свойства рабочих элементов.",
         "sub_description": "Верните 80% времени администрирования, используя Шаблоны."
       },
       "no_templates": {

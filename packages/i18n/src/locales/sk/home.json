@@ -5,7 +5,7 @@
       "not_right_now": "Teraz nie",
       "create_project": {
         "title": "Vytvoriť projekt",
-        "description": "Väčšina vecí začína projektom v Terraline.",
+        "description": "Väčšina vecí začína projektom v Plane.",
         "cta": "Začať"
       },
       "invite_team": {
@@ -19,7 +19,7 @@
         "cta": "Konfigurovať tento priestor"
       },
       "personalize_account": {
-        "title": "Prispôsobte si Terraline.",
+        "title": "Prispôsobte si Plane.",
         "description": "Vyberte si obrázok, farby a ďalšie.",
         "cta": "Prispôsobiť teraz"
       },
@@ -53,7 +53,7 @@
       }
     },
     "new_at_plane": {
-      "title": "Novinky v Terraline"
+      "title": "Novinky v Plane"
     },
     "quick_tutorial": {
       "title": "Rýchly tutoriál"

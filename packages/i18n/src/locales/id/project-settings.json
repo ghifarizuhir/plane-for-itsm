@@ -182,18 +182,18 @@
       "description": "Konfigurasikan aksi otomatis untuk menyederhanakan alur kerja manajemen proyek Anda dan mengurangi tugas manual.",
       "auto-archive": {
         "title": "Arsip otomatis item kerja yang ditutup",
-        "description": "Terraline akan mengarsipkan secara otomatis item kerja yang telah selesai atau dibatalkan.",
+        "description": "Plane akan mengarsipkan secara otomatis item kerja yang telah selesai atau dibatalkan.",
         "duration": "Arsip otomatis item kerja yang ditutup selama"
       },
       "auto-close": {
         "title": "Tutup otomatis item kerja",
-        "description": "Terraline akan menutup secara otomatis item kerja yang belum selesai atau dibatalkan.",
+        "description": "Plane akan menutup secara otomatis item kerja yang belum selesai atau dibatalkan.",
         "duration": "Tutup otomatis item kerja yang tidak aktif selama",
         "auto_close_status": "Status penutupan otomatis"
       },
       "auto-remind": {
         "title": "Pengingat otomatis",
-        "description": "Terraline akan mengirim pengingat otomatis via email dan notifikasi dalam aplikasi untuk memantau kemajuan proyek Anda.",
+        "description": "Plane akan mengirim pengingat otomatis via email dan notifikasi dalam aplikasi untuk memantau kemajuan proyek Anda.",
         "duration": "Kirim pengingat sebelum"
       }
     },
@@ -266,7 +266,7 @@
         },
         "email": {
           "title": "Email",
-          "description": "Kumpulkan item kerja baru dari siapa saja yang mengirim email ke alamat email Terraline.",
+          "description": "Kumpulkan item kerja baru dari siapa saja yang mengirim email ke alamat email Plane.",
           "fieldName": "ID Email"
         },
         "form": {
