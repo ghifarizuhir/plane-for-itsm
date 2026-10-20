@@ -6,7 +6,7 @@
 
 import { action, makeObservable, observable, runInAction } from "mobx";
 import { AiSchedulesService } from "@/services/ai-schedules.service";
-import type { TAiSchedule, TAiScheduleRun } from "@/lib/ai-schedule";
+import type { TAiSchedule, TAiScheduleRun, TAiScheduleUpdate } from "@/lib/ai-schedule";
 
 type TAiSchedulesService = Pick<AiSchedulesService, "list" | "retrieve" | "update" | "remove" | "runNow">;
 
@@ -19,6 +19,7 @@ export interface IAiSchedulesStore {
   fetchSchedules: (workspaceSlug: string) => Promise<void>;
   fetchRuns: (workspaceSlug: string, scheduleId: string) => Promise<void>;
   toggleSchedule: (workspaceSlug: string, scheduleId: string, enabled: boolean) => Promise<void>;
+  updateSchedule: (workspaceSlug: string, scheduleId: string, changes: TAiScheduleUpdate) => Promise<TAiSchedule>;
   deleteSchedule: (workspaceSlug: string, scheduleId: string) => Promise<void>;
   runNow: (workspaceSlug: string, scheduleId: string) => Promise<void>;
 }
@@ -42,6 +43,7 @@ export class AiSchedulesStore implements IAiSchedulesStore {
       fetchSchedules: action,
       fetchRuns: action,
       toggleSchedule: action,
+      updateSchedule: action,
       deleteSchedule: action,
       runNow: action,
     });
@@ -95,7 +97,7 @@ export class AiSchedulesStore implements IAiSchedulesStore {
   };
 
   toggleSchedule = async (workspaceSlug: string, scheduleId: string, enabled: boolean) => {
-    await this.service.update(workspaceSlug, scheduleId, enabled);
+    await this.service.update(workspaceSlug, scheduleId, { enabled });
     runInAction(() => {
       this.schedules = this.schedules.map((schedule) =>
         schedule.id === scheduleId ? { ...schedule, enabled } : schedule
@@ -106,6 +108,16 @@ export class AiSchedulesStore implements IAiSchedulesStore {
     } catch {
       // keep the optimistic local state; the next poll will retry
     }
+  };
+
+  updateSchedule = async (workspaceSlug: string, scheduleId: string, changes: TAiScheduleUpdate) => {
+    const updated = await this.service.update(workspaceSlug, scheduleId, changes);
+    runInAction(() => {
+      this.schedules = this.schedules.map((schedule) =>
+        schedule.id === scheduleId ? { ...schedule, ...updated } : schedule
+      );
+    });
+    return updated;
   };
 
   deleteSchedule = async (workspaceSlug: string, scheduleId: string) => {

@@ -5,7 +5,7 @@ const makeService = () => ({
   list: vi.fn(async () => [{ id: "s1", name: "Daily", enabled: true }]),
   create: vi.fn(async () => ({ id: "s1" })),
   retrieve: vi.fn(async () => ({ id: "s1", runs: [] })),
-  update: vi.fn(async () => undefined),
+  update: vi.fn(async () => ({ id: "s1", name: "Daily", enabled: true })),
   remove: vi.fn(async () => undefined),
   runNow: vi.fn(async () => ({ run_id: "r1" })),
 });
@@ -27,7 +27,7 @@ describe("AiSchedulesStore", () => {
     const store = new AiSchedulesStore(service as never);
     store.schedules = [{ id: "s1", enabled: true } as never];
     await store.toggleSchedule("acme", "s1", false);
-    expect(service.update).toHaveBeenCalledWith("acme", "s1", false);
+    expect(service.update).toHaveBeenCalledWith("acme", "s1", { enabled: false });
     expect(store.schedules[0].enabled).toBe(false);
     await store.runNow("acme", "s1");
     expect(service.runNow).toHaveBeenCalledWith("acme", "s1");
@@ -103,6 +103,43 @@ describe("AiSchedulesStore", () => {
     }) as never;
     const store = new AiSchedulesStore(service as never);
     await expect(store.fetchRuns("acme", "s1")).rejects.toThrow("boom");
+  });
+
+  it("updates a schedule and merges the response while preserving run fields", async () => {
+    const service = makeService();
+    service.update = vi.fn(async () => ({ id: "s1", name: "Weekly", frequency: "weekly" })) as never;
+    const store = new AiSchedulesStore(service as never);
+    store.schedules = [
+      {
+        id: "s1",
+        name: "Daily",
+        enabled: true,
+        last_status: "success",
+        last_run_at: "2026-10-01T09:00:00Z",
+        runs: [{ id: "r1" }],
+      } as never,
+    ];
+
+    const updated = await store.updateSchedule("acme", "s1", { frequency: "weekly" });
+
+    expect(service.update).toHaveBeenCalledWith("acme", "s1", { frequency: "weekly" });
+    expect(updated.name).toBe("Weekly");
+    expect(store.schedules[0]).toMatchObject({
+      name: "Weekly",
+      frequency: "weekly",
+      last_status: "success",
+      last_run_at: "2026-10-01T09:00:00Z",
+    });
+  });
+
+  it("propagates update errors", async () => {
+    const service = makeService();
+    service.update = vi.fn(async () => {
+      throw new Error("nope");
+    }) as never;
+    const store = new AiSchedulesStore(service as never);
+    store.schedules = [{ id: "s1", enabled: true } as never];
+    await expect(store.updateSchedule("acme", "s1", { name: "x" })).rejects.toThrow("nope");
   });
 
   it("a failed poll keeps the loaded list", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AI_SCHEDULE_TOOLS,
+  diffScheduleUpdate,
   filterSchedules,
   humanizeSchedule,
   isScheduleCommand,
@@ -11,6 +12,7 @@ import {
   scheduleRunNotificationHref,
   scheduleRunNotificationText,
   scheduleStatusLabel,
+  validateScheduleBasics,
   validateScheduleSpec,
 } from "./ai-schedule";
 import type { TAiSchedule, TAiScheduleSpec } from "./ai-schedule";
@@ -265,5 +267,82 @@ describe("schedule run notifications", () => {
     expect(scheduleRunNotificationHref("acme", "s1")).toBe("/acme/scheduler?schedule=s1");
     expect(scheduleRunNotificationText("success")).toBe("Scheduled run finished");
     expect(scheduleRunNotificationText("failed")).toBe("Scheduled run failed");
+  });
+});
+
+describe("validateScheduleBasics", () => {
+  const base = {
+    name: "Daily report",
+    frequency: "daily" as const,
+    time: "09:00",
+    day_of_week: null,
+    day_of_month: null,
+    timezone: "Asia/Jakarta",
+  };
+
+  it("accepts a valid cadence", () => {
+    expect(validateScheduleBasics(base)).toBeNull();
+  });
+
+  it("rejects missing or invalid values", () => {
+    expect(validateScheduleBasics({ ...base, name: "  " })).toBe("Name is required.");
+    expect(validateScheduleBasics({ ...base, time: "9:0" })).toBe("Time must be HH:MM (24h).");
+    expect(validateScheduleBasics({ ...base, frequency: "weekly", day_of_week: null })).toBe("Choose a weekday.");
+    expect(validateScheduleBasics({ ...base, frequency: "monthly", day_of_month: null })).toBe(
+      "Choose a day of month (1-31)."
+    );
+    expect(validateScheduleBasics({ ...base, timezone: "Mars/Olympus" })).toBe("Unknown timezone: Mars/Olympus");
+  });
+});
+
+describe("diffScheduleUpdate", () => {
+  const before: TAiSchedule = {
+    id: "s1",
+    name: "Daily report",
+    frequency: "daily",
+    time: "09:00",
+    day_of_week: null,
+    day_of_month: null,
+    timezone: "UTC",
+    enabled: true,
+    next_run_at: "2026-10-21T09:00:00Z",
+    created_by_id: "u1",
+    created_at: "2026-10-01T00:00:00Z",
+    prompt: "Old prompt",
+    spec: {
+      version: 1,
+      description: "Old description",
+      how_to: ["Old step"],
+      tools: ["count_work_items"],
+      expected_output: "Old output",
+    },
+  };
+
+  it("renders only changed fields", () => {
+    const rows = diffScheduleUpdate({
+      schedule_id: "s1",
+      changes: {
+        name: "Weekly report",
+        frequency: "weekly",
+        day_of_week: 2,
+        tools: ["search_work_items"],
+      },
+      before,
+      can_edit: true,
+    });
+    expect(rows.find((row) => row.label === "Name")).toEqual({
+      label: "Name",
+      before: "Daily report",
+      after: "Weekly report",
+    });
+    expect(rows.find((row) => row.label === "Cadence")?.after).toBe("Every Tuesday at 09:00 · UTC");
+    expect(rows.find((row) => row.label === "Tools")?.after).toBe("search_work_items");
+    expect(rows.find((row) => row.label === "Description")).toBeUndefined();
+  });
+
+  it("returns no rows without a before snapshot", () => {
+    expect(diffScheduleUpdate({ schedule_id: "s1", changes: { name: "x" }, before: null, can_edit: false })).toEqual(
+      []
+    );
   });
 });

@@ -54,6 +54,35 @@ export type TAiScheduleProposal = {
   prompt?: string;
 } & Partial<TAiScheduleSpec>;
 
+export type TAiScheduleUpdateChanges = {
+  name?: string;
+  description?: string;
+  how_to?: string[];
+  tools?: TAiScheduleTool[];
+  expected_output?: string;
+  prompt?: string;
+  frequency?: TAiScheduleFrequency;
+  time?: string;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  timezone?: string;
+};
+
+export type TAiScheduleUpdate = TAiScheduleUpdateChanges & { enabled?: boolean };
+
+export type TAiScheduleUpdateProposal = {
+  schedule_id: string;
+  changes: TAiScheduleUpdateChanges;
+  before: TAiSchedule | null;
+  can_edit: boolean;
+};
+
+export type TAiScheduleDiffRow = {
+  label: string;
+  before: string;
+  after: string;
+};
+
 export type TStructuredScheduleProposal = TAiScheduleProposal & TAiScheduleSpec;
 
 export type TAiScheduleRun = {
@@ -83,10 +112,12 @@ export type TAiSchedule = Omit<TAiScheduleProposal, "prompt"> & {
   runs?: TAiScheduleRun[];
 };
 
-export type TAiAgentPendingAction = {
-  kind: "create_schedule";
-  proposal: TAiScheduleProposal;
-};
+export type TAiAgentPendingAction =
+  | { kind: "create_schedule"; proposal: TAiScheduleProposal }
+  | {
+      kind: "update_schedule";
+      proposal: { schedule_id: string; changes: TAiScheduleUpdateChanges };
+    };
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -172,6 +203,34 @@ export const validateScheduleSpec = (spec: Partial<TAiScheduleSpec>): string | n
   return null;
 };
 
+export const validateScheduleBasics = (draft: {
+  name: string;
+  frequency: TAiScheduleFrequency;
+  time: string;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  timezone: string;
+}): string | null => {
+  const name = draft.name.trim();
+  if (!name) return "Name is required.";
+  if (name.length > 120) return "Name must be at most 120 characters.";
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time)) return "Time must be HH:MM (24h).";
+  if (draft.frequency === "weekly" && !(draft.day_of_week && draft.day_of_week >= 1 && draft.day_of_week <= 7)) {
+    return "Choose a weekday.";
+  }
+  if (draft.frequency === "monthly" && !(draft.day_of_month && draft.day_of_month >= 1 && draft.day_of_month <= 31)) {
+    return "Choose a day of month (1-31).";
+  }
+  const timezone = draft.timezone.trim();
+  if (!timezone) return "Timezone is required.";
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: timezone });
+  } catch {
+    return `Unknown timezone: ${timezone}`;
+  }
+  return null;
+};
+
 export const isStructuredProposal = (proposal: TAiScheduleProposal): proposal is TStructuredScheduleProposal =>
   Array.isArray(proposal.how_to) &&
   Array.isArray(proposal.tools) &&
@@ -180,6 +239,49 @@ export const isStructuredProposal = (proposal: TAiScheduleProposal): proposal is
 
 export const scheduleDescription = (schedule: { spec?: TAiScheduleSpec | null; prompt: string }): string =>
   schedule.spec?.description?.trim() || schedule.prompt;
+
+export const diffScheduleUpdate = (proposal: TAiScheduleUpdateProposal): TAiScheduleDiffRow[] => {
+  const { before, changes } = proposal;
+  if (!before) return [];
+  const rows: TAiScheduleDiffRow[] = [];
+  const push = (label: string, previous: string, next: string | undefined) => {
+    if (next === undefined || previous === next) return;
+    rows.push({ label, before: previous || "—", after: next || "—" });
+  };
+
+  push("Name", before.name, changes.name);
+
+  const cadenceChanged = [
+    changes.frequency,
+    changes.time,
+    changes.day_of_week,
+    changes.day_of_month,
+    changes.timezone,
+  ].some((value) => value !== undefined);
+  if (cadenceChanged) {
+    const after = humanizeSchedule({
+      frequency: changes.frequency ?? before.frequency,
+      time: changes.time ?? before.time,
+      day_of_week: changes.day_of_week !== undefined ? changes.day_of_week : before.day_of_week,
+      day_of_month: changes.day_of_month !== undefined ? changes.day_of_month : before.day_of_month,
+      timezone: changes.timezone ?? before.timezone,
+    });
+    push("Cadence", humanizeSchedule(before), after);
+  }
+
+  push("Description", before.spec?.description ?? "", changes.description);
+  if (changes.how_to !== undefined) {
+    const previous = (before.spec?.how_to ?? []).map((step, index) => `${index + 1}. ${step}`).join("\n");
+    const next = changes.how_to.map((step, index) => `${index + 1}. ${step}`).join("\n");
+    push("Steps", previous, next);
+  }
+  if (changes.tools !== undefined) {
+    push("Tools", (before.spec?.tools ?? []).join(", "), changes.tools.join(", "));
+  }
+  push("Expected output", before.spec?.expected_output ?? "", changes.expected_output);
+  push("Prompt", before.prompt, changes.prompt);
+  return rows;
+};
 
 export type TAiScheduleListFilter = {
   query: string;

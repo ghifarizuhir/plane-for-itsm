@@ -6,7 +6,7 @@
 
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
-import type { TAiSchedule, TAiScheduleProposal, TAiScheduleRun } from "@/lib/ai-schedule";
+import type { TAiSchedule, TAiScheduleProposal, TAiScheduleRun, TAiScheduleUpdate } from "@/lib/ai-schedule";
 
 export class AiSchedulesService extends APIService {
   constructor() {
@@ -41,9 +41,9 @@ export class AiSchedulesService extends APIService {
       });
   }
 
-  async update(workspaceSlug: string, scheduleId: string, enabled: boolean): Promise<void> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/ai-schedules/${scheduleId}/`, { enabled })
-      .then(() => undefined)
+  async update(workspaceSlug: string, scheduleId: string, changes: TAiScheduleUpdate): Promise<TAiSchedule> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/ai-schedules/${scheduleId}/`, changes)
+      .then((response) => response?.data)
       .catch((error) => {
         throw error?.response;
       });
