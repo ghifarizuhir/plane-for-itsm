@@ -45,6 +45,7 @@ pub const SPEC_STEPS_MAX: usize = 10;
 pub const SPEC_STEP_MAX: usize = 500;
 pub const SPEC_EXPECTED_OUTPUT_MAX: usize = 1000;
 pub const SPEC_PROMPT_MAX: usize = 8000;
+pub const LEGACY_PROMPT_MAX: usize = 2000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ScheduleProposal {
@@ -93,7 +94,7 @@ impl ScheduleProposal {
             day_of_week,
             day_of_month,
             timezone,
-            2000,
+            LEGACY_PROMPT_MAX,
         )
     }
 
@@ -283,6 +284,202 @@ pub fn allowed_read_tools(allowed: &[String]) -> Vec<&'static str> {
         .copied()
         .filter(|name| allowed.iter().any(|tool| tool == name))
         .collect()
+}
+
+/// A partial schedule update: every field is optional and only the provided
+/// fields change. Shape validation lives here; merging with the stored row and
+/// re-rendering the prompt happen in the API route.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleChanges {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub how_to: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_output: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frequency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub day_of_week: Option<i16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub day_of_month: Option<i16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
+impl ScheduleChanges {
+    pub fn is_empty(&self) -> bool {
+        self.name.is_none()
+            && self.description.is_none()
+            && self.how_to.is_none()
+            && self.tools.is_none()
+            && self.expected_output.is_none()
+            && self.prompt.is_none()
+            && self.frequency.is_none()
+            && self.time.is_none()
+            && self.day_of_week.is_none()
+            && self.day_of_month.is_none()
+            && self.timezone.is_none()
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.is_empty() {
+            return Err("at least one change is required".to_string());
+        }
+        if self.prompt.is_some()
+            && (self.description.is_some()
+                || self.how_to.is_some()
+                || self.tools.is_some()
+                || self.expected_output.is_some())
+        {
+            return Err(
+                "prompt cannot be combined with structured recipe fields".to_string(),
+            );
+        }
+        if let Some(name) = self.name.as_deref() {
+            bounded_text("name", name, 120)?;
+        }
+        if let Some(description) = self.description.as_deref() {
+            bounded_text("description", description, SPEC_DESCRIPTION_MAX)?;
+        }
+        if let Some(how_to) = self.how_to.as_ref() {
+            if how_to.is_empty() || how_to.len() > SPEC_STEPS_MAX {
+                return Err(format!("how_to must have 1-{SPEC_STEPS_MAX} steps"));
+            }
+            for step in how_to {
+                bounded_text("how_to step", step, SPEC_STEP_MAX)?;
+            }
+        }
+        if let Some(tools) = self.tools.as_ref() {
+            if tools.is_empty() {
+                return Err("tools must include at least one read tool".to_string());
+            }
+            if let Some(unknown) = tools
+                .iter()
+                .map(|tool| tool.trim())
+                .find(|tool| !SPEC_TOOLS.contains(tool))
+            {
+                return Err(format!("unknown tool: {unknown}"));
+            }
+        }
+        if let Some(prompt) = self.prompt.as_deref() {
+            bounded_text("prompt", prompt, LEGACY_PROMPT_MAX)?;
+        }
+        if let Some(frequency) = self.frequency.as_deref() {
+            let normalized = frequency.trim().to_ascii_lowercase();
+            if !FREQUENCIES.contains(&normalized.as_str()) {
+                return Err(format!(
+                    "frequency must be one of: {}",
+                    FREQUENCIES.join(", ")
+                ));
+            }
+        }
+        if let Some(time) = self.time.as_deref() {
+            parse_time(time)?;
+        }
+        if let Some(day_of_week) = self.day_of_week {
+            if !(1..=7).contains(&day_of_week) {
+                return Err("day_of_week must be 1 (Monday) to 7 (Sunday)".to_string());
+            }
+        }
+        if let Some(day_of_month) = self.day_of_month {
+            if !(1..=31).contains(&day_of_month) {
+                return Err("day_of_month must be 1-31".to_string());
+            }
+        }
+        if let Some(timezone) = self.timezone.as_deref() {
+            timezone
+                .trim()
+                .parse::<Tz>()
+                .map_err(|_| format!("unknown IANA timezone: {}", timezone.trim()))?;
+        }
+        Ok(())
+    }
+}
+
+/// Merge a structured schedule's recipe fields and render its canonical prompt.
+///
+/// `name`, `frequency`, `time`, `day_of_week`, `day_of_month`, and `timezone`
+/// are the merged effective values (patch over stored row); only the spec
+/// fields are taken from `changes`. `legacy` edits of the raw prompt are
+/// rejected here.
+#[allow(clippy::too_many_arguments)]
+pub fn updated_recipe(
+    name: &str,
+    spec: &ScheduleSpec,
+    changes: &ScheduleChanges,
+    frequency: &str,
+    time: &str,
+    day_of_week: Option<i16>,
+    day_of_month: Option<i16>,
+    timezone: &str,
+) -> Result<ScheduleRecipe, String> {
+    if changes.prompt.is_some() {
+        return Err("prompt is only editable on legacy schedules".to_string());
+    }
+    let description = changes.description.as_deref().unwrap_or(&spec.description);
+    let how_to = changes.how_to.as_deref().unwrap_or(&spec.how_to);
+    let tools = changes.tools.as_deref().unwrap_or(&spec.tools);
+    let expected_output = changes
+        .expected_output
+        .as_deref()
+        .unwrap_or(&spec.expected_output);
+    ScheduleRecipe::new(
+        name,
+        description,
+        how_to,
+        tools,
+        expected_output,
+        frequency,
+        Some(time),
+        day_of_week,
+        day_of_month,
+        Some(timezone),
+    )
+}
+
+/// Merge a legacy schedule's raw prompt and cadence. Structured recipe fields
+/// are rejected: legacy schedules keep their raw prompt shape.
+#[allow(clippy::too_many_arguments)]
+pub fn updated_legacy(
+    name: &str,
+    prompt: &str,
+    changes: &ScheduleChanges,
+    frequency: &str,
+    time: &str,
+    day_of_week: Option<i16>,
+    day_of_month: Option<i16>,
+    timezone: &str,
+) -> Result<ScheduleProposal, String> {
+    if changes.description.is_some()
+        || changes.how_to.is_some()
+        || changes.tools.is_some()
+        || changes.expected_output.is_some()
+    {
+        return Err(
+            "structured recipe fields can only be edited on recipe schedules; recreate the schedule to convert it"
+                .to_string(),
+        );
+    }
+    let prompt = changes.prompt.as_deref().unwrap_or(prompt);
+    let name = changes.name.as_deref().unwrap_or(name);
+    ScheduleProposal::new(
+        name,
+        prompt,
+        frequency,
+        Some(time),
+        day_of_week,
+        day_of_month,
+        Some(timezone),
+    )
 }
 
 /// Deterministic prompt rendering for a structured recipe.
@@ -763,5 +960,154 @@ mod tests {
         let spec = ScheduleSpec::new("d", &["s".to_string()], &all, "o").unwrap();
         assert_eq!(spec.tools.len(), SPEC_TOOLS.len());
         assert_eq!(SPEC_TOOLS.len(), 23);
+    }
+
+    fn base_spec() -> ScheduleSpec {
+        ScheduleSpec::new(
+            "Summarize overdue items",
+            &["Count overdue items".to_string()],
+            &["count_work_items".to_string()],
+            "A short list",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn update_changes_validates_bounds_and_mixing() {
+        let empty = ScheduleChanges::default();
+        assert!(empty.validate().unwrap_err().contains("at least one change"));
+
+        let mixed = ScheduleChanges {
+            prompt: Some("legacy".to_string()),
+            description: Some("recipe".to_string()),
+            ..Default::default()
+        };
+        assert!(mixed.validate().unwrap_err().contains("cannot be combined"));
+
+        let blank_name = ScheduleChanges {
+            name: Some("  ".to_string()),
+            ..Default::default()
+        };
+        assert!(blank_name.validate().unwrap_err().contains("name"));
+
+        let bad_day = ScheduleChanges {
+            day_of_week: Some(8),
+            ..Default::default()
+        };
+        assert!(bad_day.validate().unwrap_err().contains("day_of_week"));
+
+        let bad_tz = ScheduleChanges {
+            timezone: Some("Mars/Olympus".to_string()),
+            ..Default::default()
+        };
+        assert!(bad_tz.validate().unwrap_err().contains("timezone"));
+
+        let valid = ScheduleChanges {
+            name: Some(" Weekly report ".to_string()),
+            frequency: Some("weekly".to_string()),
+            day_of_week: Some(1),
+            ..Default::default()
+        };
+        assert!(valid.validate().is_ok());
+    }
+
+    #[test]
+    fn updated_recipe_merges_fields_and_renders_a_new_prompt() {
+        let spec = base_spec();
+        let changes = ScheduleChanges {
+            name: Some("Weekly overdue report".to_string()),
+            how_to: Some(vec![
+                "Count overdue items".to_string(),
+                "Group by owner".to_string(),
+            ]),
+            tools: Some(vec!["search_work_items".to_string(), "count_work_items".to_string()]),
+            frequency: Some("weekly".to_string()),
+            day_of_week: Some(3),
+            ..Default::default()
+        };
+        let recipe = updated_recipe(
+            "Weekly overdue report",
+            &spec,
+            &changes,
+            "weekly",
+            "10:30",
+            Some(3),
+            None,
+            "Asia/Jakarta",
+        )
+        .unwrap();
+        assert_eq!(recipe.proposal.frequency, "weekly");
+        assert_eq!(recipe.proposal.day_of_week, Some(3));
+        assert_eq!(recipe.proposal.timezone, "Asia/Jakarta");
+        assert_eq!(recipe.spec.how_to.len(), 2);
+        assert_eq!(recipe.spec.tools, vec!["count_work_items", "search_work_items"]);
+        assert!(recipe.proposal.prompt.contains("Task: Weekly overdue report"));
+        assert!(recipe.proposal.prompt.contains("2. Group by owner"));
+    }
+
+    #[test]
+    fn updated_recipe_rejects_prompt_edits() {
+        let changes = ScheduleChanges {
+            prompt: Some("raw".to_string()),
+            ..Default::default()
+        };
+        let error = updated_recipe(
+            "Name",
+            &base_spec(),
+            &changes,
+            "daily",
+            "09:00",
+            None,
+            None,
+            "UTC",
+        )
+        .unwrap_err();
+        assert!(error.contains("legacy"));
+    }
+
+    #[test]
+    fn updated_legacy_rejects_structured_fields() {
+        let changes = ScheduleChanges {
+            description: Some("recipe".to_string()),
+            ..Default::default()
+        };
+        let error = updated_legacy(
+            "Name",
+            "old prompt",
+            &changes,
+            "daily",
+            "09:00",
+            None,
+            None,
+            "UTC",
+        )
+        .unwrap_err();
+        assert!(error.contains("recreate"));
+    }
+
+    #[test]
+    fn updated_legacy_merges_prompt_and_cadence() {
+        let changes = ScheduleChanges {
+            name: Some("New name".to_string()),
+            prompt: Some("new prompt".to_string()),
+            frequency: Some("weekly".to_string()),
+            day_of_week: Some(2),
+            ..Default::default()
+        };
+        let proposal = updated_legacy(
+            "New name",
+            "old prompt",
+            &changes,
+            "weekly",
+            "08:15",
+            Some(2),
+            None,
+            "UTC",
+        )
+        .unwrap();
+        assert_eq!(proposal.name, "New name");
+        assert_eq!(proposal.prompt, "new prompt");
+        assert_eq!(proposal.day_of_week, Some(2));
+        assert_eq!(proposal.time, "08:15");
     }
 }
