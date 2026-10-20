@@ -1,6 +1,6 @@
 //! AI schedule jobs: claim due schedules (`tick`) and run the agent (`run`).
 
-use ai::schedule::ScheduleProposal;
+use ai::schedule::{ScheduleProposal, SPEC_PROMPT_MAX};
 use redis::aio::ConnectionManager;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -19,7 +19,7 @@ struct DueSchedule {
 
 impl DueSchedule {
     fn proposal(&self) -> Result<ScheduleProposal, String> {
-        ScheduleProposal::new(
+        ScheduleProposal::with_prompt_limit(
             "scheduled",
             &self.prompt,
             &self.frequency,
@@ -27,6 +27,7 @@ impl DueSchedule {
             self.day_of_week,
             self.day_of_month,
             Some(&self.timezone),
+            SPEC_PROMPT_MAX,
         )
     }
 }

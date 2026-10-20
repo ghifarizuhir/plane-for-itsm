@@ -508,7 +508,7 @@ async fn run_success_records_response_and_prunes() {
     .unwrap();
     assert_eq!(status, "success");
     assert_eq!(response.as_deref(), Some("scheduled answer"));
-    assert_eq!(response_html.as_deref(), Some("scheduled answer"));
+    assert_eq!(response_html.as_deref(), Some("<p>scheduled answer</p>"));
     assert!(finished.is_some());
 
     let remaining: i64 = sqlx::query_scalar(
@@ -790,16 +790,21 @@ async fn run_success_notifies_scheduled_creator_once() {
         .await
         .expect("run");
 
-    let (receiver, notification_workspace, title, status, schedule_ref): (Uuid, Uuid, String, String, String) =
-        sqlx::query_as(
-            "SELECT receiver_id, workspace_id, title, data->'ai_schedule'->>'status', \
+    let (receiver, notification_workspace, title, status, schedule_ref): (
+        Uuid,
+        Uuid,
+        String,
+        String,
+        String,
+    ) = sqlx::query_as(
+        "SELECT receiver_id, workspace_id, title, data->'ai_schedule'->>'status', \
                     data->'ai_schedule'->>'schedule_id' \
              FROM notifications WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(receiver, user_id);
     assert_eq!(notification_workspace, workspace_id);
     assert_eq!(title, "Daily digest");
@@ -945,7 +950,10 @@ async fn tick_sweeps_stuck_runs() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(notified, 2, "swept scheduled runs notify; the manual one does not");
+    assert_eq!(
+        notified, 2,
+        "swept scheduled runs notify; the manual one does not"
+    );
     let manual_notified: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM notifications WHERE entity_name = 'ai_schedule_run' AND entity_identifier = $1",
     )
@@ -1046,6 +1054,87 @@ async fn run_fails_on_invalid_spec_before_llm() {
         .execute(&pool)
         .await
         .unwrap();
+
+    sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM ai_schedules WHERE workspace_id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn tick_keeps_long_structured_recipes_enabled() {
+    let pool = pool().await;
+    let slug = format!("aislong-{}", Uuid::new_v4().simple());
+    let workspace_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let schedule_id = Uuid::new_v4();
+    insert_user(&pool, user_id, &slug).await;
+    sqlx::query(
+        "INSERT INTO workspaces (id, name, slug, owner_id, created_at, updated_at, timezone, background_color) \
+         VALUES ($1, 'AI Long', $2, $3, now(), now(), 'UTC', '#FFFFFF')",
+    )
+    .bind(workspace_id)
+    .bind(&slug)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let long_step = "x".repeat(300);
+    let how_to: Vec<String> = (0..10).map(|_| long_step.clone()).collect();
+    let spec = serde_json::json!({
+        "version": 1,
+        "description": "d",
+        "how_to": how_to,
+        "tools": ["list_projects"],
+        "expected_output": "o"
+    });
+    let prompt = "p".repeat(2500);
+    sqlx::query(
+        "INSERT INTO ai_schedules (id, workspace_id, created_by_id, name, prompt, spec, frequency, \
+         time_of_day, timezone, enabled, next_run_at, proposal_key, created_at, updated_at) \
+         VALUES ($1, $2, $3, 'Long recipe', $4, $5, 'daily', '09:00', 'UTC', true, \
+         now() - interval '1 minute', $6, now(), now())",
+    )
+    .bind(schedule_id)
+    .bind(workspace_id)
+    .bind(user_id)
+    .bind(&prompt)
+    .bind(&spec)
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let mut redis = common::redis::create_redis(
+        &std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+    )
+    .await;
+    let queued = ai_schedule::tick(&pool, &mut redis).await.expect("tick");
+
+    let enabled: bool = sqlx::query_scalar("SELECT enabled FROM ai_schedules WHERE id = $1")
+        .bind(schedule_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(enabled, "long structured recipe must not be disabled");
+    assert!(!queued.is_empty(), "the due long recipe must queue a run");
 
     sqlx::query("DELETE FROM ai_schedule_runs WHERE workspace_id = $1")
         .bind(workspace_id)
