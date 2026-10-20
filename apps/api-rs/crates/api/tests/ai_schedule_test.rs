@@ -938,3 +938,262 @@ async fn resume_recomputes_next_run_for_a_long_recipe() {
 
     scratch.purge(&pool).await;
 }
+
+#[tokio::test]
+async fn patch_edits_structured_fields_and_rerenders_prompt() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(structured_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(updated)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({
+            "name": "Weekly overdue report",
+            "description": "Weekly overdue summary per owner",
+            "how_to": ["Count overdue items", "Group the list by owner"],
+            "tools": ["count_work_items", "search_work_items"],
+            "expected_output": "A markdown table grouped by owner",
+            "frequency": "weekly",
+            "time": "10:30",
+            "day_of_week": 3,
+            "timezone": "Asia/Jakarta",
+        })),
+    )
+    .await
+    .expect("patch ok");
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["name"], json!("Weekly overdue report"));
+    assert_eq!(updated["frequency"], json!("weekly"));
+    assert_eq!(updated["day_of_week"], json!(3));
+    assert_eq!(updated["time"], json!("10:30"));
+    assert_eq!(updated["timezone"], json!("Asia/Jakarta"));
+    assert_eq!(
+        updated["spec"]["description"],
+        json!("Weekly overdue summary per owner")
+    );
+    assert_eq!(updated["spec"]["how_to"][1], json!("Group the list by owner"));
+    let prompt = updated["prompt"].as_str().unwrap();
+    assert!(prompt.contains("Task: Weekly overdue report"));
+    assert!(prompt.contains("2. Group the list by owner"));
+    assert!(prompt.contains("Allowed tools: count_work_items, search_work_items"));
+
+    let next: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(next > chrono::Utc::now());
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_keeps_next_run_for_content_and_paused_cadence_edits() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(structured_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let original_next: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"name": "Daily report v2"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    let after_content: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(after_content, original_next);
+
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": false})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, Json(paused)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"frequency": "weekly", "time": "11:00", "day_of_week": 2})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(paused["frequency"], json!("weekly"));
+    let paused_next: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(paused_next, original_next);
+
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"enabled": true})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    let resumed_next: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT next_run_at FROM ai_schedules WHERE id = $1")
+            .bind(schedule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(resumed_next > chrono::Utc::now());
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_edits_legacy_prompt_and_rejects_invalid_shapes() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(create_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(updated)) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({
+            "name": "Legacy report v2",
+            "prompt": "Summarize overdue work items by owner",
+            "timezone": "Asia/Jakarta",
+        })),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["name"], json!("Legacy report v2"));
+    assert_eq!(updated["prompt"], json!("Summarize overdue work items by owner"));
+    assert_eq!(updated["spec"], json!(null));
+
+    // Structured fields on a legacy schedule are rejected.
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"description": "recipe"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Unknown key.
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"next_run_at": "2030-01-01T00:00:00Z"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Empty patch.
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Weekly without a weekday.
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"frequency": "weekly"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
+async fn patch_rejects_prompt_edits_on_structured_schedules() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(structured_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let (status, _) = ai_schedule::patch(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path((scratch.slug.clone(), schedule_id)),
+        Json(json!({"prompt": "raw override"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    scratch.purge(&pool).await;
+}

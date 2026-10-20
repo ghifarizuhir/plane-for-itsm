@@ -8,7 +8,10 @@
 
 use std::collections::HashMap;
 
-use ai::schedule::{ScheduleProposal, ScheduleRecipe, SPEC_PROMPT_MAX};
+use ai::schedule::{
+    updated_legacy, updated_recipe, ScheduleChanges, ScheduleProposal, ScheduleRecipe, ScheduleSpec,
+    SPEC_PROMPT_MAX,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -158,6 +161,41 @@ fn schedule_input(body: &CreateScheduleBody) -> Result<ScheduleInput, String> {
     }
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateScheduleBody {
+    pub enabled: Option<bool>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub how_to: Option<Vec<String>>,
+    pub tools: Option<Vec<String>>,
+    pub expected_output: Option<String>,
+    pub prompt: Option<String>,
+    pub frequency: Option<String>,
+    pub time: Option<String>,
+    pub day_of_week: Option<i16>,
+    pub day_of_month: Option<i16>,
+    pub timezone: Option<String>,
+}
+
+impl UpdateScheduleBody {
+    fn changes(&self) -> ScheduleChanges {
+        ScheduleChanges {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            how_to: self.how_to.clone(),
+            tools: self.tools.clone(),
+            expected_output: self.expected_output.clone(),
+            prompt: self.prompt.clone(),
+            frequency: self.frequency.clone(),
+            time: self.time.clone(),
+            day_of_week: self.day_of_week,
+            day_of_month: self.day_of_month,
+            timezone: self.timezone.clone(),
+        }
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct ScheduleRow {
     id: Uuid,
@@ -207,7 +245,7 @@ fn run_json(row: &RunRow) -> Value {
     })
 }
 
-fn schedule_json(row: &ScheduleRow) -> Value {
+pub(crate) fn schedule_json(row: &ScheduleRow) -> Value {
     json!({
         "id": row.id,
         "name": row.name,
@@ -235,7 +273,7 @@ fn schedule_list_json(row: &ScheduleRow, last_run: Option<&RunRow>) -> Value {
 
 /// Load one non-deleted schedule by workspace slug + id, scoped to the
 /// workspace (unknown slug or schedule → `None`).
-async fn load_schedule(
+pub(crate) async fn load_schedule(
     pool: &PgPool,
     slug: &str,
     schedule_id: Uuid,
@@ -255,7 +293,7 @@ async fn load_schedule(
 }
 
 /// Existing schedules are managed by their creator or a workspace admin.
-fn can_manage(created_by_id: Uuid, user_id: Uuid, ws_role: Option<i16>) -> bool {
+pub(crate) fn can_manage(created_by_id: Uuid, user_id: Uuid, ws_role: Option<i16>) -> bool {
     created_by_id == user_id || ws_role == Some(20)
 }
 
@@ -440,8 +478,11 @@ pub async fn detail(
     Ok((StatusCode::OK, Json(body)))
 }
 
-/// `PATCH /api/workspaces/:slug/ai-schedules/:schedule_id/` — `{"enabled"}`.
-/// Pausing keeps `next_run_at`; resuming recomputes it from the preset.
+/// `PATCH /api/workspaces/:slug/ai-schedules/:schedule_id/` — partial
+/// update. Accepts any subset of `enabled`, name, recipe/prompt, and cadence
+/// fields; the merged result is validated, structured prompts are re-rendered,
+/// and `next_run_at` is recomputed only when cadence changes or a paused
+/// schedule resumes.
 pub async fn patch(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -458,45 +499,177 @@ pub async fn patch(
     if !can_manage(row.created_by_id, auth.0, role) {
         return Ok(deny());
     }
-    let Some(enabled) = body.get("enabled").and_then(Value::as_bool) else {
+    let body: UpdateScheduleBody = match serde_json::from_value(body) {
+        Ok(body) => body,
+        Err(err) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid schedule payload: {err}")})),
+            ));
+        }
+    };
+    let changes = body.changes();
+    if body.enabled.is_none() && changes.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "enabled must be a boolean"})),
+            Json(json!({"error": "at least one field is required"})),
         ));
-    };
-    let next_run_at = if enabled {
-        match ScheduleProposal::with_prompt_limit(
-            &row.name,
+    }
+    if !changes.is_empty() {
+        if let Err(message) = changes.validate() {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+        }
+    }
+
+    let enabled = body.enabled.unwrap_or(row.enabled);
+    let resume = body.enabled == Some(true) && !row.enabled;
+    let cadence_changed = changes.frequency.is_some()
+        || changes.time.is_some()
+        || changes.day_of_week.is_some()
+        || changes.day_of_month.is_some()
+        || changes.timezone.is_some();
+    let content_changed = changes.name.is_some()
+        || changes.description.is_some()
+        || changes.how_to.is_some()
+        || changes.tools.is_some()
+        || changes.expected_output.is_some()
+        || changes.prompt.is_some();
+
+    let name = changes.name.as_deref().unwrap_or(&row.name).to_string();
+    let frequency = changes
+        .frequency
+        .as_deref()
+        .unwrap_or(&row.frequency)
+        .to_string();
+    let time = changes
+        .time
+        .as_deref()
+        .unwrap_or(&row.time_of_day)
+        .to_string();
+    let day_of_week = changes.day_of_week.or(row.day_of_week);
+    let day_of_month = changes.day_of_month.or(row.day_of_month);
+    let timezone = changes
+        .timezone
+        .as_deref()
+        .unwrap_or(&row.timezone)
+        .to_string();
+
+    let (prompt, spec, next_run_at) = if let Some(raw_spec) = row.spec.as_ref() {
+        if changes.prompt.is_some() {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "prompt is only editable on legacy schedules"})),
+            ));
+        }
+        let stored = serde_json::from_value::<ScheduleSpec>(raw_spec.clone())
+            .map_err(|error| error.to_string())
+            .and_then(|spec| spec.validated());
+        let stored = match stored {
+            Ok(spec) => spec,
+            Err(message) => {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("stored schedule spec is invalid: {message}")})),
+                ));
+            }
+        };
+        if content_changed {
+            let recipe = match updated_recipe(
+                &name,
+                &stored,
+                &changes,
+                &frequency,
+                &time,
+                day_of_week,
+                day_of_month,
+                &timezone,
+            ) {
+                Ok(recipe) => recipe,
+                Err(message) => {
+                    return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+                }
+            };
+            let next = if enabled && (resume || cadence_changed) {
+                Some(recipe.proposal.next_occurrence(chrono::Utc::now()))
+            } else {
+                None
+            };
+            (
+                recipe.proposal.prompt,
+                serde_json::to_value(&recipe.spec).ok(),
+                next,
+            )
+        } else {
+            let proposal = match ScheduleProposal::with_prompt_limit(
+                &name,
+                &row.prompt,
+                &frequency,
+                Some(&time),
+                day_of_week,
+                day_of_month,
+                Some(&timezone),
+                SPEC_PROMPT_MAX,
+            ) {
+                Ok(proposal) => proposal,
+                Err(message) => {
+                    return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+                }
+            };
+            let next = if enabled && (resume || cadence_changed) {
+                Some(proposal.next_occurrence(chrono::Utc::now()))
+            } else {
+                None
+            };
+            (row.prompt.clone(), row.spec.clone(), next)
+        }
+    } else {
+        let proposal = match updated_legacy(
+            &name,
             &row.prompt,
-            &row.frequency,
-            Some(&row.time_of_day),
-            row.day_of_week,
-            row.day_of_month,
-            Some(&row.timezone),
-            SPEC_PROMPT_MAX,
+            &changes,
+            &frequency,
+            &time,
+            day_of_week,
+            day_of_month,
+            &timezone,
         ) {
-            Ok(proposal) => Some(proposal.next_occurrence(chrono::Utc::now())),
+            Ok(proposal) => proposal,
             Err(message) => {
                 return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
             }
-        }
-    } else {
-        None
+        };
+        let next = if enabled && (resume || cadence_changed) {
+            Some(proposal.next_occurrence(chrono::Utc::now()))
+        } else {
+            None
+        };
+        (proposal.prompt, None, next)
     };
-    let updated: Uuid = sqlx::query_scalar(
-        "UPDATE ai_schedules SET enabled = $2, \
-         next_run_at = COALESCE($3, next_run_at), updated_at = now() \
-         WHERE id = $1 RETURNING id",
+
+    let next_run_at = next_run_at.unwrap_or(row.next_run_at);
+    sqlx::query(
+        "UPDATE ai_schedules SET name = $2, prompt = $3, spec = $4, frequency = $5, \
+         time_of_day = $6, day_of_week = $7, day_of_month = $8, timezone = $9, \
+         enabled = $10, next_run_at = $11, updated_at = now() WHERE id = $1",
     )
     .bind(schedule_id)
+    .bind(&name)
+    .bind(&prompt)
+    .bind(&spec)
+    .bind(&frequency)
+    .bind(&time)
+    .bind(day_of_week)
+    .bind(day_of_month)
+    .bind(&timezone)
     .bind(enabled)
     .bind(next_run_at)
-    .fetch_one(&st.pool)
+    .execute(&st.pool)
     .await?;
-    Ok((
-        StatusCode::OK,
-        Json(json!({"id": updated, "enabled": enabled})),
-    ))
+
+    let Some(updated) = load_schedule(&st.pool, &slug, schedule_id).await? else {
+        return Ok(missing());
+    };
+    Ok((StatusCode::OK, Json(schedule_json(&updated))))
 }
 
 /// `DELETE /api/workspaces/:slug/ai-schedules/:schedule_id/` — soft delete;
