@@ -1347,6 +1347,21 @@ async fn galileo_schedule_tools_list_get_and_propose_updates() {
 }
 ```
 
+> NOTE (execution): `pending_action` only learns about `update_schedule` in
+> Task 5, so the DB test above asserts on the raw trace instead:
+>
+> ```rust
+> let recorded = trace.lock().unwrap().clone();
+> let last = recorded.last().expect("update proposal recorded");
+> assert_eq!(last.name, "update_schedule");
+> assert_eq!(last.arguments["schedule_id"], json!(schedule_id.to_string()));
+> assert_eq!(last.arguments["changes"]["frequency"], json!("weekly"));
+> assert_eq!(last.arguments["changes"]["day_of_week"], json!(2));
+> ```
+>
+> `pending_action` coverage for updates lives in Task 5's
+> `agent_pending_action` test.
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
