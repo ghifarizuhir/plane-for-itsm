@@ -78,6 +78,38 @@ describe("toAiMessage", () => {
     expect(message.workItemDecisions).toBeUndefined();
   });
 
+  it("maps schedule update metadata onto the message", () => {
+    const message = toAiMessage(
+      stored({
+        metadata: {
+          schedule_update_proposal: {
+            schedule_id: "s1",
+            changes: { frequency: "weekly", day_of_week: 2 },
+            before: {
+              id: "s1",
+              name: "Daily",
+              frequency: "daily",
+              time: "09:00",
+              timezone: "UTC",
+              enabled: true,
+              next_run_at: "2026-10-22T09:00:00Z",
+              created_by_id: "u1",
+              created_at: "2026-10-01T00:00:00Z",
+              prompt: "Summarize",
+              spec: null,
+            },
+            can_edit: true,
+          },
+          schedule_update_decision: "pending",
+        },
+      })
+    );
+    expect(message.scheduleUpdateProposal?.schedule_id).toBe("s1");
+    expect(message.scheduleUpdateProposal?.changes.frequency).toBe("weekly");
+    expect(message.scheduleUpdateProposal?.can_edit).toBe(true);
+    expect(message.scheduleUpdateDecision).toBe("pending");
+  });
+
   it("maps generic proposals and decisions from metadata", () => {
     const message = toAiMessage(
       stored({

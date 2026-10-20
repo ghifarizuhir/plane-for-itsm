@@ -6,7 +6,7 @@
 
 import type { TAiMessage } from "@/lib/ai-context";
 import type { TAiProposal, TAiProposalDecision } from "@/lib/ai-proposals";
-import type { TAiScheduleProposal } from "@/lib/ai-schedule";
+import type { TAiScheduleProposal, TAiScheduleUpdateProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision, TAiWorkItemProposalEntry } from "@/lib/ai-work-items";
 
 export type TAiConversationMode = "classic" | "agent";
@@ -24,6 +24,8 @@ export type TAiMessageMetadata = {
   schedule_proposal_key?: string;
   schedule_decision?: "pending" | "created" | "cancelled";
   created_schedule_id?: string;
+  schedule_update_proposal?: TAiScheduleUpdateProposal;
+  schedule_update_decision?: "pending" | "applied" | "cancelled";
   work_item_proposals?: TAiWorkItemProposalEntry[];
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
   proposals?: TAiProposal[];
@@ -44,6 +46,7 @@ export type TAiStoredMessage = {
 
 /** Keys the `PATCH .../messages/:id/` endpoint accepts (server allowlist). */
 export type TAiMessageMetadataPatch = Pick<TAiMessageMetadata, "schedule_decision" | "created_schedule_id"> & {
+  schedule_update_decision?: "applied" | "cancelled";
   work_item_decisions?: Record<string, TAiWorkItemDecision>;
   proposal_decisions?: Record<string, TAiProposalDecision>;
   flow?: "incident" | null;
@@ -60,6 +63,8 @@ export const toAiMessage = (stored: TAiStoredMessage): TAiMessage => ({
   scheduleProposalKey: stored.metadata?.schedule_proposal_key,
   scheduleDecision: stored.metadata?.schedule_decision,
   createdScheduleId: stored.metadata?.created_schedule_id,
+  scheduleUpdateProposal: stored.metadata?.schedule_update_proposal,
+  scheduleUpdateDecision: stored.metadata?.schedule_update_decision,
   workItemProposals: stored.metadata?.work_item_proposals,
   workItemDecisions: stored.metadata?.work_item_decisions,
   proposals: stored.metadata?.proposals,

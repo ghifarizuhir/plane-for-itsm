@@ -7,7 +7,7 @@
 import { EPageAccess } from "@plane/types";
 import sanitizeHtml from "sanitize-html";
 import type { TAiProposal, TAiProposalDecision } from "@/lib/ai-proposals";
-import type { TAiScheduleProposal } from "@/lib/ai-schedule";
+import type { TAiScheduleProposal, TAiScheduleUpdateProposal } from "@/lib/ai-schedule";
 import type { TAiWorkItemDecision, TAiWorkItemProposalEntry } from "@/lib/ai-work-items";
 
 export type TAiContextKind = "work_item" | "service" | "article" | "cycle" | "module";
@@ -72,6 +72,8 @@ export type TAiMessage = {
   scheduleProposalKey?: string;
   scheduleDecision?: "pending" | "created" | "cancelled";
   createdScheduleId?: string;
+  scheduleUpdateProposal?: TAiScheduleUpdateProposal;
+  scheduleUpdateDecision?: "pending" | "applied" | "cancelled";
   workItemProposals?: TAiWorkItemProposalEntry[];
   workItemDecisions?: Record<string, TAiWorkItemDecision>;
   proposals?: TAiProposal[];

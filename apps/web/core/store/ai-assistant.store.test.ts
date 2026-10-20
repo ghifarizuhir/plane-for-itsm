@@ -69,7 +69,11 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
     ),
     ...overrides.ai,
   },
-  schedules: { create: vi.fn(async () => ({ id: "s1" })), ...overrides.schedules },
+  schedules: {
+    create: vi.fn(async () => ({ id: "s1" })),
+    update: vi.fn(async () => ({ id: "s1", name: "Daily", enabled: true })),
+    ...overrides.schedules,
+  },
   conversations: {
     list: vi.fn(async () => [conversation("c-agent", "agent"), conversation("c-classic", "classic")]),
     create: vi.fn(async (_slug: string, mode: "classic" | "agent") => conversation(`c-new-${mode}`, mode)),
@@ -182,6 +186,41 @@ const scheduleProposal = {
   frequency: "daily" as const,
   time: "09:00",
   timezone: "UTC",
+};
+
+const scheduleUpdateProposal = {
+  schedule_id: "s1",
+  changes: { frequency: "weekly", day_of_week: 2, name: "Weekly report" },
+  before: {
+    id: "s1",
+    name: "Daily report",
+    frequency: "daily",
+    time: "09:00",
+    timezone: "UTC",
+    day_of_week: null,
+    day_of_month: null,
+    enabled: true,
+    next_run_at: "2026-10-21T09:00:00Z",
+    created_by_id: "u1",
+    created_at: "2026-10-01T00:00:00Z",
+    prompt: "Summarize",
+    spec: null,
+  },
+  can_edit: true,
+};
+
+const updateChatResponse = (conversationId: string, question: string) => {
+  const response = chatResponse(conversationId, question, "proposal ready");
+  return {
+    ...response,
+    assistant_message: {
+      ...response.assistant_message,
+      metadata: {
+        schedule_update_proposal: scheduleUpdateProposal,
+        schedule_update_decision: "pending" as const,
+      },
+    },
+  };
 };
 
 beforeEach(() => {
@@ -464,6 +503,82 @@ describe("stateful send flow", () => {
     expect(services.schedules.create).toHaveBeenCalledWith("acme", edited, message.scheduleProposalKey);
     expect(message.scheduleProposal).toEqual(edited);
     expect(message.scheduleDecision).toBe("created");
+  });
+
+  it("applies a schedule update proposal and persists the decision", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async (_slug: string, data: any) =>
+          updateChatResponse(data.conversation_id, data.prompt)
+        ),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    await store.sendMessage("ubah jadwal jadi mingguan");
+
+    const message = store.messages.find((candidate) => candidate.scheduleUpdateProposal)!;
+    expect(message.scheduleUpdateDecision).toBe("pending");
+
+    await store.confirmScheduleUpdate(message.id);
+    expect(services.schedules.update).toHaveBeenCalledWith("acme", "s1", scheduleUpdateProposal.changes);
+    expect(message.scheduleUpdateDecision).toBe("applied");
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith("acme", "c-agent", message.id, {
+      schedule_update_decision: "applied",
+    });
+  });
+
+  it("cancels a schedule update proposal without calling the service", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async (_slug: string, data: any) =>
+          updateChatResponse(data.conversation_id, data.prompt)
+        ),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    await store.sendMessage("ubah jadwal");
+
+    const message = store.messages.find((candidate) => candidate.scheduleUpdateProposal)!;
+    store.resolveScheduleUpdateProposal(message.id);
+    await flush();
+    expect(services.schedules.update).not.toHaveBeenCalled();
+    expect(message.scheduleUpdateDecision).toBe("cancelled");
+    expect(services.conversations.updateMessageMetadata).toHaveBeenCalledWith("acme", "c-agent", message.id, {
+      schedule_update_decision: "cancelled",
+    });
+  });
+
+  it("keeps the update proposal pending when apply fails", async () => {
+    const services = makeServices({
+      ai: {
+        createAgentTask: vi.fn(async (_slug: string, data: any) =>
+          updateChatResponse(data.conversation_id, data.prompt)
+        ),
+      },
+      schedules: {
+        update: vi.fn(async () => {
+          throw new Error("boom");
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    await store.sendMessage("ubah jadwal");
+
+    const message = store.messages.find((candidate) => candidate.scheduleUpdateProposal)!;
+    await expect(store.confirmScheduleUpdate(message.id)).rejects.toThrow("boom");
+    expect(message.scheduleUpdateDecision).toBe("pending");
   });
 });
 

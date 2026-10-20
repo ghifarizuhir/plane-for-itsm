@@ -36,6 +36,7 @@ import { sanitizeAssistantHtml, type TAiAssistantContext } from "@/lib/ai-contex
 // components
 import { ConversationHistoryPanel } from "./conversation-history-panel";
 import { ScheduleProposalCard } from "./schedule-proposal-card";
+import { ScheduleUpdateProposalCard } from "./schedule-update-proposal-card";
 import { WorkItemProposalCard } from "./work-item-proposal-card";
 import { ProposalCard } from "./proposals/proposal-card";
 
@@ -109,6 +110,8 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
     setHistoryOpen,
     confirmScheduleProposal,
     resolveScheduleProposal,
+    confirmScheduleUpdate,
+    resolveScheduleUpdateProposal,
     confirmWorkItemProposal,
     resolveWorkItemProposal,
     confirmProposal,
@@ -474,6 +477,14 @@ export const AiAssistantSidebar = observer(function AiAssistantSidebar() {
                               decision={message.scheduleDecision}
                               onConfirm={(proposal) => confirmScheduleProposal(message.id, proposal)}
                               onCancel={() => resolveScheduleProposal(message.id, "cancelled")}
+                            />
+                          )}
+                          {message.scheduleUpdateProposal && (
+                            <ScheduleUpdateProposalCard
+                              proposal={message.scheduleUpdateProposal}
+                              decision={message.scheduleUpdateDecision}
+                              onConfirm={() => confirmScheduleUpdate(message.id)}
+                              onCancel={() => resolveScheduleUpdateProposal(message.id)}
                             />
                           )}
                           {message.workItemProposals?.map((entry) => (

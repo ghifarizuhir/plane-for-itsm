@@ -31,7 +31,7 @@ import type { TAiConversation, TAiConversationMode } from "@/lib/ai-conversation
 export type TAiAssistantMode = TAiConversationMode;
 
 type TAiService = Pick<AIService, "createGptTask" | "createAgentTask">;
-type TAiSchedulesService = Pick<AiSchedulesService, "create">;
+type TAiSchedulesService = Pick<AiSchedulesService, "create" | "update">;
 type TAiConversationsService = Pick<
   AiConversationsService,
   "list" | "create" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
@@ -80,6 +80,8 @@ export interface IAIAssistantStore {
   retryLast: () => Promise<void>;
   confirmScheduleProposal: (messageId: string, proposal?: TAiScheduleProposal) => Promise<void>;
   resolveScheduleProposal: (messageId: string, decision: "cancelled") => void;
+  confirmScheduleUpdate: (messageId: string) => Promise<void>;
+  resolveScheduleUpdateProposal: (messageId: string) => void;
   confirmWorkItemProposal: (
     messageId: string,
     key: string,
@@ -183,6 +185,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       retryLast: action,
       confirmScheduleProposal: action,
       resolveScheduleProposal: action,
+      confirmScheduleUpdate: action,
+      resolveScheduleUpdateProposal: action,
       confirmWorkItemProposal: action,
       resolveWorkItemProposal: action,
       confirmProposal: action,
@@ -486,6 +490,31 @@ export class AIAssistantStore implements IAIAssistantStore {
     void this.persistDecision(conversationId, message, { schedule_decision: decision });
   };
 
+  confirmScheduleUpdate = async (messageId: string) => {
+    const slug = this.workspaceSlug;
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    const proposal = message?.scheduleUpdateProposal;
+    if (!slug || !message || !proposal) return;
+    if (message.scheduleUpdateDecision !== "pending") return;
+    if (!proposal.can_edit || !proposal.before) return;
+    await this.schedulesService.update(slug, proposal.schedule_id, proposal.changes);
+    runInAction(() => {
+      message.scheduleUpdateDecision = "applied";
+    });
+    await this.persistScheduleUpdateDecision(conversationId, message, "applied");
+  };
+
+  resolveScheduleUpdateProposal = (messageId: string) => {
+    const conversationId = this.activeConversationId;
+    const message = this.messages.find((candidate) => candidate.id === messageId);
+    if (!message || message.scheduleUpdateDecision !== "pending") return;
+    runInAction(() => {
+      message.scheduleUpdateDecision = "cancelled";
+    });
+    void this.persistScheduleUpdateDecision(conversationId, message, "cancelled");
+  };
+
   confirmWorkItemProposal = async (
     messageId: string,
     key: string,
@@ -760,6 +789,22 @@ export class AIAssistantStore implements IAIAssistantStore {
     if (!slug || !conversationId) return;
     try {
       await this.conversationsService.updateMessageMetadata(slug, conversationId, message.id, metadata);
+    } catch {
+      // best-effort: the schedule itself is already the source of truth
+    }
+  };
+
+  private persistScheduleUpdateDecision = async (
+    conversationId: string | undefined,
+    message: TAiMessage,
+    decision: "applied" | "cancelled"
+  ) => {
+    const slug = this.workspaceSlug;
+    if (!slug || !conversationId) return;
+    try {
+      await this.conversationsService.updateMessageMetadata(slug, conversationId, message.id, {
+        schedule_update_decision: decision,
+      });
     } catch {
       // best-effort: the schedule itself is already the source of truth
     }
