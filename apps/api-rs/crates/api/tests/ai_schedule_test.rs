@@ -1170,6 +1170,119 @@ async fn patch_edits_legacy_prompt_and_rejects_invalid_shapes() {
 }
 
 #[tokio::test]
+async fn galileo_schedule_tools_list_get_and_propose_updates() {
+    use rig::tool::{Tool, ToolContext};
+
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+
+    let (_, Json(created)) = ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(structured_body(Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let schedule_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    let trace = ai::agent::new_trace();
+    let list = ai::tools::ListSchedules {
+        pool: pool.clone(),
+        workspace_id: scratch.workspace_id,
+        user_id: scratch.user_id,
+        trace: trace.clone(),
+    };
+    let listed: Value = serde_json::from_str(
+        &list
+            .call(
+                &mut ToolContext::new(),
+                ai::tools::ListSchedulesArgs {
+                    query: Some("daily".to_string()),
+                    enabled: None,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(listed["items"][0]["id"], json!(schedule_id));
+    assert_eq!(listed["items"][0]["can_edit"], json!(true));
+
+    let get = ai::tools::GetSchedule {
+        pool: pool.clone(),
+        workspace_id: scratch.workspace_id,
+        user_id: scratch.user_id,
+        trace: trace.clone(),
+    };
+    let detail: Value = serde_json::from_str(
+        &get.call(
+            &mut ToolContext::new(),
+            ai::tools::GetScheduleArgs {
+                schedule_id: schedule_id.to_string(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        detail["spec"]["description"],
+        json!("Summarize overdue work items for the team")
+    );
+    assert_eq!(detail["can_edit"], json!(true));
+
+    let member = scratch.add_actor(&pool, 15).await;
+    let member_list = ai::tools::ListSchedules {
+        pool: pool.clone(),
+        workspace_id: scratch.workspace_id,
+        user_id: member,
+        trace: ai::agent::new_trace(),
+    };
+    let member_view: Value = serde_json::from_str(
+        &member_list
+            .call(
+                &mut ToolContext::new(),
+                ai::tools::ListSchedulesArgs {
+                    query: None,
+                    enabled: None,
+                    limit: None,
+                },
+            )
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(member_view["items"][0]["can_edit"], json!(false));
+
+    let update = ai::tools::UpdateSchedule {
+        trace: trace.clone(),
+    };
+    update
+        .call(
+            &mut ToolContext::new(),
+            ai::tools::UpdateScheduleArgs {
+                schedule_id: schedule_id.to_string(),
+                frequency: Some("weekly".to_string()),
+                day_of_week: Some(2),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let recorded = trace.lock().unwrap().clone();
+    let last = recorded.last().expect("update proposal recorded");
+    assert_eq!(last.name, "update_schedule");
+    assert_eq!(last.arguments["schedule_id"], json!(schedule_id.to_string()));
+    assert_eq!(last.arguments["changes"]["frequency"], json!("weekly"));
+    assert_eq!(last.arguments["changes"]["day_of_week"], json!(2));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn patch_rejects_prompt_edits_on_structured_schedules() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;

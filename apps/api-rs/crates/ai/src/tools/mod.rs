@@ -8,6 +8,7 @@ pub mod lookups;
 pub mod mutations;
 pub mod projects;
 pub mod proposals;
+pub mod schedules;
 pub mod services;
 pub mod sprints;
 pub mod tracks;
@@ -19,6 +20,7 @@ pub use lookups::*;
 pub use mutations::*;
 pub use projects::*;
 pub use proposals::*;
+pub use schedules::*;
 pub use services::*;
 pub use sprints::*;
 pub use tracks::*;
@@ -39,8 +41,9 @@ pub const MAX_LIMIT: i64 = 25;
 
 /// Proposal tool names: recorded in the trace but never executed against the
 /// database and never schedule-eligible.
-pub const PROPOSAL_TOOL_NAMES: [&str; 18] = [
+pub const PROPOSAL_TOOL_NAMES: [&str; 19] = [
     CREATE_SCHEDULE_NAME,
+    UPDATE_SCHEDULE_NAME,
     CREATE_WORK_ITEM_NAME,
     UPDATE_WORK_ITEM_NAME,
     ADD_COMMENT_NAME,
@@ -350,9 +353,10 @@ pub async fn ensure_feature(
     }
 }
 
-/// Build the production tool server: three read-only tools plus the
-/// `create_schedule` and `create_work_item` proposal tools, all scoped to one
-/// workspace and sharing the caller's trace handle.
+/// Build the production tool server: workspace-scoped read-only tools, the
+/// `list_schedules`/`get_schedule` schedule readers, and the proposal tools
+/// (`create_schedule`, `update_schedule`, `create_work_item`, mutations), all
+/// sharing the caller's trace handle.
 pub fn workspace_tools(
     pool: PgPool,
     workspace_id: Uuid,
@@ -543,6 +547,21 @@ pub fn workspace_tools(
             trace: trace.clone(),
         })
         .tool(TriageIntakeItem {
+            trace: trace.clone(),
+        })
+        .tool(ListSchedules {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(GetSchedule {
+            pool: pool.clone(),
+            workspace_id,
+            user_id,
+            trace: trace.clone(),
+        })
+        .tool(UpdateSchedule {
             trace: trace.clone(),
         })
         .tool(CreateSchedule {
