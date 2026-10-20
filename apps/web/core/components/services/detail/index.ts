@@ -5,6 +5,7 @@
  */
 
 export * from "./root";
+export * from "./pane";
 export * from "./quick-actions";
 export * from "./description";
 export * from "./relationships";

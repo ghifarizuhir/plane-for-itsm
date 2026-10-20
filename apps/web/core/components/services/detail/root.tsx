@@ -22,11 +22,8 @@ import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // local imports
 import { ServiceLoadErrorState } from "../service-load-error-state";
 import { ServiceDescription } from "./description";
-import { ServiceRelationships } from "./relationships";
-import { ServiceDetailSidebar } from "./sidebar";
-import { ServiceProjectLinks } from "./project-links";
+import { ServiceDetailPane } from "./pane";
 import { ServiceTitleInput } from "./title-input";
-import { ServiceWorkItems } from "./work-items";
 
 type Props = {
   serviceId: string;
@@ -92,13 +89,8 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
       <div className="w-full space-y-6 px-9 py-5 md:h-full md:min-w-0 md:flex-1 md:overflow-y-auto">
         <ServiceTitleInput serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
         <ServiceDescription serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
-        <ServiceProjectLinks serviceId={serviceId} />
-        <ServiceRelationships serviceId={serviceId} />
-        <ServiceWorkItems serviceId={serviceId} />
       </div>
-      <div className="w-full shrink-0 border-t border-subtle bg-surface-1 md:h-full md:w-1/4 md:min-w-80 md:border-t-0 md:border-l xl:min-w-96">
-        <ServiceDetailSidebar serviceId={serviceId} />
-      </div>
+      <ServiceDetailPane serviceId={serviceId} />
     </div>
   );
 });
