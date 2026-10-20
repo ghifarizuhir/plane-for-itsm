@@ -15,13 +15,17 @@ export default function GalileoContent() {
       </DocsParagraph>
       <DocsSectionHeading>Yang bisa kamu lakukan</DocsSectionHeading>
       <DocsParagraph>
-        Mengobrol tentang item yang sedang terbuka (minta ringkasan, draf balasan, atau analisis singkat), memulai
-        percakapan baru, dan membuka kembali riwayat percakapan sebelumnya.
+        Mengobrol tentang item yang sedang terbuka (minta ringkasan, draf balasan, atau analisis singkat), membuat dan
+        mengubah jadwal berulang, memulai percakapan baru, dan membuka kembali riwayat percakapan sebelumnya.
       </DocsParagraph>
       <DocsCallout variant="info" title="Konteks itu penting">
         Buka ticket atau service dulu, lalu bertanya — jawaban AI mengacu ke data yang sedang kamu lihat. Untuk tugas
         berulang, rangkai dengan <DocsTopicLink slug="scheduler">Scheduler</DocsTopicLink>.
       </DocsCallout>
+      <DocsParagraph>
+        Contoh: “Ubah laporan harian saya menjadi setiap Selasa pukul 10.00”. Galileo akan mencari jadwal yang cocok,
+        menampilkan perbandingan sebelum/sesudah, dan baru menerapkannya setelah kamu menekan Apply.
+      </DocsParagraph>
     </>
   );
 }
