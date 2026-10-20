@@ -105,12 +105,11 @@ Param name: `paneTab` (same name as KB, but scoped to the service detail route).
 
 | File                                                                | Responsibility                                                     |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `core/components/services/detail/pane/index.ts`                     | Pane width, query-param constant, tab keys, exports                |
-| `core/components/services/detail/pane/helpers.ts`                   | Pure tab validation/resolution helpers                             |
+| `core/components/services/detail/pane/index.ts`                     | Barrel exports                                                     |
+| `core/components/services/detail/pane/helpers.ts`                   | Pane width, query-param constant, tab metadata, validation helpers |
 | `core/components/services/detail/pane/helpers.test.ts`              | Unit tests for tab validation and default-open behavior            |
 | `core/components/services/detail/pane/root.tsx`                     | Aside chrome, close button, `Tabs`, open/close animation           |
 | `core/components/services/detail/pane/tabs-list.tsx`                | Three `Tabs.Trigger` items with existing i18n labels               |
-| `core/components/services/detail/pane/tab-panels/index.ts`          | Ordered tab metadata (`key`, `i18n_label`)                         |
 | `core/components/services/detail/pane/tab-panels/root.tsx`          | `Tabs.Content` switch                                              |
 | `core/components/services/detail/pane/tab-panels/properties.tsx`    | `ServiceDetailSidebar` + project links section                     |
 | `core/components/services/detail/pane/tab-panels/relationships.tsx` | `ServiceRelationships` with pane layout                            |
