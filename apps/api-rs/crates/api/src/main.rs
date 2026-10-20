@@ -718,7 +718,7 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/service-dependencies/:pk/",
-            delete(routes::service::dependency_destroy),
+            delete(routes::service::dependency_destroy).patch(routes::service::dependency_update),
         )
         .route(
             "/api/workspaces/:slug/projects/:project_id/service-issues/",
@@ -822,7 +822,8 @@ async fn main() {
         )
         .route(
             "/api/workspaces/:slug/service-dependencies/:pk/",
-            delete(routes::service::dependency_destroy_workspace),
+            delete(routes::service::dependency_destroy_workspace)
+                .patch(routes::service::dependency_update_workspace),
         )
         .route(
             "/api/workspaces/:slug/service-issues/",

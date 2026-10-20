@@ -263,49 +263,84 @@ async fn visibility_matrix_and_gates() {
     let pool = pool().await;
     let sc = Scratch::new(&pool).await;
 
-    let mut admin = visible_service_ids(&pool, sc.admin, &sc.slug).await.unwrap();
+    let mut admin = visible_service_ids(&pool, sc.admin, &sc.slug)
+        .await
+        .unwrap();
     admin.sort();
     let mut all = vec![sc.s1, sc.s2, sc.s4];
     all.sort();
     assert_eq!(admin, all, "ws admin sees every service");
 
     assert_eq!(
-        visible_service_ids(&pool, sc.owner_member, &sc.slug).await.unwrap(),
+        visible_service_ids(&pool, sc.owner_member, &sc.slug)
+            .await
+            .unwrap(),
         vec![sc.s1],
         "P1 member sees only S1"
     );
-    let mut consumer = visible_service_ids(&pool, sc.consumer_admin, &sc.slug).await.unwrap();
+    let mut consumer = visible_service_ids(&pool, sc.consumer_admin, &sc.slug)
+        .await
+        .unwrap();
     consumer.sort();
     let mut consumer_expected = vec![sc.s1, sc.s2];
     consumer_expected.sort();
-    assert_eq!(consumer, consumer_expected, "P2 admin sees S1 (consumer) + S2 (owner)");
     assert_eq!(
-        visible_service_ids(&pool, sc.guest, &sc.slug).await.unwrap(),
+        consumer, consumer_expected,
+        "P2 admin sees S1 (consumer) + S2 (owner)"
+    );
+    assert_eq!(
+        visible_service_ids(&pool, sc.guest, &sc.slug)
+            .await
+            .unwrap(),
         vec![sc.s1],
         "guest sees linked services read-only"
     );
     assert_eq!(
-        visible_service_ids(&pool, sc.outsider, &sc.slug).await.unwrap(),
+        visible_service_ids(&pool, sc.outsider, &sc.slug)
+            .await
+            .unwrap(),
         vec![sc.s4],
         "outsider sees only P4"
     );
 
-    assert!(full_visible(&pool, sc.admin, &sc.slug, sc.s4).await.unwrap());
-    assert!(full_visible(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
-    assert!(full_visible(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
-    assert!(!full_visible(&pool, sc.outsider, &sc.slug, sc.s1).await.unwrap());
-    assert!(!full_visible(&pool, sc.guest, &sc.slug, sc.s2).await.unwrap());
+    assert!(full_visible(&pool, sc.admin, &sc.slug, sc.s4)
+        .await
+        .unwrap());
+    assert!(full_visible(&pool, sc.owner_member, &sc.slug, sc.s1)
+        .await
+        .unwrap());
+    assert!(full_visible(&pool, sc.consumer_admin, &sc.slug, sc.s1)
+        .await
+        .unwrap());
+    assert!(!full_visible(&pool, sc.outsider, &sc.slug, sc.s1)
+        .await
+        .unwrap());
+    assert!(!full_visible(&pool, sc.guest, &sc.slug, sc.s2)
+        .await
+        .unwrap());
 
-    assert!(gate_writer(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
+    assert!(gate_writer(&pool, sc.owner_member, &sc.slug, sc.s1)
+        .await
+        .unwrap());
     assert!(gate_writer(&pool, sc.admin, &sc.slug, sc.s1).await.unwrap());
-    assert!(!gate_writer(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_writer(&pool, sc.consumer_admin, &sc.slug, sc.s1)
+        .await
+        .unwrap());
     assert!(!gate_writer(&pool, sc.guest, &sc.slug, sc.s1).await.unwrap());
-    assert!(!gate_writer(&pool, sc.outsider, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_writer(&pool, sc.outsider, &sc.slug, sc.s1)
+        .await
+        .unwrap());
 
-    assert!(gate_admin(&pool, sc.owner_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(gate_admin(&pool, sc.owner_admin, &sc.slug, sc.s1)
+        .await
+        .unwrap());
     assert!(gate_admin(&pool, sc.admin, &sc.slug, sc.s1).await.unwrap());
-    assert!(!gate_admin(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap());
-    assert!(!gate_admin(&pool, sc.consumer_admin, &sc.slug, sc.s1).await.unwrap());
+    assert!(!gate_admin(&pool, sc.owner_member, &sc.slug, sc.s1)
+        .await
+        .unwrap());
+    assert!(!gate_admin(&pool, sc.consumer_admin, &sc.slug, sc.s1)
+        .await
+        .unwrap());
 
     assert!(linked_to_project(&pool, sc.s1, sc.p2).await.unwrap());
     assert!(!linked_to_project(&pool, sc.s1, sc.p4).await.unwrap());
@@ -394,7 +429,11 @@ async fn canonical_detail_is_full_only() {
     )
     .await
     .unwrap();
-    assert_eq!(status, axum::http::StatusCode::NOT_FOUND, "outsider cannot read S1 (404, not 403)");
+    assert_eq!(
+        status,
+        axum::http::StatusCode::NOT_FOUND,
+        "outsider cannot read S1 (404, not 403)"
+    );
 
     let (status, axum::Json(body)) = detail_workspace(
         State(st.clone()),
@@ -530,7 +569,11 @@ async fn canonical_create_patch_destroy() {
     )
     .await
     .unwrap();
-    assert_eq!(gone.0, axum::http::StatusCode::NOT_FOUND, "soft-deleted service is invisible");
+    assert_eq!(
+        gone.0,
+        axum::http::StatusCode::NOT_FOUND,
+        "soft-deleted service is invisible"
+    );
 }
 
 #[tokio::test]
@@ -603,9 +646,11 @@ async fn project_links_and_transfer_owner() {
     .await
     .unwrap();
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
-    assert!(!api::routes::service_access::linked_to_project(&st.pool, sc.s1, sc.p4)
-        .await
-        .unwrap());
+    assert!(
+        !api::routes::service_access::linked_to_project(&st.pool, sc.s1, sc.p4)
+            .await
+            .unwrap()
+    );
 
     // owner link cannot be deleted directly
     let (_, Json(links)) = project_links_list(
@@ -627,7 +672,11 @@ async fn project_links_and_transfer_owner() {
     let owner_del = project_links_destroy(
         State(st.clone()),
         AuthUser(sc.admin),
-        Path((sc.slug.clone(), sc.s1, Uuid::parse_str(&owner_link_id).unwrap())),
+        Path((
+            sc.slug.clone(),
+            sc.s1,
+            Uuid::parse_str(&owner_link_id).unwrap(),
+        )),
     )
     .await
     .unwrap();
@@ -670,7 +719,10 @@ async fn project_links_and_transfer_owner() {
     assert_eq!(after["owner_project_id"], sc.p4.to_string());
     let links = after["project_links"].as_array().unwrap();
     assert_eq!(
-        links.iter().filter(|l| l["project_id"] == sc.p4.to_string()).count(),
+        links
+            .iter()
+            .filter(|l| l["project_id"] == sc.p4.to_string())
+            .count(),
         1,
         "absorbed consumer link: exactly one P4 link (owner)"
     );
@@ -703,6 +755,7 @@ async fn canonical_dependencies_cross_project_with_lite() {
         Json(CreateDependency {
             from_service_id: sc.s1,
             to_service_id: sc.s4,
+            dependency_type: None,
         }),
     )
     .await
@@ -717,6 +770,7 @@ async fn canonical_dependencies_cross_project_with_lite() {
         Json(CreateDependency {
             from_service_id: sc.s2,
             to_service_id: sc.s1,
+            dependency_type: None,
         }),
     )
     .await
@@ -749,7 +803,10 @@ async fn canonical_dependencies_cross_project_with_lite() {
     assert_eq!(rows[0]["to_service_id"], sc.s1.to_string());
     assert_eq!(rows[0]["from_service"]["access_level"], "lite");
     assert_eq!(rows[0]["from_service"]["name"], "Core Banking");
-    assert!(rows[0]["from_service"].get("owner_id").is_none(), "lite hides details");
+    assert!(
+        rows[0]["from_service"].get("owner_id").is_none(),
+        "lite hides details"
+    );
     assert_eq!(rows[0]["to_service"]["access_level"], "full");
 
     // cycle: P1 subscribes to S2, then S1 -> S2 closes S2 -> S1
@@ -761,6 +818,7 @@ async fn canonical_dependencies_cross_project_with_lite() {
         Json(CreateDependency {
             from_service_id: sc.s1,
             to_service_id: sc.s2,
+            dependency_type: None,
         }),
     )
     .await
@@ -788,6 +846,7 @@ async fn canonical_dependency_destroy_by_from_writer() {
         Json(CreateDependency {
             from_service_id: sc.s1,
             to_service_id: sc.s2,
+            dependency_type: None,
         }),
     )
     .await
@@ -817,8 +876,169 @@ async fn canonical_dependency_destroy_by_from_writer() {
 }
 
 #[tokio::test]
+async fn canonical_dependency_type_default_and_validation() {
+    use api::routes::service::{dependencies_create_workspace, CreateDependency};
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // P1 must see S2 as full before it can depend on it.
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+
+    let make = |dependency_type: Option<&str>| CreateDependency {
+        from_service_id: sc.s1,
+        to_service_id: sc.s2,
+        dependency_type: dependency_type.map(str::to_string),
+    };
+
+    // Omitted type defaults to depends_on.
+    let (status, Json(edge)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(make(None)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(edge["dependency_type"], "depends_on");
+
+    // Same pair with a different type is allowed.
+    let (status, Json(uses)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(make(Some("uses"))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(uses["dependency_type"], "uses");
+
+    // Same triple is a duplicate.
+    let duplicate = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(make(Some("uses"))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(duplicate.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(duplicate.1["error"], "This dependency already exists.");
+
+    // Unknown type is rejected.
+    let invalid = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(make(Some("eats"))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(invalid.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(invalid.1["error"], "Invalid dependency type.");
+}
+
+#[tokio::test]
+async fn canonical_dependency_patch_type() {
+    use api::routes::service::{
+        dependencies_create_workspace, dependency_update_workspace, CreateDependency,
+        UpdateDependency,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+
+    let (_, Json(edge)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+            dependency_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    let edge_id = Uuid::parse_str(edge["id"].as_str().unwrap()).unwrap();
+
+    let (status, Json(patched)) = dependency_update_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), edge_id)),
+        Json(UpdateDependency {
+            dependency_type: Some("runs_on".into()),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(patched["dependency_type"], "runs_on");
+
+    // Create a second edge, then collide the PATCH with it.
+    dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+            dependency_type: Some("uses".into()),
+        }),
+    )
+    .await
+    .unwrap();
+
+    let conflict = dependency_update_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), edge_id)),
+        Json(UpdateDependency {
+            dependency_type: Some("uses".into()),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(conflict.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(conflict.1["error"], "This dependency already exists.");
+
+    let invalid = dependency_update_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), edge_id)),
+        Json(UpdateDependency {
+            dependency_type: Some("eats".into()),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(invalid.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(invalid.1["error"], "Invalid dependency type.");
+
+    // Outsider cannot patch.
+    let denied = dependency_update_workspace(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), edge_id)),
+        Json(UpdateDependency {
+            dependency_type: Some("depends_on".into()),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn compat_services_scope_to_linked_and_owner_gates() {
-    use api::routes::service::{detail as compat_detail, list as compat_list, patch as compat_patch};
+    use api::routes::service::{
+        detail as compat_detail, list as compat_list, patch as compat_patch,
+    };
     use axum::extract::{Path, State};
 
     let st = state().await;
@@ -836,7 +1056,11 @@ async fn compat_services_scope_to_linked_and_owner_gates() {
     let rows = rows.as_array().unwrap();
     assert_eq!(rows.len(), 2);
     let s1 = rows.iter().find(|r| r["id"] == sc.s1.to_string()).unwrap();
-    assert_eq!(s1["project_id"], sc.p1.to_string(), "deprecated field = owner project");
+    assert_eq!(
+        s1["project_id"],
+        sc.p1.to_string(),
+        "deprecated field = owner project"
+    );
 
     // consumer cannot patch through the compat route (owner-only writer)
     let denied = compat_patch(
@@ -892,6 +1116,7 @@ async fn compat_dependencies_echo_and_link_scope() {
         Json(CreateDependency {
             from_service_id: sc.s1,
             to_service_id: sc.s2,
+            dependency_type: None,
         }),
     )
     .await
@@ -908,6 +1133,7 @@ async fn compat_dependencies_echo_and_link_scope() {
         Json(CreateDependency {
             from_service_id: sc.s1,
             to_service_id: sc.s2,
+            dependency_type: None,
         }),
     )
     .await
@@ -1015,8 +1241,8 @@ async fn service_issues_require_linked_service() {
 #[tokio::test]
 async fn canonical_service_issues_resolve_project_from_issue() {
     use api::routes::service::{
-        issue_destroy_workspace, issues_create_workspace, issues_list_workspace, CreateServiceIssue,
-        ServiceIssueListParams,
+        issue_destroy_workspace, issues_create_workspace, issues_list_workspace,
+        CreateServiceIssue, ServiceIssueListParams,
     };
     use axum::extract::{Path, Query, State};
 
@@ -1172,7 +1398,10 @@ async fn intake_accept_gate_requires_linked_service() {
     let gate = api::routes::intake::accept_gate_for_test(&st.pool, sc.p1, issue_id)
         .await
         .unwrap();
-    assert_eq!(gate, Some("Select a service before accepting this work item"));
+    assert_eq!(
+        gate,
+        Some("Select a service before accepting this work item")
+    );
 
     // linked service -> gate passes
     sqlx::query(
@@ -1217,7 +1446,10 @@ async fn ai_list_services_respects_visibility() {
         user_id: sc.owner_member,
         trace: new_trace(),
     };
-    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    let out = tool
+        .call(&mut ToolContext::new(), args(None))
+        .await
+        .unwrap();
     assert!(out.contains("ISO Switch"));
     assert!(!out.contains("Core Banking"), "S2 is not linked to P1");
     assert!(!out.contains("P4 Widget"));
@@ -1229,7 +1461,10 @@ async fn ai_list_services_respects_visibility() {
         user_id: sc.consumer_admin,
         trace: new_trace(),
     };
-    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    let out = tool
+        .call(&mut ToolContext::new(), args(None))
+        .await
+        .unwrap();
     assert!(out.contains("ISO Switch"));
     assert!(out.contains("Core Banking"));
 
@@ -1240,7 +1475,10 @@ async fn ai_list_services_respects_visibility() {
         user_id: sc.admin,
         trace: new_trace(),
     };
-    let out = tool.call(&mut ToolContext::new(), args(None)).await.unwrap();
+    let out = tool
+        .call(&mut ToolContext::new(), args(None))
+        .await
+        .unwrap();
     assert!(out.contains("P4 Widget"));
 }
 
@@ -1251,15 +1489,19 @@ async fn full_visible_rejects_inactive_membership() {
     let pool = pool().await;
     let sc = Scratch::new(&pool).await;
 
-    sqlx::query("UPDATE project_members SET is_active = false WHERE member_id = $1 AND project_id = $2")
-        .bind(sc.owner_member)
-        .bind(sc.p1)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE project_members SET is_active = false WHERE member_id = $1 AND project_id = $2",
+    )
+    .bind(sc.owner_member)
+    .bind(sc.p1)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     assert!(
-        !full_visible(&pool, sc.owner_member, &sc.slug, sc.s1).await.unwrap(),
+        !full_visible(&pool, sc.owner_member, &sc.slug, sc.s1)
+            .await
+            .unwrap(),
         "inactive project membership grants no visibility"
     );
 }

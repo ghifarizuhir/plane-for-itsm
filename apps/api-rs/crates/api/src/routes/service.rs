@@ -13,9 +13,7 @@ use crate::{
     state::AppState,
 };
 
-use super::issue_common::{
-    fetch_project_member_role, is_workspace_admin, project_gate_allows,
-};
+use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 use super::service_access;
 
 /// Allowed `status` values (`packages/types/src/service/core.ts`).
@@ -25,6 +23,28 @@ pub const SERVICE_STATUSES: &[&str] =
 pub const SERVICE_CRITICALITIES: &[&str] = &["critical", "high", "medium", "low"];
 /// Allowed `type` values.
 pub const SERVICE_TYPES: &[&str] = &["internal", "external", "infrastructure", "third_party"];
+/// Allowed `dependency_type` values (`packages/types/src/service/core.ts`).
+pub const DEPENDENCY_TYPES: &[&str] = &[
+    "runs_on",
+    "connects_to",
+    "replicates_to",
+    "depends_on",
+    "uses",
+    "other",
+];
+
+/// Validate a dependency type, defaulting omitted values to `depends_on`.
+pub fn normalize_dependency_type(value: Option<&str>) -> Result<&'static str, &'static str> {
+    match value.unwrap_or("depends_on") {
+        "runs_on" => Ok("runs_on"),
+        "connects_to" => Ok("connects_to"),
+        "replicates_to" => Ok("replicates_to"),
+        "depends_on" => Ok("depends_on"),
+        "uses" => Ok("uses"),
+        "other" => Ok("other"),
+        _ => Err("Invalid dependency type."),
+    }
+}
 
 /// trim + lowercase, matching the mock's case-insensitive uniqueness.
 pub fn normalize_name(name: &str) -> String {
@@ -190,9 +210,9 @@ pub(crate) async fn service_json_by_id(
     let row: Option<ServiceRow> = sqlx::query_as(&format!(
         "{SERVICE_SELECT} WHERE s.id = $1 AND s.deleted_at IS NULL"
     ))
-        .bind(service_id)
-        .fetch_optional(pool)
-        .await?;
+    .bind(service_id)
+    .fetch_optional(pool)
+    .await?;
     match row {
         Some(row) => {
             let links = links_for_services(pool, &[row.id]).await?;
@@ -528,7 +548,9 @@ pub async fn create_workspace(
     .fetch_one(&st.pool)
     .await?;
     if !project_ok {
-        return Ok(bad_request("Invalid owner_project_id - object does not exist."));
+        return Ok(bad_request(
+            "Invalid owner_project_id - object does not exist.",
+        ));
     }
     create_service_core(&st, auth.0, owner_project_id, &body.service).await
 }
@@ -599,7 +621,11 @@ pub(crate) async fn patch_service_core(
     let name = match body.name.clone() {
         Some(v) => {
             let trimmed = v.trim().to_string();
-            if trimmed.is_empty() { current.name.clone() } else { trimmed }
+            if trimmed.is_empty() {
+                current.name.clone()
+            } else {
+                trimmed
+            }
         }
         None => current.name.clone(),
     };
@@ -616,7 +642,10 @@ pub(crate) async fn patch_service_core(
     if dup {
         return Ok(bad_request("A service with this name already exists."));
     }
-    let status = body.status.clone().unwrap_or_else(|| current.status.clone());
+    let status = body
+        .status
+        .clone()
+        .unwrap_or_else(|| current.status.clone());
     let criticality = body
         .criticality
         .clone()
@@ -638,7 +667,10 @@ pub(crate) async fn patch_service_core(
         Some(v) => v,
         None => current.owner_id,
     };
-    let description = body.description.clone().unwrap_or_else(|| current.description.clone());
+    let description = body
+        .description
+        .clone()
+        .unwrap_or_else(|| current.description.clone());
     let description_html = body
         .description_html
         .clone()
@@ -794,7 +826,9 @@ pub async fn project_links_create(
     let actor_admin_target =
         service_access::is_project_admin(&st.pool, auth.0, &slug, body.project_id).await?;
     let actor_admin_owner = match owner {
-        Some(owner_id) => service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?,
+        Some(owner_id) => {
+            service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?
+        }
         None => false,
     };
     if !(ws_admin || actor_admin_target || actor_admin_owner) {
@@ -825,7 +859,9 @@ pub async fn project_links_create(
     .fetch_one(&st.pool)
     .await?;
     if existing_active {
-        return Ok(bad_request("This project is already linked to the service."));
+        return Ok(bad_request(
+            "This project is already linked to the service.",
+        ));
     }
     let link_id = Uuid::new_v4();
     sqlx::query(
@@ -871,7 +907,9 @@ pub async fn project_links_destroy(
     let actor_admin_link_project =
         service_access::is_project_admin(&st.pool, auth.0, &slug, link.project_id).await?;
     let actor_admin_owner = match service_access::owner_project(&st.pool, pk).await? {
-        Some(owner_id) => service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?,
+        Some(owner_id) => {
+            service_access::is_project_admin(&st.pool, auth.0, &slug, owner_id).await?
+        }
         None => false,
     };
     if !(ws_admin || actor_admin_link_project || actor_admin_owner) {
@@ -973,6 +1011,7 @@ pub struct DependencyRow {
     pub project_id: Option<Uuid>, // legacy dual-write column (nullable)
     pub from_service_id: Uuid,
     pub to_service_id: Uuid,
+    pub dependency_type: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -994,7 +1033,9 @@ async fn endpoint_json(
     .fetch_optional(pool)
     .await?;
     Ok(match lite {
-        Some((id, name, status, criticality)) => lite_service_json(id, &name, &status, &criticality),
+        Some((id, name, status, criticality)) => {
+            lite_service_json(id, &name, &status, &criticality)
+        }
         None => Value::Null,
     })
 }
@@ -1014,6 +1055,7 @@ pub(crate) async fn dependency_json(
         "project_id": project_echo.or(row.project_id),
         "from_service_id": row.from_service_id,
         "to_service_id": row.to_service_id,
+        "dependency_type": row.dependency_type,
         "created_at": row.created_at,
         "from_service": from,
         "to_service": to,
@@ -1021,14 +1063,84 @@ pub(crate) async fn dependency_json(
 }
 
 const DEPENDENCY_SELECT: &str = "SELECT id, workspace_id, project_id, from_service_id, \
-    to_service_id, created_at FROM service_dependencies";
+    to_service_id, dependency_type, created_at FROM service_dependencies";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateDependency {
     pub from_service_id: Uuid,
     pub to_service_id: Uuid,
+    pub dependency_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateDependency {
+    pub dependency_type: Option<String>,
+}
+
+async fn update_dependency_core(
+    st: &AppState,
+    user_id: Uuid,
+    slug: &str,
+    pk: Uuid,
+    requested: Option<&str>,
+    project_echo: Option<Uuid>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let row: Option<DependencyRow> = sqlx::query_as(&format!(
+        "{DEPENDENCY_SELECT} WHERE id = $1 AND deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(missing());
+    };
+    if !service_access::gate_writer(&st.pool, user_id, slug, row.from_service_id).await? {
+        return Ok(deny());
+    }
+    let Some(requested) = requested else {
+        return Ok(bad_request("Invalid dependency type."));
+    };
+    if !DEPENDENCY_TYPES.contains(&requested) {
+        return Ok(bad_request("Invalid dependency type."));
+    }
+    let duplicate: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM service_dependencies WHERE workspace_id = $1 \
+         AND from_service_id = $2 AND to_service_id = $3 AND dependency_type = $4 \
+         AND deleted_at IS NULL AND id <> $5)",
+    )
+    .bind(row.workspace_id)
+    .bind(row.from_service_id)
+    .bind(row.to_service_id)
+    .bind(requested)
+    .bind(pk)
+    .fetch_one(&st.pool)
+    .await?;
+    if duplicate {
+        return Ok(bad_request("This dependency already exists."));
+    }
+    sqlx::query(
+        "UPDATE service_dependencies SET dependency_type = $1, updated_at = now() \
+         WHERE id = $2 AND deleted_at IS NULL",
+    )
+    .bind(requested)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    let updated: DependencyRow = sqlx::query_as(&format!("{DEPENDENCY_SELECT} WHERE id = $1"))
+        .bind(pk)
+        .fetch_one(&st.pool)
+        .await?;
+    let ws_admin = is_workspace_admin(&st.pool, user_id, slug).await?;
+    let visible = if ws_admin {
+        vec![]
+    } else {
+        service_access::visible_service_ids(&st.pool, user_id, slug).await?
+    };
+    Ok((
+        StatusCode::OK,
+        Json(dependency_json(&st.pool, &updated, &visible, ws_admin, project_echo).await?),
+    ))
+}
 
 pub(crate) async fn create_dependency_core(
     st: &AppState,
@@ -1036,6 +1148,7 @@ pub(crate) async fn create_dependency_core(
     slug: &str,
     from_service_id: Uuid,
     to_service_id: Uuid,
+    dependency_type: &str,
     project_echo: Option<Uuid>,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     if from_service_id == to_service_id {
@@ -1057,11 +1170,13 @@ pub(crate) async fn create_dependency_core(
     }
     let dup: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM service_dependencies WHERE workspace_id = $1 \
-         AND from_service_id = $2 AND to_service_id = $3 AND deleted_at IS NULL)",
+         AND from_service_id = $2 AND to_service_id = $3 AND dependency_type = $4 \
+         AND deleted_at IS NULL)",
     )
     .bind(workspace_id)
     .bind(from_service_id)
     .bind(to_service_id)
+    .bind(dependency_type)
     .fetch_one(&st.pool)
     .await?;
     if dup {
@@ -1094,14 +1209,15 @@ pub(crate) async fn create_dependency_core(
     let id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO service_dependencies (id, workspace_id, project_id, from_service_id, \
-         to_service_id, created_at, updated_at, created_by_id, updated_by_id) \
-         VALUES ($1, $2, $3, $4, $5, now(), now(), $6, $6)",
+         to_service_id, dependency_type, created_at, updated_at, created_by_id, updated_by_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, now(), now(), $7, $7)",
     )
     .bind(id)
     .bind(workspace_id)
     .bind(legacy_project)
     .bind(from_service_id)
     .bind(to_service_id)
+    .bind(dependency_type)
     .bind(user_id)
     .execute(&st.pool)
     .await?;
@@ -1136,12 +1252,17 @@ pub async fn dependencies_create_workspace(
     {
         return Ok(bad_request("Target service not found."));
     }
+    let dependency_type = match normalize_dependency_type(body.dependency_type.as_deref()) {
+        Ok(value) => value,
+        Err(message) => return Ok(bad_request(message)),
+    };
     create_dependency_core(
         &st,
         auth.0,
         &slug,
         body.from_service_id,
         body.to_service_id,
+        dependency_type,
         None,
     )
     .await
@@ -1165,7 +1286,11 @@ pub async fn dependencies_list_workspace(
          ORDER BY created_at ASC"
     ))
     .bind(&slug)
-    .bind(if ws_admin { None } else { Some(visible.clone()) })
+    .bind(if ws_admin {
+        None
+    } else {
+        Some(visible.clone())
+    })
     .fetch_all(&st.pool)
     .await?;
     let mut payload = Vec::with_capacity(rows.len());
@@ -1200,6 +1325,15 @@ pub async fn dependency_destroy_workspace(
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
+pub async fn dependency_update_workspace(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<UpdateDependency>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    update_dependency_core(&st, auth.0, &slug, pk, body.dependency_type.as_deref(), None).await
+}
+
 pub async fn dependencies_list(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -1229,9 +1363,7 @@ pub async fn dependencies_list(
     };
     let mut payload = Vec::with_capacity(rows.len());
     for row in &rows {
-        payload.push(
-            dependency_json(&st.pool, row, &visible, ws_admin, Some(project_id)).await?,
-        );
+        payload.push(dependency_json(&st.pool, row, &visible, ws_admin, Some(project_id)).await?);
     }
     Ok((StatusCode::OK, Json(Value::Array(payload))))
 }
@@ -1251,12 +1383,17 @@ pub async fn dependencies_create(
     if !service_access::linked_to_project(&st.pool, body.to_service_id, project_id).await? {
         return Ok(bad_request("Target service not found."));
     }
+    let dependency_type = match normalize_dependency_type(body.dependency_type.as_deref()) {
+        Ok(value) => value,
+        Err(message) => return Ok(bad_request(message)),
+    };
     create_dependency_core(
         &st,
         auth.0,
         &slug,
         body.from_service_id,
         body.to_service_id,
+        dependency_type,
         Some(project_id),
     )
     .await
@@ -1291,6 +1428,38 @@ pub async fn dependency_destroy(
     .execute(&st.pool)
     .await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
+}
+
+pub async fn dependency_update(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, project_id, pk)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<UpdateDependency>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !gate_writer(&st.pool, auth.0, &slug, project_id).await? {
+        return Ok(deny());
+    }
+    let row: Option<DependencyRow> = sqlx::query_as(&format!(
+        "{DEPENDENCY_SELECT} WHERE id = $1 AND deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(missing());
+    };
+    if !service_access::linked_to_project(&st.pool, row.from_service_id, project_id).await? {
+        return Ok(missing());
+    }
+    update_dependency_core(
+        &st,
+        auth.0,
+        &slug,
+        pk,
+        body.dependency_type.as_deref(),
+        Some(project_id),
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
