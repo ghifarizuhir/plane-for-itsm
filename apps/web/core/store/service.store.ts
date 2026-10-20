@@ -14,6 +14,7 @@ import type {
   IServiceDependency,
   IServiceHealthSnapshot,
   IServiceProjectLink,
+  TServiceDependencyType,
   TServiceGraphData,
   TServiceHealthSummary,
   TServiceWorkItemLink,
@@ -49,6 +50,7 @@ export interface IServiceStore {
   getFilteredServiceIds: (projectId: string) => string[] | null;
   getWorkspaceServiceIds: () => string[];
   getDependenciesByProject: (projectId: string) => IServiceDependency[];
+  getDependenciesByService: (serviceId: string) => IServiceDependency[];
   getWorkItemLinksByService: (serviceId: string) => TServiceWorkItemLink[];
   getGraphData: (projectId: string) => TServiceGraphData;
   getWorkspaceGraphData: (projectId?: string) => TServiceGraphData;
@@ -79,14 +81,22 @@ export interface IServiceStore {
   addDependency: (
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     fromServiceId: string,
-    toServiceId: string
+    toServiceId: string,
+    dependencyType?: TServiceDependencyType
+  ) => Promise<IServiceDependency>;
+  updateDependency: (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string | null,
+    dependencyId: string,
+    dependencyType: TServiceDependencyType
   ) => Promise<IServiceDependency>;
   removeDependency: (
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     dependencyId: string
   ) => Promise<void>;
   updateNodePosition: (
@@ -160,6 +170,7 @@ export class ServicesStore implements IServiceStore {
       deleteService: action,
       deleteWorkspaceService: action,
       addDependency: action,
+      updateDependency: action,
       removeDependency: action,
       updateNodePosition: action,
       addProjectLink: action,
@@ -217,6 +228,10 @@ export class ServicesStore implements IServiceStore {
 
   getDependenciesByProject = computedFn((projectId: string) =>
     Object.values(this.dependencyMap).filter((d) => d.project_id === projectId)
+  );
+
+  getDependenciesByService = computedFn((serviceId: string) =>
+    Object.values(this.dependencyMap).filter((d) => d.from_service_id === serviceId || d.to_service_id === serviceId)
   );
 
   getWorkItemLinksByService = computedFn((serviceId: string) =>
@@ -451,16 +466,18 @@ export class ServicesStore implements IServiceStore {
   addDependency = async (
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     fromServiceId: string,
-    toServiceId: string
+    toServiceId: string,
+    dependencyType: TServiceDependencyType = "depends_on"
   ) => {
     const dependency = await this.serviceService.createDependency(
       workspaceSlug,
       workspaceId,
       projectId,
       fromServiceId,
-      toServiceId
+      toServiceId,
+      dependencyType
     );
     runInAction(() => {
       set(this.dependencyMap, [dependency.id], dependency);
@@ -468,7 +485,32 @@ export class ServicesStore implements IServiceStore {
     return dependency;
   };
 
-  removeDependency = async (workspaceSlug: string, workspaceId: string, projectId: string, dependencyId: string) => {
+  updateDependency = async (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string | null,
+    dependencyId: string,
+    dependencyType: TServiceDependencyType
+  ) => {
+    const dependency = await this.serviceService.updateDependency(
+      workspaceSlug,
+      workspaceId,
+      projectId,
+      dependencyId,
+      dependencyType
+    );
+    runInAction(() => {
+      set(this.dependencyMap, [dependency.id], dependency);
+    });
+    return dependency;
+  };
+
+  removeDependency = async (
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string | null,
+    dependencyId: string
+  ) => {
     await this.serviceService.deleteDependency(workspaceSlug, workspaceId, projectId, dependencyId);
     runInAction(() => {
       delete this.dependencyMap[dependencyId];

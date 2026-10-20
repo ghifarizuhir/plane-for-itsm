@@ -90,6 +90,7 @@ export interface IServiceDependency {
   project_id: string | null;
   from_service_id: string;
   to_service_id: string;
+  dependency_type: TServiceDependencyType;
   created_at: string;
   from_service?: IService | ILiteService;
   to_service?: IService | ILiteService;
@@ -110,3 +111,5 @@ export type TServiceGraphData = {
   dependencies: IServiceDependency[];
   health: Record<string, IServiceHealthSnapshot>;
 };
+
+export type TServiceDependencyType = "runs_on" | "connects_to" | "replicates_to" | "depends_on" | "uses" | "other";

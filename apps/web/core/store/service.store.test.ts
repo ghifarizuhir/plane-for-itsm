@@ -12,6 +12,23 @@ const makeStore = () => {
   const store = new ServicesStore({} as never);
   const serviceService = {
     deleteService: vi.fn(async () => undefined),
+    updateDependency: vi.fn(
+      async (
+        _slug: string,
+        _workspaceId: string,
+        _projectId: string | null,
+        dependencyId: string,
+        dependencyType: string
+      ) => ({
+        id: dependencyId,
+        workspace_id: "workspace-1",
+        project_id: null,
+        from_service_id: "service-1",
+        to_service_id: "service-2",
+        dependency_type: dependencyType,
+        created_at: "2026-10-20T00:00:00Z",
+      })
+    ),
   };
   (store as unknown as { serviceService: typeof serviceService }).serviceService = serviceService;
   return { store, serviceService };
@@ -53,5 +70,27 @@ describe("ServicesStore.deleteService", () => {
     await store.deleteService("acme", "workspace-1", "project-1", "service-2");
 
     expect(store.peekService).toEqual({ workspaceSlug: "acme", projectId: "project-1", serviceId: "service-1" });
+  });
+});
+
+describe("ServicesStore.updateDependency", () => {
+  it("updates the dependency type in place", async () => {
+    const { store, serviceService } = makeStore();
+    store.dependencyMap = {
+      "dep-1": {
+        id: "dep-1",
+        workspace_id: "workspace-1",
+        project_id: null,
+        from_service_id: "service-1",
+        to_service_id: "service-2",
+        dependency_type: "depends_on",
+        created_at: "2026-10-20T00:00:00Z",
+      },
+    };
+
+    await store.updateDependency("acme", "workspace-1", null, "dep-1", "runs_on");
+
+    expect(serviceService.updateDependency).toHaveBeenCalledWith("acme", "workspace-1", null, "dep-1", "runs_on");
+    expect(store.dependencyMap["dep-1"].dependency_type).toBe("runs_on");
   });
 });

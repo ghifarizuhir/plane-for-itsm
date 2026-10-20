@@ -7,6 +7,6 @@
 export * from "./root";
 export * from "./quick-actions";
 export * from "./description";
-export * from "./dependencies";
+export * from "./relationships";
 export * from "./project-links";
 export * from "./work-items";

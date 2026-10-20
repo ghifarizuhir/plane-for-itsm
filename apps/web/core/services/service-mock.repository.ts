@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { IService, IServiceDependency, TServiceWorkItemLink } from "@plane/types";
+import type { IService, IServiceDependency, TServiceDependencyType, TServiceWorkItemLink } from "@plane/types";
 // helpers
 import { validateDependency } from "./service.helpers";
 
@@ -163,12 +163,17 @@ export class ServiceMockRepository {
 
     const services = seedServices(workspaceId, projectId);
     const byName = (name: string) => services.find((s) => s.name === name)?.id as string;
-    const makeDep = (from: string, to: string): IServiceDependency => ({
+    const makeDep = (
+      from: string,
+      to: string,
+      dependency_type: TServiceDependencyType = "depends_on"
+    ): IServiceDependency => ({
       id: uid(),
       workspace_id: workspaceId,
       project_id: projectId,
       from_service_id: from,
       to_service_id: to,
+      dependency_type,
       created_at: nowIso(),
     });
     const dependencies: IServiceDependency[] = [
@@ -288,12 +293,13 @@ export class ServiceMockRepository {
     workspaceId: string,
     projectId: string,
     fromServiceId: string,
-    toServiceId: string
+    toServiceId: string,
+    dependencyType: TServiceDependencyType = "depends_on"
   ): IServiceDependency {
     const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
     if (!stored.services.some((s) => s.id === fromServiceId)) throw new Error("Source service not found.");
     if (!stored.services.some((s) => s.id === toServiceId)) throw new Error("Target service not found.");
-    const error = validateDependency(stored.dependencies, fromServiceId, toServiceId);
+    const error = validateDependency(stored.dependencies, fromServiceId, toServiceId, dependencyType);
     if (error) throw new Error(error);
     const dependency: IServiceDependency = {
       id: uid(),
@@ -301,6 +307,7 @@ export class ServiceMockRepository {
       project_id: projectId,
       from_service_id: fromServiceId,
       to_service_id: toServiceId,
+      dependency_type: dependencyType,
       created_at: nowIso(),
     };
     this.write(serviceStorageKey(workspaceSlug, projectId), {
@@ -308,6 +315,32 @@ export class ServiceMockRepository {
       dependencies: [...stored.dependencies, dependency],
     });
     return dependency;
+  }
+
+  updateDependency(
+    workspaceSlug: string,
+    workspaceId: string,
+    projectId: string,
+    dependencyId: string,
+    dependencyType: TServiceDependencyType
+  ): IServiceDependency {
+    const stored = this.seedIfEmpty(workspaceSlug, workspaceId, projectId);
+    const dependency = stored.dependencies.find((d) => d.id === dependencyId);
+    if (!dependency) throw new Error("Dependency not found.");
+    const duplicate = stored.dependencies.some(
+      (d) =>
+        d.id !== dependencyId &&
+        d.from_service_id === dependency.from_service_id &&
+        d.to_service_id === dependency.to_service_id &&
+        d.dependency_type === dependencyType
+    );
+    if (duplicate) throw new Error("This dependency already exists.");
+    const updated = { ...dependency, dependency_type: dependencyType };
+    this.write(serviceStorageKey(workspaceSlug, projectId), {
+      ...stored,
+      dependencies: stored.dependencies.map((d) => (d.id === dependencyId ? updated : d)),
+    });
+    return updated;
   }
 
   deleteDependency(workspaceSlug: string, workspaceId: string, projectId: string, dependencyId: string): void {

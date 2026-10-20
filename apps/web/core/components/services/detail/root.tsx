@@ -22,6 +22,7 @@ import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // local imports
 import { ServiceLoadErrorState } from "../service-load-error-state";
 import { ServiceDescription } from "./description";
+import { ServiceRelationships } from "./relationships";
 import { ServiceDetailSidebar } from "./sidebar";
 import { ServiceProjectLinks } from "./project-links";
 import { ServiceTitleInput } from "./title-input";
@@ -92,6 +93,7 @@ export const ServiceDetailRoot = observer(function ServiceDetailRoot(props: Prop
         <ServiceTitleInput serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
         <ServiceDescription serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
         <ServiceProjectLinks serviceId={serviceId} />
+        <ServiceRelationships serviceId={serviceId} />
         <ServiceWorkItems serviceId={serviceId} />
       </div>
       <div className="w-full shrink-0 border-t border-subtle bg-surface-1 md:h-full md:w-1/4 md:min-w-80 md:border-t-0 md:border-l xl:min-w-96">

@@ -5,7 +5,13 @@
  */
 
 import { API_BASE_URL } from "@plane/constants";
-import type { IService, IServiceDependency, IServiceProjectLink, TServiceWorkItemLink } from "@plane/types";
+import type {
+  IService,
+  IServiceDependency,
+  IServiceProjectLink,
+  TServiceDependencyType,
+  TServiceWorkItemLink,
+} from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
@@ -107,13 +113,31 @@ export class ServiceService extends APIService {
   async createDependency(
     workspaceSlug: string,
     _workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     fromServiceId: string,
-    toServiceId: string
+    toServiceId: string,
+    dependencyType?: TServiceDependencyType
   ): Promise<IServiceDependency> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/`, {
+    return this.post(this.dependencyUrl(workspaceSlug, projectId), {
       from_service_id: fromServiceId,
       to_service_id: toServiceId,
+      dependency_type: dependencyType,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw toServiceError(error);
+      });
+  }
+
+  async updateDependency(
+    workspaceSlug: string,
+    _workspaceId: string,
+    projectId: string | null,
+    dependencyId: string,
+    dependencyType: TServiceDependencyType
+  ): Promise<IServiceDependency> {
+    return this.patch(`${this.dependencyUrl(workspaceSlug, projectId)}${dependencyId}/`, {
+      dependency_type: dependencyType,
     })
       .then((response) => response?.data)
       .catch((error) => {
@@ -124,14 +148,20 @@ export class ServiceService extends APIService {
   async deleteDependency(
     workspaceSlug: string,
     _workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     dependencyId: string
   ): Promise<void> {
-    return this.delete(`/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/${dependencyId}/`)
+    return this.delete(`${this.dependencyUrl(workspaceSlug, projectId)}${dependencyId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw toServiceError(error);
       });
+  }
+
+  private dependencyUrl(workspaceSlug: string, projectId: string | null) {
+    return projectId
+      ? `/api/workspaces/${workspaceSlug}/projects/${projectId}/service-dependencies/`
+      : `/api/workspaces/${workspaceSlug}/service-dependencies/`;
   }
 
   async updateNodePosition(

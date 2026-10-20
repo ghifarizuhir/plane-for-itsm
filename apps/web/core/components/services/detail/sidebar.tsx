@@ -31,7 +31,6 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ServiceDeployCell } from "../health/service-deploy-cell";
 import { ServiceHealthPill } from "../health/service-health-pill";
-import { ServiceDependencies } from "./dependencies";
 import { ServicePropertySelect } from "./property-select";
 import { ServiceUrlProperty } from "./url-property";
 
@@ -147,11 +146,6 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
             onSubmit={(val) => update({ documentation_url: val })}
           />
         </SidebarPropertyListItem>
-      </div>
-
-      <div className="mt-5 border-t border-subtle pt-4 pb-5">
-        <h5 className="text-body-xs-medium">{t("common.dependencies")}</h5>
-        <ServiceDependencies serviceId={serviceId} />
       </div>
     </div>
   );

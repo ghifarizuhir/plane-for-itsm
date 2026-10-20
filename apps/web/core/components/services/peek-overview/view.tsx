@@ -17,6 +17,7 @@ import useKeypress from "@/hooks/use-keypress";
 import usePeekOverviewOutsideClickDetector from "@/hooks/use-peek-overview-outside-click";
 // local imports
 import { ServiceDescription } from "../detail/description";
+import { ServiceRelationships } from "../detail/relationships";
 import { ServiceDetailSidebar } from "../detail/sidebar";
 import { ServiceTitleInput } from "../detail/title-input";
 import { ServiceWorkItems } from "../detail/work-items";
@@ -32,7 +33,7 @@ type Props = {
 };
 
 export const ServicePeekView = observer(function ServicePeekView(props: Props) {
-  const { workspaceSlug, projectId, serviceId, status, onRetry } = props;
+  const { workspaceSlug, serviceId, status, onRetry } = props;
   // states
   const [peekMode, setPeekMode] = useState<TServicePeekModes>("side-peek");
   const [isSubmitting, setIsSubmitting] = useState<TNameDescriptionLoader>("saved");
@@ -44,7 +45,7 @@ export const ServicePeekView = observer(function ServicePeekView(props: Props) {
   const { getServiceById, setPeekService } = useService();
   // derived values
   const service = getServiceById(serviceId);
-  const serviceLink = `/${workspaceSlug}/projects/${projectId}/services/${serviceId}`;
+  const serviceLink = `/${workspaceSlug}/services/${serviceId}`;
 
   const closePeek = () => {
     setPeekService(undefined);
@@ -88,6 +89,7 @@ export const ServicePeekView = observer(function ServicePeekView(props: Props) {
       <>
         <ServiceTitleInput serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
         <ServiceDescription serviceId={serviceId} isSubmitting={isSubmitting} setIsSubmitting={setIsSubmitting} />
+        <ServiceRelationships serviceId={serviceId} />
         <ServiceWorkItems serviceId={serviceId} />
       </>
     );

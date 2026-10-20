@@ -10,11 +10,22 @@ import type {
   IService,
   IServiceDependency,
   IServiceHealthSnapshot,
+  TServiceDependencyType,
   TServiceFilters,
   TServiceOrderByOptions,
 } from "@plane/types";
 // helpers
 import { HEALTH_WEIGHT } from "@/services/service-health.helpers";
+
+/** Dependency types in UI order, matching the backend CHECK constraint. */
+export const SERVICE_DEPENDENCY_TYPES = [
+  "depends_on",
+  "uses",
+  "runs_on",
+  "connects_to",
+  "replicates_to",
+  "other",
+] as const satisfies readonly TServiceDependencyType[];
 
 /** True when the service is the restricted (lite) projection. */
 export const isLiteService = (service: IService | ILiteService): service is ILiteService =>
@@ -26,10 +37,15 @@ export const isLiteService = (service: IService | ILiteService): service is ILit
 export const isSelfDependency = (from: string, to: string) => from === to;
 
 /**
- * Adding `from -> to` is invalid if the exact edge already exists.
+ * Adding `from -> to` is invalid if the exact typed edge already exists.
  */
-export const dependencyExists = (dependencies: IServiceDependency[], from: string, to: string): boolean =>
-  dependencies.some((d) => d.from_service_id === from && d.to_service_id === to);
+export const dependencyExists = (
+  dependencies: IServiceDependency[],
+  from: string,
+  to: string,
+  type: TServiceDependencyType
+): boolean =>
+  dependencies.some((d) => d.from_service_id === from && d.to_service_id === to && d.dependency_type === type);
 
 /**
  * Adding `from -> to` creates a cycle if `to` can already reach `from`
@@ -60,9 +76,14 @@ export const wouldCreateCycle = (dependencies: IServiceDependency[], from: strin
 /**
  * Returns an error message when the dependency cannot be added, else null.
  */
-export const validateDependency = (dependencies: IServiceDependency[], from: string, to: string): string | null => {
+export const validateDependency = (
+  dependencies: IServiceDependency[],
+  from: string,
+  to: string,
+  type: TServiceDependencyType
+): string | null => {
   if (isSelfDependency(from, to)) return "A service cannot depend on itself.";
-  if (dependencyExists(dependencies, from, to)) return "This dependency already exists.";
+  if (dependencyExists(dependencies, from, to, type)) return "This dependency already exists.";
   if (wouldCreateCycle(dependencies, from, to)) return "This dependency would create a cycle.";
   return null;
 };

@@ -50,6 +50,7 @@ export const ServiceGraph = observer(function ServiceGraph({
   // derived values
   const slug = workspaceSlug?.toString();
   const pid = projectIdOverride ?? projectId?.toString();
+  const projectScope = projectIdOverride ?? projectId?.toString() ?? null;
   const workspaceId = currentWorkspace?.id;
   // states
   const [isReLayouting, setIsReLayouting] = useState(false);
@@ -63,7 +64,7 @@ export const ServiceGraph = observer(function ServiceGraph({
 
   const handleConnect = useCallback(
     async (source: string, target: string) => {
-      if (!slug || !workspaceId || !pid) {
+      if (!slug || !workspaceId) {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
@@ -72,7 +73,7 @@ export const ServiceGraph = observer(function ServiceGraph({
         return;
       }
       try {
-        await addDependency(slug, workspaceId, pid, source, target);
+        await addDependency(slug, workspaceId, projectScope, source, target);
       } catch (error) {
         setToast({
           type: TOAST_TYPE.ERROR,
@@ -81,13 +82,13 @@ export const ServiceGraph = observer(function ServiceGraph({
         });
       }
     },
-    [addDependency, pid, slug, workspaceId]
+    [addDependency, projectScope, slug, workspaceId]
   );
 
   const handleEdgeDelete = useCallback(
     (dependencyId: string) => {
-      if (!slug || !workspaceId || !pid) return;
-      void removeDependency(slug, workspaceId, pid, dependencyId).catch(() => {
+      if (!slug || !workspaceId) return;
+      void removeDependency(slug, workspaceId, projectScope, dependencyId).catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
@@ -95,7 +96,7 @@ export const ServiceGraph = observer(function ServiceGraph({
         });
       });
     },
-    [pid, removeDependency, slug, workspaceId]
+    [projectScope, removeDependency, slug, workspaceId]
   );
 
   const handleNodeDragStop = useCallback(
