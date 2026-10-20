@@ -18,11 +18,11 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::routes::ai::task_from_body;
-use crate::routes::ai_schedule::{can_manage, load_schedule, schedule_json};
 use crate::routes::ai_conversations::{
     conversation_gone, finish_turn, insert_message, load_owned_conversation, message_json,
     recent_messages, title_from, ConversationRow, MessageRow,
 };
+use crate::routes::ai_schedule::{can_manage, load_schedule, schedule_json};
 use crate::routes::module::guard_am;
 use crate::routes::project::{deny, missing, ws_role};
 use crate::{middleware::auth::AuthUser, state::AppState};

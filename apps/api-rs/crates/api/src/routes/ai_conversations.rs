@@ -421,7 +421,7 @@ fn clean_metadata_patch(patch: &serde_json::Map<String, Value>) -> Result<Value,
                 }
                 _ => {
                     return Err(
-                        "schedule_update_decision must be 'applied' or 'cancelled'".to_string(),
+                        "schedule_update_decision must be 'applied' or 'cancelled'".to_string()
                     )
                 }
             },

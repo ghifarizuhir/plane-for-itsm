@@ -984,7 +984,10 @@ async fn patch_edits_structured_fields_and_rerenders_prompt() {
         updated["spec"]["description"],
         json!("Weekly overdue summary per owner")
     );
-    assert_eq!(updated["spec"]["how_to"][1], json!("Group the list by owner"));
+    assert_eq!(
+        updated["spec"]["how_to"][1],
+        json!("Group the list by owner")
+    );
     let prompt = updated["prompt"].as_str().unwrap();
     assert!(prompt.contains("Task: Weekly overdue report"));
     assert!(prompt.contains("2. Group the list by owner"));
@@ -1119,7 +1122,10 @@ async fn patch_edits_legacy_prompt_and_rejects_invalid_shapes() {
     .unwrap();
     assert_eq!(status, StatusCode::OK);
     assert_eq!(updated["name"], json!("Legacy report v2"));
-    assert_eq!(updated["prompt"], json!("Summarize overdue work items by owner"));
+    assert_eq!(
+        updated["prompt"],
+        json!("Summarize overdue work items by owner")
+    );
     assert_eq!(updated["spec"], json!(null));
 
     // Structured fields on a legacy schedule are rejected.
@@ -1275,7 +1281,10 @@ async fn galileo_schedule_tools_list_get_and_propose_updates() {
     let recorded = trace.lock().unwrap().clone();
     let last = recorded.last().expect("update proposal recorded");
     assert_eq!(last.name, "update_schedule");
-    assert_eq!(last.arguments["schedule_id"], json!(schedule_id.to_string()));
+    assert_eq!(
+        last.arguments["schedule_id"],
+        json!(schedule_id.to_string())
+    );
     assert_eq!(last.arguments["changes"]["frequency"], json!("weekly"));
     assert_eq!(last.arguments["changes"]["day_of_week"], json!(2));
 

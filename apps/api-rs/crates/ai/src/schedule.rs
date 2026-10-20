@@ -340,9 +340,7 @@ impl ScheduleChanges {
                 || self.tools.is_some()
                 || self.expected_output.is_some())
         {
-            return Err(
-                "prompt cannot be combined with structured recipe fields".to_string(),
-            );
+            return Err("prompt cannot be combined with structured recipe fields".to_string());
         }
         if let Some(name) = self.name.as_deref() {
             bounded_text("name", name, 120)?;
@@ -975,7 +973,10 @@ mod tests {
     #[test]
     fn update_changes_validates_bounds_and_mixing() {
         let empty = ScheduleChanges::default();
-        assert!(empty.validate().unwrap_err().contains("at least one change"));
+        assert!(empty
+            .validate()
+            .unwrap_err()
+            .contains("at least one change"));
 
         let mixed = ScheduleChanges {
             prompt: Some("legacy".to_string()),
@@ -1020,7 +1021,10 @@ mod tests {
                 "Count overdue items".to_string(),
                 "Group by owner".to_string(),
             ]),
-            tools: Some(vec!["search_work_items".to_string(), "count_work_items".to_string()]),
+            tools: Some(vec![
+                "search_work_items".to_string(),
+                "count_work_items".to_string(),
+            ]),
             frequency: Some("weekly".to_string()),
             day_of_week: Some(3),
             ..Default::default()
@@ -1040,8 +1044,14 @@ mod tests {
         assert_eq!(recipe.proposal.day_of_week, Some(3));
         assert_eq!(recipe.proposal.timezone, "Asia/Jakarta");
         assert_eq!(recipe.spec.how_to.len(), 2);
-        assert_eq!(recipe.spec.tools, vec!["count_work_items", "search_work_items"]);
-        assert!(recipe.proposal.prompt.contains("Task: Weekly overdue report"));
+        assert_eq!(
+            recipe.spec.tools,
+            vec!["count_work_items", "search_work_items"]
+        );
+        assert!(recipe
+            .proposal
+            .prompt
+            .contains("Task: Weekly overdue report"));
         assert!(recipe.proposal.prompt.contains("2. Group by owner"));
     }
 

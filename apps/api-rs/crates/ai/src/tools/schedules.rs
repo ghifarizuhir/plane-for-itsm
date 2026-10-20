@@ -66,7 +66,9 @@ fn schedule_summary(row: &ScheduleListRow) -> Value {
 }
 
 fn schedule_limit(value: Option<i64>) -> i64 {
-    value.unwrap_or(SCHEDULE_LIST_DEFAULT).clamp(1, SCHEDULE_LIST_MAX)
+    value
+        .unwrap_or(SCHEDULE_LIST_DEFAULT)
+        .clamp(1, SCHEDULE_LIST_MAX)
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -331,7 +333,9 @@ mod tests {
     #[tokio::test]
     async fn update_schedule_records_a_normalized_proposal() {
         let trace = new_trace();
-        let tool = UpdateSchedule { trace: trace.clone() };
+        let tool = UpdateSchedule {
+            trace: trace.clone(),
+        };
         let out = tool
             .call(
                 &mut rig::tool::ToolContext::new(),

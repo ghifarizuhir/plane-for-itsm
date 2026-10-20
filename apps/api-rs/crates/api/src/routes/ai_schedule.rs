@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 
 use ai::schedule::{
-    updated_legacy, updated_recipe, ScheduleChanges, ScheduleProposal, ScheduleRecipe, ScheduleSpec,
-    SPEC_PROMPT_MAX,
+    updated_legacy, updated_recipe, ScheduleChanges, ScheduleProposal, ScheduleRecipe,
+    ScheduleSpec, SPEC_PROMPT_MAX,
 };
 use axum::{
     extract::{Path, State},

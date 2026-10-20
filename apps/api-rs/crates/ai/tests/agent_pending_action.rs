@@ -1,9 +1,7 @@
 //! `pending_action` extraction from a tool trace.
 
 use ai::agent::{new_trace, pending_action, record};
-use ai::tools::{
-    CreateSchedule, CreateScheduleArgs, UpdateSchedule, UpdateScheduleArgs,
-};
+use ai::tools::{CreateSchedule, CreateScheduleArgs, UpdateSchedule, UpdateScheduleArgs};
 use rig::tool::{Tool, ToolContext};
 use serde_json::json;
 
