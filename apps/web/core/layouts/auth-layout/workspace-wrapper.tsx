@@ -176,7 +176,7 @@ export const WorkspaceAuthWrapper = observer(function WorkspaceAuthWrapper(props
               <img
                 src={WorkSpaceNotAvailable}
                 className="h-[220px] object-contain object-center"
-                alt="Terraline logo"
+                alt="Plane logo"
               />
             </div>
             <h3 className="text-center text-16 font-semibold">Workspace not found</h3>

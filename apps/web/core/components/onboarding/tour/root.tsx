@@ -40,7 +40,7 @@ const TOUR_STEPS: {
     key: "work-items",
     title: "Start with work items",
     description:
-      "Work items are the building block of Terraline. Most concepts are tied to work items and their properties.",
+      "Work items are the building block of Plane. Most concepts are tied to work items and their properties.",
     image: IssuesTour,
     nextStep: "cycles",
   },
@@ -99,10 +99,10 @@ export const TourRoot = observer(function TourRoot(props: TOnboardingTourProps) 
             </div>
             <div className="flex flex-col overflow-y-auto p-6">
               <h3 className="font-semibold sm:text-18">
-                Welcome to Terraline, {currentUser?.first_name} {currentUser?.last_name}
+                Welcome to Plane, {currentUser?.first_name} {currentUser?.last_name}
               </h3>
               <p className="mt-3 text-13 text-secondary">
-                We{"'"}re glad you decided to try Terraline. Run your services, handle requests, and keep delivery work
+                We{"'"}re glad you decided to try Plane. Run your services, handle requests, and keep delivery work
                 moving. Get started by creating a project.
               </p>
               <div className="flex h-full items-end">

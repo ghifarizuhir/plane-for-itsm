@@ -27,29 +27,29 @@ type TAuthHeader = {
 const Titles = {
   [EAuthModes.SIGN_IN]: {
     [EAuthSteps.EMAIL]: {
-      header: "Welcome back to Terraline.",
+      header: "Welcome back to Plane.",
       subHeader: "",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Welcome back to Terraline.",
+      header: "Welcome back to Plane.",
       subHeader: "",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Welcome back to Terraline.",
+      header: "Welcome back to Plane.",
       subHeader: "",
     },
   },
   [EAuthModes.SIGN_UP]: {
     [EAuthSteps.EMAIL]: {
-      header: "Create your Terraline account.",
+      header: "Create your Plane account.",
       subHeader: "",
     },
     [EAuthSteps.PASSWORD]: {
-      header: "Create your Terraline account.",
+      header: "Create your Plane account.",
       subHeader: "",
     },
     [EAuthSteps.UNIQUE_CODE]: {
-      header: "Create your Terraline account.",
+      header: "Create your Plane account.",
       subHeader: "",
     },
   },

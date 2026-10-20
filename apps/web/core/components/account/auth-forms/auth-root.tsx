@@ -22,7 +22,6 @@ import {
 import { useOAuthConfig } from "@/hooks/oauth";
 import { useInstance } from "@/hooks/store/use-instance";
 // local imports
-import { TermsAndConditions } from "../terms-and-conditions";
 import { AuthBanner } from "./auth-banner";
 import { AuthHeader, AuthHeaderBase } from "./auth-header";
 import { AuthFormRoot } from "./form-root";
@@ -144,7 +143,6 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
           currentAuthMode={currentAuthMode}
         />
       )}
-      <TermsAndConditions authType={authMode} />
     </AuthContainer>
   );
 });
@@ -155,7 +153,7 @@ function AuthContainer({ children }: { children: React.ReactNode }) {
       className="auth-rise mt-6 flex w-full flex-grow flex-col items-center justify-center py-6"
       style={{ animationDelay: "200ms" }}
     >
-      <div className="relative flex w-full max-w-[22.5rem] flex-col gap-6">{children}</div>
+      <div className="relative flex w-full max-w-[22.5rem] flex-col gap-6 lg:max-w-[26rem]">{children}</div>
     </div>
   );
 }

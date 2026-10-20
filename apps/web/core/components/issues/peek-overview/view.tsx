@@ -60,6 +60,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const [isArchiveIssueModalOpen, setIsArchiveIssueModalOpen] = useState(false);
   const [isDuplicateIssueModalOpen, setIsDuplicateIssueModalOpen] = useState(false);
   const [isEditIssueModalOpen, setIsEditIssueModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   // ref
   const issuePeekOverviewRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorRefApi>(null);
@@ -81,9 +82,14 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const toggleArchiveIssueModal = (value: boolean) => setIsArchiveIssueModalOpen(value);
   const toggleDuplicateIssueModal = (value: boolean) => setIsDuplicateIssueModalOpen(value);
   const toggleEditIssueModal = (value: boolean) => setIsEditIssueModalOpen(value);
+  const toggleExportModal = (value: boolean) => setIsExportModalOpen(value);
 
   const isAnyLocalModalOpen =
-    isDeleteIssueModalOpen || isArchiveIssueModalOpen || isDuplicateIssueModalOpen || isEditIssueModalOpen;
+    isDeleteIssueModalOpen ||
+    isArchiveIssueModalOpen ||
+    isDuplicateIssueModalOpen ||
+    isEditIssueModalOpen ||
+    isExportModalOpen;
 
   usePeekOverviewOutsideClickDetector(
     issuePeekOverviewRef,
@@ -103,7 +109,14 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     const editorImageFullScreenModalElement = document.querySelector(".editor-image-full-screen-modal");
     const dropdownElement = document.activeElement?.tagName === "INPUT";
     const isAnyDropbarOpen = editorRef.current?.isAnyDropbarOpen();
-    if (!isAnyModalOpen && !dropdownElement && !isAnyDropbarOpen && !editorImageFullScreenModalElement) {
+    if (
+      !isAnyModalOpen &&
+      !isAnyEpicModalOpen &&
+      !isAnyLocalModalOpen &&
+      !dropdownElement &&
+      !isAnyDropbarOpen &&
+      !editorImageFullScreenModalElement
+    ) {
       removeRoutePeekId();
       const issueElement = document.getElementById(`issue-${issueId}`);
       if (issueElement) issueElement?.focus();
@@ -162,6 +175,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
                 toggleArchiveIssueModal={toggleArchiveIssueModal}
                 toggleDuplicateIssueModal={toggleDuplicateIssueModal}
                 toggleEditIssueModal={toggleEditIssueModal}
+                toggleExportModal={toggleExportModal}
                 handleRestoreIssue={handleRestore}
                 isArchived={is_archived}
                 issueId={issueId}

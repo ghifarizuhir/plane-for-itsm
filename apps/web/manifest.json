@@ -4,9 +4,9 @@
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
-  "name": "Terraline | IT service management",
-  "short_name": "Terraline",
-  "description": "Run your services, handle requests, and keep delivery work moving — all in Terraline.",
+  "name": "Plane | IT service management",
+  "short_name": "Plane",
+  "description": "Run your services, handle requests, and keep delivery work moving — all in Plane.",
   "icons": [
     {
       "src": "/icon-192x192.png",

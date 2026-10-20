@@ -37,7 +37,7 @@ export function InstanceNotReady() {
             <div className="flex flex-col items-center gap-11">
               <PlaneLogoBoxed className="h-24 w-24" />
               <div className="flex max-w-124 flex-col items-center gap-3">
-                <h1 className="text-h2-semibold text-primary">Welcome to Terraline</h1>
+                <h1 className="text-h2-semibold text-primary">Welcome to Plane</h1>
                 <p className="text-center text-body-md-regular text-secondary">
                   Set up your instance and create your first workspace to begin running services, requests, and delivery
                   work.

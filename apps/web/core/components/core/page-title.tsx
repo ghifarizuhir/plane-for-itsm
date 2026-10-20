@@ -16,7 +16,7 @@ export function PageHead(props: PageHeadTitleProps) {
 
   useEffect(() => {
     if (title) {
-      document.title = title ?? "Terraline | Open-source IT service management platform.";
+      document.title = title ?? "Plane | Open-source IT service management platform.";
     }
   }, [title]);
 

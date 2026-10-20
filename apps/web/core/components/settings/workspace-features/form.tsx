@@ -8,7 +8,11 @@ import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel, WORKSPACE_SETTINGS } from "@plane/constants";
+import {
+  EUserPermissions,
+  EUserPermissionsLevel,
+  WORKSPACE_SETTINGS_KEY,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -67,7 +71,7 @@ export const FeaturesSettingsForm = observer(function FeaturesSettingsForm({ wor
   // services
   const settingsService = useMemo(() => new WorkspaceSettingsService(), []);
   // fetch settings
-  const { data, isLoading, mutate } = useSWR(WORKSPACE_SETTINGS(workspaceSlug), () =>
+  const { data, isLoading, mutate } = useSWR(WORKSPACE_SETTINGS_KEY(workspaceSlug), () =>
     settingsService.fetchSettings(workspaceSlug)
   );
   // states

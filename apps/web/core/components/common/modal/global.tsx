@@ -18,7 +18,7 @@ type TGlobalModalsProps = {
 };
 
 /**
- * GlobalModals component manages all workspace-level modals across Terraline applications.
+ * GlobalModals component manages all workspace-level modals across Plane applications.
  *
  * This includes:
  * - Profile settings modal

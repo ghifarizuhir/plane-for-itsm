@@ -147,7 +147,7 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10">
       {/* Header */}
-      <CommonOnboardingHeader title="Create your profile." description="This is how you will appear in Terraline." />
+      <CommonOnboardingHeader title="Create your profile." description="This is how you will appear in Plane." />
 
       {/* Profile Picture Section */}
       <Controller

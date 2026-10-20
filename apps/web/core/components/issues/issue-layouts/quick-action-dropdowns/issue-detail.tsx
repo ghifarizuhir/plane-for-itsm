@@ -37,6 +37,7 @@ type TWorkItemDetailQuickActionProps = IQuickActionProps & {
   toggleDeleteIssueModal?: (value: boolean) => void;
   toggleDuplicateIssueModal?: (value: boolean) => void;
   toggleArchiveIssueModal?: (value: boolean) => void;
+  toggleExportModal?: (value: boolean) => void;
   isPeekMode?: boolean;
 };
 
@@ -57,6 +58,7 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
     toggleDeleteIssueModal,
     toggleDuplicateIssueModal,
     toggleArchiveIssueModal,
+    toggleExportModal,
     isPeekMode = false,
   } = props;
   // router
@@ -125,6 +127,11 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
     if (toggleArchiveIssueModal) toggleArchiveIssueModal(true);
   };
 
+  const setExportOpen = (value: boolean) => {
+    setIsExportModalOpen(value);
+    if (toggleExportModal) toggleExportModal(value);
+  };
+
   const customRestoreAction = async () => {
     if (handleRestore) await handleRestore();
   };
@@ -149,7 +156,7 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
     handleUpdate,
     handleArchive: customArchiveAction,
     handleRestore: customRestoreAction,
-    onExportDocument: () => setIsExportModalOpen(true),
+    onExportDocument: () => setExportOpen(true),
     storeType: EIssuesStoreType.PROJECT,
   };
 
@@ -231,12 +238,12 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
         fetchIssueDetails={false}
       />
 
-      <WorkItemExportModal issue={issue} isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+      <WorkItemExportModal issue={issue} isOpen={isExportModalOpen} onClose={() => setExportOpen(false)} />
 
       <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
       <div className="flex items-center gap-1">
         <Tooltip label={t("document_export.export_as_document")}>
-          <IconButton size="lg" variant="secondary" icon={ExportOutline} onClick={() => setIsExportModalOpen(true)} />
+          <IconButton size="lg" variant="secondary" icon={ExportOutline} onClick={() => setExportOpen(true)} />
         </Tooltip>
       </div>
       <CustomMenu

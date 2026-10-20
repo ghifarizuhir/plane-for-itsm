@@ -14,7 +14,7 @@ const ShapeWaves2D = lazy(() => import("./shape-waves-2d").then((module) => ({ d
 const DESKTOP_QUERY = "(min-width: 64rem)";
 
 const WAVES_PROPS: ShapeWavesProps = {
-  text: "Terraline ITSM",
+  text: "Plane ITSM",
   fontFamily: 'Geist, "Geist Sans", system-ui, sans-serif',
   fontWeight: 500,
   textSize: 0.51,

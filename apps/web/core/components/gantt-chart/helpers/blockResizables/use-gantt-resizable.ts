@@ -5,7 +5,7 @@
  */
 
 import { useRef, useState } from "react";
-// Terraline
+// Plane
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IBlockUpdateDependencyData, IGanttBlock } from "@plane/types";
 // hooks

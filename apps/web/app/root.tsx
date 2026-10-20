@@ -35,7 +35,7 @@ import "@fontsource/material-symbols-rounded";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Terraline | Open-source IT service management platform.";
+const APP_TITLE = "Plane | Open-source IT service management platform.";
 
 export const links: LinksFunction = () => [
   { rel: "icon", type: "image/png", sizes: "32x32", href: favicon32 },
@@ -64,7 +64,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#fff" />
         {/* Meta info for PWA */}
-        <meta name="application-name" content="Terraline" />
+        <meta name="application-name" content="Plane" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
@@ -98,17 +98,18 @@ export const meta: Route.MetaFunction = () => [
   { property: "og:image", content: ogImage },
   { property: "og:image:width", content: "1200" },
   { property: "og:image:height", content: "630" },
-  { property: "og:image:alt", content: "Terraline - Open-source IT service management" },
+  { property: "og:image:alt", content: "Plane - Open-source IT service management" },
   {
     name: "keywords",
     content:
       "IT service management, ITSM, service desk, helpdesk, service catalog, service map, service health, IT operations, incident tracking, knowledge base, work items",
   },
+  { name: "twitter:site", content: "@planepowers" },
   { name: "twitter:card", content: "summary_large_image" },
   { name: "twitter:image", content: ogImage },
   { name: "twitter:image:width", content: "1200" },
   { name: "twitter:image:height", content: "630" },
-  { name: "twitter:image:alt", content: "Terraline - Open-source IT service management" },
+  { name: "twitter:image:alt", content: "Plane - Open-source IT service management" },
 ];
 
 // Root stays shell-thin: in SPA mode React Router server-builds only the root route, so

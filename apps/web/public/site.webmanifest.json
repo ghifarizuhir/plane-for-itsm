@@ -1,7 +1,7 @@
 {
-  "name": "Terraline",
-  "short_name": "Terraline",
-  "description": "Terraline helps you run services, handle requests, and track work items.",
+  "name": "Plane",
+  "short_name": "Plane",
+  "description": "Plane helps you run services, handle requests, and track work items.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f9fafb",

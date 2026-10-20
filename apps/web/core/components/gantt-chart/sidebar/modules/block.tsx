@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-// Terraline
+// Plane
 import { Row } from "@plane/ui";
 // components
 import { cn } from "@plane/utils";

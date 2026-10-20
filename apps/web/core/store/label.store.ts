@@ -161,6 +161,11 @@ export class LabelStore implements ILabelStore {
           set(this.labelMap, [label.id], label);
         });
         set(this.fetchedMap, projectId, true);
+        // Program P1/S3: response is workspace-scoped, so mark workspace as
+        // fetched too. Otherwise getProjectLabels -> getWorkspaceLabels
+        // always returns undefined (workspace key never set) -> infinite
+        // loader in project settings + empty ticket modal.
+        if (workspaceSlug) set(this.fetchedMap, workspaceSlug, true);
       });
       return response;
     });
