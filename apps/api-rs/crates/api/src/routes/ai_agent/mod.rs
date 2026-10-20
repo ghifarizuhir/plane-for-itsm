@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::routes::ai::task_from_body;
+use crate::routes::ai_schedule::{can_manage, load_schedule, schedule_json};
 use crate::routes::ai_conversations::{
     conversation_gone, finish_turn, insert_message, load_owned_conversation, message_json,
     recent_messages, title_from, ConversationRow, MessageRow,
@@ -60,6 +61,32 @@ pub fn work_item_proposals_metadata(trace: &ToolTrace) -> Vec<Value> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Enrich an `update_schedule` proposal with the target schedule's current
+/// values and whether the signed-in user can manage it. `before` is null when
+/// the schedule no longer exists.
+pub async fn schedule_update_metadata(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    user_id: Uuid,
+    role: Option<i16>,
+    proposal: &Value,
+) -> Option<Value> {
+    let schedule_id = proposal
+        .get("schedule_id")
+        .and_then(Value::as_str)
+        .and_then(|raw| Uuid::parse_str(raw).ok())?;
+    let row = load_schedule(pool, slug, schedule_id).await.ok().flatten();
+    let can_edit = row
+        .as_ref()
+        .is_some_and(|row| can_manage(row.created_by_id, user_id, role));
+    Some(json!({
+        "schedule_id": schedule_id,
+        "changes": proposal.get("changes").cloned().unwrap_or_else(|| json!({})),
+        "before": row.as_ref().map(schedule_json),
+        "can_edit": can_edit,
+    }))
 }
 
 /// Metadata entry for every generic mutation proposal in this turn: one
@@ -226,7 +253,9 @@ pub async fn workspace_ai_agent(
             .fetch_optional(&st.pool)
             .await?;
     let context = match current_user {
-        Some((display_name, email)) => current_user_context(context, display_name.as_deref(), email.as_deref()),
+        Some((display_name, email)) => {
+            current_user_context(context, display_name.as_deref(), email.as_deref())
+        }
         None => context.to_string(),
     };
     let history_rows =
@@ -287,9 +316,28 @@ pub async fn workspace_ai_agent(
             let proposals = proposal_metadata(&trace);
             let mut metadata = json!({ "is_error": false });
             if let Some(action) = action.as_ref() {
-                metadata["schedule_proposal"] = action["proposal"].clone();
-                metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
-                metadata["schedule_decision"] = json!("pending");
+                match action["kind"].as_str() {
+                    Some("create_schedule") => {
+                        metadata["schedule_proposal"] = action["proposal"].clone();
+                        metadata["schedule_proposal_key"] = json!(Uuid::new_v4());
+                        metadata["schedule_decision"] = json!("pending");
+                    }
+                    Some("update_schedule") => {
+                        if let Some(proposal) = schedule_update_metadata(
+                            &st.pool,
+                            &slug,
+                            auth.0,
+                            role,
+                            &action["proposal"],
+                        )
+                        .await
+                        {
+                            metadata["schedule_update_proposal"] = proposal;
+                            metadata["schedule_update_decision"] = json!("pending");
+                        }
+                    }
+                    _ => {}
+                }
             }
             if !work_items.is_empty() {
                 metadata["work_item_proposals"] = json!(work_items);

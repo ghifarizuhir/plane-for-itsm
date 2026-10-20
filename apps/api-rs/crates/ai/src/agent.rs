@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 
 use crate::flows::{self, ActiveFlow};
 use crate::llm::LlmError;
-use crate::tools::{CREATE_SCHEDULE_NAME, PROPOSAL_TOOL_NAMES};
+use crate::tools::{CREATE_SCHEDULE_NAME, PROPOSAL_TOOL_NAMES, UPDATE_SCHEDULE_NAME};
 
 /// One recorded tool invocation, surfaced in the 200 response as `tool_calls`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -46,8 +46,8 @@ pub fn record(trace: &ToolTrace, name: &str, arguments: &impl serde::Serialize) 
 pub const PREAMBLE: &str = "You are the workspace AI assistant for Plane. \
 Answer factual questions about projects, work items, services, the intake queue, sprints, tracks, knowledge base articles, people, and their metadata by calling the provided tools; never invent identifiers, names, \
 counts, or states. All tools are scoped to the user's current workspace and \
-read-only, except create_schedule and create_work_item, which only propose \
-something and never save anything. If a tool returns no results, say so. \
+read-only, except create_schedule, update_schedule, and create_work_item, \
+which only propose something and never save anything. If a tool returns no results, say so. \
 Answer concisely in the user's language. Use get_work_item for one work \
 item's details, list_work_item_comments for its discussion, and \
 list_work_item_relations for blockers. search_work_items and \
@@ -61,7 +61,14 @@ then call create_schedule once with a complete recipe — description, ordered \
 how_to steps, at least one read tool, expected_output, and how often. Tell \
 the user they can edit every field in the confirmation card. The schedule is \
 only created after the user confirms the proposal card, so never say it is \
-already created. When the user clearly asks to create a work item or task \
+already created. When the user asks to change an existing schedule, call \
+list_schedules first, then get_schedule for the chosen one. If more than one \
+schedule could match, ask which one. Then call update_schedule once with its \
+schedule_id and only the fields that change. It is a proposal: the user must \
+confirm the before/after card, so never say the schedule was updated before \
+that confirmation. Pause, resume, delete, and run-now are Scheduler page \
+actions, not tools; tell the user to use the Scheduler page for those. When \
+the user clearly asks to create a work item or task \
 (natural language or a message starting with /task), propose exactly one work \
 item per create_work_item call. The project must be named by the user: ask \
 when it is missing or ambiguous, and never guess. State names, assignee names \
@@ -137,7 +144,11 @@ pub struct HistoryMessage {
 /// Append the signed-in user's identity to the FE-supplied context block so the
 /// model can resolve first-person references ("me", "saya") to a person. Blank
 /// parts are ignored; with no usable identity the context is unchanged.
-pub fn current_user_context(context: &str, display_name: Option<&str>, email: Option<&str>) -> String {
+pub fn current_user_context(
+    context: &str,
+    display_name: Option<&str>,
+    email: Option<&str>,
+) -> String {
     let name = display_name.map(str::trim).filter(|part| !part.is_empty());
     let email = email.map(str::trim).filter(|part| !part.is_empty());
     let identity = match (name, email) {
@@ -244,25 +255,30 @@ pub async fn run_agent(
         .map_err(map_prompt_error)
 }
 
-/// The last `create_schedule` proposal recorded during an agent run, shaped
-/// for the FE confirmation card. `None` when the tool was never called.
+/// Schedule actions recorded during an agent run, newest first. Both
+/// `create_schedule` and `update_schedule` are schedule proposals; the last
+/// one wins because the FE renders a single schedule card per turn.
+const SCHEDULE_ACTION_NAMES: [&str; 2] = [CREATE_SCHEDULE_NAME, UPDATE_SCHEDULE_NAME];
+
+/// The last schedule proposal recorded during an agent run, shaped for the FE
+/// confirmation card. `None` when neither tool was called.
 pub fn pending_action(trace: &ToolTrace) -> Option<Value> {
     let recorded = trace.lock().ok()?;
     recorded
         .iter()
         .rev()
-        .find(|call| call.name == CREATE_SCHEDULE_NAME)
+        .find(|call| SCHEDULE_ACTION_NAMES.contains(&call.name.as_str()))
         .map(|call| {
             serde_json::json!({
-                "kind": "create_schedule",
+                "kind": call.name,
                 "proposal": call.arguments.clone(),
             })
         })
 }
 
 /// All proposal tool calls recorded during an agent run, in call order, shaped
-/// for the FE confirmation cards. Covers `create_schedule` and
-/// `create_work_item`; read-only calls are ignored.
+/// for the FE confirmation cards. Covers `create_schedule`,
+/// `update_schedule`, and `create_work_item`; read-only calls are ignored.
 pub fn pending_actions(trace: &ToolTrace) -> Vec<Value> {
     let Ok(recorded) = trace.lock() else {
         return Vec::new();

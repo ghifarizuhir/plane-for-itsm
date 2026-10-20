@@ -408,11 +408,22 @@ fn clean_metadata_patch(patch: &serde_json::Map<String, Value>) -> Result<Value,
                 }
                 _ => return Err("schedule_decision must be 'created' or 'cancelled'".to_string()),
             },
-            "created_schedule_id" => match value.as_str().and_then(|raw| Uuid::parse_str(raw).ok()) {
+            "created_schedule_id" => match value.as_str().and_then(|raw| Uuid::parse_str(raw).ok())
+            {
                 Some(id) => {
                     clean.insert(key.clone(), json!(id));
                 }
                 None => return Err("created_schedule_id must be a uuid".to_string()),
+            },
+            "schedule_update_decision" => match value.as_str() {
+                Some("applied") | Some("cancelled") => {
+                    clean.insert(key.clone(), value.clone());
+                }
+                _ => {
+                    return Err(
+                        "schedule_update_decision must be 'applied' or 'cancelled'".to_string(),
+                    )
+                }
             },
             "work_item_decisions" => {
                 clean.insert(key.clone(), clean_work_item_decisions(value)?);
@@ -506,10 +517,7 @@ fn clean_work_item_decisions(value: &Value) -> Result<Value, String> {
                             .to_string(),
                     );
                 }
-                clean.insert(
-                    decision_key.to_string(),
-                    json!({"decision": "cancelled"}),
-                );
+                clean.insert(decision_key.to_string(), json!({"decision": "cancelled"}));
             }
             _ => {
                 return Err(
@@ -529,7 +537,7 @@ fn allowed_result_keys(kind: &str) -> Option<&'static [&'static str]> {
         | "update_service"
         | "update_sprint"
         | "update_track"
-        |         "update_article"
+        | "update_article"
         | "manage_service_links"
         | "manage_service_dependencies"
         | "manage_sprint_items"
@@ -589,8 +597,9 @@ fn clean_proposal_decisions(value: &Value) -> Result<Value, String> {
                         if !result_keys.contains(&result_key.as_str()) {
                             return Err(format!("{kind} result key not allowed: {result_key}"));
                         }
-                        let Some(uuid) =
-                            result_value.as_str().and_then(|raw| Uuid::parse_str(raw).ok())
+                        let Some(uuid) = result_value
+                            .as_str()
+                            .and_then(|raw| Uuid::parse_str(raw).ok())
                         else {
                             return Err(format!("{kind} result values must be uuids"));
                         };
@@ -599,9 +608,7 @@ fn clean_proposal_decisions(value: &Value) -> Result<Value, String> {
                 }
                 if let Some(required) = required_result_key(kind) {
                     if !result.contains_key(required) {
-                        return Err(format!(
-                            "{kind} applied decisions need result.{required}"
-                        ));
+                        return Err(format!("{kind} applied decisions need result.{required}"));
                     }
                 }
                 let mut cleaned = serde_json::Map::new();
@@ -632,9 +639,9 @@ fn clean_proposal_decisions(value: &Value) -> Result<Value, String> {
 }
 
 /// `PATCH .../messages/:message_id/` — merge an allowlisted metadata patch
-/// (`schedule_decision`, `created_schedule_id`, `work_item_decisions`,
-/// `proposal_decisions`) written by the FE when the user resolves a proposal
-/// card.
+/// (`schedule_decision`, `created_schedule_id`, `schedule_update_decision`,
+/// `work_item_decisions`, `proposal_decisions`) written by the FE when the user
+/// resolves a proposal card.
 pub async fn patch_message(
     State(st): State<AppState>,
     auth: AuthUser,
@@ -714,6 +721,23 @@ mod tests {
     }
 
     #[test]
+    fn metadata_patch_accepts_schedule_update_decision() {
+        let clean = clean_metadata_patch(&patch_map(vec![(
+            "schedule_update_decision",
+            json!("applied"),
+        )]))
+        .expect("valid patch");
+        assert_eq!(clean["schedule_update_decision"], json!("applied"));
+
+        let pending = clean_metadata_patch(&patch_map(vec![(
+            "schedule_update_decision",
+            json!("pending"),
+        )]))
+        .unwrap_err();
+        assert!(pending.contains("applied"));
+    }
+
+    #[test]
     fn metadata_patch_accepts_work_item_decisions() {
         let key = Uuid::new_v4().to_string();
         let issue = Uuid::new_v4();
@@ -727,7 +751,10 @@ mod tests {
             }}),
         )]))
         .expect("valid patch");
-        assert_eq!(clean["work_item_decisions"][&key]["decision"], json!("created"));
+        assert_eq!(
+            clean["work_item_decisions"][&key]["decision"],
+            json!("created")
+        );
         assert_eq!(
             clean["work_item_decisions"][&key]["created_work_item_id"],
             json!(issue)
@@ -746,7 +773,10 @@ mod tests {
             json!({ (key.clone()): {"decision": "cancelled"} }),
         )]))
         .expect("valid patch");
-        assert_eq!(clean["work_item_decisions"][&key]["decision"], json!("cancelled"));
+        assert_eq!(
+            clean["work_item_decisions"][&key]["decision"],
+            json!("cancelled")
+        );
     }
 
     #[test]
@@ -826,11 +856,9 @@ mod tests {
         .unwrap_err();
         assert!(bad_key.contains("uuid"));
 
-        let not_an_object = clean_metadata_patch(&patch_map(vec![(
-            "work_item_decisions",
-            json!("nope"),
-        )]))
-        .unwrap_err();
+        let not_an_object =
+            clean_metadata_patch(&patch_map(vec![("work_item_decisions", json!("nope"))]))
+                .unwrap_err();
         assert!(not_an_object.contains("object"));
     }
 
@@ -922,11 +950,9 @@ mod tests {
         .unwrap_err();
         assert!(bad_key.contains("uuid"));
 
-        let not_an_object = clean_metadata_patch(&patch_map(vec![(
-            "proposal_decisions",
-            json!("nope"),
-        )]))
-        .unwrap_err();
+        let not_an_object =
+            clean_metadata_patch(&patch_map(vec![("proposal_decisions", json!("nope"))]))
+                .unwrap_err();
         assert!(not_an_object.contains("object"));
     }
 

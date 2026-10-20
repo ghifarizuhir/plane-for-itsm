@@ -1092,6 +1092,73 @@ async fn agent_proposal_metadata_is_persisted_and_returned() {
 }
 
 #[tokio::test]
+async fn schedule_update_metadata_carries_before_and_permission() {
+    let pool = pool().await;
+    let scratch = Scratch::new(&pool).await;
+    let state = state(&pool).await;
+    let member = scratch.add_actor(&pool, 15).await;
+
+    let (_, Json(created)) = api::routes::ai_schedule::create(
+        State(state.clone()),
+        AuthUser(scratch.user_id),
+        Path(scratch.slug.clone()),
+        Json(json!({
+            "name": "Daily report",
+            "prompt": "Summarize overdue work items",
+            "frequency": "daily",
+            "time": "09:00",
+            "timezone": "UTC",
+            "proposal_key": Uuid::new_v4(),
+        })),
+    )
+    .await
+    .unwrap();
+    let schedule_id = created["id"].as_str().unwrap().to_string();
+    let proposal = json!({
+        "schedule_id": schedule_id,
+        "changes": {"frequency": "weekly", "day_of_week": 2}
+    });
+
+    let creator_meta = api::routes::ai_agent::schedule_update_metadata(
+        &pool,
+        &scratch.slug,
+        scratch.user_id,
+        Some(20),
+        &proposal,
+    )
+    .await
+    .expect("creator metadata");
+    assert_eq!(creator_meta["can_edit"], json!(true));
+    assert_eq!(creator_meta["before"]["name"], json!("Daily report"));
+    assert_eq!(creator_meta["changes"]["frequency"], json!("weekly"));
+
+    let member_meta = api::routes::ai_agent::schedule_update_metadata(
+        &pool,
+        &scratch.slug,
+        member,
+        Some(15),
+        &proposal,
+    )
+    .await
+    .expect("member metadata");
+    assert_eq!(member_meta["can_edit"], json!(false));
+
+    let missing = api::routes::ai_agent::schedule_update_metadata(
+        &pool,
+        &scratch.slug,
+        scratch.user_id,
+        Some(20),
+        &json!({"schedule_id": Uuid::new_v4().to_string(), "changes": {}}),
+    )
+    .await
+    .expect("missing metadata");
+    assert_eq!(missing["before"], json!(null));
+    assert_eq!(missing["can_edit"], json!(false));
+
+    scratch.purge(&pool).await;
+}
+
+#[tokio::test]
 async fn work_item_proposal_metadata_and_decisions_roundtrip() {
     let pool = pool().await;
     let scratch = Scratch::new(&pool).await;
@@ -1135,8 +1202,7 @@ async fn work_item_proposal_metadata_and_decisions_roundtrip() {
     assert_eq!(proposals.len(), 1);
     let key = proposals[0]["key"].as_str().expect("proposal key");
     assert_eq!(proposals[0]["proposal"]["name"], json!("Fix pump"));
-    let message_id =
-        Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
+    let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
 
     // A created decision roundtrips through the real PATCH endpoint.
     let issue_id = Uuid::new_v4();
@@ -1199,15 +1265,19 @@ async fn work_item_proposal_metadata_and_decisions_roundtrip() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     // The stored row kept the proposals and the last decision.
-    let stored: Value = sqlx::query_scalar(
-        "SELECT metadata FROM ai_messages WHERE id = $1",
-    )
-    .bind(message_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(stored["work_item_proposals"][0]["proposal"]["name"], json!("Fix pump"));
-    assert_eq!(stored["work_item_decisions"][key]["decision"], json!("cancelled"));
+    let stored: Value = sqlx::query_scalar("SELECT metadata FROM ai_messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        stored["work_item_proposals"][0]["proposal"]["name"],
+        json!("Fix pump")
+    );
+    assert_eq!(
+        stored["work_item_decisions"][key]["decision"],
+        json!("cancelled")
+    );
 
     scratch.purge(&pool).await;
 }
@@ -1463,7 +1533,10 @@ async fn manage_service_dependencies_proposal_roundtrip() {
         .expect("proposals array");
     assert_eq!(proposals[0]["kind"], json!("manage_service_dependencies"));
     assert_eq!(proposals[0]["proposal"]["service"], json!("prepaid-iso"));
-    assert_eq!(proposals[0]["proposal"]["depends_on"], json!("core-banking"));
+    assert_eq!(
+        proposals[0]["proposal"]["depends_on"],
+        json!("core-banking")
+    );
     let key = proposals[0]["key"].as_str().unwrap().to_string();
     let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
 
@@ -1653,7 +1726,10 @@ async fn update_service_proposal_roundtrip() {
         .as_array()
         .expect("proposals array");
     assert_eq!(proposals[0]["kind"], json!("update_service"));
-    assert_eq!(proposals[0]["proposal"]["changes"]["status"], json!("deprecated"));
+    assert_eq!(
+        proposals[0]["proposal"]["changes"]["status"],
+        json!("deprecated")
+    );
     let key = proposals[0]["key"].as_str().unwrap().to_string();
     let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
 
@@ -1766,7 +1842,10 @@ async fn update_sprint_proposal_roundtrip() {
         .as_array()
         .expect("proposals array");
     assert_eq!(proposals[0]["kind"], json!("update_sprint"));
-    assert_eq!(proposals[0]["proposal"]["changes"]["end_date"], json!("2026-11-21"));
+    assert_eq!(
+        proposals[0]["proposal"]["changes"]["end_date"],
+        json!("2026-11-21")
+    );
 
     scratch.purge(&pool).await;
 }
@@ -1861,7 +1940,10 @@ async fn update_track_proposal_roundtrip() {
         .as_array()
         .expect("proposals array");
     assert_eq!(proposals[0]["kind"], json!("update_track"));
-    assert_eq!(proposals[0]["proposal"]["changes"]["status"], json!("in-progress"));
+    assert_eq!(
+        proposals[0]["proposal"]["changes"]["status"],
+        json!("in-progress")
+    );
 
     scratch.purge(&pool).await;
 }
@@ -1899,7 +1981,10 @@ async fn create_article_proposal_roundtrip() {
         .as_array()
         .expect("proposals array");
     assert_eq!(proposals[0]["kind"], json!("create_article"));
-    assert_eq!(proposals[0]["proposal"]["name"], json!("Runbook: restart API"));
+    assert_eq!(
+        proposals[0]["proposal"]["name"],
+        json!("Runbook: restart API")
+    );
     assert_eq!(proposals[0]["proposal"]["access"], json!("private"));
     let key = proposals[0]["key"].as_str().unwrap().to_string();
     let message_id = Uuid::parse_str(body["assistant_message"]["id"].as_str().unwrap()).unwrap();
@@ -1932,9 +2017,7 @@ async fn update_article_proposal_roundtrip() {
     let conversation_id = create_conversation(&st, &scratch.slug, scratch.user_id, "agent").await;
 
     let article = Uuid::new_v4();
-    let arguments = format!(
-        r#"{{"article":"{article}","action":"append","content":"Step 3"}}"#
-    );
+    let arguments = format!(r#"{{"article":"{article}","action":"append","content":"Step 3"}}"#);
     let leaked: &'static str = Box::leak(arguments.into_boxed_str());
     let base_url = tool_roundtrip::tool_roundtrip_url("update_article", leaked).await;
     set_llm_env(&base_url);

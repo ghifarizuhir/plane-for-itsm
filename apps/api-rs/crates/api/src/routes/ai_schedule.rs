@@ -197,10 +197,10 @@ impl UpdateScheduleBody {
 }
 
 #[derive(sqlx::FromRow)]
-struct ScheduleRow {
+pub(crate) struct ScheduleRow {
     id: Uuid,
     workspace_id: Uuid,
-    created_by_id: Uuid,
+    pub(crate) created_by_id: Uuid,
     name: String,
     prompt: String,
     spec: Option<Value>,
