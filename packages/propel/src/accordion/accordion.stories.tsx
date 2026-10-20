@@ -33,9 +33,9 @@ export const Default: Story = {
     return (
       <Accordion.Root className="w-96">
         <Accordion.Item value="item-1">
-          <Accordion.Trigger>What is Terraline?</Accordion.Trigger>
+          <Accordion.Trigger>What is Plane?</Accordion.Trigger>
           <Accordion.Content>
-            Terraline is an open-source project management tool designed for developers and teams to plan, track, and
+            Plane is an open-source project management tool designed for developers and teams to plan, track, and
             manage their work efficiently.
           </Accordion.Content>
         </Accordion.Item>
@@ -49,7 +49,7 @@ export const Default: Story = {
         <Accordion.Item value="item-3">
           <Accordion.Trigger>Is it free to use?</Accordion.Trigger>
           <Accordion.Content>
-            Terraline offers both free and paid plans. The free plan includes essential features for small teams, while
+            Plane offers both free and paid plans. The free plan includes essential features for small teams, while
             paid plans unlock advanced functionality.
           </Accordion.Content>
         </Accordion.Item>
