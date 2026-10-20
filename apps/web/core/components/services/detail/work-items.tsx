@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ISearchIssueResponse } from "@plane/types";
+import { cn } from "@plane/utils";
 // components
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 // hooks
@@ -20,10 +21,13 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 
 type Props = {
   serviceId: string;
+  layout?: "page" | "pane";
 };
 
 export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props) {
-  const { serviceId } = props;
+  const { serviceId, layout = "page" } = props;
+  // derived values
+  const isPane = layout === "pane";
   // states
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   // router
@@ -80,13 +84,14 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <h4 className="text-13 font-medium text-secondary">{t("service.tabs.work_items")}</h4>
+      <div className={cn("flex items-center gap-2", isPane ? "justify-end" : "justify-between")}>
+        {!isPane && <h4 className="text-13 font-medium text-secondary">{t("service.tabs.work_items")}</h4>}
         <Button
           variant="secondary"
           size="sm"
           onClick={() => setIsPickerOpen(true)}
           disabled={!slug || !pid || !workspaceId}
+          className={cn(isPane && "w-full")}
         >
           {t("service.detail.add_work_items")}
         </Button>
@@ -98,7 +103,10 @@ export const ServiceWorkItems = observer(function ServiceWorkItems(props: Props)
           {links.map((link) => (
             <div
               key={link.id}
-              className="flex items-center justify-between gap-2 rounded-md border border-subtle px-3 py-2"
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-md border border-subtle",
+                isPane ? "px-2 py-1.5" : "px-3 py-2"
+              )}
             >
               <div className="flex min-w-0 flex-col">
                 <span className="text-13 font-medium text-primary">{link.issue_identifier ?? link.issue_id}</span>
