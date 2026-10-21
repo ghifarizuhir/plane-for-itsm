@@ -15,7 +15,6 @@ export const buildApplicationScopeUrl = (pathname: string, queryString: string, 
 export type TWorkspaceApplicationScopeResolution = {
   projectId: string | null;
   seedProjectId: string | null;
-  shouldClearParam: boolean;
 };
 
 export const resolveWorkspaceApplicationScope = ({
@@ -32,14 +31,13 @@ export const resolveWorkspaceApplicationScope = ({
   const stored = storedProjectId || null;
   const param = paramProjectId || null;
   if (!projectsReady || workspaceProjectIds === undefined) {
-    return { projectId: stored, seedProjectId: null, shouldClearParam: false };
+    return { projectId: stored, seedProjectId: null };
   }
   const validStored = stored && workspaceProjectIds.includes(stored) ? stored : null;
   const validParam = param && workspaceProjectIds.includes(param) ? param : null;
   return {
     projectId: validStored,
     seedProjectId: validParam && validParam !== stored ? validParam : null,
-    shouldClearParam: Boolean(param && !validParam && workspaceProjectIds.length > 0),
   };
 };
 

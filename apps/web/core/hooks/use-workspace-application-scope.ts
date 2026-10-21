@@ -56,22 +56,10 @@ export const useWorkspaceApplicationScope = () => {
       projectsReady,
     });
     if (!shouldHandle) return;
+    if (!resolution.seedProjectId) return;
     lastHandledRef.current = { workspaceSlug, projectParam };
-    if (resolution.seedProjectId) setProjectId(workspaceSlug, resolution.seedProjectId);
-    else if (resolution.shouldClearParam) {
-      router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), null));
-    }
-  }, [
-    workspaceSlug,
-    projectsReady,
-    projectParam,
-    resolution.seedProjectId,
-    resolution.shouldClearParam,
-    setProjectId,
-    router,
-    pathname,
-    searchParams,
-  ]);
+    setProjectId(workspaceSlug, resolution.seedProjectId);
+  }, [workspaceSlug, projectsReady, projectParam, resolution.seedProjectId, setProjectId]);
 
   const setApplication = useCallback(
     (nextProjectId: string | null) => {
