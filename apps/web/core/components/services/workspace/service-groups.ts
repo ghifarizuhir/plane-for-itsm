@@ -28,8 +28,8 @@ const compareNames = (a: string, b: string) => a.localeCompare(b, undefined, { s
 
 export function buildWorkspaceServiceGroups(
   serviceIds: string[],
-  getServiceById: (id: string) => TServiceLike | undefined,
-  getProjectById: (id: string) => TProjectLike | undefined
+  getServiceById: (id: string) => TServiceLike | null | undefined,
+  getProjectById: (id: string) => TProjectLike | null | undefined
 ): TServiceGroup[] {
   const groups = new Map<string, TServiceGroup>();
   const seenServiceIds = new Set<string>();
@@ -64,11 +64,13 @@ export function buildWorkspaceServiceGroups(
   const allGroups = [...groups.values()];
 
   for (const group of allGroups) {
-    group.serviceIds = [...group.serviceIds].toSorted((a, b) => {
+    const sortedServiceIds = group.serviceIds.slice();
+    sortedServiceIds.sort((a, b) => {
       const nameA = getServiceById(a)?.name ?? "";
       const nameB = getServiceById(b)?.name ?? "";
       return compareNames(nameA, nameB) || a.localeCompare(b);
     });
+    group.serviceIds = sortedServiceIds;
   }
 
   allGroups.sort((a, b) => {

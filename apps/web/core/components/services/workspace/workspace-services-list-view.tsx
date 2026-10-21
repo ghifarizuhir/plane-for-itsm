@@ -14,6 +14,7 @@ import { Button } from "@plane/propel/button";
 import { CustomSelect } from "@plane/ui";
 // components
 import { ServicesBoardRow } from "@/components/services/board/services-board-row";
+import { buildWorkspaceServiceGroups } from "@/components/services/workspace/service-groups";
 import { ServiceGraph } from "@/components/services/graph/service-graph";
 import { ServiceLayoutIcon, SERVICE_VIEW_LAYOUTS } from "@/components/services/service-layout-icon";
 import { WorkspaceCreateServiceModal } from "@/components/services/workspace/create-service-modal";
@@ -49,6 +50,7 @@ export const WorkspaceServicesListView = observer(function WorkspaceServicesList
       }),
     [serviceIds, search, getServiceById]
   );
+  const groups = buildWorkspaceServiceGroups(filteredIds, getServiceById, getProjectById);
 
   const handleProjectFilter = (projectId: string) => {
     if (!workspaceSlug) return;
@@ -119,8 +121,27 @@ export const WorkspaceServicesListView = observer(function WorkspaceServicesList
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {filteredIds.map((id) => (
-            <ServicesBoardRow key={id} serviceId={id} />
+          {groups.map((group) => (
+            <section key={group.key}>
+              <div className="sticky top-0 z-[5] flex items-center justify-between gap-2 border-b border-subtle bg-layer-2 px-3 py-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {group.identifier && (
+                    <span className="shrink-0 rounded-xs border border-subtle px-1 text-9 font-medium tracking-wide text-tertiary">
+                      {group.identifier}
+                    </span>
+                  )}
+                  <span className="truncate text-11 font-medium text-secondary">
+                    {group.projectId ? group.name : t("common.unassigned")}
+                  </span>
+                </div>
+                <span className="shrink-0 rounded-xs bg-layer-3 px-1.5 text-9 text-tertiary tabular-nums">
+                  {group.serviceIds.length}
+                </span>
+              </div>
+              {group.serviceIds.map((id) => (
+                <ServicesBoardRow key={id} serviceId={id} showProject={false} showOwner={false} />
+              ))}
+            </section>
           ))}
         </div>
       )}
