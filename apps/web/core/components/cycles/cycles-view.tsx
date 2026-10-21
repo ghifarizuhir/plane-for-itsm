@@ -58,6 +58,18 @@ export const CyclesView = observer(function CyclesView(props: ICyclesView) {
     });
   }, [cycleMap, start_date, status, end_date, projectAllowed, projectIds, searchQuery]);
 
+  const scopedActiveCycleId = useMemo(() => {
+    if (!projectId) return null;
+    const selection = selectWorkspaceCycles({
+      cycles: Object.values(cycleMap ?? {}),
+      projectIds: [projectId],
+      filters: {},
+      searchQuery: "",
+      projectAllowed,
+    });
+    return selection.currentCycleIds[0] ?? null;
+  }, [cycleMap, projectAllowed, projectId]);
+
   const filteredCycleIds = projectId ? getFilteredCycleIds(projectId, false) : null;
   const filteredCompletedCycleIds = projectId ? getFilteredCompletedCycleIds(projectId) : null;
   const filteredUpcomingCycleIds = (filteredCycleIds ?? []).filter(
@@ -77,7 +89,7 @@ export const CyclesView = observer(function CyclesView(props: ICyclesView) {
     : filteredUpcomingCycleIds;
   const completedCycleIds = workspaceSelection?.completedCycleIds ?? filteredCompletedCycleIds ?? [];
   const currentCycleIds = workspaceSelection?.currentCycleIds;
-  const activeCycleId = workspaceSelection && projectId ? (currentCycleIds?.[0] ?? null) : undefined;
+  const activeCycleId = workspaceSelection && projectId ? scopedActiveCycleId : undefined;
 
   if (loader || (!workspaceSelection && !filteredCycleIds)) return <CycleModuleListLayoutLoader />;
 
