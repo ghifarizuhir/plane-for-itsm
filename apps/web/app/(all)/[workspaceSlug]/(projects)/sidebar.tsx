@@ -11,6 +11,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 // components
 import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
+import { WorkspaceApplicationScopeSelect } from "@/components/workspace/application-scope";
 import { SidebarFavoritesMenu } from "@/components/workspace/sidebar/favorites/favorites-menu";
 import { SidebarProjectsList } from "@/components/workspace/sidebar/projects-list";
 import { SidebarQuickActions } from "@/components/workspace/sidebar/quick-actions";
@@ -35,7 +36,12 @@ export const AppSidebar = observer(function AppSidebar() {
   const isFavoriteEmpty = isEmpty(groupedFavorites);
 
   return (
-    <SidebarWrapper title={t("sidebar.projects")} quickActions={<SidebarQuickActions />} showCustomizeGear>
+    <SidebarWrapper
+      title={t("sidebar.projects")}
+      headerContent={<WorkspaceApplicationScopeSelect />}
+      quickActions={<SidebarQuickActions />}
+      showCustomizeGear
+    >
       <SidebarMenuItems />
       {/* Favorites Menu */}
       {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}

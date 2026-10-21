@@ -22,11 +22,12 @@ type TSidebarWrapperProps = {
   title: string;
   children: React.ReactNode;
   quickActions?: React.ReactNode;
+  headerContent?: React.ReactNode;
   showCustomizeGear?: boolean;
 };
 
 export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWrapperProps) {
-  const { title, children, quickActions, showCustomizeGear = false } = props;
+  const { title, children, quickActions, headerContent, showCustomizeGear = false } = props;
   // state
   const [isCustomizeNavDialogOpen, setIsCustomizeNavDialogOpen] = useState(false);
   // store hooks
@@ -67,6 +68,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
               <AppSidebarToggleButton />
             </div>
           </div>
+          {headerContent}
           {/* Quick actions */}
           {quickActions}
         </div>
