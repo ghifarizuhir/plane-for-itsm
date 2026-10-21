@@ -39,6 +39,23 @@ export const resolveWorkspaceApplicationScope = ({
   return {
     projectId: validStored,
     seedProjectId: validParam && validParam !== stored ? validParam : null,
-    shouldClearParam: Boolean(param && !validParam),
+    shouldClearParam: Boolean(param && !validParam && workspaceProjectIds.length > 0),
   };
+};
+
+export const shouldHandleApplicationScopeParam = ({
+  lastHandledWorkspaceSlug,
+  lastHandledProjectParam,
+  workspaceSlug,
+  projectParam,
+  projectsReady,
+}: {
+  lastHandledWorkspaceSlug?: string;
+  lastHandledProjectParam?: string | null;
+  workspaceSlug: string | undefined;
+  projectParam: string | null;
+  projectsReady: boolean;
+}): boolean => {
+  if (!workspaceSlug || !projectsReady) return false;
+  return !(lastHandledWorkspaceSlug === workspaceSlug && lastHandledProjectParam === projectParam);
 };

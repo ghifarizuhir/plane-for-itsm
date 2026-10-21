@@ -5,7 +5,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { buildApplicationScopeUrl, resolveWorkspaceApplicationScope } from "./workspace-application-scope";
+import {
+  buildApplicationScopeUrl,
+  resolveWorkspaceApplicationScope,
+  shouldHandleApplicationScopeParam,
+} from "./workspace-application-scope";
 
 describe("buildApplicationScopeUrl", () => {
   it("adds the project param and preserves existing params", () => {
@@ -82,6 +86,28 @@ describe("resolveWorkspaceApplicationScope", () => {
     ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: true });
   });
 
+  it("does not clear an invalid param while the project list is empty", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: null,
+        paramProjectId: "project-1",
+        workspaceProjectIds: [],
+        projectsReady: true,
+      })
+    ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: false });
+  });
+
+  it("clears an invalid param once the project list is loaded", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: null,
+        paramProjectId: "missing",
+        workspaceProjectIds: ["project-1"],
+        projectsReady: true,
+      })
+    ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: true });
+  });
+
   it("seeds a valid param while ignoring an invalid stored scope", () => {
     expect(
       resolveWorkspaceApplicationScope({
@@ -124,5 +150,67 @@ describe("resolveWorkspaceApplicationScope", () => {
         projectsReady: true,
       })
     ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: false });
+  });
+});
+
+describe("shouldHandleApplicationScopeParam", () => {
+  it("does not handle while projects are not ready", () => {
+    expect(
+      shouldHandleApplicationScopeParam({
+        lastHandledWorkspaceSlug: undefined,
+        lastHandledProjectParam: undefined,
+        workspaceSlug: "workspace-1",
+        projectParam: "project-1",
+        projectsReady: false,
+      })
+    ).toBe(false);
+  });
+
+  it("does not handle without a workspace slug", () => {
+    expect(
+      shouldHandleApplicationScopeParam({
+        lastHandledWorkspaceSlug: undefined,
+        lastHandledProjectParam: undefined,
+        workspaceSlug: undefined,
+        projectParam: "project-1",
+        projectsReady: true,
+      })
+    ).toBe(false);
+  });
+
+  it("does not handle the same workspace and param twice", () => {
+    expect(
+      shouldHandleApplicationScopeParam({
+        lastHandledWorkspaceSlug: "workspace-1",
+        lastHandledProjectParam: "project-1",
+        workspaceSlug: "workspace-1",
+        projectParam: "project-1",
+        projectsReady: true,
+      })
+    ).toBe(false);
+  });
+
+  it("handles a changed param in the same workspace", () => {
+    expect(
+      shouldHandleApplicationScopeParam({
+        lastHandledWorkspaceSlug: "workspace-1",
+        lastHandledProjectParam: "project-1",
+        workspaceSlug: "workspace-1",
+        projectParam: "project-2",
+        projectsReady: true,
+      })
+    ).toBe(true);
+  });
+
+  it("handles the same param after switching workspaces", () => {
+    expect(
+      shouldHandleApplicationScopeParam({
+        lastHandledWorkspaceSlug: "workspace-1",
+        lastHandledProjectParam: "project-1",
+        workspaceSlug: "workspace-2",
+        projectParam: "project-1",
+        projectsReady: true,
+      })
+    ).toBe(true);
   });
 });
