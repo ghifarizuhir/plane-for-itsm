@@ -25,12 +25,12 @@ export const ServicesBoard = observer(function ServicesBoard() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center gap-3 border-b border-subtle px-3 py-1.5 text-10 font-medium tracking-wide text-tertiary uppercase">
+      <div className="flex items-center gap-3 border-b border-subtle px-3 py-1 text-9 font-medium tracking-wide text-tertiary uppercase">
         <span className="flex-1">{t("service.board.service")}</span>
-        <span className="hidden w-[120px] shrink-0 sm:block">{t("service.board.health")}</span>
-        <span className="hidden w-[120px] shrink-0 md:block">{t("service.board.incidents")}</span>
-        <span className="hidden w-[110px] shrink-0 lg:block">{t("service.board.deploy")}</span>
-        <span className="hidden w-[56px] shrink-0 text-right xl:block">{t("service.board.owner")}</span>
+        <span className="hidden w-[90px] shrink-0 sm:block">{t("service.board.health")}</span>
+        <span className="hidden w-[100px] shrink-0 md:block">{t("service.board.incidents")}</span>
+        <span className="hidden w-[90px] shrink-0 lg:block">{t("service.board.deploy")}</span>
+        <span className="hidden w-[40px] shrink-0 text-right xl:block">{t("service.board.owner")}</span>
       </div>
       <div className="vertical-scrollbar min-h-0 flex-1">
         {serviceIds.map((id) => (
