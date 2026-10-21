@@ -171,19 +171,49 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
     filters: [
       "priority",
       "state_group",
-      "label_id",
+      "state_id",
+      "type_id",
+      "cycle_id",
+      "module_id",
       "assignee_id",
+      "mention_id",
       "created_by_id",
       "subscriber_id",
-      "project_id",
+      "label_id",
       "start_date",
       "target_date",
+      "war_room",
     ],
     layoutOptions: {
-      spreadsheet: {
+      list: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
-          order_by: [],
+          // workspace-level grouping: only options that resolve without a single project context
+          group_by: ["state_detail.group", "priority", "project", "labels", "assignees", "created_by", null],
+          order_by: ["-created_at", "-updated_at", "start_date", "-priority", "target_date"],
+          type: ["active", "backlog"],
+        },
+        extra_options: {
+          access: true,
+          values: ["show_empty_groups", "sub_issue"],
+        },
+      },
+      kanban: {
+        display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
+        display_filters: {
+          group_by: ["state_detail.group", "priority", "project", "labels", "assignees", "created_by"],
+          sub_group_by: ["state_detail.group", "priority", "project", "labels", "assignees", "created_by", null],
+          order_by: ["-created_at", "-updated_at", "start_date", "-priority", "target_date"],
+          type: ["active", "backlog"],
+        },
+        extra_options: {
+          access: true,
+          values: ["show_empty_groups", "sub_issue"],
+        },
+      },
+      calendar: {
+        display_properties: ["key", "issue_type"],
+        display_filters: {
           type: ["active", "backlog"],
         },
         extra_options: {
@@ -191,14 +221,26 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
           values: ["sub_issue"],
         },
       },
-      list: {
+      spreadsheet: {
         display_properties: ISSUE_DISPLAY_PROPERTIES_KEYS,
         display_filters: {
+          order_by: ["-created_at", "-updated_at", "start_date", "-priority"],
           type: ["active", "backlog"],
         },
         extra_options: {
-          access: false,
-          values: [],
+          access: true,
+          values: ["sub_issue"],
+        },
+      },
+      gantt_chart: {
+        display_properties: ["key", "issue_type"],
+        display_filters: {
+          order_by: ["-created_at", "-updated_at", "start_date", "-priority"],
+          type: ["active", "backlog"],
+        },
+        extra_options: {
+          access: true,
+          values: ["sub_issue"],
         },
       },
     },
