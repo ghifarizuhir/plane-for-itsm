@@ -11,7 +11,7 @@ import { useParams } from "next/navigation";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { AddWorkItemOutline } from "@makeplane/propel/icons";
-import type { TIssue } from "@plane/types";
+import { EIssuesStoreType, type TIssue } from "@plane/types";
 // components
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 import { SidebarAddButton } from "@/components/sidebar/add-button";
@@ -20,6 +20,7 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
 
 export const SidebarQuickActions = observer(function SidebarQuickActions() {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export const SidebarQuickActions = observer(function SidebarQuickActions() {
   const { toggleCreateIssueModal } = useCommandPalette();
   const { joinedProjectIds } = useProject();
   const { allowPermissions } = useUserPermissions();
+  const { projectId: scopedProjectId } = useWorkspaceApplicationScope();
   // local storage
   const { storedValue, setValue } = useLocalStorage<Record<string, Partial<TIssue>>>("draftedIssue", {});
   // derived values
@@ -85,7 +87,9 @@ export const SidebarQuickActions = observer(function SidebarQuickActions() {
               <span className="max-w-[145px] truncate text-13 font-medium">{t("sidebar.new_work_item")}</span>
             </>
           }
-          onClick={() => toggleCreateIssueModal(true)}
+          onClick={() =>
+            toggleCreateIssueModal(true, EIssuesStoreType.PROJECT, scopedProjectId ? [scopedProjectId] : undefined)
+          }
           disabled={disabled}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
