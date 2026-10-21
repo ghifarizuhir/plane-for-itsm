@@ -75,6 +75,7 @@ describe("selectWorkspaceCycles", () => {
         makeCycle({ id: "p1", project_id: "p1", status: "current" }),
         makeCycle({ id: "p2", project_id: "p2", status: "current" }),
         makeCycle({ id: "p3", project_id: "p3", status: "current" }),
+        makeCycle({ id: "p4", project_id: "p4", status: "current" }),
         makeCycle({ id: "archived", project_id: "p1", status: "current", archived_at: "2026-10-01" }),
       ],
       projectIds: ["p1", "p2", "p3"],
