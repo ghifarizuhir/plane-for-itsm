@@ -18,7 +18,7 @@ import { SidebarAddButton } from "@/components/sidebar/add-button";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
 
@@ -37,14 +37,20 @@ export const SidebarQuickActions = observer(function SidebarQuickActions() {
   const { toggleCreateIssueModal } = useCommandPalette();
   const { joinedProjectIds } = useProject();
   const { allowPermissions } = useUserPermissions();
+  const { projectsWithCreatePermissions } = useUser();
   const { projectId: scopedProjectId } = useWorkspaceApplicationScope();
   // local storage
   const { storedValue, setValue } = useLocalStorage<Record<string, Partial<TIssue>>>("draftedIssue", {});
   // derived values
-  const canCreateIssue = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
+  const canCreateInScope = !scopedProjectId || Boolean(projectsWithCreatePermissions?.[scopedProjectId]);
+  const canCreateIssue =
+    canCreateInScope &&
+    allowPermissions(
+      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      scopedProjectId ? EUserPermissionsLevel.PROJECT : EUserPermissionsLevel.WORKSPACE,
+      workspaceSlug,
+      scopedProjectId ?? undefined
+    );
   const disabled = joinedProjectIds.length === 0 || !canCreateIssue;
   const workspaceDraftIssue = workspaceSlug ? (storedValue?.[workspaceSlug] ?? undefined) : undefined;
 

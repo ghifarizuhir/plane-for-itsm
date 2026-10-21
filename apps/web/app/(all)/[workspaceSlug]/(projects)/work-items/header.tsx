@@ -10,11 +10,16 @@ import { useParams } from "next/navigation";
 // icons
 import { ChevronDownOutline, PreferencesOutline, WorkItemsOutline } from "@makeplane/propel/icons";
 // plane imports
-import { EIssueFilterType, EUserPermissionsLevel, ISSUE_DISPLAY_FILTERS_BY_PAGE } from "@plane/constants";
+import {
+  EIssueFilterType,
+  EUserPermissions,
+  EUserPermissionsLevel,
+  ISSUE_DISPLAY_FILTERS_BY_PAGE,
+} from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties, TIssueGroupByOptions } from "@plane/types";
-import { EIssuesStoreType, EIssueLayoutTypes, EUserWorkspaceRoles } from "@plane/types";
+import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -29,7 +34,7 @@ import { WorkspaceApplicationScopeChip } from "@/components/workspace/applicatio
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
 // helpers
@@ -54,6 +59,7 @@ export const WorkspaceWorkItemsHeader = observer(function WorkspaceWorkItemsHead
   // store hooks
   const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
+  const { projectsWithCreatePermissions } = useUser();
   const {
     issuesFilter: { filters, updateFilters },
   } = useIssues(EIssuesStoreType.GLOBAL);
@@ -71,11 +77,21 @@ export const WorkspaceWorkItemsHeader = observer(function WorkspaceWorkItemsHead
     () => layoutDisplayFiltersOptions?.display_filters.sub_group_by ?? [],
     [layoutDisplayFiltersOptions]
   );
-  const canUserCreateIssue = allowPermissions(
-    [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
-    EUserPermissionsLevel.WORKSPACE,
-    workspaceSlug
-  );
+  const canCreateInScope = !scopedProjectId || Boolean(projectsWithCreatePermissions?.[scopedProjectId]);
+  const canUserCreateIssue =
+    canCreateInScope &&
+    (scopedProjectId
+      ? allowPermissions(
+          [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+          EUserPermissionsLevel.PROJECT,
+          workspaceSlug,
+          scopedProjectId
+        )
+      : allowPermissions(
+          [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+          EUserPermissionsLevel.WORKSPACE,
+          workspaceSlug
+        ));
 
   // handlers
   const handleLayoutChange = useCallback(
@@ -174,7 +190,6 @@ export const WorkspaceWorkItemsMobileHeader = observer(function WorkspaceWorkIte
   const {
     issuesFilter: { filters, updateFilters },
   } = useIssues(EIssuesStoreType.GLOBAL);
-  const { project: scopedProject } = useWorkspaceApplicationScope();
 
   const issueFilters = filters?.[viewId];
   const activeLayout = issueFilters?.displayFilters?.layout ?? EIssueLayoutTypes.SPREADSHEET;
@@ -205,37 +220,30 @@ export const WorkspaceWorkItemsMobileHeader = observer(function WorkspaceWorkIte
   );
 
   return (
-    <div className="md:hidden">
-      {scopedProject && (
-        <div className="flex justify-center border-b border-subtle bg-surface-1 py-1">
-          <WorkspaceApplicationScopeChip />
-        </div>
-      )}
-      <div className="z-[13] flex justify-evenly border-b border-subtle bg-surface-1 py-2">
-        <MobileLayoutSelection layouts={LAYOUTS} onChange={handleLayoutChange} activeLayout={activeLayout} />
-        <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
-          <FiltersDropdown
-            title={t("common.display")}
-            placement="bottom-end"
-            menuButton={
-              <span className="flex items-center text-13 text-secondary">
-                {t("common.display")}
-                <ChevronDownOutline className="ml-2 h-4 w-4 text-secondary" />
-              </span>
-            }
-          >
-            <DisplayFiltersSelection
-              layoutDisplayFiltersOptions={layoutDisplayFiltersOptions}
-              displayFilters={issueFilters?.displayFilters ?? {}}
-              handleDisplayFiltersUpdate={handleDisplayFilters}
-              displayProperties={issueFilters?.displayProperties ?? {}}
-              handleDisplayPropertiesUpdate={handleDisplayProperties}
-            />
-          </FiltersDropdown>
-        </div>
-        <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
-          <WorkItemFiltersToggle entityType={EIssuesStoreType.GLOBAL} entityId={viewId} />
-        </div>
+    <div className="z-[13] flex justify-evenly border-b border-subtle bg-surface-1 py-2 md:hidden">
+      <MobileLayoutSelection layouts={LAYOUTS} onChange={handleLayoutChange} activeLayout={activeLayout} />
+      <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
+        <FiltersDropdown
+          title={t("common.display")}
+          placement="bottom-end"
+          menuButton={
+            <span className="flex items-center text-13 text-secondary">
+              {t("common.display")}
+              <ChevronDownOutline className="ml-2 h-4 w-4 text-secondary" />
+            </span>
+          }
+        >
+          <DisplayFiltersSelection
+            layoutDisplayFiltersOptions={layoutDisplayFiltersOptions}
+            displayFilters={issueFilters?.displayFilters ?? {}}
+            handleDisplayFiltersUpdate={handleDisplayFilters}
+            displayProperties={issueFilters?.displayProperties ?? {}}
+            handleDisplayPropertiesUpdate={handleDisplayProperties}
+          />
+        </FiltersDropdown>
+      </div>
+      <div className="flex flex-grow items-center justify-center border-l border-subtle text-13 text-secondary">
+        <WorkItemFiltersToggle entityType={EIssuesStoreType.GLOBAL} entityId={viewId} />
       </div>
     </div>
   );

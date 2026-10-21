@@ -45,7 +45,7 @@ export const WorkspaceWorkItemsLayoutRoot = observer(function WorkspaceWorkItems
   const { isCreateIssueModalOpen } = useCommandPalette();
   const {
     issuesFilter: { filters, fetchFilters, updateFilterExpression },
-    issues: { fetchIssuesWithExistingPagination, fetchNextIssues },
+    issues: { fetchIssues, fetchIssuesWithExistingPagination, fetchNextIssues },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { projectId: scopedProjectId } = useWorkspaceApplicationScope();
 
@@ -87,8 +87,8 @@ export const WorkspaceWorkItemsLayoutRoot = observer(function WorkspaceWorkItems
     }
     if (previousScope.current === scopedProjectId) return;
     previousScope.current = scopedProjectId;
-    if (workspaceSlug) void fetchIssuesWithExistingPagination(workspaceSlug, viewId, "mutation");
-  }, [scopedProjectId, workspaceSlug, viewId, fetchIssuesWithExistingPagination]);
+    if (workspaceSlug) void fetchIssues(workspaceSlug, viewId, "mutation", { canGroup: true, perPageCount: 100 });
+  }, [scopedProjectId, workspaceSlug, viewId, fetchIssues]);
 
   // Refresh the workspace list once the create modal closes, so a work item created
   // via the header CTA shows up immediately (project-level modal writes to PROJECT store).
