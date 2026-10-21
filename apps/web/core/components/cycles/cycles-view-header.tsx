@@ -21,18 +21,21 @@ import { useCycleFilter } from "@/hooks/store/use-cycle-filter";
 import { CycleFiltersSelection } from "./dropdowns";
 
 type Props = {
-  projectId: string;
+  projectId?: string;
+  filterKey?: string;
 };
 
 export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props) {
-  const { projectId } = props;
+  const { projectId, filterKey } = props;
+  const resolvedFilterKey = filterKey ?? projectId;
   // refs
   const inputRef = useRef<HTMLInputElement>(null);
   // hooks
-  const { currentProjectFilters, searchQuery, updateFilters, updateSearchQuery } = useCycleFilter();
+  const { getFiltersByProjectId, searchQuery, updateFilters, updateSearchQuery } = useCycleFilter();
   const { t } = useTranslation();
+  const filters = resolvedFilterKey ? getFiltersByProjectId(resolvedFilterKey) : undefined;
   // states
-  const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "" ? true : false);
+  const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "");
   // outside click detector hook
   useOutsideClickDetector(inputRef, () => {
     if (isSearchOpen && searchQuery.trim() === "") setIsSearchOpen(false);
@@ -40,8 +43,8 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
 
   const handleFilters = useCallback(
     (key: keyof TCycleFilters, value: string | string[]) => {
-      if (!projectId) return;
-      const newValues = currentProjectFilters?.[key] ?? [];
+      if (!resolvedFilterKey) return;
+      const newValues = [...(filters?.[key] ?? [])];
 
       if (Array.isArray(value))
         value.forEach((val) => {
@@ -49,13 +52,13 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
           else newValues.splice(newValues.indexOf(val), 1);
         });
       else {
-        if (currentProjectFilters?.[key]?.includes(value)) newValues.splice(newValues.indexOf(value), 1);
+        if (filters?.[key]?.includes(value)) newValues.splice(newValues.indexOf(value), 1);
         else newValues.push(value);
       }
 
-      updateFilters(projectId, { [key]: newValues });
+      updateFilters(resolvedFilterKey, { [key]: newValues });
     },
-    [currentProjectFilters, projectId, updateFilters]
+    [filters, resolvedFilterKey, updateFilters]
   );
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -68,7 +71,7 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
     }
   };
 
-  const isFiltersApplied = calculateTotalFilters(currentProjectFilters ?? {}) !== 0;
+  const isFiltersApplied = calculateTotalFilters(filters ?? {}) !== 0;
 
   useEffect(() => {
     if (searchQuery.trim() !== "") setIsSearchOpen(true);
@@ -125,7 +128,7 @@ export const CyclesViewHeader = observer(function CyclesViewHeader(props: Props)
         placement="bottom-end"
         isFiltersApplied={isFiltersApplied}
       >
-        <CycleFiltersSelection filters={currentProjectFilters ?? {}} handleFiltersUpdate={handleFilters} />
+        <CycleFiltersSelection filters={filters ?? {}} handleFiltersUpdate={handleFilters} />
       </FiltersDropdown>
     </div>
   );

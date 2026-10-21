@@ -181,6 +181,7 @@ export class CycleFilterStore implements ICycleFilterStore {
    */
   clearAllFilters = (projectId: string, state: keyof TCycleFiltersByState = "default") => {
     runInAction(() => {
+      if (!this.filters[projectId]) return;
       this.filters[projectId][state] = {};
     });
   };
