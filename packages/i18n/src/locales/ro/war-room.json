@@ -231,6 +231,10 @@
       "room_archived": "Această cameră de criză este arhivată și nu poate fi modificată.",
       "forbidden": "Nu ai permisiunea să faci asta.",
       "generic": "Ceva nu a mers bine. Încearcă din nou."
+    },
+    "toggle": {
+      "turn_on": "Porniți camera de criză",
+      "turn_off": "Încheiați camera de criză"
     }
   }
 }

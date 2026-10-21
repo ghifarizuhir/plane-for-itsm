@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Activer les états du projet",
       "description": "Activez les états du projet pour afficher et gérer les propriétés comme l'état, la priorité, les dates d'échéance et plus encore."
+    },
+    "sprints": {
+      "title": "Aucun cycle pour le moment",
+      "description": "Les cycles des applications dont vous êtes membre apparaîtront ici."
+    },
+    "tracks": {
+      "title": "Aucun module pour le moment",
+      "description": "Les modules des applications dont vous êtes membre apparaîtront ici."
+    },
+    "tickets": {
+      "title": "Aucun élément de travail pour le moment",
+      "description": "Les éléments de travail des applications dont vous êtes membre apparaîtront ici."
+    },
+    "kb": {
+      "title": "Aucune page pour le moment",
+      "description": "Les pages des applications dont vous êtes membre apparaîtront ici."
     }
   },
   "settings_empty_state": {

@@ -231,6 +231,10 @@
       "room_archived": "Cette salle de crise est archivée et ne peut pas être modifiée.",
       "forbidden": "Vous n’avez pas l’autorisation de faire cela.",
       "generic": "Un problème est survenu. Veuillez réessayer."
+    },
+    "toggle": {
+      "turn_on": "Démarrer la salle de crise",
+      "turn_off": "Terminer la salle de crise"
     }
   }
 }

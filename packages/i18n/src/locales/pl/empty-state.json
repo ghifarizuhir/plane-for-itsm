@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Włącz stany projektu",
       "description": "Włącz stany projektu, aby wyświetlać i zarządzać właściwościami takimi jak stan, priorytet, terminy i inne."
+    },
+    "sprints": {
+      "title": "Jeszcze brak cykli",
+      "description": "Cykle z aplikacji, których użytkownik jest członkiem, pojawią się tutaj."
+    },
+    "tracks": {
+      "title": "Jeszcze brak modułów",
+      "description": "Moduły z aplikacji, których użytkownik jest członkiem, pojawią się tutaj."
+    },
+    "tickets": {
+      "title": "Jeszcze brak elementów pracy",
+      "description": "Elementy pracy z aplikacji, których użytkownik jest członkiem, pojawią się tutaj."
+    },
+    "kb": {
+      "title": "Jeszcze brak stron",
+      "description": "Strony z aplikacji, których użytkownik jest członkiem, pojawią się tutaj."
     }
   },
   "settings_empty_state": {

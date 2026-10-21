@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "啟用專案狀態",
       "description": "啟用專案狀態以檢視和管理狀態、優先順序、到期日等屬性。"
+    },
+    "sprints": {
+      "title": "暫無週期",
+      "description": "您作為成員加入的應用程式中的週期將顯示在這裡。"
+    },
+    "tracks": {
+      "title": "暫無模組",
+      "description": "您作為成員加入的應用程式中的模組將顯示在這裡。"
+    },
+    "tickets": {
+      "title": "暫無工作項",
+      "description": "您作為成員加入的應用程式中的工作項將顯示在這裡。"
+    },
+    "kb": {
+      "title": "暫無頁面",
+      "description": "您作為成員加入的應用程式中的頁面將顯示在這裡。"
     }
   },
   "settings_empty_state": {

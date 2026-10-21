@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "启用项目状态",
       "description": "启用项目状态以查看和管理状态、优先级、截止日期等属性。"
+    },
+    "sprints": {
+      "title": "暂无周期",
+      "description": "您作为成员加入的应用中的周期将显示在这里。"
+    },
+    "tracks": {
+      "title": "暂无模块",
+      "description": "您作为成员加入的应用中的模块将显示在这里。"
+    },
+    "tickets": {
+      "title": "暂无工作项",
+      "description": "您作为成员加入的应用中的工作项将显示在这里。"
+    },
+    "kb": {
+      "title": "暂无页面",
+      "description": "您作为成员加入的应用中的页面将显示在这里。"
     }
   },
   "settings_empty_state": {

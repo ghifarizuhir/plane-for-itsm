@@ -231,6 +231,10 @@
       "room_archived": "Dieser War Room ist archiviert und kann nicht geändert werden.",
       "forbidden": "Dafür fehlt Ihnen die Berechtigung.",
       "generic": "Etwas ist schiefgelaufen. Bitte erneut versuchen."
+    },
+    "toggle": {
+      "turn_on": "War Room starten",
+      "turn_off": "War Room beenden"
     }
   }
 }

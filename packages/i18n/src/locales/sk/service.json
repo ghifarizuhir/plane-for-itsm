@@ -129,6 +129,9 @@
       "replicates_to": "Replikuje na",
       "replicated_from": "Replikované z",
       "related_to": "Súvisiace"
+    },
+    "project_links": {
+      "hint": "Vlastník spravuje službu. Klientske aplikácie s ňou môžu prepájať pracovné položky, ale nemôžu ju upravovať."
     }
   }
 }

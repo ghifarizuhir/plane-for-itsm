@@ -231,6 +231,10 @@
       "room_archived": "Ten pokój kryzysowy jest zarchiwizowany i nie można go zmienić.",
       "forbidden": "Brak uprawnień do wykonania tej czynności.",
       "generic": "Coś poszło nie tak. Spróbuj ponownie."
+    },
+    "toggle": {
+      "turn_on": "Rozpocznij pokój kryzysowy",
+      "turn_off": "Zakończ pokój kryzysowy"
     }
   }
 }

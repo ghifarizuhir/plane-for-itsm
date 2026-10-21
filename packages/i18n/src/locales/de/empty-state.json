@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Projektzustände aktivieren",
       "description": "Aktivieren Sie Projektzustände, um Eigenschaften wie Status, Priorität, Fälligkeitsdaten und mehr anzuzeigen und zu verwalten."
+    },
+    "sprints": {
+      "title": "Noch keine Zyklen",
+      "description": "Zyklen aus Anwendungen, in denen Sie Mitglied sind, werden hier angezeigt."
+    },
+    "tracks": {
+      "title": "Noch keine Module",
+      "description": "Module aus Anwendungen, in denen Sie Mitglied sind, werden hier angezeigt."
+    },
+    "tickets": {
+      "title": "Noch keine Arbeitselemente",
+      "description": "Arbeitselemente aus Anwendungen, in denen Sie Mitglied sind, werden hier angezeigt."
+    },
+    "kb": {
+      "title": "Noch keine Seiten",
+      "description": "Seiten aus Anwendungen, in denen Sie Mitglied sind, werden hier angezeigt."
     }
   },
   "settings_empty_state": {

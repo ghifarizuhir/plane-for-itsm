@@ -129,6 +129,9 @@
       "replicates_to": "复制到",
       "replicated_from": "复制自",
       "related_to": "相关"
+    },
+    "project_links": {
+      "hint": "所有者管理该服务。使用方应用可以将工作项关联到该服务，但无法编辑该服务。"
     }
   }
 }

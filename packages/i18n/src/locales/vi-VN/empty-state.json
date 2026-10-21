@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Kích hoạt trạng thái dự án",
       "description": "Kích hoạt Trạng thái Dự án để xem và quản lý các thuộc tính như trạng thái, mức độ ưu tiên, ngày đến hạn và hơn thế nữa."
+    },
+    "sprints": {
+      "title": "Chưa có chu kỳ",
+      "description": "Các chu kỳ từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "tracks": {
+      "title": "Chưa có mô-đun",
+      "description": "Các mô-đun từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "tickets": {
+      "title": "Chưa có mục công việc",
+      "description": "Các mục công việc từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "kb": {
+      "title": "Chưa có trang",
+      "description": "Các trang từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
     }
   },
   "settings_empty_state": {

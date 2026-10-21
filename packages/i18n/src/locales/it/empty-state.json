@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Abilita stati del progetto",
       "description": "Abilita gli stati del progetto per visualizzare e gestire proprietà come stato, priorità, date di scadenza e altro."
+    },
+    "sprints": {
+      "title": "Nessun ciclo ancora",
+      "description": "I cicli delle applicazioni di cui Lei fa parte appariranno qui."
+    },
+    "tracks": {
+      "title": "Nessun modulo ancora",
+      "description": "I moduli delle applicazioni di cui Lei fa parte appariranno qui."
+    },
+    "tickets": {
+      "title": "Nessun elemento di lavoro ancora",
+      "description": "Gli elementi di lavoro delle applicazioni di cui Lei fa parte appariranno qui."
+    },
+    "kb": {
+      "title": "Nessuna pagina ancora",
+      "description": "Le pagine delle applicazioni di cui Lei fa parte appariranno qui."
     }
   },
   "settings_empty_state": {

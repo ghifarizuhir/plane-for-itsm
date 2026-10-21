@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Habilitar estados del proyecto",
       "description": "Habilita los estados del proyecto para ver y gestionar propiedades como estado, prioridad, fechas de vencimiento y más."
+    },
+    "sprints": {
+      "title": "Aún no hay ciclos",
+      "description": "Los ciclos de las aplicaciones de las que usted es miembro aparecerán aquí."
+    },
+    "tracks": {
+      "title": "Aún no hay módulos",
+      "description": "Los módulos de las aplicaciones de las que usted es miembro aparecerán aquí."
+    },
+    "tickets": {
+      "title": "Aún no hay elementos de trabajo",
+      "description": "Los elementos de trabajo de las aplicaciones de las que usted es miembro aparecerán aquí."
+    },
+    "kb": {
+      "title": "Aún no hay páginas",
+      "description": "Las páginas de las aplicaciones de las que usted es miembro aparecerán aquí."
     }
   },
   "settings_empty_state": {

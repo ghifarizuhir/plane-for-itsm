@@ -129,6 +129,9 @@
       "replicates_to": "Mereplikasi ke",
       "replicated_from": "Direplikasi dari",
       "related_to": "Terkait dengan"
+    },
+    "project_links": {
+      "hint": "Pemilik mengelola layanan. Aplikasi konsumen dapat menautkan item kerja ke layanan tersebut tetapi tidak dapat mengeditnya."
     }
   }
 }

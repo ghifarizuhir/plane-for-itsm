@@ -129,6 +129,9 @@
       "replicates_to": "Replica en",
       "replicated_from": "Replicado desde",
       "related_to": "Relacionado con"
+    },
+    "project_links": {
+      "hint": "El propietario gestiona el servicio. Las aplicaciones consumidoras pueden vincular elementos de trabajo a este, pero no pueden editarlo."
     }
   }
 }

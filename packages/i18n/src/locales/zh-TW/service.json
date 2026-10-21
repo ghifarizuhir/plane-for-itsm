@@ -129,6 +129,9 @@
       "replicates_to": "複製到",
       "replicated_from": "複製自",
       "related_to": "相關"
+    },
+    "project_links": {
+      "hint": "擁有者管理該服務。使用方應用程式可以將工作項關聯到該服務，但無法編輯該服務。"
     }
   }
 }

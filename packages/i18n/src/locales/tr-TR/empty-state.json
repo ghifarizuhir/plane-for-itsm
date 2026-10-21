@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Proje durumlarını etkinleştir",
       "description": "Durum, öncelik, bitiş tarihleri ve daha fazlası gibi özellikleri görüntülemek ve yönetmek için Proje Durumlarını etkinleştirin."
+    },
+    "sprints": {
+      "title": "Henüz döngü yok",
+      "description": "Üyesi olduğunuz uygulamalardaki döngüler burada gösterilir."
+    },
+    "tracks": {
+      "title": "Henüz modül yok",
+      "description": "Üyesi olduğunuz uygulamalardaki modüller burada gösterilir."
+    },
+    "tickets": {
+      "title": "Henüz iş öğesi yok",
+      "description": "Üyesi olduğunuz uygulamalardaki iş öğeleri burada gösterilir."
+    },
+    "kb": {
+      "title": "Henüz sayfa yok",
+      "description": "Üyesi olduğunuz uygulamalardaki sayfalar burada gösterilir."
     }
   },
   "settings_empty_state": {

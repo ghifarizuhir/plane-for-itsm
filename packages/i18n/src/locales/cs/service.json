@@ -129,6 +129,9 @@
       "replicates_to": "Replikuje na",
       "replicated_from": "Replikováno z",
       "related_to": "Související"
+    },
+    "project_links": {
+      "hint": "Vlastník spravuje službu. Klientské aplikace s ní mohou propojovat pracovní položky, ale nemohou ji upravovat."
     }
   }
 }

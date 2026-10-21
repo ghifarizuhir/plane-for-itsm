@@ -231,6 +231,10 @@
       "room_archived": "Táto krízová miestnosť je archivovaná a nedá sa zmeniť.",
       "forbidden": "Na to nemáte oprávnenie.",
       "generic": "Niečo sa pokazilo. Skúste to znova."
+    },
+    "toggle": {
+      "turn_on": "Začať krízovú miestnosť",
+      "turn_off": "Ukončiť krízovú miestnosť"
     }
   }
 }

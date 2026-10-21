@@ -129,6 +129,9 @@
       "replicates_to": "Repliziert auf",
       "replicated_from": "Repliziert von",
       "related_to": "Verwandt mit"
+    },
+    "project_links": {
+      "hint": "Der Besitzer verwaltet den Service. Nutzende Anwendungen können Arbeitselemente damit verknüpfen, ihn aber nicht bearbeiten."
     }
   }
 }

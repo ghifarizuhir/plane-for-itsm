@@ -129,6 +129,9 @@
       "replicates_to": "Réplique vers",
       "replicated_from": "Répliqué depuis",
       "related_to": "Lié à"
+    },
+    "project_links": {
+      "hint": "Le propriétaire gère le service. Les applications consommatrices peuvent y lier des éléments de travail, mais ne peuvent pas le modifier."
     }
   }
 }

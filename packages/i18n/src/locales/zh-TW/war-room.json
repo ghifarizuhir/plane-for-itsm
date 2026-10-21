@@ -231,6 +231,10 @@
       "room_archived": "此作戰室已封存，無法變更。",
       "forbidden": "您沒有執行此操作的權限。",
       "generic": "發生錯誤，請重試。"
+    },
+    "toggle": {
+      "turn_on": "啟動作戰室",
+      "turn_off": "結束作戰室"
     }
   }
 }

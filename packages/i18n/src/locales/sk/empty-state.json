@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Povoliť stavy projektu",
       "description": "Povoľte stavy projektu na zobrazenie a správu vlastností ako stav, priorita, termíny a ďalšie."
+    },
+    "sprints": {
+      "title": "Zatiaľ žiadne cykly",
+      "description": "Cykly z aplikácií, ktorých ste členom, sa zobrazia tu."
+    },
+    "tracks": {
+      "title": "Zatiaľ žiadne moduly",
+      "description": "Moduly z aplikácií, ktorých ste členom, sa zobrazia tu."
+    },
+    "tickets": {
+      "title": "Zatiaľ žiadne pracovné položky",
+      "description": "Pracovné položky z aplikácií, ktorých ste členom, sa zobrazia tu."
+    },
+    "kb": {
+      "title": "Zatiaľ žiadne stránky",
+      "description": "Stránky z aplikácií, ktorých ste členom, sa zobrazia tu."
     }
   },
   "settings_empty_state": {

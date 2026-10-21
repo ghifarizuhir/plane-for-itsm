@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Activați stările proiectului",
       "description": "Activați stările proiectului pentru a vizualiza și gestiona proprietăți precum starea, prioritatea, datele scadente și altele."
+    },
+    "sprints": {
+      "title": "Încă nu există cicluri",
+      "description": "Ciclurile din aplicațiile din care faceți parte vor apărea aici."
+    },
+    "tracks": {
+      "title": "Încă nu există module",
+      "description": "Modulele din aplicațiile din care faceți parte vor apărea aici."
+    },
+    "tickets": {
+      "title": "Încă nu există activități",
+      "description": "Activitățile din aplicațiile din care faceți parte vor apărea aici."
+    },
+    "kb": {
+      "title": "Încă nu există pagini",
+      "description": "Paginile din aplicațiile din care faceți parte vor apărea aici."
     }
   },
   "settings_empty_state": {

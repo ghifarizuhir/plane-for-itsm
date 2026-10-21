@@ -231,6 +231,10 @@
       "room_archived": "Bu kriz odası arşivlendi ve değiştirilemez.",
       "forbidden": "Bunu yapma izniniz yok.",
       "generic": "Bir şeyler yanlış gitti. Lütfen tekrar deneyin."
+    },
+    "toggle": {
+      "turn_on": "Kriz odasını başlat",
+      "turn_off": "Kriz odasını bitir"
     }
   }
 }

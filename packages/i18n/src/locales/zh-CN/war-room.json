@@ -231,6 +231,10 @@
       "room_archived": "此作战室已归档，无法更改。",
       "forbidden": "您没有执行此操作的权限。",
       "generic": "出现错误，请重试。"
+    },
+    "toggle": {
+      "turn_on": "启动作战室",
+      "turn_off": "结束作战室"
     }
   }
 }

@@ -231,6 +231,10 @@
       "room_archived": "Esta sala de crise está arquivada e não pode ser alterada.",
       "forbidden": "Você não tem permissão para fazer isso.",
       "generic": "Algo deu errado. Tente novamente."
+    },
+    "toggle": {
+      "turn_on": "Iniciar sala de crise",
+      "turn_off": "Encerrar sala de crise"
     }
   }
 }

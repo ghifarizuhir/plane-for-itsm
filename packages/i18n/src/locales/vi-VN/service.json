@@ -129,6 +129,9 @@
       "replicates_to": "Sao chép đến",
       "replicated_from": "Sao chép từ",
       "related_to": "Liên quan đến"
+    },
+    "project_links": {
+      "hint": "Chủ sở hữu quản lý dịch vụ. Các ứng dụng tiêu dùng có thể liên kết mục công việc với dịch vụ nhưng không thể chỉnh sửa."
     }
   }
 }

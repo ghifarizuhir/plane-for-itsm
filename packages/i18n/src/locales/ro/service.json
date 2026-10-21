@@ -129,6 +129,9 @@
       "replicates_to": "Replică către",
       "replicated_from": "Replicat de la",
       "related_to": "Legat de"
+    },
+    "project_links": {
+      "hint": "Proprietarul gestionează serviciul. Aplicațiile consumatoare pot asocia activități acestuia, dar nu îl pot edita."
     }
   }
 }

@@ -129,6 +129,9 @@
       "replicates_to": "複製先",
       "replicated_from": "複製元",
       "related_to": "関連"
+    },
+    "project_links": {
+      "hint": "所有者がサービスを管理します。利用側アプリケーションは作業項目をリンクできますが、編集はできません。"
     }
   }
 }

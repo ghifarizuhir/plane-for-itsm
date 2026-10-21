@@ -194,6 +194,22 @@
     "project_overview_state_sidebar": {
       "title": "Aktifkan status proyek",
       "description": "Aktifkan Status Proyek untuk melihat dan mengelola properti seperti status, prioritas, tanggal jatuh tempo, dan lainnya."
+    },
+    "sprints": {
+      "title": "Belum ada siklus",
+      "description": "Siklus dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
+    },
+    "tracks": {
+      "title": "Belum ada modul",
+      "description": "Modul dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
+    },
+    "tickets": {
+      "title": "Belum ada item kerja",
+      "description": "Item kerja dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
+    },
+    "kb": {
+      "title": "Belum ada halaman",
+      "description": "Halaman dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
     }
   },
   "settings_empty_state": {

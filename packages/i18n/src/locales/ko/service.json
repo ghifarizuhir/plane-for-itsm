@@ -129,6 +129,9 @@
       "replicates_to": "복제 대상",
       "replicated_from": "복제 출처",
       "related_to": "관련"
+    },
+    "project_links": {
+      "hint": "소유자가 서비스를 관리합니다. 컨슈머 애플리케이션은 작업 항목을 연결할 수 있지만 편집할 수는 없습니다."
     }
   }
 }

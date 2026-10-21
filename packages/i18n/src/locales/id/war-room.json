@@ -231,6 +231,10 @@
       "room_archived": "Ruang perang ini telah diarsipkan dan tidak dapat diubah.",
       "forbidden": "Anda tidak memiliki izin untuk melakukan itu.",
       "generic": "Terjadi kesalahan. Silakan coba lagi."
+    },
+    "toggle": {
+      "turn_on": "Mulai ruang perang",
+      "turn_off": "Akhiri ruang perang"
     }
   }
 }
