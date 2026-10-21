@@ -46,7 +46,7 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: ["project-1", "project-2"],
         projectsReady: false,
       })
-    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearStored: false });
+    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: false });
   });
 
   it("seeds from a valid param that differs from the stored scope", () => {
@@ -57,7 +57,7 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: ["project-1", "project-2"],
         projectsReady: true,
       })
-    ).toEqual({ projectId: "project-1", seedProjectId: "project-2", shouldClearStored: false });
+    ).toEqual({ projectId: "project-1", seedProjectId: "project-2", shouldClearParam: false });
   });
 
   it("does not seed when the param matches the stored scope", () => {
@@ -68,10 +68,10 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: ["project-1"],
         projectsReady: true,
       })
-    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearStored: false });
+    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: false });
   });
 
-  it("ignores an invalid param and keeps a valid stored scope", () => {
+  it("clears an invalid param that arrives with a valid stored scope", () => {
     expect(
       resolveWorkspaceApplicationScope({
         storedProjectId: "project-1",
@@ -79,10 +79,21 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: ["project-1"],
         projectsReady: true,
       })
-    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearStored: false });
+    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: true });
   });
 
-  it("clears an invalid stored scope once projects are ready", () => {
+  it("seeds a valid param while ignoring an invalid stored scope", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: "missing",
+        paramProjectId: "project-1",
+        workspaceProjectIds: ["project-1"],
+        projectsReady: true,
+      })
+    ).toEqual({ projectId: null, seedProjectId: "project-1", shouldClearParam: false });
+  });
+
+  it("ignores an invalid stored scope without scheduling a clear", () => {
     expect(
       resolveWorkspaceApplicationScope({
         storedProjectId: "missing",
@@ -90,7 +101,18 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: ["project-1"],
         projectsReady: true,
       })
-    ).toEqual({ projectId: null, seedProjectId: null, shouldClearStored: true });
+    ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: false });
+  });
+
+  it("treats empty strings as null and never clears the param", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: "",
+        paramProjectId: "",
+        workspaceProjectIds: ["project-1"],
+        projectsReady: true,
+      })
+    ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: false });
   });
 
   it("returns no scope when nothing is stored or requested", () => {
@@ -101,6 +123,6 @@ describe("resolveWorkspaceApplicationScope", () => {
         workspaceProjectIds: [],
         projectsReady: true,
       })
-    ).toEqual({ projectId: null, seedProjectId: null, shouldClearStored: false });
+    ).toEqual({ projectId: null, seedProjectId: null, shouldClearParam: false });
   });
 });

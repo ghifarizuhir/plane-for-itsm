@@ -15,7 +15,7 @@ export const buildApplicationScopeUrl = (pathname: string, queryString: string, 
 export type TWorkspaceApplicationScopeResolution = {
   projectId: string | null;
   seedProjectId: string | null;
-  shouldClearStored: boolean;
+  shouldClearParam: boolean;
 };
 
 export const resolveWorkspaceApplicationScope = ({
@@ -29,14 +29,16 @@ export const resolveWorkspaceApplicationScope = ({
   workspaceProjectIds: string[] | undefined;
   projectsReady: boolean;
 }): TWorkspaceApplicationScopeResolution => {
+  const stored = storedProjectId || null;
+  const param = paramProjectId || null;
   if (!projectsReady || workspaceProjectIds === undefined) {
-    return { projectId: storedProjectId, seedProjectId: null, shouldClearStored: false };
+    return { projectId: stored, seedProjectId: null, shouldClearParam: false };
   }
-  const validStored = storedProjectId && workspaceProjectIds.includes(storedProjectId) ? storedProjectId : null;
-  const validParam = paramProjectId && workspaceProjectIds.includes(paramProjectId) ? paramProjectId : null;
+  const validStored = stored && workspaceProjectIds.includes(stored) ? stored : null;
+  const validParam = param && workspaceProjectIds.includes(param) ? param : null;
   return {
     projectId: validStored,
-    seedProjectId: validParam && validParam !== storedProjectId ? validParam : null,
-    shouldClearStored: Boolean(storedProjectId && !validStored),
+    seedProjectId: validParam && validParam !== stored ? validParam : null,
+    shouldClearParam: Boolean(param && !validParam),
   };
 };

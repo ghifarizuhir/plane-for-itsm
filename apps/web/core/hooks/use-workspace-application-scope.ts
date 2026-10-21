@@ -9,6 +9,7 @@ import { useParams, usePathname, useSearchParams } from "next/navigation";
 // hooks
 import { useApplicationScope } from "@/hooks/store/use-application-scope";
 import { useProject } from "@/hooks/store/use-project";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 // helpers
 import { buildApplicationScopeUrl, resolveWorkspaceApplicationScope } from "@/lib/workspace-application-scope";
@@ -22,13 +23,14 @@ export const useWorkspaceApplicationScope = () => {
   const router = useAppRouter();
   const projectParam = searchParams.get("project");
   // store hooks
+  const { currentWorkspace } = useWorkspace();
   const { workspaceProjectIds, getProjectById, isInitializingProjects } = useProject();
   const { getProjectId, setProjectId } = useApplicationScope();
   // refs
   const lastHandledRef = useRef<{ workspaceSlug?: string; projectParam?: string | null }>({});
-  const pendingRef = useRef<string | null | undefined>(undefined);
   // derived values
-  const projectsReady = !isInitializingProjects && workspaceProjectIds !== undefined;
+  const workspaceMatches = !workspaceSlug || currentWorkspace?.slug === workspaceSlug;
+  const projectsReady = workspaceMatches && !isInitializingProjects && workspaceProjectIds !== undefined;
   const storedProjectId = workspaceSlug ? getProjectId(workspaceSlug) : null;
   const resolution = resolveWorkspaceApplicationScope({
     storedProjectId,
@@ -36,10 +38,10 @@ export const useWorkspaceApplicationScope = () => {
     workspaceProjectIds,
     projectsReady,
   });
-  const projectId = pendingRef.current !== undefined ? pendingRef.current : resolution.projectId;
+  const projectId = resolution.projectId;
 
-  // Seed from `?project=` once per URL value, and discard scopes that no longer
-  // belong to this workspace. Never let a store write re-seed from a stale URL.
+  // Seed from `?project=` once per URL value. Never let a store write re-seed
+  // from a stale URL, and never delete a persisted scope on a transient failure.
   useEffect(() => {
     if (!workspaceSlug || !projectsReady) return;
     const alreadyHandled =
@@ -47,33 +49,33 @@ export const useWorkspaceApplicationScope = () => {
     if (alreadyHandled) return;
     lastHandledRef.current = { workspaceSlug, projectParam };
     if (resolution.seedProjectId) setProjectId(workspaceSlug, resolution.seedProjectId);
-    else if (resolution.shouldClearStored) setProjectId(workspaceSlug, null);
+    else if (resolution.shouldClearParam) {
+      router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), null));
+    }
   }, [
     workspaceSlug,
     projectsReady,
     projectParam,
     resolution.seedProjectId,
-    resolution.shouldClearStored,
+    resolution.shouldClearParam,
     setProjectId,
+    router,
+    pathname,
+    searchParams,
   ]);
-
-  // Keep an explicit selection stable until the deferred router.replace lands.
-  useEffect(() => {
-    if (pendingRef.current === undefined) return;
-    if (projectParam === (pendingRef.current ?? null)) pendingRef.current = undefined;
-  }, [projectParam]);
 
   const setApplication = useCallback(
     (nextProjectId: string | null) => {
       if (!workspaceSlug) return;
-      const normalized =
-        nextProjectId && workspaceProjectIds && !workspaceProjectIds.includes(nextProjectId) ? null : nextProjectId;
-      pendingRef.current = normalized;
+      let normalized = nextProjectId || null;
+      if (normalized && projectsReady && workspaceProjectIds && !workspaceProjectIds.includes(normalized)) {
+        normalized = null;
+      }
       lastHandledRef.current = { workspaceSlug, projectParam };
       setProjectId(workspaceSlug, normalized);
       router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), normalized));
     },
-    [workspaceSlug, workspaceProjectIds, setProjectId, router, pathname, searchParams, projectParam]
+    [workspaceSlug, projectsReady, workspaceProjectIds, setProjectId, router, pathname, searchParams, projectParam]
   );
 
   const clearApplication = useCallback(() => setApplication(null), [setApplication]);
