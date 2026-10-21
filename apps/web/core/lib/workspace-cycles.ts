@@ -34,7 +34,11 @@ const dateValue = (date: string | null | undefined) => {
   return time !== undefined && !Number.isNaN(time) ? time : Number.POSITIVE_INFINITY;
 };
 
-const byName = (a: ICycle, b: ICycle) => a.name.localeCompare(b.name);
+const CYCLE_GROUPS = new Set<TCycleGroups>(["current", "upcoming", "draft", "completed"]);
+
+const isCycleGroup = (status: string): status is TCycleGroups => CYCLE_GROUPS.has(status as TCycleGroups);
+
+const byName = (a: ICycle, b: ICycle) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 const byStartDate = (a: ICycle, b: ICycle) => dateValue(a.start_date) - dateValue(b.start_date);
 const completedFirst = (a: ICycle, b: ICycle) => Number(!a.start_date) - Number(!b.start_date);
 
@@ -43,7 +47,8 @@ const completedFirst = (a: ICycle, b: ICycle) => Number(!a.start_date) - Number(
  * from the date range so every row/action behaves like a project cycle.
  */
 export const normalizeWorkspaceCycle = (cycle: ICycle, now: Date = new Date()): ICycle => {
-  const status = (cycle.status?.toLowerCase() as TCycleGroups | undefined) ?? deriveCycleStatus(cycle, now);
+  const explicitStatus = cycle.status?.trim().toLowerCase();
+  const status = explicitStatus && isCycleGroup(explicitStatus) ? explicitStatus : deriveCycleStatus(cycle, now);
   return cycle.status === status ? cycle : { ...cycle, status };
 };
 
@@ -75,7 +80,8 @@ export const selectWorkspaceCycles = ({
 
   filteredCycles.forEach((cycle) => {
     const status = (cycle.status ?? "draft") as TCycleGroups;
-    groups[status].push(cycle);
+    const bucket = groups[status] ?? groups.draft;
+    bucket.push(cycle);
   });
 
   groups.current.sort(byName);

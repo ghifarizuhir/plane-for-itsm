@@ -397,9 +397,9 @@ export class CycleStore implements ICycleStore {
    */
   fetchWorkspaceCycles = async (workspaceSlug: string) =>
     await this.cycleService.getWorkspaceCycles(workspaceSlug).then((response) => {
+      const normalizedCycles = response.map((cycle) => normalizeWorkspaceCycle(cycle));
       runInAction(() => {
-        response.forEach((cycle) => {
-          const normalizedCycle = normalizeWorkspaceCycle(cycle);
+        normalizedCycles.forEach((normalizedCycle) => {
           set(this.cycleMap, [normalizedCycle.id], {
             ...this.cycleMap[normalizedCycle.id],
             ...normalizedCycle,
@@ -407,7 +407,7 @@ export class CycleStore implements ICycleStore {
           set(this.fetchedMap, normalizedCycle.project_id, true);
         });
       });
-      return response;
+      return normalizedCycles;
     });
 
   /**

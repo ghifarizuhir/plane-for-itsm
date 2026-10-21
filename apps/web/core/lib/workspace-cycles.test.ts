@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ICycle } from "@plane/types";
+import type { ICycle, TCycleGroups } from "@plane/types";
 import { normalizeWorkspaceCycle, selectWorkspaceCycles, WORKSPACE_CYCLE_FILTER_KEY } from "./workspace-cycles";
 
 const NOW = new Date(2026, 9, 18); // Oct 18 2026, local time
@@ -39,6 +39,37 @@ describe("normalizeWorkspaceCycle", () => {
 
     expect(normalizeWorkspaceCycle(cycle, NOW).status).toBe("completed");
   });
+
+  it("falls back to the derived status for unknown status values", () => {
+    const cycle = makeCycle({
+      id: "unknown",
+      status: "active" as TCycleGroups,
+      start_date: day(16),
+      end_date: day(20),
+    });
+
+    expect(normalizeWorkspaceCycle(cycle, NOW).status).toBe("current");
+  });
+
+  it("derives draft for an empty status and no dates", () => {
+    const cycle = makeCycle({ id: "empty", status: "" as TCycleGroups });
+
+    expect(normalizeWorkspaceCycle(cycle, NOW).status).toBe("draft");
+  });
+
+  it("does not mutate the input cycle when normalizing", () => {
+    const cycle = makeCycle({
+      id: "immutable",
+      status: "active" as TCycleGroups,
+      start_date: day(16),
+      end_date: day(20),
+    });
+
+    const normalized = normalizeWorkspaceCycle(cycle, NOW);
+
+    expect(cycle.status).toBe("active");
+    expect(normalized).not.toBe(cycle);
+  });
 });
 
 describe("selectWorkspaceCycles", () => {
@@ -67,6 +98,25 @@ describe("selectWorkspaceCycles", () => {
     expect(selection.completedCycleIds).toEqual(["completed-new", "completed-old", "completed-no-start"]);
     expect(selection.draftCycleIds).toEqual(["draft-alpha", "draft", "draft-zulu"]);
     expect(selection.totalCount).toBe(10);
+  });
+
+  it("selects a cycle with an unknown status by its derived group", () => {
+    const selection = selectWorkspaceCycles({
+      cycles: [
+        makeCycle({
+          id: "unknown",
+          status: "active" as TCycleGroups,
+          start_date: day(16),
+          end_date: day(20),
+        }),
+      ],
+      projectIds: ["p1"],
+      filters: {},
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(selection.currentCycleIds).toEqual(["unknown"]);
   });
 
   it("filters by project scope, archived state, and the project feature flag", () => {
@@ -105,6 +155,38 @@ describe("selectWorkspaceCycles", () => {
     expect(selection.currentCycleIds).toEqual(["alpha-current"]);
     expect(selection.completedCycleIds).toEqual([]);
     expect(selection.totalCount).toBe(1);
+  });
+
+  it("applies date filters through the shared cycle filter helper", () => {
+    const selection = selectWorkspaceCycles({
+      cycles: [
+        makeCycle({ id: "later", start_date: day(26), end_date: day(30) }),
+        makeCycle({ id: "sooner", start_date: day(25), end_date: day(29) }),
+      ],
+      projectIds: ["p1"],
+      filters: { start_date: [`${day(26)};after`] },
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(selection.upcomingCycleIds).toEqual(["later"]);
+    expect(selection.totalCount).toBe(1);
+  });
+
+  it("sorts names case-insensitively", () => {
+    const selection = selectWorkspaceCycles({
+      cycles: [
+        makeCycle({ id: "upper", name: "Alpha", status: "current", start_date: day(16), end_date: day(20) }),
+        makeCycle({ id: "lower", name: "alpha", status: "current", start_date: day(16), end_date: day(20) }),
+        makeCycle({ id: "beta", name: "Beta", status: "current", start_date: day(16), end_date: day(20) }),
+      ],
+      projectIds: ["p1"],
+      filters: {},
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(selection.currentCycleIds).toEqual(["upper", "lower", "beta"]);
   });
 
   it("exports the reserved workspace filter key", () => {
