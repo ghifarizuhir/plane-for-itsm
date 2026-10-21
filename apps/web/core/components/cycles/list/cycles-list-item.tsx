@@ -17,6 +17,7 @@ import { generateQueryParams, calculateCycleProgress } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
@@ -30,12 +31,13 @@ type TCyclesListItem = {
   handleAddToFavorites?: () => void;
   handleRemoveFromFavorites?: () => void;
   workspaceSlug: string;
-  projectId: string;
+  projectId?: string;
+  showProjectBadge?: boolean;
   className?: string;
 };
 
 export const CyclesListItem = observer(function CyclesListItem(props: TCyclesListItem) {
-  const { cycleId, workspaceSlug, projectId, className = "" } = props;
+  const { cycleId, workspaceSlug, projectId, showProjectBadge = false, className = "" } = props;
   // refs
   const parentRef = useRef(null);
   // router
@@ -46,11 +48,14 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
   const { isMobile } = usePlatformOS();
   // store hooks
   const { getCycleById } = useCycle();
+  const { getProjectById } = useProject();
 
   // derived values
   const cycleDetails = getCycleById(cycleId);
+  const resolvedProjectId = cycleDetails?.project_id || projectId;
+  const project = showProjectBadge && resolvedProjectId ? getProjectById(resolvedProjectId) : undefined;
 
-  if (!cycleDetails) return null;
+  if (!cycleDetails || !resolvedProjectId) return null;
 
   // computed
   // TODO: change this logic once backend fix the response
@@ -82,7 +87,7 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
   return (
     <ListItem
       title={cycleDetails?.name ?? ""}
-      itemLink={`/${workspaceSlug}/projects/${projectId}/cycles/${cycleDetails.id}`}
+      itemLink={`/${workspaceSlug}/projects/${resolvedProjectId}/cycles/${cycleDetails.id}`}
       onItemClick={handleItemClick}
       className={className}
       prependTitleElement={
@@ -104,10 +109,17 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
           </div>
         </div>
       }
+      appendTitleElement={
+        project ? (
+          <span className="max-w-[140px] truncate rounded-sm bg-layer-2 px-1.5 py-0.5 text-11 text-tertiary">
+            {project.name}
+          </span>
+        ) : undefined
+      }
       actionableItems={
         <CycleListItemAction
           workspaceSlug={workspaceSlug}
-          projectId={projectId}
+          projectId={resolvedProjectId}
           cycleId={cycleId}
           cycleDetails={cycleDetails}
           parentRef={parentRef}
@@ -119,7 +131,7 @@ export const CyclesListItem = observer(function CyclesListItem(props: TCyclesLis
           <CycleQuickActions
             parentRef={parentRef}
             cycleId={cycleId}
-            projectId={projectId}
+            projectId={resolvedProjectId}
             workspaceSlug={workspaceSlug}
           />
         </div>

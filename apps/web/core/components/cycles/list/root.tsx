@@ -20,14 +20,29 @@ import { ActiveCycleRoot } from "../active-cycle/root";
 export interface ICyclesList {
   completedCycleIds: string[];
   upcomingCycleIds?: string[] | undefined;
+  currentCycleIds?: string[];
   cycleIds: string[];
   workspaceSlug: string;
-  projectId: string;
+  projectId?: string;
+  activeCycleId?: string | null;
+  showActiveCycle?: boolean;
+  showProjectBadge?: boolean;
   isArchived?: boolean;
 }
 
 export const CyclesList = observer(function CyclesList(props: ICyclesList) {
-  const { completedCycleIds, upcomingCycleIds, cycleIds, workspaceSlug, projectId, isArchived = false } = props;
+  const {
+    completedCycleIds,
+    upcomingCycleIds,
+    currentCycleIds,
+    cycleIds,
+    workspaceSlug,
+    projectId,
+    activeCycleId,
+    showActiveCycle = true,
+    showProjectBadge = false,
+    isArchived = false,
+  } = props;
   const { t } = useTranslation();
 
   return (
@@ -35,11 +50,48 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
       <ListLayout>
         {isArchived ? (
           <>
-            <CyclesListMap cycleIds={cycleIds} projectId={projectId} workspaceSlug={workspaceSlug} />
+            <CyclesListMap
+              cycleIds={cycleIds}
+              projectId={projectId}
+              workspaceSlug={workspaceSlug}
+              showProjectBadge={showProjectBadge}
+            />
           </>
         ) : (
           <>
-            <ActiveCycleRoot workspaceSlug={workspaceSlug} projectId={projectId} />
+            {showActiveCycle && projectId && (
+              <ActiveCycleRoot
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                cycleId={activeCycleId ?? undefined}
+              />
+            )}
+
+            {currentCycleIds && currentCycleIds.length > 0 && (
+              <Disclosure as="div" className="flex flex-shrink-0 flex-col" defaultOpen>
+                {({ open }) => (
+                  <>
+                    <Disclosure.Button className="sticky top-0 z-[2] w-full flex-shrink-0 cursor-pointer border-b border-subtle bg-layer-1">
+                      <CycleListGroupHeader
+                        title={t("project_cycles.active_cycle.label")}
+                        type="current"
+                        count={currentCycleIds.length}
+                        showCount
+                        isExpanded={open}
+                      />
+                    </Disclosure.Button>
+                    <Disclosure.Panel>
+                      <CyclesListMap
+                        cycleIds={currentCycleIds}
+                        projectId={projectId}
+                        workspaceSlug={workspaceSlug}
+                        showProjectBadge={showProjectBadge}
+                      />
+                    </Disclosure.Panel>
+                  </>
+                )}
+              </Disclosure>
+            )}
 
             {upcomingCycleIds && (
               <Disclosure as="div" className="flex flex-shrink-0 flex-col" defaultOpen>
@@ -55,7 +107,12 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
                       />
                     </Disclosure.Button>
                     <Disclosure.Panel>
-                      <CyclesListMap cycleIds={upcomingCycleIds} projectId={projectId} workspaceSlug={workspaceSlug} />
+                      <CyclesListMap
+                        cycleIds={upcomingCycleIds}
+                        projectId={projectId}
+                        workspaceSlug={workspaceSlug}
+                        showProjectBadge={showProjectBadge}
+                      />
                     </Disclosure.Panel>
                   </>
                 )}
@@ -74,7 +131,12 @@ export const CyclesList = observer(function CyclesList(props: ICyclesList) {
                     />
                   </Disclosure.Button>
                   <Disclosure.Panel>
-                    <CyclesListMap cycleIds={completedCycleIds} projectId={projectId} workspaceSlug={workspaceSlug} />
+                    <CyclesListMap
+                      cycleIds={completedCycleIds}
+                      projectId={projectId}
+                      workspaceSlug={workspaceSlug}
+                      showProjectBadge={showProjectBadge}
+                    />
                   </Disclosure.Panel>
                 </>
               )}
