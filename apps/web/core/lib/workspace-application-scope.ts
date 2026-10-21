@@ -11,3 +11,32 @@ export const buildApplicationScopeUrl = (pathname: string, queryString: string, 
   const query = params.toString();
   return `${pathname}${query ? `?${query}` : ""}`;
 };
+
+export type TWorkspaceApplicationScopeResolution = {
+  projectId: string | null;
+  seedProjectId: string | null;
+  shouldClearStored: boolean;
+};
+
+export const resolveWorkspaceApplicationScope = ({
+  storedProjectId,
+  paramProjectId,
+  workspaceProjectIds,
+  projectsReady,
+}: {
+  storedProjectId: string | null;
+  paramProjectId: string | null;
+  workspaceProjectIds: string[] | undefined;
+  projectsReady: boolean;
+}): TWorkspaceApplicationScopeResolution => {
+  if (!projectsReady || workspaceProjectIds === undefined) {
+    return { projectId: storedProjectId, seedProjectId: null, shouldClearStored: false };
+  }
+  const validStored = storedProjectId && workspaceProjectIds.includes(storedProjectId) ? storedProjectId : null;
+  const validParam = paramProjectId && workspaceProjectIds.includes(paramProjectId) ? paramProjectId : null;
+  return {
+    projectId: validStored,
+    seedProjectId: validParam && validParam !== storedProjectId ? validParam : null,
+    shouldClearStored: Boolean(storedProjectId && !validStored),
+  };
+};

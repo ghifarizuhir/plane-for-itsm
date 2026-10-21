@@ -4,14 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 // hooks
 import { useApplicationScope } from "@/hooks/store/use-application-scope";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 // helpers
-import { buildApplicationScopeUrl } from "@/lib/workspace-application-scope";
+import { buildApplicationScopeUrl, resolveWorkspaceApplicationScope } from "@/lib/workspace-application-scope";
 
 export const useWorkspaceApplicationScope = () => {
   // router
@@ -20,33 +20,60 @@ export const useWorkspaceApplicationScope = () => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useAppRouter();
+  const projectParam = searchParams.get("project");
   // store hooks
-  const { workspaceProjectIds, getProjectById } = useProject();
+  const { workspaceProjectIds, getProjectById, isInitializingProjects } = useProject();
   const { getProjectId, setProjectId } = useApplicationScope();
+  // refs
+  const lastHandledRef = useRef<{ workspaceSlug?: string; projectParam?: string | null }>({});
+  const pendingRef = useRef<string | null | undefined>(undefined);
   // derived values
+  const projectsReady = !isInitializingProjects && workspaceProjectIds !== undefined;
   const storedProjectId = workspaceSlug ? getProjectId(workspaceSlug) : null;
-  const projectId = storedProjectId && workspaceProjectIds?.includes(storedProjectId) ? storedProjectId : null;
+  const resolution = resolveWorkspaceApplicationScope({
+    storedProjectId,
+    paramProjectId: projectParam,
+    workspaceProjectIds,
+    projectsReady,
+  });
+  const projectId = pendingRef.current !== undefined ? pendingRef.current : resolution.projectId;
 
-  // Seed from `?project=` and discard scopes that no longer belong to this workspace.
+  // Seed from `?project=` once per URL value, and discard scopes that no longer
+  // belong to this workspace. Never let a store write re-seed from a stale URL.
   useEffect(() => {
-    if (!workspaceSlug || workspaceProjectIds === undefined) return;
-    const paramProjectId = searchParams.get("project");
-    if (paramProjectId && workspaceProjectIds.includes(paramProjectId)) {
-      if (storedProjectId !== paramProjectId) setProjectId(workspaceSlug, paramProjectId);
-      return;
-    }
-    if (storedProjectId && !workspaceProjectIds.includes(storedProjectId)) {
-      setProjectId(workspaceSlug, null);
-    }
-  }, [workspaceSlug, workspaceProjectIds, searchParams, storedProjectId, setProjectId]);
+    if (!workspaceSlug || !projectsReady) return;
+    const alreadyHandled =
+      lastHandledRef.current.workspaceSlug === workspaceSlug && lastHandledRef.current.projectParam === projectParam;
+    if (alreadyHandled) return;
+    lastHandledRef.current = { workspaceSlug, projectParam };
+    if (resolution.seedProjectId) setProjectId(workspaceSlug, resolution.seedProjectId);
+    else if (resolution.shouldClearStored) setProjectId(workspaceSlug, null);
+  }, [
+    workspaceSlug,
+    projectsReady,
+    projectParam,
+    resolution.seedProjectId,
+    resolution.shouldClearStored,
+    setProjectId,
+  ]);
+
+  // Keep an explicit selection stable until the deferred router.replace lands.
+  useEffect(() => {
+    if (pendingRef.current === undefined) return;
+    if (projectParam === (pendingRef.current ?? null)) pendingRef.current = undefined;
+  }, [projectParam]);
 
   const setApplication = useCallback(
     (nextProjectId: string | null) => {
       if (!workspaceSlug) return;
-      setProjectId(workspaceSlug, nextProjectId);
-      router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), nextProjectId));
+      const normalized =
+        nextProjectId && workspaceProjectIds && !workspaceProjectIds.includes(nextProjectId) ? null : nextProjectId;
+      pendingRef.current = normalized;
+      lastHandledRef.current = { workspaceSlug, projectParam };
+      setProjectId(workspaceSlug, normalized);
+      router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), normalized));
     },
-    [workspaceSlug, setProjectId, router, pathname, searchParams]
+    [workspaceSlug, workspaceProjectIds, setProjectId, router, pathname, searchParams, projectParam]
   );
 
   const clearApplication = useCallback(() => setApplication(null), [setApplication]);
