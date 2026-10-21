@@ -87,8 +87,17 @@ export const WorkspaceWorkItemsLayoutRoot = observer(function WorkspaceWorkItems
     }
     if (previousScope.current === scopedProjectId) return;
     previousScope.current = scopedProjectId;
-    if (workspaceSlug) void fetchIssues(workspaceSlug, viewId, "mutation", { canGroup: true, perPageCount: 100 });
-  }, [scopedProjectId, workspaceSlug, viewId, fetchIssues]);
+    // Stored pagination options preserve calendar ranges and pagination state; only
+    // fall back to a fresh first page when no stored options exist.
+    const refetch = async () => {
+      if (!workspaceSlug) return;
+      const response = await fetchIssuesWithExistingPagination(workspaceSlug, viewId, "mutation");
+      if (!response) {
+        await fetchIssues(workspaceSlug, viewId, "mutation", { canGroup: true, perPageCount: 100 });
+      }
+    };
+    void refetch();
+  }, [scopedProjectId, workspaceSlug, viewId, fetchIssues, fetchIssuesWithExistingPagination]);
 
   // Refresh the workspace list once the create modal closes, so a work item created
   // via the header CTA shows up immediately (project-level modal writes to PROJECT store).
@@ -102,7 +111,7 @@ export const WorkspaceWorkItemsLayoutRoot = observer(function WorkspaceWorkItems
 
   const fetchNextPages = useCallback(
     (groupId?: string, subGroupId?: string) => {
-      if (workspaceSlug) fetchNextIssues(workspaceSlug, viewId, groupId, subGroupId);
+      if (workspaceSlug) void fetchNextIssues(workspaceSlug, viewId, groupId, subGroupId);
     },
     [fetchNextIssues, workspaceSlug, viewId]
   );

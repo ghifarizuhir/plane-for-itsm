@@ -13,7 +13,8 @@ import { EIssuesStoreType, EUserWorkspaceRoles } from "@plane/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
 
 export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
   // plane imports
@@ -22,11 +23,25 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
   const { workspaceProjectIds } = useProject();
   const { toggleCreateIssueModal, toggleCreateProjectModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
+  const { workspaceSlug, projectId: scopedProjectId } = useWorkspaceApplicationScope();
+  const { projectsWithCreatePermissions } = useUser();
   // derived values
-  const hasMemberLevelPermission = allowPermissions(
+  const hasWorkspaceMemberPermission = allowPermissions(
     [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
+    EUserPermissionsLevel.WORKSPACE,
+    workspaceSlug
   );
+  const canCreateInScope = !scopedProjectId || Boolean(projectsWithCreatePermissions?.[scopedProjectId]);
+  const canCreateIssue =
+    canCreateInScope &&
+    (scopedProjectId
+      ? allowPermissions(
+          [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
+          EUserPermissionsLevel.PROJECT,
+          workspaceSlug,
+          scopedProjectId
+        )
+      : hasWorkspaceMemberPermission);
 
   if (workspaceProjectIds?.length === 0) {
     return (
@@ -41,7 +56,7 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
             onClick: () => {
               toggleCreateProjectModal(true);
             },
-            disabled: !hasMemberLevelPermission,
+            disabled: !hasWorkspaceMemberPermission,
             variant: "primary",
           },
         ]}
@@ -59,9 +74,9 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
         {
           label: t(`workspace_empty_state.views.cta_primary`),
           onClick: () => {
-            toggleCreateIssueModal(true, EIssuesStoreType.PROJECT);
+            toggleCreateIssueModal(true, EIssuesStoreType.PROJECT, scopedProjectId ? [scopedProjectId] : undefined);
           },
-          disabled: !hasMemberLevelPermission,
+          disabled: !canCreateIssue,
           variant: "primary",
         },
       ]}
