@@ -17,7 +17,14 @@ export interface IWorkspaceApplicationScopeStore {
   reset: (workspaceSlug?: string) => void;
 }
 
-const getDefaultStorage = (): TStorageLike | null => (typeof window !== "undefined" ? window.localStorage : null);
+const getDefaultStorage = (): TStorageLike | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
 
 export class WorkspaceApplicationScopeStore implements IWorkspaceApplicationScopeStore {
   projectIdByWorkspace: Record<string, string | null> = {};
@@ -27,7 +34,7 @@ export class WorkspaceApplicationScopeStore implements IWorkspaceApplicationScop
     this.storage = storage;
     this.projectIdByWorkspace = this.readStorage();
     makeObservable(this, {
-      projectIdByWorkspace: observable,
+      projectIdByWorkspace: observable.ref,
       setProjectId: action,
       reset: action,
     });
@@ -66,13 +73,18 @@ export class WorkspaceApplicationScopeStore implements IWorkspaceApplicationScop
   };
 
   reset = (workspaceSlug?: string) => {
-    if (workspaceSlug) {
+    if (workspaceSlug !== undefined) {
       const next = { ...this.projectIdByWorkspace };
       delete next[workspaceSlug];
       this.projectIdByWorkspace = next;
-    } else {
-      this.projectIdByWorkspace = {};
+      this.persist();
+      return;
     }
-    this.persist();
+    this.projectIdByWorkspace = {};
+    try {
+      this.storage?.removeItem(WORKSPACE_APPLICATION_SCOPE_STORAGE_KEY);
+    } catch {
+      // Best-effort persistence; the in-memory scope still works for this session.
+    }
   };
 }

@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   WORKSPACE_APPLICATION_SCOPE_STORAGE_KEY,
   WorkspaceApplicationScopeStore,
@@ -21,6 +21,10 @@ const createStorage = () => {
 };
 
 describe("WorkspaceApplicationScopeStore", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("defaults to All and persists one scope per workspace", () => {
     const storage = createStorage();
     const store = new WorkspaceApplicationScopeStore(storage);
@@ -70,5 +74,74 @@ describe("WorkspaceApplicationScopeStore", () => {
     const store = new WorkspaceApplicationScopeStore(storage);
 
     expect(store.getProjectId("ws-1")).toBeNull();
+  });
+
+  it("falls back to an in-memory scope when localStorage access throws", () => {
+    vi.stubGlobal("window", {
+      get localStorage() {
+        throw new Error("SecurityError");
+      },
+    });
+
+    const store = new WorkspaceApplicationScopeStore();
+
+    expect(store.getProjectId("ws-1")).toBeNull();
+    store.setProjectId("ws-1", "project-1");
+    expect(store.getProjectId("ws-1")).toBe("project-1");
+  });
+
+  it("keeps working in memory when storage operations throw", () => {
+    const storage = {
+      getItem: () => {
+        throw new Error("SecurityError");
+      },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {
+        throw new Error("SecurityError");
+      },
+    };
+
+    const store = new WorkspaceApplicationScopeStore(storage);
+
+    expect(store.getProjectId("ws-1")).toBeNull();
+    expect(() => store.setProjectId("ws-1", "project-1")).not.toThrow();
+    expect(store.getProjectId("ws-1")).toBe("project-1");
+    expect(() => store.reset()).not.toThrow();
+    expect(store.getProjectId("ws-1")).toBeNull();
+  });
+
+  it("ignores non-string non-null persisted values", () => {
+    const storage = createStorage();
+    storage.setItem(
+      WORKSPACE_APPLICATION_SCOPE_STORAGE_KEY,
+      JSON.stringify({ "ws-1": 42, "ws-2": "project-2", "ws-3": null })
+    );
+
+    const store = new WorkspaceApplicationScopeStore(storage);
+
+    expect(store.projectIdByWorkspace).toEqual({ "ws-2": "project-2", "ws-3": null });
+  });
+
+  it("removes the storage key on global reset", () => {
+    const storage = createStorage();
+    const store = new WorkspaceApplicationScopeStore(storage);
+    store.setProjectId("ws-1", "project-1");
+
+    store.reset();
+
+    expect(store.getProjectId("ws-1")).toBeNull();
+    expect(storage.getItem(WORKSPACE_APPLICATION_SCOPE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("does not clear every workspace when reset receives an empty slug", () => {
+    const storage = createStorage();
+    const store = new WorkspaceApplicationScopeStore(storage);
+    store.setProjectId("ws-1", "project-1");
+
+    store.reset("");
+
+    expect(store.getProjectId("ws-1")).toBe("project-1");
   });
 });
