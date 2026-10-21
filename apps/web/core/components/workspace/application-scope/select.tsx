@@ -21,18 +21,19 @@ export const WorkspaceApplicationScopeSelect = observer(function WorkspaceApplic
   // i18n
   const { t } = useTranslation();
   // store hooks
-  const { workspaceProjectIds, getProjectById } = useProject();
+  const { workspaceProjectIds, getProjectById, isInitializingProjects } = useProject();
   // scope
   const { projectId, setApplication, clearApplication } = useWorkspaceApplicationScope();
 
   if (routeProjectId) return null;
-  if (workspaceProjectIds === undefined) return null;
+  if (isInitializingProjects || workspaceProjectIds === undefined) return null;
 
   const selectedProject = projectId ? getProjectById(projectId) : undefined;
+  const selectedLabel = selectedProject?.name ?? t("service.catalog_all_projects");
 
   return (
     <div className="flex flex-col gap-1 px-2">
-      <span className="tracking-wider text-[11px] font-semibold text-placeholder uppercase">Application</span>
+      <span className="tracking-wider text-[11px] font-semibold text-placeholder uppercase">{t("common.project")}</span>
       <div className="flex min-w-0 items-center gap-1">
         <CustomSelect
           value={projectId ?? ""}
@@ -41,9 +42,9 @@ export const WorkspaceApplicationScopeSelect = observer(function WorkspaceApplic
           buttonClassName="w-full border border-subtle bg-layer-1"
           input
           label={
-            <span className="flex min-w-0 items-center gap-1.5 py-0.5 text-12">
+            <span className="flex min-w-0 items-center gap-1.5 py-0.5 text-12" title={selectedLabel}>
               <ProjectsOutline className="size-3.5 flex-shrink-0 text-tertiary" />
-              <span className="truncate">{selectedProject?.name ?? t("service.catalog_all_projects")}</span>
+              <span className="truncate">{selectedLabel}</span>
             </span>
           }
         >
@@ -61,7 +62,7 @@ export const WorkspaceApplicationScopeSelect = observer(function WorkspaceApplic
           <button
             type="button"
             onClick={clearApplication}
-            aria-label="Clear application scope"
+            aria-label={t("common.clear")}
             className="grid size-6 flex-shrink-0 place-items-center rounded-sm text-tertiary hover:bg-layer-transparent-hover hover:text-primary"
           >
             <CloseOutline className="size-3" />
