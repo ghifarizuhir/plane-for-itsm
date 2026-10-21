@@ -136,11 +136,10 @@ render.
 - `SidebarWrapper` gains an optional `headerContent` slot rendered between the title row
   and `quickActions`. `AppSidebar` passes the application selector; project sidebars do
   not.
-- `rich-filters/FiltersRow` gains an optional `leadingContent` slot (default `undefined`)
-  rendered before the condition chips. Used for the scope chip on Work Items. No visual
-  change to project pages.
 - New `WorkspaceApplicationScopeSelect` and `WorkspaceApplicationScopeChip` components
-  under `core/components/workspace/application-scope/`.
+  under `core/components/workspace/application-scope/`. The chip is rendered in the page
+  header (left, next to the page title/breadcrumb), so it stays visible even when the
+  filter row is hidden.
 
 ## 7. UI/UX
 
@@ -157,9 +156,11 @@ render.
 
 - Rendered on every workspace aggregate page when a project is scoped:
   `Application: <name> ×`.
-- Work Items: first element of the filters row.
-- Cycles/Modules/Pages/Services: in the page toolbar, replacing the old project dropdown.
+- Placed in the page header’s left area, next to the breadcrumb/page title, so it is
+  independent of filter-row visibility.
 - Clicking `×` resets scope to All and refetches.
+- The old per-page project dropdowns are removed; the header chip is the only in-page
+  scope indicator, avoiding duplicate controls.
 
 ### 7.3 Work Items
 
