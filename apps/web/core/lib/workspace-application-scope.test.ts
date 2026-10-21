@@ -53,6 +53,28 @@ describe("resolveWorkspaceApplicationScope", () => {
     ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: false });
   });
 
+  it("trusts the stored scope while the project list is unavailable", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: "project-1",
+        paramProjectId: "project-2",
+        workspaceProjectIds: undefined,
+        projectsReady: false,
+      })
+    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: false });
+  });
+
+  it("trusts the stored scope when ids are unavailable even if readiness is inconsistent", () => {
+    expect(
+      resolveWorkspaceApplicationScope({
+        storedProjectId: "project-1",
+        paramProjectId: "project-2",
+        workspaceProjectIds: undefined,
+        projectsReady: true,
+      })
+    ).toEqual({ projectId: "project-1", seedProjectId: null, shouldClearParam: false });
+  });
+
   it("seeds from a valid param that differs from the stored scope", () => {
     expect(
       resolveWorkspaceApplicationScope({
