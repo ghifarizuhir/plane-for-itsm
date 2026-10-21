@@ -49,9 +49,12 @@ describe("selectWorkspaceCycles", () => {
         makeCycle({ id: "current-a", name: "Alpha", start_date: day(16), end_date: day(20) }),
         makeCycle({ id: "upcoming-later", name: "Later", start_date: day(26), end_date: day(30) }),
         makeCycle({ id: "upcoming-sooner", name: "Sooner", start_date: day(25), end_date: day(29) }),
+        makeCycle({ id: "completed-no-start", name: "No start", status: "completed" }),
         makeCycle({ id: "completed-new", name: "New", start_date: day(10), end_date: day(12) }),
         makeCycle({ id: "completed-old", name: "Old", start_date: day(1), end_date: day(5) }),
+        makeCycle({ id: "draft-zulu", name: "Zulu" }),
         makeCycle({ id: "draft", name: "Draft" }),
+        makeCycle({ id: "draft-alpha", name: "Alpha" }),
       ],
       projectIds: ["p1"],
       filters: {},
@@ -61,9 +64,9 @@ describe("selectWorkspaceCycles", () => {
 
     expect(selection.currentCycleIds).toEqual(["current-a", "current-b"]);
     expect(selection.upcomingCycleIds).toEqual(["upcoming-sooner", "upcoming-later"]);
-    expect(selection.completedCycleIds).toEqual(["completed-new", "completed-old"]);
-    expect(selection.draftCycleIds).toEqual(["draft"]);
-    expect(selection.totalCount).toBe(7);
+    expect(selection.completedCycleIds).toEqual(["completed-new", "completed-old", "completed-no-start"]);
+    expect(selection.draftCycleIds).toEqual(["draft-alpha", "draft", "draft-zulu"]);
+    expect(selection.totalCount).toBe(10);
   });
 
   it("filters by project scope, archived state, and the project feature flag", () => {
@@ -74,7 +77,7 @@ describe("selectWorkspaceCycles", () => {
         makeCycle({ id: "p3", project_id: "p3", status: "current" }),
         makeCycle({ id: "archived", project_id: "p1", status: "current", archived_at: "2026-10-01" }),
       ],
-      projectIds: ["p1", "p2"],
+      projectIds: ["p1", "p2", "p3"],
       filters: {},
       searchQuery: "",
       projectAllowed: (projectId) => projectId !== "p3",
