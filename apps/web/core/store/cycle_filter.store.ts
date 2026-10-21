@@ -27,6 +27,7 @@ export interface ICycleFilterStore {
   getFiltersByProjectId: (projectId: string) => TCycleFilters | undefined;
   getArchivedFiltersByProjectId: (projectId: string) => TCycleFilters | undefined;
   // actions
+  initProjectCycleFilters: (projectId: string) => void;
   updateDisplayFilters: (projectId: string, displayFilters: TCycleDisplayFilters) => void;
   updateFilters: (projectId: string, filters: TCycleFilters, state?: keyof TCycleFiltersByState) => void;
   updateSearchQuery: (query: string) => void;
