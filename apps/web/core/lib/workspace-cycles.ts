@@ -47,7 +47,7 @@ const completedFirst = (a: ICycle, b: ICycle) => Number(!a.start_date) - Number(
  * from the date range so every row/action behaves like a project cycle.
  */
 export const normalizeWorkspaceCycle = (cycle: ICycle, now: Date = new Date()): ICycle => {
-  const explicitStatus = cycle.status?.trim().toLowerCase();
+  const explicitStatus = typeof cycle.status === "string" ? cycle.status.trim().toLowerCase() : undefined;
   const status = explicitStatus && isCycleGroup(explicitStatus) ? explicitStatus : deriveCycleStatus(cycle, now);
   return cycle.status === status ? cycle : { ...cycle, status };
 };
@@ -80,7 +80,7 @@ export const selectWorkspaceCycles = ({
 
   filteredCycles.forEach((cycle) => {
     const status = (cycle.status ?? "draft") as TCycleGroups;
-    const bucket = groups[status] ?? groups.draft;
+    const bucket = isCycleGroup(status) ? groups[status] : groups.draft;
     bucket.push(cycle);
   });
 
