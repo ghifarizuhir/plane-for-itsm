@@ -51,16 +51,21 @@ export const WorkspaceListRoot = observer(function WorkspaceListRoot(props: Prop
 
   // 1:1 with project BaseListRoot: fetch once per view/group, after filters are ready
   const hasFilters = Boolean(issueFilters);
-  const lastFetchedRef = useRef<{ viewId?: string; groupBy?: GroupByColumnTypes | null } | null>(null);
+  const lastFetchedRef = useRef<{
+    workspaceSlug?: string;
+    viewId?: string;
+    groupBy?: GroupByColumnTypes | null;
+  } | null>(null);
   useEffect(() => {
     if (!workspaceSlug || !hasFilters) return;
     const last = lastFetchedRef.current;
-    if (last !== null && last.viewId === viewId && last.groupBy === group_by) return;
+    if (last !== null && last.workspaceSlug === workspaceSlug && last.viewId === viewId && last.groupBy === group_by)
+      return;
     fetchIssues(workspaceSlug, viewId, "init-loader", {
       canGroup: true,
       perPageCount: group_by ? 50 : 100,
     });
-    lastFetchedRef.current = { viewId, groupBy: group_by };
+    lastFetchedRef.current = { workspaceSlug, viewId, groupBy: group_by };
   }, [workspaceSlug, viewId, hasFilters, group_by, fetchIssues]);
 
   const canEditProperties = useCallback(

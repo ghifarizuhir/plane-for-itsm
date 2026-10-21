@@ -67,7 +67,12 @@ export const WorkspaceGanttRoot = observer(function WorkspaceGanttRoot(props: Pr
     if (updateIssue) await updateIssue(issue.project_id, issue.id, payload);
   };
 
-  const isAllowed = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+  // Workspace gantt spans projects; allow workspace members to edit and let the API
+  // enforce per-project permissions.
+  const isAllowed = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.WORKSPACE
+  );
 
   const updateBlockDates = useCallback(
     (updates: { id: string; start_date?: string; target_date?: string }[]) => {

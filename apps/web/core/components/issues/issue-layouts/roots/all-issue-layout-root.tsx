@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { observer } from "mobx-react";
 import { useParams, useSearchParams } from "next/navigation";
 import useSWR from "swr";
@@ -24,6 +24,7 @@ import { useGlobalView } from "@/hooks/store/use-global-view";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
 import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-properties";
 
 type Props = {
@@ -44,9 +45,10 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
   // store hooks
   const {
     issuesFilter: { filters, fetchFilters, updateFilterExpression },
-    issues: { fetchNextIssues },
+    issues: { fetchIssues, fetchIssuesWithExistingPagination, fetchNextIssues },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { fetchAllGlobalViews, getViewDetailsById } = useGlobalView();
+  const { projectId: scopedProjectId } = useWorkspaceApplicationScope();
   // Derived values
   const viewDetails = globalViewId ? getViewDetailsById(globalViewId) : undefined;
   const workItemFilters = globalViewId ? filters?.[globalViewId] : undefined;
@@ -84,6 +86,26 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
     },
     [fetchNextIssues, workspaceSlug, globalViewId]
   );
+
+  // Refetch the active view when the sidebar application scope changes, preserving
+  // stored pagination options (calendar range) and falling back to a first page.
+  const previousScope = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (previousScope.current === undefined) {
+      previousScope.current = scopedProjectId;
+      return;
+    }
+    if (previousScope.current === scopedProjectId) return;
+    previousScope.current = scopedProjectId;
+    if (!workspaceSlug || !globalViewId) return;
+    const refetch = async () => {
+      const response = await fetchIssuesWithExistingPagination(workspaceSlug, globalViewId, "mutation");
+      if (!response) {
+        await fetchIssues(workspaceSlug, globalViewId, "mutation", { canGroup: true, perPageCount: 100 });
+      }
+    };
+    void refetch();
+  }, [scopedProjectId, workspaceSlug, globalViewId, fetchIssues, fetchIssuesWithExistingPagination]);
 
   // Fetch global views
   const { isLoading: globalViewsLoading } = useSWR(
