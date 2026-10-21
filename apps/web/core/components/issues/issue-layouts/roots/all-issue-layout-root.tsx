@@ -44,7 +44,7 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
   // store hooks
   const {
     issuesFilter: { filters, fetchFilters, updateFilterExpression },
-    issues: { clear, groupedIssueIds, fetchIssues, fetchNextIssues },
+    issues: { fetchNextIssues },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { fetchAllGlobalViews, getViewDetailsById } = useGlobalView();
   // Derived values
@@ -77,10 +77,13 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
     routeFilters[key] = value;
   });
 
-  // Fetch next pages callback
-  const fetchNextPages = useCallback(() => {
-    if (workspaceSlug && globalViewId) fetchNextIssues(workspaceSlug, globalViewId);
-  }, [fetchNextIssues, workspaceSlug, globalViewId]);
+  // Fetch next pages callback — 1:1 with project (supports grouped list/kanban pagination)
+  const fetchNextPages = useCallback(
+    (groupId?: string, subGroupId?: string) => {
+      if (workspaceSlug && globalViewId) fetchNextIssues(workspaceSlug, globalViewId, groupId, subGroupId);
+    },
+    [fetchNextIssues, workspaceSlug, globalViewId]
+  );
 
   // Fetch global views
   const { isLoading: globalViewsLoading } = useSWR(
@@ -93,18 +96,13 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
     { revalidateIfStale: false, revalidateOnFocus: false }
   );
 
-  // Fetch issues
+  // Fetch filters — issues are fetched by each layout root (1:1 with project)
   const { isLoading: issuesLoading } = useSWR(
-    workspaceSlug && globalViewId ? `WORKSPACE_GLOBAL_VIEW_ISSUES_${workspaceSlug}_${globalViewId}` : null,
+    workspaceSlug && globalViewId ? `WORKSPACE_GLOBAL_VIEW_FILTERS_${workspaceSlug}_${globalViewId}` : null,
     async () => {
       if (workspaceSlug && globalViewId) {
-        clear();
         toggleLoading(true);
         await fetchFilters(workspaceSlug, globalViewId);
-        await fetchIssues(workspaceSlug, globalViewId, groupedIssueIds ? "mutation" : "init-loader", {
-          canGroup: false,
-          perPageCount: 100,
-        });
         toggleLoading(false);
       }
     },
@@ -160,6 +158,7 @@ export const AllIssueLayoutRoot = observer(function AllIssueLayoutRoot(props: Pr
                 fetchNextPages={fetchNextPages}
                 globalViewsLoading={globalViewsLoading}
                 issuesLoading={issuesLoading}
+                fetchIssuesOnMount
               />
             </div>
             {/* peek overview */}

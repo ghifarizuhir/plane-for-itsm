@@ -66,30 +66,30 @@
     }
   },
   "workspace_analytics": {
-    "label": "Reports",
-    "page_label": "{workspace} - Reports",
-    "open_tasks": "Total open tickets",
+    "label": "Analytics",
+    "page_label": "{workspace} - Analytics",
+    "open_tasks": "Total open tasks",
     "error": "There was some error in fetching the data.",
-    "work_items_closed_in": "Tickets closed in",
+    "work_items_closed_in": "Work items closed in",
     "selected_projects": "Selected applications",
     "total_members": "Total members",
-    "total_cycles": "Total sprints",
-    "total_modules": "Total tracks",
+    "total_cycles": "Total cycles",
+    "total_modules": "Total modules",
     "pending_work_items": {
-      "title": "Pending tickets",
-      "empty_state": "Analysis of pending tickets by co-workers appears here."
+      "title": "Pending work items",
+      "empty_state": "Analysis of pending work items by co-workers appears here."
     },
     "work_items_closed_in_a_year": {
-      "title": "Tickets closed in a year",
-      "empty_state": "Close tickets to view analysis of the same in the form of a graph."
+      "title": "Work items closed in a year",
+      "empty_state": "Close work items to view analysis of the same in the form of a graph."
     },
     "most_work_items_created": {
-      "title": "Most tickets created",
-      "empty_state": "Co-workers and the number of tickets created by them appears here."
+      "title": "Most work items created",
+      "empty_state": "Co-workers and the number of work items created by them appears here."
     },
     "most_work_items_closed": {
-      "title": "Most tickets closed",
-      "empty_state": "Co-workers and the number of tickets closed by them appears here."
+      "title": "Most work items closed",
+      "empty_state": "Co-workers and the number of work items closed by them appears here."
     },
     "tabs": {
       "scope_and_demand": "Scope and Demand",
@@ -106,7 +106,7 @@
     "trend_on_charts": "Trend on charts",
     "active_projects": "Active Applications",
     "customized_insights": "Customized Insights",
-    "created_vs_resolved": "Opened vs Resolved",
+    "created_vs_resolved": "Created vs Resolved",
     "empty_state": {
       "project_insights": {
         "title": "No data yet",
@@ -121,31 +121,31 @@
         "description": "Work items assigned to you, broken down by state, will show up here."
       },
       "general": {
-        "title": "Track ticket throughput, on-call load, and SLA trends",
-        "description": "See how tickets move from open to resolved, where time goes, and how your service team performs — so services stay on track.",
+        "title": "Track throughput, workloads, and trends. Spot bottlenecks and keep work moving",
+        "description": "See how work moves from open to done, where time goes, and how your team is performing — so services stay on track.",
         "primary_button": {
           "text": "Start your first application",
           "comic": {
-            "title": "Reports work best with Sprints + Tracks",
-            "description": "First, timebox your tickets into Sprints and group longer efforts into Tracks. Check out both on the left nav."
+            "title": "Analytics works best with Cycles + Modules",
+            "description": "First, timebox your work items into Cycles and group longer efforts into Modules. Check out both on the left nav."
           }
         }
       },
       "cycle_progress": {
         "title": "No data yet",
-        "description": "Sprint progress analytics will appear here. Add tickets to sprints to start tracking progress."
+        "description": "Cycle progress analytics will appear here. Add work items to cycles to start tracking progress."
       },
       "module_progress": {
         "title": "No data yet",
-        "description": "Track progress analytics will appear here. Add tickets to tracks to start tracking progress."
+        "description": "Module progress analytics will appear here. Add work items to modules to start tracking progress."
       },
       "intake_trends": {
         "title": "No data yet",
-        "description": "Intake trends will appear here. Triage intake requests into tickets to start tracking trends."
+        "description": "Intake trends analytics will appear here. Add work items to intake to start tracking trends."
       }
     },
     "upgrade_to_plan": "Upgrade to {plan} to unlock {tab}",
-    "workitem_resolved_vs_pending": "Tickets resolved vs pending",
+    "workitem_resolved_vs_pending": "Work items resolved vs pending",
     "projects_by_status": "Applications by status",
     "active_users": "Active users",
     "intake_trends": "Intake Trends"

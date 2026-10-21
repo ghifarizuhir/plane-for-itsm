@@ -129,24 +129,24 @@ export const coreRoutes: RouteConfigEntry[] = [
           ),
         ]),
 
-        // Workspace Sprints
-        layout("./(all)/[workspaceSlug]/(projects)/sprints/layout.tsx", [
-          route(":workspaceSlug/sprints", "./(all)/[workspaceSlug]/(projects)/sprints/page.tsx"),
+        // Workspace Cycles
+        layout("./(all)/[workspaceSlug]/(projects)/cycles/layout.tsx", [
+          route(":workspaceSlug/cycles", "./(all)/[workspaceSlug]/(projects)/cycles/page.tsx"),
         ]),
 
-        // Workspace Tracks
-        layout("./(all)/[workspaceSlug]/(projects)/tracks/layout.tsx", [
-          route(":workspaceSlug/tracks", "./(all)/[workspaceSlug]/(projects)/tracks/page.tsx"),
+        // Workspace Modules
+        layout("./(all)/[workspaceSlug]/(projects)/modules/layout.tsx", [
+          route(":workspaceSlug/modules", "./(all)/[workspaceSlug]/(projects)/modules/page.tsx"),
         ]),
 
-        // Workspace Tickets
-        layout("./(all)/[workspaceSlug]/(projects)/tickets/layout.tsx", [
-          route(":workspaceSlug/tickets", "./(all)/[workspaceSlug]/(projects)/tickets/page.tsx"),
+        // Workspace Work items
+        layout("./(all)/[workspaceSlug]/(projects)/work-items/layout.tsx", [
+          route(":workspaceSlug/work-items", "./(all)/[workspaceSlug]/(projects)/work-items/page.tsx"),
         ]),
 
-        // Workspace KB
-        layout("./(all)/[workspaceSlug]/(projects)/kb/layout.tsx", [
-          route(":workspaceSlug/kb", "./(all)/[workspaceSlug]/(projects)/kb/page.tsx"),
+        // Workspace Pages
+        layout("./(all)/[workspaceSlug]/(projects)/pages/layout.tsx", [
+          route(":workspaceSlug/pages", "./(all)/[workspaceSlug]/(projects)/pages/page.tsx"),
         ]),
 
         // Workspace Intake
@@ -462,6 +462,12 @@ export const coreRoutes: RouteConfigEntry[] = [
   // War rooms list redirect: /:workspaceSlug/projects/:projectId/war-rooms
   // → /:workspaceSlug/projects/:projectId/issues?war_room=on
   route(":workspaceSlug/projects/:projectId/war-rooms", "routes/redirects/core/war-rooms.tsx"),
+
+  // Legacy ITSM workspace slugs → Plane names
+  route(":workspaceSlug/sprints", "routes/redirects/core/workspace-sprints.tsx"),
+  route(":workspaceSlug/tracks", "routes/redirects/core/workspace-tracks.tsx"),
+  route(":workspaceSlug/tickets", "routes/redirects/core/workspace-tickets.tsx"),
+  route(":workspaceSlug/kb", "routes/redirects/core/workspace-kb.tsx"),
 
   // Sign-up redirects
   route("accounts/sign-up", "routes/redirects/core/accounts-signup.tsx"),

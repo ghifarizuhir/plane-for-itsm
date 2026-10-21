@@ -6,6 +6,10 @@
 
 import { EIssueLayoutTypes } from "@plane/types";
 import { WorkspaceSpreadsheetRoot } from "@/components/issues/issue-layouts/spreadsheet/roots/workspace-root";
+import { WorkspaceListRoot } from "@/components/issues/issue-layouts/list/roots/workspace-root";
+import { WorkspaceKanbanRoot } from "@/components/issues/issue-layouts/kanban/roots/workspace-root";
+import { WorkspaceCalendarRoot } from "@/components/issues/issue-layouts/calendar/roots/workspace-root";
+import { WorkspaceGanttRoot } from "@/components/issues/issue-layouts/gantt/roots/workspace-root";
 
 export type TWorkspaceLayoutProps = {
   activeLayout: EIssueLayoutTypes | undefined;
@@ -17,9 +21,10 @@ export type TWorkspaceLayoutProps = {
   routeFilters: {
     [key: string]: string;
   };
-  fetchNextPages: () => void;
+  fetchNextPages: (groupId?: string, subGroupId?: string) => void;
   globalViewsLoading: boolean;
   issuesLoading: boolean;
+  fetchIssuesOnMount?: boolean;
 };
 
 export function WorkspaceActiveLayout(props: TWorkspaceLayoutProps) {
@@ -34,8 +39,20 @@ export function WorkspaceActiveLayout(props: TWorkspaceLayoutProps) {
     fetchNextPages,
     globalViewsLoading,
     issuesLoading,
+    fetchIssuesOnMount,
   } = props;
+  // 1:1 with project ProjectIssueLayout — same layout switcher (list/kanban/calendar/gantt/spreadsheet)
   switch (activeLayout) {
+    case EIssueLayoutTypes.LIST:
+      return <WorkspaceListRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
+    case EIssueLayoutTypes.KANBAN:
+      return <WorkspaceKanbanRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
+    case EIssueLayoutTypes.CALENDAR:
+      return (
+        <WorkspaceCalendarRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />
+      );
+    case EIssueLayoutTypes.GANTT:
+      return <WorkspaceGanttRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
     case EIssueLayoutTypes.SPREADSHEET:
       return (
         <WorkspaceSpreadsheetRoot
@@ -48,6 +65,7 @@ export function WorkspaceActiveLayout(props: TWorkspaceLayoutProps) {
           fetchNextPages={fetchNextPages}
           globalViewsLoading={globalViewsLoading}
           issuesLoading={issuesLoading}
+          fetchOnMount={fetchIssuesOnMount}
         />
       );
     default:

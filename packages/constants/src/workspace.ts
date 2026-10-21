@@ -247,14 +247,14 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
   tickets: {
     key: "tickets",
     labelTranslationKey: "sidebar.work_items",
-    href: `/tickets/`,
+    href: `/work-items/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
   },
   sprints: {
     key: "sprints",
     labelTranslationKey: "sidebar.cycles",
-    href: `/sprints/`,
+    href: `/cycles/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
     flag: "cycle_view",
@@ -262,7 +262,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
   tracks: {
     key: "tracks",
     labelTranslationKey: "sidebar.modules",
-    href: `/tracks/`,
+    href: `/modules/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
     highlight: (pathname: string, url: string) => pathname.includes(url),
     flag: "module_view",
@@ -277,7 +277,7 @@ export const WORKSPACE_SIDEBAR_STATIC_NAVIGATION_ITEMS: Record<string, IWorkspac
   kb: {
     key: "kb",
     labelTranslationKey: "sidebar.pages",
-    href: `/kb/`,
+    href: `/pages/`,
     access: [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     highlight: (pathname: string, url: string) => pathname.includes(url),
     flag: "page_view",

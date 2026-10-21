@@ -31,7 +31,7 @@ const WorkspaceSprintsBreadcrumbs = observer(function WorkspaceSprintsBreadcrumb
             component={
               <BreadcrumbLink
                 label={t("sidebar.cycles")}
-                href={`/${workspaceSlug}/sprints/`}
+                href={`/${workspaceSlug}/cycles/`}
                 icon={<CyclesOutline className="h-4 w-4 text-tertiary" />}
                 isLast
               />

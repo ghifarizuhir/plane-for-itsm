@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 // plane constants
 import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -35,10 +35,18 @@ type Props = {
   fetchNextPages: () => void;
   globalViewsLoading: boolean;
   issuesLoading: boolean;
+  fetchOnMount?: boolean;
 };
 
 export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRoot(props: Props) {
-  const { isLoading = false, workspaceSlug, globalViewId, fetchNextPages, issuesLoading } = props;
+  const {
+    isLoading = false,
+    workspaceSlug,
+    globalViewId,
+    fetchNextPages,
+    issuesLoading,
+    fetchOnMount = false,
+  } = props;
 
   // Custom hooks
   useWorkspaceIssueProperties(workspaceSlug);
@@ -46,13 +54,23 @@ export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRo
   // Store hooks
   const {
     issuesFilter: { filters, updateFilters },
-    issues: { getIssueLoader, getPaginationData, groupedIssueIds },
+    issues: { getIssueLoader, getPaginationData, groupedIssueIds, fetchIssues },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { updateIssue, removeIssue, archiveIssue } = useIssuesActions(EIssuesStoreType.GLOBAL);
   const { allowPermissions } = useUserPermissions();
 
   // Derived values
   const issueFilters = globalViewId ? filters?.[globalViewId.toString()] : undefined;
+
+  // 1:1 with project BaseSpreadsheetRoot, but opt-in so workspace-views keeps its own fetch flow
+  const hasFilters = Boolean(issueFilters);
+  useEffect(() => {
+    if (!fetchOnMount || !workspaceSlug || !globalViewId || !hasFilters) return;
+    fetchIssues(workspaceSlug.toString(), globalViewId.toString(), "init-loader", {
+      canGroup: false,
+      perPageCount: 100,
+    });
+  }, [fetchOnMount, workspaceSlug, globalViewId, hasFilters, fetchIssues]);
 
   // Permission checker
   const canEditProperties = useCallback(

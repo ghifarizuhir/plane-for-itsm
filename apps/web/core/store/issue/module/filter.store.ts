@@ -22,6 +22,8 @@ import type {
 } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { handleIssueQueryParamsByLayout } from "@plane/utils";
+// helpers
+import { appendRichFilterNode } from "@/lib/issue-filter-scope";
 import { IssueFiltersService } from "@/services/issue_filter.service";
 import type { IBaseIssueFilterStore } from "../helpers/issue-filter-helper.store";
 import { IssueFilterHelperStore } from "../helpers/issue-filter-helper.store";
@@ -139,6 +141,8 @@ export class ModuleIssuesFilter extends IssueFilterHelperStore implements IModul
         filterParams = {};
       }
       filterParams["module"] = moduleId;
+      // api-rs ignores the legacy `module` param, so scope via rich filters too.
+      filterParams.filters = appendRichFilterNode(filterParams.filters, { module_id: [moduleId] });
 
       const paginationParams = this.getPaginationParams(filterParams, options, cursor, groupId, subGroupId);
       return paginationParams;

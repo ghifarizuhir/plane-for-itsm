@@ -8,7 +8,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Outlet } from "react-router";
 // icons
-import { ModuleOutline } from "@makeplane/propel/icons";
+import { PagesOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
@@ -18,7 +18,7 @@ import { ContentWrapper } from "@/components/core/content-wrapper";
 // hooks
 import { useAppRouter } from "@/hooks/use-app-router";
 
-const WorkspaceTracksBreadcrumbs = observer(function WorkspaceTracksBreadcrumbs() {
+const WorkspaceKbBreadcrumbs = observer(function WorkspaceKbBreadcrumbs() {
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
   const { t } = useTranslation();
@@ -30,9 +30,9 @@ const WorkspaceTracksBreadcrumbs = observer(function WorkspaceTracksBreadcrumbs(
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label={t("sidebar.modules")}
-                href={`/${workspaceSlug}/tracks/`}
-                icon={<ModuleOutline className="h-4 w-4 text-tertiary" />}
+                label={t("sidebar.pages")}
+                href={`/${workspaceSlug}/pages/`}
+                icon={<PagesOutline className="h-4 w-4 text-tertiary" />}
                 isLast
               />
             }
@@ -44,10 +44,10 @@ const WorkspaceTracksBreadcrumbs = observer(function WorkspaceTracksBreadcrumbs(
   );
 });
 
-export default function WorkspaceTracksLayout() {
+export default function WorkspaceKbLayout() {
   return (
     <>
-      <AppHeader header={<WorkspaceTracksBreadcrumbs />} />
+      <AppHeader header={<WorkspaceKbBreadcrumbs />} />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>
