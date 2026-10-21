@@ -26,10 +26,12 @@ import { ServiceIncidentCell } from "../health/service-incident-cell";
 
 type Props = {
   serviceId: string;
+  showProject?: boolean;
+  showOwner?: boolean;
 };
 
 export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props) {
-  const { serviceId } = props;
+  const { serviceId, showProject = true, showOwner = true } = props;
   // router
   const { workspaceSlug } = useParams();
   // plane hooks
@@ -49,7 +51,7 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
   const state = health?.health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
   const serviceLink = `/${workspaceSlug?.toString()}/services/${service.id}`;
-  const ownerProject = service.owner_project_id ? getProjectById(service.owner_project_id) : undefined;
+  const ownerProject = showProject && service.owner_project_id ? getProjectById(service.owner_project_id) : undefined;
   const isCritical = service.criticality === "critical";
 
   return (
@@ -57,41 +59,40 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
       id={`service-${service.id}`}
       href={serviceLink}
       onClick={() => handleRedirection(workspaceSlug?.toString(), service, isMobile)}
-      className="relative flex items-center gap-3 border-b border-subtle px-3 py-2.5 transition-colors hover:bg-layer-transparent-hover"
+      className="relative flex items-center gap-3 border-b border-subtle px-3 py-1.5 transition-colors hover:bg-layer-transparent-hover"
     >
       <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <ServiceHealthDot health={state} />
-        <span className="truncate text-13 font-medium text-primary">{service.name}</span>
+        <span className="truncate text-12 font-medium text-primary">{service.name}</span>
         {ownerProject && (
           <span
-            className="shrink-0 rounded-xs border border-subtle px-1 text-10 font-medium tracking-wide text-tertiary"
+            className="shrink-0 rounded-xs border border-subtle px-1 text-9 font-medium tracking-wide text-tertiary"
             title={ownerProject.name}
           >
             {ownerProject.identifier}
           </span>
         )}
-        <span
-          className={cn(
-            "shrink-0 rounded-xs border px-1 text-10 font-medium tracking-wide uppercase",
-            isCritical ? "border-danger-strong text-danger-primary" : "border-subtle text-tertiary"
-          )}
-        >
-          {t(`service.criticality_values.${service.criticality}`)}
-        </span>
+        {isCritical && (
+          <span className="shrink-0 rounded-xs border border-danger-strong px-1 text-9 font-medium tracking-wide text-danger-primary uppercase">
+            {t(`service.criticality_values.${service.criticality}`)}
+          </span>
+        )}
       </div>
-      <div className="hidden w-[120px] shrink-0 sm:block">
+      <div className="hidden w-[90px] shrink-0 sm:block">
         <ServiceHealthPill health={state} />
       </div>
-      <div className="hidden w-[120px] shrink-0 md:block">
+      <div className="hidden w-[100px] shrink-0 md:block">
         <ServiceIncidentCell incidents={health?.incidents ?? []} />
       </div>
-      <div className="hidden w-[110px] shrink-0 lg:block">
+      <div className="hidden w-[90px] shrink-0 lg:block">
         <ServiceDeployCell lastDeployedAt={health?.last_deployed_at ?? null} />
       </div>
-      <div className="hidden w-[56px] shrink-0 items-center justify-end xl:flex">
-        {service.owner_id && <ButtonAvatars showTooltip userIds={service.owner_id} />}
-      </div>
+      {showOwner && (
+        <div className="hidden w-[40px] shrink-0 items-center justify-end xl:flex">
+          {service.owner_id && <ButtonAvatars showTooltip userIds={service.owner_id} />}
+        </div>
+      )}
     </ControlLink>
   );
 });
