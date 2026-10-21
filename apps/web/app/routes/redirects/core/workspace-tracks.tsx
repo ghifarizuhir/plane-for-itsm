@@ -7,9 +7,10 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/workspace-tracks";
 
-export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
+export const clientLoader = ({ params, request }: Route.ClientLoaderArgs) => {
   const { workspaceSlug } = params;
-  throw redirect(`/${workspaceSlug}/modules/`);
+  const search = new URL(request.url).search;
+  throw redirect(`/${workspaceSlug}/modules${search}`);
 };
 
 export default function WorkspaceTracks() {

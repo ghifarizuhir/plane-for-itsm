@@ -7,9 +7,10 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/workspace-sprints";
 
-export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
+export const clientLoader = ({ params, request }: Route.ClientLoaderArgs) => {
   const { workspaceSlug } = params;
-  throw redirect(`/${workspaceSlug}/cycles/`);
+  const search = new URL(request.url).search;
+  throw redirect(`/${workspaceSlug}/cycles${search}`);
 };
 
 export default function WorkspaceSprints() {

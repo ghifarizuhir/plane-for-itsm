@@ -7,9 +7,10 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/workspace-tickets";
 
-export const clientLoader = ({ params }: Route.ClientLoaderArgs) => {
+export const clientLoader = ({ params, request }: Route.ClientLoaderArgs) => {
   const { workspaceSlug } = params;
-  throw redirect(`/${workspaceSlug}/work-items/`);
+  const search = new URL(request.url).search;
+  throw redirect(`/${workspaceSlug}/work-items${search}`);
 };
 
 export default function WorkspaceTickets() {

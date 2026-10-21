@@ -124,7 +124,7 @@ export const WorkspaceTracksListView = observer(function WorkspaceTracksListView
 
   const handleProjectFilterChange = (projectId: string) => {
     if (!slug) return;
-    router.push(projectId ? `/${slug}/tracks?project=${projectId}` : `/${slug}/tracks`);
+    router.push(projectId ? `/${slug}/modules?project=${projectId}` : `/${slug}/modules`);
   };
 
   return (

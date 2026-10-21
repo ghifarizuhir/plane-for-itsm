@@ -181,7 +181,7 @@ export const WorkspaceKbListView = observer(function WorkspaceKbListView({ typeF
     if (nextType !== "all") params.set("type", nextType);
     if (normalizedProjectFilter) params.set("project", normalizedProjectFilter);
     const query = params.toString();
-    return `/${slug}/kb${query ? `?${query}` : ""}`;
+    return `/${slug}/pages${query ? `?${query}` : ""}`;
   };
 
   const handleProjectFilterChange = (projectId: string) => {
@@ -190,7 +190,7 @@ export const WorkspaceKbListView = observer(function WorkspaceKbListView({ typeF
     if (normalizedType !== "all") params.set("type", normalizedType);
     if (projectId) params.set("project", projectId);
     const query = params.toString();
-    router.push(`/${slug}/kb${query ? `?${query}` : ""}`);
+    router.push(`/${slug}/pages${query ? `?${query}` : ""}`);
   };
 
   const handleLoadMore = () => {

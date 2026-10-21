@@ -124,7 +124,7 @@ export const WorkspaceSprintsListView = observer(function WorkspaceSprintsListVi
 
   const handleProjectFilterChange = (projectId: string) => {
     if (!slug) return;
-    router.push(projectId ? `/${slug}/sprints?project=${projectId}` : `/${slug}/sprints`);
+    router.push(projectId ? `/${slug}/cycles?project=${projectId}` : `/${slug}/cycles`);
   };
 
   return (

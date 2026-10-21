@@ -22,6 +22,7 @@ export const WorkspaceApplicationScopeChip = observer(function WorkspaceApplicat
   return (
     <div className="flex max-w-[220px] items-center gap-1 rounded-sm border border-subtle bg-layer-1 px-2 py-0.5 text-11 text-secondary">
       <ProjectsOutline className="size-3 flex-shrink-0 text-tertiary" />
+      <span className="truncate text-tertiary">{t("common.project")}:</span>
       <span className="truncate" title={project.name}>
         {project.name}
       </span>
