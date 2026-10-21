@@ -94,6 +94,18 @@ export class WorkspaceIssues extends BaseIssuesStore implements IWorkspaceIssues
   /** */
   updateParentStats = () => {};
 
+  private getScopedProjectId = (workspaceSlug: string): string | null => {
+    const scopedProjectId = this.rootIssueStore.rootStore.workspaceApplicationScope.getProjectId(workspaceSlug);
+    if (!scopedProjectId) return null;
+
+    const projectMap = this.rootIssueStore.projectMap;
+    if (!projectMap || Object.keys(projectMap).length === 0) return scopedProjectId;
+
+    const project = projectMap[scopedProjectId];
+    if (!project || project.archived_at) return null;
+    return scopedProjectId;
+  };
+
   /**
    * This method is called to fetch the first issues of pagination
    * @param workspaceSlug
@@ -132,7 +144,7 @@ export class WorkspaceIssues extends BaseIssuesStore implements IWorkspaceIssues
 
       // The sidebar application scope is a workspace-wide project filter. The
       // workspace endpoint ignores legacy `?project=`, so scope via rich filters.
-      const scopedProjectId = this.rootIssueStore.rootStore.workspaceApplicationScope.getProjectId(workspaceSlug);
+      const scopedProjectId = this.getScopedProjectId(workspaceSlug);
       if (scopedProjectId) {
         params.filters = appendRichFilterNode(params.filters, { project_id: [scopedProjectId] });
       }
@@ -227,7 +239,7 @@ export class WorkspaceIssues extends BaseIssuesStore implements IWorkspaceIssues
       };
 
       // Keep paginated pages scoped to the sidebar application selection.
-      const scopedProjectId = this.rootIssueStore.rootStore.workspaceApplicationScope.getProjectId(workspaceSlug);
+      const scopedProjectId = this.getScopedProjectId(workspaceSlug);
       if (scopedProjectId) {
         params.filters = appendRichFilterNode(params.filters, { project_id: [scopedProjectId] });
       }
