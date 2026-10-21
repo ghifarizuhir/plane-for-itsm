@@ -42,18 +42,18 @@ export const resolveWorkspaceApplicationScope = ({
 };
 
 export const shouldHandleApplicationScopeParam = ({
-  lastHandledWorkspaceSlug,
+  hasHandledParam,
   lastHandledProjectParam,
   workspaceSlug,
   projectParam,
   projectsReady,
 }: {
-  lastHandledWorkspaceSlug?: string;
+  hasHandledParam: boolean;
   lastHandledProjectParam?: string | null;
   workspaceSlug: string | undefined;
   projectParam: string | null;
   projectsReady: boolean;
 }): boolean => {
   if (!workspaceSlug || !projectsReady) return false;
-  return !(lastHandledWorkspaceSlug === workspaceSlug && lastHandledProjectParam === projectParam);
+  return !(hasHandledParam && lastHandledProjectParam === projectParam);
 };

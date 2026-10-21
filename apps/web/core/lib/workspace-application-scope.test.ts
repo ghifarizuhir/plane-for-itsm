@@ -173,7 +173,7 @@ describe("shouldHandleApplicationScopeParam", () => {
   it("does not handle while projects are not ready", () => {
     expect(
       shouldHandleApplicationScopeParam({
-        lastHandledWorkspaceSlug: undefined,
+        hasHandledParam: false,
         lastHandledProjectParam: undefined,
         workspaceSlug: "workspace-1",
         projectParam: "project-1",
@@ -185,7 +185,7 @@ describe("shouldHandleApplicationScopeParam", () => {
   it("does not handle without a workspace slug", () => {
     expect(
       shouldHandleApplicationScopeParam({
-        lastHandledWorkspaceSlug: undefined,
+        hasHandledParam: false,
         lastHandledProjectParam: undefined,
         workspaceSlug: undefined,
         projectParam: "project-1",
@@ -194,10 +194,10 @@ describe("shouldHandleApplicationScopeParam", () => {
     ).toBe(false);
   });
 
-  it("does not handle the same workspace and param twice", () => {
+  it("does not handle an already-handled param", () => {
     expect(
       shouldHandleApplicationScopeParam({
-        lastHandledWorkspaceSlug: "workspace-1",
+        hasHandledParam: true,
         lastHandledProjectParam: "project-1",
         workspaceSlug: "workspace-1",
         projectParam: "project-1",
@@ -209,7 +209,7 @@ describe("shouldHandleApplicationScopeParam", () => {
   it("handles a changed param in the same workspace", () => {
     expect(
       shouldHandleApplicationScopeParam({
-        lastHandledWorkspaceSlug: "workspace-1",
+        hasHandledParam: true,
         lastHandledProjectParam: "project-1",
         workspaceSlug: "workspace-1",
         projectParam: "project-2",
@@ -218,12 +218,12 @@ describe("shouldHandleApplicationScopeParam", () => {
     ).toBe(true);
   });
 
-  it("handles the same param after switching workspaces", () => {
+  it("handles a param that has not been handled yet", () => {
     expect(
       shouldHandleApplicationScopeParam({
-        lastHandledWorkspaceSlug: "workspace-1",
-        lastHandledProjectParam: "project-1",
-        workspaceSlug: "workspace-2",
+        hasHandledParam: false,
+        lastHandledProjectParam: undefined,
+        workspaceSlug: "workspace-1",
         projectParam: "project-1",
         projectsReady: true,
       })

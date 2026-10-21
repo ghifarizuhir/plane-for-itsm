@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 // hooks
 import { useApplicationScope } from "@/hooks/store/use-application-scope";
@@ -18,6 +18,8 @@ import {
   shouldHandleApplicationScopeParam,
 } from "@/lib/workspace-application-scope";
 
+const handledScopeParams = new Map<string, string | null>();
+
 export const useWorkspaceApplicationScope = () => {
   // router
   const { workspaceSlug: routerWorkspaceSlug } = useParams();
@@ -30,8 +32,6 @@ export const useWorkspaceApplicationScope = () => {
   const { currentWorkspace } = useWorkspace();
   const { workspaceProjectIds, getProjectById, isInitializingProjects } = useProject();
   const { getProjectId, setProjectId } = useApplicationScope();
-  // refs
-  const lastHandledRef = useRef<{ workspaceSlug?: string; projectParam?: string | null }>({});
   // derived values
   const workspaceMatches = !workspaceSlug || currentWorkspace?.slug === workspaceSlug;
   const projectsReady = workspaceMatches && !isInitializingProjects && workspaceProjectIds !== undefined;
@@ -48,18 +48,23 @@ export const useWorkspaceApplicationScope = () => {
   // from a stale URL, and never delete a persisted scope on a transient failure.
   useEffect(() => {
     if (!workspaceSlug || !projectsReady) return;
+    const hasHandledParam = handledScopeParams.has(workspaceSlug);
     const shouldHandle = shouldHandleApplicationScopeParam({
-      lastHandledWorkspaceSlug: lastHandledRef.current.workspaceSlug,
-      lastHandledProjectParam: lastHandledRef.current.projectParam,
+      hasHandledParam,
+      lastHandledProjectParam: handledScopeParams.get(workspaceSlug),
       workspaceSlug,
       projectParam,
       projectsReady,
     });
     if (!shouldHandle) return;
-    if (!resolution.seedProjectId) return;
-    lastHandledRef.current = { workspaceSlug, projectParam };
-    setProjectId(workspaceSlug, resolution.seedProjectId);
-  }, [workspaceSlug, projectsReady, projectParam, resolution.seedProjectId, setProjectId]);
+    if (resolution.seedProjectId) {
+      handledScopeParams.set(workspaceSlug, projectParam);
+      setProjectId(workspaceSlug, resolution.seedProjectId);
+      return;
+    }
+    const isParamAuthoritative = !projectParam || Boolean(workspaceProjectIds?.includes(projectParam));
+    if (isParamAuthoritative) handledScopeParams.set(workspaceSlug, projectParam);
+  }, [workspaceSlug, projectsReady, projectParam, resolution.seedProjectId, workspaceProjectIds, setProjectId]);
 
   const setApplication = useCallback(
     (nextProjectId: string | null) => {
@@ -72,7 +77,7 @@ export const useWorkspaceApplicationScope = () => {
         setProjectId(workspaceSlug, normalized);
         return;
       }
-      lastHandledRef.current = { workspaceSlug, projectParam };
+      handledScopeParams.set(workspaceSlug, projectParam);
       setProjectId(workspaceSlug, normalized);
       router.replace(buildApplicationScopeUrl(pathname, searchParams.toString(), normalized));
     },
