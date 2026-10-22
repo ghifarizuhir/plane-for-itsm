@@ -61,7 +61,7 @@ export interface IProjectPageStore {
     pageId: string,
     options?: { trackVisit?: boolean }
   ) => Promise<TPage | undefined>;
-  createPage: (pageData: Partial<TPage>) => Promise<TPage | undefined>;
+  createPage: (pageData: Partial<TPage>, projectId?: string) => Promise<TPage | undefined>;
   removePage: (params: { pageId: string; shouldSync?: boolean }) => Promise<void>;
   movePage: (workspaceSlug: string, projectId: string, pageId: string, newProjectId: string) => Promise<void>;
 }
@@ -294,17 +294,18 @@ export class ProjectPageStore implements IProjectPageStore {
    * @description create a page
    * @param {Partial<TPage>} pageData
    */
-  createPage = async (pageData: Partial<TPage>) => {
+  createPage = async (pageData: Partial<TPage>, projectId?: string) => {
     try {
-      const { workspaceSlug, projectId } = this.store.router;
-      if (!workspaceSlug || !projectId) return undefined;
+      const { workspaceSlug, projectId: routeProjectId } = this.store.router;
+      const resolvedProjectId = projectId ?? routeProjectId;
+      if (!workspaceSlug || !resolvedProjectId) return undefined;
 
       runInAction(() => {
         this.loader = "mutation-loader";
         this.error = undefined;
       });
 
-      const page = await this.service.create(workspaceSlug, projectId, pageData);
+      const page = await this.service.create(workspaceSlug, resolvedProjectId, pageData);
       runInAction(() => {
         if (page?.id) set(this.data, [page.id], new ProjectPage(this.store, page));
         this.loader = undefined;
