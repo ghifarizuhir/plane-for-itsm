@@ -28,6 +28,7 @@ export interface IServiceFilterStore {
   updateDisplayFilters: (projectId: string, displayFilters: Partial<TServiceDisplayFilters>) => void;
   updateFilters: (projectId: string, filters: Partial<TServiceFilters>) => void;
   updateSearchQuery: (query: string) => void;
+  initProjectServiceFilters: (projectId: string) => void;
   clearAllFilters: (projectId: string) => void;
 }
 

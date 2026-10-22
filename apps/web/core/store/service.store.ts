@@ -20,6 +20,7 @@ import type {
   TServiceWorkItemLink,
 } from "@plane/types";
 // helpers
+import { selectWorkspaceServiceIds, WORKSPACE_SERVICE_FILTER_KEY } from "@/lib/workspace-services";
 import { filterServices, orderServices } from "@/services/service.helpers";
 // services
 import { ServiceHealthService } from "@/services/service-health.service";
@@ -42,6 +43,7 @@ export interface IServiceStore {
   workItemLinkMap: Record<string, TServiceWorkItemLink>;
   healthMap: Record<string, IServiceHealthSnapshot>;
   errorMap: Record<string, boolean>;
+  workspaceError: boolean;
   peekService?: TServicePeek;
   getServiceById: (serviceId: string) => IService | null;
   getServiceHealth: (serviceId: string) => IServiceHealthSnapshot | null;
@@ -49,6 +51,9 @@ export interface IServiceStore {
   getProjectServiceIds: (projectId: string) => string[] | null;
   getFilteredServiceIds: (projectId: string) => string[] | null;
   getWorkspaceServiceIds: () => string[];
+  getWorkspaceScopedServiceIds: (projectIds?: string[]) => string[];
+  getWorkspaceFilteredServiceIds: (projectIds?: string[]) => string[];
+  getWorkspaceHealthSummary: (projectIds?: string[]) => TServiceHealthSummary;
   getDependenciesByProject: (projectId: string) => IServiceDependency[];
   getDependenciesByService: (serviceId: string) => IServiceDependency[];
   getWorkItemLinksByService: (serviceId: string) => TServiceWorkItemLink[];
@@ -145,6 +150,7 @@ export class ServicesStore implements IServiceStore {
   workItemLinkMap: Record<string, TServiceWorkItemLink> = {};
   healthMap: Record<string, IServiceHealthSnapshot> = {};
   errorMap: Record<string, boolean> = {};
+  workspaceError: boolean = false;
   peekService: TServicePeek | undefined = undefined;
   rootStore;
   serviceService;
@@ -160,6 +166,7 @@ export class ServicesStore implements IServiceStore {
       workItemLinkMap: observable,
       healthMap: observable,
       errorMap: observable,
+      workspaceError: observable.ref,
       peekService: observable.ref,
       fetchServices: action,
       fetchWorkspaceServices: action,
@@ -262,12 +269,58 @@ export class ServicesStore implements IServiceStore {
     return sortBy(Object.values(this.serviceMap), [(s) => s.sort_order]).map((s) => s.id);
   });
 
+  getWorkspaceScopedServiceIds = computedFn((projectIds?: string[]) => {
+    if (!this.workspaceFetched) return [];
+    return selectWorkspaceServiceIds({
+      services: Object.values(this.serviceMap),
+      projectIds,
+      filters: {},
+      searchQuery: "",
+      orderBy: "name",
+      healthMap: {},
+    });
+  });
+
+  getWorkspaceFilteredServiceIds = computedFn((projectIds?: string[]) => {
+    if (!this.workspaceFetched) return [];
+    const displayFilters = this.rootStore.serviceFilter.getDisplayFiltersByProjectId(WORKSPACE_SERVICE_FILTER_KEY);
+    const filters = this.rootStore.serviceFilter.getFiltersByProjectId(WORKSPACE_SERVICE_FILTER_KEY);
+    const searchQuery = this.rootStore.serviceFilter.searchQuery;
+    return selectWorkspaceServiceIds({
+      services: Object.values(this.serviceMap),
+      projectIds,
+      filters,
+      searchQuery,
+      orderBy: displayFilters?.order_by ?? "health",
+      healthMap: this.healthMap,
+    });
+  });
+
+  getWorkspaceHealthSummary = computedFn((projectIds?: string[]): TServiceHealthSummary => {
+    const summary: TServiceHealthSummary = { down: 0, degraded: 0, healthy: 0, unknown: 0, criticalImpacted: 0 };
+    this.getWorkspaceScopedServiceIds(projectIds).forEach((serviceId) => {
+      const service = this.serviceMap[serviceId];
+      if (!service) return;
+      const state = this.healthMap[service.id]?.health ?? "unknown";
+      summary[state] += 1;
+      if (state !== "healthy" && state !== "unknown" && service.criticality === "critical") {
+        summary.criticalImpacted += 1;
+      }
+    });
+    return summary;
+  });
+
   getWorkspaceGraphData = computedFn((projectId?: string): TServiceGraphData => {
     const serviceIds = this.getWorkspaceServiceIds();
     const services = serviceIds
       .map((id) => this.serviceMap[id])
       .filter((service): service is IService => Boolean(service))
-      .filter((service) => !projectId || service.project_links?.some((l) => l.project_id === projectId));
+      .filter(
+        (service) =>
+          !projectId ||
+          service.owner_project_id === projectId ||
+          service.project_links?.some((l) => l.project_id === projectId)
+      );
     const visible = new Set(services.map((s) => s.id));
     const dependencies = Object.values(this.dependencyMap).filter(
       (d) => visible.has(d.from_service_id) || visible.has(d.to_service_id)
@@ -332,6 +385,7 @@ export class ServicesStore implements IServiceStore {
 
   fetchWorkspaceServices = async (workspaceSlug: string, workspaceId: string, projectId?: string) => {
     try {
+      this.workspaceError = false;
       this.loader = true;
       const [services, dependencies, links] = await Promise.all([
         this.serviceService.getWorkspaceServices(workspaceSlug, projectId ? { project: projectId } : undefined),
@@ -358,6 +412,7 @@ export class ServicesStore implements IServiceStore {
     } catch {
       runInAction(() => {
         this.loader = false;
+        this.workspaceError = true;
       });
       return undefined;
     }
