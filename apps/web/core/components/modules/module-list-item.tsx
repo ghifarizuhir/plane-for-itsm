@@ -18,30 +18,35 @@ import { ModuleListItemAction, ModuleQuickActions } from "@/components/modules";
 // helpers
 // hooks
 import { useModule } from "@/hooks/store/use-module";
+import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
 type Props = {
   moduleId: string;
+  showProjectBadge?: boolean;
 };
 
 export const ModuleListItem = observer(function ModuleListItem(props: Props) {
-  const { moduleId } = props;
+  const { moduleId, showProjectBadge = false } = props;
   // refs
   const parentRef = useRef(null);
   // router
   const router = useAppRouter();
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug } = useParams();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   // store hooks
   const { getModuleById } = useModule();
+  const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
 
   // derived values
   const moduleDetails = getModuleById(moduleId);
+  const resolvedProjectId = moduleDetails?.project_id;
+  const project = showProjectBadge && resolvedProjectId ? getProjectById(resolvedProjectId) : undefined;
 
-  if (!moduleDetails) return null;
+  if (!moduleDetails || !resolvedProjectId) return null;
 
   const completionPercentage =
     ((moduleDetails.completed_issues + moduleDetails.cancelled_issues) / moduleDetails.total_issues) * 100;
@@ -100,12 +105,19 @@ export const ModuleListItem = observer(function ModuleListItem(props: Props) {
         </div>
       }
       appendTitleElement={
-        <button
-          onClick={openModuleOverview}
-          className={`z-[5] flex-shrink-0 ${isMobile ? "flex" : "hidden group-hover:flex"}`}
-        >
-          <InfoOutline className="h-4 w-4 text-placeholder" />
-        </button>
+        <div className="flex items-center gap-2">
+          {project && (
+            <span className="max-w-[120px] truncate rounded-sm bg-layer-2 px-1.5 py-0.5 text-11 text-tertiary">
+              {project.name}
+            </span>
+          )}
+          <button
+            onClick={openModuleOverview}
+            className={`z-[5] flex-shrink-0 ${isMobile ? "flex" : "hidden group-hover:flex"}`}
+          >
+            <InfoOutline className="h-4 w-4 text-placeholder" />
+          </button>
+        </div>
       }
       actionableItems={<ModuleListItemAction moduleId={moduleId} moduleDetails={moduleDetails} parentRef={parentRef} />}
       quickActionElement={
@@ -113,7 +125,7 @@ export const ModuleListItem = observer(function ModuleListItem(props: Props) {
           <ModuleQuickActions
             parentRef={parentRef}
             moduleId={moduleId}
-            projectId={projectId.toString()}
+            projectId={resolvedProjectId}
             workspaceSlug={workspaceSlug.toString()}
           />
         </div>

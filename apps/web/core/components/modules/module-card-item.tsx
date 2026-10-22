@@ -9,7 +9,7 @@ import React, { useRef } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { InfoOutline, UserAltOutline, WorkItemsOutline } from "@makeplane/propel/icons";
+import { InfoOutline, ProjectsOutline, UserAltOutline, WorkItemsOutline } from "@makeplane/propel/icons";
 // plane package imports
 import { MODULE_STATUS, EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
@@ -27,16 +27,23 @@ import { ModuleStatusDropdown } from "@/components/modules/module-status-dropdow
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
+import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 
+const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
+  e.stopPropagation();
+  e.preventDefault();
+};
+
 type Props = {
   moduleId: string;
+  showProjectBadge?: boolean;
 };
 
 export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
-  const { moduleId } = props;
+  const { moduleId, showProjectBadge = false } = props;
   // refs
   const parentRef = useRef(null);
   // router
@@ -47,14 +54,19 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
+  const { getProjectById } = useProject();
   const { getUserDetails } = useMember();
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   // derived values
   const moduleDetails = getModuleById(moduleId);
+  const resolvedProjectId = moduleDetails?.project_id ?? projectId?.toString();
+  const project = showProjectBadge && resolvedProjectId ? getProjectById(resolvedProjectId) : undefined;
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug?.toString(),
+    resolvedProjectId
   );
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails?.start_date) || Boolean(moduleDetails?.target_date);
@@ -63,11 +75,12 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const handleAddToFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    const addToFavoritePromise = addModuleToFavorites(workspaceSlug.toString(), projectId.toString(), moduleId).then(
+    const addToFavoritePromise = addModuleToFavorites(workspaceSlug.toString(), resolvedProjectId, moduleId).then(
       () => {
         if (!storedValue) toggleFavoriteMenu(true);
+        return undefined;
       }
     );
 
@@ -87,13 +100,9 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const handleRemoveFromFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    const removeFromFavoritePromise = removeModuleFromFavorites(
-      workspaceSlug.toString(),
-      projectId.toString(),
-      moduleId
-    );
+    const removeFromFavoritePromise = removeModuleFromFavorites(workspaceSlug.toString(), resolvedProjectId, moduleId);
 
     setPromiseToast(removeFromFavoritePromise, {
       loading: "Removing module from favorites...",
@@ -108,21 +117,17 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
     });
   };
 
-  const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-  };
-
   const handleModuleDetailsChange = async (payload: Partial<IModule>) => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId, payload)
+    await updateModuleDetails(workspaceSlug.toString(), resolvedProjectId, moduleId, payload)
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: "Success!",
           message: "Module updated successfully.",
         });
+        return undefined;
       })
       .catch((err) => {
         setToast({
@@ -180,7 +185,12 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
               <Tooltip label={moduleDetails.name} layout="stacked" disabled={isMobile}>
                 <span className="truncate text-14 font-medium">{moduleDetails.name}</span>
               </Tooltip>
-              <div className="flex items-center gap-2" onClick={handleEventPropagation}>
+              <div
+                role="presentation"
+                className="flex items-center gap-2"
+                onClick={handleEventPropagation}
+                onKeyDown={handleEventPropagation}
+              >
                 {moduleStatus && (
                   <ModuleStatusDropdown
                     isDisabled={isDisabled}
@@ -194,6 +204,12 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
               </div>
             </div>
           </div>
+          {project && (
+            <div className="flex items-center gap-1.5 text-11 text-tertiary">
+              <ProjectsOutline className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{project.name}</span>
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-secondary">
@@ -217,7 +233,12 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
               showValue={false}
               aria-label="Module progress"
             />
-            <div className="flex items-center justify-between py-0.5" onClick={handleEventPropagation}>
+            <div
+              role="presentation"
+              className="flex items-center justify-between py-0.5"
+              onClick={handleEventPropagation}
+              onKeyDown={handleEventPropagation}
+            >
               <DateRangeDropdown
                 buttonContainerClassName={`h-6 w-full flex ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"} items-center gap-1.5 text-tertiary border-[0.5px] border-strong rounded-sm text-11`}
                 buttonVariant="transparent-with-text"
@@ -253,11 +274,11 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
             selected={!!moduleDetails.is_favorite}
           />
         )}
-        {workspaceSlug && projectId && (
+        {workspaceSlug && resolvedProjectId && (
           <ModuleQuickActions
             parentRef={parentRef}
             moduleId={moduleId}
-            projectId={projectId.toString()}
+            projectId={resolvedProjectId}
             workspaceSlug={workspaceSlug.toString()}
           />
         )}

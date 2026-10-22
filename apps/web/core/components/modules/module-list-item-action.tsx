@@ -36,7 +36,7 @@ type Props = {
 export const ModuleListItemAction = observer(function ModuleListItemAction(props: Props) {
   const { moduleId, moduleDetails, parentRef } = props;
   // router
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug } = useParams();
   //   store hooks
   const { allowPermissions } = useUserPermissions();
   const { addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
@@ -49,9 +49,12 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   // derived values
 
   const moduleStatus = MODULE_STATUS.find((status) => status.value === moduleDetails.status);
+  const resolvedProjectId = moduleDetails.project_id;
   const isEditingAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
+    EUserPermissionsLevel.PROJECT,
+    workspaceSlug?.toString(),
+    resolvedProjectId
   );
   const isDisabled = !isEditingAllowed || !!moduleDetails?.archived_at;
   const renderIcon = Boolean(moduleDetails.start_date) || Boolean(moduleDetails.target_date);
@@ -60,12 +63,13 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   const handleAddToFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    const addToFavoritePromise = addModuleToFavorites(workspaceSlug.toString(), projectId.toString(), moduleId).then(
+    const addToFavoritePromise = addModuleToFavorites(workspaceSlug.toString(), resolvedProjectId, moduleId).then(
       () => {
         // open favorites menu if closed
         if (!storedValue) toggleFavoriteMenu(true);
+        return undefined;
       }
     );
 
@@ -85,13 +89,9 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   const handleRemoveFromFavorites = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    const removeFromFavoritePromise = removeModuleFromFavorites(
-      workspaceSlug.toString(),
-      projectId.toString(),
-      moduleId
-    );
+    const removeFromFavoritePromise = removeModuleFromFavorites(workspaceSlug.toString(), resolvedProjectId, moduleId);
 
     setPromiseToast(removeFromFavoritePromise, {
       loading: "Removing module from favorites...",
@@ -107,15 +107,16 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   };
 
   const handleModuleDetailsChange = async (payload: Partial<IModule>) => {
-    if (!workspaceSlug || !projectId) return;
+    if (!workspaceSlug || !resolvedProjectId) return;
 
-    await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), moduleId, payload)
+    await updateModuleDetails(workspaceSlug.toString(), resolvedProjectId, moduleId, payload)
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: "Success!",
           message: "Module updated successfully.",
         });
+        return undefined;
       })
       .catch((err) => {
         setToast({
@@ -180,12 +181,12 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
           selected={moduleDetails.is_favorite}
         />
       )}
-      {workspaceSlug && projectId && (
+      {workspaceSlug && (
         <div className="hidden md:block">
           <ModuleQuickActions
             parentRef={parentRef}
             moduleId={moduleId}
-            projectId={projectId.toString()}
+            projectId={resolvedProjectId}
             workspaceSlug={workspaceSlug.toString()}
           />
         </div>
