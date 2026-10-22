@@ -14,6 +14,7 @@ import { Button } from "@plane/propel/button";
 import { useService } from "@/hooks/store/use-service";
 import { useServiceFilter } from "@/hooks/store/use-service-filter";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { useWorkspaceServicePermissions } from "@/hooks/use-workspace-service-permissions";
 // components
 import { ServicesBoard } from "./board/services-board";
 import { ServiceGraph } from "./graph/service-graph";
@@ -59,6 +60,8 @@ export const ServicesListView = observer(function ServicesListView({
   } = useService();
   const { getDisplayFiltersByProjectId, clearAllFilters } = useServiceFilter();
   const { currentWorkspace } = useWorkspace();
+  const { canCreateService } = useWorkspaceServicePermissions();
+  const canCreate = workspaceMode ? canCreateService : true;
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
@@ -90,7 +93,7 @@ export const ServicesListView = observer(function ServicesListView({
 
   const workspaceId = currentWorkspace?.id;
   const hasError = workspaceMode ? workspaceError : projectId ? errorMap[projectId.toString()] : false;
-  const isLoading = loader && (workspaceMode ? !workspaceFetched : totalServiceIds === null);
+  const isLoading = workspaceMode ? !workspaceFetched && !workspaceError : loader && totalServiceIds === null;
 
   const handleRetry = () => {
     if (!workspaceSlug || !workspaceId) return;
@@ -113,7 +116,7 @@ export const ServicesListView = observer(function ServicesListView({
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.description")}</p>
-          <Button variant="primary" size="sm" onClick={openCreateModal}>
+          <Button variant="primary" size="sm" onClick={openCreateModal} disabled={!canCreate}>
             {t("service.add")}
           </Button>
         </div>

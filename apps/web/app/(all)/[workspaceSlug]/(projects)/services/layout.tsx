@@ -70,7 +70,7 @@ const WorkspaceServicesBreadcrumbs = observer(function WorkspaceServicesBreadcru
   );
 });
 
-export default function WorkspaceServicesLayout() {
+const WorkspaceServicesLayout = observer(function WorkspaceServicesLayout() {
   const { serviceId } = useParams();
   const { projectId } = useWorkspaceApplicationScope();
 
@@ -89,4 +89,6 @@ export default function WorkspaceServicesLayout() {
       </ContentWrapper>
     </>
   );
-}
+});
+
+export default WorkspaceServicesLayout;
