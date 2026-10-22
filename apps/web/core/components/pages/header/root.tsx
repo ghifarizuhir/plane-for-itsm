@@ -27,7 +27,7 @@ import { PageTabNavigation } from "../list/tab-navigation";
 
 type Props = {
   pageType: TPageNavigationTabs;
-  projectId: string;
+  projectId?: string;
   storeType: EPageStoreType;
   workspaceSlug: string;
 };

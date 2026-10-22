@@ -6,10 +6,11 @@
 
 import { observer } from "mobx-react";
 import useSWR from "swr";
+// plane imports
+import type { EPageAccess } from "@plane/constants";
 import type { TPageNavigationTabs } from "@plane/types";
 // hooks
-import type { EPageStoreType } from "@/hooks/store";
-import { usePageStore } from "@/hooks/store";
+import { EPageStoreType, usePageStore } from "@/hooks/store";
 // local imports
 import { PagesListHeaderRoot } from "./header";
 import { PagesListMainContent } from "./pages-list-main-content";
@@ -17,25 +18,32 @@ import { PagesListMainContent } from "./pages-list-main-content";
 type TPageView = {
   children: React.ReactNode;
   pageType: TPageNavigationTabs;
-  projectId: string;
+  projectId?: string;
   storeType: EPageStoreType;
   workspaceSlug: string;
+  canCreate?: boolean;
+  onCreatePage?: (access: EPageAccess) => void | Promise<void>;
+  emptyStateVariant?: "workspace";
 };
 
 export const PagesListView = observer(function PagesListView(props: TPageView) {
-  const { children, pageType, projectId, storeType, workspaceSlug } = props;
+  const { children, pageType, projectId, storeType, workspaceSlug, canCreate, onCreatePage, emptyStateVariant } = props;
   // store hooks
   const { isAnyPageAvailable, fetchPagesList } = usePageStore(storeType);
-  // fetching pages list
-  useSWR(
-    workspaceSlug && projectId && pageType ? `PROJECT_PAGES_${projectId}` : null,
-    workspaceSlug && projectId && pageType ? () => fetchPagesList(workspaceSlug, projectId, pageType) : null
-  );
+  const isWorkspaceStore = storeType === EPageStoreType.WORKSPACE;
+  const fetchKey =
+    workspaceSlug && pageType
+      ? isWorkspaceStore
+        ? `WORKSPACE_PAGES_${workspaceSlug}`
+        : projectId
+          ? `PROJECT_PAGES_${projectId}`
+          : null
+      : null;
 
-  // pages loader
+  useSWR(fetchKey, fetchKey ? () => fetchPagesList(workspaceSlug, projectId ?? "", pageType) : null);
+
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      {/* tab header */}
       {isAnyPageAvailable && (
         <PagesListHeaderRoot
           pageType={pageType}
@@ -44,7 +52,14 @@ export const PagesListView = observer(function PagesListView(props: TPageView) {
           workspaceSlug={workspaceSlug}
         />
       )}
-      <PagesListMainContent pageType={pageType} storeType={storeType}>
+      <PagesListMainContent
+        pageType={pageType}
+        storeType={storeType}
+        createProjectId={projectId}
+        canCreate={canCreate}
+        onCreatePage={onCreatePage}
+        emptyStateVariant={emptyStateVariant}
+      >
         {children}
       </PagesListMainContent>
     </div>
