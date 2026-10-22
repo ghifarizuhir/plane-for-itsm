@@ -45,6 +45,7 @@ export const WorkspaceCreateServiceModal = observer(function WorkspaceCreateServ
       (workspaceProjectIds ?? [])
         .map((id) => getProjectById(id))
         .filter((p): p is NonNullable<typeof p> => Boolean(p))
+        .filter((p) => p.service_view !== false)
         .filter((p) =>
           allowPermissions(
             [EUserPermissions.ADMIN, EUserPermissions.MEMBER],

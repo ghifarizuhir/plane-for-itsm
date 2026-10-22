@@ -21,45 +21,94 @@ import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
 import { ServicePeekOverview } from "./peek-overview";
 import { ServiceLoadErrorState } from "./service-load-error-state";
+import { WorkspaceCreateServiceModal } from "./workspace/create-service-modal";
+// helpers
+import { WORKSPACE_SERVICE_FILTER_KEY } from "@/lib/workspace-services";
 
-export const ServicesListView = observer(function ServicesListView() {
+type Props = {
+  workspaceMode?: boolean;
+  projectIds?: string[];
+  filterKey?: string;
+  scopeProjectId?: string;
+};
+
+export const ServicesListView = observer(function ServicesListView({
+  workspaceMode = false,
+  projectIds,
+  filterKey,
+  scopeProjectId,
+}: Props) {
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getProjectServiceIds, getFilteredServiceIds, getProjectHealthSummary, loader, errorMap, fetchServices } =
-    useService();
-  const { currentProjectDisplayFilters, clearAllFilters } = useServiceFilter();
+  const {
+    errorMap,
+    fetchServices,
+    fetchWorkspaceServices,
+    getFilteredServiceIds,
+    getProjectHealthSummary,
+    getProjectServiceIds,
+    getWorkspaceFilteredServiceIds,
+    getWorkspaceHealthSummary,
+    getWorkspaceScopedServiceIds,
+    loader,
+    workspaceError,
+    workspaceFetched,
+  } = useService();
+  const { getDisplayFiltersByProjectId, clearAllFilters } = useServiceFilter();
   const { currentWorkspace } = useWorkspace();
   // states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  // derived values
-  const layout = currentProjectDisplayFilters?.layout ?? "board";
-  const projectServiceIds = projectId ? getProjectServiceIds(projectId.toString()) : null;
-  const serviceIds = projectId ? getFilteredServiceIds(projectId.toString()) : null;
-  const summary = projectId ? getProjectHealthSummary(projectId.toString()) : null;
-
-  const workspaceId = currentWorkspace?.id;
-  const hasError = projectId ? errorMap[projectId.toString()] : false;
-
-  const handleRetry = () => {
-    if (!workspaceSlug || !workspaceId || !projectId) return;
-    fetchServices(workspaceSlug.toString(), workspaceId, projectId.toString());
-  };
-
   const openCreateModal = () => setIsCreateModalOpen(true);
   const closeCreateModal = () => setIsCreateModalOpen(false);
+
+  // derived values
+  const resolvedFilterKey = filterKey ?? (workspaceMode ? WORKSPACE_SERVICE_FILTER_KEY : projectId?.toString());
+  const displayFilters = resolvedFilterKey ? getDisplayFiltersByProjectId(resolvedFilterKey) : undefined;
+  const layout =
+    workspaceMode && !scopeProjectId && displayFilters?.layout === "graph"
+      ? "board"
+      : (displayFilters?.layout ?? "board");
+  const totalServiceIds = workspaceMode
+    ? getWorkspaceScopedServiceIds(projectIds)
+    : projectId
+      ? getProjectServiceIds(projectId.toString())
+      : null;
+  const serviceIds = workspaceMode
+    ? getWorkspaceFilteredServiceIds(projectIds)
+    : projectId
+      ? getFilteredServiceIds(projectId.toString())
+      : null;
+  const summary = workspaceMode
+    ? getWorkspaceHealthSummary(projectIds)
+    : projectId
+      ? getProjectHealthSummary(projectId.toString())
+      : null;
+
+  const workspaceId = currentWorkspace?.id;
+  const hasError = workspaceMode ? workspaceError : projectId ? errorMap[projectId.toString()] : false;
+  const isLoading = loader && (workspaceMode ? !workspaceFetched : totalServiceIds === null);
+
+  const handleRetry = () => {
+    if (!workspaceSlug || !workspaceId) return;
+    if (workspaceMode) {
+      void fetchWorkspaceServices(workspaceSlug.toString(), workspaceId);
+      return;
+    }
+    if (projectId) void fetchServices(workspaceSlug.toString(), workspaceId, projectId.toString());
+  };
 
   const renderContent = () => {
     if (hasError) {
       return <ServiceLoadErrorState onRetry={handleRetry} />;
     }
-    if (loader || projectServiceIds === null || serviceIds === null) {
+    if (isLoading || totalServiceIds === null || serviceIds === null) {
       return <div className="text-sm p-6 text-secondary">{t("common.loading")}</div>;
     }
-    if (projectServiceIds.length === 0) {
+    if (totalServiceIds.length === 0) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.title")}</p>
@@ -75,25 +124,28 @@ export const ServicesListView = observer(function ServicesListView() {
         <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
           <p className="text-sm font-medium text-primary">{t("service.empty_state.no_matches.title")}</p>
           <p className="text-xs text-secondary">{t("service.empty_state.no_matches.description")}</p>
-          {projectId && (
-            <Button variant="secondary" size="sm" onClick={() => clearAllFilters(projectId.toString())}>
+          {resolvedFilterKey && (
+            <Button variant="secondary" size="sm" onClick={() => clearAllFilters(resolvedFilterKey)}>
               {t("common.clear_all")}
             </Button>
           )}
         </div>
       );
     }
-    if (layout === "graph") {
+    if (layout === "graph" && (workspaceMode ? scopeProjectId : projectId)) {
       return (
         <div className="min-h-0 w-full flex-1">
-          <ServiceGraph />
+          <ServiceGraph
+            scope={workspaceMode ? "workspace" : "project"}
+            projectIdOverride={workspaceMode ? scopeProjectId : undefined}
+          />
         </div>
       );
     }
     return (
       <>
         {summary && <ServiceHealthSummary summary={summary} />}
-        <ServicesBoard />
+        <ServicesBoard serviceIds={serviceIds} />
       </>
     );
   };
@@ -102,13 +154,23 @@ export const ServicesListView = observer(function ServicesListView() {
     <div className="relative flex min-h-0 w-full flex-1 flex-col">
       {renderContent()}
       <ServicePeekOverview />
-      {workspaceSlug && projectId && (
-        <CreateUpdateServiceModal
+      {workspaceMode ? (
+        <WorkspaceCreateServiceModal
           isOpen={isCreateModalOpen}
           onClose={closeCreateModal}
-          workspaceSlug={workspaceSlug.toString()}
-          projectId={projectId.toString()}
+          workspaceSlug={workspaceSlug?.toString() ?? ""}
+          defaultOwnerProjectId={scopeProjectId}
         />
+      ) : (
+        workspaceSlug &&
+        projectId && (
+          <CreateUpdateServiceModal
+            isOpen={isCreateModalOpen}
+            onClose={closeCreateModal}
+            workspaceSlug={workspaceSlug.toString()}
+            projectId={projectId.toString()}
+          />
+        )
       )}
     </div>
   );

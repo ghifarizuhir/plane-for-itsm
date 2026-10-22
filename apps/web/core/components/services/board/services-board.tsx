@@ -13,7 +13,11 @@ import { useService } from "@/hooks/store/use-service";
 // local imports
 import { ServicesBoardRow } from "./services-board-row";
 
-export const ServicesBoard = observer(function ServicesBoard() {
+type Props = {
+  serviceIds?: string[];
+};
+
+export const ServicesBoard = observer(function ServicesBoard({ serviceIds: serviceIdsProp }: Props) {
   // router
   const { projectId } = useParams();
   // plane hooks
@@ -21,7 +25,7 @@ export const ServicesBoard = observer(function ServicesBoard() {
   // store hooks
   const { getFilteredServiceIds } = useService();
   // derived values
-  const serviceIds = projectId ? (getFilteredServiceIds(projectId.toString()) ?? []) : [];
+  const serviceIds = serviceIdsProp ?? (projectId ? (getFilteredServiceIds(projectId.toString()) ?? []) : []);
 
   return (
     <div className="flex h-full w-full flex-col">

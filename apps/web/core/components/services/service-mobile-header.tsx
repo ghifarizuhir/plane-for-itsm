@@ -14,13 +14,22 @@ import { SERVICE_VIEW_LAYOUTS, ServiceLayoutIcon } from "./service-layout-icon";
 // hooks
 import { useServiceFilter } from "@/hooks/store/use-service-filter";
 
-export const ServiceMobileHeader = observer(function ServiceMobileHeader() {
+type Props = {
+  filterKey?: string;
+  isGraphDisabled?: boolean;
+};
+
+export const ServiceMobileHeader = observer(function ServiceMobileHeader({
+  filterKey,
+  isGraphDisabled = false,
+}: Props) {
   // router
   const { projectId } = useParams();
   // hooks
   const { t } = useTranslation();
   // store hooks
   const { updateDisplayFilters } = useServiceFilter();
+  const resolvedFilterKey = filterKey ?? projectId?.toString();
 
   return (
     <div className="flex justify-start md:hidden">
@@ -35,19 +44,23 @@ export const ServiceMobileHeader = observer(function ServiceMobileHeader() {
         customButtonClassName="flex flex-grow justify-center items-center text-secondary text-13"
         closeOnSelect
       >
-        {SERVICE_VIEW_LAYOUTS.map((layout) => (
-          <CustomMenu.MenuItem
-            key={layout.key}
-            onClick={() => {
-              if (!projectId) return;
-              updateDisplayFilters(projectId.toString(), { layout: layout.key });
-            }}
-            className="flex items-center gap-2"
-          >
-            <ServiceLayoutIcon layoutType={layout.key} />
-            <div className="text-tertiary">{t(layout.i18n_label)}</div>
-          </CustomMenu.MenuItem>
-        ))}
+        {SERVICE_VIEW_LAYOUTS.map((layout) => {
+          const isLayoutDisabled = layout.key === "graph" && isGraphDisabled;
+
+          return (
+            <CustomMenu.MenuItem
+              key={layout.key}
+              onClick={() => {
+                if (isLayoutDisabled || !resolvedFilterKey) return;
+                updateDisplayFilters(resolvedFilterKey, { layout: layout.key });
+              }}
+              className="flex items-center gap-2"
+            >
+              <ServiceLayoutIcon layoutType={layout.key} />
+              <div className="text-tertiary">{t(layout.i18n_label)}</div>
+            </CustomMenu.MenuItem>
+          );
+        })}
       </CustomMenu>
     </div>
   );
