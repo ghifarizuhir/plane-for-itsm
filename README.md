@@ -1,165 +1,223 @@
-<br /><br />
+<div align="center">
 
-<p align="center">
-<a href="https://plane.so">
-  <img src="https://media.docs.plane.so/logo/plane_github_readme.png" alt="Plane Logo" width="400">
-</a>
-</p>
-<p align="center"><b>Modern IT service management for all teams</b></p>
+# Plane for ITSM
 
-<p align="center">
-    <a href="https://plane.so/"><b>Website</b></a> •
-    <a href="https://forum.plane.so"><b>Forum</b></a> •
-    <a href="https://x.com/planepowers"><b>X</b></a> •
-    <a href="https://docs.plane.so/"><b>Documentation</b></a>
-</p>
+**Open-source IT service management, built on Plane and shaped by ITIL4.**
 
-<p>
-    <a href="https://app.plane.so/#gh-light-mode-only" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-top.webp"
-        alt="Plane Screens"
-        width="100%"
-      />
-    </a>
-</p>
+Tickets, services, knowledge, and delivery work in one workspace — so incidents, requests, problems, and changes stay connected to the services they affect.
 
-Meet [Plane](https://plane.so/), an open-source IT service management tool to run services, resolve requests, and track delivery work without the chaos of managing the tool itself. 🧘‍♀️
+[ITIL4 practice map](#itil4-practice-map) · [Capabilities](#capabilities) · [Architecture](#architecture) · [Self-hosting](#self-hosting) · [Local development](#local-development) · [Documentation](#documentation)
 
-> Plane is evolving every day. Your suggestions, ideas, and reported bugs help us immensely. Do not hesitate to join in the conversation on [Forum](https://forum.plane.so) or raise a GitHub issue. We read everything and respond to most.
+</div>
 
-## 🚀 Installation
+---
 
-Getting started with Plane is simple. Choose the setup that works best for you:
+## Why Plane for ITSM
 
-- **Plane Cloud**
-  Sign up for a free account on [Plane Cloud](https://app.plane.so)—it's the fastest way to get up and running without worrying about infrastructure.
+Plane for ITSM is a fork of [Plane](https://plane.so) that moves the product from project delivery into **IT service management**. The workspace is the tenant. Applications group the work. Services form a shared catalog. Tickets carry incidents, requests, problems, changes, and improvements through ITIL4 practices.
 
-- **Self-host Plane**
-  Prefer full control over your data and infrastructure? Install and run Plane on your own servers. Follow our detailed [deployment guides](https://developers.plane.so/self-hosting/overview) to get started.
+The result is one operational system for support and delivery teams:
 
-| Installation methods | Docs link                                                                                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Docker               | [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://developers.plane.so/self-hosting/methods/docker-compose)         |
-| Kubernetes           | [![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)](https://developers.plane.so/self-hosting/methods/kubernetes) |
+- Service desk intake and triage instead of scattered request channels.
+- A service catalog and dependency map instead of a spreadsheet.
+- Major-incident coordination instead of a chat thread and a bridge call.
+- Knowledge capture that stays linked to the tickets that produced it.
+- Sprints, tracks, and reports for the delivery work behind the services.
 
-`Instance admins` can configure instance settings with [God mode](https://developers.plane.so/self-hosting/govern/instance-admin).
+## ITIL4 practice map
 
-## 🌟 Features
+| ITIL4 practice             | What the platform provides                                                                      | Main surfaces                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Incident management        | Report, triage, resolve, and review disruptions; run major incidents from a dedicated war room. | Intake, Tickets, Queues, Services, War Rooms, KB, Reports   |
+| Problem management         | Link recurring incidents, investigate root causes, and publish known errors.                    | Tickets (Problem), Tracks, Knowledge base, Reports          |
+| Service request management | Move standard requests through a configurable Request type with an optional service gate.       | Intake, Tickets (Request), Services, Queues, Knowledge base |
+| Change enablement          | Plan changes, link affected services, and coordinate rollout and rollback.                      | Tickets (Change), Sprints, Tracks, Services                 |
+| Continual improvement      | Turn review findings into Improvement tickets and measure the outcome.                          | Tickets (Improvement), Tracks, Reports                      |
+| Knowledge management       | Capture solutions, runbooks, and known errors; publish selected knowledge externally.           | Knowledge base, Space, Galileo                              |
 
-- **Work Items**
-  Efficiently create and manage tasks with a robust rich text editor that supports file uploads. Enhance organization and tracking by adding sub-properties and referencing related issues.
+ITIL4 here is an operating model, not a certification claim. Two deliberate boundaries today: there is no SLA engine or CAB approval board, and service health is a catalog indicator rather than live monitoring. The in-app guide at `/:workspaceSlug/docs` walks through each practice with the exact product flow.
 
-- **Cycles**
-  Maintain your team’s momentum with Cycles. Track progress effortlessly using burn-down charts and other insightful tools.
+## Capabilities
 
-- **Modules**
-  Simplify complex projects by dividing them into smaller, manageable modules.
+### Tickets
 
-- **Views**
-  Customize your workflow by creating filters to display only the most relevant issues. Save and share these views with ease.
+Tickets are the unit of operational work. The seed ships four work item types — **Incident**, **Problem**, **Change**, and **Improvement**. **Request** is opt-in: create a Request work item type and enable `requires service` to enforce a service link during intake triage.
 
-- **Pages**
-  Capture and organize ideas using Plane Pages, complete with AI capabilities and a rich text editor. Format text, insert images, add hyperlinks, or convert your notes into actionable items.
+- Five layouts: list, kanban, calendar, gantt, and spreadsheet.
+- Rich text descriptions with TipTap, versions, comments, activity, attachments, sub-items, and relations.
+- Saved filters, queues, export, keyboard-first navigation, and global search.
+- Workspace-wide and application-scoped views, with a persistent application scope selector.
 
-- **Analytics**
-  Access real-time insights across all your Plane data. Visualize trends, remove blockers, and keep your projects moving forward.
+### Intake
 
-## 🛠️ Local development
+Intake is the service desk front door. Reports arrive in a workspace triage queue before they become tickets.
 
-See [CONTRIBUTING](./CONTRIBUTING.md)
+- In-app forms and token-authenticated webhook sources (for example, Alertmanager-style alerts).
+- Series deduplication: repeated alerts update `occurrence_count` instead of creating duplicate tickets.
+- AI triage suggestions with a human accept/decline gate.
+- Accept-time classification by work item type, with a required service link when the type demands it.
+- Workspace intake aggregates reports across applications, with an application filter for triage.
 
-## ⚙️ Built with
+### Services
 
-[![React Router](https://img.shields.io/badge/-React%20Router-CA4245?logo=react-router&style=for-the-badge&logoColor=white)](https://reactrouter.com/)
-[![Django](https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=green)](https://www.djangoproject.com/)
-[![Node JS](https://img.shields.io/badge/node.js-339933?style=for-the-badge&logo=Node.js&logoColor=white)](https://nodejs.org/en)
+Services form a workspace-level service catalog shared across applications.
 
-## 📸 Screenshots
+- Owner and consumer application links, so one service can be supported by one team and consumed by many.
+- Status, criticality, type, owner, repository, and documentation fields.
+- Typed dependencies: `runs_on`, `connects_to`, `replicates_to`, `depends_on`, `uses`, and `other`.
+- Board and dependency-graph layouts, work-item links, and incident/health indicators.
+- Health is currently derived from catalog data, not a live monitoring feed; the replacement seam is isolated in `apps/web/core/services/service-health.service.ts`.
 
-  <p>
-    <a href="https://plane.so" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-work-items.webp"
-        alt="Plane Views"
-        width="100%"
-      />
-    </a>
-  </p>
-  <p>
-    <a href="https://plane.so" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-cycles.webp"
-        width="100%"
-      />
-    </a>
-  </p>
-  <p>
-    <a href="https://plane.so" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-modules.webp"
-        alt="Plane Cycles and Modules"
-        width="100%"
-      />
-    </a>
-  </p>
-  <p>
-    <a href="https://plane.so" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-views.webp"
-        alt="Plane Analytics"
-        width="100%"
-      />
-    </a>
-  </p>
-   <p>
-    <a href="https://plane.so" target="_blank">
-      <img
-        src="https://media.docs.plane.so/GitHub-readme/github-analytics.webp"
-        alt="Plane Pages"
-        width="100%"
-      />
-    </a>
-  </p>
-</p>
+### War Rooms
 
-## 📝 Documentation
+A War Room turns an Incident ticket into a coordinated major-incident response.
 
-Explore Plane's [product documentation](https://docs.plane.so/) and [developer documentation](https://developers.plane.so/) to learn about features, setup, and usage.
+- Toggle the War Room property on an Incident to create or reopen a room; toggle it off to resolve.
+- Realtime chat with presence, typing indicators, mentions, and message history.
+- Runbook, participants, activity timeline, and blast-radius service map.
+- Severity follows ticket priority; one active room per incident.
+- Realtime events relay through `apps/live` over Redis.
 
-## ❤️ Community
+### Sprints and Tracks
 
-Join the Plane community on [GitHub Discussions](https://github.com/orgs/makeplane/discussions) and our [Forum](https://forum.plane.so). We follow a [Code of conduct](https://github.com/makeplane/plane/blob/master/CODE_OF_CONDUCT.md) in all our community channels.
+- **Sprints** (cycles) provide a recurring cadence with start and end dates, progress, and burn-down.
+- **Tracks** (modules) group tickets toward a larger outcome or phase.
+- Both are workspace-level aggregates with application scope, so the same planning surfaces work across teams.
 
-Feel free to ask questions, report bugs, participate in discussions, share ideas, request features, or showcase your projects. We’d love to hear from you!
+### Queues, Knowledge base, and Reports
 
-## 🛡️ Security
+- **Queues** are saved views over tickets: triage, active incidents, problem review, per-service requests, and upcoming changes.
+- **Knowledge base** is a workspace page tree with a TipTap editor, versions, comments, and Yjs collaboration for concurrent editing. Selected pages can be published through **Space**.
+- **Reports** provide workspace analytics for trends and distribution across applications.
 
-If you discover a security vulnerability in Plane, please report it responsibly instead of opening a public issue. We take all legitimate reports seriously and will investigate them promptly. See [Security policy](https://github.com/makeplane/plane/blob/master/SECURITY.md) for more info.
+### AI
 
-To disclose any security issues, please email us at security@plane.so.
+- **Galileo** is a context-aware assistant that can summarize the open ticket, service, sprint, track, or knowledge article.
+- **Scheduler** runs recurring AI recipes such as daily reports, weekly summaries, and reminders, with run history.
+- Intake triage suggestions keep a human in the loop before classification is applied.
 
-## 🤝 Contributing
+### Applications and workspace configuration
 
-There are many ways you can contribute to Plane:
+- **Applications** are the user-facing name for projects: identity, members, issue prefix, tickets, and war rooms.
+- Configuration lives at workspace level: states, labels, estimates, work item types, views, intake, sprints, and tracks.
+- Tickets remain owned by exactly one application; application identifiers and deep links stay stable.
+- RBAC keeps both layers: workspace roles plus per-application membership, with guest scoping per application.
+- The application scope selector is persisted per workspace and shared by every aggregate page.
 
-- Report [bugs](https://github.com/makeplane/plane/issues/new?assignees=srinivaspendem%2Cpushya22&labels=%F0%9F%90%9Bbug&projects=&template=--bug-report.yaml&title=%5Bbug%5D%3A+) or submit [feature requests](https://github.com/makeplane/plane/issues/new?assignees=srinivaspendem%2Cpushya22&labels=%E2%9C%A8feature&projects=&template=--feature-request.yaml&title=%5Bfeature%5D%3A+).
-- Review the [documentation](https://docs.plane.so/) and submit [pull requests](https://github.com/makeplane/docs) to improve it—whether it's fixing typos or adding new content.
-- Talk or write about Plane or any other ecosystem integration and [let us know](https://forum.plane.so)!
-- Show your support by upvoting [popular feature requests](https://github.com/makeplane/plane/issues).
+## Architecture
 
-Please read [CONTRIBUTING.md](https://github.com/makeplane/plane/blob/master/CONTRIBUTING.md) for details on the process for submitting pull requests to us.
+Plane for ITSM is a pnpm + Turbo monorepo with a Rust API at its center.
 
-### Repo activity
+| Path              | Role                                                               | Stack                                                           |
+| ----------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `apps/web`        | Main SPA: tickets, services, intake, KB, reports, docs             | React 19, React Router 8, Vite, Tailwind 4, MobX, SWR, TipTap 2 |
+| `apps/admin`      | Instance administration (`/god-mode`)                              | React Router, Vite                                              |
+| `apps/space`      | Public pages and knowledge publishing                              | React Router, Vite                                              |
+| `apps/live`       | Realtime collaboration and war-room events                         | Express, Hocuspocus, Yjs, Redis                                 |
+| `apps/api-rs`     | Primary API, worker, and beat                                      | Rust, Axum, SQLx, Tokio, Redis Streams                          |
+| `apps/api`        | Django fallback for un-ported boundaries                           | Django 5, Django REST Framework                                 |
+| `apps/proxy`      | Reverse proxy and TLS termination                                  | Caddy                                                           |
+| `packages/ui`     | Design system and Storybook                                        | React, Radix, Tailwind                                          |
+| `packages/editor` | Rich-text editor                                                   | TipTap, Yjs                                                     |
+| `packages/*`      | Shared types, MobX stores, API clients, constants, i18n, utilities | TypeScript                                                      |
 
-![Plane Repo Activity](https://repobeats.axiom.co/api/embed/2523c6ed2f77c082b7908c33e2ab208981d76c39.svg "Repobeats analytics image")
+Data and infrastructure:
 
-### We couldn't have done this without you.
+- **PostgreSQL 15** with one table per entity, not a single JSONB document store.
+- **Valkey/Redis** for caching and the `plane:jobs` job stream used by the Rust worker and beat.
+- **MinIO/S3** for uploads.
+- **Hocuspocus + Yjs** for real-time document collaboration.
 
-<a href="https://github.com/makeplane/plane/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=makeplane/plane" />
-</a>
+The Django app (`apps/api`) remains as an opt-in fallback for boundaries that have not been ported to Rust: asset upload/download, Unsplash, analytics export, notification sending, and OAuth. The Rust service is the default API.
+
+## Self-hosting
+
+Prerequisites: Docker with Compose, Node.js >= 22.22, and pnpm 11.10 (enabled through Corepack).
+
+```bash
+./setup.sh
+docker compose up -d --build
+```
+
+`setup.sh` copies the env files, generates a `SECRET_KEY`, enables pnpm, and installs dependencies. The compose stack starts Postgres, Valkey, MinIO, the Rust API/worker/beat, the web, admin, space, and live apps, and Caddy. Caddy serves the stack on `LISTEN_HTTP_PORT` (default `80`).
+
+Verify the API:
+
+```bash
+curl http://localhost:8000/health
+```
+
+For production, set `SECRET_KEY`, `WEB_URL`, `CORS_ALLOWED_ORIGINS`, database, Redis, and storage values in the env files. The full runbook is in [`docs/design/06-ops-runbook.md`](docs/design/06-ops-runbook.md).
+
+## Local development
+
+Run the backend in Docker and the frontends with Vite:
+
+```bash
+./setup.sh
+docker compose -f docker-compose-local.yml up -d --build api worker beat-worker
+pnpm dev
+```
+
+- Web: `http://localhost:3000`
+- Admin: `http://localhost:3001`
+- API: `http://localhost:8000`
+- Live: `http://localhost:3100`
+
+Useful commands:
+
+| Command                             | Purpose                           |
+| ----------------------------------- | --------------------------------- |
+| `pnpm dev`                          | Start all dev servers             |
+| `pnpm build`                        | Build all packages and apps       |
+| `pnpm check`                        | Run format, lint, and type checks |
+| `pnpm fix`                          | Auto-fix format and lint issues   |
+| `pnpm --filter=@plane/ui storybook` | Start Storybook on port 6006      |
+
+Service-specific workflows, migration rules, and backend test commands are in [`AGENTS.md`](AGENTS.md).
+
+## Repository layout
+
+```text
+apps/
+  web/           main SPA
+  admin/         instance admin (god-mode)
+  space/         public pages
+  live/          realtime collaboration and war-room events
+  api-rs/        Rust API, worker, beat, sqlx migrations
+  api/           Django fallback
+  proxy/         Caddy reverse proxy
+packages/
+  ui/            design system + Storybook
+  editor/        TipTap + Yjs editor
+  types/         shared TypeScript types
+  shared-state/  MobX stores
+  services/      API clients
+  constants/     enums, prefixes, navigation
+  i18n/          locales
+docs/
+  design/        architecture, data model, API contract, testing, ops
+  features/      product specifications
+  superpowers/   design history and implementation plans
+```
+
+## Documentation
+
+- **In-app guide** — open `/:workspaceSlug/docs` in a running instance. The **ITIL4** group covers incident, problem, service request, change and improvement, and an end-to-end operating flow.
+- **Architecture** — [`docs/design/01-architecture.md`](docs/design/01-architecture.md)
+- **API contract** — [`docs/design/03-api-contract.md`](docs/design/03-api-contract.md)
+- **Testing strategy** — [`docs/design/05-testing-strategy.md`](docs/design/05-testing-strategy.md)
+- **Ops runbook** — [`docs/design/06-ops-runbook.md`](docs/design/06-ops-runbook.md)
+- **Design history** — [`docs/superpowers/specs/`](docs/superpowers/specs/)
+
+## Contributing
+
+Contributions are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request, and run `pnpm check` before pushing. Bug reports and feature requests can follow the repository's issue templates.
+
+## Security
+
+Report vulnerabilities responsibly instead of opening a public issue. See [`SECURITY.md`](SECURITY.md) for the disclosure process.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0](https://github.com/makeplane/plane/blob/master/LICENSE.txt).
+Plane for ITSM is licensed under the [GNU Affero General Public License v3.0](LICENSE.txt). It is a fork of [Plane](https://github.com/makeplane/plane), which is also AGPL-3.0. Upstream copyright notices and license terms remain in effect.
