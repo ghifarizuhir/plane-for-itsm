@@ -7,6 +7,7 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // PLane
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { GANTT_TIMELINE_TYPE } from "@plane/types";
 import type { IBlockUpdateData, IBlockUpdateDependencyData, IModule } from "@plane/types";
 // components
@@ -16,18 +17,40 @@ import { ModuleGanttBlock } from "@/components/modules";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
 import { useModuleFilter } from "@/hooks/store/use-module-filter";
-import { useProject } from "@/hooks/store/use-project";
+import { useUserPermissions } from "@/hooks/store/user";
 
-export const ModulesListGanttChartView = observer(function ModulesListGanttChartView() {
+type Props = {
+  projectId?: string;
+  moduleIds?: string[] | null;
+  filterKey?: string;
+};
+
+export const ModulesListGanttChartView = observer(function ModulesListGanttChartView({
+  projectId,
+  moduleIds,
+  filterKey,
+}: Props) {
   // router
-  const { workspaceSlug, projectId } = useParams();
+  const { workspaceSlug, projectId: routeProjectId } = useParams();
+  const resolvedProjectId = projectId ?? routeProjectId?.toString();
+  const resolvedFilterKey = filterKey ?? resolvedProjectId;
   // store
-  const { currentProjectDetails } = useProject();
-  const { getFilteredModuleIds, updateModuleDetails } = useModule();
-  const { currentProjectDisplayFilters: displayFilters } = useModuleFilter();
+  const { getFilteredModuleIds, getModuleById, updateModuleDetails } = useModule();
+  const { getDisplayFiltersByProjectId } = useModuleFilter();
+  const { allowPermissions } = useUserPermissions();
+  const displayFilters = resolvedFilterKey ? getDisplayFiltersByProjectId(resolvedFilterKey) : undefined;
 
   // derived values
-  const filteredModuleIds = projectId ? getFilteredModuleIds(projectId.toString()) : undefined;
+  const filteredModuleIds = moduleIds ?? (resolvedProjectId ? getFilteredModuleIds(resolvedProjectId) : null);
+
+  const isAllowed = resolvedProjectId
+    ? allowPermissions(
+        [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        EUserPermissionsLevel.PROJECT,
+        workspaceSlug?.toString(),
+        resolvedProjectId
+      )
+    : false;
 
   const handleModuleUpdate = async (module: IModule, data: IBlockUpdateData) => {
     if (!workspaceSlug || !module) return;
@@ -41,19 +64,21 @@ export const ModulesListGanttChartView = observer(function ModulesListGanttChart
   const updateBlockDates = async (blockUpdates: IBlockUpdateDependencyData[]) => {
     const blockUpdate = blockUpdates[0];
 
-    if (!blockUpdate) return;
+    if (!blockUpdate || !workspaceSlug) return;
+
+    const module = getModuleById(blockUpdate.id);
+
+    if (!module) return;
 
     const payload: Partial<IModule> = {};
 
     if (blockUpdate.start_date) payload.start_date = blockUpdate.start_date;
     if (blockUpdate.target_date) payload.target_date = blockUpdate.target_date;
 
-    await updateModuleDetails(workspaceSlug.toString(), projectId.toString(), blockUpdate.id, payload);
+    await updateModuleDetails(workspaceSlug.toString(), module.project_id, blockUpdate.id, payload);
   };
 
-  const isAllowed = currentProjectDetails?.member_role === 20 || currentProjectDetails?.member_role === 15;
-
-  if (!filteredModuleIds) return null;
+  if (!resolvedProjectId || !filteredModuleIds) return null;
 
   return (
     <TimeLineTypeContext.Provider value={GANTT_TIMELINE_TYPE.MODULE}>

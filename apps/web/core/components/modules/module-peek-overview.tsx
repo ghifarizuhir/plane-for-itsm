@@ -15,7 +15,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { ModuleAnalyticsSidebar } from "./";
 
 type Props = {
-  projectId: string;
+  projectId?: string;
   workspaceSlug: string;
   isArchived?: boolean;
 };
@@ -33,7 +33,8 @@ export const ModulePeekOverview = observer(function ModulePeekOverview({
   // refs
   const ref = React.useRef(null);
   // store hooks
-  const { fetchModuleDetails, fetchArchivedModuleDetails } = useModule();
+  const { fetchModuleDetails, fetchArchivedModuleDetails, getModuleById } = useModule();
+  const resolvedProjectId = projectId ?? (peekModule ? getModuleById(peekModule)?.project_id : undefined);
 
   const handleClose = () => {
     const query = generateQueryParams(searchParams, ["peekModule"]);
@@ -41,10 +42,10 @@ export const ModulePeekOverview = observer(function ModulePeekOverview({
   };
 
   useEffect(() => {
-    if (!peekModule) return;
-    if (isArchived) fetchArchivedModuleDetails(workspaceSlug, projectId, peekModule.toString());
-    else fetchModuleDetails(workspaceSlug, projectId, peekModule.toString());
-  }, [fetchArchivedModuleDetails, fetchModuleDetails, isArchived, peekModule, projectId, workspaceSlug]);
+    if (!peekModule || !resolvedProjectId) return;
+    if (isArchived) fetchArchivedModuleDetails(workspaceSlug, resolvedProjectId, peekModule.toString());
+    else fetchModuleDetails(workspaceSlug, resolvedProjectId, peekModule.toString());
+  }, [fetchArchivedModuleDetails, fetchModuleDetails, isArchived, peekModule, resolvedProjectId, workspaceSlug]);
 
   return (
     <>
