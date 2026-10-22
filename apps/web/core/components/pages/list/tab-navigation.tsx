@@ -14,6 +14,7 @@ type TPageTabNavigation = {
   workspaceSlug: string;
   projectId?: string;
   pageType: TPageNavigationTabs;
+  scopeProjectId?: string;
 };
 
 // pages tab options
@@ -33,7 +34,7 @@ const pageTabs: { key: TPageNavigationTabs; label: string }[] = [
 ];
 
 export function PageTabNavigation(props: TPageTabNavigation) {
-  const { workspaceSlug, projectId, pageType } = props;
+  const { workspaceSlug, projectId, pageType, scopeProjectId } = props;
   const basePath = projectId ? `/${workspaceSlug}/projects/${projectId}/pages` : `/${workspaceSlug}/pages`;
 
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, tabKey: TPageNavigationTabs) => {
@@ -42,27 +43,32 @@ export function PageTabNavigation(props: TPageTabNavigation) {
 
   return (
     <div className="relative flex h-full items-center">
-      {pageTabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={`${basePath}?type=${tab.key}`}
-          onClick={(e) => handleTabClick(e, tab.key)}
-          className="flex h-full flex-col"
-        >
-          <div
-            className={cn(`flex flex-1 items-center justify-center px-4 text-13 font-medium transition-all`, {
-              "text-accent-primary": tab.key === pageType,
-            })}
+      {pageTabs.map((tab) => {
+        const params = new URLSearchParams({ type: tab.key });
+        if (!projectId && scopeProjectId) params.set("project", scopeProjectId);
+
+        return (
+          <Link
+            key={tab.key}
+            href={`${basePath}?${params.toString()}`}
+            onClick={(e) => handleTabClick(e, tab.key)}
+            className="flex h-full flex-col"
           >
-            {tab.label}
-          </div>
-          <div
-            className={cn(`w-full rounded-t border-t-2 border-transparent transition-all`, {
-              "border-accent-strong": tab.key === pageType,
-            })}
-          />
-        </Link>
-      ))}
+            <div
+              className={cn(`flex flex-1 items-center justify-center px-4 text-13 font-medium transition-all`, {
+                "text-accent-primary": tab.key === pageType,
+              })}
+            >
+              {tab.label}
+            </div>
+            <div
+              className={cn(`w-full rounded-t border-t-2 border-transparent transition-all`, {
+                "border-accent-strong": tab.key === pageType,
+              })}
+            />
+          </Link>
+        );
+      })}
     </div>
   );
 }

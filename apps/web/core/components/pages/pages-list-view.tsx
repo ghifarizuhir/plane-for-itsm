@@ -21,13 +21,24 @@ type TPageView = {
   projectId?: string;
   storeType: EPageStoreType;
   workspaceSlug: string;
+  scopeProjectId?: string;
   canCreate?: boolean;
   onCreatePage?: (access: EPageAccess) => void | Promise<void>;
   emptyStateVariant?: "workspace";
 };
 
 export const PagesListView = observer(function PagesListView(props: TPageView) {
-  const { children, pageType, projectId, storeType, workspaceSlug, canCreate, onCreatePage, emptyStateVariant } = props;
+  const {
+    children,
+    pageType,
+    projectId,
+    storeType,
+    workspaceSlug,
+    scopeProjectId,
+    canCreate,
+    onCreatePage,
+    emptyStateVariant,
+  } = props;
   // store hooks
   const { isAnyPageAvailable, fetchPagesList } = usePageStore(storeType);
   const isWorkspaceStore = storeType === EPageStoreType.WORKSPACE;
@@ -50,6 +61,7 @@ export const PagesListView = observer(function PagesListView(props: TPageView) {
           projectId={projectId}
           storeType={storeType}
           workspaceSlug={workspaceSlug}
+          scopeProjectId={scopeProjectId}
         />
       )}
       <PagesListMainContent

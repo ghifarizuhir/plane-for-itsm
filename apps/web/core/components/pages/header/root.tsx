@@ -30,10 +30,11 @@ type Props = {
   projectId?: string;
   storeType: EPageStoreType;
   workspaceSlug: string;
+  scopeProjectId?: string;
 };
 
 export const PagesListHeaderRoot = observer(function PagesListHeaderRoot(props: Props) {
-  const { pageType, projectId, storeType, workspaceSlug } = props;
+  const { pageType, projectId, storeType, workspaceSlug, scopeProjectId } = props;
   const { t } = useTranslation();
   // store hooks
   const { filters, updateFilters, clearAllFilters } = usePageStore(storeType);
@@ -62,7 +63,12 @@ export const PagesListHeaderRoot = observer(function PagesListHeaderRoot(props: 
     <>
       <Header variant={EHeaderVariant.SECONDARY}>
         <Header.LeftItem>
-          <PageTabNavigation workspaceSlug={workspaceSlug} projectId={projectId} pageType={pageType} />
+          <PageTabNavigation
+            workspaceSlug={workspaceSlug}
+            projectId={projectId}
+            pageType={pageType}
+            scopeProjectId={scopeProjectId}
+          />
         </Header.LeftItem>
         <Header.RightItem className="items-center">
           <PageSearchInput

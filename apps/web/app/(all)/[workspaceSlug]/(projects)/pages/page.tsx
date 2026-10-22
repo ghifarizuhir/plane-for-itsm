@@ -102,6 +102,7 @@ function WorkspacePagesPage() {
         projectId={scopedProjectId ?? undefined}
         storeType={EPageStoreType.WORKSPACE}
         workspaceSlug={workspaceSlug}
+        scopeProjectId={scopedProjectId ?? undefined}
         canCreate={canCreatePage}
         onCreatePage={requestCreatePage}
         emptyStateVariant={scopedProjectId ? undefined : "workspace"}
