@@ -17,10 +17,14 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import { ServiceMobileHeader, ServiceViewHeader } from "@/components/services";
 // hooks
 import { useService } from "@/hooks/store/use-service";
 import { useServiceDetailPane } from "@/hooks/services/use-service-detail-pane";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { useWorkspaceApplicationScope } from "@/hooks/use-workspace-application-scope";
+// helpers
+import { WORKSPACE_SERVICE_FILTER_KEY } from "@/lib/workspace-services";
 
 const WorkspaceServicesBreadcrumbs = observer(function WorkspaceServicesBreadcrumbs() {
   const router = useAppRouter();
@@ -67,9 +71,19 @@ const WorkspaceServicesBreadcrumbs = observer(function WorkspaceServicesBreadcru
 });
 
 export default function WorkspaceServicesLayout() {
+  const { serviceId } = useParams();
+  const { projectId } = useWorkspaceApplicationScope();
+
   return (
     <>
-      <AppHeader header={<WorkspaceServicesBreadcrumbs />} />
+      <AppHeader
+        header={serviceId ? <WorkspaceServicesBreadcrumbs /> : <ServiceViewHeader workspaceMode />}
+        mobileHeader={
+          serviceId ? undefined : (
+            <ServiceMobileHeader filterKey={WORKSPACE_SERVICE_FILTER_KEY} isGraphDisabled={!projectId} />
+          )
+        }
+      />
       <ContentWrapper>
         <Outlet />
       </ContentWrapper>
