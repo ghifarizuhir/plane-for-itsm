@@ -37,6 +37,7 @@ export interface IModuleFilterStore {
   updateFilters: (projectId: string, filters: TModuleFilters, state?: keyof TModuleFiltersByState) => void;
   updateSearchQuery: (query: string) => void;
   updateArchivedModulesSearchQuery: (query: string) => void;
+  initProjectModuleFilters: (projectId: string) => void;
   clearAllFilters: (projectId: string, state?: keyof TModuleFiltersByState) => void;
 }
 
@@ -154,7 +155,7 @@ export class ModuleFilterStore implements IModuleFilterStore {
   get currentProjectArchivedFilters() {
     const projectId = this.rootStore.router.projectId;
     if (!projectId) return;
-    return this.filters[projectId].archived;
+    return this.filters[projectId]?.archived;
   }
 
   /**
@@ -246,6 +247,12 @@ export class ModuleFilterStore implements IModuleFilterStore {
    */
   clearAllFilters = (projectId: string, state: keyof TModuleFiltersByState = "default") => {
     runInAction(() => {
+      this.filters[projectId] = this.filters[projectId] ?? { default: {}, archived: {} };
+      this.displayFilters[projectId] = this.displayFilters[projectId] ?? {
+        favorites: false,
+        layout: "list",
+        order_by: "name",
+      };
       this.filters[projectId][state] = {};
       this.displayFilters[projectId].favorites = false;
     });

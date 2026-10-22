@@ -31,11 +31,17 @@ import { ModuleLayoutIcon } from "./module-layout-icon";
 import { IconButton } from "@plane/propel/icon-button";
 // i18n
 
-export const ModuleViewHeader = observer(function ModuleViewHeader() {
+type Props = {
+  filterKey?: string;
+  isGanttDisabled?: boolean;
+};
+
+export const ModuleViewHeader = observer(function ModuleViewHeader({ filterKey, isGanttDisabled = false }: Props) {
   // refs
   const inputRef = useRef<HTMLInputElement>(null);
   // router
   const { projectId } = useParams();
+  const resolvedFilterKey = filterKey ?? projectId?.toString();
   // hooks
   const { isMobile } = usePlatformOS();
   // store hooks
@@ -43,23 +49,25 @@ export const ModuleViewHeader = observer(function ModuleViewHeader() {
     workspace: { workspaceMemberIds },
   } = useMember();
   const {
-    currentProjectDisplayFilters: displayFilters,
-    currentProjectFilters: filters,
+    getDisplayFiltersByProjectId,
+    getFiltersByProjectId,
     searchQuery,
     updateDisplayFilters,
     updateFilters,
     updateSearchQuery,
   } = useModuleFilter();
   const { t } = useTranslation();
+  const filters = resolvedFilterKey ? getFiltersByProjectId(resolvedFilterKey) : undefined;
+  const displayFilters = resolvedFilterKey ? getDisplayFiltersByProjectId(resolvedFilterKey) : undefined;
 
   // states
-  const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "" ? true : false);
+  const [isSearchOpen, setIsSearchOpen] = useState(searchQuery !== "");
 
   // handlers
   const handleFilters = useCallback(
     (key: keyof TModuleFilters, value: string | string[]) => {
-      if (!projectId) return;
-      const newValues = filters?.[key] ?? [];
+      if (!resolvedFilterKey) return;
+      const newValues = [...(filters?.[key] ?? [])];
 
       if (Array.isArray(value))
         value.forEach((val) => {
@@ -71,9 +79,9 @@ export const ModuleViewHeader = observer(function ModuleViewHeader() {
         else newValues.push(value);
       }
 
-      updateFilters(projectId.toString(), { [key]: newValues });
+      updateFilters(resolvedFilterKey, { [key]: newValues });
     },
-    [filters, projectId, updateFilters]
+    [filters, resolvedFilterKey, updateFilters]
   );
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -146,8 +154,8 @@ export const ModuleViewHeader = observer(function ModuleViewHeader() {
       <ModuleOrderByDropdown
         value={displayFilters?.order_by}
         onChange={(val) => {
-          if (!projectId || val === displayFilters?.order_by) return;
-          updateDisplayFilters(projectId.toString(), {
+          if (!resolvedFilterKey || val === displayFilters?.order_by) return;
+          updateDisplayFilters(resolvedFilterKey, {
             order_by: val,
           });
         }}
@@ -162,34 +170,44 @@ export const ModuleViewHeader = observer(function ModuleViewHeader() {
           displayFilters={displayFilters ?? {}}
           filters={filters ?? {}}
           handleDisplayFiltersUpdate={(val) => {
-            if (!projectId) return;
-            updateDisplayFilters(projectId.toString(), val);
+            if (!resolvedFilterKey) return;
+            updateDisplayFilters(resolvedFilterKey, val);
           }}
           handleFiltersUpdate={handleFilters}
           memberIds={workspaceMemberIds ?? undefined}
         />
       </FiltersDropdown>
       <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">
-        {MODULE_VIEW_LAYOUTS.map((layout) => (
-          <Tooltip key={layout.key} label={t(layout.i18n_title)} disabled={isMobile}>
-            <button
-              type="button"
-              className={cn(
-                "group grid h-5.5 w-7 place-items-center overflow-hidden rounded-sm transition-all hover:bg-layer-transparent-hover",
-                {
-                  "bg-layer-transparent-active hover:bg-layer-transparent-active":
-                    displayFilters?.layout === layout.key,
-                }
-              )}
-              onClick={() => {
-                if (!projectId) return;
-                updateDisplayFilters(projectId.toString(), { layout: layout.key });
-              }}
+        {MODULE_VIEW_LAYOUTS.map((layout) => {
+          const isLayoutDisabled = layout.key === "gantt" && isGanttDisabled;
+
+          return (
+            <Tooltip
+              key={layout.key}
+              label={isLayoutDisabled ? "Select an application to view timeline" : t(layout.i18n_title)}
+              disabled={isMobile && !isLayoutDisabled}
             >
-              <ModuleLayoutIcon layoutType={layout.key} />
-            </button>
-          </Tooltip>
-        ))}
+              <button
+                type="button"
+                aria-disabled={isLayoutDisabled}
+                className={cn(
+                  "group grid h-5.5 w-7 place-items-center overflow-hidden rounded-sm transition-all hover:bg-layer-transparent-hover",
+                  {
+                    "bg-layer-transparent-active hover:bg-layer-transparent-active":
+                      displayFilters?.layout === layout.key,
+                    "cursor-not-allowed opacity-40 hover:bg-transparent": isLayoutDisabled,
+                  }
+                )}
+                onClick={() => {
+                  if (isLayoutDisabled || !resolvedFilterKey) return;
+                  updateDisplayFilters(resolvedFilterKey, { layout: layout.key });
+                }}
+              >
+                <ModuleLayoutIcon layoutType={layout.key} />
+              </button>
+            </Tooltip>
+          );
+        })}
       </div>
     </div>
   );
