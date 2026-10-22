@@ -18,10 +18,11 @@ import { PageListBlock } from "./block";
 type TPagesListRoot = {
   pageType: TPageNavigationTabs;
   storeType: EPageStoreType;
+  showProjectBadge?: boolean;
 };
 
 export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRoot) {
-  const { pageType, storeType } = props;
+  const { pageType, storeType, showProjectBadge = false } = props;
   // store hooks
   const { getCurrentProjectFilteredPageIdsByTab } = usePageStore(storeType);
   // derived values
@@ -31,7 +32,7 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
   return (
     <ListLayout>
       {filteredPageIds.map((pageId) => (
-        <PageListBlock key={pageId} pageId={pageId} storeType={storeType} />
+        <PageListBlock key={pageId} pageId={pageId} storeType={storeType} showProjectBadge={showProjectBadge} />
       ))}
     </ListLayout>
   );

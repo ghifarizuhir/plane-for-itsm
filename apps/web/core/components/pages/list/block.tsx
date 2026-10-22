@@ -14,6 +14,7 @@ import { getPageName } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 import { BlockItemAction } from "@/components/pages/list/block-item-action";
 // hooks
+import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // plane web hooks
 import type { EPageStoreType } from "@/hooks/store";
@@ -22,10 +23,11 @@ import { usePage } from "@/hooks/store";
 type TPageListBlock = {
   pageId: string;
   storeType: EPageStoreType;
+  showProjectBadge?: boolean;
 };
 
 export const PageListBlock = observer(function PageListBlock(props: TPageListBlock) {
-  const { pageId, storeType } = props;
+  const { pageId, storeType, showProjectBadge = false } = props;
   // refs
   const parentRef = useRef(null);
   // hooks
@@ -33,7 +35,9 @@ export const PageListBlock = observer(function PageListBlock(props: TPageListBlo
     pageId,
     storeType,
   });
+  const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
+  const project = showProjectBadge && page?.project_ids?.[0] ? getProjectById(page.project_ids[0]) : undefined;
   // handle page check
   if (!page) return null;
   // derived values
@@ -52,6 +56,13 @@ export const PageListBlock = observer(function PageListBlock(props: TPageListBlo
       }
       title={getPageName(name)}
       itemLink={getRedirectionLink()}
+      appendTitleElement={
+        project ? (
+          <span className="max-w-[120px] truncate rounded-sm bg-layer-2 px-1.5 py-0.5 text-11 text-tertiary">
+            {project.name}
+          </span>
+        ) : undefined
+      }
       actionableItems={<BlockItemAction page={page} parentRef={parentRef} storeType={storeType} />}
       isMobile={isMobile}
       parentRef={parentRef}
