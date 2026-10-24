@@ -19,7 +19,7 @@ No new tables, migrations, or workers. Health is computed on read by api-rs and 
 - External monitoring (Prometheus, Alertmanager, uptime probes) as a direct health source.
 - Dependency health propagation (a service is not marked degraded because its dependency is down).
 - Realtime health over WebSocket; v1 uses polling + focus refetch.
-- New incident pages/tabs; incident details stay in a hover card on the catalog.
+- New incident pages/tabs; incident details stay in a tooltip on the catalog.
 
 ## Decisions (brainstormed & approved)
 
@@ -28,7 +28,7 @@ No new tables, migrations, or workers. Health is computed on read by api-rs and 
 3. **Severity** — war room severity wins when present; otherwise priority mapping.
 4. **Health rule** — any active incident ⇒ `degraded`; none ⇒ `healthy`; planned/retired ⇒ `unknown`. `down` is not produced in this phase.
 5. **Propagation** — none; only incidents directly linked to the service (or explicitly linked via a war room).
-6. **UI depth** — count + highest severity + hover card listing active incidents. No new page.
+6. **UI depth** — count + highest severity + tooltip listing active incidents. No new page.
 7. **Last deploy** — fake timestamps removed; `last_deployed_at = null` and UI copy "No deployment".
 8. **Approach** — read-time aggregation in api-rs (chosen over materialized snapshots and frontend computation).
 
@@ -97,7 +97,7 @@ interface IServiceIncident {
 }
 ```
 
-Sort incidents by severity rank (`sev1` first), then `opened_at` descending. The catalog count uses the array length; the hover card shows up to 5 and appends `+N more`.
+Sort incidents by severity rank (`sev1` first), then `opened_at` descending. The catalog count uses the array length; the tooltip shows up to 5 and appends `+N more`.
 
 ### Last deploy
 
@@ -197,10 +197,9 @@ New DB-backed integration test (scratch workspace; run serially with other scrat
 
 ### UI
 
-- `ServiceIncidentCell`: keep count + highest-severity label. Add a hover card (accessible, keyboard-focusable) listing active incidents:
+- `ServiceIncidentCell`: keep count + highest-severity label. Add a keyboard-focusable tooltip listing active incidents:
   - `identifier — name` and `WR-{sequence_id}` when present
   - max 5 visible, `+N more`
-  - empty state not rendered when count is 0
 - `ServiceDeployCell`: `null` renders the translated "No deployment" copy instead of an em dash.
 - Graph node: when `lastDeployedAt` is null, render the same "No deployment" copy (not an empty slot).
 - Sidebar deploy cell automatically picks up the new copy.
@@ -212,8 +211,7 @@ Add keys (all active locales; use the `translate` skill):
 
 - `service.deploy.no_deployment` — "No deployment"
 - `service.incidents.tooltip_title` — e.g. "Active incidents"
-- `service.incidents.more` — "{count} more"
-- `service.incidents.empty` — "No active incidents"
+- `service.incidents.more` — ICU plural, e.g. "{count, plural, one {# more} other {# more}}"
 
 ### Frontend tests
 
