@@ -55,6 +55,10 @@ async fn main() {
             post(routes::inbound::alertmanager),
         )
         .route(
+            "/api/inbound/metrics/:token/",
+            post(routes::service_metrics::ingest),
+        )
+        .route(
             "/api/workspaces/",
             get(routes::workspace::list).post(routes::workspace::create),
         )

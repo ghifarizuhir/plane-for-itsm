@@ -262,3 +262,205 @@ mod tests {
         assert!(validate_item(&item, now).iter().any(|(f, _)| f == "key"));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Ingest
+// ---------------------------------------------------------------------------
+
+const SOURCE_COLS: &str = "s.id, s.workspace_id, s.name, s.token, s.is_active, s.config, \
+    s.created_at, s.updated_at, s.created_by_id";
+
+fn resolve_service_id(source: &MetricSourceRow, item: &IngestItem) -> Result<Uuid, String> {
+    if let Some(id) = item.service_id {
+        return Ok(id);
+    }
+    let Some(key) = item.service.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+        return Err("service or service_id is required".into());
+    };
+    if key.chars().count() > 200 {
+        return Err("service must be at most 200 characters".into());
+    }
+    if let Some(id) = source
+        .config
+        .get("service_map")
+        .and_then(Value::as_object)
+        .and_then(|map| map.get(key))
+        .and_then(Value::as_str)
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        return Ok(id);
+    }
+    if let Some(id) = source
+        .config
+        .get("fallback_service_id")
+        .and_then(Value::as_str)
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        return Ok(id);
+    }
+    Err(format!("Unknown service '{key}'"))
+}
+
+fn error_response(mut errors: Vec<Value>) -> (StatusCode, Json<Value>) {
+    let truncated = errors.len() > MAX_ERRORS;
+    errors.truncate(MAX_ERRORS);
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"errors": errors, "truncated": truncated})),
+    )
+}
+
+pub async fn ingest(
+    State(st): State<AppState>,
+    Path(token): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    let source: Option<MetricSourceRow> = sqlx::query_as(&format!(
+        "SELECT {SOURCE_COLS} FROM metric_sources s \
+         JOIN workspaces w ON w.id = s.workspace_id \
+         WHERE s.token = $1 AND s.deleted_at IS NULL"
+    ))
+    .bind(&token)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(source) = source else {
+        return Ok((StatusCode::NOT_FOUND, Json(json!({"error": "Unknown token"}))));
+    };
+    if !source.is_active {
+        return Ok((StatusCode::FORBIDDEN, Json(json!({"error": "Metric source is inactive"}))));
+    }
+
+    let parsed: IngestBody = match serde_json::from_value(body) {
+        Ok(value) => value,
+        Err(error) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Invalid payload: {error}")})),
+            ))
+        }
+    };
+    if parsed.metrics.is_empty() || parsed.metrics.len() > MAX_BATCH {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("metrics must contain 1..{MAX_BATCH} items")})),
+        ));
+    }
+
+    let now = Utc::now();
+    let mut errors: Vec<Value> = Vec::new();
+    let mut items: Vec<IngestItem> = Vec::with_capacity(parsed.metrics.len());
+    for (index, raw) in parsed.metrics.into_iter().enumerate() {
+        match serde_json::from_value::<IngestItem>(raw) {
+            Ok(item) => {
+                for (field, message) in validate_item(&item, now) {
+                    errors.push(json!({"index": index, "field": field, "message": message}));
+                }
+                items.push(item);
+            }
+            Err(error) => {
+                errors.push(json!({"index": index, "field": "", "message": error.to_string()}));
+            }
+        }
+    }
+    if !errors.is_empty() {
+        return Ok(error_response(errors));
+    }
+
+    let mut requested: Vec<Uuid> = Vec::with_capacity(items.len());
+    let mut resolved: Vec<(Uuid, &IngestItem)> = Vec::with_capacity(items.len());
+    for (index, item) in items.iter().enumerate() {
+        match resolve_service_id(&source, item) {
+            Ok(id) => {
+                requested.push(id);
+                resolved.push((id, item));
+            }
+            Err(message) => errors.push(json!({"index": index, "field": "service", "message": message})),
+        }
+    }
+    if !errors.is_empty() {
+        return Ok(error_response(errors));
+    }
+    requested.sort();
+    requested.dedup();
+
+    let live: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM services WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2)",
+    )
+    .bind(source.workspace_id)
+    .bind(&requested)
+    .fetch_all(&st.pool)
+    .await?;
+    let live: HashSet<Uuid> = live.into_iter().collect();
+    for (index, (service_id, _)) in resolved.iter().enumerate() {
+        if !live.contains(service_id) {
+            errors.push(json!({
+                "index": index,
+                "field": "service",
+                "message": "Service not found in this workspace"
+            }));
+        }
+    }
+    if !errors.is_empty() {
+        return Ok(error_response(errors));
+    }
+
+    let mut tx = st.pool.begin().await?;
+    let mut accepted = 0usize;
+    let mut metrics_created = 0usize;
+    for (service_id, item) in resolved {
+        let display_name = item.display_name.as_deref().map(str::trim).unwrap_or("");
+        let unit = item.unit.as_deref().map(str::trim).unwrap_or("");
+        let (metric_id, created): (Uuid, bool) = sqlx::query_as(
+            "INSERT INTO service_metrics (id, workspace_id, service_id, metric_key, display_name, unit) \
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) \
+             ON CONFLICT (service_id, metric_key) DO UPDATE SET \
+               display_name = CASE WHEN service_metrics.display_name = '' THEN EXCLUDED.display_name \
+                                   ELSE service_metrics.display_name END, \
+               unit = CASE WHEN service_metrics.unit = '' THEN EXCLUDED.unit \
+                           ELSE service_metrics.unit END, \
+               updated_at = now() \
+             RETURNING id, (xmax = 0) AS inserted",
+        )
+        .bind(source.workspace_id)
+        .bind(service_id)
+        .bind(&item.key)
+        .bind(display_name)
+        .bind(unit)
+        .fetch_one(&mut *tx)
+        .await?;
+        if created {
+            metrics_created += 1;
+        }
+        sqlx::query(
+            "INSERT INTO service_metric_buckets \
+             (service_id, metric_id, source_id, resolution, bucket_start, \"count\", \"sum\", \
+              \"min\", \"max\", \"avg\", last_value) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) \
+             ON CONFLICT (metric_id, resolution, bucket_start) DO UPDATE SET \
+               \"count\" = EXCLUDED.\"count\", \"sum\" = EXCLUDED.\"sum\", \
+               \"min\" = EXCLUDED.\"min\", \"max\" = EXCLUDED.\"max\", \
+               \"avg\" = EXCLUDED.\"avg\", last_value = EXCLUDED.last_value, \
+               source_id = EXCLUDED.source_id, ingested_at = now()",
+        )
+        .bind(service_id)
+        .bind(metric_id)
+        .bind(source.id)
+        .bind(i16::try_from(item.resolution).unwrap_or(60))
+        .bind(item.bucket_start)
+        .bind(item.count)
+        .bind(item.sum)
+        .bind(item.min)
+        .bind(item.max)
+        .bind(item.avg)
+        .bind(item.last)
+        .execute(&mut *tx)
+        .await?;
+        accepted += 1;
+    }
+    tx.commit().await?;
+
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(json!({"accepted": accepted, "metrics_created": metrics_created})),
+    ))
+}
