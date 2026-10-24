@@ -16,6 +16,7 @@
 
 - Modify: `packages/types/src/service/filters.ts:9-25`
 - Modify: `apps/web/core/store/service_filter.store.ts:114-126`
+- Modify: `apps/web/app/(all)/[workspaceSlug]/(projects)/services/page.tsx` (one-line layout fallback `board` to `list`)
 - Modify: `apps/web/core/components/services/service-layout-icon.tsx`
 - Test: none (store change covered by typecheck; no existing store test file)
 
@@ -488,7 +489,7 @@ export const ServicesListRow = observer(function ServicesListRow(props: Props) {
 });
 ```
 
-Note: the `t` hook is kept for future row-level strings; if unused after implementation, remove the import before committing so `oxlint --deny-warnings` passes.
+Note: the row renders no direct translated strings (all copy lives in the reused cells), so the `t` hook is omitted entirely.
 
 - [ ] **Step 2: Create the grouped list**
 
