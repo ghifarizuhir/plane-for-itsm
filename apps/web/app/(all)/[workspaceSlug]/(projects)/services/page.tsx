@@ -73,7 +73,7 @@ function WorkspaceServicesPage() {
 
   useEffect(() => {
     if (scopedProjectId || !displayFilters || displayFilters.layout !== "graph") return;
-    updateDisplayFilters(filterKey, { layout: "board" });
+    updateDisplayFilters(filterKey, { layout: "list" });
   }, [displayFilters, filterKey, scopedProjectId, updateDisplayFilters]);
 
   useEffect(() => {

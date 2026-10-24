@@ -8,7 +8,12 @@ import { set } from "lodash-es";
 import { action, computed, observable, makeObservable, runInAction, reaction } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import type { TServiceDisplayFilters, TServiceFilters, TServiceLayoutOptions } from "@plane/types";
+import type {
+  TServiceDisplayFilters,
+  TServiceFilters,
+  TServiceGroupByOptions,
+  TServiceLayoutOptions,
+} from "@plane/types";
 // helpers
 import { storage } from "@/lib/local-storage";
 // store
@@ -113,13 +118,19 @@ export class ServiceFilterStore implements IServiceFilterStore {
 
   initProjectServiceFilters = (projectId: string) => {
     const displayFilters = this.getDisplayFiltersByProjectId(projectId);
-    // Legacy persisted layouts ("list" | "grid") collapse into the board.
+    // Legacy persisted layouts ("board" | "grid") collapse into the list.
     const persistedLayout = displayFilters?.layout as string | undefined;
-    const layout: TServiceLayoutOptions = persistedLayout === "graph" ? "graph" : "board";
+    const layout: TServiceLayoutOptions = persistedLayout === "graph" ? "graph" : "list";
+    const persistedGroupBy = (displayFilters as { group_by?: unknown } | undefined)?.group_by;
+    const groupBy: TServiceGroupByOptions =
+      persistedGroupBy === "status" || persistedGroupBy === "criticality" || persistedGroupBy === "health"
+        ? persistedGroupBy
+        : "status";
     runInAction(() => {
       this.displayFilters[projectId] = {
         layout,
         order_by: displayFilters?.order_by || "health",
+        group_by: groupBy,
       };
       this.filters[projectId] = this.filters[projectId] ?? {};
     });
