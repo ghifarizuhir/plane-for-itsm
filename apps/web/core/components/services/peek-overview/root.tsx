@@ -17,38 +17,70 @@ export const ServicePeekOverview = observer(function ServicePeekOverview() {
   // router
   const { workspaceSlug, projectId } = useParams();
   // store hooks
-  const { peekService, setPeekService, fetchedMap, errorMap, fetchServices } = useService();
+  const {
+    peekService,
+    setPeekService,
+    fetchedMap,
+    errorMap,
+    fetchServices,
+    workspaceFetched,
+    workspaceError,
+    fetchWorkspaceServices,
+  } = useService();
   const { currentWorkspace } = useWorkspace();
   // derived values
   const slug = workspaceSlug?.toString();
   const pid = projectId?.toString();
-  const isMatching = Boolean(peekService && peekService.workspaceSlug === slug && peekService.projectId === pid);
+  const workspaceId = currentWorkspace?.id;
+  // Project routes scope the peek to their project; the workspace catalog has no
+  // projectId param, so any peek in the same workspace belongs to that surface.
+  const isMatching = Boolean(
+    peekService && peekService.workspaceSlug === slug && (pid ? peekService.projectId === pid : true)
+  );
+  const status: "loading" | "error" | "ready" = pid
+    ? errorMap[pid]
+      ? "error"
+      : fetchedMap[pid]
+        ? "ready"
+        : "loading"
+    : workspaceError
+      ? "error"
+      : workspaceFetched
+        ? "ready"
+        : "loading";
 
   // Drop the peek when the route moves to another workspace/project
   useEffect(() => {
     if (peekService && !isMatching) setPeekService(undefined);
   }, [peekService, isMatching, setPeekService]);
 
-  // Ensure the service list (and health) is hydrated for this project
+  // Ensure the list (and health) behind the peek is hydrated for this scope
   useEffect(() => {
-    if (!isMatching || !slug || !pid) return;
-    if (fetchedMap[pid] || !currentWorkspace?.id) return;
-    void fetchServices(slug, currentWorkspace.id, pid);
-  }, [isMatching, slug, pid, fetchedMap, currentWorkspace?.id, fetchServices]);
+    if (!isMatching || !slug || !workspaceId) return;
+    if (pid) {
+      if (fetchedMap[pid]) return;
+      void fetchServices(slug, workspaceId, pid);
+      return;
+    }
+    if (workspaceFetched) return;
+    void fetchWorkspaceServices(slug, workspaceId);
+  }, [isMatching, slug, pid, workspaceId, fetchedMap, workspaceFetched, fetchServices, fetchWorkspaceServices]);
 
-  if (!isMatching || !peekService || !slug || !pid) return null;
-
-  const status: "loading" | "error" | "ready" = errorMap[pid] ? "error" : fetchedMap[pid] ? "ready" : "loading";
+  if (!isMatching || !peekService || !slug) return null;
 
   const handleRetry = () => {
-    if (!slug || !pid || !currentWorkspace?.id) return;
-    void fetchServices(slug, currentWorkspace.id, pid);
+    if (!slug || !workspaceId) return;
+    if (pid) {
+      void fetchServices(slug, workspaceId, pid);
+      return;
+    }
+    void fetchWorkspaceServices(slug, workspaceId);
   };
 
   return (
     <ServicePeekView
       workspaceSlug={slug}
-      projectId={pid}
+      projectId={peekService.projectId || pid || ""}
       serviceId={peekService.serviceId}
       status={status}
       onRetry={handleRetry}

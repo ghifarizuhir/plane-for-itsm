@@ -5,7 +5,6 @@
  */
 
 import { useCallback } from "react";
-import { useParams } from "next/navigation";
 // types
 import type { IService } from "@plane/types";
 // hooks
@@ -16,7 +15,6 @@ import { useService } from "./store/use-service";
 const useServicePeekOverviewRedirection = () => {
   // router
   const router = useAppRouter();
-  const { projectId } = useParams();
   // store hooks
   const { getIsServicePeeked, setPeekService } = useService();
 
@@ -25,17 +23,16 @@ const useServicePeekOverviewRedirection = () => {
       if (!workspaceSlug || !service) return;
       const { project_id, id } = service;
       const serviceLink = `/${workspaceSlug}/services/${id}`;
-      // Workspace catalog route has no projectId param and renders no peek panel.
-      // Navigate directly to the detail page instead of setting peek state that nobody consumes.
-      if (!projectId) {
+      if (getIsServicePeeked(id)) return;
+      if (isMobile) {
         router.push(serviceLink);
         return;
       }
-      if (getIsServicePeeked(id)) return;
-      if (isMobile) router.push(serviceLink);
-      else setPeekService({ workspaceSlug, projectId: project_id ?? "", serviceId: id });
+      // Workspace catalog routes carry no projectId param; the peek panel falls
+      // back to the workspace scope and edits still route through the owner project.
+      setPeekService({ workspaceSlug, projectId: project_id ?? "", serviceId: id });
     },
-    [getIsServicePeeked, projectId, router, setPeekService]
+    [getIsServicePeeked, router, setPeekService]
   );
 
   return { handleRedirection };

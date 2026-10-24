@@ -98,6 +98,7 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
 
   return (
     <div
+      id={`service-${service.id}`}
       className={cn(
         "group relative w-[256px] transition-opacity duration-150",
         dimmed && "opacity-55",
