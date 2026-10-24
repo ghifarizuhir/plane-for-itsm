@@ -464,3 +464,289 @@ pub async fn ingest(
         Json(json!({"accepted": accepted, "metrics_created": metrics_created})),
     ))
 }
+
+// ---------------------------------------------------------------------------
+// Source management (workspace admin)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSource {
+    pub name: String,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    pub config: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchSource {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+    #[serde(default)]
+    pub config: Option<Value>,
+}
+
+fn source_json(row: &MetricSourceRow) -> Value {
+    json!({
+        "id": row.id,
+        "workspace_id": row.workspace_id,
+        "name": row.name,
+        "token": row.token,
+        "is_active": row.is_active,
+        "config": row.config,
+        "created_by": row.created_by_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    })
+}
+
+pub async fn validate_source_config(
+    pool: &sqlx::PgPool,
+    workspace_id: Uuid,
+    config: &Value,
+) -> Result<(), String> {
+    let Some(object) = config.as_object() else {
+        return Err("config must be an object".into());
+    };
+    for key in object.keys() {
+        if key != "service_map" && key != "fallback_service_id" {
+            return Err(format!("Unknown config key '{key}'"));
+        }
+    }
+    let mut ids: Vec<Uuid> = Vec::new();
+    if let Some(map) = object.get("service_map") {
+        let Some(map) = map.as_object() else {
+            return Err("service_map must be an object".into());
+        };
+        if map.len() > 500 {
+            return Err("service_map must have at most 500 entries".into());
+        }
+        for (key, value) in map {
+            let key = key.trim();
+            if key.is_empty() || key.chars().count() > 200 {
+                return Err("service_map keys must be 1..200 characters".into());
+            }
+            let Some(id) = value.as_str().and_then(|s| Uuid::parse_str(s).ok()) else {
+                return Err("service_map values must be service ids".into());
+            };
+            ids.push(id);
+        }
+    }
+    if let Some(value) = object.get("fallback_service_id") {
+        if !value.is_null() {
+            let Some(id) = value.as_str().and_then(|s| Uuid::parse_str(s).ok()) else {
+                return Err("fallback_service_id must be a service id or null".into());
+            };
+            ids.push(id);
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let live: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM services WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2)",
+    )
+    .bind(workspace_id)
+    .bind(&ids)
+    .fetch_all(pool)
+    .await
+    .map_err(|error| error.to_string())?;
+    if live.len() != ids.len() {
+        return Err("Service does not belong to this workspace".into());
+    }
+    Ok(())
+}
+
+async fn fetch_source(
+    pool: &sqlx::PgPool,
+    slug: &str,
+    pk: Uuid,
+) -> Result<Option<MetricSourceRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {SOURCE_COLS} FROM metric_sources s \
+         JOIN workspaces w ON w.id = s.workspace_id \
+         WHERE s.id = $1 AND w.slug = $2 AND s.deleted_at IS NULL"
+    ))
+    .bind(pk)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn list_sources(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<MetricSourceRow> = sqlx::query_as(&format!(
+        "SELECT {SOURCE_COLS} FROM metric_sources s \
+         JOIN workspaces w ON w.id = s.workspace_id \
+         WHERE w.slug = $1 AND s.deleted_at IS NULL ORDER BY s.created_at ASC"
+    ))
+    .bind(&slug)
+    .fetch_all(&st.pool)
+    .await?;
+    Ok((
+        StatusCode::OK,
+        Json(Value::Array(rows.iter().map(source_json).collect())),
+    ))
+}
+
+pub async fn create_source(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path(slug): Path<String>,
+    Json(body): Json<CreateSource>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let name = body.name.trim().to_string();
+    if name.is_empty() || name.chars().count() > 255 {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Name must be 1..255 characters"})),
+        ));
+    }
+    let workspace_id: Uuid = sqlx::query_scalar("SELECT id FROM workspaces WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&st.pool)
+        .await?;
+    let config = body.config.unwrap_or_else(|| json!({}));
+    if let Err(message) = validate_source_config(&st.pool, workspace_id, &config).await {
+        return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+    }
+    let id = Uuid::new_v4();
+    let inserted = sqlx::query(
+        "INSERT INTO metric_sources (id, workspace_id, name, token, is_active, config, \
+         created_by_id, updated_by_id, created_at, updated_at) \
+         VALUES ($1, $2, $3, 'plane_ms_' || replace(gen_random_uuid()::text, '-', ''), $4, $5, \
+         $6, $6, now(), now())",
+    )
+    .bind(id)
+    .bind(workspace_id)
+    .bind(&name)
+    .bind(body.is_active.unwrap_or(true))
+    .bind(&config)
+    .bind(auth.0)
+    .execute(&st.pool)
+    .await;
+    if let Err(error) = inserted {
+        if error.as_database_error().and_then(|e| e.constraint()).is_some() {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "A metric source with this name already exists"})),
+            ));
+        }
+        return Err(error.into());
+    }
+    let row = fetch_source(&st.pool, &slug, id).await?.unwrap();
+    Ok((StatusCode::CREATED, Json(source_json(&row))))
+}
+
+pub async fn patch_source(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+    Json(body): Json<PatchSource>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let Some(current) = fetch_source(&st.pool, &slug, pk).await? else {
+        return Ok(missing());
+    };
+    let name = body.name.as_ref().map(|name| name.trim().to_string());
+    if matches!(&name, Some(name) if name.is_empty() || name.chars().count() > 255) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Name must be 1..255 characters"})),
+        ));
+    }
+    if let Some(config) = &body.config {
+        if let Err(message) = validate_source_config(&st.pool, current.workspace_id, config).await {
+            return Ok((StatusCode::BAD_REQUEST, Json(json!({"error": message}))));
+        }
+    }
+    let config = body.config.unwrap_or(current.config);
+    let updated = sqlx::query(
+        "UPDATE metric_sources SET name = COALESCE($1, name), is_active = COALESCE($2, is_active), \
+         config = $3, updated_by_id = $4, updated_at = now() \
+         WHERE id = $5 AND deleted_at IS NULL",
+    )
+    .bind(name)
+    .bind(body.is_active)
+    .bind(&config)
+    .bind(auth.0)
+    .bind(pk)
+    .execute(&st.pool)
+    .await;
+    if let Err(error) = updated {
+        if error.as_database_error().and_then(|e| e.constraint()).is_some() {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "A metric source with this name already exists"})),
+            ));
+        }
+        return Err(error.into());
+    }
+    let row = fetch_source(&st.pool, &slug, pk).await?.unwrap();
+    Ok((StatusCode::OK, Json(source_json(&row))))
+}
+
+pub async fn destroy_source(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let result = sqlx::query(
+        "UPDATE metric_sources s SET deleted_at = now(), updated_by_id = $1, updated_at = now() \
+         FROM workspaces w WHERE w.id = s.workspace_id AND w.slug = $2 \
+         AND s.id = $3 AND s.deleted_at IS NULL",
+    )
+    .bind(auth.0)
+    .bind(&slug)
+    .bind(pk)
+    .execute(&st.pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Ok(missing());
+    }
+    Ok((StatusCode::OK, Json(json!({"ok": true}))))
+}
+
+pub async fn rotate_source(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let token: Option<String> = sqlx::query_scalar(
+        "UPDATE metric_sources s \
+         SET token = 'plane_ms_' || replace(gen_random_uuid()::text, '-', ''), \
+         updated_by_id = $1, updated_at = now() \
+         FROM workspaces w WHERE w.id = s.workspace_id AND w.slug = $2 \
+         AND s.id = $3 AND s.deleted_at IS NULL RETURNING s.token",
+    )
+    .bind(auth.0)
+    .bind(&slug)
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match token {
+        Some(token) => Ok((StatusCode::OK, Json(json!({"id": pk, "token": token})))),
+        None => Ok(missing()),
+    }
+}

@@ -285,3 +285,81 @@ async fn ingest_batch_is_atomic_on_invalid_item() {
         .unwrap();
     assert_eq!(rows, 0);
 }
+
+#[tokio::test]
+async fn source_crud_requires_workspace_admin_and_rotate_invalidates_old_token() {
+    use api::middleware::auth::AuthUser;
+    use api::routes::service_metrics::{create_source, list_sources, rotate_source, CreateSource};
+
+    let pool = pool().await;
+    let sc = Scratch::new(&pool).await;
+
+    let (status, Json(_)) = list_sources(
+        State(state().await),
+        AuthUser(sc.member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+
+    let (status, Json(created)) = create_source(
+        State(state().await),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Json(CreateSource {
+            name: "Prometheus".into(),
+            is_active: None,
+            config: Some(json!({"service_map": {"payment-api": sc.service_id}})),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let old_token = created["token"].as_str().unwrap().to_string();
+    assert!(old_token.starts_with("plane_ms_"));
+
+    let source_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    let (status, Json(rotated)) = rotate_source(
+        State(state().await),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), source_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let new_token = rotated["token"].as_str().unwrap().to_string();
+    assert_ne!(old_token, new_token);
+
+    let body = json!({"metrics": [{"service": "payment-api", "key": "x", "resolution": 60,
+        "bucket_start": aligned_now(60), "avg": 1.0}]});
+    let (status, _) = ingest(State(state().await), Path(old_token), Json(body.clone())).await.unwrap();
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
+    let (status, _) = ingest(State(state().await), Path(new_token), Json(body)).await.unwrap();
+    assert_eq!(status, axum::http::StatusCode::ACCEPTED);
+}
+
+#[tokio::test]
+async fn source_config_rejects_service_from_another_workspace() {
+    use api::middleware::auth::AuthUser;
+    use api::routes::service_metrics::{create_source, CreateSource};
+
+    let pool = pool().await;
+    let sc = Scratch::new(&pool).await;
+    let other = Scratch::new(&pool).await;
+
+    let (status, Json(body)) = create_source(
+        State(state().await),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Json(CreateSource {
+            name: "Bad mapping".into(),
+            is_active: None,
+            config: Some(json!({"service_map": {"other": other.service_id}})),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "Service does not belong to this workspace");
+}

@@ -805,6 +805,18 @@ async fn main() {
             get(routes::service::list_workspace).post(routes::service::create_workspace),
         )
         .route(
+            "/api/workspaces/:slug/metric-sources/",
+            get(routes::service_metrics::list_sources).post(routes::service_metrics::create_source),
+        )
+        .route(
+            "/api/workspaces/:slug/metric-sources/:pk/",
+            patch(routes::service_metrics::patch_source).delete(routes::service_metrics::destroy_source),
+        )
+        .route(
+            "/api/workspaces/:slug/metric-sources/:pk/rotate/",
+            post(routes::service_metrics::rotate_source),
+        )
+        .route(
             "/api/workspaces/:slug/services/health/",
             get(routes::service_health::workspace_health),
         )
