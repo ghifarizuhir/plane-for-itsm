@@ -11,6 +11,7 @@ import { SERVICE_DETAIL_PANE_TABS } from "../helpers";
 import { ServicePropertiesTabPanel } from "./properties";
 import { ServiceRelationshipsTabPanel } from "./relationships";
 import { ServiceTicketsTabPanel } from "./tickets";
+import { ServiceMonitoringTabPanel } from "./monitoring";
 
 type Props = {
   serviceId: string;
@@ -26,6 +27,7 @@ export function ServiceDetailPaneTabPanelsRoot(props: Props) {
           {tab.key === "properties" && <ServicePropertiesTabPanel serviceId={serviceId} />}
           {tab.key === "relationships" && <ServiceRelationshipsTabPanel serviceId={serviceId} />}
           {tab.key === "tickets" && <ServiceTicketsTabPanel serviceId={serviceId} />}
+          {tab.key === "monitoring" && <ServiceMonitoringTabPanel serviceId={serviceId} />}
         </Tabs.Content>
       ))}
     </>

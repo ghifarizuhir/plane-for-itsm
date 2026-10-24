@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-export type TServiceDetailPaneTab = "properties" | "relationships" | "tickets";
+export type TServiceDetailPaneTab = "properties" | "relationships" | "tickets" | "monitoring";
 
 export const SERVICE_DETAIL_PANE_WIDTH = 320;
 
@@ -17,6 +17,7 @@ export const SERVICE_DETAIL_PANE_TABS: {
   { key: "properties", i18n_label: "common.properties" },
   { key: "relationships", i18n_label: "service.relationships.title" },
   { key: "tickets", i18n_label: "service.tabs.work_items" },
+  { key: "monitoring", i18n_label: "service.tabs.monitoring" },
 ];
 
 export const SERVICE_DETAIL_PANE_TAB_KEYS = SERVICE_DETAIL_PANE_TABS.map((tab) => tab.key);
