@@ -46,6 +46,7 @@ pub mod search;
 pub mod service;
 pub mod service_access;
 pub mod service_health;
+pub mod service_metrics;
 pub mod state;
 pub mod subscribe;
 pub mod themes;
