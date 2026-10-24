@@ -832,6 +832,18 @@ async fn main() {
             post(routes::service::transfer_owner),
         )
         .route(
+            "/api/workspaces/:slug/services/:pk/metrics/",
+            get(routes::service_metrics::list_metrics),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/metrics/:metric_id/",
+            patch(routes::service_metrics::patch_metric).delete(routes::service_metrics::destroy_metric),
+        )
+        .route(
+            "/api/workspaces/:slug/services/:pk/metrics/:metric_id/buckets/",
+            get(routes::service_metrics::buckets),
+        )
+        .route(
             "/api/workspaces/:slug/services/:pk/project-links/",
             get(routes::service::project_links_list).post(routes::service::project_links_create),
         )

@@ -750,3 +750,349 @@ pub async fn rotate_source(
         None => Ok(missing()),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Read API (service visibility)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+pub struct BucketQuery {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub resolution: Option<i32>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct MetricWithLast {
+    id: Uuid,
+    service_id: Uuid,
+    metric_key: String,
+    display_name: String,
+    unit: String,
+    description: String,
+    bucket_start: Option<DateTime<Utc>>,
+    resolution: Option<i16>,
+    count: Option<i64>,
+    sum: Option<f64>,
+    min: Option<f64>,
+    max: Option<f64>,
+    avg: Option<f64>,
+    last_value: Option<f64>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct MetricRow {
+    id: Uuid,
+    service_id: Uuid,
+    metric_key: String,
+    display_name: String,
+    unit: String,
+    description: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct BucketRow {
+    bucket_start: DateTime<Utc>,
+    count: Option<i64>,
+    sum: Option<f64>,
+    min: Option<f64>,
+    max: Option<f64>,
+    avg: Option<f64>,
+    last_value: Option<f64>,
+}
+
+fn metric_json(row: &MetricRow) -> Value {
+    json!({
+        "id": row.id,
+        "service_id": row.service_id,
+        "key": row.metric_key,
+        "display_name": row.display_name,
+        "unit": row.unit,
+        "description": row.description,
+    })
+}
+
+pub async fn list_metrics(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk)): Path<(String, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !service_access::full_visible(&st.pool, auth.0, &slug, pk).await? {
+        return Ok(deny());
+    }
+    let rows: Vec<MetricWithLast> = sqlx::query_as(
+        "SELECT m.id, m.service_id, m.metric_key, m.display_name, m.unit, m.description, \
+                b.bucket_start, b.resolution, b.\"count\", b.\"sum\", b.\"min\", b.\"max\", \
+                b.\"avg\", b.last_value \
+         FROM service_metrics m \
+         LEFT JOIN LATERAL ( \
+           SELECT bucket_start, resolution, \"count\", \"sum\", \"min\", \"max\", \"avg\", last_value \
+           FROM service_metric_buckets b WHERE b.metric_id = m.id \
+           ORDER BY b.bucket_start DESC LIMIT 1 \
+         ) b ON true \
+         WHERE m.service_id = $1 ORDER BY m.metric_key",
+    )
+    .bind(pk)
+    .fetch_all(&st.pool)
+    .await?;
+
+    let metrics: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let last_bucket = row.bucket_start.map(|start| {
+                json!({
+                    "bucket_start": start,
+                    "resolution": row.resolution,
+                    "count": row.count,
+                    "sum": row.sum,
+                    "min": row.min,
+                    "max": row.max,
+                    "avg": row.avg,
+                    "last": row.last_value,
+                })
+            });
+            json!({
+                "id": row.id,
+                "service_id": row.service_id,
+                "key": row.metric_key,
+                "display_name": row.display_name,
+                "unit": row.unit,
+                "description": row.description,
+                "last_bucket": last_bucket,
+            })
+        })
+        .collect();
+    Ok((StatusCode::OK, Json(json!({"metrics": metrics}))))
+}
+
+type BucketsResponse = (
+    StatusCode,
+    [(header::HeaderName, &'static str); 1],
+    Json<Value>,
+);
+
+fn parse_timestamp(value: Option<&str>, default: DateTime<Utc>) -> Result<DateTime<Utc>, String> {
+    match value {
+        Some(raw) => DateTime::parse_from_rfc3339(raw)
+            .map(|parsed| parsed.with_timezone(&Utc))
+            .map_err(|_| format!("Invalid timestamp '{raw}'")),
+        None => Ok(default),
+    }
+}
+
+pub async fn buckets(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk, metric_id)): Path<(String, Uuid, Uuid)>,
+    Query(params): Query<BucketQuery>,
+) -> Result<BucketsResponse, common::errors::AppError> {
+    if !service_access::full_visible(&st.pool, auth.0, &slug, pk).await? {
+        return Ok((
+            StatusCode::FORBIDDEN,
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(json!({"error": "You don't have the required permissions."})),
+        ));
+    }
+    let metric: Option<MetricRow> = sqlx::query_as(
+        "SELECT id, service_id, metric_key, display_name, unit, description \
+         FROM service_metrics WHERE id = $1 AND service_id = $2",
+    )
+    .bind(metric_id)
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    let Some(metric) = metric else {
+        return Ok((
+            StatusCode::NOT_FOUND,
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(json!({"error": "The required object does not exist."})),
+        ));
+    };
+
+    let now = Utc::now();
+    let to = match parse_timestamp(params.to.as_deref(), now) {
+        Ok(value) => value,
+        Err(message) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                [(header::CACHE_CONTROL, "no-store")],
+                Json(json!({"error": message})),
+            ))
+        }
+    };
+    let from = match parse_timestamp(params.from.as_deref(), to - Duration::hours(24)) {
+        Ok(value) => value,
+        Err(message) => {
+            return Ok((
+                StatusCode::BAD_REQUEST,
+                [(header::CACHE_CONTROL, "no-store")],
+                Json(json!({"error": message})),
+            ))
+        }
+    };
+    let range_seconds = (to - from).num_seconds();
+    if range_seconds <= 0 || range_seconds > MAX_RANGE_SECONDS {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            [(header::CACHE_CONTROL, "no-store")],
+            Json(json!({"error": "Range must be between 0 and 90 days"})),
+        ));
+    }
+    let resolution = match params.resolution {
+        Some(resolution) => {
+            let Some(retention) = retention_seconds(resolution) else {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    [(header::CACHE_CONTROL, "no-store")],
+                    Json(json!({"error": "Invalid resolution"})),
+                ));
+            };
+            if from < now - Duration::seconds(retention) {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    [(header::CACHE_CONTROL, "no-store")],
+                    Json(json!({"error": "Resolution is not retained for this range"})),
+                ));
+            }
+            resolution
+        }
+        None => auto_resolution(range_seconds).unwrap_or(3600),
+    };
+
+    let rows: Vec<BucketRow> = sqlx::query_as(
+        "SELECT bucket_start, \"count\", \"sum\", \"min\", \"max\", \"avg\", last_value \
+         FROM service_metric_buckets \
+         WHERE metric_id = $1 AND resolution = $2 AND bucket_start >= $3 AND bucket_start < $4 \
+         ORDER BY bucket_start",
+    )
+    .bind(metric_id)
+    .bind(i16::try_from(resolution).unwrap_or(60))
+    .bind(from)
+    .bind(to)
+    .fetch_all(&st.pool)
+    .await?;
+
+    let buckets: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "bucket_start": row.bucket_start,
+                "count": row.count,
+                "sum": row.sum,
+                "min": row.min,
+                "max": row.max,
+                "avg": row.avg,
+                "last": row.last_value,
+            })
+        })
+        .collect();
+    Ok((
+        StatusCode::OK,
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(json!({
+            "metric": metric_json(&metric),
+            "resolution": resolution,
+            "from": from,
+            "to": to,
+            "buckets": buckets,
+        })),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PatchMetric {
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub unit: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+pub async fn patch_metric(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk, metric_id)): Path<(String, Uuid, Uuid)>,
+    Json(body): Json<PatchMetric>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let in_workspace: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM services s JOIN workspaces w ON w.id = s.workspace_id \
+         WHERE s.id = $1 AND w.slug = $2 AND s.deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !in_workspace {
+        return Ok(missing());
+    }
+    let display_name = body.display_name.map(|value| value.trim().to_string());
+    if matches!(&display_name, Some(value) if value.chars().count() > 255) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "display_name must be at most 255 characters"})),
+        ));
+    }
+    let unit = body.unit.map(|value| value.trim().to_string());
+    if matches!(&unit, Some(value) if value.chars().count() > 50) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "unit must be at most 50 characters"})),
+        ));
+    }
+    let updated: Option<MetricRow> = sqlx::query_as(
+        "UPDATE service_metrics SET \
+           display_name = COALESCE($1, display_name), \
+           unit = COALESCE($2, unit), \
+           description = COALESCE($3, description), \
+           updated_at = now() \
+         WHERE id = $4 AND service_id = $5 \
+         RETURNING id, service_id, metric_key, display_name, unit, description",
+    )
+    .bind(display_name)
+    .bind(unit)
+    .bind(body.description)
+    .bind(metric_id)
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match updated {
+        Some(row) => Ok((StatusCode::OK, Json(metric_json(&row)))),
+        None => Ok(missing()),
+    }
+}
+
+pub async fn destroy_metric(
+    State(st): State<AppState>,
+    auth: AuthUser,
+    Path((slug, pk, metric_id)): Path<(String, Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
+    if !is_workspace_admin(&st.pool, auth.0, &slug).await? {
+        return Ok(deny());
+    }
+    let in_workspace: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM services s JOIN workspaces w ON w.id = s.workspace_id \
+         WHERE s.id = $1 AND w.slug = $2 AND s.deleted_at IS NULL)",
+    )
+    .bind(pk)
+    .bind(&slug)
+    .fetch_one(&st.pool)
+    .await?;
+    if !in_workspace {
+        return Ok(missing());
+    }
+    let deleted: Option<Uuid> = sqlx::query_scalar(
+        "DELETE FROM service_metrics WHERE id = $1 AND service_id = $2 RETURNING id",
+    )
+    .bind(metric_id)
+    .bind(pk)
+    .fetch_optional(&st.pool)
+    .await?;
+    match deleted {
+        Some(_) => Ok((StatusCode::OK, Json(json!({"ok": true})))),
+        None => Ok(missing()),
+    }
+}

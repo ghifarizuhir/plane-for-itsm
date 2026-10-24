@@ -4,7 +4,7 @@
 
 use api::routes::service_metrics::ingest;
 use api::state::AppState;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use common::config::AppConfig;
@@ -362,4 +362,71 @@ async fn source_config_rejects_service_from_another_workspace() {
     .unwrap();
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
     assert_eq!(body["error"], "Service does not belong to this workspace");
+}
+
+#[tokio::test]
+async fn read_endpoints_scope_by_service_visibility_and_auto_resolve() {
+    use api::middleware::auth::AuthUser;
+    use api::routes::service_metrics::{buckets, list_metrics, BucketQuery};
+
+    let pool = pool().await;
+    let sc = Scratch::new(&pool).await;
+    let token = format!("plane_ms_{}", Uuid::new_v4().simple());
+    insert_source(&pool, sc.workspace_id, &token, json!({"service_map": {"payment-api": sc.service_id}})).await;
+    ingest(
+        State(state().await),
+        Path(token),
+        Json(json!({"metrics": [{
+            "service": "payment-api", "key": "http.latency", "unit": "ms",
+            "resolution": 300, "bucket_start": aligned_now(300),
+            "count": 60, "avg": 120
+        }]})),
+    )
+    .await
+    .unwrap();
+
+    let (status, Json(defs)) = list_metrics(
+        State(state().await),
+        AuthUser(sc.member),
+        Path((sc.slug.clone(), sc.service_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let metric_id = Uuid::parse_str(defs["metrics"][0]["id"].as_str().unwrap()).unwrap();
+    assert_eq!(defs["metrics"][0]["key"], "http.latency");
+
+    let (status, _, Json(series)) = buckets(
+        State(state().await),
+        AuthUser(sc.member),
+        Path((sc.slug.clone(), sc.service_id, metric_id)),
+        Query(BucketQuery { from: None, to: None, resolution: None }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(series["resolution"], 300);
+    assert_eq!(series["buckets"][0]["avg"], 120.0);
+
+    let outsider = Uuid::new_v4();
+    insert_user(&pool, outsider, &format!("outsider-{}", Uuid::new_v4().simple())).await;
+    let (status, Json(_)) = list_metrics(
+        State(state().await),
+        AuthUser(outsider),
+        Path((sc.slug.clone(), sc.service_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+
+    let other_service = insert_service(&pool, sc.workspace_id, "Other").await;
+    let (status, _, Json(_)) = buckets(
+        State(state().await),
+        AuthUser(sc.admin),
+        Path((sc.slug, other_service, metric_id)),
+        Query(BucketQuery { from: None, to: None, resolution: None }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
 }
