@@ -16,6 +16,7 @@ import { ServiceMultiSelect } from "@/components/services/select/service-multi-s
 // helpers
 import { getBlastRadius } from "@/services/war-room.helpers";
 // hooks
+import { useProject } from "@/hooks/store/use-project";
 import { useService } from "@/hooks/store/use-service";
 import { useWarRoom } from "@/hooks/store/use-war-room";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -38,10 +39,20 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
   // store hooks
   const { fetchedMap, loader, fetchServices, getServiceById, getServiceHealth, getDependenciesByProject } =
     useService();
+  const { projectMap } = useProject();
   const { addServices, removeService } = useWarRoom();
   const { currentWorkspace } = useWorkspace();
   // derived values
   const workspaceId = currentWorkspace?.id;
+  const projectLookup = useMemo(() => {
+    const lookup: Record<string, { identifier: string; name: string }> = {};
+    Object.values(projectMap).forEach((proj) => {
+      if (proj?.id && proj.identifier) {
+        lookup[proj.id] = { identifier: proj.identifier, name: proj.name };
+      }
+    });
+    return lookup;
+  }, [projectMap]);
   const affectedServiceIds = useMemo(() => room.services.map((service) => service.id), [room.services]);
   const dependencies = getDependenciesByProject(projectId);
   const blastRadius = useMemo(
@@ -138,6 +149,7 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
             graphData={graphData}
             readOnly
             highlightedServiceIds={blastRadius.affectedIds}
+            projectLookup={projectLookup}
             onNodeClick={handleNodeClick}
           />
         )}

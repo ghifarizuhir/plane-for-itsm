@@ -398,14 +398,14 @@
   --xy-connectionline-stroke: var(--bg-accent-primary);
   --xy-connectionline-stroke-width: 1.5;
   --xy-handle-background-color: var(--bg-layer-3);
-  --xy-handle-border-color: var(--bg-surface-1);
-  --xy-controls-button-background-color: var(--bg-surface-1);
-  --xy-controls-button-background-color-hover: var(--bg-layer-2);
+  --xy-handle-border-color: var(--bg-layer-1);
+  --xy-controls-button-background-color: var(--bg-layer-1);
+  --xy-controls-button-background-color-hover: var(--bg-layer-1-hover);
   --xy-controls-button-color: var(--txt-secondary);
   --xy-controls-button-color-hover: var(--txt-primary);
   --xy-controls-button-border-color: var(--border-subtle);
-  --xy-controls-box-shadow: 0 0 0 1px var(--border-subtle);
-  --xy-minimap-background-color: var(--bg-surface-1);
+  --xy-controls-box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border-subtle);
+  --xy-minimap-background-color: var(--bg-layer-1);
   --xy-minimap-mask-background-color: color-mix(in srgb, var(--bg-canvas) 60%, transparent);
   --xy-minimap-node-background-color: var(--bg-layer-3);
   --xy-attribution-background-color: transparent;
@@ -417,7 +417,26 @@
   color: var(--txt-tertiary);
 }
 
+.service-graph-flow .react-flow__handle:hover {
+  background-color: var(--bg-accent-primary);
+}
+
+.service-graph-flow .react-flow__controls {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.service-graph-flow .react-flow__minimap {
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px 0 rgba(0, 0, 0, 0.08),
+    0 0 0 1px var(--border-subtle);
+}
+
 .service-graph-flow .react-flow__node.selected .service-node-card {
   border-color: var(--border-accent-strong);
-  box-shadow: 0 0 0 1px var(--border-accent-strong);
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.16),
+    0 0 0 1px var(--border-accent-strong);
 }

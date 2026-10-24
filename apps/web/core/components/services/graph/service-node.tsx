@@ -4,11 +4,30 @@
  * See the LICENSE file for details.
  */
 
+import type { ComponentType } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { LockOutline } from "@makeplane/propel/icons";
+import {
+  BoxesOutline,
+  ClockOutline,
+  CubeOutline,
+  GlobeOutline,
+  LockOutline,
+  ServerOutline,
+  WarningTriangleOutline,
+} from "@makeplane/propel/icons";
 // plane imports
-import type { ILiteService, IService, IServiceIncident, TServiceHealth } from "@plane/types";
-import { cn } from "@plane/utils";
+import type {
+  ILiteService,
+  IService,
+  IServiceIncident,
+  TServiceCriticality,
+  TServiceHealth,
+  TServiceType,
+} from "@plane/types";
+import { calculateTimeAgo, cn } from "@plane/utils";
+// helpers
+import { getHighestSeverityIncident } from "@/services/service-health.helpers";
+import { isLiteService } from "@/services/service.helpers";
 // local imports
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceHealthDot } from "../health/service-health-dot";
@@ -18,51 +37,179 @@ export type TServiceNodeData = {
   accessLevel?: "full" | "lite";
   statusLabel: string;
   criticalityLabel: string;
+  typeLabel?: string;
+  healthLabel?: string;
+  ownerProjectIdentifier?: string;
+  ownerProjectName?: string;
   health: TServiceHealth;
   incidents: IServiceIncident[];
+  lastDeployedAt?: string | null;
+  highestSeverityLabel?: string;
   /** Blast-radius map: dependency neighbors are dimmed. */
   dimmed?: boolean;
+};
+
+const SERVICE_TYPE_ICON: Record<TServiceType, ComponentType<{ className?: string }>> = {
+  internal: CubeOutline,
+  external: GlobeOutline,
+  infrastructure: ServerOutline,
+  third_party: BoxesOutline,
+};
+
+const CRITICALITY_BADGE_STYLE: Record<TServiceCriticality, string> = {
+  critical: "border-danger-strong bg-danger-subtle text-danger-primary",
+  high: "border-subtle bg-warning-subtle text-warning-primary",
+  medium: "border-subtle bg-layer-2 text-secondary",
+  low: "border-subtle bg-layer-2 text-tertiary",
+};
+
+const HEALTH_BORDER_STYLE: Record<TServiceHealth, string> = {
+  down: "border-danger-strong",
+  degraded: "border-subtle-1",
+  healthy: "border-subtle",
+  unknown: "border-subtle",
 };
 
 export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
   const service = (data as TServiceNodeData | undefined)?.service;
   if (!service) return null;
-  const { statusLabel, criticalityLabel, health, incidents, dimmed, accessLevel } = data as TServiceNodeData;
+  const {
+    statusLabel,
+    criticalityLabel,
+    typeLabel,
+    healthLabel,
+    ownerProjectIdentifier,
+    ownerProjectName,
+    health,
+    incidents,
+    lastDeployedAt,
+    highestSeverityLabel,
+    dimmed,
+    accessLevel,
+  } = data as TServiceNodeData;
   const state = health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
-  const isLite = accessLevel === "lite";
+  const isLite = accessLevel === "lite" || isLiteService(service);
+  const serviceType: TServiceType = !isLite && "type" in service ? service.type : "internal";
+  const TypeIcon = SERVICE_TYPE_ICON[serviceType] ?? CubeOutline;
+  const highestIncident = getHighestSeverityIncident(incidents);
+  const hasIncidents = incidents.length > 0 && Boolean(highestIncident);
+  const isSevereIncident = highestIncident?.severity === "sev1" || highestIncident?.severity === "sev2";
 
   return (
-    <div className={cn("relative w-[220px]", dimmed && "opacity-60", isLite && "opacity-80")}>
-      <Handle type="target" position={Position.Left} />
+    <div
+      className={cn(
+        "group relative w-[256px] transition-opacity duration-150",
+        dimmed && "opacity-55",
+        isLite && "opacity-80"
+      )}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!h-2.5 !w-2.5 !border-2 transition-transform duration-150 group-hover:scale-125"
+      />
       <div
         className={cn(
-          "service-node-card shadow-sm relative overflow-hidden rounded-md border border-subtle bg-surface-1 px-3 py-2 transition-colors",
+          "service-node-card shadow-xs relative flex flex-col gap-2 overflow-hidden rounded-lg border bg-layer-1 p-3 transition-colors duration-150 hover:bg-layer-1-hover",
+          HEALTH_BORDER_STYLE[state],
           isLite && "border-dashed"
         )}
         title={isLite ? `${service.name} — Restricted` : service.name}
       >
-        <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
-        <div className="flex min-w-0 items-center gap-2 pl-1">
-          <ServiceHealthDot health={state} />
-          {isLite && <LockOutline className="h-3 w-3 shrink-0 text-tertiary" />}
+        {/* Top telemetry & identity row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-subtle bg-layer-2 text-secondary",
+                state === "down" && "border-danger-strong bg-danger-subtle text-danger-primary",
+                state === "degraded" && "bg-warning-subtle text-warning-primary"
+              )}
+              title={typeLabel}
+            >
+              {isLite ? <LockOutline className="h-3 w-3 text-tertiary" /> : <TypeIcon className="h-3 w-3" />}
+            </span>
+            {ownerProjectIdentifier ? (
+              <span
+                className="truncate rounded-xs border border-subtle bg-layer-2 px-1.5 py-0.5 font-code text-10 font-medium tracking-wide text-secondary"
+                title={ownerProjectName ?? ownerProjectIdentifier}
+              >
+                {ownerProjectIdentifier}
+              </span>
+            ) : (
+              typeLabel && <span className="truncate text-10 font-medium text-tertiary">{typeLabel}</span>
+            )}
+          </div>
+
           <span
-            className={cn("text-sm min-w-0 flex-1 truncate font-medium", isLite ? "text-tertiary" : "text-primary")}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-10 font-medium",
+              config.pill
+            )}
+            title={healthLabel}
+          >
+            <ServiceHealthDot health={state} className={cn("h-1.5 w-1.5", state === "down" && "animate-pulse")} />
+            {healthLabel && <span className="leading-none">{healthLabel}</span>}
+          </span>
+        </div>
+
+        {/* Service primary title */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-13 font-semibold tracking-[-0.01em]",
+              isLite ? "text-tertiary" : "text-primary"
+            )}
             title={service.name}
           >
             {service.name}
           </span>
         </div>
-        <div className="text-xs mt-1 pl-1 text-secondary capitalize">
-          {statusLabel} · {criticalityLabel}
+
+        {/* Operational footer strip */}
+        <div className="flex items-center justify-between gap-2 border-t border-subtle pt-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "shrink-0 rounded-xs border px-1.5 py-0.5 font-code text-9 font-medium tracking-wide uppercase",
+                CRITICALITY_BADGE_STYLE[service.criticality] ?? CRITICALITY_BADGE_STYLE.medium
+              )}
+            >
+              {criticalityLabel}
+            </span>
+            <span className="truncate text-11 text-secondary capitalize">{statusLabel}</span>
+          </div>
+
+          {hasIncidents ? (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-0.5 font-code text-10 font-medium tabular-nums",
+                isSevereIncident ? "bg-danger-subtle text-danger-primary" : "bg-warning-subtle text-warning-primary"
+              )}
+            >
+              <WarningTriangleOutline className="h-3 w-3 shrink-0" />
+              <span>{incidents.length}</span>
+              {highestSeverityLabel && (
+                <>
+                  <span className="opacity-60">·</span>
+                  <span>{highestSeverityLabel}</span>
+                </>
+              )}
+            </span>
+          ) : lastDeployedAt ? (
+            <span className="inline-flex shrink-0 items-center gap-1 font-code text-10 text-tertiary tabular-nums">
+              <ClockOutline className="h-3 w-3 shrink-0 text-tertiary" />
+              <span>{calculateTimeAgo(lastDeployedAt)}</span>
+            </span>
+          ) : null}
         </div>
       </div>
-      {incidents.length > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger-primary px-1 text-10 font-medium text-on-color">
-          {incidents.length}
-        </span>
-      )}
-      <Handle type="source" position={Position.Right} />
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!h-2.5 !w-2.5 !border-2 transition-transform duration-150 group-hover:scale-125"
+      />
     </div>
   );
 }

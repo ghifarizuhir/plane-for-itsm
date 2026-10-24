@@ -11,8 +11,8 @@ import type { ILiteService, IService, IServiceDependency } from "@plane/types";
 // helpers
 import { isLiteService } from "@/services/service.helpers";
 
-export const SERVICE_NODE_WIDTH = 220;
-export const SERVICE_NODE_HEIGHT = 72;
+export const SERVICE_NODE_WIDTH = 256;
+export const SERVICE_NODE_HEIGHT = 104;
 
 export const getLayoutedElements = (
   services: (IService | ILiteService)[],
@@ -20,7 +20,7 @@ export const getLayoutedElements = (
 ): { nodes: Node[]; edges: Edge[] } => {
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 90 });
+  graph.setGraph({ rankdir: "LR", nodesep: 48, ranksep: 112 });
 
   const ids = new Set(services.map((s) => s.id));
   services.forEach((s) => graph.setNode(s.id, { width: SERVICE_NODE_WIDTH, height: SERVICE_NODE_HEIGHT }));
@@ -53,6 +53,7 @@ export const getLayoutedElements = (
       source: d.from_service_id,
       target: d.to_service_id,
       type: "smoothstep",
+      data: { dependencyType: d.dependency_type ?? "depends_on" },
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
     }));
 

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
   useEdgesState,
@@ -22,7 +23,10 @@ import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
 // plane imports
 import { useTranslation } from "@plane/i18n";
-import type { ILiteService, IService, TServiceGraphData, TServiceHealth } from "@plane/types";
+import type { ILiteService, IService, TServiceDependencyType, TServiceGraphData, TServiceHealth } from "@plane/types";
+// helpers
+import { getHighestSeverityIncident } from "@/services/service-health.helpers";
+import { isLiteService } from "@/services/service.helpers";
 // components
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceNode } from "./service-node";
@@ -30,11 +34,22 @@ import { getLayoutedElements } from "./use-graph-layout";
 
 const nodeTypes = { service: ServiceNode };
 
+const DEPENDENCY_TYPE_LABEL_KEYS: Record<TServiceDependencyType, string> = {
+  depends_on: "service.detail.depends_on",
+  uses: "service.relationships.uses",
+  runs_on: "service.relationships.runs_on",
+  connects_to: "service.relationships.connects_to",
+  replicates_to: "service.relationships.replicates_to",
+  other: "service.relationships.related_to",
+};
+
 export type TServiceGraphCanvasProps = {
   graphData: TServiceGraphData;
   readOnly?: boolean;
   /** When provided, non-listed services are dimmed (war room blast radius). */
   highlightedServiceIds?: string[];
+  /** Optional lookup for owner project badges on service nodes. */
+  projectLookup?: Record<string, { identifier: string; name: string }>;
   onNodeClick?: (serviceId: string) => void;
   onConnect?: (sourceServiceId: string, targetServiceId: string) => void;
   onEdgeDelete?: (dependencyId: string) => void;
@@ -50,6 +65,7 @@ export function ServiceGraphCanvas({
   graphData,
   readOnly = false,
   highlightedServiceIds,
+  projectLookup,
   onNodeClick,
   onConnect,
   onEdgeDelete,
@@ -83,7 +99,13 @@ export function ServiceGraphCanvas({
       layoutNodes.map((node) => {
         const service = (node.data as { service?: IService | ILiteService } | undefined)?.service;
         if (!service) return node;
-        const health = graphData.health[service.id];
+        const snapshot = graphData.health[service.id];
+        const healthState: TServiceHealth = snapshot?.health ?? "unknown";
+        const incidents = snapshot?.incidents ?? [];
+        const highestIncident = getHighestSeverityIncident(incidents);
+        const isLite = isLiteService(service);
+        const ownerProjectId = !isLite ? (service.owner_project_id ?? service.project_id) : null;
+        const ownerProject = ownerProjectId ? projectLookup?.[ownerProjectId] : undefined;
         return {
           ...node,
           data: {
@@ -91,18 +113,74 @@ export function ServiceGraphCanvas({
             service,
             statusLabel: t(`service.status_values.${service.status}`),
             criticalityLabel: t(`service.criticality_values.${service.criticality}`),
-            health: health?.health ?? "unknown",
-            incidents: health?.incidents ?? [],
+            typeLabel: !isLite ? t(`service.type_values.${service.type}`) : t("service.lite.restricted"),
+            healthLabel: t(HEALTH_CONFIG[healthState].label_key),
+            ownerProjectIdentifier: ownerProject?.identifier,
+            ownerProjectName: ownerProject?.name,
+            health: healthState,
+            incidents,
+            lastDeployedAt: snapshot?.last_deployed_at ?? null,
+            highestSeverityLabel: highestIncident
+              ? t(`service.incident_severity.${highestIncident.severity}`)
+              : undefined,
             dimmed: highlighted.size > 0 && !highlighted.has(service.id),
           },
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
-    [layoutNodes, currentLocale, graphData.health, highlighted]
+    [layoutNodes, currentLocale, graphData.health, highlighted, projectLookup]
+  );
+
+  const translatedEdges = useMemo<Edge[]>(
+    () =>
+      layoutEdges.map((edge): Edge => {
+        const depType =
+          (edge.data as { dependencyType?: TServiceDependencyType } | undefined)?.dependencyType ?? "depends_on";
+        const targetHealth = graphData.health[edge.target]?.health ?? "unknown";
+        const sourceHealth = graphData.health[edge.source]?.health ?? "unknown";
+        const isDownPath = targetHealth === "down" || sourceHealth === "down";
+        const isDegradedPath = !isDownPath && (targetHealth === "degraded" || sourceHealth === "degraded");
+        const edgeStroke = isDownPath
+          ? "var(--bg-danger-primary)"
+          : isDegradedPath
+            ? "var(--bg-warning-primary)"
+            : "var(--border-strong)";
+
+        return {
+          ...edge,
+          animated: isDownPath,
+          label: depType !== "depends_on" ? t(DEPENDENCY_TYPE_LABEL_KEYS[depType]) : undefined,
+          labelStyle: {
+            fill: "var(--txt-secondary)",
+            fontSize: 10,
+            fontWeight: 500,
+            fontFamily: "var(--font-code, monospace)",
+          },
+          labelBgStyle: {
+            fill: "var(--bg-layer-1)",
+            stroke: "var(--border-subtle)",
+            strokeWidth: 1,
+          },
+          labelBgPadding: [6, 3] as [number, number],
+          labelBgBorderRadius: 4,
+          style: {
+            stroke: edgeStroke,
+            strokeWidth: isDownPath ? 2 : 1.5,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 14,
+            height: 14,
+            color: edgeStroke,
+          },
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change
+    [layoutEdges, currentLocale, graphData.health]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(translatedEdges);
 
   useEffect(() => {
     setNodes((prev) => {
@@ -115,8 +193,12 @@ export function ServiceGraphCanvas({
             | {
                 statusLabel?: string;
                 criticalityLabel?: string;
+                typeLabel?: string;
+                healthLabel?: string;
+                ownerProjectIdentifier?: string;
                 health?: string;
                 incidents?: unknown[];
+                lastDeployedAt?: string | null;
                 dimmed?: boolean;
               }
             | undefined;
@@ -124,15 +206,23 @@ export function ServiceGraphCanvas({
             | {
                 statusLabel?: string;
                 criticalityLabel?: string;
+                typeLabel?: string;
+                healthLabel?: string;
+                ownerProjectIdentifier?: string;
                 health?: string;
                 incidents?: unknown[];
+                lastDeployedAt?: string | null;
                 dimmed?: boolean;
               }
             | undefined;
           return (
             prevData?.statusLabel === nextData?.statusLabel &&
             prevData?.criticalityLabel === nextData?.criticalityLabel &&
+            prevData?.typeLabel === nextData?.typeLabel &&
+            prevData?.healthLabel === nextData?.healthLabel &&
+            prevData?.ownerProjectIdentifier === nextData?.ownerProjectIdentifier &&
             prevData?.health === nextData?.health &&
+            prevData?.lastDeployedAt === nextData?.lastDeployedAt &&
             prevData?.dimmed === nextData?.dimmed &&
             (prevData?.incidents?.length ?? 0) === (nextData?.incidents?.length ?? 0)
           );
@@ -145,13 +235,25 @@ export function ServiceGraphCanvas({
       );
     });
     setEdges((prev) => {
-      if (prev.length === layoutEdges.length && prev.every((edge, i) => edge.id === layoutEdges[i]?.id)) return prev;
+      if (
+        prev.length === translatedEdges.length &&
+        prev.every((edge, i) => {
+          const next = translatedEdges[i];
+          return (
+            edge.id === next?.id &&
+            edge.label === next?.label &&
+            edge.animated === next?.animated &&
+            edge.style?.stroke === next?.style?.stroke
+          );
+        })
+      )
+        return prev;
       const selectedById = new Map(prev.map((edge) => [edge.id, edge.selected]));
-      return layoutEdges.map((edge) =>
+      return translatedEdges.map((edge) =>
         selectedById.has(edge.id) ? { ...edge, selected: selectedById.get(edge.id) } : edge
       );
     });
-  }, [translatedNodes, layoutEdges, setNodes, setEdges]);
+  }, [translatedNodes, translatedEdges, setNodes, setEdges]);
 
   const handleConnect = useCallback(
     (connection: Connection) => {

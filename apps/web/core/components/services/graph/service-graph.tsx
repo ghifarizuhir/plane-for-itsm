@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
@@ -15,11 +15,13 @@ import type { TServiceGraphData } from "@plane/types";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import useServicePeekOverviewRedirection from "@/hooks/use-service-peek-overview-redirection";
+import { useProject } from "@/hooks/store/use-project";
 import { useService } from "@/hooks/store/use-service";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // helpers
 import { isLiteService } from "@/services/service.helpers";
 // components
+import { ServiceHealthDot } from "../health/service-health-dot";
 import { ServiceGraphCanvas } from "./service-graph-canvas";
 
 export const ServiceGraph = observer(function ServiceGraph({
@@ -43,6 +45,7 @@ export const ServiceGraph = observer(function ServiceGraph({
     updateNodePosition,
     updateService,
   } = useService();
+  const { projectMap } = useProject();
   const { currentWorkspace } = useWorkspace();
   // peek overview
   const { isMobile } = usePlatformOS();
@@ -61,6 +64,16 @@ export const ServiceGraph = observer(function ServiceGraph({
       : pid
         ? getGraphData(pid)
         : { services: [], dependencies: [], health: {} };
+
+  const projectLookup = useMemo(() => {
+    const lookup: Record<string, { identifier: string; name: string }> = {};
+    Object.values(projectMap).forEach((proj) => {
+      if (proj?.id && proj.identifier) {
+        lookup[proj.id] = { identifier: proj.identifier, name: proj.name };
+      }
+    });
+    return lookup;
+  }, [projectMap]);
 
   const handleConnect = useCallback(
     async (source: string, target: string) => {
@@ -145,8 +158,24 @@ export const ServiceGraph = observer(function ServiceGraph({
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-        <p className="text-xs text-secondary">{t("service.graph.connect_hint")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-3 py-2">
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-12 text-secondary">{t("service.graph.connect_hint")}</p>
+          <div className="hidden items-center gap-3 border-l border-subtle pl-4 sm:flex">
+            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
+              <ServiceHealthDot health="healthy" />
+              <span>{t("service.health_values.healthy")}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
+              <ServiceHealthDot health="degraded" />
+              <span>{t("service.health_values.degraded")}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
+              <ServiceHealthDot health="down" />
+              <span>{t("service.health_values.down")}</span>
+            </span>
+          </div>
+        </div>
         <Button variant="secondary" size="sm" onClick={handleReLayout} loading={isReLayouting}>
           {t("service.graph.re_layout")}
         </Button>
@@ -154,6 +183,7 @@ export const ServiceGraph = observer(function ServiceGraph({
       <div className="min-h-0 flex-1">
         <ServiceGraphCanvas
           graphData={graphData}
+          projectLookup={projectLookup}
           onConnect={handleConnect}
           onEdgeDelete={handleEdgeDelete}
           onNodeDragStop={handleNodeDragStop}
