@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "概览",
       "work_items": "工作项",
-      "dependencies": "依赖关系"
+      "dependencies": "依赖关系",
+      "monitoring": "监控"
     },
     "layout": {
       "board": "看板",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "所有者管理该服务。使用方应用可以将工作项关联到该服务，但无法编辑该服务。"
+    },
+    "monitoring": {
+      "select_metric": "指标",
+      "range_1h": "过去 1 小时",
+      "range_6h": "过去 6 小时",
+      "range_24h": "过去 24 小时",
+      "range_7d": "过去 7 天",
+      "range_30d": "过去 30 天",
+      "range_90d": "过去 90 天",
+      "empty_title": "尚未收到任何指标",
+      "empty_description": "连接监控来源，开始接收此服务的指标存储桶。",
+      "empty_range": "此范围内没有数据",
+      "error": "无法加载指标。",
+      "configure_source": "配置指标来源",
+      "last": "最新",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "count": "数量",
+      "resolution": "分辨率"
     }
   }
 }

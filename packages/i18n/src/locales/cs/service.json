@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Přehled",
       "work_items": "Pracovní položky",
-      "dependencies": "Závislosti"
+      "dependencies": "Závislosti",
+      "monitoring": "Monitorování"
     },
     "layout": {
       "board": "Nástěnka",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "Vlastník spravuje službu. Klientské aplikace s ní mohou propojovat pracovní položky, ale nemohou ji upravovat."
+    },
+    "monitoring": {
+      "select_metric": "Metrika",
+      "range_1h": "Poslední hodina",
+      "range_6h": "Posledních 6 hodin",
+      "range_24h": "Posledních 24 hodin",
+      "range_7d": "Posledních 7 dní",
+      "range_30d": "Posledních 30 dní",
+      "range_90d": "Posledních 90 dní",
+      "empty_title": "Zatím nebyly přijaty žádné metriky",
+      "empty_description": "Připojte zdroj monitorování a začněte přijímat buckety metrik této služby.",
+      "empty_range": "V tomto rozsahu nejsou žádná data",
+      "error": "Metriky se nepodařilo načíst.",
+      "configure_source": "Nakonfigurovat zdroj metrik",
+      "last": "Poslední",
+      "avg": "Průměr",
+      "min": "Min",
+      "max": "Max",
+      "count": "Počet",
+      "resolution": "Rozlišení"
     }
   }
 }

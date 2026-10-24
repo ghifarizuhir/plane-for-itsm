@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "概覽",
       "work_items": "工作項目",
-      "dependencies": "相依性"
+      "dependencies": "相依性",
+      "monitoring": "監控"
     },
     "layout": {
       "board": "看板",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "擁有者管理該服務。使用方應用程式可以將工作項關聯到該服務，但無法編輯該服務。"
+    },
+    "monitoring": {
+      "select_metric": "指標",
+      "range_1h": "過去 1 小時",
+      "range_6h": "過去 6 小時",
+      "range_24h": "過去 24 小時",
+      "range_7d": "過去 7 天",
+      "range_30d": "過去 30 天",
+      "range_90d": "過去 90 天",
+      "empty_title": "尚未收到任何指標",
+      "empty_description": "連接監控來源，開始接收此服務的指標儲存貯體。",
+      "empty_range": "此範圍內沒有資料",
+      "error": "無法載入指標。",
+      "configure_source": "設定指標來源",
+      "last": "最新",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "count": "數量",
+      "resolution": "解析度"
     }
   }
 }

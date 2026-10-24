@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Resumen",
       "work_items": "Elementos de trabajo",
-      "dependencies": "Dependencias"
+      "dependencies": "Dependencias",
+      "monitoring": "Supervisión"
     },
     "layout": {
       "board": "Tablero",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "El propietario gestiona el servicio. Las aplicaciones consumidoras pueden vincular elementos de trabajo a este, pero no pueden editarlo."
+    },
+    "monitoring": {
+      "select_metric": "Métrica",
+      "range_1h": "Última hora",
+      "range_6h": "Últimas 6 horas",
+      "range_24h": "Últimas 24 horas",
+      "range_7d": "Últimos 7 días",
+      "range_30d": "Últimos 30 días",
+      "range_90d": "Últimos 90 días",
+      "empty_title": "Aún no se recibieron métricas",
+      "empty_description": "Conecte una fuente de supervisión para empezar a ingerir buckets de métricas de este servicio.",
+      "empty_range": "Sin datos en este intervalo",
+      "error": "No se pudieron cargar las métricas.",
+      "configure_source": "Configurar la fuente de métricas",
+      "last": "Último",
+      "avg": "Promedio",
+      "min": "Mín",
+      "max": "Máx",
+      "count": "Cantidad",
+      "resolution": "Resolución"
     }
   }
 }

@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "오버뷰",
       "work_items": "작업 항목",
-      "dependencies": "종속성"
+      "dependencies": "종속성",
+      "monitoring": "모니터링"
     },
     "layout": {
       "board": "보드",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "소유자가 서비스를 관리합니다. 컨슈머 애플리케이션은 작업 항목을 연결할 수 있지만 편집할 수는 없습니다."
+    },
+    "monitoring": {
+      "select_metric": "메트릭",
+      "range_1h": "최근 1시간",
+      "range_6h": "최근 6시간",
+      "range_24h": "최근 24시간",
+      "range_7d": "최근 7일",
+      "range_30d": "최근 30일",
+      "range_90d": "최근 90일",
+      "empty_title": "수신된 메트릭이 없습니다",
+      "empty_description": "모니터링 소스를 연결하여 이 서비스의 메트릭 버킷 수신을 시작합니다.",
+      "empty_range": "이 범위에 데이터가 없습니다",
+      "error": "메트릭을 불러오지 못했습니다.",
+      "configure_source": "메트릭 소스 구성",
+      "last": "최근",
+      "avg": "평균",
+      "min": "최소",
+      "max": "최대",
+      "count": "개수",
+      "resolution": "해상도"
     }
   }
 }

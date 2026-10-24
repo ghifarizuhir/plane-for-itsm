@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Prezentare generală",
       "work_items": "Activități",
-      "dependencies": "Dependențe"
+      "dependencies": "Dependențe",
+      "monitoring": "Monitorizare"
     },
     "layout": {
       "board": "Panou",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "Proprietarul gestionează serviciul. Aplicațiile consumatoare pot asocia activități acestuia, dar nu îl pot edita."
+    },
+    "monitoring": {
+      "select_metric": "Metrică",
+      "range_1h": "Ultima oră",
+      "range_6h": "Ultimele 6 ore",
+      "range_24h": "Ultimele 24 de ore",
+      "range_7d": "Ultimele 7 zile",
+      "range_30d": "Ultimele 30 de zile",
+      "range_90d": "Ultimele 90 de zile",
+      "empty_title": "Nu au fost primite încă metrici",
+      "empty_description": "Conectați o sursă de monitorizare pentru a începe ingerarea bucketelor de metrici ale acestui serviciu.",
+      "empty_range": "Niciun date în acest interval",
+      "error": "Metricile nu au putut fi încărcate.",
+      "configure_source": "Configurați sursa de metrici",
+      "last": "Ultima",
+      "avg": "Medie",
+      "min": "Min",
+      "max": "Max",
+      "count": "Număr",
+      "resolution": "Rezoluție"
     }
   }
 }

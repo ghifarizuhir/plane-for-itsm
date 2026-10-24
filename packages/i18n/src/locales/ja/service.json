@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "概要",
       "work_items": "作業項目",
-      "dependencies": "依存関係"
+      "dependencies": "依存関係",
+      "monitoring": "モニタリング"
     },
     "layout": {
       "board": "ボード",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "所有者がサービスを管理します。利用側アプリケーションは作業項目をリンクできますが、編集はできません。"
+    },
+    "monitoring": {
+      "select_metric": "メトリクス",
+      "range_1h": "直近1時間",
+      "range_6h": "直近6時間",
+      "range_24h": "直近24時間",
+      "range_7d": "直近7日間",
+      "range_30d": "直近30日間",
+      "range_90d": "直近90日間",
+      "empty_title": "メトリクスはまだ受信されていません",
+      "empty_description": "モニタリングソースを接続して、このサービスのメトリクスバケットの受信を開始します。",
+      "empty_range": "この期間にデータがありません",
+      "error": "メトリクスを読み込めませんでした。",
+      "configure_source": "メトリクスソースを設定",
+      "last": "最新",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "count": "件数",
+      "resolution": "解像度"
     }
   }
 }

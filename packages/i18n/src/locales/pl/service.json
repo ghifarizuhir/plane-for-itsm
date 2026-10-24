@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Przegląd",
       "work_items": "Elementy pracy",
-      "dependencies": "Zależności"
+      "dependencies": "Zależności",
+      "monitoring": "Monitoring"
     },
     "layout": {
       "board": "Tablica",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "Właściciel zarządza usługą. Aplikacje klienckie mogą łączyć z nią elementy pracy, ale nie mogą jej edytować."
+    },
+    "monitoring": {
+      "select_metric": "Metryka",
+      "range_1h": "Ostatnia godzina",
+      "range_6h": "Ostatnie 6 godzin",
+      "range_24h": "Ostatnie 24 godziny",
+      "range_7d": "Ostatnie 7 dni",
+      "range_30d": "Ostatnie 30 dni",
+      "range_90d": "Ostatnie 90 dni",
+      "empty_title": "Nie odebrano jeszcze żadnych metryk",
+      "empty_description": "Proszę podłączyć źródło monitorowania, aby rozpocząć pozyskiwanie kubełków metryk tej usługi.",
+      "empty_range": "Brak danych w tym zakresie",
+      "error": "Nie można wczytać metryk.",
+      "configure_source": "Konfiguruj źródło metryk",
+      "last": "Ostatnia",
+      "avg": "Średnia",
+      "min": "Min",
+      "max": "Maks",
+      "count": "Liczba",
+      "resolution": "Rozdzielczość"
     }
   }
 }

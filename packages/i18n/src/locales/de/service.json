@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Übersicht",
       "work_items": "Arbeitselemente",
-      "dependencies": "Abhängigkeiten"
+      "dependencies": "Abhängigkeiten",
+      "monitoring": "Monitoring"
     },
     "layout": {
       "board": "Pinnwand",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "Der Besitzer verwaltet den Service. Nutzende Anwendungen können Arbeitselemente damit verknüpfen, ihn aber nicht bearbeiten."
+    },
+    "monitoring": {
+      "select_metric": "Metrik",
+      "range_1h": "Letzte Stunde",
+      "range_6h": "Letzte 6 Stunden",
+      "range_24h": "Letzte 24 Stunden",
+      "range_7d": "Letzte 7 Tage",
+      "range_30d": "Letzte 30 Tage",
+      "range_90d": "Letzte 90 Tage",
+      "empty_title": "Noch keine Metriken empfangen",
+      "empty_description": "Eine Monitoring-Quelle verbinden, um Metrik-Buckets für diesen Service zu erfassen.",
+      "empty_range": "Keine Daten in diesem Zeitraum",
+      "error": "Metriken konnten nicht geladen werden.",
+      "configure_source": "Metrik-Quelle konfigurieren",
+      "last": "Letzt",
+      "avg": "Durchschnitt",
+      "min": "Min",
+      "max": "Max",
+      "count": "Anzahl",
+      "resolution": "Auflösung"
     }
   }
 }

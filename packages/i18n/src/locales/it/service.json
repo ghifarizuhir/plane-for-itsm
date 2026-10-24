@@ -27,7 +27,8 @@
     "tabs": {
       "overview": "Panoramica",
       "work_items": "Elementi di lavoro",
-      "dependencies": "Dipendenze"
+      "dependencies": "Dipendenze",
+      "monitoring": "Monitoraggio"
     },
     "layout": {
       "board": "Bacheca",
@@ -137,6 +138,26 @@
     },
     "project_links": {
       "hint": "Il proprietario gestisce il servizio. Le applicazioni consumatrici possono collegare elementi di lavoro ad esso, ma non possono modificarlo."
+    },
+    "monitoring": {
+      "select_metric": "Metrica",
+      "range_1h": "Ultima ora",
+      "range_6h": "Ultime 6 ore",
+      "range_24h": "Ultime 24 ore",
+      "range_7d": "Ultimi 7 giorni",
+      "range_30d": "Ultimi 30 giorni",
+      "range_90d": "Ultimi 90 giorni",
+      "empty_title": "Nessuna metrica ricevuta",
+      "empty_description": "Colleghi una sorgente di monitoraggio per iniziare a importare i bucket di metriche di questo servizio.",
+      "empty_range": "Nessun dato in questo intervallo",
+      "error": "Impossibile caricare le metriche.",
+      "configure_source": "Configura sorgente metriche",
+      "last": "Ultimo",
+      "avg": "Media",
+      "min": "Min",
+      "max": "Max",
+      "count": "Conteggio",
+      "resolution": "Risoluzione"
     }
   }
 }

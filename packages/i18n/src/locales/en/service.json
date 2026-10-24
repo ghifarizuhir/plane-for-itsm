@@ -32,7 +32,8 @@
     "tabs": {
       "overview": "Overview",
       "work_items": "Work items",
-      "dependencies": "Dependencies"
+      "dependencies": "Dependencies",
+      "monitoring": "Monitoring"
     },
     "layout": {
       "board": "Board",
@@ -151,6 +152,26 @@
     },
     "lite": {
       "restricted": "Restricted"
+    },
+    "monitoring": {
+      "select_metric": "Metric",
+      "range_1h": "Last 1 hour",
+      "range_6h": "Last 6 hours",
+      "range_24h": "Last 24 hours",
+      "range_7d": "Last 7 days",
+      "range_30d": "Last 30 days",
+      "range_90d": "Last 90 days",
+      "empty_title": "No metrics received yet",
+      "empty_description": "Connect a monitoring source to start ingesting metric buckets for this service.",
+      "empty_range": "No data in this range",
+      "error": "Could not load metrics.",
+      "configure_source": "Configure metric source",
+      "last": "Last",
+      "avg": "Average",
+      "min": "Min",
+      "max": "Max",
+      "count": "Count",
+      "resolution": "Resolution"
     }
   }
 }
