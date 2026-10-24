@@ -16,7 +16,7 @@ import { useServiceFilter } from "@/hooks/store/use-service-filter";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useWorkspaceServicePermissions } from "@/hooks/use-workspace-service-permissions";
 // components
-import { ServicesBoard } from "./board/services-board";
+import { ServicesList } from "./list/services-list";
 import { ServiceGraph } from "./graph/service-graph";
 import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
@@ -52,9 +52,11 @@ export const ServicesListView = observer(function ServicesListView({
     getFilteredServiceIds,
     getProjectHealthSummary,
     getProjectServiceIds,
+    getServiceById,
     getWorkspaceFilteredServiceIds,
     getWorkspaceHealthSummary,
     getWorkspaceScopedServiceIds,
+    healthMap,
     loader,
     workspaceError,
     workspaceFetched,
@@ -74,8 +76,8 @@ export const ServicesListView = observer(function ServicesListView({
   const displayFilters = resolvedFilterKey ? getDisplayFiltersByProjectId(resolvedFilterKey) : undefined;
   const layout =
     workspaceMode && !scopeProjectId && displayFilters?.layout === "graph"
-      ? "board"
-      : (displayFilters?.layout ?? "board");
+      ? "list"
+      : (displayFilters?.layout ?? "list");
   const totalServiceIds = workspaceMode
     ? getWorkspaceScopedServiceIds(projectIds)
     : projectId
@@ -153,7 +155,11 @@ export const ServicesListView = observer(function ServicesListView({
     return (
       <>
         {summary && <ServiceHealthSummary summary={summary} />}
-        <ServicesBoard serviceIds={serviceIds} />
+        <ServicesList
+          services={serviceIds.map((id) => getServiceById(id)).filter((service) => service !== null)}
+          filterKey={resolvedFilterKey ?? WORKSPACE_SERVICE_FILTER_KEY}
+          healthMap={healthMap}
+        />
       </>
     );
   };

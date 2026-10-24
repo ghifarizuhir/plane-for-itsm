@@ -23,6 +23,7 @@ import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { WorkspaceApplicationScopeChip } from "@/components/workspace/application-scope";
 import { ServiceOrderByDropdown } from "./dropdowns/order-by";
+import { ServiceGroupByDropdown } from "./dropdowns/group-by";
 import { ServiceFiltersSelection } from "./filters";
 import { ServiceSearchInput } from "./search-input";
 import { CreateUpdateServiceModal } from "./modal";
@@ -142,6 +143,17 @@ export const ServiceViewHeader = observer(function ServiceViewHeader({ workspace
               });
             }}
           />
+          {displayFilters?.layout === "list" && (
+            <ServiceGroupByDropdown
+              value={displayFilters?.group_by}
+              onChange={(val) => {
+                if (!resolvedFilterKey || val === displayFilters?.group_by) return;
+                updateDisplayFilters(resolvedFilterKey, {
+                  group_by: val,
+                });
+              }}
+            />
+          )}
           <FiltersDropdown
             icon={<FilterOutline className="h-3 w-3" />}
             title={t("common.filters")}
