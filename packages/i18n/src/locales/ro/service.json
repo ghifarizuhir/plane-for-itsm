@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Are incidente active"
+      "active": "Are incidente active",
+      "tooltip_title": "Incidente active",
+      "more": "{count, plural, one {încă #} few {încă #} other {încă #}}"
+    },
+    "deploy": {
+      "no_deployment": "Nicio implementare"
     },
     "summary": {
       "down": "{count} indisponibile",

@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "アクティブなインシデントがあります。"
+      "active": "アクティブなインシデントがあります。",
+      "tooltip_title": "アクティブなインシデント",
+      "more": "{count, plural, one {他 # 件} other {他 # 件}}"
+    },
+    "deploy": {
+      "no_deployment": "デプロイなし"
     },
     "summary": {
       "down": "{count}件が停止中",

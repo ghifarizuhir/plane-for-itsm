@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Memiliki insiden aktif"
+      "active": "Memiliki insiden aktif",
+      "tooltip_title": "Insiden aktif",
+      "more": "{count, plural, one {# lainnya} other {# lainnya}}"
+    },
+    "deploy": {
+      "no_deployment": "Belum ada deployment"
     },
     "summary": {
       "down": "{count} mati",

@@ -79,7 +79,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Has active incidents"
+      "active": "Has active incidents",
+      "tooltip_title": "Active incidents",
+      "more": "{count, plural, one {# more} other {# more}}"
+    },
+    "deploy": {
+      "no_deployment": "No deployment"
     },
     "summary": {
       "down": "{count} down",

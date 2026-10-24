@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "აქვს აქტიური ინციდენტები"
+      "active": "აქვს აქტიური ინციდენტები",
+      "tooltip_title": "აქტიური ინციდენტები",
+      "more": "{count, plural, one {კიდევ #} other {კიდევ #}}"
+    },
+    "deploy": {
+      "no_deployment": "განლაგება არ არის"
     },
     "summary": {
       "down": "{count} გათიშული",

@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Aktif olaylar var"
+      "active": "Aktif olaylar var",
+      "tooltip_title": "Etkin olaylar",
+      "more": "{count, plural, one {# daha} other {# daha}}"
+    },
+    "deploy": {
+      "no_deployment": "Dağıtım yok"
     },
     "summary": {
       "down": "{count} çalışmıyor",
