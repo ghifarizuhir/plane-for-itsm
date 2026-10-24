@@ -20,6 +20,7 @@ import { ServicesBoard } from "./board/services-board";
 import { ServiceGraph } from "./graph/service-graph";
 import { ServiceHealthSummary } from "./health/service-health-summary";
 import { CreateUpdateServiceModal } from "./modal";
+import { useServiceHealthPolling } from "@/hooks/use-service-health-polling";
 import { ServicePeekOverview } from "./peek-overview";
 import { ServiceLoadErrorState } from "./service-load-error-state";
 import { WorkspaceCreateServiceModal } from "./workspace/create-service-modal";
@@ -92,6 +93,10 @@ export const ServicesListView = observer(function ServicesListView({
       : null;
 
   const workspaceId = currentWorkspace?.id;
+  useServiceHealthPolling(
+    workspaceSlug?.toString(),
+    workspaceMode ? (scopeProjectId ?? null) : (projectId?.toString() ?? null)
+  );
   const hasError = workspaceMode ? workspaceError : projectId ? errorMap[projectId.toString()] : false;
   const isLoading = workspaceMode ? !workspaceFetched && !workspaceError : loader && totalServiceIds === null;
 

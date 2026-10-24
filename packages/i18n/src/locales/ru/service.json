@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Есть активные инциденты"
+      "active": "Есть активные инциденты",
+      "tooltip_title": "Активные инциденты",
+      "more": "{count, plural, one {ещё #} few {ещё #} many {ещё #} other {ещё #}}"
+    },
+    "deploy": {
+      "no_deployment": "Нет развёртывания"
     },
     "summary": {
       "down": "{count} не работает",

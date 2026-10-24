@@ -19,6 +19,11 @@ export interface IServiceIncident {
   service_id: string;
   severity: TServiceIncidentSeverity;
   opened_at: string;
+  identifier?: string;
+  name?: string;
+  war_room_id?: string | null;
+  war_room_sequence_id?: number | null;
+  war_room_name?: string | null;
 }
 
 export interface IServiceHealthSnapshot {

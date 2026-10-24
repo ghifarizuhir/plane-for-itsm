@@ -24,15 +24,60 @@
 Append these helpers and tests to `apps/api-rs/crates/api/tests/service_workspace_test.rs` (after the existing `insert_war_room` helper):
 
 ```rust
-async fn set_issue_state_group(pool: &PgPool, issue_id: Uuid, group: &str) {
+async fn insert_incident(
+    pool: &PgPool,
+    sc: &Scratch,
+    project_id: Uuid,
+    name: &str,
+    priority: &str,
+    group: &str,
+) -> Uuid {
+    let state_id = Uuid::new_v4();
+    let type_id = Uuid::new_v4();
     sqlx::query(
-        "UPDATE states SET \"group\" = $1 WHERE id = (SELECT state_id FROM issues WHERE id = $2)",
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, \
+         sequence, \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, $2, '', '#cccccc', $3, $4, $5, 65535, $6, false, false, now(), now())",
     )
+    .bind(state_id)
+    .bind(format!("health-{}", Uuid::new_v4().simple()))
+    .bind(format!("health-{}", Uuid::new_v4().simple()))
+    .bind(project_id)
+    .bind(sc.workspace_id)
     .bind(group)
-    .bind(issue_id)
     .execute(pool)
     .await
-    .expect("scratch issue state");
+    .expect("scratch incident state");
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
+         is_default, level, is_epic, requires_service, created_at, updated_at) \
+         VALUES ($1, 'Incident', '', '{}'::jsonb, $2, true, true, 0, false, true, now(), now())",
+    )
+    .bind(type_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch incident type");
+    let issue_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, \
+         priority, is_draft, sort_order, sequence_id, state_id, type_id, project_id, workspace_id, \
+         created_at, updated_at) \
+         VALUES ($1, $2, '<p></p>', '{}', '', $3, false, 65535, \
+         (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM issues WHERE project_id = $4), \
+         $5, $6, $4, $7, now(), now())",
+    )
+    .bind(issue_id)
+    .bind(name)
+    .bind(priority)
+    .bind(project_id)
+    .bind(state_id)
+    .bind(type_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch incident issue");
+    issue_id
 }
 
 async fn link_issue_to_service(
@@ -100,16 +145,11 @@ async fn health_derives_from_open_incidents_and_war_rooms() {
     let st = state().await;
     let sc = Scratch::new(&st.pool).await;
 
-    let open_issue = insert_issue(&st.pool, &sc, sc.p1, "DB latency").await;
-    sqlx::query("UPDATE issues SET priority = 'high' WHERE id = $1")
-        .bind(open_issue)
-        .execute(&st.pool)
-        .await
-        .unwrap();
+    let open_issue = insert_incident(&st.pool, &sc, sc.p1, "DB latency", "high", "unstarted").await;
     link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, open_issue).await;
 
-    let completed_issue = insert_issue(&st.pool, &sc, sc.p1, "Old outage").await;
-    set_issue_state_group(&st.pool, completed_issue, "completed").await;
+    let completed_issue =
+        insert_incident(&st.pool, &sc, sc.p1, "Old outage", "none", "completed").await;
     link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, completed_issue).await;
 
     let room_id = insert_war_room(&st.pool, &sc, sc.p1).await;
@@ -117,7 +157,7 @@ async fn health_derives_from_open_incidents_and_war_rooms() {
     link_service_to_war_room(&st.pool, &sc, room_id, sc.p1, sc.s1).await;
     link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, room_issue).await;
 
-    let p2_issue = insert_issue(&st.pool, &sc, sc.p2, "P2 incident").await;
+    let p2_issue = insert_incident(&st.pool, &sc, sc.p2, "P2 incident", "none", "unstarted").await;
     link_issue_to_service(&st.pool, &sc, sc.s1, sc.p2, p2_issue).await;
 
     let (status, _, Json(body)) = workspace_health(
@@ -171,7 +211,7 @@ async fn health_respects_project_scope_and_lifecycle() {
     let st = state().await;
     let sc = Scratch::new(&st.pool).await;
 
-    let issue = insert_issue(&st.pool, &sc, sc.p1, "API down").await;
+    let issue = insert_incident(&st.pool, &sc, sc.p1, "API down", "none", "unstarted").await;
     link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, issue).await;
 
     let denied = project_health(
@@ -761,23 +801,29 @@ export const INCIDENT_SEVERITY_RANK: Record<TServiceIncidentSeverity, number> = 
   sev4: 3,
 };
 
-/** Highest-severity incident in a list (`sev1` is highest). */
+/** Highest-severity incident in a list (`sev1` is highest; ties break newest first). */
 export const getHighestSeverityIncident = (incidents: IServiceIncident[]): IServiceIncident | null =>
   incidents.reduce<IServiceIncident | null>(
     (highest, incident) =>
-      !highest || INCIDENT_SEVERITY_RANK[incident.severity] < INCIDENT_SEVERITY_RANK[highest.severity]
+      !highest ||
+      INCIDENT_SEVERITY_RANK[incident.severity] < INCIDENT_SEVERITY_RANK[highest.severity] ||
+      (INCIDENT_SEVERITY_RANK[incident.severity] === INCIDENT_SEVERITY_RANK[highest.severity] &&
+        new Date(incident.opened_at).getTime() > new Date(highest.opened_at).getTime())
         ? incident
         : highest,
     null
   );
 
 /** Severity first (`sev1`), then most recently opened. */
-export const sortIncidentsBySeverity = (incidents: IServiceIncident[]): IServiceIncident[] =>
-  [...incidents].sort((a, b) => {
+export const sortIncidentsBySeverity = (incidents: IServiceIncident[]): IServiceIncident[] => {
+  const sorted: IServiceIncident[] = [...incidents];
+  sorted.sort((a, b) => {
     const rank = INCIDENT_SEVERITY_RANK[a.severity] - INCIDENT_SEVERITY_RANK[b.severity];
     if (rank !== 0) return rank;
     return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
   });
+  return sorted;
+};
 
 export const getIncidentTooltipWindow = (incidents: IServiceIncident[], limit = 5) => {
   const sorted = sortIncidentsBySeverity(incidents);
@@ -945,7 +991,9 @@ pnpm --filter=@plane/i18n run generate:types
 pnpm --filter=@plane/i18n run check:sync
 ```
 
-Expected: `0 missing, 0 stale, 0 collisions`.
+Expected: the three new `service.*` keys present in every locale. Note: the full-repo
+`check:sync` currently reports pre-existing drift in unrelated namespaces
+(`auth`, `home`, `project_settings`); do not touch those files in this plan.
 
 - [ ] **Step 4: Commit**
 

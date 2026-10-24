@@ -706,6 +706,10 @@ async fn main() {
             get(routes::service::list).post(routes::service::create),
         )
         .route(
+            "/api/workspaces/:slug/projects/:project_id/services/health/",
+            get(routes::service_health::project_health),
+        )
+        .route(
             "/api/workspaces/:slug/projects/:project_id/services/:pk/",
             get(routes::service::detail)
                 .put(routes::service::patch)
@@ -795,6 +799,10 @@ async fn main() {
         .route(
             "/api/workspaces/:slug/services/",
             get(routes::service::list_workspace).post(routes::service::create_workspace),
+        )
+        .route(
+            "/api/workspaces/:slug/services/health/",
+            get(routes::service_health::workspace_health),
         )
         .route(
             "/api/workspaces/:slug/services/:pk/",

@@ -1322,6 +1322,295 @@ async fn insert_war_room(pool: &PgPool, sc: &Scratch, project_id: Uuid) -> Uuid 
     room_id
 }
 
+async fn insert_incident(
+    pool: &PgPool,
+    sc: &Scratch,
+    project_id: Uuid,
+    name: &str,
+    priority: &str,
+    group: &str,
+) -> Uuid {
+    let state_id = Uuid::new_v4();
+    let type_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO states (id, name, description, color, slug, project_id, workspace_id, \
+         sequence, \"group\", \"default\", is_triage, created_at, updated_at) \
+         VALUES ($1, $2, '', '#cccccc', $3, $4, $5, 65535, $6, false, false, now(), now())",
+    )
+    .bind(state_id)
+    .bind(format!("health-{}", Uuid::new_v4().simple()))
+    .bind(format!("health-{}", Uuid::new_v4().simple()))
+    .bind(project_id)
+    .bind(sc.workspace_id)
+    .bind(group)
+    .execute(pool)
+    .await
+    .expect("scratch incident state");
+    sqlx::query(
+        "INSERT INTO issue_types (id, name, description, logo_props, workspace_id, is_active, \
+         is_default, level, is_epic, requires_service, created_at, updated_at) \
+         VALUES ($1, 'Incident', '', '{}'::jsonb, $2, true, true, 0, false, true, now(), now())",
+    )
+    .bind(type_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch incident type");
+    let issue_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO issues (id, name, description_html, description_json, description_stripped, \
+         priority, is_draft, sort_order, sequence_id, state_id, type_id, project_id, workspace_id, \
+         created_at, updated_at) \
+         VALUES ($1, $2, '<p></p>', '{}', '', $3, false, 65535, \
+         (SELECT COALESCE(MAX(sequence_id), 0) + 1 FROM issues WHERE project_id = $4), \
+         $5, $6, $4, $7, now(), now())",
+    )
+    .bind(issue_id)
+    .bind(name)
+    .bind(priority)
+    .bind(project_id)
+    .bind(state_id)
+    .bind(type_id)
+    .bind(sc.workspace_id)
+    .execute(pool)
+    .await
+    .expect("scratch incident issue");
+    issue_id
+}
+
+async fn link_issue_to_service(
+    pool: &PgPool,
+    sc: &Scratch,
+    service_id: Uuid,
+    project_id: Uuid,
+    issue_id: Uuid,
+) {
+    sqlx::query(
+        "INSERT INTO service_issues (id, workspace_id, project_id, service_id, issue_id, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now())",
+    )
+    .bind(sc.workspace_id)
+    .bind(project_id)
+    .bind(service_id)
+    .bind(issue_id)
+    .execute(pool)
+    .await
+    .expect("scratch service issue");
+}
+
+async fn link_service_to_war_room(
+    pool: &PgPool,
+    sc: &Scratch,
+    war_room_id: Uuid,
+    project_id: Uuid,
+    service_id: Uuid,
+) {
+    sqlx::query(
+        "INSERT INTO war_room_services (id, workspace_id, project_id, war_room_id, service_id, \
+         created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, now(), now())",
+    )
+    .bind(sc.workspace_id)
+    .bind(project_id)
+    .bind(war_room_id)
+    .bind(service_id)
+    .execute(pool)
+    .await
+    .expect("scratch war room service");
+}
+
+async fn war_room_primary_issue(pool: &PgPool, war_room_id: Uuid) -> Uuid {
+    sqlx::query_scalar("SELECT primary_issue_id FROM war_rooms WHERE id = $1")
+        .bind(war_room_id)
+        .fetch_one(pool)
+        .await
+        .expect("scratch war room primary issue")
+}
+
+fn incident_snapshot<'a>(body: &'a serde_json::Value, service_id: Uuid) -> &'a serde_json::Value {
+    let expected = service_id.to_string();
+    body.as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["service_id"].as_str() == Some(expected.as_str()))
+        .expect("service snapshot")
+}
+
+#[tokio::test]
+async fn health_derives_from_open_incidents_and_war_rooms() {
+    use api::routes::service_health::workspace_health;
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let open_issue = insert_incident(&st.pool, &sc, sc.p1, "DB latency", "high", "unstarted").await;
+    link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, open_issue).await;
+
+    let completed_issue =
+        insert_incident(&st.pool, &sc, sc.p1, "Old outage", "none", "completed").await;
+    link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, completed_issue).await;
+
+    let room_id = insert_war_room(&st.pool, &sc, sc.p1).await;
+    let room_issue = war_room_primary_issue(&st.pool, room_id).await;
+    link_service_to_war_room(&st.pool, &sc, room_id, sc.p1, sc.s1).await;
+    link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, room_issue).await;
+
+    let p2_issue = insert_incident(&st.pool, &sc, sc.p2, "P2 incident", "none", "unstarted").await;
+    link_issue_to_service(&st.pool, &sc, sc.s1, sc.p2, p2_issue).await;
+
+    let (status, _, Json(body)) = workspace_health(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(
+        body.as_array().unwrap().len(),
+        1,
+        "owner member sees only S1"
+    );
+
+    let s1 = incident_snapshot(&body, sc.s1);
+    assert_eq!(s1["health"], "degraded");
+    assert_eq!(s1["last_deployed_at"], serde_json::Value::Null);
+    let incidents = s1["incidents"].as_array().unwrap();
+    assert_eq!(
+        incidents.len(),
+        2,
+        "completed + inaccessible P2 incidents excluded; war room deduped"
+    );
+    assert_eq!(incidents[0]["severity"], "sev2", "highest severity first");
+    assert!(incidents[0]["identifier"]
+        .as_str()
+        .unwrap()
+        .starts_with("P1-"));
+
+    let room_id_string = room_id.to_string();
+    let room_incident = incidents
+        .iter()
+        .find(|incident| incident["war_room_id"].as_str() == Some(room_id_string.as_str()))
+        .expect("war room incident");
+    assert_eq!(room_incident["war_room_sequence_id"].as_i64(), Some(1));
+    assert_eq!(room_incident["severity"], "sev3");
+    assert_eq!(room_incident["name"], "War room primary");
+
+    let (_, _, Json(admin_body)) =
+        workspace_health(State(st.clone()), AuthUser(sc.admin), Path(sc.slug.clone()))
+            .await
+            .unwrap();
+    let admin_s1 = incident_snapshot(&admin_body, sc.s1);
+    assert_eq!(
+        admin_s1["incidents"].as_array().unwrap().len(),
+        3,
+        "workspace admin sees the P2 incident too"
+    );
+}
+
+#[tokio::test]
+async fn health_respects_project_scope_and_lifecycle() {
+    use api::routes::service_health::{project_health, workspace_health};
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let issue = insert_incident(&st.pool, &sc, sc.p1, "API down", "none", "unstarted").await;
+    link_issue_to_service(&st.pool, &sc, sc.s1, sc.p1, issue).await;
+
+    let denied = project_health(
+        State(st.clone()),
+        AuthUser(sc.outsider),
+        Path((sc.slug.clone(), sc.p2)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.0, axum::http::StatusCode::FORBIDDEN);
+
+    let (_, _, Json(body)) = project_health(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path((sc.slug.clone(), sc.p2)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(body.as_array().unwrap().len(), 2, "S1 consumer + S2 owner");
+    assert_eq!(incident_snapshot(&body, sc.s1)["health"], "healthy");
+    assert_eq!(incident_snapshot(&body, sc.s2)["health"], "healthy");
+
+    let (_, _, Json(owner_body)) = project_health(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(incident_snapshot(&owner_body, sc.s1)["health"], "degraded");
+    assert_eq!(
+        incident_snapshot(&owner_body, sc.s1)["incidents"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    sqlx::query("UPDATE services SET status = 'planned' WHERE id = $1")
+        .bind(sc.s1)
+        .execute(&st.pool)
+        .await
+        .unwrap();
+    let (_, _, Json(planned_body)) = workspace_health(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    let planned = incident_snapshot(&planned_body, sc.s1);
+    assert_eq!(planned["health"], "unknown");
+    assert_eq!(planned["incidents"].as_array().unwrap().len(), 1);
+
+    sqlx::query("UPDATE issues SET archived_at = CURRENT_DATE WHERE id = $1")
+        .bind(issue)
+        .execute(&st.pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE services SET status = 'active' WHERE id = $1")
+        .bind(sc.s1)
+        .execute(&st.pool)
+        .await
+        .unwrap();
+    let (_, _, Json(archived_body)) = workspace_health(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        incident_snapshot(&archived_body, sc.s1)["health"],
+        "healthy"
+    );
+
+    sqlx::query("UPDATE issues SET archived_at = NULL, state_id = NULL WHERE id = $1")
+        .bind(issue)
+        .execute(&st.pool)
+        .await
+        .unwrap();
+    let (_, _, Json(no_state_body)) = workspace_health(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        incident_snapshot(&no_state_body, sc.s1)["health"],
+        "degraded"
+    );
+}
+
 #[tokio::test]
 async fn war_room_attach_requires_linked_service() {
     use api::routes::war_room::{services_create, LinkServices};

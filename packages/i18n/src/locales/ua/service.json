@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Є активні інциденти"
+      "active": "Є активні інциденти",
+      "tooltip_title": "Активні інциденти",
+      "more": "{count, plural, one {ще #} few {ще #} many {ще #} other {ще #}}"
+    },
+    "deploy": {
+      "no_deployment": "Немає розгортання"
     },
     "summary": {
       "down": "{count} не працює",

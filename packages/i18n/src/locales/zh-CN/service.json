@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "有进行中的事件"
+      "active": "有进行中的事件",
+      "tooltip_title": "活跃事故",
+      "more": "{count, plural, one {另有 # 个} other {另有 # 个}}"
+    },
+    "deploy": {
+      "no_deployment": "无部署"
     },
     "summary": {
       "down": "{count} 个宕机",

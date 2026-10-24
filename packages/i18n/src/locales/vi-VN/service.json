@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Có sự cố đang hoạt động"
+      "active": "Có sự cố đang hoạt động",
+      "tooltip_title": "Sự cố đang hoạt động",
+      "more": "{count, plural, one {thêm #} other {thêm #}}"
+    },
+    "deploy": {
+      "no_deployment": "Chưa có triển khai"
     },
     "summary": {
       "down": "{count} ngừng hoạt động",

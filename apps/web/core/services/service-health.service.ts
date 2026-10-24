@@ -4,23 +4,20 @@
  * See the LICENSE file for details.
  */
 
-import type { IService, IServiceHealthSnapshot } from "@plane/types";
-// helpers
-import { buildHealthSnapshot } from "@/services/service-health.helpers";
+import { API_BASE_URL } from "@plane/constants";
+import type { IServiceHealthSnapshot } from "@plane/types";
+// services
+import { APIService } from "@/services/api.service";
 
-/**
- * Mock health source. The backend has no health data yet, so snapshots are
- * derived locally. This class is the single seam to replace with an HTTP call
- * (`GET /api/workspaces/:slug/projects/:projectId/services/health/`) later —
- * stores and components depend only on this signature.
- */
-export class ServiceHealthService {
-  async getHealth(
-    _workspaceSlug: string,
-    _workspaceId: string,
-    _projectId: string,
-    services: IService[]
-  ): Promise<IServiceHealthSnapshot[]> {
-    return services.map((service) => buildHealthSnapshot(service));
+export class ServiceHealthService extends APIService {
+  constructor() {
+    super(API_BASE_URL);
+  }
+
+  async getHealth(workspaceSlug: string, projectId: string | null): Promise<IServiceHealthSnapshot[]> {
+    const url = projectId
+      ? `/api/workspaces/${workspaceSlug}/projects/${projectId}/services/health/`
+      : `/api/workspaces/${workspaceSlug}/services/health/`;
+    return this.get(url).then((response) => response?.data);
   }
 }

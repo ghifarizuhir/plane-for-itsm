@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Má aktívne incidenty"
+      "active": "Má aktívne incidenty",
+      "tooltip_title": "Aktívne incidenty",
+      "more": "{count, plural, one {# ďalší} few {# ďalšie} many {# ďalšieho} other {# ďalších}}"
+    },
+    "deploy": {
+      "no_deployment": "Žiadne nasadenie"
     },
     "summary": {
       "down": "{count} nedostupných",

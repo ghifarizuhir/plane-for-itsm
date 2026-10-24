@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Hat aktive Störungen"
+      "active": "Hat aktive Störungen",
+      "tooltip_title": "Aktive Vorfälle",
+      "more": "{count, plural, one {noch #} other {noch #}}"
+    },
+    "deploy": {
+      "no_deployment": "Keine Bereitstellung"
     },
     "summary": {
       "down": "{count} ausgefallen",

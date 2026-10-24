@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "Ha incidenti attivi"
+      "active": "Ha incidenti attivi",
+      "tooltip_title": "Incidenti attivi",
+      "more": "{count, plural, one {# altro} many {# altri} other {# altri}}"
+    },
+    "deploy": {
+      "no_deployment": "Nessuna distribuzione"
     },
     "summary": {
       "down": "{count} fuori servizio",

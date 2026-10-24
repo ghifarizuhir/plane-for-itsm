@@ -74,7 +74,12 @@
       "sev4": "SEV4"
     },
     "incidents": {
-      "active": "활성 인시던트가 있습니다"
+      "active": "활성 인시던트가 있습니다",
+      "tooltip_title": "활성 인시던트",
+      "more": "{count, plural, one {#개 더} other {#개 더}}"
+    },
+    "deploy": {
+      "no_deployment": "배포 없음"
     },
     "summary": {
       "down": "다운 {count}개",

@@ -45,6 +45,7 @@ pub mod s3proxy;
 pub mod search;
 pub mod service;
 pub mod service_access;
+pub mod service_health;
 pub mod state;
 pub mod subscribe;
 pub mod themes;
