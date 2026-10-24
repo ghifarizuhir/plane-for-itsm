@@ -10,6 +10,8 @@ export * from "./board/services-board";
 export * from "./board/services-board-row";
 export * from "./health/service-health-dot";
 export * from "./health/service-health-pill";
+export * from "./health/service-status-pill";
+export * from "./health/service-criticality-pill";
 export * from "./health/service-health-summary";
 export * from "./health/service-incident-cell";
 export * from "./health/service-deploy-cell";

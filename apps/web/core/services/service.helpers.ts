@@ -195,9 +195,10 @@ export const groupServices = (
     bucket.push(service);
     buckets.set(key, bucket);
   }
-  return [...buckets.entries()]
-    .toSorted(([a], [b]) => order.indexOf(a) - order.indexOf(b))
-    .map(([key, bucket]) => ({ key, services: bucket }));
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const entries = [...buckets.entries()];
+  entries.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+  return entries.map(([key, bucket]) => ({ key, services: bucket }));
 };
 
 /**

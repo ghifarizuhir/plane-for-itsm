@@ -123,17 +123,17 @@ git commit -m "feat(services): rename board layout key to list with migration"
 Append to `apps/web/core/services/service.helpers.test.ts`:
 
 ```ts
-describe("groupServices", () => {
-  const makeService = (id: string, overrides: Record<string, unknown> = {}) =>
-    ({
-      id,
-      name: id,
-      status: "active",
-      criticality: "medium",
-      type: "internal",
-      ...overrides,
-    }) as never;
+const makeService = (id: string, overrides: Record<string, unknown> = {}) =>
+  ({
+    id,
+    name: id,
+    status: "active",
+    criticality: "medium",
+    type: "internal",
+    ...overrides,
+  }) as never;
 
+describe("groupServices", () => {
   it("groups by status in lifecycle order", () => {
     const services = [
       makeService("retired", { status: "retired" }),
@@ -222,9 +222,10 @@ export const groupServices = (
     bucket.push(service);
     buckets.set(key, bucket);
   }
-  return [...buckets.entries()]
-    .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
-    .map(([key, bucket]) => ({ key, services: bucket }));
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const entries = [...buckets.entries()];
+  entries.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+  return entries.map(([key, bucket]) => ({ key, services: bucket }));
 };
 ```
 
