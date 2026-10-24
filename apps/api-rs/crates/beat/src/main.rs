@@ -76,6 +76,7 @@ async fn main() {
         ("0 0 3 * * *", "cleanup.page_versions"),
         ("0 15 3 * * *", "cleanup.issue_desc"),
         ("0 30 3 * * *", "cleanup.webhook_logs"),
+        ("0 45 3 * * *", "cleanup.service_metric_buckets"),
         ("0 0 1 * * *", "export.delete_old_s3"), // 01:30 placeholder
         ("0 0 2 * * *", "file_asset.delete_unuploaded"),
     ] {

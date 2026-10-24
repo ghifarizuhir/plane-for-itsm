@@ -36,6 +36,7 @@ pub async fn dispatch_with_pool(
         "cleanup.page_versions" => cleanup::page_versions(pool).await,
         "cleanup.issue_desc" => cleanup::issue_description_versions(pool).await,
         "cleanup.webhook_logs" => cleanup::webhook_logs(pool).await,
+        "cleanup.service_metric_buckets" => cleanup::service_metric_buckets(pool).await,
         "issue.archive" => issue_automation::archive(pool).await,
         "file_asset.delete_unuploaded" => file_asset::delete_unuploaded(pool).await,
         "export.delete_old_s3" => export::delete_old_s3(pool).await,
@@ -49,6 +50,7 @@ pub fn is_enabled_job(name: &str) -> bool {
     matches!(
         name,
         "ai.schedule.tick" | "ai.schedule.run" | "ai.intake.triage" | "ai.intake.triage.sweep"
+            | "cleanup.service_metric_buckets"
     )
 }
 
@@ -76,6 +78,7 @@ pub async fn handle_by_id(
         "ai.schedule.run" => ai_schedule::run(pool, payload).await,
         "ai.intake.triage" => intake_triage::classify(pool, payload).await,
         "ai.intake.triage.sweep" => intake_triage::sweep(pool, redis).await,
+        "cleanup.service_metric_buckets" => cleanup::service_metric_buckets(pool).await,
         _ => {
             tracing::error!(job=%job, id=%id, "enabled job has no dispatch arm");
             Ok(())
