@@ -988,7 +988,9 @@ pnpm --filter=@plane/i18n run generate:types
 pnpm --filter=@plane/i18n run check:sync
 ```
 
-Expected: `0 missing, 0 stale, 0 collisions`.
+Expected: the three new `service.*` keys present in every locale. Note: the full-repo
+`check:sync` currently reports pre-existing drift in unrelated namespaces
+(`auth`, `home`, `project_settings`); do not touch those files in this plan.
 
 - [ ] **Step 4: Commit**
 
