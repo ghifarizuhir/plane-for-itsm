@@ -30,7 +30,7 @@
       "dependencies": "Dépendances"
     },
     "layout": {
-      "board": "Tableau",
+      "list": "Liste",
       "graph": "Graphe"
     },
     "layout_label": "Disposition",
@@ -87,12 +87,22 @@
       "healthy": "{count} opérationnels",
       "critical_impacted": "{count} critiques impactés"
     },
-    "board": {
+    "list": {
       "service": "Service",
+      "status": "Statut",
+      "criticality": "Criticité",
       "health": "Santé",
       "incidents": "Incidents",
       "deploy": "Dernier déploiement",
-      "owner": "Propriétaire"
+      "owner": "Propriétaire",
+      "group_by": {
+        "label": "Grouper par",
+        "status": "Statut",
+        "criticality": "Criticité",
+        "health": "Santé"
+      },
+      "expand_group": "Développer le groupe",
+      "collapse_group": "Réduire le groupe"
     },
     "graph": {
       "re_layout": "Réorganiser",

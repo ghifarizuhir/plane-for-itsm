@@ -35,7 +35,7 @@
       "dependencies": "Dependencies"
     },
     "layout": {
-      "board": "Board",
+      "list": "List",
       "graph": "Graph"
     },
     "layout_label": "Layout",
@@ -92,12 +92,22 @@
       "healthy": "{count} healthy",
       "critical_impacted": "{count} critical impacted"
     },
-    "board": {
+    "list": {
       "service": "Service",
+      "status": "Status",
+      "criticality": "Criticality",
       "health": "Health",
       "incidents": "Incidents",
       "deploy": "Last deploy",
-      "owner": "Owner"
+      "owner": "Owner",
+      "group_by": {
+        "label": "Group by",
+        "status": "Status",
+        "criticality": "Criticality",
+        "health": "Health"
+      },
+      "expand_group": "Expand group",
+      "collapse_group": "Collapse group"
     },
     "graph": {
       "re_layout": "Re-layout",

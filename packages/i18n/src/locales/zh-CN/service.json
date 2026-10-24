@@ -30,7 +30,7 @@
       "dependencies": "依赖关系"
     },
     "layout": {
-      "board": "看板",
+      "list": "列表",
       "graph": "图谱"
     },
     "layout_label": "布局",
@@ -87,12 +87,22 @@
       "healthy": "{count} 个健康",
       "critical_impacted": "{count} 个严重受影响"
     },
-    "board": {
+    "list": {
       "service": "服务",
-      "health": "健康",
-      "incidents": "事件",
+      "status": "状态",
+      "criticality": "关键程度",
+      "health": "健康状况",
+      "incidents": "事故",
       "deploy": "上次部署",
-      "owner": "所有者"
+      "owner": "所有者",
+      "group_by": {
+        "label": "分组依据",
+        "status": "状态",
+        "criticality": "关键程度",
+        "health": "健康状况"
+      },
+      "expand_group": "展开分组",
+      "collapse_group": "折叠分组"
     },
     "graph": {
       "re_layout": "重新排布",

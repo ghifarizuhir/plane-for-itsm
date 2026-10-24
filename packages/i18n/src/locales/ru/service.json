@@ -30,7 +30,7 @@
       "dependencies": "Зависимости"
     },
     "layout": {
-      "board": "Доска",
+      "list": "Список",
       "graph": "Граф"
     },
     "layout_label": "Макет",
@@ -87,12 +87,22 @@
       "healthy": "{count} работает",
       "critical_impacted": "{count} критических затронуто"
     },
-    "board": {
+    "list": {
       "service": "Сервис",
+      "status": "Статус",
+      "criticality": "Критичность",
       "health": "Состояние",
       "incidents": "Инциденты",
       "deploy": "Последний деплой",
-      "owner": "Владелец"
+      "owner": "Владелец",
+      "group_by": {
+        "label": "Группировать по",
+        "status": "Статус",
+        "criticality": "Критичность",
+        "health": "Состояние"
+      },
+      "expand_group": "Развернуть группу",
+      "collapse_group": "Свернуть группу"
     },
     "graph": {
       "re_layout": "Перестроить",

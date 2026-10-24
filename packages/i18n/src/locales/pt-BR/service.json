@@ -30,7 +30,7 @@
       "dependencies": "Dependências"
     },
     "layout": {
-      "board": "Quadro",
+      "list": "Lista",
       "graph": "Grafo"
     },
     "layout_label": "Layout",
@@ -87,12 +87,22 @@
       "healthy": "{count} saudáveis",
       "critical_impacted": "{count} críticos afetados"
     },
-    "board": {
+    "list": {
       "service": "Serviço",
+      "status": "Status",
+      "criticality": "Criticidade",
       "health": "Saúde",
       "incidents": "Incidentes",
       "deploy": "Última implantação",
-      "owner": "Proprietário"
+      "owner": "Proprietário",
+      "group_by": {
+        "label": "Agrupar por",
+        "status": "Status",
+        "criticality": "Criticidade",
+        "health": "Saúde"
+      },
+      "expand_group": "Expandir grupo",
+      "collapse_group": "Recolher grupo"
     },
     "graph": {
       "re_layout": "Reorganizar",

@@ -30,7 +30,7 @@
       "dependencies": "Zależności"
     },
     "layout": {
-      "board": "Tablica",
+      "list": "Lista",
       "graph": "Graf"
     },
     "layout_label": "Układ",
@@ -87,12 +87,22 @@
       "healthy": "{count} sprawnych",
       "critical_impacted": "{count} krytycznych dotkniętych"
     },
-    "board": {
+    "list": {
       "service": "Usługa",
+      "status": "Status",
+      "criticality": "Krytyczność",
       "health": "Kondycja",
       "incidents": "Incydenty",
       "deploy": "Ostatnie wdrożenie",
-      "owner": "Właściciel"
+      "owner": "Właściciel",
+      "group_by": {
+        "label": "Grupuj według",
+        "status": "Status",
+        "criticality": "Krytyczność",
+        "health": "Kondycja"
+      },
+      "expand_group": "Rozwiń grupę",
+      "collapse_group": "Zwiń grupę"
     },
     "graph": {
       "re_layout": "Rozmieść ponownie",
