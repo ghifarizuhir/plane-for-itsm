@@ -34,12 +34,15 @@ export const getHighestSeverityIncident = (incidents: IServiceIncident[]): IServ
   );
 
 /** Severity first (`sev1`), then most recently opened. */
-export const sortIncidentsBySeverity = (incidents: IServiceIncident[]): IServiceIncident[] =>
-  [...incidents].toSorted((a, b) => {
+export const sortIncidentsBySeverity = (incidents: IServiceIncident[]): IServiceIncident[] => {
+  const sorted: IServiceIncident[] = [...incidents];
+  sorted.sort((a, b) => {
     const rank = INCIDENT_SEVERITY_RANK[a.severity] - INCIDENT_SEVERITY_RANK[b.severity];
     if (rank !== 0) return rank;
     return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
   });
+  return sorted;
+};
 
 export const getIncidentTooltipWindow = (incidents: IServiceIncident[], limit = 5) => {
   const sorted = sortIncidentsBySeverity(incidents);

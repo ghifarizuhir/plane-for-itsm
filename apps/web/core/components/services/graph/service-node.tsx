@@ -24,7 +24,7 @@ import type {
   TServiceHealth,
   TServiceType,
 } from "@plane/types";
-import { calculateTimeAgo, cn } from "@plane/utils";
+import { cn } from "@plane/utils";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
@@ -44,6 +44,7 @@ export type TServiceNodeData = {
   health: TServiceHealth;
   incidents: IServiceIncident[];
   lastDeployedAt?: string | null;
+  noDeploymentLabel: string;
   highestSeverityLabel?: string;
   /** Blast-radius map: dependency neighbors are dimmed. */
   dimmed?: boolean;
@@ -82,7 +83,7 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
     ownerProjectName,
     health,
     incidents,
-    lastDeployedAt,
+    noDeploymentLabel,
     highestSeverityLabel,
     dimmed,
     accessLevel,
@@ -198,12 +199,12 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
                 </>
               )}
             </span>
-          ) : lastDeployedAt ? (
-            <span className="inline-flex shrink-0 items-center gap-1 font-code text-10 text-tertiary tabular-nums">
+          ) : (
+            <span className="inline-flex max-w-[96px] shrink-0 items-center gap-1 font-code text-10 text-tertiary tabular-nums">
               <ClockOutline className="h-3 w-3 shrink-0 text-tertiary" />
-              <span>{calculateTimeAgo(lastDeployedAt)}</span>
+              <span className="truncate">{noDeploymentLabel}</span>
             </span>
-          ) : null}
+          )}
         </div>
       </div>
       <Handle

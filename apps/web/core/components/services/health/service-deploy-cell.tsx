@@ -5,6 +5,7 @@
  */
 
 import { ClockOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 import { calculateTimeAgo } from "@plane/utils";
 
 type Props = {
@@ -12,7 +13,10 @@ type Props = {
 };
 
 export function ServiceDeployCell({ lastDeployedAt }: Props) {
-  if (!lastDeployedAt) return <span className="text-12 text-tertiary">—</span>;
+  const { t } = useTranslation();
+  if (!lastDeployedAt) {
+    return <span className="text-12 text-tertiary">{t("service.deploy.no_deployment")}</span>;
+  }
   return (
     <span className="flex items-center gap-1 text-12 text-secondary">
       <ClockOutline className="h-3.5 w-3.5 text-tertiary" />

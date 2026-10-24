@@ -120,6 +120,7 @@ export function ServiceGraphCanvas({
             health: healthState,
             incidents,
             lastDeployedAt: snapshot?.last_deployed_at ?? null,
+            noDeploymentLabel: t("service.deploy.no_deployment"),
             highestSeverityLabel: highestIncident
               ? t(`service.incident_severity.${highestIncident.severity}`)
               : undefined,
@@ -199,6 +200,7 @@ export function ServiceGraphCanvas({
                 health?: string;
                 incidents?: unknown[];
                 lastDeployedAt?: string | null;
+                noDeploymentLabel?: string;
                 dimmed?: boolean;
               }
             | undefined;
@@ -212,6 +214,7 @@ export function ServiceGraphCanvas({
                 health?: string;
                 incidents?: unknown[];
                 lastDeployedAt?: string | null;
+                noDeploymentLabel?: string;
                 dimmed?: boolean;
               }
             | undefined;
@@ -223,6 +226,7 @@ export function ServiceGraphCanvas({
             prevData?.ownerProjectIdentifier === nextData?.ownerProjectIdentifier &&
             prevData?.health === nextData?.health &&
             prevData?.lastDeployedAt === nextData?.lastDeployedAt &&
+            prevData?.noDeploymentLabel === nextData?.noDeploymentLabel &&
             prevData?.dimmed === nextData?.dimmed &&
             (prevData?.incidents?.length ?? 0) === (nextData?.incidents?.length ?? 0)
           );
