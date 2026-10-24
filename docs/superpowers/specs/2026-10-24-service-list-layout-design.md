@@ -37,7 +37,7 @@ Replace the service catalog `board` layout with a `list` layout modeled on work 
 - Group dimensions and order:
   - `status`: active, maintenance, planned, deprecated, retired (lifecycle order).
   - `criticality`: critical, high, medium, low.
-  - `health`: down, degraded, healthy, unknown (reuse existing `HEALTH_WEIGHT` ordering).
+  - `health`: down, degraded, healthy, unknown (display order; differs from `HEALTH_WEIGHT`, which stays row-sort-only with `unknown` between `degraded` and `healthy`).
   - `null`: flat list, no group headers.
 - Health for grouping reads `healthMap` (same source as filters and the board today); missing snapshots count as `unknown`.
 - Group header shows the dimension label + service count and a collapse chevron. Collapse state is component-local, default expanded; empty groups are never rendered.
