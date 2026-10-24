@@ -15,13 +15,14 @@ import {
 
 describe("service detail pane helpers", () => {
   it("lists the approved tabs in order", () => {
-    expect(SERVICE_DETAIL_PANE_TAB_KEYS).toEqual(["properties", "relationships", "tickets"]);
+    expect(SERVICE_DETAIL_PANE_TAB_KEYS).toEqual(["properties", "relationships", "tickets", "monitoring"]);
   });
 
   it("accepts valid tab keys", () => {
     expect(isServiceDetailPaneTab("properties")).toBe(true);
     expect(isServiceDetailPaneTab("relationships")).toBe(true);
     expect(isServiceDetailPaneTab("tickets")).toBe(true);
+    expect(isServiceDetailPaneTab("monitoring")).toBe(true);
   });
 
   it("rejects missing, empty, and unknown values", () => {
