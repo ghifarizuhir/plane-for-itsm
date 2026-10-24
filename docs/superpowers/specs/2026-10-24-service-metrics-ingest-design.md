@@ -303,7 +303,7 @@ Validasi:
 
 ## Read API
 
-Session. Akses memakai `gate_member` + service visibility yang sudah ada: workspace admin melihat semua service; member hanya service di `visible_service_ids` (owner/consumer project yang bisa diakses). Guest/non-member → `403`.
+Session. Akses memakai pola workspace service yang sudah ada (`service_access::full_visible`): workspace admin melihat semua service; member hanya service yang terhubung ke project tempat ia aktif (owner/consumer). Guest/non-member → `403`.
 
 | Method   | Path                                                             | Fungsi                                             |
 | -------- | ---------------------------------------------------------------- | -------------------------------------------------- |
@@ -548,6 +548,7 @@ pnpm --filter=web build
 
 - Migrasi additive, tanpa backfill; diterapkan saat boot.
 - Deploy: rebuild `api`, `worker`, `beat-worker` (Docker), lalu build web + restart prod.
+- Setelah rebuild backend, restart `plane-live.service` karena container Redis ikut ter-recreate (prosedur AGENTS.md), lalu verifikasi health API/live.
 - Tidak ada feature flag; tab Monitoring menampilkan empty state sampai ingest pertama.
 - Intake/alert, health, list, dan graph yang ada tidak berubah.
 
