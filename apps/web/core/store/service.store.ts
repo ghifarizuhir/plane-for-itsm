@@ -61,6 +61,7 @@ export interface IServiceStore {
   getWorkspaceGraphData: (projectId?: string) => TServiceGraphData;
   getIsServicePeeked: (serviceId: string) => boolean;
   setPeekService: (peek?: TServicePeek) => void;
+  refreshHealth: (workspaceSlug: string, projectId: string | null) => Promise<void>;
   fetchServices: (workspaceSlug: string, workspaceId: string, projectId: string) => Promise<IService[] | undefined>;
   fetchWorkspaceServices: (
     workspaceSlug: string,
@@ -170,6 +171,7 @@ export class ServicesStore implements IServiceStore {
       peekService: observable.ref,
       fetchServices: action,
       fetchWorkspaceServices: action,
+      refreshHealth: action,
       setPeekService: action,
       createService: action,
       createWorkspaceService: action,
@@ -365,13 +367,15 @@ export class ServicesStore implements IServiceStore {
         this.loader = false;
       });
       try {
-        const health = await this.serviceHealthService.getHealth(workspaceSlug, workspaceId, projectId, services);
+        const health = await this.serviceHealthService.getHealth(workspaceSlug, projectId);
         runInAction(() => {
-          health.forEach((snapshot) => set(this.healthMap, [snapshot.service_id], snapshot));
+          health.forEach((snapshot) => {
+            set(this.healthMap, [snapshot.service_id], snapshot);
+          });
         });
       } catch (error) {
         // Health is supplementary; the board falls back to "unknown" without it.
-        console.error("Failed to derive service health", error);
+        console.error("Failed to fetch service health", error);
       }
       return services;
     } catch {
@@ -400,13 +404,15 @@ export class ServicesStore implements IServiceStore {
         this.loader = false;
       });
       try {
-        const health = await this.serviceHealthService.getHealth(workspaceSlug, workspaceId, "", services);
+        const health = await this.serviceHealthService.getHealth(workspaceSlug, projectId ?? null);
         runInAction(() => {
-          health.forEach((snapshot) => set(this.healthMap, [snapshot.service_id], snapshot));
+          health.forEach((snapshot) => {
+            set(this.healthMap, [snapshot.service_id], snapshot);
+          });
         });
       } catch (error) {
         // Health is supplementary; the board falls back to "unknown" without it.
-        console.error("Failed to derive service health", error);
+        console.error("Failed to fetch service health", error);
       }
       return services;
     } catch {
@@ -415,6 +421,19 @@ export class ServicesStore implements IServiceStore {
         this.workspaceError = true;
       });
       return undefined;
+    }
+  };
+
+  refreshHealth = async (workspaceSlug: string, projectId: string | null) => {
+    try {
+      const health = await this.serviceHealthService.getHealth(workspaceSlug, projectId);
+      runInAction(() => {
+        health.forEach((snapshot) => {
+          set(this.healthMap, [snapshot.service_id], snapshot);
+        });
+      });
+    } catch (error) {
+      console.error("Failed to refresh service health", error);
     }
   };
 
@@ -469,6 +488,7 @@ export class ServicesStore implements IServiceStore {
     Object.values(this.workItemLinkMap).forEach((l) => {
       if (l.service_id === serviceId) delete this.workItemLinkMap[l.id];
     });
+    delete this.healthMap[serviceId];
     if (this.peekService?.serviceId === serviceId) this.peekService = undefined;
   };
 

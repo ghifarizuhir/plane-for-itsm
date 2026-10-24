@@ -801,11 +801,14 @@ export const INCIDENT_SEVERITY_RANK: Record<TServiceIncidentSeverity, number> = 
   sev4: 3,
 };
 
-/** Highest-severity incident in a list (`sev1` is highest). */
+/** Highest-severity incident in a list (`sev1` is highest; ties break newest first). */
 export const getHighestSeverityIncident = (incidents: IServiceIncident[]): IServiceIncident | null =>
   incidents.reduce<IServiceIncident | null>(
     (highest, incident) =>
-      !highest || INCIDENT_SEVERITY_RANK[incident.severity] < INCIDENT_SEVERITY_RANK[highest.severity]
+      !highest ||
+      INCIDENT_SEVERITY_RANK[incident.severity] < INCIDENT_SEVERITY_RANK[highest.severity] ||
+      (INCIDENT_SEVERITY_RANK[incident.severity] === INCIDENT_SEVERITY_RANK[highest.severity] &&
+        new Date(incident.opened_at).getTime() > new Date(highest.opened_at).getTime())
         ? incident
         : highest,
     null
