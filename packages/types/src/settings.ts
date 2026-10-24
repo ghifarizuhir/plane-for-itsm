@@ -17,6 +17,7 @@ export type TWorkspaceSettingsTabs =
   | "webhooks"
   | "work_item_types"
   | "features"
+  | "metric_sources"
   | "document_export";
 export type TWorkspaceSettingsItem = {
   key: TWorkspaceSettingsTabs;

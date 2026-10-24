@@ -65,6 +65,13 @@ export const WORKSPACE_SETTINGS: Record<TWorkspaceSettingsTabs, TWorkspaceSettin
     access: [EUserWorkspaceRoles.ADMIN],
     highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/work-item-types`),
   },
+  metric_sources: {
+    key: "metric_sources",
+    i18n_label: "workspace_settings.settings.metric_sources.heading",
+    href: `/settings/metric-sources`,
+    access: [EUserWorkspaceRoles.ADMIN],
+    highlight: (pathname: string, baseUrl: string) => pathname.startsWith(`${baseUrl}/settings/metric-sources`),
+  },
   features: {
     key: "features",
     i18n_label: "workspace_settings.settings.features.title",
@@ -92,7 +99,10 @@ export const GROUPED_WORKSPACE_SETTINGS: Record<WORKSPACE_SETTINGS_CATEGORY, TWo
     WORKSPACE_SETTINGS["export"],
     WORKSPACE_SETTINGS["document_export"],
   ],
-  [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: [WORKSPACE_SETTINGS["work_item_types"]],
+  [WORKSPACE_SETTINGS_CATEGORY.SERVICE_MANAGEMENT]: [
+    WORKSPACE_SETTINGS["metric_sources"],
+    WORKSPACE_SETTINGS["work_item_types"],
+  ],
   [WORKSPACE_SETTINGS_CATEGORY.FEATURES]: [WORKSPACE_SETTINGS["features"]],
   [WORKSPACE_SETTINGS_CATEGORY.DEVELOPER]: [WORKSPACE_SETTINGS["webhooks"]],
 };

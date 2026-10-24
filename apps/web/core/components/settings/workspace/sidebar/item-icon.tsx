@@ -6,6 +6,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  AnalyticsOutline,
   BuildingOutline,
   DocumentationOutline,
   ExportOutline,
@@ -23,6 +24,7 @@ export const WORKSPACE_SETTINGS_ICONS: Record<TWorkspaceSettingsTabs, LucideIcon
   members: MembersOutline,
   export: ExportOutline,
   webhooks: WebhooksOutline,
+  metric_sources: AnalyticsOutline,
   work_item_types: WorkItemsOutline,
   features: SettingsOutline,
   document_export: DocumentationOutline,
