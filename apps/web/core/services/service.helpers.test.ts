@@ -8,11 +8,22 @@ import { describe, expect, it } from "vitest";
 // local imports
 import {
   dependencyExists,
+  groupServices,
   isLiteService,
   isValidServiceUrl,
   normalizeServiceUrl,
   validateDependency,
 } from "./service.helpers";
+
+const makeService = (id: string, overrides: Record<string, unknown> = {}) =>
+  ({
+    id,
+    name: id,
+    status: "active",
+    criticality: "medium",
+    type: "internal",
+    ...overrides,
+  }) as never;
 
 describe("isLiteService", () => {
   it("detects lite projections", () => {
@@ -81,5 +92,37 @@ describe("typed dependency validation", () => {
       "This dependency already exists."
     );
     expect(validateDependency([...dependencies], "service-1", "service-2", "runs_on")).toBeNull();
+  });
+});
+
+describe("groupServices", () => {
+  it("groups by status in lifecycle order", () => {
+    const services = [
+      makeService("retired", { status: "retired" }),
+      makeService("active", { status: "active" }),
+      makeService("planned", { status: "planned" }),
+    ];
+
+    const groups = groupServices(services, "status", {});
+    expect(groups.map((group) => group.key)).toEqual(["active", "planned", "retired"]);
+    expect(groups[0]?.services.map((service) => service.id)).toEqual(["active"]);
+  });
+
+  it("groups by health with missing snapshots as unknown", () => {
+    const services = [makeService("a"), makeService("b")];
+    const healthMap = {
+      a: { service_id: "a", health: "degraded", incidents: [], last_deployed_at: null },
+    } as never;
+
+    const groups = groupServices(services, "health", healthMap);
+    expect(groups.map((group) => group.key)).toEqual(["degraded", "unknown"]);
+  });
+
+  it("returns a single flat group when group by is null", () => {
+    const services = [makeService("a"), makeService("b")];
+
+    const groups = groupServices(services, null, {});
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.services).toHaveLength(2);
   });
 });

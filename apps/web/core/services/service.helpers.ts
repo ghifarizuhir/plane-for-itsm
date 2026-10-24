@@ -12,6 +12,7 @@ import type {
   IServiceHealthSnapshot,
   TServiceDependencyType,
   TServiceFilters,
+  TServiceGroupByOptions,
   TServiceOrderByOptions,
 } from "@plane/types";
 // helpers
@@ -153,6 +154,50 @@ export const orderServices = (
     }
   });
   return ordered;
+};
+
+export type TServiceGroup = {
+  key: string;
+  services: IService[];
+};
+
+const STATUS_GROUP_ORDER = ["active", "maintenance", "planned", "deprecated", "retired"];
+
+const CRITICALITY_GROUP_ORDER = ["critical", "high", "medium", "low"];
+
+const HEALTH_GROUP_ORDER = ["down", "degraded", "healthy", "unknown"];
+
+/**
+ * Groups already-filtered services for the list layout. Returns groups in
+ * dimension order; services keep their input order (callers pass ordered ids).
+ */
+export const groupServices = (
+  services: IService[],
+  groupBy: TServiceGroupByOptions,
+  healthMap: Record<string, IServiceHealthSnapshot> = {}
+): TServiceGroup[] => {
+  if (!groupBy) return [{ key: "all", services }];
+  const order =
+    groupBy === "status"
+      ? STATUS_GROUP_ORDER
+      : groupBy === "criticality"
+        ? CRITICALITY_GROUP_ORDER
+        : HEALTH_GROUP_ORDER;
+  const buckets = new Map<string, IService[]>();
+  for (const service of services) {
+    const key =
+      groupBy === "status"
+        ? service.status
+        : groupBy === "criticality"
+          ? service.criticality
+          : (healthMap[service.id]?.health ?? "unknown");
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(service);
+    buckets.set(key, bucket);
+  }
+  return [...buckets.entries()]
+    .toSorted(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+    .map(([key, bucket]) => ({ key, services: bucket }));
 };
 
 /**
