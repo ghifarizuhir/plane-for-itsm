@@ -23,6 +23,7 @@ const makeService = (id: string, position: IService["position"]): IService =>
     status: "active",
     criticality: "medium",
     type: "internal",
+    kind: "service",
     owner_id: null,
     repository_url: null,
     documentation_url: null,

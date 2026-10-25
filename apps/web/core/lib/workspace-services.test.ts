@@ -17,6 +17,7 @@ const makeService = (overrides: Partial<IService>): IService =>
     status: "active",
     criticality: "medium",
     type: "internal",
+    kind: "service",
     created_at: "2026-10-01T00:00:00.000Z",
     updated_at: "2026-10-01T00:00:00.000Z",
     ...overrides,
@@ -82,6 +83,18 @@ describe("selectWorkspaceServiceIds", () => {
     );
 
     expect(selection).toEqual(["match"]);
+  });
+
+  it("filters by component kind", () => {
+    const selection = select(
+      [
+        makeService({ id: "db", name: "Primary DB", kind: "database" }),
+        makeService({ id: "svc", name: "Payments", kind: "service" }),
+      ],
+      { filters: { kind: ["database"] } }
+    );
+
+    expect(selection).toEqual(["db"]);
   });
 
   it("applies health and active-incident filters", () => {

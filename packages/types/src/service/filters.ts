@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import type { TServiceCriticality, TServiceHealth, TServiceStatus, TServiceType } from "./core";
+import type { TServiceCriticality, TServiceHealth, TServiceKind, TServiceStatus, TServiceType } from "./core";
 
 export type TServiceLayoutOptions = "board" | "graph";
 
@@ -16,6 +16,7 @@ export type TServiceFilters = {
   status?: TServiceStatus[];
   criticality?: TServiceCriticality[];
   type?: TServiceType[];
+  kind?: TServiceKind[];
   health?: TServiceHealth[];
   incidents?: TServiceIncidentFilter[];
 };

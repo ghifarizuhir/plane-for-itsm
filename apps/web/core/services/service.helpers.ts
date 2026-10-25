@@ -99,6 +99,7 @@ const matchesFilters = (
   if (filters.criticality && filters.criticality.length > 0 && !filters.criticality.includes(service.criticality))
     return false;
   if (filters.type && filters.type.length > 0 && !filters.type.includes(service.type)) return false;
+  if (filters.kind && filters.kind.length > 0 && !filters.kind.includes(service.kind)) return false;
   if (filters.health && filters.health.length > 0) {
     const state = health?.health ?? "unknown";
     if (!filters.health.includes(state)) return false;

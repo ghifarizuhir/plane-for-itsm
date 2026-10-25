@@ -10,6 +10,17 @@ export type TServiceCriticality = "critical" | "high" | "medium" | "low";
 
 export type TServiceType = "internal" | "external" | "infrastructure" | "third_party";
 
+export type TServiceKind =
+  | "service"
+  | "database"
+  | "server"
+  | "cache"
+  | "queue"
+  | "storage"
+  | "network"
+  | "external_api"
+  | "other";
+
 export type TServiceHealth = "healthy" | "degraded" | "down" | "unknown";
 
 export type TServiceIncidentSeverity = "sev1" | "sev2" | "sev3" | "sev4";
@@ -77,6 +88,7 @@ export interface IService {
   status: TServiceStatus;
   criticality: TServiceCriticality;
   type: TServiceType;
+  kind: TServiceKind;
   owner_id: string | null;
   repository_url: string | null;
   documentation_url: string | null;
