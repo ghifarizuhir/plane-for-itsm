@@ -26,11 +26,14 @@ import {
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
+import { AnimatePresence } from "framer-motion";
 import { LockOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { ILiteService, IService, TServiceDependencyType, TServiceGraphData, TServiceHealth } from "@plane/types";
 import { cn } from "@plane/utils";
+// hooks
+import { useHoverPointer } from "@/hooks/use-mobile-viewport";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
@@ -42,6 +45,7 @@ import { getServiceRelationships } from "./graph-relationships";
 import { ServiceFocusCard } from "./service-focus-card";
 import { ServiceNode } from "./service-node";
 import { CLUSTER_HEADER_HEIGHT, getLayoutedElements } from "./use-graph-layout";
+import { useServiceFocusInteraction } from "./use-service-focus";
 import { syncGraphNodes } from "./node-sync";
 
 const nodeTypes = { service: ServiceNode };
@@ -162,19 +166,31 @@ export function ServiceGraphCanvas({
   // states
   const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(false);
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const {
+    effectiveServiceId,
+    pinnedServiceId,
+    hover,
+    leaveNode,
+    enterCard,
+    leaveCard,
+    pin,
+    clear: clearFocus,
+    suppress,
+    resume,
+  } = useServiceFocusInteraction();
+  const canHover = useHoverPointer();
   // refs
   const fitDone = useRef(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // derived values
   const highlighted = useMemo(() => new Set(highlightedServiceIds ?? []), [highlightedServiceIds]);
-  const selectedService = selectedServiceId
-    ? (graphData.services.find((service) => service.id === selectedServiceId) ?? null)
+  const selectedService = effectiveServiceId
+    ? (graphData.services.find((service) => service.id === effectiveServiceId) ?? null)
     : null;
-  const selectedHealth = selectedServiceId ? graphData.health[selectedServiceId] : undefined;
+  const selectedHealth = effectiveServiceId ? graphData.health[effectiveServiceId] : undefined;
   const relationships = useMemo(
-    () => (selectedServiceId ? getServiceRelationships(selectedServiceId, graphData.dependencies) : null),
-    [graphData.dependencies, selectedServiceId]
+    () => (effectiveServiceId ? getServiceRelationships(effectiveServiceId, graphData.dependencies) : null),
+    [graphData.dependencies, effectiveServiceId]
   );
 
   const getMiniMapNodeColor = useCallback((node: Node) => {
@@ -209,17 +225,18 @@ export function ServiceGraphCanvas({
             health: healthState,
             incidents,
             lastDeployedAt: snapshot?.last_deployed_at ?? null,
+            noDeploymentLabel: t("service.deploy.no_deployment"),
             highestSeverityLabel: highestIncident
               ? t(`service.incident_severity.${highestIncident.severity}`)
               : undefined,
             dimmed: !relationships && highlighted.size > 0 && !highlighted.has(service.id),
             focusDimmed: relationships ? !relationships.nodeIds.has(service.id) : false,
-            focused: service.id === selectedServiceId,
+            focused: service.id === effectiveServiceId,
           },
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
-    [layoutNodes, currentLocale, graphData.health, highlighted, relationships, selectedServiceId]
+    [layoutNodes, currentLocale, graphData.health, highlighted, relationships, effectiveServiceId]
   );
 
   const translatedEdges = useMemo<Edge[]>(
@@ -280,7 +297,7 @@ export function ServiceGraphCanvas({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(translatedEdges);
-  const selectedNode = selectedServiceId ? (nodes.find((node) => node.id === selectedServiceId) ?? null) : null;
+  const selectedNode = effectiveServiceId ? (nodes.find((node) => node.id === effectiveServiceId) ?? null) : null;
 
   const clusters = useMemo(
     () => getServiceClusters(nodes, graphData.services, projectLookup, t),
@@ -330,16 +347,51 @@ export function ServiceGraphCanvas({
     [onEdgeDelete]
   );
 
+  const handleNodeDragStart = useCallback(() => {
+    suppress();
+  }, [suppress]);
+
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
+      resume();
       onNodeDragStop?.(node.id, node.position);
     },
-    [onNodeDragStop]
+    [onNodeDragStop, resume]
   );
 
-  const handleNodeClick = useCallback((_event: unknown, node: Node) => {
-    setSelectedServiceId(node.id);
-  }, []);
+  const handleConnectStart = useCallback(() => {
+    suppress();
+  }, [suppress]);
+
+  const handleConnectEnd = useCallback(() => {
+    resume();
+  }, [resume]);
+
+  const handleMoveStart = useCallback(() => {
+    suppress();
+  }, [suppress]);
+
+  const handleMoveEnd = useCallback(() => {
+    resume();
+  }, [resume]);
+
+  const handleNodeClick = useCallback(
+    (_event: unknown, node: Node) => {
+      pin(node.id);
+    },
+    [pin]
+  );
+
+  const handleNodeMouseEnter = useCallback(
+    (_event: unknown, node: Node) => {
+      if (canHover) hover(node.id);
+    },
+    [canHover, hover]
+  );
+
+  const handleNodeMouseLeave = useCallback(() => {
+    leaveNode();
+  }, [leaveNode]);
 
   const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: Node) => {
@@ -349,16 +401,16 @@ export function ServiceGraphCanvas({
   );
 
   const handlePaneClick = useCallback(() => {
-    setSelectedServiceId(null);
-  }, []);
+    clearFocus();
+  }, [clearFocus]);
 
   const closeFocus = useCallback(() => {
-    setSelectedServiceId(null);
+    clearFocus();
     setNodes((current) => current.map((node) => (node.selected ? { ...node, selected: false } : node)));
-  }, [setNodes]);
+  }, [clearFocus, setNodes]);
   const openSelectedService = useCallback(() => {
-    if (selectedServiceId) onNodeOpen?.(selectedServiceId);
-  }, [onNodeOpen, selectedServiceId]);
+    if (effectiveServiceId) onNodeOpen?.(effectiveServiceId);
+  }, [effectiveServiceId, onNodeOpen]);
 
   const syncEdgeLabels = useCallback((zoom: number) => {
     setShowEdgeLabels((previous) => {
@@ -375,19 +427,19 @@ export function ServiceGraphCanvas({
   );
 
   useEffect(() => {
-    if (!selectedServiceId) return;
+    if (!effectiveServiceId) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeFocus();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeFocus, selectedServiceId]);
+  }, [closeFocus, effectiveServiceId]);
 
   useEffect(() => {
-    if (selectedServiceId && !graphData.services.some((service) => service.id === selectedServiceId)) {
-      setSelectedServiceId(null);
+    if (effectiveServiceId && !graphData.services.some((service) => service.id === effectiveServiceId)) {
+      clearFocus();
     }
-  }, [graphData.services, selectedServiceId]);
+  }, [clearFocus, effectiveServiceId, graphData.services]);
 
   // Re-fit after topology/layout changes (service/dependency mutations or manual
   // Re-layout). Deduplicated at the source: health polls, language changes, and
@@ -444,10 +496,17 @@ export function ServiceGraphCanvas({
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onMove={handleMove}
+          onMoveStart={handleMoveStart}
+          onMoveEnd={handleMoveEnd}
           onConnect={readOnly ? undefined : handleConnect}
+          onConnectStart={readOnly ? undefined : handleConnectStart}
+          onConnectEnd={readOnly ? undefined : handleConnectEnd}
           onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
+          onNodeDragStart={readOnly ? undefined : handleNodeDragStart}
           onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
           onNodeClick={handleNodeClick}
+          onNodeMouseEnter={canHover ? handleNodeMouseEnter : undefined}
+          onNodeMouseLeave={canHover ? handleNodeMouseLeave : undefined}
           onNodeDoubleClick={handleNodeDoubleClick}
           onPaneClick={handlePaneClick}
           nodesDraggable={!readOnly}
@@ -488,18 +547,23 @@ export function ServiceGraphCanvas({
           <Controls showInteractive={false} />
           {!readOnly && <MiniMap pannable nodeColor={getMiniMapNodeColor} />}
         </ReactFlow>
-        {selectedService && selectedNode && (
-          <ServiceFocusCard
-            key={selectedService.id}
-            node={selectedNode}
-            service={selectedService}
-            relationshipCount={relationships?.edgeIds.size ?? 0}
-            health={selectedHealth?.health}
-            lastDeployedAt={selectedHealth?.last_deployed_at}
-            onClose={closeFocus}
-            onOpen={onNodeOpen ? openSelectedService : undefined}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {selectedService && selectedNode && (
+            <ServiceFocusCard
+              key={selectedService.id}
+              node={selectedNode}
+              service={selectedService}
+              relationshipCount={relationships?.edgeIds.size ?? 0}
+              health={selectedHealth?.health}
+              lastDeployedAt={selectedHealth?.last_deployed_at}
+              pinned={pinnedServiceId === selectedService.id}
+              onClose={closeFocus}
+              onOpen={onNodeOpen ? openSelectedService : undefined}
+              onPointerEnter={enterCard}
+              onPointerLeave={leaveCard}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </ReactFlowProvider>
   );

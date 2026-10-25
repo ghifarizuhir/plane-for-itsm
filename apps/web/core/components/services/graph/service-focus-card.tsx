@@ -43,8 +43,11 @@ type TServiceFocusCardProps = {
   relationshipCount: number;
   health?: TServiceHealth;
   lastDeployedAt?: string | null;
+  pinned?: boolean;
   onClose: () => void;
   onOpen?: () => void;
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
 };
 
 /**
@@ -60,6 +63,8 @@ export function ServiceFocusCard({
   lastDeployedAt,
   onClose,
   onOpen,
+  onPointerEnter,
+  onPointerLeave,
 }: TServiceFocusCardProps) {
   // plane hooks
   const { t } = useTranslation();
@@ -119,7 +124,14 @@ export function ServiceFocusCard({
   const pointerLeft = Math.min(Math.max(nodeX + nodeWidth / 2 - left, 20), cardWidth - 20);
 
   return (
-    <div className="absolute z-20" style={{ ...position, width: cardWidth }} role="region" aria-label={service.name}>
+    <div
+      className="absolute z-20"
+      style={{ ...position, width: cardWidth }}
+      role="region"
+      aria-label={service.name}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
       <div
         className="service-focus-card relative flex flex-col overflow-hidden rounded-xl border border-strong bg-surface-1"
         style={{ maxHeight, "--focus-accent": accent } as CSSProperties}
