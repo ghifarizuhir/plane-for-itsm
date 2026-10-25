@@ -130,3 +130,6 @@ packages/i18n/src/types/keys.generated.ts
 
 # Local brainstorming visual companion artifacts
 .superpowers/
+
+# Local design critique artifacts
+.impeccable/
