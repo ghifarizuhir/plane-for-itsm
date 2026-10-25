@@ -15,6 +15,7 @@ use crate::{
 
 use super::issue_common::{fetch_project_member_role, is_workspace_admin, project_gate_allows};
 use super::service_access;
+use common::models::service::SERVICE_KINDS;
 
 /// Allowed `status` values (`packages/types/src/service/core.ts`).
 pub const SERVICE_STATUSES: &[&str] =
@@ -122,6 +123,7 @@ pub struct ServiceRow {
     pub status: String,
     pub criticality: String,
     pub service_type: String,
+    pub kind: String,
     pub owner_id: Option<Uuid>,
     pub repository_url: Option<String>,
     pub documentation_url: Option<String>,
@@ -134,7 +136,7 @@ pub struct ServiceRow {
 }
 
 const SERVICE_SELECT: &str = "SELECT s.id, s.workspace_id, s.name, s.description, \
-    s.description_html, s.status, s.criticality, s.\"type\" AS service_type, s.owner_id, \
+    s.description_html, s.status, s.criticality, s.\"type\" AS service_type, s.kind, s.owner_id, \
     s.repository_url, s.documentation_url, s.position, s.sort_order, s.created_at, s.updated_at, \
     s.created_by_id, s.updated_by_id FROM services s";
 
@@ -195,6 +197,7 @@ pub fn service_json(row: &ServiceRow, links: &[ServiceLinkRow], access_level: &s
         "status": row.status,
         "criticality": row.criticality,
         "type": row.service_type,
+        "kind": row.kind,
         "owner_id": row.owner_id,
         "repository_url": row.repository_url,
         "documentation_url": row.documentation_url,
@@ -372,6 +375,7 @@ pub struct CreateService {
     pub criticality: Option<String>,
     #[serde(rename = "type")]
     pub service_type: Option<String>,
+    pub kind: Option<String>,
     pub owner_id: Option<Uuid>,
     pub repository_url: Option<String>,
     pub documentation_url: Option<String>,
@@ -386,6 +390,7 @@ pub struct PatchService {
     pub criticality: Option<String>,
     #[serde(rename = "type")]
     pub service_type: Option<String>,
+    pub kind: Option<String>,
     #[serde(default, deserialize_with = "deserialize_present")]
     pub owner_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "deserialize_present")]
@@ -461,6 +466,7 @@ pub(crate) async fn create_service_core(
         .service_type
         .clone()
         .unwrap_or_else(|| "internal".to_string());
+    let kind = body.kind.clone().unwrap_or_else(|| "service".to_string());
     if let Err(e) = validate_enum("status", &status, SERVICE_STATUSES) {
         return Ok(bad_request(e));
     }
@@ -468,6 +474,9 @@ pub(crate) async fn create_service_core(
         return Ok(bad_request(e));
     }
     if let Err(e) = validate_enum("type", &service_type, SERVICE_TYPES) {
+        return Ok(bad_request(e));
+    }
+    if let Err(e) = validate_enum("kind", &kind, &SERVICE_KINDS) {
         return Ok(bad_request(e));
     }
     let dup: bool = sqlx::query_scalar(
@@ -506,10 +515,10 @@ pub(crate) async fn create_service_core(
     let mut tx = st.pool.begin().await?;
     sqlx::query(
         "INSERT INTO services (id, workspace_id, project_id, name, description, description_html, \
-         status, criticality, \"type\", owner_id, repository_url, documentation_url, position, \
+         status, criticality, \"type\", kind, owner_id, repository_url, documentation_url, position, \
          sort_order, created_at, updated_at, created_by_id, updated_by_id) \
-         SELECT $1, p.workspace_id, p.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, \
-         now(), now(), $12, $12 FROM projects p WHERE p.id = $13",
+         SELECT $1, p.workspace_id, p.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL, $12, \
+         now(), now(), $13, $13 FROM projects p WHERE p.id = $14",
     )
     .bind(id)
     .bind(&name)
@@ -518,6 +527,7 @@ pub(crate) async fn create_service_core(
     .bind(&status)
     .bind(&criticality)
     .bind(&service_type)
+    .bind(&kind)
     .bind(body.owner_id)
     .bind(body.repository_url.clone())
     .bind(body.documentation_url.clone())
@@ -677,6 +687,7 @@ pub(crate) async fn patch_service_core(
         .service_type
         .clone()
         .unwrap_or_else(|| current.service_type.clone());
+    let kind = body.kind.clone().unwrap_or_else(|| current.kind.clone());
     if let Err(e) = validate_enum("status", &status, SERVICE_STATUSES) {
         return Ok(bad_request(e));
     }
@@ -686,6 +697,10 @@ pub(crate) async fn patch_service_core(
     if let Err(e) = validate_enum("type", &service_type, SERVICE_TYPES) {
         return Ok(bad_request(e));
     }
+    if let Err(e) = validate_enum("kind", &kind, &SERVICE_KINDS) {
+        return Ok(bad_request(e));
+    }
+    let kind_changed = kind != current.kind;
     let owner_id = match body.owner_id {
         Some(v) => v,
         None => current.owner_id,
@@ -706,15 +721,19 @@ pub(crate) async fn patch_service_core(
         Some(v) => v,
         None => current.documentation_url.clone(),
     };
-    let position = match body.position.clone() {
-        Some(v) => v,
-        None => current.position.clone(),
+    let position = if kind_changed {
+        None
+    } else {
+        match body.position.clone() {
+            Some(v) => v,
+            None => current.position.clone(),
+        }
     };
     sqlx::query(
         "UPDATE services SET name = $1, description = $2, description_html = $3, status = $4, \
-         criticality = $5, \"type\" = $6, owner_id = $7, repository_url = $8, documentation_url = $9, \
-         position = $10, updated_at = now(), updated_by_id = $11 \
-         WHERE id = $12 AND deleted_at IS NULL",
+         criticality = $5, \"type\" = $6, kind = $7, owner_id = $8, repository_url = $9, \
+         documentation_url = $10, position = $11, updated_at = now(), updated_by_id = $12 \
+         WHERE id = $13 AND deleted_at IS NULL",
     )
     .bind(&name)
     .bind(&description)
@@ -722,6 +741,7 @@ pub(crate) async fn patch_service_core(
     .bind(&status)
     .bind(&criticality)
     .bind(&service_type)
+    .bind(&kind)
     .bind(owner_id)
     .bind(&repository_url)
     .bind(&documentation_url)

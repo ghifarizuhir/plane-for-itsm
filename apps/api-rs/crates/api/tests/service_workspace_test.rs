@@ -488,6 +488,7 @@ async fn canonical_create_patch_destroy() {
             status: None,
             criticality: None,
             service_type: None,
+            kind: None,
             owner_id: None,
             repository_url: None,
             documentation_url: None,
@@ -616,6 +617,7 @@ async fn service_mutations_reset_workspace_layout() {
             status: None,
             criticality: None,
             service_type: None,
+            kind: None,
             owner_id: None,
             repository_url: None,
             documentation_url: None,
@@ -2047,4 +2049,143 @@ async fn full_visible_rejects_inactive_membership() {
             .unwrap(),
         "inactive project membership grants no visibility"
     );
+}
+
+#[tokio::test]
+async fn service_kind_create_patch_and_layout() {
+    use api::routes::service::{
+        create_workspace, patch_workspace, CreateService, CreateWorkspaceService, PatchService,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let new_service = |name: &str, kind: Option<&str>| CreateWorkspaceService {
+        owner_project_id: sc.p1,
+        service: CreateService {
+            name: Some(name.into()),
+            description: None,
+            description_html: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            kind: kind.map(str::to_string),
+            owner_id: None,
+            repository_url: None,
+            documentation_url: None,
+        },
+    };
+
+    let backfilled: String = sqlx::query_scalar("SELECT kind FROM services WHERE id = $1")
+        .bind(sc.s1)
+        .fetch_one(&st.pool)
+        .await
+        .expect("kind backfill");
+    assert_eq!(backfilled, "service", "existing rows backfill to service");
+
+    let (status, axum::Json(defaulted)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("Default Kind", None)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(defaulted["kind"], "service");
+
+    let (status, axum::Json(database)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("Database Kind", Some("database"))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    assert_eq!(database["kind"], "database");
+    let database_id = Uuid::parse_str(database["id"].as_str().unwrap()).unwrap();
+
+    let (status, axum::Json(invalid)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("Invalid Kind", Some("legacy"))),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(invalid["error"], "Invalid kind");
+
+    set_service_position(&st.pool, sc.s1, 10.0, 20.0).await;
+    set_service_position(&st.pool, sc.s2, 30.0, 40.0).await;
+    let s2_position_before = service_position(&st.pool, sc.s2).await;
+
+    let (status, axum::Json(patched)) = patch_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), database_id)),
+        Json(PatchService {
+            kind: Some("server".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(patched["kind"], "server");
+    assert_eq!(
+        service_position(&st.pool, database_id).await,
+        None,
+        "kind change clears that service's position"
+    );
+    assert_eq!(
+        service_position(&st.pool, sc.s2).await,
+        s2_position_before,
+        "kind change must not clear other services' positions"
+    );
+
+    set_service_position(&st.pool, database_id, 12.0, 34.0).await;
+    let (status, axum::Json(type_patched)) = patch_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), database_id)),
+        Json(PatchService {
+            service_type: Some("external".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(type_patched["kind"], "server");
+    let stored = service_position(&st.pool, database_id)
+        .await
+        .expect("kept stored position");
+    assert_eq!(stored["x"].as_f64(), Some(12.0));
+    assert_eq!(stored["y"].as_f64(), Some(34.0));
+    assert!(
+        stored.get("x").is_some() && stored.get("y").is_some(),
+        "non-kind patch keeps the stored position"
+    );
+
+    let (status, axum::Json(invalid_patch)) = patch_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), database_id)),
+        Json(PatchService {
+            kind: Some("legacy".into()),
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(invalid_patch["error"], "Invalid kind");
+    let still_stored = service_position(&st.pool, database_id)
+        .await
+        .expect("rejected patch keeps position");
+    assert_eq!(still_stored["x"].as_f64(), Some(12.0));
+    assert_eq!(still_stored["y"].as_f64(), Some(34.0));
 }
