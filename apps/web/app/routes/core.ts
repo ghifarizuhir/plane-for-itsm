@@ -327,6 +327,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/work-item-types/[typeId]/page.tsx"
           ),
           route(
+            ":workspaceSlug/settings/metric-sources",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/metric-sources/page.tsx"
+          ),
+          route(
             ":workspaceSlug/settings/features",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/features/page.tsx"
           ),
