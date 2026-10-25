@@ -484,6 +484,7 @@ export class ServicesStore implements IServiceStore {
   ) => {
     const original = this.getServiceById(serviceId);
     if (!original) throw new Error("Service not found");
+    const kindChanged = data.kind !== undefined && data.kind !== original.kind;
     try {
       runInAction(() => {
         set(this.serviceMap, [serviceId], { ...original, ...data });
@@ -491,6 +492,7 @@ export class ServicesStore implements IServiceStore {
       const response = await this.serviceService.updateService(workspaceSlug, workspaceId, projectId, serviceId, data);
       runInAction(() => {
         set(this.serviceMap, [serviceId], response);
+        if (kindChanged) this.markLayoutChanged();
       });
       return response;
     } catch (error) {

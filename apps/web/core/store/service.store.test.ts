@@ -54,6 +54,12 @@ const makeStore = () => {
       created_at: "2026-10-25T00:00:00Z",
     })),
     deleteDependency: vi.fn(async () => undefined),
+    updateService: vi.fn(
+      async (_slug: string, _workspaceId: string, _projectId: string, serviceId: string, data: Partial<IService>) => ({
+        ...makeService(serviceId, null),
+        ...data,
+      })
+    ),
     updateNodePosition: vi.fn(async (_slug: string, _workspaceId: string, _projectId: string, serviceId: string) =>
       makeService(serviceId, { x: 5, y: 6 })
     ),
@@ -236,5 +242,27 @@ describe("ServicesStore.updateNodePosition", () => {
     await expect(store.updateNodePosition("acme", "workspace-1", null, "service-1", null)).rejects.toThrow("nope");
 
     expect(store.serviceMap["service-1"]).toStrictEqual(original);
+  });
+});
+
+describe("ServicesStore.updateService layout", () => {
+  it("bumps the layout epoch when the kind changes", async () => {
+    const { store } = makeStore();
+    store.serviceMap = { "service-1": makeService("service-1", null) };
+
+    await store.updateService("acme", "workspace-1", "project-1", "service-1", { kind: "database" });
+
+    expect(store.serviceMap["service-1"].kind).toBe("database");
+    expect(store.layoutEpoch).toBe(1);
+  });
+
+  it("does not bump the layout epoch for other fields", async () => {
+    const { store } = makeStore();
+    store.serviceMap = { "service-1": makeService("service-1", null) };
+
+    await store.updateService("acme", "workspace-1", "project-1", "service-1", { status: "maintenance" });
+
+    expect(store.serviceMap["service-1"].status).toBe("maintenance");
+    expect(store.layoutEpoch).toBe(0);
   });
 });
