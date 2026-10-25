@@ -11,6 +11,25 @@ import { usePopper } from "@plane/hooks";
 import { Popover, Transition } from "@headlessui/react";
 // ui
 import { Button } from "@plane/propel/button";
+import { cn } from "@plane/utils";
+
+const PANEL_ORIGIN: Record<Placement, string> = {
+  auto: "origin-top",
+  "auto-start": "origin-top-left",
+  "auto-end": "origin-top-right",
+  top: "origin-bottom",
+  "top-start": "origin-bottom-left",
+  "top-end": "origin-bottom-right",
+  bottom: "origin-top",
+  "bottom-start": "origin-top-left",
+  "bottom-end": "origin-top-right",
+  left: "origin-right",
+  "left-start": "origin-top-right",
+  "left-end": "origin-bottom-right",
+  right: "origin-left",
+  "right-start": "origin-top-left",
+  "right-end": "origin-bottom-left",
+};
 
 type Props = {
   children: React.ReactNode;
@@ -89,25 +108,29 @@ export function FiltersDropdown(props: Props) {
               </div>
             )}
           </Popover.Button>
-          <Transition
-            as={Fragment}
-            enter="transition ease-out duration-200"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition ease-in duration-150"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
+          <Transition as={Fragment}>
             <Popover.Panel portal className="z-30">
-              <div
-                className="z-30 my-1 overflow-hidden rounded-sm border border-subtle bg-surface-1 shadow-raised-100"
-                ref={setPopperElement}
-                style={styles.popper}
-                {...attributes.popper}
-              >
-                <div className="flex max-h-[30rem] w-[calc(100vw-2rem)] flex-col overflow-hidden md:w-[18.75rem] lg:max-h-[37.5rem]">
-                  {children}
-                </div>
+              <div ref={setPopperElement} style={styles.popper} {...attributes.popper}>
+                <Transition.Child
+                  as={Fragment}
+                  enter="transition motion-micro"
+                  enterFrom="opacity-0 translate-y-1 scale-[0.98]"
+                  enterTo="opacity-100 translate-y-0 scale-100"
+                  leave="transition motion-micro"
+                  leaveFrom="opacity-100 translate-y-0 scale-100"
+                  leaveTo="opacity-0 translate-y-1 scale-[0.98]"
+                >
+                  <div
+                    className={cn(
+                      "z-30 my-1 overflow-hidden rounded-sm border border-subtle bg-surface-1 shadow-raised-100",
+                      PANEL_ORIGIN[placement ?? "auto"]
+                    )}
+                  >
+                    <div className="flex max-h-[30rem] w-[calc(100vw-2rem)] flex-col overflow-hidden md:w-[18.75rem] lg:max-h-[37.5rem]">
+                      {children}
+                    </div>
+                  </div>
+                </Transition.Child>
               </div>
             </Popover.Panel>
           </Transition>

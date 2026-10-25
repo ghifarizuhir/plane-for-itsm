@@ -4,11 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { MOTION_TRANSITION } from "@plane/constants";
 import { cn } from "../utils";
 import type { TTabNavigationItemProps } from "./tab-navigation-types";
 
 export function TabNavigationItem({ children, isActive, className }: TTabNavigationItemProps) {
+  const reducedMotion = useReducedMotion();
+
   return (
     <div
       className={cn(
@@ -17,20 +20,21 @@ export function TabNavigationItem({ children, isActive, className }: TTabNavigat
         className
       )}
     >
-      <AnimatePresence>
-        {isActive && (
-          <motion.div
-            className="absolute inset-0 -z-10 rounded-md bg-layer-transparent-active"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{
-              duration: 0.3,
-              ease: [0.4, 0, 0.2, 1],
-            }}
-          />
-        )}
-      </AnimatePresence>
+      {reducedMotion ? (
+        isActive && <div className="absolute inset-0 -z-10 rounded-md bg-layer-transparent-active" />
+      ) : (
+        <AnimatePresence>
+          {isActive && (
+            <motion.div
+              className="absolute inset-0 -z-10 rounded-md bg-layer-transparent-active"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={MOTION_TRANSITION.panel}
+            />
+          )}
+        </AnimatePresence>
+      )}
       {children}
     </div>
   );

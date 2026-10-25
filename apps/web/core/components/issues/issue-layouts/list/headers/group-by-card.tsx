@@ -8,7 +8,7 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { CircleDashed } from "lucide-react";
-import { AddOutline } from "@makeplane/propel/icons";
+import { AddOutline, ChevronRightOutline } from "@makeplane/propel/icons";
 // types
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TIssue, ISearchIssueResponse, TIssueGroupByOptions } from "@plane/types";
@@ -36,6 +36,7 @@ interface IHeaderGroupByCard {
   addIssuesToView?: (issueIds: string[]) => Promise<TIssue>;
   selectionHelpers: TSelectionHelper;
   handleCollapsedGroups: (value: string) => void;
+  isExpanded?: boolean;
   isEpic?: boolean;
 }
 
@@ -51,6 +52,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
     addIssuesToView,
     selectionHelpers,
     handleCollapsedGroups,
+    isExpanded = true,
     isEpic = false,
   } = props;
   // states
@@ -118,6 +120,12 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
           <div className="line-clamp-1 inline-block truncate font-medium text-primary">{title}</div>
           <div className="pl-2 text-13 font-medium text-tertiary">{count || 0}</div>
           <div className="px-2.5"></div>
+          <ChevronRightOutline
+            className={cn(
+              "motion-micro size-3.5 flex-shrink-0 text-tertiary transition-transform",
+              isExpanded ? "rotate-90" : "rotate-0"
+            )}
+          />
         </div>
 
         {!disableIssueCreation &&

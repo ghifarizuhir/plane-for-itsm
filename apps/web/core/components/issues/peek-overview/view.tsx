@@ -7,7 +7,9 @@
 import { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import { createPortal } from "react-dom";
+import { motion, useReducedMotion } from "framer-motion";
 // plane imports
+import { MOTION_TRANSITION } from "@plane/constants";
 import type { EditorRefApi } from "@plane/editor";
 import type { TNameDescriptionLoader } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
@@ -71,6 +73,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
     issue: { getIssueById },
   } = useIssueDetail();
   const { isAnyModalOpen: isAnyEpicModalOpen } = useIssueDetail(EIssueServiceType.EPICS);
+  const reducedMotion = useReducedMotion();
   const issue = getIssueById(issueId);
   // remove peek id
   const removeRoutePeekId = () => {
@@ -133,7 +136,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
 
   const peekOverviewIssueClassName = cn(
     !embedIssue
-      ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1 transition-all duration-300"
+      ? "absolute z-[25] flex flex-col overflow-hidden rounded-sm border border-subtle bg-surface-1"
       : `h-full w-full`,
     !embedIssue && {
       "top-0 right-0 bottom-0 w-full border-0 border-l md:w-[50%]": peekMode === "side-peek",
@@ -141,6 +144,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
       "absolute inset-0 m-4": peekMode === "full-screen",
     }
   );
+  const showPeekMotion = !embedIssue && !reducedMotion;
 
   const shouldUsePortal = !embedIssue;
 
@@ -149,9 +153,21 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
   const content = (
     <div className="w-full text-body-sm-regular">
       {issueId && (
-        <div
+        <motion.div
           ref={issuePeekOverviewRef}
           className={peekOverviewIssueClassName}
+          initial={
+            showPeekMotion ? (peekMode === "side-peek" ? { opacity: 0, x: 24 } : { opacity: 0, scale: 0.985 }) : false
+          }
+          animate={showPeekMotion ? { opacity: 1, x: 0, scale: 1 } : undefined}
+          exit={
+            showPeekMotion
+              ? peekMode === "side-peek"
+                ? { opacity: 0, x: 24 }
+                : { opacity: 0, scale: 0.985 }
+              : undefined
+          }
+          transition={MOTION_TRANSITION.overlay}
           style={{
             boxShadow:
               "0px 4px 8px 0px rgba(0, 0, 0, 0.12), 0px 6px 12px 0px rgba(16, 24, 40, 0.12), 0px 1px 16px 0px rgba(16, 24, 40, 0.12)",
@@ -278,7 +294,7 @@ export const IssueView = observer(function IssueView(props: IIssueView) {
               </div>
             </>
           )}
-        </div>
+        </motion.div>
       )}
     </div>
   );

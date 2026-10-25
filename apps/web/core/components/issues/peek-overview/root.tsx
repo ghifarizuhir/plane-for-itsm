@@ -7,6 +7,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
+import { AnimatePresence } from "framer-motion";
 // Plane imports
 import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -70,9 +71,9 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
         try {
           setError(false);
           await fetchIssue(workspaceSlug, projectId, issueId);
-        } catch (error) {
+        } catch (err) {
           setError(true);
-          console.error("Error fetching the parent issue", error);
+          console.error("Error fetching the parent issue", err);
         }
       },
       update: async (workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>) => {
@@ -110,8 +111,8 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
         try {
           if (!issues?.archiveIssue) return;
           await issues.archiveIssue(workspaceSlug, projectId, issueId);
-        } catch (error) {
-          console.error("Error archiving the issue", error);
+        } catch (err) {
+          console.error("Error archiving the issue", err);
         }
       },
       restore: async (workspaceSlug: string, projectId: string, issueId: string) => {
@@ -169,8 +170,8 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
           });
           await removeFromCyclePromise;
           fetchActivities(workspaceSlug, projectId, issueId);
-        } catch (error) {
-          console.error("Error removing issue from cycle", error);
+        } catch (err) {
+          console.error("Error removing issue from cycle", err);
         }
       },
       changeModulesInIssue: async (
@@ -206,8 +207,8 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
           });
           await removeFromModulePromise;
           fetchActivities(workspaceSlug, projectId, issueId);
-        } catch (error) {
-          console.error("Error removing issue from module", error);
+        } catch (err) {
+          console.error("Error removing issue from module", err);
         }
       },
     }),
@@ -225,28 +226,37 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
     }
   );
 
-  if (!peekIssue?.workspaceSlug || !peekIssue?.projectId || !peekIssue?.issueId) return <></>;
+  const peekWorkspaceSlug = peekIssue?.workspaceSlug;
+  const peekProjectId = peekIssue?.projectId;
 
   // Check if issue is editable, based on user role
-  const isEditable = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    peekIssue?.workspaceSlug,
-    peekIssue?.projectId
-  );
+  const isEditable =
+    !!peekWorkspaceSlug &&
+    !!peekProjectId &&
+    allowPermissions(
+      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      EUserPermissionsLevel.PROJECT,
+      peekWorkspaceSlug,
+      peekProjectId
+    );
 
   return (
-    <IssueView
-      workspaceSlug={peekIssue.workspaceSlug}
-      projectId={peekIssue.projectId}
-      issueId={peekIssue.issueId}
-      isLoading={isLoading}
-      isError={error}
-      is_archived={!!peekIssue.isArchived}
-      disabled={!isEditable}
-      embedIssue={embedIssue}
-      embedRemoveCurrentNotification={embedRemoveCurrentNotification}
-      issueOperations={issueOperations}
-    />
+    <AnimatePresence>
+      {peekWorkspaceSlug && peekProjectId && peekIssue?.issueId ? (
+        <IssueView
+          key={peekIssue.issueId}
+          workspaceSlug={peekWorkspaceSlug}
+          projectId={peekProjectId}
+          issueId={peekIssue.issueId}
+          isLoading={isLoading}
+          isError={error}
+          is_archived={!!peekIssue.isArchived}
+          disabled={!isEditable}
+          embedIssue={embedIssue}
+          embedRemoveCurrentNotification={embedRemoveCurrentNotification}
+          issueOperations={issueOperations}
+        />
+      ) : null}
+    </AnimatePresence>
   );
 });

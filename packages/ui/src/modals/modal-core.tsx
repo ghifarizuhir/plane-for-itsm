@@ -34,10 +34,10 @@ export function ModalCore(props: Props) {
       <Dialog as="div" className="relative z-30" onClose={() => handleClose && handleClose()}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-300"
+          enter="motion-overlay"
           enterFrom="opacity-0"
           enterTo="opacity-100"
-          leave="ease-in duration-200"
+          leave="motion-micro"
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
@@ -48,10 +48,10 @@ export function ModalCore(props: Props) {
           <div className={position}>
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-300"
+              enter="motion-overlay"
               enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
               enterTo="opacity-100 translate-y-0 sm:scale-100"
-              leave="ease-in duration-200"
+              leave="motion-micro"
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >

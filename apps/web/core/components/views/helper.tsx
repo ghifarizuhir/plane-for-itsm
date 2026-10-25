@@ -42,19 +42,30 @@ export function WorkspaceActiveLayout(props: TWorkspaceLayoutProps) {
     fetchIssuesOnMount,
   } = props;
   // 1:1 with project ProjectIssueLayout — same layout switcher (list/kanban/calendar/gantt/spreadsheet)
+  let content = <></>;
   switch (activeLayout) {
     case EIssueLayoutTypes.LIST:
-      return <WorkspaceListRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
+      content = (
+        <WorkspaceListRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />
+      );
+      break;
     case EIssueLayoutTypes.KANBAN:
-      return <WorkspaceKanbanRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
+      content = (
+        <WorkspaceKanbanRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />
+      );
+      break;
     case EIssueLayoutTypes.CALENDAR:
-      return (
+      content = (
         <WorkspaceCalendarRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />
       );
+      break;
     case EIssueLayoutTypes.GANTT:
-      return <WorkspaceGanttRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />;
+      content = (
+        <WorkspaceGanttRoot workspaceSlug={workspaceSlug} viewId={globalViewId} fetchNextPages={fetchNextPages} />
+      );
+      break;
     case EIssueLayoutTypes.SPREADSHEET:
-      return (
+      content = (
         <WorkspaceSpreadsheetRoot
           isDefaultView={isDefaultView}
           isLoading={isLoading}
@@ -68,9 +79,14 @@ export function WorkspaceActiveLayout(props: TWorkspaceLayoutProps) {
           fetchOnMount={fetchIssuesOnMount}
         />
       );
-    default:
-      return <></>;
+      break;
   }
+
+  return (
+    <div key={activeLayout} className="layout-enter h-full w-full">
+      {content}
+    </div>
+  );
 }
 
 export type TLayoutSelectionProps = {

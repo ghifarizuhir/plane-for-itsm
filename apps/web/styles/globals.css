@@ -173,6 +173,57 @@
   }
 }
 
+:root {
+  --motion-duration-micro: 120ms;
+  --motion-duration-panel: 180ms;
+  --motion-duration-overlay: 220ms;
+  --motion-ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@keyframes layoutEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes groupEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.layout-enter {
+  animation: layoutEnter var(--motion-duration-panel) var(--motion-ease-enter);
+}
+
+.group-enter {
+  animation: groupEnter var(--motion-duration-micro) var(--motion-ease-enter);
+}
+
+.motion-micro {
+  transition-duration: var(--motion-duration-micro);
+  transition-timing-function: var(--motion-ease-enter);
+}
+
+.motion-panel {
+  transition-duration: var(--motion-duration-panel);
+  transition-timing-function: var(--motion-ease-enter);
+}
+
+.motion-overlay {
+  transition-duration: var(--motion-duration-overlay);
+  transition-timing-function: var(--motion-ease-enter);
+}
+
 /* Progress Bar Styles */
 :root {
   --bprogress-color: var(--background-color-accent-primary);
@@ -494,4 +545,20 @@
     0 1px 2px 0 rgba(0, 0, 0, 0.06),
     0 20px 48px -20px rgba(0, 0, 0, 0.48),
     0 8px 20px -12px rgba(0, 0, 0, 0.32);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .animate-pulse,
+  .layout-enter,
+  .group-enter {
+    animation: none;
+  }
 }
