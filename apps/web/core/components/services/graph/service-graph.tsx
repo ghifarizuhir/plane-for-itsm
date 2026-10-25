@@ -128,7 +128,7 @@ export const ServiceGraph = observer(function ServiceGraph({
     [pid, scope, slug, updateNodePosition, workspaceId]
   );
 
-  const handleNodeClick = useCallback(
+  const handleNodeOpen = useCallback(
     (serviceId: string) => {
       if (!slug) return;
       const service = getServiceById(serviceId);
@@ -163,11 +163,21 @@ export const ServiceGraph = observer(function ServiceGraph({
   }, [graphData.services, markLayoutChanged, pid, scope, slug, updateNodePosition, workspaceId]);
 
   return (
-    <div className="flex h-full w-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-subtle px-3 py-2">
-        <div className="flex flex-wrap items-center gap-4">
-          <p className="text-12 text-secondary">{t("service.graph.connect_hint")}</p>
-          <div className="hidden items-center gap-3 border-l border-subtle pl-4 sm:flex">
+    <div className="relative h-full w-full">
+      <div className="absolute inset-0">
+        <ServiceGraphCanvas
+          graphData={graphData}
+          projectLookup={projectLookup}
+          layoutEpoch={layoutEpoch}
+          onConnect={handleConnect}
+          onEdgeDelete={handleEdgeDelete}
+          onNodeDragStop={handleNodeDragStop}
+          onNodeOpen={handleNodeOpen}
+        />
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-2 sm:p-3">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-3 rounded-lg border border-subtle bg-surface-1 px-3 py-2 shadow-raised-200">
+          <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
               <ServiceHealthDot health="healthy" />
               <span>{t("service.health_values.healthy")}</span>
@@ -181,21 +191,20 @@ export const ServiceGraph = observer(function ServiceGraph({
               <span>{t("service.health_values.down")}</span>
             </span>
           </div>
+          <span className="bg-subtle hidden h-4 w-px shrink-0 lg:block" />
+          <p className="hidden max-w-[280px] truncate text-11 text-tertiary lg:block">
+            {t("service.graph.connect_hint")}
+          </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={handleReLayout} loading={isReLayouting}>
+        <Button
+          className="pointer-events-auto shrink-0"
+          variant="secondary"
+          size="lg"
+          onClick={handleReLayout}
+          loading={isReLayouting}
+        >
           {t("service.graph.re_layout")}
         </Button>
-      </div>
-      <div className="min-h-0 flex-1">
-        <ServiceGraphCanvas
-          graphData={graphData}
-          projectLookup={projectLookup}
-          layoutEpoch={layoutEpoch}
-          onConnect={handleConnect}
-          onEdgeDelete={handleEdgeDelete}
-          onNodeDragStop={handleNodeDragStop}
-          onNodeClick={handleNodeClick}
-        />
       </div>
     </div>
   );

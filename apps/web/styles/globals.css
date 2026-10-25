@@ -413,30 +413,104 @@
   --xy-selection-border: 1px dashed var(--border-accent-strong);
 }
 
-.service-graph-flow .react-flow__attribution a {
-  color: var(--txt-tertiary);
-}
-
 .service-graph-flow .react-flow__handle:hover {
   background-color: var(--bg-accent-primary);
 }
 
 .service-graph-flow .react-flow__controls {
-  border-radius: 6px;
+  margin: 12px;
+  border-radius: 10px;
   overflow: hidden;
+}
+
+.service-graph-flow .react-flow__controls-button {
+  width: 32px;
+  height: 32px;
 }
 
 .service-graph-flow .react-flow__minimap {
-  border-radius: 6px;
+  margin: 12px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow:
     0 1px 2px 0 rgba(0, 0, 0, 0.08),
+    0 12px 32px -16px rgba(0, 0, 0, 0.28),
     0 0 0 1px var(--border-subtle);
 }
 
-.service-graph-flow .react-flow__node.selected .service-node-card {
+.service-graph-flow .service-node-card.is-focused {
   border-color: var(--border-accent-strong);
   box-shadow:
     0 2px 8px -2px rgba(0, 0, 0, 0.16),
     0 0 0 1px var(--border-accent-strong);
+}
+
+/* Service-kind accents for the dependency graph. Propel clears Tailwind's
+ * default color palette (`--color-*: initial`), so `sky-500`-style utilities
+ * silently emit nothing. These tokens keep one hue per kind, theme-aware. */
+@theme inline {
+  --color-kind-service: var(--kind-service);
+  --color-kind-database: var(--kind-database);
+  --color-kind-server: var(--kind-server);
+  --color-kind-cache: var(--kind-cache);
+  --color-kind-queue: var(--kind-queue);
+  --color-kind-storage: var(--kind-storage);
+  --color-kind-network: var(--kind-network);
+  --color-kind-external-api: var(--kind-external-api);
+  --color-kind-other: var(--kind-other);
+}
+
+:root,
+[data-theme*="light"] {
+  --kind-service: oklch(0.5 0.134 242.749);
+  --kind-database: oklch(0.491 0.27 292.581);
+  --kind-server: oklch(0.553 0.195 38.402);
+  --kind-cache: oklch(0.525 0.223 3.958);
+  --kind-queue: oklch(0.555 0.163 48.998);
+  --kind-storage: oklch(0.508 0.118 165.612);
+  --kind-network: oklch(0.52 0.105 223.128);
+  --kind-external-api: oklch(0.457 0.24 277.023);
+  --kind-other: var(--txt-tertiary);
+  --canvas-dot: oklch(0.8834 0.007 247.9);
+  --canvas-dot-strong: oklch(0.8338 0.01 252.8);
+}
+
+[data-theme*="dark"] {
+  --kind-service: oklch(0.746 0.16 232.661);
+  --kind-database: oklch(0.702 0.183 293.541);
+  --kind-server: oklch(0.75 0.183 55.934);
+  --kind-cache: oklch(0.718 0.202 349.761);
+  --kind-queue: oklch(0.828 0.189 84.429);
+  --kind-storage: oklch(0.765 0.177 163.223);
+  --kind-network: oklch(0.789 0.154 211.53);
+  --kind-external-api: oklch(0.673 0.182 276.935);
+  --kind-other: var(--txt-tertiary);
+  --canvas-dot: oklch(0.3344 0.0126 253);
+  --canvas-dot-strong: oklch(0.3838 0.0143 252.3);
+}
+
+.service-focus-card {
+  box-shadow:
+    0 1px 2px 0 rgba(0, 0, 0, 0.06),
+    0 20px 48px -20px rgba(0, 0, 0, 0.48),
+    0 8px 20px -12px rgba(0, 0, 0, 0.32);
+  animation: service-focus-card-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes service-focus-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .service-focus-card {
+    animation: none;
+  }
 }

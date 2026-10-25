@@ -80,6 +80,15 @@ describe("syncGraphNodes", () => {
     expect((result[0].data as { service: IService }).service.name).toBe("Renamed");
   });
 
+  it("applies focus state changes", () => {
+    const prev = [makeNode("a")];
+    const next = [{ ...prev[0], data: { ...prev[0].data, focused: true, focusDimmed: false } }];
+
+    const result = syncGraphNodes(prev, next);
+
+    expect((result[0].data as { focused: boolean }).focused).toBe(true);
+  });
+
   it("preserves selection", () => {
     const prev = [{ ...makeNode("a"), selected: true }];
     const next = [{ ...makeNode("a"), selected: false }];

@@ -31,15 +31,15 @@ export const SERVICE_KIND_ICON: Record<TServiceKind, ComponentType<{ className?:
 };
 
 export const SERVICE_KIND_CLUSTER_STYLE: Record<TServiceKind, string> = {
-  service: "border-sky-500/40 bg-sky-500/5 text-sky-600 dark:text-sky-400",
-  database: "border-violet-500/40 bg-violet-500/5 text-violet-600 dark:text-violet-400",
-  server: "border-orange-500/40 bg-orange-500/5 text-orange-600 dark:text-orange-400",
-  cache: "border-pink-500/40 bg-pink-500/5 text-pink-600 dark:text-pink-400",
-  queue: "border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400",
-  storage: "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400",
-  network: "border-cyan-500/40 bg-cyan-500/5 text-cyan-600 dark:text-cyan-400",
-  external_api: "border-indigo-500/40 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400",
-  other: "border-subtle bg-layer-2/40 text-tertiary",
+  service: "border-kind-service/35 bg-kind-service/6 text-kind-service",
+  database: "border-kind-database/35 bg-kind-database/6 text-kind-database",
+  server: "border-kind-server/35 bg-kind-server/6 text-kind-server",
+  cache: "border-kind-cache/35 bg-kind-cache/6 text-kind-cache",
+  queue: "border-kind-queue/35 bg-kind-queue/6 text-kind-queue",
+  storage: "border-kind-storage/35 bg-kind-storage/6 text-kind-storage",
+  network: "border-kind-network/35 bg-kind-network/6 text-kind-network",
+  external_api: "border-kind-external-api/35 bg-kind-external-api/6 text-kind-external-api",
+  other: "border-kind-other/35 bg-kind-other/6 text-kind-other",
 };
 
 export const RESTRICTED_CLUSTER_STYLE = "border-dashed border-subtle bg-layer-2/30 text-tertiary";

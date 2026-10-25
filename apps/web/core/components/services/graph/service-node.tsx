@@ -5,15 +5,14 @@
  */
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { ClockOutline, CubeOutline, LockOutline, WarningTriangleOutline } from "@makeplane/propel/icons";
+import { ClockOutline, LockOutline, WarningTriangleOutline } from "@makeplane/propel/icons";
 // plane imports
 import type { ILiteService, IService, IServiceIncident, TServiceCriticality, TServiceHealth } from "@plane/types";
-import { cn } from "@plane/utils";
+import { calculateTimeAgo, calculateTimeAgoShort, cn } from "@plane/utils";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
 // local imports
-import { SERVICE_KIND_ICON } from "../kind-config";
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceHealthDot } from "../health/service-health-dot";
 
@@ -22,18 +21,18 @@ export type TServiceNodeData = {
   accessLevel?: "full" | "lite";
   statusLabel: string;
   criticalityLabel: string;
-  typeLabel?: string;
-  kindLabel?: string;
+  typeLabel: string;
   healthLabel?: string;
-  ownerProjectIdentifier?: string;
-  ownerProjectName?: string;
   health: TServiceHealth;
   incidents: IServiceIncident[];
   lastDeployedAt?: string | null;
-  noDeploymentLabel: string;
   highestSeverityLabel?: string;
   /** Blast-radius map: dependency neighbors are dimmed. */
   dimmed?: boolean;
+  /** A node was selected elsewhere: everything outside its relationships fades further. */
+  focusDimmed?: boolean;
+  /** The selected node whose direct relationships are being traced. */
+  focused?: boolean;
 };
 
 const CRITICALITY_BADGE_STYLE: Record<TServiceCriticality, string> = {
@@ -57,25 +56,24 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
     statusLabel,
     criticalityLabel,
     typeLabel,
-    kindLabel,
     healthLabel,
-    ownerProjectIdentifier,
-    ownerProjectName,
     health,
     incidents,
-    noDeploymentLabel,
+    lastDeployedAt,
     highestSeverityLabel,
     dimmed,
+    focusDimmed,
+    focused,
     accessLevel,
   } = data as TServiceNodeData;
   const state = health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
   const isLite = accessLevel === "lite" || isLiteService(service);
-  const kind = !isLite && "kind" in service ? service.kind : "service";
-  const KindIcon = SERVICE_KIND_ICON[kind] ?? CubeOutline;
   const highestIncident = getHighestSeverityIncident(incidents);
   const hasIncidents = incidents.length > 0 && Boolean(highestIncident);
   const isSevereIncident = highestIncident?.severity === "sev1" || highestIncident?.severity === "sev2";
+  const deployedAgo = lastDeployedAt ? calculateTimeAgo(lastDeployedAt) : "";
+  const deployedAgoShort = lastDeployedAt ? calculateTimeAgoShort(lastDeployedAt) : "";
 
   return (
     <div
@@ -83,6 +81,7 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
       className={cn(
         "group relative w-[256px] transition-opacity duration-150",
         dimmed && "opacity-55",
+        focusDimmed && "opacity-30",
         isLite && "opacity-80"
       )}
     >
@@ -93,36 +92,25 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
       />
       <div
         className={cn(
-          "service-node-card shadow-xs relative flex flex-col gap-2 overflow-hidden rounded-lg border bg-layer-1 p-3 transition-colors duration-150 hover:bg-layer-1-hover",
+          "service-node-card relative flex flex-col gap-2 overflow-hidden rounded-lg border bg-layer-1 p-3 shadow-raised-100 transition-colors duration-150 hover:bg-layer-1-hover",
           HEALTH_BORDER_STYLE[state],
+          focused && "is-focused",
           isLite && "border-dashed"
         )}
-        title={isLite ? `${service.name} — Restricted` : service.name}
+        title={isLite ? `${service.name} — ${typeLabel}` : service.name}
       >
         {/* Top telemetry & identity row */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={cn(
-                "grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-subtle bg-layer-2 text-secondary",
-                state === "down" && "border-danger-strong bg-danger-subtle text-danger-primary",
-                state === "degraded" && "bg-warning-subtle text-warning-primary"
-              )}
-              title={kindLabel ?? typeLabel}
-            >
-              {isLite ? <LockOutline className="h-3 w-3 text-tertiary" /> : <KindIcon className="h-3 w-3" />}
-            </span>
-            {ownerProjectIdentifier ? (
-              <span
-                className="truncate rounded-xs border border-subtle bg-layer-2 px-1.5 py-0.5 font-code text-10 font-medium tracking-wide text-secondary"
-                title={ownerProjectName ?? ownerProjectIdentifier}
-              >
-                {ownerProjectIdentifier}
-              </span>
-            ) : (
-              typeLabel && <span className="truncate text-10 font-medium text-tertiary">{typeLabel}</span>
+          <span
+            className={cn(
+              "inline-flex min-w-0 items-center gap-1 rounded-xs border border-subtle bg-layer-2 px-1.5 py-0.5 text-10 font-medium text-secondary",
+              isLite && "text-tertiary"
             )}
-          </div>
+            title={typeLabel}
+          >
+            {isLite && <LockOutline className="h-3 w-3 shrink-0 text-tertiary" />}
+            <span className="truncate">{typeLabel}</span>
+          </span>
 
           <span
             className={cn(
@@ -180,10 +168,16 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
               )}
             </span>
           ) : (
-            <span className="inline-flex max-w-[96px] shrink-0 items-center gap-1 font-code text-10 text-tertiary tabular-nums">
-              <ClockOutline className="h-3 w-3 shrink-0 text-tertiary" />
-              <span className="truncate">{noDeploymentLabel}</span>
-            </span>
+            lastDeployedAt && (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 font-code text-10 text-secondary tabular-nums"
+                title={deployedAgo}
+                aria-label={deployedAgo}
+              >
+                <ClockOutline className="h-3 w-3 shrink-0 text-tertiary" />
+                <span>{deployedAgoShort}</span>
+              </span>
+            )
           )}
         </div>
       </div>

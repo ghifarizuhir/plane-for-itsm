@@ -21,6 +21,8 @@ type TServiceNodeData = {
   lastDeployedAt?: string | null;
   noDeploymentLabel?: string;
   dimmed?: boolean;
+  focusDimmed?: boolean;
+  focused?: boolean;
 };
 
 const hasSamePosition = (left: Node["position"], right: Node["position"]) => left.x === right.x && left.y === right.y;
@@ -38,7 +40,9 @@ const hasSameData = (left?: TServiceNodeData, right?: TServiceNodeData) =>
   (left?.incidents?.length ?? 0) === (right?.incidents?.length ?? 0) &&
   left?.lastDeployedAt === right?.lastDeployedAt &&
   left?.noDeploymentLabel === right?.noDeploymentLabel &&
-  left?.dimmed === right?.dimmed;
+  left?.dimmed === right?.dimmed &&
+  left?.focusDimmed === right?.focusDimmed &&
+  left?.focused === right?.focused;
 
 /**
  * Merges freshly computed layout nodes into React Flow state while preserving

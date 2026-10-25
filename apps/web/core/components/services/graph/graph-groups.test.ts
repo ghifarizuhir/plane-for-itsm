@@ -103,6 +103,17 @@ describe("grouped layout", () => {
     expect(getNodes(services)).toEqual(getNodes(services));
   });
 
+  it("wraps a large kind into a compact card grid", () => {
+    const services = Array.from({ length: 12 }, (_, index) => makeService(`svc-${index}`));
+
+    const nodes = getNodes(services);
+    const xPositions = new Set(nodes.map((node) => node.position.x));
+    const yPositions = new Set(nodes.map((node) => node.position.y));
+
+    expect(xPositions.size).toBe(4);
+    expect(yPositions.size).toBe(3);
+  });
+
   it("packages different groups without overlapping", () => {
     const services = [
       makeService("p1-svc", { owner_project_id: "p1", project_id: "p1" }),

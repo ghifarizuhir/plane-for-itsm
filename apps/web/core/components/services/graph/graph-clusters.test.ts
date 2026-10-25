@@ -68,12 +68,33 @@ describe("getServiceClusters", () => {
 
     expect(clusters).toHaveLength(1);
     expect(clusters[0]).toMatchObject({
-      x: 76,
-      y: 44,
-      width: 304,
-      height: 184,
+      x: 84,
+      y: 56,
+      width: 288,
+      height: 164,
       label: "Database",
+      count: 1,
+      serviceIds: ["db"],
     });
+  });
+
+  it("counts every member of a cluster", () => {
+    const services = [
+      makeService("db-1", { kind: "database" }),
+      makeService("db-2", { kind: "database" }),
+      makeService("svc", { kind: "service" }),
+    ];
+    const clusters = getServiceClusters(
+      [makeNode("db-1", 0, 0), makeNode("db-2", 0, 200), makeNode("svc", 400, 0)],
+      services,
+      {},
+      t
+    );
+
+    expect(clusters.map((cluster) => [cluster.label, cluster.count])).toEqual([
+      ["Service", 1],
+      ["Database", 2],
+    ]);
   });
 
   it("prefixes the project identifier when multiple projects are visible", () => {

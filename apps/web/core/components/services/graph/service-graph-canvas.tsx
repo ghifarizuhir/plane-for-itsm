@@ -7,21 +7,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MarkerType,
   MiniMap,
   ReactFlow,
+  ReactFlowProvider,
   ViewportPortal,
   useEdgesState,
   useNodesState,
+  useStore,
   type Connection,
   type Edge,
   type Node,
   type ReactFlowInstance,
+  type Viewport,
 } from "@xyflow/react";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
+import { LockOutline } from "@makeplane/propel/icons";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { ILiteService, IService, TServiceDependencyType, TServiceGraphData, TServiceHealth } from "@plane/types";
@@ -31,13 +36,82 @@ import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
 // components
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
-import { RESTRICTED_CLUSTER_STYLE, SERVICE_KIND_CLUSTER_STYLE } from "../kind-config";
-import { getServiceClusters } from "./graph-clusters";
+import { RESTRICTED_CLUSTER_STYLE, SERVICE_KIND_CLUSTER_STYLE, SERVICE_KIND_ICON } from "../kind-config";
+import { getServiceClusters, type TServiceCluster } from "./graph-clusters";
+import { getServiceRelationships } from "./graph-relationships";
+import { ServiceFocusCard } from "./service-focus-card";
 import { ServiceNode } from "./service-node";
-import { getLayoutedElements } from "./use-graph-layout";
+import { CLUSTER_HEADER_HEIGHT, getLayoutedElements } from "./use-graph-layout";
 import { syncGraphNodes } from "./node-sync";
 
 const nodeTypes = { service: ServiceNode };
+
+/** Edge labels only earn their space once the cards and gaps are large enough. */
+const EDGE_LABEL_VISIBLE_ZOOM = 1.1;
+
+/** Leave the floating legend room above the map without shrinking the sides. */
+const FIT_VIEW_PADDING = { top: "56px", right: 0.12, bottom: 0.12, left: 0.12 } as const;
+
+/**
+ * Cluster headers keep a constant screen size: at overview zoom they are the
+ * only readable orientation cue, so they must not shrink with the viewport.
+ */
+function ServiceClusterHeader({ cluster }: { cluster: TServiceCluster }) {
+  const zoom = useStore((state) => state.transform[2]);
+  const scale = 1 / Math.max(zoom, 0.5);
+  const ClusterIcon = cluster.restricted ? LockOutline : SERVICE_KIND_ICON[cluster.kind ?? "other"];
+
+  return (
+    <div
+      className="flex min-w-0 items-center"
+      style={{ height: CLUSTER_HEADER_HEIGHT, gap: 6 * scale, paddingInline: 12 * scale }}
+    >
+      <span className="shrink-0" style={{ width: 14 * scale, height: 14 * scale }}>
+        <ClusterIcon className="h-full w-full" />
+      </span>
+      <span
+        className="min-w-0 truncate font-semibold tracking-[-0.01em]"
+        style={{ fontSize: 11 * scale, lineHeight: 1.2 }}
+      >
+        {cluster.label}
+      </span>
+      <span
+        className="shrink-0 font-code font-medium tabular-nums"
+        style={{ fontSize: 10 * scale, paddingLeft: 4 * scale }}
+      >
+        {cluster.count}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Dot grid kept at a constant screen size so it stays legible at the zoom
+ * levels a full topology settles on (React Flow scales patterns with zoom).
+ */
+function CanvasBackground() {
+  const zoom = useStore((state) => state.transform[2]);
+  const scale = Math.max(zoom, 0.05);
+
+  return (
+    <>
+      <Background
+        id="service-graph-dots"
+        variant={BackgroundVariant.Dots}
+        gap={12 / scale}
+        size={2.2 / scale}
+        color="var(--canvas-dot)"
+      />
+      <Background
+        id="service-graph-dots-major"
+        variant={BackgroundVariant.Dots}
+        gap={24 / scale}
+        size={2.8 / scale}
+        color="var(--canvas-dot-strong)"
+      />
+    </>
+  );
+}
 
 const DEPENDENCY_TYPE_LABEL_KEYS: Record<TServiceDependencyType, string> = {
   depends_on: "service.detail.depends_on",
@@ -55,7 +129,8 @@ export type TServiceGraphCanvasProps = {
   highlightedServiceIds?: string[];
   /** Optional lookup for owner project badges on service nodes. */
   projectLookup?: Record<string, { identifier: string; name: string }>;
-  onNodeClick?: (serviceId: string) => void;
+  /** Opens a service (peek on the catalog page, new tab in the war room). */
+  onNodeOpen?: (serviceId: string) => void;
   onConnect?: (sourceServiceId: string, targetServiceId: string) => void;
   onEdgeDelete?: (dependencyId: string) => void;
   onNodeDragStop?: (serviceId: string, position: { x: number; y: number }) => void;
@@ -74,7 +149,7 @@ export function ServiceGraphCanvas({
   highlightedServiceIds,
   projectLookup,
   layoutEpoch = 0,
-  onNodeClick,
+  onNodeOpen,
   onConnect,
   onEdgeDelete,
   onNodeDragStop,
@@ -86,11 +161,21 @@ export function ServiceGraphCanvas({
   const isDark = resolvedTheme?.includes("dark") ?? false;
   // states
   const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
+  const [showEdgeLabels, setShowEdgeLabels] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   // refs
   const fitDone = useRef(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   // derived values
   const highlighted = useMemo(() => new Set(highlightedServiceIds ?? []), [highlightedServiceIds]);
+  const selectedService = selectedServiceId
+    ? (graphData.services.find((service) => service.id === selectedServiceId) ?? null)
+    : null;
+  const selectedHealth = selectedServiceId ? graphData.health[selectedServiceId] : undefined;
+  const relationships = useMemo(
+    () => (selectedServiceId ? getServiceRelationships(selectedServiceId, graphData.dependencies) : null),
+    [graphData.dependencies, selectedServiceId]
+  );
 
   const getMiniMapNodeColor = useCallback((node: Node) => {
     const health = (node.data as { health?: TServiceHealth } | undefined)?.health ?? DEFAULT_HEALTH;
@@ -112,8 +197,6 @@ export function ServiceGraphCanvas({
         const incidents = snapshot?.incidents ?? [];
         const highestIncident = getHighestSeverityIncident(incidents);
         const isLite = isLiteService(service);
-        const ownerProjectId = !isLite ? (service.owner_project_id ?? service.project_id) : null;
-        const ownerProject = ownerProjectId ? projectLookup?.[ownerProjectId] : undefined;
         return {
           ...node,
           data: {
@@ -122,23 +205,21 @@ export function ServiceGraphCanvas({
             statusLabel: t(`service.status_values.${service.status}`),
             criticalityLabel: t(`service.criticality_values.${service.criticality}`),
             typeLabel: !isLite ? t(`service.type_values.${service.type}`) : t("service.lite.restricted"),
-            kindLabel: !isLite ? t(`service.kind_values.${service.kind}`) : undefined,
             healthLabel: t(HEALTH_CONFIG[healthState].label_key),
-            ownerProjectIdentifier: ownerProject?.identifier,
-            ownerProjectName: ownerProject?.name,
             health: healthState,
             incidents,
             lastDeployedAt: snapshot?.last_deployed_at ?? null,
-            noDeploymentLabel: t("service.deploy.no_deployment"),
             highestSeverityLabel: highestIncident
               ? t(`service.incident_severity.${highestIncident.severity}`)
               : undefined,
-            dimmed: highlighted.size > 0 && !highlighted.has(service.id),
+            dimmed: !relationships && highlighted.size > 0 && !highlighted.has(service.id),
+            focusDimmed: relationships ? !relationships.nodeIds.has(service.id) : false,
+            focused: service.id === selectedServiceId,
           },
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change (t is re-created per render)
-    [layoutNodes, currentLocale, graphData.health, highlighted, projectLookup]
+    [layoutNodes, currentLocale, graphData.health, highlighted, relationships, selectedServiceId]
   );
 
   const translatedEdges = useMemo<Edge[]>(
@@ -155,11 +236,15 @@ export function ServiceGraphCanvas({
           : isDegradedPath
             ? "var(--bg-warning-primary)"
             : "var(--border-strong)";
+        const isRelated = relationships?.edgeIds.has(edge.id) ?? false;
+        const isMuted = relationships !== null && !isRelated;
+        const focusedStroke = isRelated && !isDownPath && !isDegradedPath ? "var(--border-accent-strong)" : edgeStroke;
 
         return {
           ...edge,
-          animated: isDownPath,
-          label: depType !== "depends_on" ? t(DEPENDENCY_TYPE_LABEL_KEYS[depType]) : undefined,
+          animated: isDownPath && !isMuted,
+          label:
+            showEdgeLabels && !isMuted && depType !== "depends_on" ? t(DEPENDENCY_TYPE_LABEL_KEYS[depType]) : undefined,
           labelStyle: {
             fill: "var(--txt-secondary)",
             fontSize: 10,
@@ -171,26 +256,31 @@ export function ServiceGraphCanvas({
             stroke: "var(--border-subtle)",
             strokeWidth: 1,
           },
-          labelBgPadding: [6, 3] as [number, number],
-          labelBgBorderRadius: 4,
+          labelBgPadding: [7, 4] as [number, number],
+          labelBgBorderRadius: 6,
           style: {
-            stroke: edgeStroke,
-            strokeWidth: isDownPath ? 2 : 1.5,
+            stroke: focusedStroke,
+            strokeWidth: isDownPath || isRelated ? 2 : 1.5,
+            opacity: isMuted ? 0.08 : 1,
           },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 14,
-            height: 14,
-            color: edgeStroke,
-          },
+          markerEnd: isMuted
+            ? undefined
+            : {
+                type: MarkerType.ArrowClosed,
+                width: 14,
+                height: 14,
+                color: focusedStroke,
+              },
+          zIndex: isRelated ? 2 : 0,
         };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change
-    [layoutEdges, currentLocale, graphData.health]
+    [layoutEdges, currentLocale, graphData.health, showEdgeLabels, relationships]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(translatedEdges);
+  const selectedNode = selectedServiceId ? (nodes.find((node) => node.id === selectedServiceId) ?? null) : null;
 
   const clusters = useMemo(
     () => getServiceClusters(nodes, graphData.services, projectLookup, t),
@@ -209,7 +299,11 @@ export function ServiceGraphCanvas({
             edge.id === next?.id &&
             edge.label === next?.label &&
             edge.animated === next?.animated &&
-            edge.style?.stroke === next?.style?.stroke
+            edge.style?.stroke === next?.style?.stroke &&
+            edge.style?.opacity === next?.style?.opacity &&
+            edge.style?.strokeWidth === next?.style?.strokeWidth &&
+            edge.zIndex === next?.zIndex &&
+            Boolean(edge.markerEnd) === Boolean(next?.markerEnd)
           );
         })
       )
@@ -243,12 +337,57 @@ export function ServiceGraphCanvas({
     [onNodeDragStop]
   );
 
-  const handleNodeClick = useCallback(
+  const handleNodeClick = useCallback((_event: unknown, node: Node) => {
+    setSelectedServiceId(node.id);
+  }, []);
+
+  const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: Node) => {
-      onNodeClick?.(node.id);
+      onNodeOpen?.(node.id);
     },
-    [onNodeClick]
+    [onNodeOpen]
   );
+
+  const handlePaneClick = useCallback(() => {
+    setSelectedServiceId(null);
+  }, []);
+
+  const closeFocus = useCallback(() => {
+    setSelectedServiceId(null);
+    setNodes((current) => current.map((node) => (node.selected ? { ...node, selected: false } : node)));
+  }, [setNodes]);
+  const openSelectedService = useCallback(() => {
+    if (selectedServiceId) onNodeOpen?.(selectedServiceId);
+  }, [onNodeOpen, selectedServiceId]);
+
+  const syncEdgeLabels = useCallback((zoom: number) => {
+    setShowEdgeLabels((previous) => {
+      const next = zoom >= EDGE_LABEL_VISIBLE_ZOOM;
+      return previous === next ? previous : next;
+    });
+  }, []);
+
+  const handleMove = useCallback(
+    (_event: unknown, viewport: Viewport) => {
+      syncEdgeLabels(viewport.zoom);
+    },
+    [syncEdgeLabels]
+  );
+
+  useEffect(() => {
+    if (!selectedServiceId) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeFocus();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeFocus, selectedServiceId]);
+
+  useEffect(() => {
+    if (selectedServiceId && !graphData.services.some((service) => service.id === selectedServiceId)) {
+      setSelectedServiceId(null);
+    }
+  }, [graphData.services, selectedServiceId]);
 
   // Re-fit after topology/layout changes (service/dependency mutations or manual
   // Re-layout). Deduplicated at the source: health polls, language changes, and
@@ -263,7 +402,7 @@ export function ServiceGraphCanvas({
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        instance.fitView({ padding: 0.25, duration: 300 });
+        instance.fitView({ padding: FIT_VIEW_PADDING, duration: 300 });
       });
     });
 
@@ -283,59 +422,85 @@ export function ServiceGraphCanvas({
       const { width, height } = node.getBoundingClientRect();
       if (width === 0 || height === 0) return;
       fitDone.current = true;
-      instance.fitView({ padding: 0.25 });
+      instance.fitView({ padding: FIT_VIEW_PADDING });
+      syncEdgeLabels(instance.getZoom());
     };
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [instance]);
+  }, [instance, syncEdgeLabels]);
 
   return (
-    <div ref={wrapperRef} className="h-full w-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        className="service-graph-flow"
-        colorMode={isDark ? "dark" : "light"}
-        defaultMarkerColor="var(--border-strong)"
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={readOnly ? undefined : handleConnect}
-        onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
-        onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
-        onNodeClick={handleNodeClick}
-        nodesDraggable={!readOnly}
-        nodesConnectable={!readOnly}
-        edgesFocusable={!readOnly}
-        elementsSelectable={!readOnly}
-        deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
-        onInit={setInstance}
-      >
-        <ViewportPortal>
-          {clusters.map((cluster) => (
-            <div
-              key={cluster.id}
-              className={cn(
-                "pointer-events-none absolute rounded-xl border",
-                cluster.restricted ? RESTRICTED_CLUSTER_STYLE : SERVICE_KIND_CLUSTER_STYLE[cluster.kind ?? "other"]
-              )}
-              style={{
-                transform: `translate(${cluster.x}px, ${cluster.y}px)`,
-                width: cluster.width,
-                height: cluster.height,
-                zIndex: 0,
-              }}
-            >
-              <span className="absolute top-2 left-3 text-11 font-medium">{cluster.label}</span>
-            </div>
-          ))}
-        </ViewportPortal>
-        <Background color="var(--border-subtle-1)" />
-        <Controls />
-        {!readOnly && <MiniMap nodeColor={getMiniMapNodeColor} />}
-      </ReactFlow>
-    </div>
+    <ReactFlowProvider>
+      <div ref={wrapperRef} className="relative h-full w-full">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          className="service-graph-flow"
+          colorMode={isDark ? "dark" : "light"}
+          defaultMarkerColor="var(--border-strong)"
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onMove={handleMove}
+          onConnect={readOnly ? undefined : handleConnect}
+          onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
+          onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
+          onNodeClick={handleNodeClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          onPaneClick={handlePaneClick}
+          nodesDraggable={!readOnly}
+          nodesConnectable={!readOnly}
+          edgesFocusable={!readOnly}
+          elementsSelectable={!readOnly}
+          deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
+          minZoom={0.05}
+          proOptions={{ hideAttribution: true }}
+          onInit={setInstance}
+        >
+          <ViewportPortal>
+            {clusters.map((cluster) => {
+              const isRelatedCluster =
+                !relationships || cluster.serviceIds.some((serviceId) => relationships.nodeIds.has(serviceId));
+
+              return (
+                <div
+                  key={cluster.id}
+                  className={cn(
+                    "pointer-events-none absolute rounded-xl border transition-opacity duration-150",
+                    cluster.restricted ? RESTRICTED_CLUSTER_STYLE : SERVICE_KIND_CLUSTER_STYLE[cluster.kind ?? "other"]
+                  )}
+                  style={{
+                    transform: `translate(${cluster.x}px, ${cluster.y}px)`,
+                    width: cluster.width,
+                    height: cluster.height,
+                    opacity: isRelatedCluster ? 1 : 0.35,
+                    zIndex: 0,
+                  }}
+                >
+                  <ServiceClusterHeader cluster={cluster} />
+                </div>
+              );
+            })}
+          </ViewportPortal>
+          <CanvasBackground />
+          <Controls showInteractive={false} />
+          {!readOnly && <MiniMap pannable nodeColor={getMiniMapNodeColor} />}
+        </ReactFlow>
+        {selectedService && selectedNode && (
+          <ServiceFocusCard
+            key={selectedService.id}
+            node={selectedNode}
+            service={selectedService}
+            relationshipCount={relationships?.edgeIds.size ?? 0}
+            health={selectedHealth?.health}
+            lastDeployedAt={selectedHealth?.last_deployed_at}
+            onClose={closeFocus}
+            onOpen={onNodeOpen ? openSelectedService : undefined}
+          />
+        )}
+      </div>
+    </ReactFlowProvider>
   );
 }

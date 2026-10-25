@@ -100,7 +100,7 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
     }
   };
 
-  const handleNodeClick = (serviceId: string) => {
+  const handleNodeOpen = (serviceId: string) => {
     window.open(`/${workspaceSlug}/services/${serviceId}`, "_blank", "noopener,noreferrer");
   };
 
@@ -150,7 +150,7 @@ export const WarRoomServiceMap = observer(function WarRoomServiceMap({
             readOnly
             highlightedServiceIds={blastRadius.affectedIds}
             projectLookup={projectLookup}
-            onNodeClick={handleNodeClick}
+            onNodeOpen={handleNodeOpen}
           />
         )}
       </div>

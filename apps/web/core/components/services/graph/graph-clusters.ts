@@ -20,6 +20,8 @@ export type TServiceCluster = {
   kind: TServiceKind | null;
   restricted: boolean;
   label: string;
+  count: number;
+  serviceIds: string[];
   x: number;
   y: number;
   width: number;
@@ -31,6 +33,8 @@ type TClusterBucket = {
   projectId: string | null;
   kind: TServiceKind | null;
   restricted: boolean;
+  count: number;
+  serviceIds: string[];
   minX: number;
   minY: number;
   maxX: number;
@@ -62,12 +66,16 @@ export const getServiceClusters = (
       projectId: isLiteService(service) ? null : service.owner_project_id,
       kind: isLiteService(service) ? null : service.kind,
       restricted: isLiteService(service),
+      count: 0,
+      serviceIds: [],
       minX: Number.POSITIVE_INFINITY,
       minY: Number.POSITIVE_INFINITY,
       maxX: Number.NEGATIVE_INFINITY,
       maxY: Number.NEGATIVE_INFINITY,
     };
 
+    bucket.count += 1;
+    bucket.serviceIds.push(service.id);
     bucket.minX = Math.min(bucket.minX, node.position.x);
     bucket.minY = Math.min(bucket.minY, node.position.y);
     bucket.maxX = Math.max(bucket.maxX, node.position.x + width);
@@ -105,6 +113,8 @@ export const getServiceClusters = (
       kind: bucket.kind,
       restricted: bucket.restricted,
       label,
+      count: bucket.count,
+      serviceIds: bucket.serviceIds,
       x: bucket.minX - CLUSTER_PADDING,
       y: bucket.minY - CLUSTER_HEADER_HEIGHT - CLUSTER_PADDING,
       width: bucket.maxX - bucket.minX + CLUSTER_PADDING * 2,
