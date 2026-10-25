@@ -31,6 +31,7 @@ import { isLiteService } from "@/services/service.helpers";
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceNode } from "./service-node";
 import { getLayoutedElements } from "./use-graph-layout";
+import { syncGraphNodes } from "./node-sync";
 
 const nodeTypes = { service: ServiceNode };
 
@@ -184,60 +185,7 @@ export function ServiceGraphCanvas({
   const [edges, setEdges, onEdgesChange] = useEdgesState(translatedEdges);
 
   useEffect(() => {
-    setNodes((prev) => {
-      if (
-        prev.length === translatedNodes.length &&
-        prev.every((node, i) => {
-          const next = translatedNodes[i];
-          if (node.id !== next?.id) return false;
-          const prevData = node.data as
-            | {
-                statusLabel?: string;
-                criticalityLabel?: string;
-                typeLabel?: string;
-                healthLabel?: string;
-                ownerProjectIdentifier?: string;
-                health?: string;
-                incidents?: unknown[];
-                lastDeployedAt?: string | null;
-                noDeploymentLabel?: string;
-                dimmed?: boolean;
-              }
-            | undefined;
-          const nextData = next?.data as
-            | {
-                statusLabel?: string;
-                criticalityLabel?: string;
-                typeLabel?: string;
-                healthLabel?: string;
-                ownerProjectIdentifier?: string;
-                health?: string;
-                incidents?: unknown[];
-                lastDeployedAt?: string | null;
-                noDeploymentLabel?: string;
-                dimmed?: boolean;
-              }
-            | undefined;
-          return (
-            prevData?.statusLabel === nextData?.statusLabel &&
-            prevData?.criticalityLabel === nextData?.criticalityLabel &&
-            prevData?.typeLabel === nextData?.typeLabel &&
-            prevData?.healthLabel === nextData?.healthLabel &&
-            prevData?.ownerProjectIdentifier === nextData?.ownerProjectIdentifier &&
-            prevData?.health === nextData?.health &&
-            prevData?.lastDeployedAt === nextData?.lastDeployedAt &&
-            prevData?.noDeploymentLabel === nextData?.noDeploymentLabel &&
-            prevData?.dimmed === nextData?.dimmed &&
-            (prevData?.incidents?.length ?? 0) === (nextData?.incidents?.length ?? 0)
-          );
-        })
-      )
-        return prev;
-      const selectedById = new Map(prev.map((node) => [node.id, node.selected]));
-      return translatedNodes.map((node) =>
-        selectedById.has(node.id) ? { ...node, selected: selectedById.get(node.id) } : node
-      );
-    });
+    setNodes((prev) => syncGraphNodes(prev, translatedNodes));
     setEdges((prev) => {
       if (
         prev.length === translatedEdges.length &&
