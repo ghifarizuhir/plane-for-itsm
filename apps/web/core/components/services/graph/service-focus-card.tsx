@@ -211,10 +211,10 @@ export function ServiceFocusCard({
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.14, ease: "easeOut" }}
                 className="inline-flex shrink-0 items-center gap-1 self-center font-code text-9 font-medium tracking-[0.12em] text-tertiary uppercase"
-                title={t("common.pin")}
+                title={t("pin")}
               >
                 <span aria-hidden className="h-1 w-1 rounded-full bg-[var(--focus-accent)]" />
-                {t("common.pin")}
+                {t("pin")}
               </motion.span>
             )}
           </AnimatePresence>
@@ -222,8 +222,8 @@ export function ServiceFocusCard({
           <button
             type="button"
             onClick={onClose}
-            aria-label={t("common.close")}
-            title={t("common.close")}
+            aria-label={t("close")}
+            title={t("close")}
             className="-mt-0.5 -mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-tertiary transition-colors hover:bg-layer-transparent-hover hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none"
           >
             <CloseOutline className="h-3.5 w-3.5" />
@@ -277,7 +277,7 @@ export function ServiceFocusCard({
                   aria-controls={descriptionId}
                   className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-10 font-medium text-secondary transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none"
                 >
-                  {expanded ? t("common.show_less") : t("common.show_all")}
+                  {expanded ? t("show_less") : t("show_all")}
                   <motion.span
                     aria-hidden
                     animate={{ rotate: expanded ? 180 : 0 }}
@@ -339,10 +339,10 @@ export function ServiceFocusCard({
             <button
               type="button"
               onClick={onOpen}
-              aria-label={`${t("common.preview")}: ${service.name}`}
+              aria-label={`${t("preview")}: ${service.name}`}
               className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-subtle bg-layer-2 px-2 py-1 text-10 font-medium text-secondary transition-colors hover:border-strong hover:bg-layer-2-hover hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none"
             >
-              {t("common.preview")}
+              {t("preview")}
               <NewTabArrowOutline className="h-3 w-3" />
             </button>
           )}
