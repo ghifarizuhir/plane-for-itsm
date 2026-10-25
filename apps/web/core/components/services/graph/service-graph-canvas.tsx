@@ -11,6 +11,7 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  ViewportPortal,
   useEdgesState,
   useNodesState,
   type Connection,
@@ -24,11 +25,14 @@ import { useTheme } from "next-themes";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import type { ILiteService, IService, TServiceDependencyType, TServiceGraphData, TServiceHealth } from "@plane/types";
+import { cn } from "@plane/utils";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
 // components
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
+import { RESTRICTED_CLUSTER_STYLE, SERVICE_KIND_CLUSTER_STYLE } from "../kind-config";
+import { getServiceClusters } from "./graph-clusters";
 import { ServiceNode } from "./service-node";
 import { getLayoutedElements } from "./use-graph-layout";
 import { syncGraphNodes } from "./node-sync";
@@ -118,6 +122,7 @@ export function ServiceGraphCanvas({
             statusLabel: t(`service.status_values.${service.status}`),
             criticalityLabel: t(`service.criticality_values.${service.criticality}`),
             typeLabel: !isLite ? t(`service.type_values.${service.type}`) : t("service.lite.restricted"),
+            kindLabel: !isLite ? t(`service.kind_values.${service.kind}`) : undefined,
             healthLabel: t(HEALTH_CONFIG[healthState].label_key),
             ownerProjectIdentifier: ownerProject?.identifier,
             ownerProjectName: ownerProject?.name,
@@ -187,6 +192,12 @@ export function ServiceGraphCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(translatedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(translatedEdges);
 
+  const clusters = useMemo(
+    () => getServiceClusters(nodes, graphData.services, projectLookup, t),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentLocale re-runs labels on language change
+    [nodes, graphData.services, projectLookup, currentLocale]
+  );
+
   useEffect(() => {
     setNodes((prev) => syncGraphNodes(prev, translatedNodes));
     setEdges((prev) => {
@@ -252,7 +263,7 @@ export function ServiceGraphCanvas({
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        instance.fitView({ padding: 0.2, duration: 300 });
+        instance.fitView({ padding: 0.25, duration: 300 });
       });
     });
 
@@ -272,7 +283,7 @@ export function ServiceGraphCanvas({
       const { width, height } = node.getBoundingClientRect();
       if (width === 0 || height === 0) return;
       fitDone.current = true;
-      instance.fitView();
+      instance.fitView({ padding: 0.25 });
     };
     fit();
     const observer = new ResizeObserver(fit);
@@ -302,6 +313,25 @@ export function ServiceGraphCanvas({
         deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
         onInit={setInstance}
       >
+        <ViewportPortal>
+          {clusters.map((cluster) => (
+            <div
+              key={cluster.id}
+              className={cn(
+                "pointer-events-none absolute rounded-xl border",
+                cluster.restricted ? RESTRICTED_CLUSTER_STYLE : SERVICE_KIND_CLUSTER_STYLE[cluster.kind ?? "other"]
+              )}
+              style={{
+                transform: `translate(${cluster.x}px, ${cluster.y}px)`,
+                width: cluster.width,
+                height: cluster.height,
+                zIndex: 0,
+              }}
+            >
+              <span className="absolute top-2 left-3 text-11 font-medium">{cluster.label}</span>
+            </div>
+          ))}
+        </ViewportPortal>
         <Background color="var(--border-subtle-1)" />
         <Controls />
         {!readOnly && <MiniMap nodeColor={getMiniMapNodeColor} />}

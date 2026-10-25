@@ -12,6 +12,7 @@ type TServiceNodeData = {
   statusLabel?: string;
   criticalityLabel?: string;
   typeLabel?: string;
+  kindLabel?: string;
   healthLabel?: string;
   ownerProjectIdentifier?: string;
   ownerProjectName?: string;
@@ -29,6 +30,7 @@ const hasSameData = (left?: TServiceNodeData, right?: TServiceNodeData) =>
   left?.statusLabel === right?.statusLabel &&
   left?.criticalityLabel === right?.criticalityLabel &&
   left?.typeLabel === right?.typeLabel &&
+  left?.kindLabel === right?.kindLabel &&
   left?.healthLabel === right?.healthLabel &&
   left?.ownerProjectIdentifier === right?.ownerProjectIdentifier &&
   left?.ownerProjectName === right?.ownerProjectName &&

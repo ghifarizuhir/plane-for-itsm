@@ -4,31 +4,16 @@
  * See the LICENSE file for details.
  */
 
-import type { ComponentType } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import {
-  BoxesOutline,
-  ClockOutline,
-  CubeOutline,
-  GlobeOutline,
-  LockOutline,
-  ServerOutline,
-  WarningTriangleOutline,
-} from "@makeplane/propel/icons";
+import { ClockOutline, CubeOutline, LockOutline, WarningTriangleOutline } from "@makeplane/propel/icons";
 // plane imports
-import type {
-  ILiteService,
-  IService,
-  IServiceIncident,
-  TServiceCriticality,
-  TServiceHealth,
-  TServiceType,
-} from "@plane/types";
+import type { ILiteService, IService, IServiceIncident, TServiceCriticality, TServiceHealth } from "@plane/types";
 import { cn } from "@plane/utils";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
 // local imports
+import { SERVICE_KIND_ICON } from "../kind-config";
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
 import { ServiceHealthDot } from "../health/service-health-dot";
 
@@ -38,6 +23,7 @@ export type TServiceNodeData = {
   statusLabel: string;
   criticalityLabel: string;
   typeLabel?: string;
+  kindLabel?: string;
   healthLabel?: string;
   ownerProjectIdentifier?: string;
   ownerProjectName?: string;
@@ -48,13 +34,6 @@ export type TServiceNodeData = {
   highestSeverityLabel?: string;
   /** Blast-radius map: dependency neighbors are dimmed. */
   dimmed?: boolean;
-};
-
-const SERVICE_TYPE_ICON: Record<TServiceType, ComponentType<{ className?: string }>> = {
-  internal: CubeOutline,
-  external: GlobeOutline,
-  infrastructure: ServerOutline,
-  third_party: BoxesOutline,
 };
 
 const CRITICALITY_BADGE_STYLE: Record<TServiceCriticality, string> = {
@@ -78,6 +57,7 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
     statusLabel,
     criticalityLabel,
     typeLabel,
+    kindLabel,
     healthLabel,
     ownerProjectIdentifier,
     ownerProjectName,
@@ -91,8 +71,8 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
   const state = health ?? DEFAULT_HEALTH;
   const config = HEALTH_CONFIG[state];
   const isLite = accessLevel === "lite" || isLiteService(service);
-  const serviceType: TServiceType = !isLite && "type" in service ? service.type : "internal";
-  const TypeIcon = SERVICE_TYPE_ICON[serviceType] ?? CubeOutline;
+  const kind = !isLite && "kind" in service ? service.kind : "service";
+  const KindIcon = SERVICE_KIND_ICON[kind] ?? CubeOutline;
   const highestIncident = getHighestSeverityIncident(incidents);
   const hasIncidents = incidents.length > 0 && Boolean(highestIncident);
   const isSevereIncident = highestIncident?.severity === "sev1" || highestIncident?.severity === "sev2";
@@ -128,9 +108,9 @@ export function ServiceNode({ data }: NodeProps<Node<TServiceNodeData>>) {
                 state === "down" && "border-danger-strong bg-danger-subtle text-danger-primary",
                 state === "degraded" && "bg-warning-subtle text-warning-primary"
               )}
-              title={typeLabel}
+              title={kindLabel ?? typeLabel}
             >
-              {isLite ? <LockOutline className="h-3 w-3 text-tertiary" /> : <TypeIcon className="h-3 w-3" />}
+              {isLite ? <LockOutline className="h-3 w-3 text-tertiary" /> : <KindIcon className="h-3 w-3" />}
             </span>
             {ownerProjectIdentifier ? (
               <span

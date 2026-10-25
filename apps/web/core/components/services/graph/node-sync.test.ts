@@ -19,6 +19,7 @@ const makeNode = (id: string, service = { id, name: id }): Node => ({
     statusLabel: "Active",
     criticalityLabel: "Medium",
     typeLabel: "Internal",
+    kindLabel: "Database",
     healthLabel: "Healthy",
     ownerProjectIdentifier: "P1",
     ownerProjectName: "Project One",
@@ -59,6 +60,15 @@ describe("syncGraphNodes", () => {
     const result = syncGraphNodes(prev, next);
 
     expect((result[0].data as { healthLabel: string }).healthLabel).toBe("Degraded");
+  });
+
+  it("applies a new kind label", () => {
+    const prev = [makeNode("a")];
+    const next = [{ ...prev[0], data: { ...prev[0].data, kindLabel: "Server" } }];
+
+    const result = syncGraphNodes(prev, next);
+
+    expect((result[0].data as { kindLabel: string }).kindLabel).toBe("Server");
   });
 
   it("applies a new service reference", () => {
