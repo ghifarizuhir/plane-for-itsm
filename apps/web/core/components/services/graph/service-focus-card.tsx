@@ -6,9 +6,9 @@
 
 import { useEffect, useId, useState, type CSSProperties } from "react";
 import { useStore, type Node } from "@xyflow/react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ChevronDownOutline,
-  ChevronUpOutline,
   ClockOutline,
   CloseOutline,
   LinkOutline,
@@ -61,6 +61,7 @@ export function ServiceFocusCard({
   relationshipCount,
   health,
   lastDeployedAt,
+  pinned,
   onClose,
   onOpen,
   onPointerEnter,
@@ -68,6 +69,7 @@ export function ServiceFocusCard({
 }: TServiceFocusCardProps) {
   // plane hooks
   const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
   // ids
   const descriptionId = useId();
   // react flow store — the card follows the viewport while panning/zooming
@@ -132,9 +134,23 @@ export function ServiceFocusCard({
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
     >
-      <div
+      <motion.div
         className="service-focus-card relative flex flex-col overflow-hidden rounded-xl border border-strong bg-surface-1"
-        style={{ maxHeight, "--focus-accent": accent } as CSSProperties}
+        style={
+          {
+            maxHeight,
+            transformOrigin: `${pointerLeft}px ${placeAbove ? "bottom" : "top"}`,
+            "--focus-accent": accent,
+          } as CSSProperties
+        }
+        initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: placeAbove ? 8 : -8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={
+          reducedMotion
+            ? { opacity: 0 }
+            : { opacity: 0, scale: 0.98, y: placeAbove ? 6 : -6, transition: { duration: 0.12, ease: "easeOut" } }
+        }
+        transition={reducedMotion ? { duration: 0.12 } : { type: "spring", stiffness: 380, damping: 30, mass: 0.7 }}
       >
         <span
           aria-hidden
@@ -147,7 +163,12 @@ export function ServiceFocusCard({
           style={{ backgroundImage: `radial-gradient(120% 100% at 18% 0%, ${accent}, transparent 68%)` }}
         />
 
-        <header className="relative flex items-start gap-3 px-3.5 pt-3.5 pb-3">
+        <motion.header
+          className="relative flex items-start gap-3 px-3.5 pt-3.5 pb-3"
+          initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0, duration: 0.18, ease: "easeOut" }}
+        >
           <span
             className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] border"
             style={{
@@ -182,6 +203,22 @@ export function ServiceFocusCard({
             </p>
           </div>
 
+          <AnimatePresence initial={false}>
+            {pinned && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.14, ease: "easeOut" }}
+                className="inline-flex shrink-0 items-center gap-1 self-center font-code text-9 font-medium tracking-[0.12em] text-tertiary uppercase"
+                title={t("common.pin")}
+              >
+                <span aria-hidden className="h-1 w-1 rounded-full bg-[var(--focus-accent)]" />
+                {t("common.pin")}
+              </motion.span>
+            )}
+          </AnimatePresence>
+
           <button
             type="button"
             onClick={onClose}
@@ -191,9 +228,14 @@ export function ServiceFocusCard({
           >
             <CloseOutline className="h-3.5 w-3.5" />
           </button>
-        </header>
+        </motion.header>
 
-        <div className="relative flex flex-wrap items-center gap-1.5 px-3.5 pb-3">
+        <motion.div
+          className="relative flex flex-wrap items-center gap-1.5 px-3.5 pb-3"
+          initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03, duration: 0.18, ease: "easeOut" }}
+        >
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-10 font-medium",
@@ -214,10 +256,15 @@ export function ServiceFocusCard({
           >
             {criticalityLabel}
           </span>
-        </div>
+        </motion.div>
 
         {hasDescription && (
-          <div className="flex min-h-0 flex-1 flex-col border-t border-subtle">
+          <motion.div
+            className="flex min-h-0 flex-1 flex-col border-t border-subtle"
+            initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05, duration: 0.18, ease: "easeOut" }}
+          >
             <div className="flex items-center justify-between gap-2 px-3.5 pt-2">
               <span className="font-code text-9 font-medium tracking-[0.14em] text-tertiary uppercase">
                 {t("service.fields.description")}
@@ -231,11 +278,14 @@ export function ServiceFocusCard({
                   className="inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-10 font-medium text-secondary transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none"
                 >
                   {expanded ? t("common.show_less") : t("common.show_all")}
-                  {expanded ? (
-                    <ChevronUpOutline className="h-3 w-3 shrink-0" />
-                  ) : (
-                    <ChevronDownOutline className="h-3 w-3 shrink-0" />
-                  )}
+                  <motion.span
+                    aria-hidden
+                    animate={{ rotate: expanded ? 180 : 0 }}
+                    transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 30 }}
+                    className="shrink-0"
+                  >
+                    <ChevronDownOutline className="h-3 w-3" />
+                  </motion.span>
                 </button>
               )}
             </div>
@@ -259,10 +309,15 @@ export function ServiceFocusCard({
                 />
               )}
             </div>
-          </div>
+          </motion.div>
         )}
 
-        <footer className="mt-auto flex shrink-0 items-center gap-2 border-t border-subtle px-3 py-2">
+        <motion.footer
+          className="mt-auto flex shrink-0 items-center gap-2 border-t border-subtle px-3 py-2"
+          initial={reducedMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.07, duration: 0.18, ease: "easeOut" }}
+        >
           <span
             className="inline-flex min-w-0 items-center gap-1.5 text-10 text-tertiary"
             title={t("service.relationships.title")}
@@ -291,8 +346,8 @@ export function ServiceFocusCard({
               <NewTabArrowOutline className="h-3 w-3" />
             </button>
           )}
-        </footer>
-      </div>
+        </motion.footer>
+      </motion.div>
 
       <span
         aria-hidden
