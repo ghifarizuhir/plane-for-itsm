@@ -92,7 +92,7 @@ export function ScheduleRunInboxDetail({ workspaceSlug, scheduleRun, embedRemove
         ) : runs === null ? (
           <p className="text-sm text-tertiary">Loading run output…</p>
         ) : run ? (
-          <ScheduleRunsList runs={[run]} />
+          <ScheduleRunsList runs={[run]} defaultExpanded />
         ) : (
           <div className="rounded-md border border-subtle bg-layer-1 p-3">
             <p className="text-xs text-tertiary">

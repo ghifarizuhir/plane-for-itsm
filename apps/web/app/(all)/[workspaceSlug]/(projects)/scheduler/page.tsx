@@ -11,9 +11,7 @@ export default function WorkspaceSchedulerPage() {
   return (
     <>
       <PageHead title="Scheduler" />
-      <div className="relative h-full w-full overflow-hidden overflow-y-auto">
-        <SchedulerView />
-      </div>
+      <SchedulerView />
     </>
   );
 }

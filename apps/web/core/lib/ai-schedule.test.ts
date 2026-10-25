@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   AI_SCHEDULE_TOOLS,
+  compactScheduleCadence,
   diffScheduleUpdate,
   filterSchedules,
+  groupSchedules,
   humanizeSchedule,
   isScheduleCommand,
   isScheduleRunNotification,
   isStructuredProposal,
+  orderSchedules,
   runDurationInSeconds,
   scheduleDescription,
   scheduleRunNotificationHref,
@@ -237,6 +240,78 @@ describe("filterSchedules", () => {
       "late",
       "paused",
     ]);
+  });
+});
+
+describe("compactScheduleCadence", () => {
+  it("renders a short cadence for each frequency", () => {
+    expect(compactScheduleCadence({ frequency: "hourly", time: "09:30" })).toBe("Hourly · :30");
+    expect(compactScheduleCadence({ frequency: "daily", time: "09:00" })).toBe("Daily · 09:00");
+    expect(compactScheduleCadence({ frequency: "weekly", time: "09:00", day_of_week: 3 })).toBe("Weekly · Wed 09:00");
+    expect(compactScheduleCadence({ frequency: "monthly", time: "09:00", day_of_month: 15 })).toBe(
+      "Monthly · day 15 · 09:00"
+    );
+  });
+});
+
+describe("orderSchedules", () => {
+  it("orders by name ascending, active first for ties", () => {
+    const rows = [
+      schedule({ id: "b", name: "Beta" }),
+      schedule({ id: "a", name: "alpha", enabled: false }),
+      schedule({ id: "c", name: "Alpha", enabled: true }),
+    ];
+    expect(orderSchedules(rows, "name").map((row) => row.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("orders newest created first", () => {
+    const rows = [
+      schedule({ id: "old", created_at: "2026-09-01T00:00:00Z" }),
+      schedule({ id: "new", created_at: "2026-09-20T00:00:00Z" }),
+    ];
+    expect(orderSchedules(rows, "created").map((row) => row.id)).toEqual(["new", "old"]);
+  });
+
+  it("keeps the default next-run order", () => {
+    const rows = [
+      schedule({ id: "paused", enabled: false, next_run_at: "2026-09-01T00:00:00Z" }),
+      schedule({ id: "late", next_run_at: "2026-09-30T09:00:00Z" }),
+      schedule({ id: "soon", next_run_at: "2026-09-28T09:00:00Z" }),
+    ];
+    expect(orderSchedules(rows, "next_run").map((row) => row.id)).toEqual(["soon", "late", "paused"]);
+  });
+});
+
+describe("groupSchedules", () => {
+  it("groups active and paused schedules and omits empty groups", () => {
+    const rows = [schedule({ id: "a", enabled: true }), schedule({ id: "b", enabled: false })];
+    expect(groupSchedules(rows, "status").map((group) => [group.key, group.schedules.map((row) => row.id)])).toEqual([
+      ["active", ["a"]],
+      ["paused", ["b"]],
+    ]);
+    expect(groupSchedules([schedule({ id: "a", enabled: true })], "status").map((group) => group.key)).toEqual([
+      "active",
+    ]);
+  });
+
+  it("groups by cadence in frequency order and skips empty frequencies", () => {
+    const rows = [
+      schedule({ id: "weekly", frequency: "weekly" }),
+      schedule({ id: "daily", frequency: "daily" }),
+      schedule({ id: "weekly-2", frequency: "weekly" }),
+    ];
+    expect(groupSchedules(rows, "frequency").map((group) => [group.key, group.schedules.map((row) => row.id)])).toEqual(
+      [
+        ["daily", ["daily"]],
+        ["weekly", ["weekly", "weekly-2"]],
+      ]
+    );
+  });
+
+  it("returns a single group when grouping is disabled", () => {
+    const rows = [schedule({ id: "a" })];
+    expect(groupSchedules(rows, "none")).toEqual([{ key: "all", label: "All schedules", schedules: rows }]);
+    expect(groupSchedules([], "none")).toEqual([]);
   });
 });
 

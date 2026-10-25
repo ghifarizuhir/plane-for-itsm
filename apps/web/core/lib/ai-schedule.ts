@@ -288,6 +288,103 @@ export type TAiScheduleListFilter = {
   status: "all" | "active" | "paused";
 };
 
+export type TAiScheduleGroupBy = "status" | "frequency" | "none";
+
+export type TAiScheduleOrderBy = "next_run" | "name" | "created";
+
+export type TAiScheduleDisplayProperties = {
+  cadence: boolean;
+  nextRun: boolean;
+  lastRun: boolean;
+  creator: boolean;
+};
+
+export const DEFAULT_SCHEDULE_DISPLAY_PROPERTIES: TAiScheduleDisplayProperties = {
+  cadence: true,
+  nextRun: true,
+  lastRun: true,
+  creator: true,
+};
+
+export type TAiScheduleGroup = {
+  key: string;
+  label: string;
+  schedules: TAiSchedule[];
+};
+
+const FREQUENCY_GROUP_ORDER: TAiScheduleFrequency[] = ["hourly", "daily", "weekly", "monthly"];
+const FREQUENCY_LABELS: Record<TAiScheduleFrequency, string> = {
+  hourly: "Hourly",
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+/** Short cadence label for dense list rows; the full humanized text is used in tooltips. */
+export const compactScheduleCadence = (
+  schedule: Pick<TAiScheduleProposal, "frequency" | "time" | "day_of_week" | "day_of_month">
+): string => {
+  switch (schedule.frequency) {
+    case "hourly":
+      return `Hourly · :${schedule.time.slice(-2)}`;
+    case "daily":
+      return `Daily · ${schedule.time}`;
+    case "weekly":
+      return `Weekly · ${(WEEKDAYS[(schedule.day_of_week ?? 1) - 1] ?? "Monday").slice(0, 3)} ${schedule.time}`;
+    case "monthly":
+      return `Monthly · day ${schedule.day_of_month ?? 1} · ${schedule.time}`;
+    default:
+      return "—";
+  }
+};
+
+export const orderSchedules = (schedules: TAiSchedule[], sortBy: TAiScheduleOrderBy): TAiSchedule[] => {
+  switch (sortBy) {
+    case "name":
+      return orderBy(
+        schedules,
+        [(schedule) => schedule.name.toLowerCase(), (schedule) => (schedule.enabled ? 0 : 1)],
+        ["asc", "asc"]
+      );
+    case "created":
+      return orderBy(schedules, [(schedule) => schedule.created_at], ["desc"]);
+    case "next_run":
+    default:
+      return orderBy(
+        schedules,
+        [
+          (schedule) => (schedule.enabled ? 0 : 1),
+          (schedule) => (schedule.next_run_at ? 0 : 1),
+          (schedule) => schedule.next_run_at ?? "",
+          (schedule) => schedule.created_at,
+        ],
+        ["asc", "asc", "asc", "desc"]
+      );
+  }
+};
+
+/** Group an already filtered/ordered list into the sections rendered by the scheduler list. */
+export const groupSchedules = (schedules: TAiSchedule[], groupBy: TAiScheduleGroupBy): TAiScheduleGroup[] => {
+  if (groupBy === "none") {
+    return schedules.length > 0 ? [{ key: "all", label: "All schedules", schedules }] : [];
+  }
+
+  if (groupBy === "frequency") {
+    return FREQUENCY_GROUP_ORDER.map((frequency) => ({
+      key: frequency,
+      label: FREQUENCY_LABELS[frequency],
+      schedules: schedules.filter((schedule) => schedule.frequency === frequency),
+    })).filter((group) => group.schedules.length > 0);
+  }
+
+  const active = schedules.filter((schedule) => schedule.enabled);
+  const paused = schedules.filter((schedule) => !schedule.enabled);
+  return [
+    { key: "active", label: "Active", schedules: active },
+    { key: "paused", label: "Paused", schedules: paused },
+  ].filter((group) => group.schedules.length > 0);
+};
+
 export const RUN_STATUS_BADGE_VARIANTS: Record<TAiScheduleRun["status"], "success" | "danger" | "brand"> = {
   success: "success",
   failed: "danger",
@@ -317,14 +414,5 @@ export const filterSchedules = (schedules: TAiSchedule[], filter: TAiScheduleLis
   });
   // NOTE: do not use `.sort()` here — the repo's `oxlint --fix` pre-commit
   // hook rewrites it to `.toSorted()`, which the TS lib target does not know.
-  return orderBy(
-    matches,
-    [
-      (schedule) => (schedule.enabled ? 0 : 1),
-      (schedule) => (schedule.next_run_at ? 0 : 1),
-      (schedule) => schedule.next_run_at ?? "",
-      (schedule) => schedule.created_at,
-    ],
-    ["asc", "asc", "asc", "desc"]
-  );
+  return orderSchedules(matches, "next_run");
 };
