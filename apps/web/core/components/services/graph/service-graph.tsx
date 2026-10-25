@@ -43,7 +43,8 @@ export const ServiceGraph = observer(function ServiceGraph({
     addDependency,
     removeDependency,
     updateNodePosition,
-    updateService,
+    layoutEpoch,
+    markLayoutChanged,
   } = useService();
   const { projectMap } = useProject();
   const { currentWorkspace } = useWorkspace();
@@ -114,8 +115,9 @@ export const ServiceGraph = observer(function ServiceGraph({
 
   const handleNodeDragStop = useCallback(
     (serviceId: string, position: { x: number; y: number }) => {
-      if (!slug || !workspaceId || !pid) return;
-      void updateNodePosition(slug, workspaceId, pid, serviceId, position).catch(() => {
+      const targetProjectId: string | null = scope === "workspace" ? null : (pid ?? null);
+      if (!slug || !workspaceId || (scope === "project" && !targetProjectId)) return;
+      void updateNodePosition(slug, workspaceId, targetProjectId, serviceId, position).catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
           title: "Error!",
@@ -123,7 +125,7 @@ export const ServiceGraph = observer(function ServiceGraph({
         });
       });
     },
-    [pid, slug, updateNodePosition, workspaceId]
+    [pid, scope, slug, updateNodePosition, workspaceId]
   );
 
   const handleNodeClick = useCallback(
@@ -137,24 +139,28 @@ export const ServiceGraph = observer(function ServiceGraph({
   );
 
   const handleReLayout = useCallback(async () => {
-    if (!slug || !workspaceId || !pid) return;
+    const targetProjectId: string | null = scope === "workspace" ? null : (pid ?? null);
+    if (!slug || !workspaceId || (scope === "project" && !targetProjectId)) return;
     const positioned = graphData.services.filter((service) => !isLiteService(service) && service.position !== null);
-    if (positioned.length === 0) return;
     setIsReLayouting(true);
     try {
-      await Promise.all(
-        positioned.map((service) => updateService(slug, workspaceId, pid, service.id, { position: null }))
-      );
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Could not reset layout. Please try again.",
-      });
+      if (positioned.length > 0) {
+        const results = await Promise.allSettled(
+          positioned.map((service) => updateNodePosition(slug, workspaceId, targetProjectId, service.id, null))
+        );
+        if (results.some((result) => result.status === "rejected")) {
+          setToast({
+            type: TOAST_TYPE.ERROR,
+            title: "Error!",
+            message: "Could not reset layout. Please try again.",
+          });
+        }
+      }
     } finally {
+      markLayoutChanged();
       setIsReLayouting(false);
     }
-  }, [graphData.services, pid, slug, updateService, workspaceId]);
+  }, [graphData.services, markLayoutChanged, pid, scope, slug, updateNodePosition, workspaceId]);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -184,6 +190,7 @@ export const ServiceGraph = observer(function ServiceGraph({
         <ServiceGraphCanvas
           graphData={graphData}
           projectLookup={projectLookup}
+          layoutEpoch={layoutEpoch}
           onConnect={handleConnect}
           onEdgeDelete={handleEdgeDelete}
           onNodeDragStop={handleNodeDragStop}

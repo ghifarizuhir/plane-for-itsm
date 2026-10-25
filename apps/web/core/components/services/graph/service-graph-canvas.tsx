@@ -55,6 +55,8 @@ export type TServiceGraphCanvasProps = {
   onConnect?: (sourceServiceId: string, targetServiceId: string) => void;
   onEdgeDelete?: (dependencyId: string) => void;
   onNodeDragStop?: (serviceId: string, position: { x: number; y: number }) => void;
+  /** Incremented by the store when topology/layout changes; triggers fitView. */
+  layoutEpoch?: number;
 };
 
 /**
@@ -67,6 +69,7 @@ export function ServiceGraphCanvas({
   readOnly = false,
   highlightedServiceIds,
   projectLookup,
+  layoutEpoch = 0,
   onNodeClick,
   onConnect,
   onEdgeDelete,
@@ -236,9 +239,31 @@ export function ServiceGraphCanvas({
     [onNodeClick]
   );
 
-  // Fit the graph the first time the canvas actually has dimensions. The war room
-  // mounts this inside an off-screen drawer below xl, so `onInit` alone would fit
-  // against a 0x0 viewport and never retry.
+  // Re-fit after topology/layout changes (service/dependency mutations or manual
+  // Re-layout). Deduplicated at the source: health polls, language changes, and
+  // filters never bump the epoch.
+  const lastLayoutEpoch = useRef(layoutEpoch);
+
+  useEffect(() => {
+    if (layoutEpoch === lastLayoutEpoch.current) return;
+    lastLayoutEpoch.current = layoutEpoch;
+    if (!instance) return;
+
+    let secondFrame = 0;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        instance.fitView({ padding: 0.2, duration: 300 });
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [instance, layoutEpoch]);
+
+  // Fit the graph on mount (the war room mounts this inside an off-screen
+  // drawer below xl, so onInit alone would fit against a 0x0 viewport).
   useEffect(() => {
     const node = wrapperRef.current;
     if (!node || !instance) return;
