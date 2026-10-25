@@ -8,6 +8,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 export const MOBILE_VIEWPORT_QUERY = "(max-width: 767px)";
 export const TOUCH_POINTER_QUERY = "(pointer: coarse)";
+export const HOVER_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
 
 const getMatches = (query: string): boolean => {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
@@ -34,3 +35,4 @@ export const useMediaQuery = (query: string): boolean => {
 
 export const useMobileViewport = (): boolean => useMediaQuery(MOBILE_VIEWPORT_QUERY);
 export const useTouchPointer = (): boolean => useMediaQuery(TOUCH_POINTER_QUERY);
+export const useHoverPointer = (): boolean => useMediaQuery(HOVER_POINTER_QUERY);
