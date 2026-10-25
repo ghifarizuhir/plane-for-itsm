@@ -90,6 +90,23 @@ pub fn next_sort_order(max_existing: f64) -> f64 {
     max_existing.max(0.0) + 65535.0
 }
 
+/// Clear all persisted graph node positions in a workspace. Positions are a
+/// layout hint: `NULL` means "let the client auto-layout". Called inside the
+/// same transaction as service/dependency mutations so the reset is atomic.
+async fn reset_workspace_layout(
+    tx: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE services SET position = NULL \
+         WHERE workspace_id = $1 AND deleted_at IS NULL AND position IS NOT NULL",
+    )
+    .bind(workspace_id)
+    .execute(&mut *tx)
+    .await?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Row + serializer
 // ---------------------------------------------------------------------------
@@ -520,6 +537,12 @@ pub(crate) async fn create_service_core(
     .bind(id)
     .execute(&mut *tx)
     .await?;
+    let workspace_id: Uuid =
+        sqlx::query_scalar("SELECT workspace_id FROM projects WHERE id = $1")
+            .bind(owner_project_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    reset_workspace_layout(&mut *tx, workspace_id).await?;
     tx.commit().await?;
     let json = service_json_by_id(&st.pool, id, "full")
         .await?
@@ -747,6 +770,11 @@ pub(crate) async fn destroy_service_core(
     pk: Uuid,
 ) -> Result<(StatusCode, Json<Value>), common::errors::AppError> {
     let mut tx = st.pool.begin().await?;
+    let workspace_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT workspace_id FROM services WHERE id = $1")
+            .bind(pk)
+            .fetch_optional(&mut *tx)
+            .await?;
     sqlx::query(
         "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
          WHERE (from_service_id = $1 OR to_service_id = $1) AND deleted_at IS NULL",
@@ -768,6 +796,9 @@ pub(crate) async fn destroy_service_core(
     .bind(pk)
     .execute(&mut *tx)
     .await?;
+    if let Some(workspace_id) = workspace_id {
+        reset_workspace_layout(&mut *tx, workspace_id).await?;
+    }
     tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }

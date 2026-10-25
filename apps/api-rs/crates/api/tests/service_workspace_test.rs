@@ -129,6 +129,27 @@ async fn insert_service(pool: &PgPool, workspace_id: Uuid, name: &str) -> Uuid {
     id
 }
 
+async fn set_service_position(pool: &PgPool, service_id: Uuid, x: f64, y: f64) {
+    sqlx::query(
+        "UPDATE services SET position = jsonb_build_object('x', $2::float8, 'y', $3::float8) \
+         WHERE id = $1",
+    )
+    .bind(service_id)
+    .bind(x)
+    .bind(y)
+    .execute(pool)
+    .await
+    .expect("set service position");
+}
+
+async fn service_position(pool: &PgPool, service_id: Uuid) -> Option<serde_json::Value> {
+    sqlx::query_scalar("SELECT position FROM services WHERE id = $1")
+        .bind(service_id)
+        .fetch_one(pool)
+        .await
+        .expect("service position")
+}
+
 async fn link_service(
     pool: &PgPool,
     service_id: Uuid,
@@ -574,6 +595,89 @@ async fn canonical_create_patch_destroy() {
         axum::http::StatusCode::NOT_FOUND,
         "soft-deleted service is invisible"
     );
+}
+
+#[tokio::test]
+async fn service_mutations_reset_workspace_layout() {
+    use api::routes::service::{
+        create_workspace, destroy_workspace, CreateService, CreateWorkspaceService,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    let new_service = |name: &str| CreateWorkspaceService {
+        owner_project_id: sc.p1,
+        service: CreateService {
+            name: Some(name.into()),
+            description: None,
+            description_html: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            owner_id: None,
+            repository_url: None,
+            documentation_url: None,
+        },
+    };
+
+    for id in [sc.s1, sc.s2, sc.s4] {
+        set_service_position(&st.pool, id, 10.0, 20.0).await;
+    }
+    let updated_at_before: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT updated_at FROM services WHERE id = $1")
+            .bind(sc.s1)
+            .fetch_one(&st.pool)
+            .await
+            .expect("service updated_at");
+
+    let (status, Json(created)) = create_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path(sc.slug.clone()),
+        Json(new_service("Payments API")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let new_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    for id in [sc.s1, sc.s2, sc.s4, new_id] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "create service resets every workspace position"
+        );
+    }
+    let updated_at_after: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT updated_at FROM services WHERE id = $1")
+            .bind(sc.s1)
+            .fetch_one(&st.pool)
+            .await
+            .expect("service updated_at");
+    assert_eq!(
+        updated_at_before, updated_at_after,
+        "layout reset must not touch updated_at"
+    );
+
+    set_service_position(&st.pool, sc.s1, 30.0, 40.0).await;
+    set_service_position(&st.pool, new_id, 50.0, 60.0).await;
+    let (status, _) = destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.owner_admin),
+        Path((sc.slug.clone(), new_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "delete service resets remaining workspace positions"
+        );
+    }
 }
 
 #[tokio::test]
