@@ -45,6 +45,9 @@ export interface IServiceStore {
   errorMap: Record<string, boolean>;
   workspaceError: boolean;
   peekService?: TServicePeek;
+  layoutEpoch: number;
+  markLayoutChanged: () => void;
+  clearLayoutPositions: () => void;
   getServiceById: (serviceId: string) => IService | null;
   getServiceHealth: (serviceId: string) => IServiceHealthSnapshot | null;
   getProjectHealthSummary: (projectId: string) => TServiceHealthSummary;
@@ -108,9 +111,9 @@ export interface IServiceStore {
   updateNodePosition: (
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     serviceId: string,
-    position: { x: number; y: number }
+    position: { x: number; y: number } | null
   ) => Promise<void>;
   addProjectLink: (
     workspaceSlug: string,
@@ -153,6 +156,7 @@ export class ServicesStore implements IServiceStore {
   errorMap: Record<string, boolean> = {};
   workspaceError: boolean = false;
   peekService: TServicePeek | undefined = undefined;
+  layoutEpoch: number = 0;
   rootStore;
   serviceService;
   serviceHealthService;
@@ -169,6 +173,9 @@ export class ServicesStore implements IServiceStore {
       errorMap: observable,
       workspaceError: observable.ref,
       peekService: observable.ref,
+      layoutEpoch: observable.ref,
+      markLayoutChanged: action,
+      clearLayoutPositions: action,
       fetchServices: action,
       fetchWorkspaceServices: action,
       refreshHealth: action,
@@ -350,6 +357,19 @@ export class ServicesStore implements IServiceStore {
     this.peekService = peek;
   };
 
+  markLayoutChanged = () => {
+    this.layoutEpoch += 1;
+  };
+
+  clearLayoutPositions = () => {
+    Object.entries(this.serviceMap).forEach(([serviceId, service]) => {
+      if (service.position !== null) {
+        set(this.serviceMap, [serviceId], { ...service, position: null });
+      }
+    });
+    this.markLayoutChanged();
+  };
+
   fetchServices = async (workspaceSlug: string, workspaceId: string, projectId: string) => {
     try {
       set(this.errorMap, projectId, false);
@@ -441,6 +461,7 @@ export class ServicesStore implements IServiceStore {
     const service = await this.serviceService.createService(workspaceSlug, workspaceId, projectId, data);
     runInAction(() => {
       set(this.serviceMap, [service.id], service);
+      this.clearLayoutPositions();
     });
     return service;
   };
@@ -449,6 +470,7 @@ export class ServicesStore implements IServiceStore {
     const service = await this.serviceService.createWorkspaceService(workspaceSlug, data);
     runInAction(() => {
       set(this.serviceMap, [service.id], service);
+      this.clearLayoutPositions();
     });
     return service;
   };
@@ -496,6 +518,7 @@ export class ServicesStore implements IServiceStore {
     await this.serviceService.deleteService(workspaceSlug, workspaceId, projectId, serviceId);
     runInAction(() => {
       this.removeLocalService(serviceId);
+      this.clearLayoutPositions();
     });
   };
 
@@ -503,6 +526,7 @@ export class ServicesStore implements IServiceStore {
     await this.serviceService.deleteWorkspaceService(workspaceSlug, serviceId);
     runInAction(() => {
       this.removeLocalService(serviceId);
+      this.clearLayoutPositions();
     });
   };
 
@@ -556,6 +580,7 @@ export class ServicesStore implements IServiceStore {
     );
     runInAction(() => {
       set(this.dependencyMap, [dependency.id], dependency);
+      this.clearLayoutPositions();
     });
     return dependency;
   };
@@ -589,26 +614,36 @@ export class ServicesStore implements IServiceStore {
     await this.serviceService.deleteDependency(workspaceSlug, workspaceId, projectId, dependencyId);
     runInAction(() => {
       delete this.dependencyMap[dependencyId];
+      this.clearLayoutPositions();
     });
   };
 
   updateNodePosition = async (
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     serviceId: string,
-    position: { x: number; y: number }
+    position: { x: number; y: number } | null
   ) => {
-    const response = await this.serviceService.updateNodePosition(
-      workspaceSlug,
-      workspaceId,
-      projectId,
-      serviceId,
-      position
-    );
-    runInAction(() => {
-      set(this.serviceMap, [serviceId], response);
-    });
+    const original = this.getServiceById(serviceId);
+    if (!original) throw new Error("Service not found");
+    try {
+      runInAction(() => {
+        set(this.serviceMap, [serviceId], { ...original, position });
+      });
+      const response = projectId
+        ? await this.serviceService.updateNodePosition(workspaceSlug, workspaceId, projectId, serviceId, position)
+        : await this.serviceService.updateWorkspaceService(workspaceSlug, serviceId, { position });
+      runInAction(() => {
+        set(this.serviceMap, [serviceId], response);
+      });
+    } catch (error) {
+      console.error("Failed to update service position", error);
+      runInAction(() => {
+        set(this.serviceMap, [serviceId], original);
+      });
+      throw error;
+    }
   };
 
   linkWorkItem = async (

@@ -167,11 +167,13 @@ export class ServiceService extends APIService {
   async updateNodePosition(
     workspaceSlug: string,
     workspaceId: string,
-    projectId: string,
+    projectId: string | null,
     serviceId: string,
-    position: { x: number; y: number }
+    position: { x: number; y: number } | null
   ): Promise<IService> {
-    return this.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position });
+    return projectId
+      ? this.updateService(workspaceSlug, workspaceId, projectId, serviceId, { position })
+      : this.updateWorkspaceService(workspaceSlug, serviceId, { position });
   }
 
   async linkWorkItem(

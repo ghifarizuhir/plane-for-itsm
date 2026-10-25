@@ -926,7 +926,7 @@ describe("ServicesStore.updateNodePosition", () => {
 
     await expect(store.updateNodePosition("acme", "workspace-1", null, "service-1", null)).rejects.toThrow("nope");
 
-    expect(store.serviceMap["service-1"]).toBe(original);
+    expect(store.serviceMap["service-1"]).toStrictEqual(original);
   });
 });
 ```
