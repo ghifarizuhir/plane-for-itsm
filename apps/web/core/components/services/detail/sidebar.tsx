@@ -31,12 +31,14 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // local imports
 import { ServiceDeployCell } from "../health/service-deploy-cell";
 import { ServiceHealthPill } from "../health/service-health-pill";
+import { SERVICE_KIND_ORDER } from "../kind";
 import { ServicePropertySelect } from "./property-select";
 import { ServiceUrlProperty } from "./url-property";
 
 const SERVICE_STATUS_OPTIONS: IService["status"][] = ["active", "planned", "maintenance", "deprecated", "retired"];
 const SERVICE_CRITICALITY_OPTIONS: IService["criticality"][] = ["critical", "high", "medium", "low"];
 const SERVICE_TYPE_OPTIONS: IService["type"][] = ["internal", "external", "infrastructure", "third_party"];
+const SERVICE_KIND_OPTIONS: IService["kind"][] = SERVICE_KIND_ORDER;
 
 type Props = {
   serviceId: string;
@@ -123,6 +125,15 @@ export const ServiceDetailSidebar = observer(function ServiceDetailSidebar(props
             options={SERVICE_TYPE_OPTIONS}
             i18nPrefix="service.type_values"
             onChange={(val) => update({ type: val })}
+          />
+        </SidebarPropertyListItem>
+
+        <SidebarPropertyListItem icon={ModuleOutline} label={t("service.fields.kind")}>
+          <ServicePropertySelect
+            value={service.kind}
+            options={SERVICE_KIND_OPTIONS}
+            i18nPrefix="service.kind_values"
+            onChange={(val) => update({ kind: val })}
           />
         </SidebarPropertyListItem>
 

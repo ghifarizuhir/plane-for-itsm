@@ -8,6 +8,7 @@ import type { ICycle, IModule, IService } from "@plane/types";
 import {
   MODULE_STATUS_VALUES,
   SERVICE_CRITICALITY_VALUES,
+  SERVICE_KIND_VALUES,
   SERVICE_STATUS_VALUES,
   SERVICE_TYPE_VALUES,
   type TAiCreateServiceProposal,
@@ -58,6 +59,7 @@ export const PROPOSAL_FORM_FIELDS: Record<TFormProposalKind, readonly TFormField
     { key: "status", label: "Status", kind: "select", options: SERVICE_STATUS_VALUES },
     { key: "criticality", label: "Criticality", kind: "select", options: SERVICE_CRITICALITY_VALUES },
     { key: "type", label: "Type", kind: "select", options: SERVICE_TYPE_VALUES },
+    { key: "kind", label: "Component kind", kind: "select", options: SERVICE_KIND_VALUES },
     { key: "owner", label: "Owner", kind: "member" },
     { key: "repository_url", label: "Repository URL", kind: "url", maxLength: 2048 },
     { key: "documentation_url", label: "Documentation URL", kind: "url", maxLength: 2048 },
@@ -66,6 +68,7 @@ export const PROPOSAL_FORM_FIELDS: Record<TFormProposalKind, readonly TFormField
     { key: "status", label: "Status", kind: "select", options: SERVICE_STATUS_VALUES },
     { key: "criticality", label: "Criticality", kind: "select", options: SERVICE_CRITICALITY_VALUES },
     { key: "type", label: "Type", kind: "select", options: SERVICE_TYPE_VALUES },
+    { key: "kind", label: "Component kind", kind: "select", options: SERVICE_KIND_VALUES },
     { key: "owner", label: "Owner", kind: "member" },
     { key: "description", label: "Description", kind: "textarea", maxLength: 5000 },
     { key: "repository_url", label: "Repository URL", kind: "url", maxLength: 2048 },
@@ -196,6 +199,7 @@ export const buildServiceWrite = (
   if (draftText(draft, "status")) data.status = draftText(draft, "status") as IService["status"];
   if (draftText(draft, "criticality")) data.criticality = draftText(draft, "criticality") as IService["criticality"];
   if (draftText(draft, "type")) data.type = draftText(draft, "type") as IService["type"];
+  if (draftText(draft, "kind")) data.kind = draftText(draft, "kind") as IService["kind"];
   if (!isUpdate || "owner" in draft) {
     if (ownerId) data.owner_id = ownerId;
     else if (isUpdate) data.owner_id = null;

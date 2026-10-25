@@ -17,6 +17,7 @@
       "status": "상태",
       "criticality": "중요도",
       "type": "유형",
+      "kind": "구성 요소 종류",
       "owner": "소유자",
       "repository": "레포지토리",
       "documentation": "문서",
@@ -62,6 +63,17 @@
       "infrastructure": "인프라스트럭처",
       "third_party": "서드파티"
     },
+    "kind_values": {
+      "service": "서비스",
+      "database": "데이터베이스",
+      "server": "서버",
+      "cache": "캐시",
+      "queue": "큐",
+      "storage": "스토리지",
+      "network": "네트워크",
+      "external_api": "외부 API",
+      "other": "기타"
+    },
     "health_values": {
       "healthy": "정상",
       "degraded": "성능 저하",
@@ -99,7 +111,9 @@
       "re_layout": "다시 배치",
       "connect_hint": "노드 핸들에서 드래그하여 종속성을 생성하세요",
       "empty": "표시할 서비스가 없습니다",
-      "coming_soon": "그래프 곧 출시"
+      "coming_soon": "그래프 곧 출시",
+      "unassigned": "미지정",
+      "restricted": "제한됨"
     },
     "detail": {
       "depends_on": "의존 대상",

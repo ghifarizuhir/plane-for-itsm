@@ -23,6 +23,8 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { WorkspaceService } from "@/services/workspace.service";
 // helpers
 import { SERVICE_DESCRIPTION_DISABLED_EXTENSIONS, stripHtmlToText } from "@/services/service.helpers";
+// local imports
+import { SERVICE_KIND_ORDER } from "./kind";
 
 // services init
 const workspaceService = new WorkspaceService();
@@ -51,7 +53,7 @@ const SERVICE_TYPE_OPTIONS: IService["type"][] = ["internal", "external", "infra
 
 type TServiceOptionSelectProps = {
   control: Control<IService, any>;
-  name: "status" | "criticality" | "type";
+  name: "status" | "criticality" | "type" | "kind";
   label: string;
 };
 
@@ -63,13 +65,17 @@ function ServiceOptionSelect(props: TServiceOptionSelectProps) {
       ? SERVICE_STATUS_OPTIONS
       : name === "criticality"
         ? SERVICE_CRITICALITY_OPTIONS
-        : SERVICE_TYPE_OPTIONS;
+        : name === "type"
+          ? SERVICE_TYPE_OPTIONS
+          : SERVICE_KIND_ORDER;
   const prefix =
     name === "status"
       ? "service.status_values"
       : name === "criticality"
         ? "service.criticality_values"
-        : "service.type_values";
+        : name === "type"
+          ? "service.type_values"
+          : "service.kind_values";
   return (
     <Controller
       control={control}
@@ -103,6 +109,7 @@ const defaultValues: Partial<IService> = {
   status: "planned",
   criticality: "medium",
   type: "internal",
+  kind: "service",
   owner_id: null,
   repository_url: null,
   documentation_url: null,
@@ -123,6 +130,7 @@ export function ServiceForm(props: Props) {
       status: data?.status || "planned",
       criticality: data?.criticality || "medium",
       type: data?.type || "internal",
+      kind: data?.kind || "service",
       owner_id: data?.owner_id || null,
       repository_url: data?.repository_url || "",
       documentation_url: data?.documentation_url || "",
@@ -284,6 +292,9 @@ export function ServiceForm(props: Props) {
             </div>
             <div className="h-7">
               <ServiceOptionSelect control={control} name="type" label={t("service.fields.type")} />
+            </div>
+            <div className="h-7">
+              <ServiceOptionSelect control={control} name="kind" label={t("service.fields.kind")} />
             </div>
             <Controller
               control={control}

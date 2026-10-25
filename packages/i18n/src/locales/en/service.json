@@ -21,6 +21,7 @@
       "status": "Status",
       "criticality": "Criticality",
       "type": "Type",
+      "kind": "Component kind",
       "owner": "Owner",
       "owner_project": "Owner application",
       "repository": "Repository",
@@ -67,6 +68,17 @@
       "infrastructure": "Infrastructure",
       "third_party": "Third party"
     },
+    "kind_values": {
+      "service": "Service",
+      "database": "Database",
+      "server": "Server",
+      "cache": "Cache",
+      "queue": "Queue",
+      "storage": "Storage",
+      "network": "Network",
+      "external_api": "External API",
+      "other": "Other"
+    },
     "health_values": {
       "healthy": "Healthy",
       "degraded": "Degraded",
@@ -104,7 +116,9 @@
       "re_layout": "Re-layout",
       "connect_hint": "Drag from a node handle to create a dependency",
       "empty": "No services to show",
-      "coming_soon": "Graph coming soon"
+      "coming_soon": "Graph coming soon",
+      "unassigned": "Unassigned",
+      "restricted": "Restricted"
     },
     "detail": {
       "depends_on": "Depends on",

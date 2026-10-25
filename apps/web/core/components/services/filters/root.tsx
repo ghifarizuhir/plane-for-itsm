@@ -15,6 +15,7 @@ import {
   FilterServiceCriticality,
   FilterServiceHealth,
   FilterServiceIncidents,
+  FilterServiceKind,
   FilterServiceStatus,
   FilterServiceType,
 } from "@/components/services";
@@ -92,6 +93,15 @@ export const ServiceFiltersSelection = observer(function ServiceFiltersSelection
           <FilterServiceType
             appliedFilters={filters.type ?? null}
             handleUpdate={(val) => handleFiltersUpdate("type", val)}
+            searchQuery={filtersSearchQuery}
+          />
+        </div>
+
+        {/* component kind */}
+        <div className="py-2">
+          <FilterServiceKind
+            appliedFilters={filters.kind ?? null}
+            handleUpdate={(val) => handleFiltersUpdate("kind", val)}
             searchQuery={filtersSearchQuery}
           />
         </div>

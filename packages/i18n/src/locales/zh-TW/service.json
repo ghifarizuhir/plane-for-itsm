@@ -17,6 +17,7 @@
       "status": "狀態",
       "criticality": "關鍵性",
       "type": "類型",
+      "kind": "元件類型",
       "owner": "擁有者",
       "repository": "倉庫",
       "documentation": "文件",
@@ -62,6 +63,17 @@
       "infrastructure": "基礎設施",
       "third_party": "第三方"
     },
+    "kind_values": {
+      "service": "服務",
+      "database": "資料庫",
+      "server": "伺服器",
+      "cache": "快取",
+      "queue": "佇列",
+      "storage": "儲存",
+      "network": "網路",
+      "external_api": "外部 API",
+      "other": "其他"
+    },
     "health_values": {
       "healthy": "健康",
       "degraded": "降級",
@@ -99,7 +111,9 @@
       "re_layout": "重新排列",
       "connect_hint": "從節點控點拖曳以建立相依性",
       "empty": "尚無可顯示的服務",
-      "coming_soon": "圖譜即將推出"
+      "coming_soon": "圖譜即將推出",
+      "unassigned": "未指派",
+      "restricted": "受限"
     },
     "detail": {
       "depends_on": "相依的服務",

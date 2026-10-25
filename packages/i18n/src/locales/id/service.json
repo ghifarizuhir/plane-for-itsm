@@ -17,6 +17,7 @@
       "status": "Status",
       "criticality": "Kritikalitas",
       "type": "Tipe",
+      "kind": "Jenis komponen",
       "owner": "Pemilik",
       "repository": "Repositori",
       "documentation": "Dokumentasi",
@@ -62,6 +63,17 @@
       "infrastructure": "Infrastruktur",
       "third_party": "Pihak ketiga"
     },
+    "kind_values": {
+      "service": "Layanan",
+      "database": "Basis data",
+      "server": "Server",
+      "cache": "Cache",
+      "queue": "Antrean",
+      "storage": "Penyimpanan",
+      "network": "Jaringan",
+      "external_api": "API eksternal",
+      "other": "Lainnya"
+    },
     "health_values": {
       "healthy": "Sehat",
       "degraded": "Terdegradasi",
@@ -99,7 +111,9 @@
       "re_layout": "Tata ulang",
       "connect_hint": "Seret dari handel node untuk membuat dependensi",
       "empty": "Tidak ada layanan untuk ditampilkan",
-      "coming_soon": "Graf segera hadir"
+      "coming_soon": "Graf segera hadir",
+      "unassigned": "Tanpa project",
+      "restricted": "Terbatas"
     },
     "detail": {
       "depends_on": "Bergantung pada",

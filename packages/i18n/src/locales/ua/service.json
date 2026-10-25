@@ -17,6 +17,7 @@
       "status": "Статус",
       "criticality": "Критичність",
       "type": "Тип",
+      "kind": "Тип компонента",
       "owner": "Власник",
       "repository": "Репозиторій",
       "documentation": "Документація",
@@ -62,6 +63,17 @@
       "infrastructure": "Інфраструктура",
       "third_party": "Сторонній"
     },
+    "kind_values": {
+      "service": "Сервіс",
+      "database": "База даних",
+      "server": "Сервер",
+      "cache": "Кеш",
+      "queue": "Черга",
+      "storage": "Сховище",
+      "network": "Мережа",
+      "external_api": "Зовнішній API",
+      "other": "Інше"
+    },
     "health_values": {
       "healthy": "Працює",
       "degraded": "Деградує",
@@ -99,7 +111,9 @@
       "re_layout": "Перебудувати",
       "connect_hint": "Перетягніть від маркера вузла, щоб створити залежність",
       "empty": "Немає сервісів для відображення",
-      "coming_soon": "Граф незабаром"
+      "coming_soon": "Граф незабаром",
+      "unassigned": "Не призначено",
+      "restricted": "Обмежений"
     },
     "detail": {
       "depends_on": "Залежить від",

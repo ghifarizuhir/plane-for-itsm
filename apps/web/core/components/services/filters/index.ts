@@ -7,6 +7,7 @@
 export * from "./criticality";
 export * from "./health";
 export * from "./incidents";
+export * from "./kind";
 export * from "./root";
 export * from "./status";
 export * from "./type";

@@ -17,6 +17,7 @@
       "status": "Stav",
       "criticality": "Kritickosť",
       "type": "Typ",
+      "kind": "Druh komponentu",
       "owner": "Vlastník",
       "repository": "Repozitár",
       "documentation": "Dokumentácia",
@@ -62,6 +63,17 @@
       "infrastructure": "Infraštruktúra",
       "third_party": "Tretia strana"
     },
+    "kind_values": {
+      "service": "Služba",
+      "database": "Databáza",
+      "server": "Server",
+      "cache": "Cache",
+      "queue": "Rada",
+      "storage": "Úložisko",
+      "network": "Sieť",
+      "external_api": "Externé API",
+      "other": "Iné"
+    },
     "health_values": {
       "healthy": "Zdravá",
       "degraded": "Obmedzená",
@@ -99,7 +111,9 @@
       "re_layout": "Preusporiadať",
       "connect_hint": "Potiahnutím z úchytu uzla vytvoríte závislosť",
       "empty": "Žiadne služby na zobrazenie",
-      "coming_soon": "Graf už čoskoro"
+      "coming_soon": "Graf už čoskoro",
+      "unassigned": "Nepriradené",
+      "restricted": "Obmedzené"
     },
     "detail": {
       "depends_on": "Závisí od",

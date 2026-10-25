@@ -17,6 +17,7 @@
       "status": "სტატუსი",
       "criticality": "კრიტიკულობა",
       "type": "ტიპი",
+      "kind": "კომპონენტის ტიპი",
       "owner": "მფლობელი",
       "repository": "რეპოზიტორია",
       "documentation": "დოკუმენტაცია",
@@ -62,6 +63,17 @@
       "infrastructure": "ინფრასტრუქტურა",
       "third_party": "მესამე მხარე"
     },
+    "kind_values": {
+      "service": "სერვისი",
+      "database": "მონაცემთა ბაზა",
+      "server": "სერვერი",
+      "cache": "ქეში",
+      "queue": "რიგი",
+      "storage": "საცავი",
+      "network": "ქსელი",
+      "external_api": "გარე API",
+      "other": "სხვა"
+    },
     "health_values": {
       "healthy": "ჯანმრთელი",
       "degraded": "გაუარესებული",
@@ -99,7 +111,9 @@
       "re_layout": "ხელახლა განლაგება",
       "connect_hint": "გადაათრიეთ კვანძის სახელურიდან დამოკიდებულების შესაქმნელად",
       "empty": "საჩვენებელი სერვისები არ არის",
-      "coming_soon": "გრაფი მალე იქნება"
+      "coming_soon": "გრაფი მალე იქნება",
+      "unassigned": "მიუნიჭებელი",
+      "restricted": "შეზღუდული"
     },
     "detail": {
       "depends_on": "დამოკიდებულია",

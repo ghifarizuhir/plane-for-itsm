@@ -17,6 +17,7 @@
       "status": "Status",
       "criticality": "Krytyczność",
       "type": "Typ",
+      "kind": "Rodzaj komponentu",
       "owner": "Właściciel",
       "repository": "Repozytorium",
       "documentation": "Dokumentacja",
@@ -62,6 +63,17 @@
       "infrastructure": "Infrastruktura",
       "third_party": "Strona trzecia"
     },
+    "kind_values": {
+      "service": "Usługa",
+      "database": "Baza danych",
+      "server": "Serwer",
+      "cache": "Pamięć podręczna",
+      "queue": "Kolejka",
+      "storage": "Magazyn",
+      "network": "Sieć",
+      "external_api": "Zewnętrzne API",
+      "other": "Inne"
+    },
     "health_values": {
       "healthy": "Sprawny",
       "degraded": "Zdegradowany",
@@ -99,7 +111,9 @@
       "re_layout": "Rozmieść ponownie",
       "connect_hint": "Przeciągnij z uchwytu węzła, aby utworzyć zależność",
       "empty": "Brak usług do wyświetlenia",
-      "coming_soon": "Graf wkrótce"
+      "coming_soon": "Graf wkrótce",
+      "unassigned": "Nieprzypisane",
+      "restricted": "Ograniczone"
     },
     "detail": {
       "depends_on": "Zależy od",

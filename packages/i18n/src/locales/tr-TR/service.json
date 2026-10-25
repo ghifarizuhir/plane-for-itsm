@@ -17,6 +17,7 @@
       "status": "Durum",
       "criticality": "Kritiklik",
       "type": "Tür",
+      "kind": "Bileşen türü",
       "owner": "Sahip",
       "repository": "Depo",
       "documentation": "Dokümantasyon",
@@ -62,6 +63,17 @@
       "infrastructure": "Altyapı",
       "third_party": "Üçüncü taraf"
     },
+    "kind_values": {
+      "service": "Servis",
+      "database": "Veritabanı",
+      "server": "Sunucu",
+      "cache": "Önbellek",
+      "queue": "Kuyruk",
+      "storage": "Depolama",
+      "network": "Ağ",
+      "external_api": "Harici API",
+      "other": "Diğer"
+    },
     "health_values": {
       "healthy": "Sağlıklı",
       "degraded": "Düşük performans",
@@ -99,7 +111,9 @@
       "re_layout": "Yeniden düzenle",
       "connect_hint": "Bağımlılık oluşturmak için bir düğüm tutamacından sürükleyin",
       "empty": "Gösterilecek hizmet yok",
-      "coming_soon": "Graf çok yakında"
+      "coming_soon": "Graf çok yakında",
+      "unassigned": "Atanmamış",
+      "restricted": "Kısıtlı"
     },
     "detail": {
       "depends_on": "Bağımlı Olduğu",

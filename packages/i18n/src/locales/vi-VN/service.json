@@ -17,6 +17,7 @@
       "status": "Trạng thái",
       "criticality": "Mức độ quan trọng",
       "type": "Loại",
+      "kind": "Loại thành phần",
       "owner": "Chủ sở hữu",
       "repository": "Kho lưu trữ",
       "documentation": "Tài liệu",
@@ -62,6 +63,17 @@
       "infrastructure": "Hạ tầng",
       "third_party": "Bên thứ ba"
     },
+    "kind_values": {
+      "service": "Dịch vụ",
+      "database": "Cơ sở dữ liệu",
+      "server": "Máy chủ",
+      "cache": "Bộ nhớ đệm",
+      "queue": "Hàng đợi",
+      "storage": "Lưu trữ",
+      "network": "Mạng",
+      "external_api": "API bên ngoài",
+      "other": "Khác"
+    },
     "health_values": {
       "healthy": "Ổn định",
       "degraded": "Suy giảm",
@@ -99,7 +111,9 @@
       "re_layout": "Bố trí lại",
       "connect_hint": "Kéo từ tay nắm trên nút để tạo một phụ thuộc",
       "empty": "Không có dịch vụ để hiển thị",
-      "coming_soon": "Đồ thị sắp ra mắt"
+      "coming_soon": "Đồ thị sắp ra mắt",
+      "unassigned": "Chưa gán",
+      "restricted": "Bị hạn chế"
     },
     "detail": {
       "depends_on": "Phụ thuộc vào",

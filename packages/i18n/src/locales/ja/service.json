@@ -17,6 +17,7 @@
       "status": "ステータス",
       "criticality": "重要度",
       "type": "タイプ",
+      "kind": "コンポーネント種別",
       "owner": "所有者",
       "repository": "リポジトリ",
       "documentation": "ドキュメント",
@@ -62,6 +63,17 @@
       "infrastructure": "インフラストラクチャ",
       "third_party": "サードパーティ"
     },
+    "kind_values": {
+      "service": "サービス",
+      "database": "データベース",
+      "server": "サーバー",
+      "cache": "キャッシュ",
+      "queue": "キュー",
+      "storage": "ストレージ",
+      "network": "ネットワーク",
+      "external_api": "外部API",
+      "other": "その他"
+    },
     "health_values": {
       "healthy": "正常",
       "degraded": "低下中",
@@ -99,7 +111,9 @@
       "re_layout": "再レイアウト",
       "connect_hint": "ノードのハンドルからドラッグして依存関係を作成します",
       "empty": "表示するサービスがありません",
-      "coming_soon": "グラフ近日公開"
+      "coming_soon": "グラフ近日公開",
+      "unassigned": "未割り当て",
+      "restricted": "制限付き"
     },
     "detail": {
       "depends_on": "依存先",

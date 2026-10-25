@@ -17,6 +17,7 @@
       "status": "Status",
       "criticality": "Criticitate",
       "type": "Tip",
+      "kind": "Tipul componentei",
       "owner": "Proprietar",
       "repository": "Repozitoriu",
       "documentation": "Documentație",
@@ -62,6 +63,17 @@
       "infrastructure": "Infrastructură",
       "third_party": "Terță parte"
     },
+    "kind_values": {
+      "service": "Serviciu",
+      "database": "Bază de date",
+      "server": "Server",
+      "cache": "Cache",
+      "queue": "Coadă",
+      "storage": "Stocare",
+      "network": "Rețea",
+      "external_api": "API extern",
+      "other": "Altele"
+    },
     "health_values": {
       "healthy": "Funcțional",
       "degraded": "Degradat",
@@ -99,7 +111,9 @@
       "re_layout": "Rearanjează",
       "connect_hint": "Trage din mânerul unui nod pentru a crea o dependență",
       "empty": "Niciun serviciu de afișat",
-      "coming_soon": "Graf în curând"
+      "coming_soon": "Graf în curând",
+      "unassigned": "Neatribuit",
+      "restricted": "Restricționat"
     },
     "detail": {
       "depends_on": "Depinde de",

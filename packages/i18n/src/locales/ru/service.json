@@ -17,6 +17,7 @@
       "status": "Статус",
       "criticality": "Критичность",
       "type": "Тип",
+      "kind": "Тип компонента",
       "owner": "Владелец",
       "repository": "Репозиторий",
       "documentation": "Документация",
@@ -62,6 +63,17 @@
       "infrastructure": "Инфраструктура",
       "third_party": "Сторонний"
     },
+    "kind_values": {
+      "service": "Сервис",
+      "database": "База данных",
+      "server": "Сервер",
+      "cache": "Кэш",
+      "queue": "Очередь",
+      "storage": "Хранилище",
+      "network": "Сеть",
+      "external_api": "Внешний API",
+      "other": "Другое"
+    },
     "health_values": {
       "healthy": "Работает",
       "degraded": "Деградирует",
@@ -99,7 +111,9 @@
       "re_layout": "Перестроить",
       "connect_hint": "Перетащите от маркера узла, чтобы создать зависимость",
       "empty": "Нет сервисов для отображения",
-      "coming_soon": "Граф скоро"
+      "coming_soon": "Граф скоро",
+      "unassigned": "Без назначения",
+      "restricted": "Ограниченный"
     },
     "detail": {
       "depends_on": "Зависит от",

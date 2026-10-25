@@ -17,6 +17,7 @@
       "status": "Stav",
       "criticality": "Kritičnost",
       "type": "Typ",
+      "kind": "Druh komponenty",
       "owner": "Vlastník",
       "repository": "Repozitář",
       "documentation": "Dokumentace",
@@ -62,6 +63,17 @@
       "infrastructure": "Infrastruktura",
       "third_party": "Třetí strana"
     },
+    "kind_values": {
+      "service": "Služba",
+      "database": "Databáze",
+      "server": "Server",
+      "cache": "Mezipaměť",
+      "queue": "Fronta",
+      "storage": "Úložiště",
+      "network": "Síť",
+      "external_api": "Externí API",
+      "other": "Jiné"
+    },
     "health_values": {
       "healthy": "Zdravá",
       "degraded": "Omezená",
@@ -99,7 +111,9 @@
       "re_layout": "Přeuspořádat",
       "connect_hint": "Tažením z úchytu uzlu vytvoříte závislost",
       "empty": "Žádné služby k zobrazení",
-      "coming_soon": "Graf již brzy"
+      "coming_soon": "Graf již brzy",
+      "unassigned": "Nepřiřazeno",
+      "restricted": "Omezeno"
     },
     "detail": {
       "depends_on": "Závisí na",

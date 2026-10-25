@@ -41,6 +41,17 @@ export const PROPOSAL_LIMITS = {
 export const SERVICE_STATUS_VALUES = ["active", "planned", "maintenance", "deprecated", "retired"] as const;
 export const SERVICE_CRITICALITY_VALUES = ["critical", "high", "medium", "low"] as const;
 export const SERVICE_TYPE_VALUES = ["internal", "external", "infrastructure", "third_party"] as const;
+export const SERVICE_KIND_VALUES = [
+  "service",
+  "database",
+  "server",
+  "cache",
+  "queue",
+  "storage",
+  "network",
+  "external_api",
+  "other",
+] as const;
 export const MODULE_STATUS_VALUES = ["backlog", "planned", "in-progress", "paused", "completed", "cancelled"] as const;
 export const ARTICLE_ACCESS_VALUES = ["public", "private"] as const;
 export const ARTICLE_ACTION_VALUES = ["append", "replace"] as const;
@@ -104,6 +115,7 @@ export type TAiCreateServiceProposal = {
   status?: string | null;
   criticality?: string | null;
   type?: string | null;
+  kind?: string | null;
   owner?: string | null;
   repository_url?: string | null;
   documentation_url?: string | null;
@@ -113,6 +125,7 @@ export type TAiUpdateServiceChanges = {
   status?: string | null;
   criticality?: string | null;
   type?: string | null;
+  kind?: string | null;
   owner?: string | null;
   description?: string | null;
   repository_url?: string | null;
@@ -438,6 +451,8 @@ export const validateCreateServiceProposal = (proposal: Partial<TAiCreateService
     return "Unknown criticality.";
   if (proposal.type && !SERVICE_TYPE_VALUES.includes(proposal.type as (typeof SERVICE_TYPE_VALUES)[number]))
     return "Unknown type.";
+  if (proposal.kind && !SERVICE_KIND_VALUES.includes(proposal.kind as (typeof SERVICE_KIND_VALUES)[number]))
+    return "Unknown component kind.";
   if ((proposal.owner?.length ?? 0) > PROPOSAL_LIMITS.name) return "Owner is too long.";
   if (proposal.repository_url) {
     if (proposal.repository_url.length > PROPOSAL_LIMITS.url)
@@ -466,6 +481,8 @@ export const validateUpdateServiceProposal = (proposal: Partial<TAiUpdateService
     return "Unknown criticality.";
   if (changes.type && !SERVICE_TYPE_VALUES.includes(changes.type as (typeof SERVICE_TYPE_VALUES)[number]))
     return "Unknown type.";
+  if (changes.kind && !SERVICE_KIND_VALUES.includes(changes.kind as (typeof SERVICE_KIND_VALUES)[number]))
+    return "Unknown component kind.";
   if ((changes.description?.length ?? 0) > PROPOSAL_LIMITS.description)
     return `Description must be at most ${PROPOSAL_LIMITS.description} characters.`;
   if ((changes.owner?.length ?? 0) > PROPOSAL_LIMITS.name) return "Owner is too long.";

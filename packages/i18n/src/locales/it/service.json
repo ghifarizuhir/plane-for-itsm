@@ -17,6 +17,7 @@
       "status": "Stato",
       "criticality": "Criticità",
       "type": "Tipo",
+      "kind": "Tipo di componente",
       "owner": "Proprietario",
       "repository": "Repository",
       "documentation": "Documentazione",
@@ -62,6 +63,17 @@
       "infrastructure": "Infrastruttura",
       "third_party": "Terze parti"
     },
+    "kind_values": {
+      "service": "Servizio",
+      "database": "Database",
+      "server": "Server",
+      "cache": "Cache",
+      "queue": "Coda",
+      "storage": "Archiviazione",
+      "network": "Rete",
+      "external_api": "API esterna",
+      "other": "Altro"
+    },
     "health_values": {
       "healthy": "Operativo",
       "degraded": "Degradato",
@@ -99,7 +111,9 @@
       "re_layout": "Riorganizza",
       "connect_hint": "Trascina dalla maniglia di un nodo per creare una dipendenza",
       "empty": "Nessun servizio da mostrare",
-      "coming_soon": "Grafo prossimamente"
+      "coming_soon": "Grafo prossimamente",
+      "unassigned": "Non assegnato",
+      "restricted": "Limitato"
     },
     "detail": {
       "depends_on": "Dipende da",

@@ -17,6 +17,7 @@
       "status": "状态",
       "criticality": "关键性",
       "type": "类型",
+      "kind": "组件类型",
       "owner": "所有者",
       "repository": "仓库",
       "documentation": "文档",
@@ -62,6 +63,17 @@
       "infrastructure": "基础设施",
       "third_party": "第三方"
     },
+    "kind_values": {
+      "service": "服务",
+      "database": "数据库",
+      "server": "服务器",
+      "cache": "缓存",
+      "queue": "队列",
+      "storage": "存储",
+      "network": "网络",
+      "external_api": "外部 API",
+      "other": "其他"
+    },
     "health_values": {
       "healthy": "健康",
       "degraded": "降级",
@@ -99,7 +111,9 @@
       "re_layout": "重新排布",
       "connect_hint": "从节点句柄拖动以创建依赖关系",
       "empty": "暂无可显示的服务",
-      "coming_soon": "图谱即将推出"
+      "coming_soon": "图谱即将推出",
+      "unassigned": "未分配",
+      "restricted": "受限"
     },
     "detail": {
       "depends_on": "依赖的服务",
