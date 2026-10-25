@@ -196,7 +196,7 @@ File: `apps/web/core/services/service-mock.repository.ts`: service mock memakai 
 
 ### Konfigurasi kind
 
-File baru: `apps/web/core/components/services/kind-config.ts`.
+File baru: `apps/web/core/components/services/kind.ts` (order + label key, pure) dan `kind-config.ts` (ikon + warna).
 
 - `SERVICE_KIND_ORDER`: urutan dropdown dan layout.
 - `SERVICE_KIND_ICON`: ikon propel per kind (mis. `CubeOutline`, `LibraryOutline`, `ServerOutline`, `CacheOutline`, `ListOutline`, `ArchiveOutline`, `ConnectionsOutline`, `GlobeOutline`, `BoxesOutline`).
@@ -215,7 +215,7 @@ export type TServiceGroup = {
   projectId: string | null;
   kind: TServiceKind | null;
   restricted: boolean;
-  serviceIds: string[];
+  services: (IService | ILiteService)[];
 };
 
 export const getServiceGroups = (services: (IService | ILiteService)[]): TServiceGroup[];
