@@ -32,7 +32,7 @@
       "monitoring": "Monitoring"
     },
     "layout": {
-      "board": "Pinnwand",
+      "list": "Liste",
       "graph": "Graph"
     },
     "layout_label": "Layout",
@@ -100,12 +100,22 @@
       "healthy": "{count} funktionsfähig",
       "critical_impacted": "{count} kritische betroffen"
     },
-    "board": {
+    "list": {
       "service": "Service",
+      "status": "Status",
+      "criticality": "Kritikalität",
       "health": "Zustand",
-      "incidents": "Störungen",
-      "deploy": "Letzte Bereitstellung",
-      "owner": "Besitzer"
+      "incidents": "Vorfälle",
+      "deploy": "Letztes Deployment",
+      "owner": "Eigentümer",
+      "group_by": {
+        "label": "Gruppieren nach",
+        "status": "Status",
+        "criticality": "Kritikalität",
+        "health": "Zustand"
+      },
+      "expand_group": "Gruppe erweitern",
+      "collapse_group": "Gruppe einklappen"
     },
     "graph": {
       "re_layout": "Neu anordnen",

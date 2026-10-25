@@ -6,7 +6,9 @@
 
 import type { TServiceCriticality, TServiceHealth, TServiceKind, TServiceStatus, TServiceType } from "./core";
 
-export type TServiceLayoutOptions = "board" | "graph";
+export type TServiceLayoutOptions = "list" | "graph";
+
+export type TServiceGroupByOptions = "status" | "criticality" | "health" | null;
 
 export type TServiceOrderByOptions = "health" | "name" | "-created_at" | "-updated_at" | "criticality" | "status";
 
@@ -24,4 +26,5 @@ export type TServiceFilters = {
 export type TServiceDisplayFilters = {
   layout: TServiceLayoutOptions;
   order_by: TServiceOrderByOptions;
+  group_by: TServiceGroupByOptions;
 };

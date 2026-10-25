@@ -32,7 +32,7 @@
       "monitoring": "Pemantauan"
     },
     "layout": {
-      "board": "Papan",
+      "list": "Daftar",
       "graph": "Graf"
     },
     "layout_label": "Tata letak",
@@ -100,12 +100,22 @@
       "healthy": "{count} sehat",
       "critical_impacted": "{count} kritis terdampak"
     },
-    "board": {
+    "list": {
       "service": "Layanan",
+      "status": "Status",
+      "criticality": "Kritikalitas",
       "health": "Kesehatan",
       "incidents": "Insiden",
-      "deploy": "Deploy terakhir",
-      "owner": "Pemilik"
+      "deploy": "Deployment terakhir",
+      "owner": "Pemilik",
+      "group_by": {
+        "label": "Kelompokkan",
+        "status": "Status",
+        "criticality": "Kritikalitas",
+        "health": "Kesehatan"
+      },
+      "expand_group": "Bentangkan grup",
+      "collapse_group": "Ciutkan grup"
     },
     "graph": {
       "re_layout": "Tata ulang",

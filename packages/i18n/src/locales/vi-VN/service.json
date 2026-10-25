@@ -32,7 +32,7 @@
       "monitoring": "Giám sát"
     },
     "layout": {
-      "board": "Bảng",
+      "list": "Danh sách",
       "graph": "Đồ thị"
     },
     "layout_label": "Bố cục",
@@ -100,12 +100,22 @@
       "healthy": "{count} ổn định",
       "critical_impacted": "{count} nghiêm trọng bị ảnh hưởng"
     },
-    "board": {
+    "list": {
       "service": "Dịch vụ",
-      "health": "Sức khỏe",
+      "status": "Trạng thái",
+      "criticality": "Mức độ nghiêm trọng",
+      "health": "Tình trạng",
       "incidents": "Sự cố",
-      "deploy": "Triển khai gần nhất",
-      "owner": "Chủ sở hữu"
+      "deploy": "Lần triển khai gần nhất",
+      "owner": "Chủ sở hữu",
+      "group_by": {
+        "label": "Nhóm theo",
+        "status": "Trạng thái",
+        "criticality": "Mức độ nghiêm trọng",
+        "health": "Tình trạng"
+      },
+      "expand_group": "Mở rộng nhóm",
+      "collapse_group": "Thu gọn nhóm"
     },
     "graph": {
       "re_layout": "Bố trí lại",

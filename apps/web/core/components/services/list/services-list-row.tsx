@@ -7,7 +7,6 @@
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { useTranslation } from "@plane/i18n";
 import { ControlLink } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
@@ -19,23 +18,21 @@ import { useProject } from "@/hooks/store/use-project";
 import { useService } from "@/hooks/store/use-service";
 // local imports
 import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
+import { ServiceCriticalityPill } from "../health/service-criticality-pill";
 import { ServiceDeployCell } from "../health/service-deploy-cell";
 import { ServiceHealthDot } from "../health/service-health-dot";
 import { ServiceHealthPill } from "../health/service-health-pill";
 import { ServiceIncidentCell } from "../health/service-incident-cell";
+import { ServiceStatusPill } from "../health/service-status-pill";
 
 type Props = {
   serviceId: string;
-  showProject?: boolean;
-  showOwner?: boolean;
 };
 
-export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props) {
-  const { serviceId, showProject = true, showOwner = true } = props;
+export const ServicesListRow = observer(function ServicesListRow(props: Props) {
+  const { serviceId } = props;
   // router
   const { workspaceSlug } = useParams();
-  // plane hooks
-  const { t } = useTranslation();
   // store hooks
   const { getServiceById, getServiceHealth } = useService();
   const { getProjectById } = useProject();
@@ -49,10 +46,8 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
   if (!service) return null;
 
   const state = health?.health ?? DEFAULT_HEALTH;
-  const config = HEALTH_CONFIG[state];
   const serviceLink = `/${workspaceSlug?.toString()}/services/${service.id}`;
-  const ownerProject = showProject && service.owner_project_id ? getProjectById(service.owner_project_id) : undefined;
-  const isCritical = service.criticality === "critical";
+  const ownerProject = service.owner_project_id ? getProjectById(service.owner_project_id) : undefined;
 
   return (
     <ControlLink
@@ -61,7 +56,7 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
       onClick={() => handleRedirection(workspaceSlug?.toString(), service, isMobile)}
       className="relative flex items-center gap-3 border-b border-subtle px-3 py-1.5 transition-colors hover:bg-layer-transparent-hover"
     >
-      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", config.rail)} />
+      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-[3px]", HEALTH_CONFIG[state].rail)} />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <ServiceHealthDot health={state} />
         <span className="truncate text-12 font-medium text-primary">{service.name}</span>
@@ -73,26 +68,25 @@ export const ServicesBoardRow = observer(function ServicesBoardRow(props: Props)
             {ownerProject.identifier}
           </span>
         )}
-        {isCritical && (
-          <span className="shrink-0 rounded-xs border border-danger-strong px-1 text-9 font-medium tracking-wide text-danger-primary uppercase">
-            {t(`service.criticality_values.${service.criticality}`)}
-          </span>
-        )}
       </div>
-      <div className="hidden w-[90px] shrink-0 sm:block">
+      <div className="hidden w-[100px] shrink-0 sm:block">
+        <ServiceStatusPill status={service.status} />
+      </div>
+      <div className="hidden w-[90px] shrink-0 md:block">
+        <ServiceCriticalityPill criticality={service.criticality} />
+      </div>
+      <div className="hidden w-[90px] shrink-0 md:block">
         <ServiceHealthPill health={state} />
       </div>
-      <div className="hidden w-[100px] shrink-0 md:block">
+      <div className="hidden w-[100px] shrink-0 lg:block">
         <ServiceIncidentCell incidents={health?.incidents ?? []} />
       </div>
-      <div className="hidden w-[90px] shrink-0 lg:block">
+      <div className="hidden w-[90px] shrink-0 xl:block">
         <ServiceDeployCell lastDeployedAt={health?.last_deployed_at ?? null} />
       </div>
-      {showOwner && (
-        <div className="hidden w-[40px] shrink-0 items-center justify-end xl:flex">
-          {service.owner_id && <ButtonAvatars showTooltip userIds={service.owner_id} />}
-        </div>
-      )}
+      <div className="hidden w-[40px] shrink-0 items-center justify-end xl:flex">
+        {service.owner_id && <ButtonAvatars showTooltip userIds={service.owner_id} />}
+      </div>
     </ControlLink>
   );
 });

@@ -16,6 +16,7 @@
 
 - Modify: `packages/types/src/service/filters.ts:9-25`
 - Modify: `apps/web/core/store/service_filter.store.ts:114-126`
+- Modify: `apps/web/app/(all)/[workspaceSlug]/(projects)/services/page.tsx` (one-line layout fallback `board` to `list`)
 - Modify: `apps/web/core/components/services/service-layout-icon.tsx`
 - Test: none (store change covered by typecheck; no existing store test file)
 
@@ -123,17 +124,17 @@ git commit -m "feat(services): rename board layout key to list with migration"
 Append to `apps/web/core/services/service.helpers.test.ts`:
 
 ```ts
-describe("groupServices", () => {
-  const makeService = (id: string, overrides: Record<string, unknown> = {}) =>
-    ({
-      id,
-      name: id,
-      status: "active",
-      criticality: "medium",
-      type: "internal",
-      ...overrides,
-    }) as never;
+const makeService = (id: string, overrides: Record<string, unknown> = {}) =>
+  ({
+    id,
+    name: id,
+    status: "active",
+    criticality: "medium",
+    type: "internal",
+    ...overrides,
+  }) as never;
 
+describe("groupServices", () => {
   it("groups by status in lifecycle order", () => {
     const services = [
       makeService("retired", { status: "retired" }),
@@ -222,9 +223,10 @@ export const groupServices = (
     bucket.push(service);
     buckets.set(key, bucket);
   }
-  return [...buckets.entries()]
-    .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
-    .map(([key, bucket]) => ({ key, services: bucket }));
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const entries = [...buckets.entries()];
+  entries.sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
+  return entries.map(([key, bucket]) => ({ key, services: bucket }));
 };
 ```
 
@@ -487,7 +489,7 @@ export const ServicesListRow = observer(function ServicesListRow(props: Props) {
 });
 ```
 
-Note: the `t` hook is kept for future row-level strings; if unused after implementation, remove the import before committing so `oxlint --deny-warnings` passes.
+Note: the row renders no direct translated strings (all copy lives in the reused cells), so the `t` hook is omitted entirely.
 
 - [ ] **Step 2: Create the grouped list**
 

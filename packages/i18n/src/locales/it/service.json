@@ -32,7 +32,7 @@
       "monitoring": "Monitoraggio"
     },
     "layout": {
-      "board": "Bacheca",
+      "list": "Elenco",
       "graph": "Grafo"
     },
     "layout_label": "Layout",
@@ -100,12 +100,22 @@
       "healthy": "{count} operativi",
       "critical_impacted": "{count} critici interessati"
     },
-    "board": {
+    "list": {
       "service": "Servizio",
-      "health": "Salute",
+      "status": "Stato",
+      "criticality": "Criticità",
+      "health": "Stato di salute",
       "incidents": "Incidenti",
-      "deploy": "Ultimo rilascio",
-      "owner": "Proprietario"
+      "deploy": "Ultimo deployment",
+      "owner": "Proprietario",
+      "group_by": {
+        "label": "Raggruppa per",
+        "status": "Stato",
+        "criticality": "Criticità",
+        "health": "Stato di salute"
+      },
+      "expand_group": "Espandi gruppo",
+      "collapse_group": "Comprimi gruppo"
     },
     "graph": {
       "re_layout": "Riorganizza",

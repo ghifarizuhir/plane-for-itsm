@@ -32,7 +32,7 @@
       "monitoring": "Supervisión"
     },
     "layout": {
-      "board": "Tablero",
+      "list": "Lista",
       "graph": "Grafo"
     },
     "layout_label": "Diseño",
@@ -100,12 +100,22 @@
       "healthy": "{count} saludables",
       "critical_impacted": "{count} críticos afectados"
     },
-    "board": {
+    "list": {
       "service": "Servicio",
+      "status": "Estado",
+      "criticality": "Criticidad",
       "health": "Salud",
       "incidents": "Incidentes",
       "deploy": "Último despliegue",
-      "owner": "Propietario"
+      "owner": "Propietario",
+      "group_by": {
+        "label": "Agrupar por",
+        "status": "Estado",
+        "criticality": "Criticidad",
+        "health": "Salud"
+      },
+      "expand_group": "Expandir grupo",
+      "collapse_group": "Contraer grupo"
     },
     "graph": {
       "re_layout": "Reorganizar",

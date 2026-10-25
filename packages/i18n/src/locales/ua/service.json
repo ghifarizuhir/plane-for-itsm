@@ -32,7 +32,7 @@
       "monitoring": "Моніторинг"
     },
     "layout": {
-      "board": "Дошка",
+      "list": "Список",
       "graph": "Граф"
     },
     "layout_label": "Розташування",
@@ -100,12 +100,22 @@
       "healthy": "{count} працює",
       "critical_impacted": "{count} критичних постраждало"
     },
-    "board": {
+    "list": {
       "service": "Сервіс",
+      "status": "Статус",
+      "criticality": "Критичність",
       "health": "Стан",
       "incidents": "Інциденти",
       "deploy": "Останній деплой",
-      "owner": "Власник"
+      "owner": "Власник",
+      "group_by": {
+        "label": "Групувати за",
+        "status": "Статус",
+        "criticality": "Критичність",
+        "health": "Стан"
+      },
+      "expand_group": "Розгорнути групу",
+      "collapse_group": "Згорнути групу"
     },
     "graph": {
       "re_layout": "Перебудувати",

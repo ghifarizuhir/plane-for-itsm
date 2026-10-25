@@ -32,7 +32,7 @@
       "monitoring": "모니터링"
     },
     "layout": {
-      "board": "보드",
+      "list": "목록",
       "graph": "그래프"
     },
     "layout_label": "레이아웃",
@@ -100,12 +100,22 @@
       "healthy": "정상 {count}개",
       "critical_impacted": "심각 영향 {count}개"
     },
-    "board": {
+    "list": {
       "service": "서비스",
-      "health": "헬스",
+      "status": "상태",
+      "criticality": "중요도",
+      "health": "상태",
       "incidents": "인시던트",
       "deploy": "최근 배포",
-      "owner": "소유자"
+      "owner": "소유자",
+      "group_by": {
+        "label": "그룹화 기준",
+        "status": "상태",
+        "criticality": "중요도",
+        "health": "상태"
+      },
+      "expand_group": "그룹 펼치기",
+      "collapse_group": "그룹 접기"
     },
     "graph": {
       "re_layout": "다시 배치",

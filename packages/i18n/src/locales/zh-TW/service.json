@@ -32,7 +32,7 @@
       "monitoring": "監控"
     },
     "layout": {
-      "board": "看板",
+      "list": "清單",
       "graph": "圖譜"
     },
     "layout_label": "版面配置",
@@ -100,12 +100,22 @@
       "healthy": "{count} 個健康",
       "critical_impacted": "{count} 個嚴重受影響"
     },
-    "board": {
+    "list": {
       "service": "服務",
-      "health": "健康",
-      "incidents": "事件",
-      "deploy": "上次佈署",
-      "owner": "擁有者"
+      "status": "狀態",
+      "criticality": "關鍵程度",
+      "health": "健康狀況",
+      "incidents": "事故",
+      "deploy": "上次部署",
+      "owner": "擁有者",
+      "group_by": {
+        "label": "分組依據",
+        "status": "狀態",
+        "criticality": "關鍵程度",
+        "health": "健康狀況"
+      },
+      "expand_group": "展開分組",
+      "collapse_group": "收合分組"
     },
     "graph": {
       "re_layout": "重新排列",

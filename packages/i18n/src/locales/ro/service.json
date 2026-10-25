@@ -32,7 +32,7 @@
       "monitoring": "Monitorizare"
     },
     "layout": {
-      "board": "Panou",
+      "list": "Listă",
       "graph": "Graf"
     },
     "layout_label": "Aspect",
@@ -100,12 +100,22 @@
       "healthy": "{count} funcționale",
       "critical_impacted": "{count} critice afectate"
     },
-    "board": {
+    "list": {
       "service": "Serviciu",
-      "health": "Sănătate",
+      "status": "Stare",
+      "criticality": "Criticitate",
+      "health": "Stare de sănătate",
       "incidents": "Incidente",
       "deploy": "Ultima implementare",
-      "owner": "Proprietar"
+      "owner": "Proprietar",
+      "group_by": {
+        "label": "Grupează după",
+        "status": "Stare",
+        "criticality": "Criticitate",
+        "health": "Stare de sănătate"
+      },
+      "expand_group": "Extinde grupul",
+      "collapse_group": "Restrânge grupul"
     },
     "graph": {
       "re_layout": "Rearanjează",

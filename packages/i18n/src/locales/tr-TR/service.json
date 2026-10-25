@@ -32,7 +32,7 @@
       "monitoring": "İzleme"
     },
     "layout": {
-      "board": "Pano",
+      "list": "Liste",
       "graph": "Graf"
     },
     "layout_label": "Düzen",
@@ -100,12 +100,22 @@
       "healthy": "{count} sağlıklı",
       "critical_impacted": "{count} kritik etkilendi"
     },
-    "board": {
+    "list": {
       "service": "Hizmet",
+      "status": "Durum",
+      "criticality": "Kritiklik",
       "health": "Sağlık",
       "incidents": "Olaylar",
       "deploy": "Son dağıtım",
-      "owner": "Sahip"
+      "owner": "Sahip",
+      "group_by": {
+        "label": "Gruplandırma ölçütü",
+        "status": "Durum",
+        "criticality": "Kritiklik",
+        "health": "Sağlık"
+      },
+      "expand_group": "Grubu genişlet",
+      "collapse_group": "Grubu daralt"
     },
     "graph": {
       "re_layout": "Yeniden düzenle",

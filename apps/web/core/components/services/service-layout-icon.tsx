@@ -4,12 +4,12 @@
  * See the LICENSE file for details.
  */
 
-import { BoardOutline, WorkgraphOutline } from "@makeplane/propel/icons";
+import { ListOutline, WorkgraphOutline } from "@makeplane/propel/icons";
 import type { TServiceLayoutOptions } from "@plane/types";
 import { cn } from "@plane/utils";
 
 export const SERVICE_VIEW_LAYOUTS: { key: TServiceLayoutOptions; i18n_label: string }[] = [
-  { key: "board", i18n_label: "service.layout.board" },
+  { key: "list", i18n_label: "service.layout.list" },
   { key: "graph", i18n_label: "service.layout.graph" },
 ];
 
@@ -26,7 +26,7 @@ export function ServiceLayoutIcon(props: IServiceLayoutIcon) {
 
   // get Layout icon
   const icons = {
-    board: BoardOutline,
+    list: ListOutline,
     graph: WorkgraphOutline,
   };
   const Icon = icons[layoutType ?? "list"];

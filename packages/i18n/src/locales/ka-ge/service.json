@@ -32,7 +32,7 @@
       "monitoring": "მონიტორინგი"
     },
     "layout": {
-      "board": "დაფა",
+      "list": "სია",
       "graph": "გრაფი"
     },
     "layout_label": "განლაგება",
@@ -100,12 +100,22 @@
       "healthy": "{count} ჯანმრთელი",
       "critical_impacted": "{count} კრიტიკული დაზარალებული"
     },
-    "board": {
+    "list": {
       "service": "სერვისი",
+      "status": "სტატუსი",
+      "criticality": "კრიტიკულობა",
       "health": "ჯანმრთელობა",
       "incidents": "ინციდენტები",
-      "deploy": "ბოლო დეპლოი",
-      "owner": "მფლობელი"
+      "deploy": "ბოლო განლაგება",
+      "owner": "მფლობელი",
+      "group_by": {
+        "label": "დაჯგუფება",
+        "status": "სტატუსი",
+        "criticality": "კრიტიკულობა",
+        "health": "ჯანმრთელობა"
+      },
+      "expand_group": "ჯგუფის გაშლა",
+      "collapse_group": "ჯგუფის ჩაკეცვა"
     },
     "graph": {
       "re_layout": "ხელახლა განლაგება",

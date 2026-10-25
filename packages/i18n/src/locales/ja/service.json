@@ -32,7 +32,7 @@
       "monitoring": "モニタリング"
     },
     "layout": {
-      "board": "ボード",
+      "list": "リスト",
       "graph": "グラフ"
     },
     "layout_label": "レイアウト",
@@ -100,12 +100,22 @@
       "healthy": "{count}件が正常",
       "critical_impacted": "{count}件の重大サービスに影響"
     },
-    "board": {
+    "list": {
       "service": "サービス",
+      "status": "ステータス",
+      "criticality": "重要度",
       "health": "ヘルス",
       "incidents": "インシデント",
       "deploy": "最終デプロイ",
-      "owner": "所有者"
+      "owner": "所有者",
+      "group_by": {
+        "label": "グループ化",
+        "status": "ステータス",
+        "criticality": "重要度",
+        "health": "ヘルス"
+      },
+      "expand_group": "グループを展開",
+      "collapse_group": "グループを折りたたむ"
     },
     "graph": {
       "re_layout": "再レイアウト",

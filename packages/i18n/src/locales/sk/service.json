@@ -32,7 +32,7 @@
       "monitoring": "Monitorovanie"
     },
     "layout": {
-      "board": "Nástenka",
+      "list": "Zoznam",
       "graph": "Graf"
     },
     "layout_label": "Rozloženie",
@@ -100,12 +100,22 @@
       "healthy": "{count} zdravých",
       "critical_impacted": "{count} kritických zasiahnutých"
     },
-    "board": {
+    "list": {
       "service": "Služba",
-      "health": "Zdravie",
+      "status": "Stav",
+      "criticality": "Kritickosť",
+      "health": "Stav",
       "incidents": "Incidenty",
       "deploy": "Posledné nasadenie",
-      "owner": "Vlastník"
+      "owner": "Vlastník",
+      "group_by": {
+        "label": "Zoskupiť podľa",
+        "status": "Stav",
+        "criticality": "Kritickosť",
+        "health": "Stav"
+      },
+      "expand_group": "Rozbaliť skupinu",
+      "collapse_group": "Zbaliť skupinu"
     },
     "graph": {
       "re_layout": "Preusporiadať",
