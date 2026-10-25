@@ -5,6 +5,7 @@
  */
 
 import type { ILiteService, IService, TServiceKind } from "@plane/types";
+import { orderBy } from "lodash-es";
 // helpers
 import { isLiteService } from "@/services/service.helpers";
 // local imports
@@ -52,13 +53,14 @@ export const getServiceGroups = (services: (IService | ILiteService)[]): TServic
 
   const sortedGroups = [...groups.values()];
   sortedGroups.forEach((group) => {
-    group.services = [...group.services].toSorted((a, b) => a.name.localeCompare(b.name));
+    // NOTE: do not use `.sort()` here — the repo's `oxlint --fix` pre-commit
+    // hook rewrites it to `.toSorted()`, which the TS lib target does not know.
+    group.services = orderBy(group.services, [(service) => service.name], ["asc"]);
   });
 
-  return sortedGroups.toSorted(
-    (a, b) =>
-      groupRank(a) - groupRank(b) ||
-      (a.projectId ?? "").localeCompare(b.projectId ?? "") ||
-      kindRank(a.kind) - kindRank(b.kind)
+  return orderBy(
+    sortedGroups,
+    [(group) => groupRank(group), (group) => group.projectId ?? "", (group) => kindRank(group.kind)],
+    ["asc", "asc", "asc"]
   );
 };
