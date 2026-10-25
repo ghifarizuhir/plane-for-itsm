@@ -10,6 +10,7 @@ pub mod module;
 pub mod notification;
 pub mod page;
 pub mod project;
+pub mod service;
 pub mod state;
 pub mod view;
 pub mod webhook;
