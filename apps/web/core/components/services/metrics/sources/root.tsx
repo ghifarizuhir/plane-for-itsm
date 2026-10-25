@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { API_BASE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -215,7 +216,15 @@ export function MetricSourcesRoot({ workspaceSlug }: Props) {
       )}
 
       <div className="mt-6 rounded-md border border-subtle p-3">
-        <p className="text-12 font-medium text-primary">{t("workspace_settings.settings.metric_sources.snippet")}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-12 font-medium text-primary">{t("workspace_settings.settings.metric_sources.snippet")}</p>
+          <Link
+            href={`/${workspaceSlug}/docs/metric-sources`}
+            className="text-12 font-medium text-accent-primary hover:underline"
+          >
+            {t("common.documentation")}
+          </Link>
+        </div>
         <pre className="mt-2 overflow-x-auto rounded bg-surface-2 p-2 text-11 text-secondary">
           {`curl -X POST "${API_BASE_URL}/api/inbound/metrics/<token>/" \\
   -H 'Content-Type: application/json' \\

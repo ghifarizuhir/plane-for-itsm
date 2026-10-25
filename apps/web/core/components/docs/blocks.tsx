@@ -18,6 +18,23 @@ export function DocsParagraph({ children }: { children: ReactNode }) {
   return <p className="mt-3 text-13 leading-6 text-secondary">{children}</p>;
 }
 
+export function DocsInlineCode({ children }: { children: ReactNode }) {
+  return <code className="font-mono rounded bg-layer-1 px-1 py-0.5 text-12 text-primary">{children}</code>;
+}
+
+export function DocsCodeBlock({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-subtle">
+      {title && (
+        <div className="border-b border-subtle bg-layer-1 px-4 py-2 text-11 font-medium text-tertiary">{title}</div>
+      )}
+      <pre className="font-mono overflow-x-auto bg-surface-2 p-4 text-12 leading-6 text-secondary">
+        <code>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
 type TCalloutVariant = "info" | "tip" | "warning";
 
 const CALLOUT_STYLES: Record<TCalloutVariant, { container: string; icon: ReactNode }> = {

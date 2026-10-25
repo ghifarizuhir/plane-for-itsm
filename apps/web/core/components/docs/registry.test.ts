@@ -21,6 +21,12 @@ describe("docs registry", () => {
     expect(getTopicBySlug("not-a-topic")).toBeUndefined();
   });
 
+  it("registers the metric sources integration topic", () => {
+    const topic = getTopicBySlug("metric-sources");
+    expect(topic?.group).toBe("settings");
+    expect(topic?.title).toContain("Metric sources");
+  });
+
   it("returns neighbors with correct edges", () => {
     const first = getTopicNeighbors(DOC_TOPICS[0].slug);
     expect(first.prev).toBeUndefined();

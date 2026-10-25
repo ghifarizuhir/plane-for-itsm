@@ -274,6 +274,14 @@ export const DOC_TOPICS: TDocTopic[] = [
     icon: SettingsOutline,
     component: lazy(() => import("./content/project-settings")),
   },
+  {
+    slug: "metric-sources",
+    title: "Metric sources & integrasi metrik",
+    description: "Hubungkan monitoring eksternal: token, format payload, dan contoh agent pengirim metrik.",
+    group: "settings",
+    icon: AnalyticsOutline,
+    component: lazy(() => import("./content/metric-sources")),
+  },
 ];
 
 export const getTopicBySlug = (slug: string): TDocTopic | undefined => DOC_TOPICS.find((topic) => topic.slug === slug);
