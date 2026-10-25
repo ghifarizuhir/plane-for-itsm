@@ -14,7 +14,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IService, IServiceDependency, TServiceDependencyType } from "@plane/types";
-import { ControlLink, CustomSelect } from "@plane/ui";
+import { ControlLink, CustomSearchSelect, CustomSelect } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -111,6 +111,11 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
     .map((id) => getServiceById(id))
     .filter((candidate): candidate is IService => Boolean(candidate) && candidate!.id !== serviceId)
     .filter((candidate) => !dependencyExists(dependencies, serviceId, candidate.id, selectedType));
+  const serviceOptions = candidates.map((candidate) => ({
+    value: candidate.id,
+    query: candidate.name,
+    content: <span className="truncate">{candidate.name}</span>,
+  }));
   const canAdd = Boolean(selectedId) && !dependencyExists(dependencies, serviceId, selectedId, selectedType);
 
   const handleAdd = async () => {
@@ -252,9 +257,10 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
             </CustomSelect.Option>
           ))}
         </CustomSelect>
-        <CustomSelect
+        <CustomSearchSelect
           value={selectedId}
           onChange={(value: string) => setSelectedId(value)}
+          options={serviceOptions}
           className={cn("h-7.5 min-w-0", isPane ? "w-full" : "grow basis-0")}
           label={
             <span className="flex items-center gap-2 py-0.5 text-12">
@@ -265,13 +271,7 @@ export const ServiceRelationships = observer(function ServiceRelationships(props
               )}
             </span>
           }
-        >
-          {candidates.map((candidate) => (
-            <CustomSelect.Option key={candidate.id} value={candidate.id}>
-              <span className="truncate">{candidate.name}</span>
-            </CustomSelect.Option>
-          ))}
-        </CustomSelect>
+        />
         <Button
           variant="secondary"
           size="sm"

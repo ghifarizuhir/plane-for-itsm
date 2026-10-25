@@ -13,7 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 // ui
-import { CustomSelect } from "@plane/ui";
+import { CustomSearchSelect } from "@plane/ui";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useService } from "@/hooks/store/use-service";
@@ -56,6 +56,12 @@ export const ServiceProjectLinks = observer(function ServiceProjectLinks({ servi
     .filter((id) => canAddForProject(id))
     .map((id) => getProjectById(id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+  const projectOptions = addableProjects.map((candidate) => ({
+    value: candidate.id,
+    query: candidate.name,
+    content: <span className="truncate">{candidate.name}</span>,
+  }));
 
   const handleAdd = async () => {
     if (!slug || !workspaceId || !selectedProjectId) return;
@@ -109,18 +115,13 @@ export const ServiceProjectLinks = observer(function ServiceProjectLinks({ servi
             </span>
             <span className="flex shrink-0 items-center gap-2">
               {isOwner && isWorkspaceAdmin && addableProjects.length > 0 && (
-                <CustomSelect
+                <CustomSearchSelect
                   value=""
                   onChange={handleTransfer}
+                  options={projectOptions}
                   label={<span className="text-11 text-tertiary">{t("service.project_links.transfer")}</span>}
                   noChevron
-                >
-                  {addableProjects.map((candidate) => (
-                    <CustomSelect.Option key={candidate.id} value={candidate.id}>
-                      <span className="truncate">{candidate.name}</span>
-                    </CustomSelect.Option>
-                  ))}
-                </CustomSelect>
+                />
               )}
               {!isOwner && canManageLinks && (
                 <button
@@ -137,9 +138,10 @@ export const ServiceProjectLinks = observer(function ServiceProjectLinks({ servi
       })}
       {addableProjects.length > 0 && (
         <div className="flex items-center gap-2">
-          <CustomSelect
+          <CustomSearchSelect
             value={selectedProjectId}
             onChange={setSelectedProjectId}
+            options={projectOptions}
             className="h-7.5 min-w-0 grow basis-0"
             label={
               <span className="text-12">
@@ -150,13 +152,7 @@ export const ServiceProjectLinks = observer(function ServiceProjectLinks({ servi
                 )}
               </span>
             }
-          >
-            {addableProjects.map((candidate) => (
-              <CustomSelect.Option key={candidate.id} value={candidate.id}>
-                <span className="truncate">{candidate.name}</span>
-              </CustomSelect.Option>
-            ))}
-          </CustomSelect>
+          />
           <Button variant="secondary" size="sm" onClick={handleAdd} disabled={!selectedProjectId}>
             {t("add")}
           </Button>

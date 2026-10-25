@@ -13,7 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IService } from "@plane/types";
 // ui
-import { CustomSelect, Input as UIKitInput } from "@plane/ui";
+import { CustomSearchSelect, CustomSelect, Input as UIKitInput } from "@plane/ui";
 // components
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { RichTextEditor } from "@/components/editor/rich-text";
@@ -186,6 +186,12 @@ export function ServiceForm(props: Props) {
     });
   }, [data, reset]);
 
+  const ownerProjectOptions = (ownerProjectField?.projects ?? []).map((project) => ({
+    value: project.id,
+    query: project.name,
+    content: <span className="truncate">{project.name}</span>,
+  }));
+
   return (
     <form onSubmit={handleSubmit(handleCreateUpdateService)}>
       <div className="space-y-5 p-5">
@@ -198,9 +204,10 @@ export function ServiceForm(props: Props) {
               <label htmlFor="owner_project" className="text-11 font-medium text-secondary">
                 {t("service.fields.owner_project")}
               </label>
-              <CustomSelect
+              <CustomSearchSelect
                 value={ownerProjectField.value}
                 onChange={(val: string) => ownerProjectField.onChange(val)}
+                options={ownerProjectOptions}
                 disabled={ownerProjectField.disabled}
                 label={
                   <span className="flex items-center gap-2 py-0.5 text-12">
@@ -209,13 +216,7 @@ export function ServiceForm(props: Props) {
                     )}
                   </span>
                 }
-              >
-                {ownerProjectField.projects.map((project) => (
-                  <CustomSelect.Option key={project.id} value={project.id}>
-                    <span className="truncate">{project.name}</span>
-                  </CustomSelect.Option>
-                ))}
-              </CustomSelect>
+              />
             </div>
           )}
           <div className="space-y-1">
