@@ -1238,6 +1238,7 @@ pub(crate) async fn create_dependency_core(
         _ => None,
     };
     let id = Uuid::new_v4();
+    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "INSERT INTO service_dependencies (id, workspace_id, project_id, from_service_id, \
          to_service_id, dependency_type, created_at, updated_at, created_by_id, updated_by_id) \
@@ -1250,8 +1251,10 @@ pub(crate) async fn create_dependency_core(
     .bind(to_service_id)
     .bind(dependency_type)
     .bind(user_id)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    reset_workspace_layout(&mut *tx, workspace_id).await?;
+    tx.commit().await?;
     let row: DependencyRow = sqlx::query_as(&format!("{DEPENDENCY_SELECT} WHERE id = $1"))
         .bind(id)
         .fetch_one(&st.pool)
@@ -1346,13 +1349,16 @@ pub async fn dependency_destroy_workspace(
     if !service_access::gate_writer(&st.pool, auth.0, &slug, row.from_service_id).await? {
         return Ok(deny());
     }
+    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    reset_workspace_layout(&mut *tx, row.workspace_id).await?;
+    tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 
@@ -1451,13 +1457,16 @@ pub async fn dependency_destroy(
     if !service_access::gate_writer(&st.pool, auth.0, &slug, row.from_service_id).await? {
         return Ok(deny());
     }
+    let mut tx = st.pool.begin().await?;
     sqlx::query(
         "UPDATE service_dependencies SET deleted_at = now(), updated_at = now() \
          WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(pk)
-    .execute(&st.pool)
+    .execute(&mut *tx)
     .await?;
+    reset_workspace_layout(&mut *tx, row.workspace_id).await?;
+    tx.commit().await?;
     Ok((StatusCode::NO_CONTENT, Json(Value::Null)))
 }
 

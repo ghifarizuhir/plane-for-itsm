@@ -681,6 +681,156 @@ async fn service_mutations_reset_workspace_layout() {
 }
 
 #[tokio::test]
+async fn dependency_mutations_reset_workspace_layout() {
+    use api::routes::service::{
+        dependencies_create as dependencies_create_compat,
+        dependencies_create_workspace, dependency_destroy as dependency_destroy_compat,
+        dependency_destroy_workspace, CreateDependency,
+    };
+    use axum::extract::{Path, State};
+
+    let st = state().await;
+    let sc = Scratch::new(&st.pool).await;
+
+    // S1 -> S2 requires S2 to be linked to P1.
+    link_service(&st.pool, sc.s2, sc.p1, sc.workspace_id, "consumer").await;
+
+    for id in [sc.s1, sc.s2, sc.s4] {
+        set_service_position(&st.pool, id, 10.0, 20.0).await;
+    }
+    let (status, Json(project_edge)) = dependencies_create_compat(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+            dependency_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let project_edge_id = Uuid::parse_str(project_edge["id"].as_str().unwrap()).unwrap();
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "create dependency resets every workspace position"
+        );
+    }
+
+    // Duplicate is rejected and must not disturb positions.
+    for id in [sc.s1, sc.s2, sc.s4] {
+        set_service_position(&st.pool, id, 30.0, 40.0).await;
+    }
+    let duplicate = dependencies_create_compat(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1)),
+        Json(CreateDependency {
+            from_service_id: sc.s1,
+            to_service_id: sc.s2,
+            dependency_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(duplicate.0, axum::http::StatusCode::BAD_REQUEST);
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert!(
+            service_position(&st.pool, id).await.is_some(),
+            "rejected duplicate leaves positions intact"
+        );
+    }
+
+    // Cycle is rejected and must not disturb positions.
+    let cycle = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s2,
+            to_service_id: sc.s1,
+            dependency_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(cycle.0, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(cycle.1["error"], "This dependency would create a cycle.");
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert!(
+            service_position(&st.pool, id).await.is_some(),
+            "rejected cycle leaves positions intact"
+        );
+    }
+
+    // Project delete resets.
+    let (status, _) = dependency_destroy_compat(
+        State(st.clone()),
+        AuthUser(sc.owner_member),
+        Path((sc.slug.clone(), sc.p1, project_edge_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "project delete resets every workspace position"
+        );
+    }
+
+    // Workspace create resets.
+    for id in [sc.s1, sc.s2, sc.s4] {
+        set_service_position(&st.pool, id, 50.0, 60.0).await;
+    }
+    let (status, Json(workspace_edge)) = dependencies_create_workspace(
+        State(st.clone()),
+        AuthUser(sc.consumer_admin),
+        Path(sc.slug.clone()),
+        Json(CreateDependency {
+            from_service_id: sc.s2,
+            to_service_id: sc.s1,
+            dependency_type: None,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::CREATED);
+    let workspace_edge_id = Uuid::parse_str(workspace_edge["id"].as_str().unwrap()).unwrap();
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "workspace create resets every workspace position"
+        );
+    }
+
+    // Workspace delete resets.
+    for id in [sc.s1, sc.s2, sc.s4] {
+        set_service_position(&st.pool, id, 70.0, 80.0).await;
+    }
+    let (status, _) = dependency_destroy_workspace(
+        State(st.clone()),
+        AuthUser(sc.admin),
+        Path((sc.slug.clone(), workspace_edge_id)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+    for id in [sc.s1, sc.s2, sc.s4] {
+        assert_eq!(
+            service_position(&st.pool, id).await,
+            None,
+            "workspace delete resets every workspace position"
+        );
+    }
+}
+
+#[tokio::test]
 async fn project_links_and_transfer_owner() {
     use api::routes::service::{
         project_links_create, project_links_destroy, project_links_list, transfer_owner,
