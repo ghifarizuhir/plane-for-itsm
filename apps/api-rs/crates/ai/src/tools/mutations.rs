@@ -13,6 +13,7 @@ use super::{
     WORK_ITEM_NAME_MAX, WORK_ITEM_STATE_MAX,
 };
 use crate::agent::{record, ToolTrace};
+use common::models::service::SERVICE_KINDS;
 
 pub const UPDATE_WORK_ITEM_NAME: &str = "update_work_item";
 
@@ -730,6 +731,8 @@ pub struct CreateServiceArgs {
     /// One of: internal, external, infrastructure, third_party.
     #[serde(rename = "type")]
     pub service_type: Option<String>,
+    /// One of: service, database, server, cache, queue, storage, network, external_api, other.
+    pub kind: Option<String>,
     /// Owner display name or email; resolved by the UI.
     pub owner: Option<String>,
     /// Repository URL starting with http:// or https://.
@@ -750,6 +753,8 @@ pub struct CreateServiceProposal {
     pub criticality: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     pub service_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -776,6 +781,7 @@ pub fn create_service_proposal_from_args(
         "criticality",
     )?;
     let service_type = optional_enum_arg(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
+    let kind = optional_enum_arg(args.kind.as_deref(), &SERVICE_KINDS, "kind")?;
     let owner = optional_bounded_text(args.owner.as_deref(), "owner", CONTAINER_REF_MAX)?;
     let repository_url = optional_url(args.repository_url.as_deref(), "repository_url")?;
     let documentation_url = optional_url(args.documentation_url.as_deref(), "documentation_url")?;
@@ -786,6 +792,7 @@ pub fn create_service_proposal_from_args(
         status,
         criticality,
         service_type,
+        kind,
         owner,
         repository_url,
         documentation_url,
@@ -805,7 +812,7 @@ impl Tool for CreateService {
     fn description(&self) -> String {
         "Propose creating one service in a project. Only call this when the user \
          asks to create a service. The project and service name are required; \
-         never guess them. Status, criticality, type, owner, and URLs are \
+         never guess them. Status, criticality, type, kind, owner, and URLs are \
          optional. The user must confirm and may edit every field in the UI \
          before anything is saved. Never claim the service was created until \
          they confirm."
@@ -892,6 +899,9 @@ pub struct UpdateServiceChanges {
     /// New type: internal, external, infrastructure, third_party.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub service_type: Option<String>,
+    /// New component kind: service, database, server, cache, queue, storage, network, external_api, other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     /// New owner display name or email; an empty string clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
@@ -917,6 +927,7 @@ fn normalize_service_changes(
             "criticality",
         )?,
         service_type: optional_enum_arg(changes.service_type.as_deref(), &SERVICE_TYPES, "type")?,
+        kind: optional_enum_arg(changes.kind.as_deref(), &SERVICE_KINDS, "kind")?,
         owner: clearable_text(changes.owner.as_deref(), "owner", CONTAINER_REF_MAX)?,
         description: clearable_text(
             changes.description.as_deref(),
@@ -981,7 +992,7 @@ impl Tool for UpdateService {
 
     fn description(&self) -> String {
         "Propose editing exactly one existing service. Only call this when the \
-         user asks to change a service's status, criticality, type, owner, \
+         user asks to change a service's status, criticality, type, kind, owner, \
          description, or URLs. The service name or id is required; never guess \
          it. Send only the fields that change; an empty string clears a field. \
          The user must confirm and may edit every field in the UI before \
@@ -2308,6 +2319,7 @@ mod tests {
             status: Some(" ACTIVE ".into()),
             criticality: Some("High".into()),
             service_type: Some("internal".into()),
+            kind: None,
             owner: Some(" Budi ".into()),
             repository_url: Some(" https://git.example.com/email ".into()),
             documentation_url: None,
@@ -2333,6 +2345,7 @@ mod tests {
             status: None,
             criticality: None,
             service_type: None,
+            kind: None,
             owner: None,
             repository_url: None,
             documentation_url: None,
@@ -2347,6 +2360,7 @@ mod tests {
             status: Some("broken".into()),
             criticality: None,
             service_type: None,
+            kind: None,
             owner: None,
             repository_url: None,
             documentation_url: None,
@@ -2361,6 +2375,7 @@ mod tests {
             status: None,
             criticality: None,
             service_type: None,
+            kind: None,
             owner: None,
             repository_url: Some("git.example.com".into()),
             documentation_url: None,
@@ -2378,6 +2393,7 @@ mod tests {
             status: None,
             criticality: None,
             service_type: Some("internal".into()),
+            kind: Some("database".into()),
             owner: None,
             repository_url: None,
             documentation_url: None,
@@ -2385,7 +2401,45 @@ mod tests {
         .unwrap();
         let value = serde_json::to_value(&proposal).unwrap();
         assert_eq!(value["type"], serde_json::json!("internal"));
+        assert_eq!(value["kind"], serde_json::json!("database"));
         assert!(value.get("service_type").is_none());
+    }
+
+    #[test]
+    fn create_service_normalizes_kind() {
+        let proposal = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "Primary DB".into(),
+            description: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            kind: Some(" DATABASE ".into()),
+            owner: None,
+            repository_url: None,
+            documentation_url: None,
+        })
+        .unwrap();
+        assert_eq!(proposal.kind.as_deref(), Some("database"));
+        assert_eq!(
+            serde_json::to_value(&proposal).unwrap()["kind"],
+            serde_json::json!("database")
+        );
+
+        let invalid = create_service_proposal_from_args(CreateServiceArgs {
+            project: "LTS".into(),
+            name: "Primary DB".into(),
+            description: None,
+            status: None,
+            criticality: None,
+            service_type: None,
+            kind: Some("legacy".into()),
+            owner: None,
+            repository_url: None,
+            documentation_url: None,
+        })
+        .unwrap_err();
+        assert!(invalid.to_string().contains("database"));
     }
 
     #[test]
@@ -2406,6 +2460,28 @@ mod tests {
         assert_eq!(proposal.changes.status.as_deref(), Some("deprecated"));
         assert_eq!(proposal.changes.owner.as_deref(), Some(""));
         assert_eq!(proposal.changes.repository_url.as_deref(), Some(""));
+
+        let kind_proposal = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "Primary DB".into(),
+            project: None,
+            changes: UpdateServiceChanges {
+                kind: Some(" SERVER ".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(kind_proposal.changes.kind.as_deref(), Some("server"));
+
+        let bad_kind = update_service_proposal_from_args(UpdateServiceArgs {
+            service: "Primary DB".into(),
+            project: None,
+            changes: UpdateServiceChanges {
+                kind: Some("legacy".into()),
+                ..Default::default()
+            },
+        })
+        .unwrap_err();
+        assert!(bad_kind.to_string().contains("database"));
 
         let empty = update_service_proposal_from_args(UpdateServiceArgs {
             service: "Email".into(),

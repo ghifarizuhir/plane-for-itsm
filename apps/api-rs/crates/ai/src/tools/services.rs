@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use super::{clamp_limit, db_error, optional_text, resolve_project, schema_of, ProjectRow};
 use crate::agent::{record, ToolTrace};
+use common::models::service::SERVICE_KINDS;
 
 pub const SERVICE_STATUSES: [&str; 5] =
     ["active", "planned", "maintenance", "deprecated", "retired"];
@@ -41,6 +42,7 @@ pub struct ServiceRow {
     pub status: String,
     pub criticality: String,
     pub service_type: String,
+    pub kind: String,
     pub owner: String,
     pub project: String,
     pub repository_url: Option<String>,
@@ -48,7 +50,7 @@ pub struct ServiceRow {
 }
 
 pub const SERVICES_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.status, \
-     sv.criticality, sv.\"type\" AS service_type, \
+     sv.criticality, sv.\"type\" AS service_type, sv.kind, \
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
@@ -68,8 +70,9 @@ pub const SERVICES_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.status
      AND ($4::text IS NULL OR sv.status = $4) \
      AND ($5::text IS NULL OR sv.criticality = $5) \
      AND ($6::text IS NULL OR sv.\"type\" = $6) \
-     AND ($7::text IS NULL OR p.identifier ILIKE $7 OR p.name ILIKE '%' || $7 || '%') \
-     ORDER BY sv.name LIMIT $8";
+     AND ($7::text IS NULL OR sv.kind = $7) \
+     AND ($8::text IS NULL OR p.identifier ILIKE $8 OR p.name ILIKE '%' || $8 || '%') \
+     ORDER BY sv.name LIMIT $9";
 
 pub fn services_json(rows: &[ServiceRow]) -> String {
     let items: Vec<Value> = rows
@@ -81,6 +84,7 @@ pub fn services_json(rows: &[ServiceRow]) -> String {
                 "status": row.status,
                 "criticality": row.criticality,
                 "type": row.service_type,
+                "kind": row.kind,
                 "owner": row.owner,
             })
         })
@@ -99,6 +103,8 @@ pub struct ListServicesArgs {
     /// One of: internal, external, infrastructure, third_party.
     #[serde(rename = "type")]
     pub service_type: Option<String>,
+    /// One of: service, database, server, cache, queue, storage, network, external_api, other.
+    pub kind: Option<String>,
     /// Project identifier (e.g. "LTS") or project name.
     pub project: Option<String>,
     /// Maximum rows to return, 1-25 (default 10).
@@ -120,8 +126,8 @@ impl Tool for ListServices {
 
     fn description(&self) -> String {
         "List services in the workspace-scoped service catalog the caller can access, optionally \
-         filtered by name substring, lifecycle status, criticality, type, and \
-         project. Returns name, project, status, criticality, type, and owner. \
+         filtered by name substring, lifecycle status, criticality, type, kind, and \
+         project. Returns name, project, status, criticality, type, kind, and owner. \
          Dependencies may cross projects."
             .to_string()
     }
@@ -144,6 +150,7 @@ impl Tool for ListServices {
             "criticality",
         )?;
         let service_type = service_allowlist(args.service_type.as_deref(), &SERVICE_TYPES, "type")?;
+        let kind = service_allowlist(args.kind.as_deref(), &SERVICE_KINDS, "kind")?;
         let project = optional_text(args.project.as_deref());
         let limit = clamp_limit(args.limit);
         let rows: Vec<ServiceRow> = sqlx::query_as(SERVICES_SQL)
@@ -153,6 +160,7 @@ impl Tool for ListServices {
             .bind(&status)
             .bind(&criticality)
             .bind(&service_type)
+            .bind(&kind)
             .bind(&project)
             .bind(limit)
             .fetch_all(&self.pool)
@@ -163,7 +171,7 @@ impl Tool for ListServices {
 }
 
 pub const SERVICE_BY_ID_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.status, \
-     sv.criticality, sv.\"type\" AS service_type, \
+     sv.criticality, sv.\"type\" AS service_type, sv.kind, \
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
@@ -181,7 +189,7 @@ pub const SERVICE_BY_ID_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.s
             AND pm.member_id = $3 AND pm.is_active = true AND pm.deleted_at IS NULL))";
 
 pub const SERVICES_BY_NAME_PROJECT_SQL: &str = "SELECT sv.id, sv.name, sv.description, \
-     sv.status, sv.criticality, sv.\"type\" AS service_type, \
+     sv.status, sv.criticality, sv.\"type\" AS service_type, sv.kind, \
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
@@ -196,7 +204,7 @@ pub const SERVICES_BY_NAME_PROJECT_SQL: &str = "SELECT sv.id, sv.name, sv.descri
      ORDER BY sv.name LIMIT 10";
 
 pub const SERVICES_BY_NAME_SQL: &str = "SELECT sv.id, sv.name, sv.description, sv.status, \
-     sv.criticality, sv.\"type\" AS service_type, \
+     sv.criticality, sv.\"type\" AS service_type, sv.kind, \
      COALESCE(u.display_name, u.email, '') AS owner, p.identifier AS project, \
      sv.repository_url, sv.documentation_url \
      FROM services sv \
@@ -370,6 +378,7 @@ pub fn service_detail_json(
         "status": row.status,
         "criticality": row.criticality,
         "type": row.service_type,
+        "kind": row.kind,
         "owner": row.owner,
         "repository_url": row.repository_url,
         "documentation_url": row.documentation_url,
@@ -477,6 +486,11 @@ mod tests {
         );
         assert!(service_allowlist(Some("nope"), &SERVICE_TYPES, "type").is_err());
         assert_eq!(
+            service_allowlist(Some(" DATABASE "), &SERVICE_KINDS, "kind").unwrap(),
+            Some("database".to_string())
+        );
+        assert!(service_allowlist(Some("legacy"), &SERVICE_KINDS, "kind").is_err());
+        assert_eq!(
             service_allowlist(None, &SERVICE_TYPES, "type").unwrap(),
             None
         );
@@ -491,6 +505,7 @@ mod tests {
             status: "active".to_string(),
             criticality: "critical".to_string(),
             service_type: "internal".to_string(),
+            kind: "service".to_string(),
             owner: "Budi".to_string(),
             project: "LTS".to_string(),
             repository_url: None,
@@ -500,6 +515,7 @@ mod tests {
         assert_eq!(parsed["returned"], json!(1));
         assert_eq!(parsed["items"][0]["name"], json!("API"));
         assert_eq!(parsed["items"][0]["type"], json!("internal"));
+        assert_eq!(parsed["items"][0]["kind"], json!("service"));
         assert_eq!(parsed["items"][0]["owner"], json!("Budi"));
     }
 
@@ -518,6 +534,7 @@ mod tests {
             status: "active".to_string(),
             criticality: "high".to_string(),
             service_type: "internal".to_string(),
+            kind: "service".to_string(),
             owner: String::new(),
             project: project.to_string(),
             repository_url: None,

@@ -1980,6 +1980,7 @@ async fn ai_list_services_respects_visibility() {
         status: None,
         criticality: None,
         service_type: None,
+        kind: None,
         project: None,
         limit: None,
     };
@@ -1998,6 +1999,24 @@ async fn ai_list_services_respects_visibility() {
     assert!(out.contains("ISO Switch"));
     assert!(!out.contains("Core Banking"), "S2 is not linked to P1");
     assert!(!out.contains("P4 Widget"));
+
+    sqlx::query("UPDATE services SET kind = 'database' WHERE id = $1")
+        .bind(sc.s1)
+        .execute(&st.pool)
+        .await
+        .expect("set kind");
+    let db_only = tool
+        .call(
+            &mut ToolContext::new(),
+            ListServicesArgs {
+                kind: Some("database".into()),
+                ..args(None)
+            },
+        )
+        .await
+        .unwrap();
+    assert!(db_only.contains("\"kind\":\"database\""));
+    assert!(!db_only.contains("\"kind\":\"service\""));
 
     // P2 admin sees S1 (consumer) + S2 (owner)
     let tool = ListServices {
