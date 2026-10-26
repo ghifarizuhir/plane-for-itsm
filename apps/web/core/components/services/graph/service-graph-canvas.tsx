@@ -4,13 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Background,
   BackgroundVariant,
-  Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   ViewportPortal,
@@ -32,59 +30,122 @@ import { LockOutline } from "@makeplane/propel/icons";
 import { useTranslation } from "@plane/i18n";
 import type { ILiteService, IService, TServiceDependencyType, TServiceGraphData, TServiceHealth } from "@plane/types";
 import { cn } from "@plane/utils";
-// hooks
-import { useHoverPointer } from "@/hooks/use-mobile-viewport";
 // helpers
 import { getHighestSeverityIncident } from "@/services/service-health.helpers";
 import { isLiteService } from "@/services/service.helpers";
 // components
-import { DEFAULT_HEALTH, HEALTH_CONFIG } from "../health/health-config";
+import { HEALTH_CONFIG } from "../health/health-config";
 import { RESTRICTED_CLUSTER_STYLE, SERVICE_KIND_CLUSTER_STYLE, SERVICE_KIND_ICON } from "../kind-config";
 import { getServiceClusters, type TServiceCluster } from "./graph-clusters";
 import { getServiceRelationships } from "./graph-relationships";
-import { ServiceFocusCard } from "./service-focus-card";
+import {
+  FOCUS_RAIL_MIN_CANVAS_WIDTH,
+  FOCUS_RAIL_WIDTH,
+  ServiceFocusCard,
+  type TFocusRelationship,
+} from "./service-focus-card";
+import { ServiceGraphHeaderControls } from "./service-graph-header-controls";
 import { ServiceNode } from "./service-node";
-import { CLUSTER_HEADER_HEIGHT, getLayoutedElements } from "./use-graph-layout";
+import { GRAPH_FIT_VIEW_PADDING, getLayoutedElements } from "./use-graph-layout";
 import { useServiceFocusInteraction } from "./use-service-focus";
 import { syncGraphNodes } from "./node-sync";
 
 const nodeTypes = { service: ServiceNode };
 
+const CLUSTER_GRIP_DOTS = ["tl", "tr", "ml", "mr", "bl", "br"] as const;
+
 /** Edge labels only earn their space once the cards and gaps are large enough. */
 const EDGE_LABEL_VISIBLE_ZOOM = 1.1;
 
-/** Leave the floating legend room above the map without shrinking the sides. */
-const FIT_VIEW_PADDING = { top: "56px", right: 0.12, bottom: 0.12, left: 0.12 } as const;
+const getClusterAccent = (cluster: TServiceCluster) =>
+  cluster.restricted ? "var(--txt-tertiary)" : `var(--kind-${(cluster.kind ?? "other").replace(/_/g, "-")})`;
+
+type TServiceClusterHeaderProps = {
+  cluster: TServiceCluster;
+  readOnly: boolean;
+  dragging: boolean;
+  onDragStart: (cluster: TServiceCluster, event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDragMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDragEnd: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDragCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
+};
 
 /**
  * Cluster headers keep a constant screen size: at overview zoom they are the
  * only readable orientation cue, so they must not shrink with the viewport.
+ * The pill doubles as the group drag handle.
  */
-function ServiceClusterHeader({ cluster }: { cluster: TServiceCluster }) {
+function ServiceClusterHeader({
+  cluster,
+  readOnly,
+  dragging,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
+}: TServiceClusterHeaderProps) {
   const zoom = useStore((state) => state.transform[2]);
   const scale = 1 / Math.max(zoom, 0.5);
   const ClusterIcon = cluster.restricted ? LockOutline : SERVICE_KIND_ICON[cluster.kind ?? "other"];
+  const accent = getClusterAccent(cluster);
+  const draggable = !readOnly && !cluster.restricted;
 
   return (
     <div
-      className="flex min-w-0 items-center"
-      style={{ height: CLUSTER_HEADER_HEIGHT, gap: 6 * scale, paddingInline: 12 * scale }}
+      title={cluster.label}
+      data-dragging={dragging || undefined}
+      onPointerDown={draggable ? (event) => onDragStart(cluster, event) : undefined}
+      onPointerMove={draggable ? onDragMove : undefined}
+      onPointerUp={draggable ? onDragEnd : undefined}
+      onPointerCancel={draggable ? onDragCancel : undefined}
+      className={cn(
+        "service-cluster-handle nodrag nopan group pointer-events-auto absolute top-0 left-3 flex touch-none items-center gap-1.5 rounded-full border border-subtle bg-surface-1 py-1 pr-1.5 pl-1 shadow-raised-200 transition-[border-color,box-shadow] duration-150 select-none",
+        draggable ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+        dragging && "cursor-grabbing"
+      )}
+      style={{
+        transform: `translateY(-50%) scale(${scale})`,
+        transformOrigin: "left center",
+        borderColor: dragging ? accent : undefined,
+        boxShadow: dragging ? `0 14px 34px -14px color-mix(in oklab, ${accent} 55%, transparent)` : undefined,
+      }}
     >
-      <span className="shrink-0" style={{ width: 14 * scale, height: 14 * scale }}>
-        <ClusterIcon className="h-full w-full" />
-      </span>
       <span
-        className="min-w-0 truncate font-semibold tracking-[-0.01em]"
-        style={{ fontSize: 11 * scale, lineHeight: 1.2 }}
+        className="grid h-5 w-5 shrink-0 place-items-center rounded-full"
+        style={{
+          backgroundColor: `color-mix(in oklab, ${accent} 12%, transparent)`,
+          color: accent,
+        }}
       >
-        {cluster.label}
+        <ClusterIcon className="h-3 w-3" />
       </span>
-      <span
-        className="shrink-0 font-code font-medium tabular-nums"
-        style={{ fontSize: 10 * scale, paddingLeft: 4 * scale }}
-      >
+      {cluster.projectLabel && (
+        <span className="font-code text-9 font-medium tracking-[0.1em] text-tertiary uppercase">
+          {cluster.projectLabel}
+        </span>
+      )}
+      {cluster.projectLabel && cluster.kindLabel && <span aria-hidden className="bg-subtle h-2.5 w-px shrink-0" />}
+      {cluster.kindLabel && (
+        <span className="text-10 font-semibold tracking-[-0.01em] whitespace-nowrap text-secondary">
+          {cluster.kindLabel}
+        </span>
+      )}
+      <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full border border-subtle bg-layer-2 px-1 font-code text-9 font-semibold text-secondary tabular-nums">
         {cluster.count}
       </span>
+      {draggable && (
+        <span
+          aria-hidden
+          className={cn(
+            "ml-0.5 grid shrink-0 grid-cols-2 gap-[2.5px] text-tertiary opacity-40 transition-opacity duration-150 group-hover:opacity-90",
+            dragging && "opacity-90"
+          )}
+        >
+          {CLUSTER_GRIP_DOTS.map((dot) => (
+            <span key={dot} className="h-[2.5px] w-[2.5px] rounded-full bg-current" />
+          ))}
+        </span>
+      )}
     </div>
   );
 }
@@ -126,6 +187,15 @@ const DEPENDENCY_TYPE_LABEL_KEYS: Record<TServiceDependencyType, string> = {
   other: "service.relationships.related_to",
 };
 
+type TClusterDragSession = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  zoom: number;
+  origins: Map<string, { x: number; y: number }>;
+  moved: boolean;
+};
+
 export type TServiceGraphCanvasProps = {
   graphData: TServiceGraphData;
   readOnly?: boolean;
@@ -138,6 +208,9 @@ export type TServiceGraphCanvasProps = {
   onConnect?: (sourceServiceId: string, targetServiceId: string) => void;
   onEdgeDelete?: (dependencyId: string) => void;
   onNodeDragStop?: (serviceId: string, position: { x: number; y: number }) => void;
+  /** Resets persisted node positions and re-runs the layout. */
+  onReLayout?: () => void;
+  isReLayouting?: boolean;
   /** Incremented by the store when topology/layout changes; triggers fitView. */
   layoutEpoch?: number;
 };
@@ -157,6 +230,8 @@ export function ServiceGraphCanvas({
   onConnect,
   onEdgeDelete,
   onNodeDragStop,
+  onReLayout,
+  isReLayouting,
 }: TServiceGraphCanvasProps) {
   // plane hooks
   const { t, currentLocale } = useTranslation();
@@ -166,37 +241,56 @@ export function ServiceGraphCanvas({
   // states
   const [instance, setInstance] = useState<ReactFlowInstance | null>(null);
   const [showEdgeLabels, setShowEdgeLabels] = useState(false);
-  const {
-    effectiveServiceId,
-    pinnedServiceId,
-    hover,
-    leaveNode,
-    enterCard,
-    leaveCard,
-    pin,
-    clear: clearFocus,
-    suppress,
-    resume,
-  } = useServiceFocusInteraction();
-  const canHover = useHoverPointer();
+  const [draggingClusterId, setDraggingClusterId] = useState<string | null>(null);
+  const [railHeld, setRailHeld] = useState(false);
+  const { effectiveServiceId, pinnedServiceId, pin, clear: clearFocus } = useServiceFocusInteraction();
   // refs
   const fitDone = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const clusterDragSession = useRef<TClusterDragSession | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   // derived values
   const highlighted = useMemo(() => new Set(highlightedServiceIds ?? []), [highlightedServiceIds]);
   const selectedService = effectiveServiceId
     ? (graphData.services.find((service) => service.id === effectiveServiceId) ?? null)
     : null;
   const selectedHealth = effectiveServiceId ? graphData.health[effectiveServiceId] : undefined;
+  const selectedProjectIdentifier = useMemo(() => {
+    if (!selectedService || !("owner_project_id" in selectedService)) return null;
+    const projectId = selectedService.owner_project_id;
+    return projectId ? (projectLookup?.[projectId]?.identifier ?? null) : null;
+  }, [projectLookup, selectedService]);
   const relationships = useMemo(
     () => (effectiveServiceId ? getServiceRelationships(effectiveServiceId, graphData.dependencies) : null),
     [graphData.dependencies, effectiveServiceId]
   );
+  const focusRelationships = useMemo<TFocusRelationship[]>(() => {
+    if (!effectiveServiceId) return [];
 
-  const getMiniMapNodeColor = useCallback((node: Node) => {
-    const health = (node.data as { health?: TServiceHealth } | undefined)?.health ?? DEFAULT_HEALTH;
-    return HEALTH_CONFIG[health].color;
-  }, []);
+    const result: TFocusRelationship[] = [];
+    graphData.dependencies.forEach((dependency) => {
+      const isOutgoing = dependency.from_service_id === effectiveServiceId;
+      const isIncoming = dependency.to_service_id === effectiveServiceId;
+      if (!isOutgoing && !isIncoming) return;
+
+      const relatedId = isOutgoing ? dependency.to_service_id : dependency.from_service_id;
+      const related =
+        graphData.services.find((candidate) => candidate.id === relatedId) ??
+        (dependency.from_service?.id === relatedId ? dependency.from_service : dependency.to_service);
+
+      if (!related) return;
+      result.push({
+        id: dependency.id,
+        direction: isOutgoing ? "out" : "in",
+        type: dependency.dependency_type ?? "depends_on",
+        service: related,
+        health: graphData.health[relatedId]?.health,
+      });
+    });
+
+    return result;
+  }, [effectiveServiceId, graphData]);
 
   const { nodes: layoutNodes, edges: layoutEdges } = useMemo(
     () => getLayoutedElements(graphData.services, graphData.dependencies),
@@ -347,33 +441,110 @@ export function ServiceGraphCanvas({
     [onEdgeDelete]
   );
 
-  const handleNodeDragStart = useCallback(() => {
-    suppress();
-  }, [suppress]);
-
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
-      resume();
       onNodeDragStop?.(node.id, node.position);
     },
-    [onNodeDragStop, resume]
+    [onNodeDragStop]
   );
 
-  const handleConnectStart = useCallback(() => {
-    suppress();
-  }, [suppress]);
+  const handleClusterDragStart = useCallback(
+    (cluster: TServiceCluster, event: ReactPointerEvent<HTMLDivElement>) => {
+      if (readOnly || cluster.restricted || !instance || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture(event.pointerId);
 
-  const handleConnectEnd = useCallback(() => {
-    resume();
-  }, [resume]);
+      const memberIds = new Set(cluster.serviceIds);
+      const origins = new Map<string, { x: number; y: number }>();
+      instance.getNodes().forEach((node) => {
+        if (memberIds.has(node.id)) origins.set(node.id, { ...node.position });
+      });
+      if (origins.size === 0) return;
 
-  const handleMoveStart = useCallback(() => {
-    suppress();
-  }, [suppress]);
+      clusterDragSession.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        zoom: instance.getZoom(),
+        origins,
+        moved: false,
+      };
+      setDraggingClusterId(cluster.id);
+      setNodes((current) => current.map((node) => (origins.has(node.id) ? { ...node, dragging: true } : node)));
+    },
+    [instance, readOnly, setNodes]
+  );
 
-  const handleMoveEnd = useCallback(() => {
-    resume();
-  }, [resume]);
+  const handleClusterDragMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const session = clusterDragSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!session.moved && Math.hypot(event.clientX - session.startX, event.clientY - session.startY) < 2) return;
+      session.moved = true;
+
+      const dx = (event.clientX - session.startX) / session.zoom;
+      const dy = (event.clientY - session.startY) / session.zoom;
+      setNodes((current) =>
+        current.map((node) => {
+          const origin = session.origins.get(node.id);
+          return origin ? { ...node, dragging: true, position: { x: origin.x + dx, y: origin.y + dy } } : node;
+        })
+      );
+    },
+    [setNodes]
+  );
+
+  const releaseClusterDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const handle = event.currentTarget;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    clusterDragSession.current = null;
+    setDraggingClusterId(null);
+  }, []);
+
+  const handleClusterDragEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const session = clusterDragSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      event.stopPropagation();
+
+      if (session.moved) {
+        const dx = (event.clientX - session.startX) / session.zoom;
+        const dy = (event.clientY - session.startY) / session.zoom;
+        const liteIds = new Set(graphData.services.filter(isLiteService).map((service) => service.id));
+        session.origins.forEach((origin, serviceId) => {
+          if (liteIds.has(serviceId)) return;
+          onNodeDragStop?.(serviceId, { x: origin.x + dx, y: origin.y + dy });
+        });
+      }
+
+      setNodes((current) =>
+        current.map((node) => (session.origins.has(node.id) ? { ...node, dragging: false } : node))
+      );
+      releaseClusterDrag(event);
+    },
+    [graphData.services, onNodeDragStop, releaseClusterDrag, setNodes]
+  );
+
+  const handleClusterDragCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const session = clusterDragSession.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      event.stopPropagation();
+
+      setNodes((current) =>
+        current.map((node) => {
+          const origin = session.origins.get(node.id);
+          return origin ? { ...node, dragging: false, position: origin } : node;
+        })
+      );
+      releaseClusterDrag(event);
+    },
+    [releaseClusterDrag, setNodes]
+  );
 
   const handleNodeClick = useCallback(
     (_event: unknown, node: Node) => {
@@ -381,17 +552,6 @@ export function ServiceGraphCanvas({
     },
     [pin]
   );
-
-  const handleNodeMouseEnter = useCallback(
-    (_event: unknown, node: Node) => {
-      if (canHover) hover(node.id);
-    },
-    [canHover, hover]
-  );
-
-  const handleNodeMouseLeave = useCallback(() => {
-    leaveNode();
-  }, [leaveNode]);
 
   const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: Node) => {
@@ -408,10 +568,6 @@ export function ServiceGraphCanvas({
     clearFocus();
     setNodes((current) => current.map((node) => (node.selected ? { ...node, selected: false } : node)));
   }, [clearFocus, setNodes]);
-  const openSelectedService = useCallback(() => {
-    if (effectiveServiceId) onNodeOpen?.(effectiveServiceId);
-  }, [effectiveServiceId, onNodeOpen]);
-
   const syncEdgeLabels = useCallback((zoom: number) => {
     setShowEdgeLabels((previous) => {
       const next = zoom >= EDGE_LABEL_VISIBLE_ZOOM;
@@ -454,7 +610,7 @@ export function ServiceGraphCanvas({
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
-        instance.fitView({ padding: FIT_VIEW_PADDING, duration: 300 });
+        instance.fitView({ padding: GRAPH_FIT_VIEW_PADDING, duration: 300 });
       });
     });
 
@@ -474,7 +630,7 @@ export function ServiceGraphCanvas({
       const { width, height } = node.getBoundingClientRect();
       if (width === 0 || height === 0) return;
       fitDone.current = true;
-      instance.fitView({ padding: FIT_VIEW_PADDING });
+      instance.fitView({ padding: GRAPH_FIT_VIEW_PADDING });
       syncEdgeLabels(instance.getZoom());
     };
     fit();
@@ -483,87 +639,156 @@ export function ServiceGraphCanvas({
     return () => observer.disconnect();
   }, [instance, syncEdgeLabels]);
 
+  // Measure the full canvas so a pinned inspector can claim a rail without
+  // feeding its own width back into the decision.
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    const measure = () => setContainerWidth(element.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const railTarget = pinnedServiceId !== null && containerWidth >= FOCUS_RAIL_MIN_CANVAS_WIDTH;
+
+  // Hold the rail open for the inspector's exit animation before the map
+  // reclaims the space.
+  useEffect(() => {
+    if (railTarget) {
+      setRailHeld(true);
+      return;
+    }
+    const timeout = setTimeout(() => setRailHeld(false), 160);
+    return () => clearTimeout(timeout);
+  }, [railTarget]);
+
+  const railActive = railTarget || railHeld;
+
+  // Give the map room for the inspector rail. The fit waits a frame so React
+  // Flow has measured the narrower canvas, then eases into the new frame.
+  const lastRailActive = useRef(false);
+  useEffect(() => {
+    if (!instance || railActive === lastRailActive.current) return;
+    lastRailActive.current = railActive;
+    const timeout = setTimeout(
+      () => instance.fitView({ padding: GRAPH_FIT_VIEW_PADDING, duration: railActive ? 260 : 220 }),
+      railActive ? 60 : 140
+    );
+    return () => clearTimeout(timeout);
+  }, [instance, railActive]);
+
   return (
     <ReactFlowProvider>
-      <div ref={wrapperRef} className="relative h-full w-full">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          className="service-graph-flow"
-          colorMode={isDark ? "dark" : "light"}
-          defaultMarkerColor="var(--border-strong)"
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onMove={handleMove}
-          onMoveStart={handleMoveStart}
-          onMoveEnd={handleMoveEnd}
-          onConnect={readOnly ? undefined : handleConnect}
-          onConnectStart={readOnly ? undefined : handleConnectStart}
-          onConnectEnd={readOnly ? undefined : handleConnectEnd}
-          onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
-          onNodeDragStart={readOnly ? undefined : handleNodeDragStart}
-          onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
-          onNodeClick={handleNodeClick}
-          onNodeMouseEnter={canHover ? handleNodeMouseEnter : undefined}
-          onNodeMouseLeave={canHover ? handleNodeMouseLeave : undefined}
-          onNodeDoubleClick={handleNodeDoubleClick}
-          onPaneClick={handlePaneClick}
-          nodesDraggable={!readOnly}
-          nodesConnectable={!readOnly}
-          edgesFocusable={!readOnly}
-          elementsSelectable={!readOnly}
-          deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
-          minZoom={0.05}
-          proOptions={{ hideAttribution: true }}
-          onInit={setInstance}
+      <div ref={containerRef} className="relative h-full w-full">
+        <div
+          ref={wrapperRef}
+          className="relative h-full"
+          style={{ width: railActive ? `calc(100% - ${FOCUS_RAIL_WIDTH}px)` : "100%" }}
         >
-          <ViewportPortal>
-            {clusters.map((cluster) => {
-              const isRelatedCluster =
-                !relationships || cluster.serviceIds.some((serviceId) => relationships.nodeIds.has(serviceId));
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            className="service-graph-flow"
+            colorMode={isDark ? "dark" : "light"}
+            defaultMarkerColor="var(--border-strong)"
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onMove={handleMove}
+            onConnect={readOnly ? undefined : handleConnect}
+            onEdgesDelete={readOnly ? undefined : handleEdgesDelete}
+            onNodeDragStop={readOnly ? undefined : handleNodeDragStop}
+            onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
+            onPaneClick={handlePaneClick}
+            nodesDraggable={!readOnly}
+            nodesConnectable={!readOnly}
+            edgesFocusable={!readOnly}
+            elementsSelectable={!readOnly}
+            deleteKeyCode={readOnly ? null : ["Backspace", "Delete"]}
+            minZoom={0.05}
+            proOptions={{ hideAttribution: true }}
+            onInit={setInstance}
+          >
+            <ViewportPortal>
+              {clusters.map((cluster) => {
+                const isRelatedCluster =
+                  !relationships || cluster.serviceIds.some((serviceId) => relationships.nodeIds.has(serviceId));
+                const isDragging = draggingClusterId === cluster.id;
+                const accent = getClusterAccent(cluster);
 
-              return (
-                <div
-                  key={cluster.id}
-                  className={cn(
-                    "pointer-events-none absolute rounded-xl border transition-opacity duration-150",
-                    cluster.restricted ? RESTRICTED_CLUSTER_STYLE : SERVICE_KIND_CLUSTER_STYLE[cluster.kind ?? "other"]
-                  )}
-                  style={{
-                    transform: `translate(${cluster.x}px, ${cluster.y}px)`,
-                    width: cluster.width,
-                    height: cluster.height,
-                    opacity: isRelatedCluster ? 1 : 0.35,
-                    zIndex: 0,
-                  }}
-                >
-                  <ServiceClusterHeader cluster={cluster} />
-                </div>
-              );
-            })}
-          </ViewportPortal>
-          <CanvasBackground />
-          <Controls showInteractive={false} />
-          {!readOnly && <MiniMap pannable nodeColor={getMiniMapNodeColor} />}
-        </ReactFlow>
-        <AnimatePresence mode="wait">
-          {selectedService && selectedNode && (
-            <ServiceFocusCard
-              key={selectedService.id}
-              node={selectedNode}
-              service={selectedService}
-              relationshipCount={relationships?.edgeIds.size ?? 0}
-              health={selectedHealth?.health}
-              lastDeployedAt={selectedHealth?.last_deployed_at}
-              pinned={pinnedServiceId === selectedService.id}
-              onClose={closeFocus}
-              onOpen={onNodeOpen ? openSelectedService : undefined}
-              onPointerEnter={enterCard}
-              onPointerLeave={leaveCard}
-            />
-          )}
-        </AnimatePresence>
+                return (
+                  <div
+                    key={cluster.id}
+                    data-dragging={isDragging || undefined}
+                    className={cn(
+                      "service-cluster pointer-events-none absolute rounded-[18px] border transition-[opacity,border-color,box-shadow] duration-200",
+                      cluster.restricted
+                        ? RESTRICTED_CLUSTER_STYLE
+                        : SERVICE_KIND_CLUSTER_STYLE[cluster.kind ?? "other"]
+                    )}
+                    style={{
+                      transform: `translate(${cluster.x}px, ${cluster.y}px)`,
+                      width: cluster.width,
+                      height: cluster.height,
+                      opacity: isRelatedCluster ? 1 : 0.3,
+                      zIndex: isDragging ? 5 : 0,
+                      borderColor: isDragging ? accent : undefined,
+                      boxShadow: isDragging
+                        ? `0 24px 56px -28px color-mix(in oklab, ${accent} 55%, transparent), inset 0 0 0 1px color-mix(in oklab, ${accent} 35%, transparent)`
+                        : undefined,
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 rounded-[inherit]"
+                      style={{
+                        backgroundImage: `radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, ${accent} 7%, transparent), transparent 62%)`,
+                      }}
+                    />
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-6 top-0 h-px"
+                      style={{
+                        backgroundImage: `linear-gradient(90deg, transparent, color-mix(in oklab, ${accent} 65%, transparent), transparent)`,
+                      }}
+                    />
+                    <ServiceClusterHeader
+                      cluster={cluster}
+                      readOnly={readOnly}
+                      dragging={isDragging}
+                      onDragStart={handleClusterDragStart}
+                      onDragMove={handleClusterDragMove}
+                      onDragEnd={handleClusterDragEnd}
+                      onDragCancel={handleClusterDragCancel}
+                    />
+                  </div>
+                );
+              })}
+            </ViewportPortal>
+            <CanvasBackground />
+          </ReactFlow>
+          <ServiceGraphHeaderControls onReLayout={readOnly ? undefined : onReLayout} isReLayouting={isReLayouting} />
+          <AnimatePresence mode="wait">
+            {selectedService && selectedNode && (
+              <ServiceFocusCard
+                key={selectedService.id}
+                node={selectedNode}
+                service={selectedService}
+                projectIdentifier={selectedProjectIdentifier}
+                relationships={focusRelationships}
+                health={selectedHealth?.health}
+                lastDeployedAt={selectedHealth?.last_deployed_at}
+                pinned={pinnedServiceId === selectedService.id}
+                rail={railActive}
+                onClose={closeFocus}
+                onFocusService={pin}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </ReactFlowProvider>
   );

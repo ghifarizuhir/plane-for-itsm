@@ -8,8 +8,6 @@ import { useCallback, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { useTranslation } from "@plane/i18n";
-import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TServiceGraphData } from "@plane/types";
 // hooks
@@ -21,7 +19,6 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 // helpers
 import { isLiteService } from "@/services/service.helpers";
 // components
-import { ServiceHealthDot } from "../health/service-health-dot";
 import { ServiceGraphCanvas } from "./service-graph-canvas";
 
 export const ServiceGraph = observer(function ServiceGraph({
@@ -33,8 +30,6 @@ export const ServiceGraph = observer(function ServiceGraph({
 }) {
   // router
   const { workspaceSlug, projectId } = useParams();
-  // plane hooks
-  const { t } = useTranslation();
   // store hooks
   const {
     getGraphData,
@@ -173,38 +168,9 @@ export const ServiceGraph = observer(function ServiceGraph({
           onEdgeDelete={handleEdgeDelete}
           onNodeDragStop={handleNodeDragStop}
           onNodeOpen={handleNodeOpen}
+          onReLayout={handleReLayout}
+          isReLayouting={isReLayouting}
         />
-      </div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-2 sm:p-3">
-        <div className="pointer-events-auto flex min-w-0 items-center gap-3 rounded-lg border border-subtle bg-surface-1 px-3 py-2 shadow-raised-200">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
-              <ServiceHealthDot health="healthy" />
-              <span>{t("service.health_values.healthy")}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
-              <ServiceHealthDot health="degraded" />
-              <span>{t("service.health_values.degraded")}</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-11 text-secondary">
-              <ServiceHealthDot health="down" />
-              <span>{t("service.health_values.down")}</span>
-            </span>
-          </div>
-          <span className="bg-subtle hidden h-4 w-px shrink-0 lg:block" />
-          <p className="hidden max-w-[280px] truncate text-11 text-tertiary lg:block">
-            {t("service.graph.connect_hint")}
-          </p>
-        </div>
-        <Button
-          className="pointer-events-auto shrink-0"
-          variant="secondary"
-          size="lg"
-          onClick={handleReLayout}
-          loading={isReLayouting}
-        >
-          {t("service.graph.re_layout")}
-        </Button>
       </div>
     </div>
   );

@@ -22,6 +22,9 @@ export const GROUP_MAX_ROW_WIDTH = 1900;
 export const CLUSTER_PADDING = 16;
 export const CLUSTER_HEADER_HEIGHT = 28;
 
+/** Breathing room around the topology when fitting the viewport. */
+export const GRAPH_FIT_VIEW_PADDING = { top: "20px", right: 0.12, bottom: "20px", left: 0.12 } as const;
+
 type TPosition = { x: number; y: number };
 
 type TGroupLayout = {

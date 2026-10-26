@@ -20,6 +20,8 @@ export type TServiceCluster = {
   kind: TServiceKind | null;
   restricted: boolean;
   label: string;
+  projectLabel: string | null;
+  kindLabel: string | null;
   count: number;
   serviceIds: string[];
   x: number;
@@ -104,7 +106,8 @@ export const getServiceClusters = (
       : bucket.projectId
         ? (projectLookup?.[bucket.projectId]?.identifier ?? null)
         : t("service.graph.unassigned");
-    const parts = [showProjectPrefix ? projectLabel : null, kindLabel].filter(Boolean) as string[];
+    const visibleProjectLabel = showProjectPrefix ? projectLabel : null;
+    const parts = [visibleProjectLabel, kindLabel].filter(Boolean) as string[];
     const label = parts.length > 0 ? parts.join(" · ") : (projectLabel ?? "");
 
     return {
@@ -113,6 +116,8 @@ export const getServiceClusters = (
       kind: bucket.kind,
       restricted: bucket.restricted,
       label,
+      projectLabel: visibleProjectLabel,
+      kindLabel,
       count: bucket.count,
       serviceIds: bucket.serviceIds,
       x: bucket.minX - CLUSTER_PADDING,

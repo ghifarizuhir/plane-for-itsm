@@ -450,15 +450,6 @@
   --xy-connectionline-stroke-width: 1.5;
   --xy-handle-background-color: var(--bg-layer-3);
   --xy-handle-border-color: var(--bg-layer-1);
-  --xy-controls-button-background-color: var(--bg-layer-1);
-  --xy-controls-button-background-color-hover: var(--bg-layer-1-hover);
-  --xy-controls-button-color: var(--txt-secondary);
-  --xy-controls-button-color-hover: var(--txt-primary);
-  --xy-controls-button-border-color: var(--border-subtle);
-  --xy-controls-box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border-subtle);
-  --xy-minimap-background-color: var(--bg-layer-1);
-  --xy-minimap-mask-background-color: color-mix(in srgb, var(--bg-canvas) 60%, transparent);
-  --xy-minimap-node-background-color: var(--bg-layer-3);
   --xy-attribution-background-color: transparent;
   --xy-selection-background-color: color-mix(in srgb, var(--bg-accent-primary) 10%, transparent);
   --xy-selection-border: 1px dashed var(--border-accent-strong);
@@ -468,25 +459,35 @@
   background-color: var(--bg-accent-primary);
 }
 
-.service-graph-flow .react-flow__controls {
-  margin: 12px;
-  border-radius: 10px;
-  overflow: hidden;
+/* Graph viewport controls live in the page header next to the layout switcher,
+ * so they inherit the header's compact 22px control rhythm. */
+.service-graph-header-controls .react-flow__controls {
+  flex-direction: row;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.service-graph-flow .react-flow__controls-button {
-  width: 32px;
-  height: 32px;
+.service-graph-header-controls .react-flow__controls-button {
+  width: 28px;
+  height: 22px;
+  border: 0;
+  border-right: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--txt-secondary);
 }
 
-.service-graph-flow .react-flow__minimap {
-  margin: 12px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow:
-    0 1px 2px 0 rgba(0, 0, 0, 0.08),
-    0 12px 32px -16px rgba(0, 0, 0, 0.28),
-    0 0 0 1px var(--border-subtle);
+.service-graph-header-controls .react-flow__controls-button:hover {
+  background: var(--bg-layer-transparent-hover);
+  color: var(--txt-primary);
+}
+
+.service-graph-header-controls .react-flow__controls-button svg {
+  max-width: 14px;
+  max-height: 14px;
 }
 
 .service-graph-flow .service-node-card.is-focused {
@@ -547,6 +548,29 @@
     0 8px 20px -12px rgba(0, 0, 0, 0.32);
 }
 
+.service-focus-name {
+  display: inline;
+  margin-inline: -2px;
+  padding-inline: 2px;
+  background-image: linear-gradient(
+    180deg,
+    transparent 52%,
+    color-mix(in oklab, var(--focus-accent) 28%, transparent) 52%
+  );
+  background-position: 0 90%;
+  background-repeat: no-repeat;
+  background-size: 0% 42%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  animation: service-focus-name-in 380ms cubic-bezier(0.2, 0.8, 0.2, 1) 70ms forwards;
+}
+
+@keyframes service-focus-name-in {
+  to {
+    background-size: 100% 42%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -560,5 +584,10 @@
   .layout-enter,
   .group-enter {
     animation: none;
+  }
+
+  .service-focus-name {
+    animation: none;
+    background-size: 100% 42%;
   }
 }

@@ -25,6 +25,7 @@ import { WorkspaceApplicationScopeChip } from "@/components/workspace/applicatio
 import { ServiceOrderByDropdown } from "./dropdowns/order-by";
 import { ServiceGroupByDropdown } from "./dropdowns/group-by";
 import { ServiceFiltersSelection } from "./filters";
+import { SERVICE_GRAPH_CONTROLS_SLOT_ID } from "./graph/service-graph-controls-slot";
 import { ServiceSearchInput } from "./search-input";
 import { CreateUpdateServiceModal } from "./modal";
 import { SERVICE_VIEW_LAYOUTS, ServiceLayoutIcon } from "./service-layout-icon";
@@ -88,6 +89,7 @@ export const ServiceViewHeader = observer(function ServiceViewHeader({ workspace
   );
 
   const isFiltersApplied = calculateTotalFilters(filters ?? {}) !== 0;
+  const isGraphLayout = displayFilters?.layout === "graph" && (!workspaceMode || Boolean(scopedProjectId));
 
   // auth
   const canUserCreateService = workspaceMode
@@ -162,6 +164,7 @@ export const ServiceViewHeader = observer(function ServiceViewHeader({ workspace
           >
             <ServiceFiltersSelection filters={filters ?? {}} handleFiltersUpdate={handleFilters} />
           </FiltersDropdown>
+          {isGraphLayout && <div id={SERVICE_GRAPH_CONTROLS_SLOT_ID} className="flex items-center" />}
           <div className="hidden items-center gap-1 rounded-sm bg-layer-3 p-1 md:flex">
             {SERVICE_VIEW_LAYOUTS.map((layout) => {
               const isLayoutDisabled = workspaceMode && !scopedProjectId && layout.key === "graph";

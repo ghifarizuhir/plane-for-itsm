@@ -4,37 +4,27 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
-// local imports
-import { createFocusIntentController, type TServiceFocusState } from "./focus-intent";
+import { useCallback, useState } from "react";
 
-const INITIAL_STATE: TServiceFocusState = {
-  hoveredServiceId: null,
-  pinnedServiceId: null,
-  suppressed: false,
-};
-
+/**
+ * Click-only focus. The inspector opens when a service is clicked and stays
+ * open until it is closed or the canvas is clicked.
+ */
 export function useServiceFocusInteraction() {
-  const [state, setState] = useState<TServiceFocusState>(INITIAL_STATE);
-  const [controller] = useState(() => createFocusIntentController({ onChange: setState }));
+  const [pinnedServiceId, setPinnedServiceId] = useState<string | null>(null);
 
-  useEffect(
-    () => () => {
-      controller.dispose();
-    },
-    [controller]
-  );
+  const pin = useCallback((serviceId: string) => {
+    setPinnedServiceId(serviceId);
+  }, []);
+
+  const clear = useCallback(() => {
+    setPinnedServiceId(null);
+  }, []);
 
   return {
-    ...state,
-    effectiveServiceId: state.pinnedServiceId ?? state.hoveredServiceId,
-    hover: controller.hover,
-    leaveNode: controller.leaveNode,
-    enterCard: controller.enterCard,
-    leaveCard: controller.leaveCard,
-    pin: controller.pin,
-    clear: controller.clear,
-    suppress: controller.suppress,
-    resume: controller.resume,
+    effectiveServiceId: pinnedServiceId,
+    pinnedServiceId,
+    pin,
+    clear,
   };
 }

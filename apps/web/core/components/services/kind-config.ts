@@ -31,15 +31,15 @@ export const SERVICE_KIND_ICON: Record<TServiceKind, ComponentType<{ className?:
 };
 
 export const SERVICE_KIND_CLUSTER_STYLE: Record<TServiceKind, string> = {
-  service: "border-kind-service/35 bg-kind-service/6 text-kind-service",
-  database: "border-kind-database/35 bg-kind-database/6 text-kind-database",
-  server: "border-kind-server/35 bg-kind-server/6 text-kind-server",
-  cache: "border-kind-cache/35 bg-kind-cache/6 text-kind-cache",
-  queue: "border-kind-queue/35 bg-kind-queue/6 text-kind-queue",
-  storage: "border-kind-storage/35 bg-kind-storage/6 text-kind-storage",
-  network: "border-kind-network/35 bg-kind-network/6 text-kind-network",
-  external_api: "border-kind-external-api/35 bg-kind-external-api/6 text-kind-external-api",
-  other: "border-kind-other/35 bg-kind-other/6 text-kind-other",
+  service: "border-kind-service/25 bg-kind-service/[0.035]",
+  database: "border-kind-database/25 bg-kind-database/[0.035]",
+  server: "border-kind-server/25 bg-kind-server/[0.035]",
+  cache: "border-kind-cache/25 bg-kind-cache/[0.035]",
+  queue: "border-kind-queue/25 bg-kind-queue/[0.035]",
+  storage: "border-kind-storage/25 bg-kind-storage/[0.035]",
+  network: "border-kind-network/25 bg-kind-network/[0.035]",
+  external_api: "border-kind-external-api/25 bg-kind-external-api/[0.035]",
+  other: "border-kind-other/20 bg-kind-other/[0.025]",
 };
 
-export const RESTRICTED_CLUSTER_STYLE = "border-dashed border-subtle bg-layer-2/30 text-tertiary";
+export const RESTRICTED_CLUSTER_STYLE = "border-dashed border-subtle bg-layer-2/20";

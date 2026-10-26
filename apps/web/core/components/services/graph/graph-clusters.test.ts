@@ -128,6 +128,34 @@ describe("getServiceClusters", () => {
     expect(clusters.map((cluster) => cluster.label)).toEqual(["Service", "Unassigned · Server", "Restricted"]);
   });
 
+  it("exposes split labels so the header can style project and kind separately", () => {
+    const services = [
+      makeService("db", { kind: "database" }),
+      makeService("svc", { owner_project_id: "p2", project_id: "p2" }),
+      makeLite("lite"),
+    ];
+    const clusters = getServiceClusters(
+      [makeNode("db", 0, 0), makeNode("svc", 400, 0), makeNode("lite", 800, 0)],
+      services,
+      { p1: { identifier: "PAY", name: "Payments" }, p2: { identifier: "AUTH", name: "Auth" } },
+      t
+    );
+
+    expect(clusters.map((cluster) => [cluster.projectLabel, cluster.kindLabel])).toEqual([
+      ["PAY", "Database"],
+      ["AUTH", "Service"],
+      ["Restricted", null],
+    ]);
+  });
+
+  it("hides the project label when only one project is visible", () => {
+    const service = makeService("db", { kind: "database" });
+    const [cluster] = getServiceClusters([makeNode("db", 0, 0)], [service], {}, t);
+
+    expect(cluster.projectLabel).toBeNull();
+    expect(cluster.kindLabel).toBe("Database");
+  });
+
   it("moves the frame when a member node moves", () => {
     const service = makeService("db", { kind: "database" });
     const before = getServiceClusters([makeNode("db", 100, 100)], [service], {}, t)[0];
