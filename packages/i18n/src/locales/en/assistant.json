@@ -6,6 +6,36 @@
     "slash_incident_off": "End the incident flow",
     "incident_ref_required": "Add an incident ID, e.g. /incident OPS-123",
     "incident_invalid_ref": "That doesn't look like a work item ID (e.g. OPS-123)",
-    "incident_flow_ended": "Incident flow ended"
+    "incident_flow_ended": "Incident flow ended",
+    "galileo": {
+      "new_chat": "New chat",
+      "history": "Chat history",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "previous_7_days": "Previous 7 days",
+      "older": "Older",
+      "empty_history": "No conversations yet.",
+      "empty_title": "What can Galileo help with?",
+      "empty_subtitle": "Ask anything, or start with one of these.",
+      "suggestion_summarize": "Summarize my latest incidents",
+      "suggestion_procedure": "Find the right procedure for a service request",
+      "suggestion_draft": "Draft a customer update for an incident",
+      "suggestion_explain": "Explain how our change process works",
+      "rename": "Rename",
+      "delete_confirm": "Delete this chat?",
+      "conversation_actions": "Conversation actions",
+      "conversation_title": "Conversation title",
+      "not_found_title": "Conversation not found",
+      "not_found_body": "This conversation may have been deleted or belongs to another user.",
+      "start_new_chat": "Start a new chat",
+      "load_failed": "Couldn't load conversations.",
+      "composer_placeholder": "Ask Galileo anything…",
+      "composer_hint": "Enter to send · Shift+Enter for a new line",
+      "send": "Send message",
+      "scroll_to_bottom": "Scroll to bottom",
+      "typing": "Galileo is thinking",
+      "switch_mode": "Switch workspace mode",
+      "third_party_notice": "Messages are sent to a 3rd party AI service."
+    }
   }
 }
