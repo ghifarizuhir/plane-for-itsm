@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "Dịch vụ",
+    "catalog_title": "Danh mục dịch vụ",
+    "catalog_all_projects": "Tất cả ứng dụng",
+    "catalog_search_placeholder": "Tìm kiếm dịch vụ",
+    "select_owner_project": "Chọn ứng dụng sở hữu",
     "add": "Thêm dịch vụ",
     "create": "Tạo dịch vụ",
     "empty_state": {
@@ -19,6 +23,7 @@
       "type": "Loại",
       "kind": "Loại thành phần",
       "owner": "Chủ sở hữu",
+      "owner_project": "Ứng dụng sở hữu",
       "repository": "Kho lưu trữ",
       "documentation": "Tài liệu",
       "health": "Sức khỏe",
@@ -161,7 +166,16 @@
       "related_to": "Liên quan đến"
     },
     "project_links": {
-      "hint": "Chủ sở hữu quản lý dịch vụ. Các ứng dụng tiêu dùng có thể liên kết mục công việc với dịch vụ nhưng không thể chỉnh sửa."
+      "owner": "Chủ sở hữu",
+      "transfer": "Chuyển quyền sở hữu…",
+      "add_project": "Thêm ứng dụng",
+      "hint": "Chủ sở hữu quản lý dịch vụ. Các ứng dụng tiêu dùng có thể liên kết mục công việc với dịch vụ nhưng không thể chỉnh sửa.",
+      "add_error": "Không thể thêm liên kết ứng dụng. Vui lòng thử lại.",
+      "remove_error": "Không thể xóa liên kết ứng dụng. Vui lòng thử lại.",
+      "transfer_error": "Không thể chuyển quyền sở hữu. Vui lòng thử lại."
+    },
+    "lite": {
+      "restricted": "Bị hạn chế"
     },
     "monitoring": {
       "select_metric": "Chỉ số",

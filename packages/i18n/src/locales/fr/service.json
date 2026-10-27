@@ -23,7 +23,8 @@
       "documentation": "Documentation",
       "health": "Santé",
       "incidents": "Incidents",
-      "deploy": "Dernier déploiement"
+      "deploy": "Dernier déploiement",
+      "owner_project": "Application propriétaire"
     },
     "tabs": {
       "overview": "Vue d'ensemble",
@@ -161,7 +162,13 @@
       "related_to": "Lié à"
     },
     "project_links": {
-      "hint": "Le propriétaire gère le service. Les applications consommatrices peuvent y lier des éléments de travail, mais ne peuvent pas le modifier."
+      "hint": "Le propriétaire gère le service. Les applications consommatrices peuvent y lier des éléments de travail, mais ne peuvent pas le modifier.",
+      "owner": "Propriétaire",
+      "transfer": "Transférer la propriété…",
+      "add_project": "Ajouter une application",
+      "add_error": "Impossible d'ajouter le lien d'application. Veuillez réessayer.",
+      "remove_error": "Impossible de retirer le lien d'application. Veuillez réessayer.",
+      "transfer_error": "Impossible de transférer la propriété. Veuillez réessayer."
     },
     "monitoring": {
       "select_metric": "Métrique",
@@ -182,6 +189,13 @@
       "max": "Max",
       "count": "Nombre",
       "resolution": "Résolution"
+    },
+    "catalog_title": "Catalogue des services",
+    "catalog_all_projects": "Toutes les applications",
+    "catalog_search_placeholder": "Rechercher des services",
+    "select_owner_project": "Sélectionner l'application propriétaire",
+    "lite": {
+      "restricted": "Restreint"
     }
   }
 }

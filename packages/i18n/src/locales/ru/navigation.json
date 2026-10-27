@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "Стикеры",
+    "docs": "Документация",
+    "ai_scheduler": "Планировщик",
     "your_work": "Ваша работа",
     "projects": "Проекты",
     "pages": "База знаний",
@@ -25,21 +27,21 @@
     "intake": "Предложения",
     "drafts": "Черновики",
     "favorites": "Избранное",
-    "pro": "Pro",
-    "upgrade": "Обновить",
     "pi_chat": "AI Чат",
+    "work": "Работа",
+    "procedure": "Процедура",
+    "galileo": "Galileo",
     "epics": "Эпики",
-    "upgrade_plan": "Апгрейд план",
-    "plane_pro": "Плейн Про",
     "business": "Бизнес",
+    "hide": "Скрыть",
+    "more": "Ещё",
+    "pin": "Закрепить",
+    "unpin": "Открепить",
     "groups": {
       "delivery": "Выполнение",
       "services": "Сервисы и поддержка",
       "knowledge": "Знания",
       "personal": "Личное"
-    },
-    "work": "Работа",
-    "procedure": "Процедура",
-    "galileo": "Galileo"
+    }
   }
 }

@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Sources Intake",
+      "heading": "Sources Intake",
+      "description": "Connectez des outils de supervision pour créer automatiquement des éléments Intake à partir des alertes.",
+      "add_source": "Ajouter une source",
+      "edit_source": "Modifier la source",
+      "create_source": "Créer une source",
+      "update_source": "Enregistrer les modifications",
+      "empty": "Aucune source Intake pour le moment. Ajoutez-en une et pointez le webhook Alertmanager vers son URL.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "auto_accept": "Acceptation automatique",
+      "copy_url": "Copier l'URL",
+      "rotate": "Renouveler le jeton",
+      "rotate_confirm": "Renouveler ce jeton ? L'ancienne URL cessera immédiatement de fonctionner.",
+      "delete_confirm": "Supprimer « {name} » ? Les événements entrants seront rejetés.",
+      "activate": "Activer",
+      "deactivate": "Désactiver",
+      "save_error": "Impossible d'enregistrer la source Intake.",
+      "form": {
+        "name": "Nom",
+        "type": "Type d'élément de travail",
+        "select_type": "Sélectionner un type",
+        "auto_accept": "Accepter automatiquement une fois classé",
+        "default_priority": "Priorité par défaut",
+        "service_mapping": "Mappage des services",
+        "service_label_key": "Clé de libellé de service",
+        "severity_mapping": "Mappage des niveaux de gravité",
+        "severity_label_key": "Clé de libellé de gravité",
+        "label_value": "Valeur du libellé",
+        "select_service": "Sélectionner un service",
+        "fallback_service": "Service de secours",
+        "no_fallback": "Aucun secours",
+        "add_row": "Ajouter une ligne"
+      }
     }
   }
 }

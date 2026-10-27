@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Zdroje Intake",
+      "heading": "Zdroje Intake",
+      "description": "Prepojte monitorovacie nástroje a vytvárajte položky Intake automaticky z upozornení.",
+      "add_source": "Pridať zdroj",
+      "edit_source": "Upraviť zdroj",
+      "create_source": "Vytvoriť zdroj",
+      "update_source": "Uložiť zmeny",
+      "empty": "Zatiaľ žiadne zdroje Intake. Pridajte zdroj a nasmerujte webhook Alertmanager na jeho URL.",
+      "active": "Aktívne",
+      "inactive": "Neaktívne",
+      "auto_accept": "Automatické prijatie",
+      "copy_url": "Kopírovať URL",
+      "rotate": "Obnoviť token",
+      "rotate_confirm": "Obnoviť tento token? Stará URL okamžite prestane fungovať.",
+      "delete_confirm": "Odstrániť „{name}“? Prichádzajúce udalosti budú odmietnuté.",
+      "activate": "Aktivovať",
+      "deactivate": "Deaktivovať",
+      "save_error": "Zdroj Intake sa nepodarilo uložiť.",
+      "form": {
+        "name": "Názov",
+        "type": "Typ pracovnej položky",
+        "select_type": "Vyberte typ",
+        "auto_accept": "Po klasifikácii automaticky prijať",
+        "default_priority": "Predvolená priorita",
+        "service_mapping": "Mapovanie služieb",
+        "service_label_key": "Kľúč štítku služby",
+        "severity_mapping": "Mapovanie závažnosti",
+        "severity_label_key": "Kľúč štítku závažnosti",
+        "label_value": "Hodnota štítku",
+        "select_service": "Vyberte službu",
+        "fallback_service": "Záložná služba",
+        "no_fallback": "Bez záložnej služby",
+        "add_row": "Pridať riadok"
+      }
     }
   }
 }

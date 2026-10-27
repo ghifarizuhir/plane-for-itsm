@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "便利貼",
+    "docs": "文件",
+    "ai_scheduler": "排程器",
     "your_work": "你的工作",
     "projects": "專案",
     "pages": "知識庫",
@@ -25,21 +27,21 @@
     "intake": "接收",
     "drafts": "草稿",
     "favorites": "收藏",
-    "pro": "專業版",
-    "upgrade": "升級",
     "pi_chat": "AI 聊天",
+    "work": "工作",
+    "procedure": "流程",
+    "galileo": "Galileo",
     "epics": "史詩",
-    "upgrade_plan": "升級方案",
-    "plane_pro": "平面專業版",
     "business": "商業",
+    "hide": "隱藏",
+    "more": "更多",
+    "pin": "釘選",
+    "unpin": "取消釘選",
     "groups": {
       "delivery": "執行",
       "services": "服務與支援",
       "knowledge": "知識",
       "personal": "個人"
-    },
-    "work": "工作",
-    "procedure": "流程",
-    "galileo": "Galileo"
+    }
   }
 }

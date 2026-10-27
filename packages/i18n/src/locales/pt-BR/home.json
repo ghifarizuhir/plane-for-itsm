@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Criar um projeto",
         "description": "A maioria das coisas começa com um projeto no Plane.",
-        "cta": "Começar"
+        "cta": "Começar",
+        "cta_view_services": "Ver serviços"
       },
       "invite_team": {
         "title": "Convide sua equipe",

@@ -23,7 +23,8 @@
       "documentation": "Dokumentacja",
       "health": "Kondycja",
       "incidents": "Incydenty",
-      "deploy": "Ostatnie wdrożenie"
+      "deploy": "Ostatnie wdrożenie",
+      "owner_project": "Aplikacja właścicielska"
     },
     "tabs": {
       "overview": "Przegląd",
@@ -161,7 +162,13 @@
       "related_to": "Powiązane"
     },
     "project_links": {
-      "hint": "Właściciel zarządza usługą. Aplikacje klienckie mogą łączyć z nią elementy pracy, ale nie mogą jej edytować."
+      "hint": "Właściciel zarządza usługą. Aplikacje klienckie mogą łączyć z nią elementy pracy, ale nie mogą jej edytować.",
+      "owner": "Właściciel",
+      "transfer": "Przekaż własność…",
+      "add_project": "Dodaj aplikację",
+      "add_error": "Nie udało się dodać powiązania aplikacji. Proszę spróbować ponownie.",
+      "remove_error": "Nie udało się usunąć powiązania aplikacji. Proszę spróbować ponownie.",
+      "transfer_error": "Nie udało się przekazać własności. Proszę spróbować ponownie."
     },
     "monitoring": {
       "select_metric": "Metryka",
@@ -182,6 +189,13 @@
       "max": "Maks",
       "count": "Liczba",
       "resolution": "Rozdzielczość"
+    },
+    "catalog_title": "Katalog usług",
+    "catalog_all_projects": "Wszystkie aplikacje",
+    "catalog_search_placeholder": "Szukaj usług",
+    "select_owner_project": "Wybierz aplikację właścicielską",
+    "lite": {
+      "restricted": "Ograniczone"
     }
   }
 }

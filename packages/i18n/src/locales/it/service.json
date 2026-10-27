@@ -23,7 +23,8 @@
       "documentation": "Documentazione",
       "health": "Salute",
       "incidents": "Incidenti",
-      "deploy": "Ultimo rilascio"
+      "deploy": "Ultimo rilascio",
+      "owner_project": "Applicazione proprietaria"
     },
     "tabs": {
       "overview": "Panoramica",
@@ -161,7 +162,13 @@
       "related_to": "Correlato a"
     },
     "project_links": {
-      "hint": "Il proprietario gestisce il servizio. Le applicazioni consumatrici possono collegare elementi di lavoro ad esso, ma non possono modificarlo."
+      "hint": "Il proprietario gestisce il servizio. Le applicazioni consumatrici possono collegare elementi di lavoro ad esso, ma non possono modificarlo.",
+      "owner": "Proprietario",
+      "transfer": "Trasferisci proprietà…",
+      "add_project": "Aggiungi applicazione",
+      "add_error": "Impossibile aggiungere il collegamento all'applicazione. Riprovi.",
+      "remove_error": "Impossibile rimuovere il collegamento all'applicazione. Riprovi.",
+      "transfer_error": "Impossibile trasferire la proprietà. Riprovi."
     },
     "monitoring": {
       "select_metric": "Metrica",
@@ -182,6 +189,13 @@
       "max": "Max",
       "count": "Conteggio",
       "resolution": "Risoluzione"
+    },
+    "catalog_title": "Catalogo dei servizi",
+    "catalog_all_projects": "Tutte le applicazioni",
+    "catalog_search_placeholder": "Cerca servizi",
+    "select_owner_project": "Seleziona l'applicazione proprietaria",
+    "lite": {
+      "restricted": "Limitato"
     }
   }
 }

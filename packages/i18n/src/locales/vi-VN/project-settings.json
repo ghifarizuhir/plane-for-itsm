@@ -217,6 +217,42 @@
       "description": "Tạo và tùy chỉnh các loại mục công việc khác nhau với các thuộc tính riêng",
       "untyped": "Không có loại"
     },
+    "intake_sources": {
+      "title": "Nguồn Intake",
+      "heading": "Nguồn Intake",
+      "description": "Kết nối các công cụ giám sát để tự động tạo mục Intake từ cảnh báo.",
+      "add_source": "Thêm nguồn",
+      "edit_source": "Chỉnh sửa nguồn",
+      "create_source": "Tạo nguồn",
+      "update_source": "Lưu thay đổi",
+      "empty": "Chưa có nguồn Intake. Thêm một nguồn và trỏ webhook Alertmanager của bạn đến URL của nguồn đó.",
+      "active": "Đang hoạt động",
+      "inactive": "Không hoạt động",
+      "auto_accept": "Tự động chấp nhận",
+      "copy_url": "Sao chép URL",
+      "rotate": "Tạo lại token",
+      "rotate_confirm": "Tạo lại token này? URL cũ sẽ ngừng hoạt động ngay lập tức.",
+      "delete_confirm": "Xóa \"{name}\"? Các sự kiện đến sẽ bị từ chối.",
+      "activate": "Kích hoạt",
+      "deactivate": "Hủy kích hoạt",
+      "save_error": "Không thể lưu nguồn Intake.",
+      "form": {
+        "name": "Tên",
+        "type": "Loại mục công việc",
+        "select_type": "Chọn một loại",
+        "auto_accept": "Tự động chấp nhận sau khi phân loại",
+        "default_priority": "Mức ưu tiên mặc định",
+        "service_mapping": "Ánh xạ dịch vụ",
+        "service_label_key": "Khóa nhãn dịch vụ",
+        "severity_mapping": "Ánh xạ mức độ nghiêm trọng",
+        "severity_label_key": "Khóa nhãn mức độ nghiêm trọng",
+        "label_value": "Giá trị nhãn",
+        "select_service": "Chọn một dịch vụ",
+        "fallback_service": "Dịch vụ dự phòng",
+        "no_fallback": "Không có dự phòng",
+        "add_row": "Thêm hàng"
+      }
+    },
     "features": {
       "cycles": {
         "title": "Chu kỳ",

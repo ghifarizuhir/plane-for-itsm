@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "便签",
+    "docs": "文档",
+    "ai_scheduler": "调度器",
     "your_work": "我的工作",
     "projects": "项目",
     "pages": "知识库",
@@ -25,21 +27,21 @@
     "intake": "收集",
     "drafts": "草稿",
     "favorites": "收藏",
-    "pro": "专业版",
-    "upgrade": "升级",
     "pi_chat": "AI 聊天",
+    "work": "工作",
+    "procedure": "流程",
+    "galileo": "Galileo",
     "epics": "史诗",
-    "upgrade_plan": "升级计划",
-    "plane_pro": "Terraline Pro",
     "business": "商业版",
+    "hide": "隐藏",
+    "more": "更多",
+    "pin": "固定",
+    "unpin": "取消固定",
     "groups": {
       "delivery": "执行",
       "services": "服务与支持",
       "knowledge": "知识",
       "personal": "个人"
-    },
-    "work": "工作",
-    "procedure": "流程",
-    "galileo": "Galileo"
+    }
   }
 }

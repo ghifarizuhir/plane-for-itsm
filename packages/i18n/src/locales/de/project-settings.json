@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Intake-Quellen",
+      "heading": "Intake-Quellen",
+      "description": "Verbinden Sie Monitoring-Tools, um aus Warnungen automatisch Intake-Elemente zu erstellen.",
+      "add_source": "Quelle hinzufügen",
+      "edit_source": "Quelle bearbeiten",
+      "create_source": "Quelle erstellen",
+      "update_source": "Änderungen speichern",
+      "empty": "Noch keine Intake-Quellen. Fügen Sie eine hinzu und richten Sie Ihren Alertmanager-Webhook auf die URL der Quelle.",
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "auto_accept": "Automatisch übernehmen",
+      "copy_url": "URL kopieren",
+      "rotate": "Token rotieren",
+      "rotate_confirm": "Dieses Token rotieren? Die alte URL funktioniert sofort nicht mehr.",
+      "delete_confirm": "„{name}“ löschen? Eingehende Ereignisse werden abgelehnt.",
+      "activate": "Aktivieren",
+      "deactivate": "Deaktivieren",
+      "save_error": "Die Intake-Quelle konnte nicht gespeichert werden.",
+      "form": {
+        "name": "Name",
+        "type": "Arbeitselementtyp",
+        "select_type": "Typ auswählen",
+        "auto_accept": "Nach Klassifizierung automatisch übernehmen",
+        "default_priority": "Standardpriorität",
+        "service_mapping": "Service-Zuordnung",
+        "service_label_key": "Service-Label-Schlüssel",
+        "severity_mapping": "Schweregrad-Zuordnung",
+        "severity_label_key": "Schweregrad-Label-Schlüssel",
+        "label_value": "Label-Wert",
+        "select_service": "Service auswählen",
+        "fallback_service": "Fallback-Service",
+        "no_fallback": "Kein Fallback",
+        "add_row": "Zeile hinzufügen"
+      }
     }
   }
 }

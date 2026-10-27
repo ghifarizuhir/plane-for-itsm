@@ -25,12 +25,8 @@
     "intake": "Cereri",
     "drafts": "Schițe",
     "favorites": "Favorite",
-    "pro": "Pro",
-    "upgrade": "Treci la versiunea superioară",
     "pi_chat": "Terraline AI",
     "epics": "Epice",
-    "upgrade_plan": "Actualizare plan",
-    "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
       "delivery": "Livrare",
@@ -40,6 +36,12 @@
     },
     "work": "Lucru",
     "procedure": "Procedură",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Documentație",
+    "ai_scheduler": "Planificator",
+    "hide": "Ascundeți",
+    "more": "Mai multe",
+    "pin": "Fixați",
+    "unpin": "Anulați fixarea"
   }
 }

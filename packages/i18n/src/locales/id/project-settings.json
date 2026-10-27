@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Sumber Intake",
+      "heading": "Sumber Intake",
+      "description": "Hubungkan alat pemantauan untuk membuat item Intake secara otomatis dari peringatan.",
+      "add_source": "Tambah sumber",
+      "edit_source": "Edit sumber",
+      "create_source": "Buat sumber",
+      "update_source": "Simpan perubahan",
+      "empty": "Belum ada sumber Intake. Tambahkan satu dan arahkan webhook Alertmanager ke URL-nya.",
+      "active": "Aktif",
+      "inactive": "Tidak aktif",
+      "auto_accept": "Terima otomatis",
+      "copy_url": "Salin URL",
+      "rotate": "Rotasi token",
+      "rotate_confirm": "Rotasi token ini? URL lama akan langsung berhenti berfungsi.",
+      "delete_confirm": "Hapus \"{name}\"? Peristiwa yang masuk akan ditolak.",
+      "activate": "Aktifkan",
+      "deactivate": "Nonaktifkan",
+      "save_error": "Tidak dapat menyimpan sumber Intake.",
+      "form": {
+        "name": "Nama",
+        "type": "Tipe item kerja",
+        "select_type": "Pilih tipe",
+        "auto_accept": "Terima otomatis setelah diklasifikasikan",
+        "default_priority": "Prioritas default",
+        "service_mapping": "Pemetaan layanan",
+        "service_label_key": "Kunci label layanan",
+        "severity_mapping": "Pemetaan tingkat keparahan",
+        "severity_label_key": "Kunci label tingkat keparahan",
+        "label_value": "Nilai label",
+        "select_service": "Pilih layanan",
+        "fallback_service": "Layanan cadangan",
+        "no_fallback": "Tanpa cadangan",
+        "add_row": "Tambah baris"
+      }
     }
   }
 }

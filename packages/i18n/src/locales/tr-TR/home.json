@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Proje oluştur",
         "description": "Çoğu şey Plane'de bir projeyle başlar.",
-        "cta": "Başla"
+        "cta": "Başla",
+        "cta_view_services": "Hizmetleri görüntüleyin"
       },
       "invite_team": {
         "title": "Ekibinizi davet edin",

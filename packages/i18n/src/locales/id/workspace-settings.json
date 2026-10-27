@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Penagihan & Rencana",
-        "description": "Pilih rencana Anda, kelola langganan, dan tingkatkan dengan mudah seiring pertumbuhan kebutuhan Anda.",
-        "title": "Penagihan & Rencana",
-        "current_plan": "Rencana saat ini",
-        "free_plan": "Anda saat ini menggunakan rencana gratis",
-        "view_plans": "Lihat rencana"
-      },
       "exports": {
         "heading": "Ekspor",
         "description": "Ekspor data proyek Anda dalam berbagai format dan akses riwayat ekspor Anda dengan tautan unduhan.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Nama",
           "description": "Deskripsi",
-          "active": "Aktif"
+          "active": "Aktif",
+          "requires_service": "Memerlukan layanan"
         },
         "not_found": {
           "title": "Tipe item kerja tidak ditemukan",

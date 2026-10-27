@@ -23,7 +23,8 @@
       "documentation": "Documentație",
       "health": "Sănătate",
       "incidents": "Incidente",
-      "deploy": "Ultima implementare"
+      "deploy": "Ultima implementare",
+      "owner_project": "Aplicație proprietar"
     },
     "tabs": {
       "overview": "Prezentare generală",
@@ -161,7 +162,13 @@
       "related_to": "Legat de"
     },
     "project_links": {
-      "hint": "Proprietarul gestionează serviciul. Aplicațiile consumatoare pot asocia activități acestuia, dar nu îl pot edita."
+      "hint": "Proprietarul gestionează serviciul. Aplicațiile consumatoare pot asocia activități acestuia, dar nu îl pot edita.",
+      "owner": "Proprietar",
+      "transfer": "Transferați proprietatea…",
+      "add_project": "Adăugați aplicație",
+      "add_error": "Legătura cu aplicația nu a putut fi adăugată. Încercați din nou.",
+      "remove_error": "Legătura cu aplicația nu a putut fi eliminată. Încercați din nou.",
+      "transfer_error": "Proprietatea nu a putut fi transferată. Încercați din nou."
     },
     "monitoring": {
       "select_metric": "Metrică",
@@ -182,6 +189,13 @@
       "max": "Max",
       "count": "Număr",
       "resolution": "Rezoluție"
+    },
+    "catalog_title": "Catalog de servicii",
+    "catalog_all_projects": "Toate aplicațiile",
+    "catalog_search_placeholder": "Căutați servicii",
+    "select_owner_project": "Selectați aplicația proprietar",
+    "lite": {
+      "restricted": "Restricționat"
     }
   }
 }

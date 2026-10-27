@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Sorgenti Intake",
+      "heading": "Sorgenti Intake",
+      "description": "Collegare strumenti di monitoraggio per creare automaticamente elementi Intake dagli avvisi.",
+      "add_source": "Aggiungi sorgente",
+      "edit_source": "Modifica sorgente",
+      "create_source": "Crea sorgente",
+      "update_source": "Salva modifiche",
+      "empty": "Ancora nessuna sorgente Intake. Aggiungerne una e puntare il webhook di Alertmanager al relativo URL.",
+      "active": "Attiva",
+      "inactive": "Inattiva",
+      "auto_accept": "Accettazione automatica",
+      "copy_url": "Copia URL",
+      "rotate": "Ruota token",
+      "rotate_confirm": "Ruotare questo token? Il vecchio URL smetterà subito di funzionare.",
+      "delete_confirm": "Eliminare «{name}»? Gli eventi in arrivo verranno rifiutati.",
+      "activate": "Attivare",
+      "deactivate": "Disattivare",
+      "save_error": "Impossibile salvare la sorgente Intake.",
+      "form": {
+        "name": "Nome",
+        "type": "Tipo di elemento di lavoro",
+        "select_type": "Seleziona un tipo",
+        "auto_accept": "Accetta automaticamente una volta classificato",
+        "default_priority": "Priorità predefinita",
+        "service_mapping": "Mappatura servizi",
+        "service_label_key": "Chiave etichetta servizio",
+        "severity_mapping": "Mappatura gravità",
+        "severity_label_key": "Chiave etichetta gravità",
+        "label_value": "Valore etichetta",
+        "select_service": "Seleziona un servizio",
+        "fallback_service": "Servizio di fallback",
+        "no_fallback": "Nessun fallback",
+        "add_row": "Aggiungi riga"
+      }
     }
   }
 }

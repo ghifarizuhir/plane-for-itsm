@@ -177,10 +177,6 @@
       "cta_primary": "Utwórz pierwszą notatkę",
       "cta_secondary": "Dokumentacja"
     },
-    "active_cycles": {
-      "title": "Brak aktywnych cykli",
-      "description": "Nie masz teraz żadnych trwających cykli. Aktywne cykle pojawiają się tutaj, gdy obejmują dzisiejszą datę."
-    },
     "dashboard": {
       "title": "Wizualizuj swój postęp za pomocą pulpitów nawigacyjnych",
       "description": "Twórz konfigurowalne pulpity nawigacyjne do śledzenia metryk, mierzenia wyników i efektywnego prezentowania spostrzeżeń.",
@@ -210,6 +206,10 @@
     "kb": {
       "title": "Jeszcze brak stron",
       "description": "Strony z aplikacji, których użytkownik jest członkiem, pojawią się tutaj."
+    },
+    "intake": {
+      "title": "Brak zgłoszeń",
+      "description": "Tutaj pojawią się przychodzące zgłoszenia serwisowe z aplikacji, do których przyznano dostęp."
     }
   },
   "settings_empty_state": {

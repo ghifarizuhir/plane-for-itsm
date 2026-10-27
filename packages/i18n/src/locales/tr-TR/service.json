@@ -23,7 +23,8 @@
       "documentation": "Dokümantasyon",
       "health": "Sağlık",
       "incidents": "Olaylar",
-      "deploy": "Son dağıtım"
+      "deploy": "Son dağıtım",
+      "owner_project": "Sahip uygulama"
     },
     "tabs": {
       "overview": "Genel Bakış",
@@ -161,7 +162,13 @@
       "related_to": "İlgili"
     },
     "project_links": {
-      "hint": "Hizmeti sahibi yönetir. Tüketici uygulamalar iş öğelerini bu hizmete bağlayabilir ancak düzenleyemez."
+      "hint": "Hizmeti sahibi yönetir. Tüketici uygulamalar iş öğelerini bu hizmete bağlayabilir ancak düzenleyemez.",
+      "owner": "Sahip",
+      "transfer": "Sahipliği devredin…",
+      "add_project": "Uygulama ekleyin",
+      "add_error": "Uygulama bağlantısı eklenemedi. Lütfen tekrar deneyin.",
+      "remove_error": "Uygulama bağlantısı kaldırılamadı. Lütfen tekrar deneyin.",
+      "transfer_error": "Sahiplik devredilemedi. Lütfen tekrar deneyin."
     },
     "monitoring": {
       "select_metric": "Metrik",
@@ -182,6 +189,13 @@
       "max": "Maks",
       "count": "Sayı",
       "resolution": "Çözünürlük"
+    },
+    "catalog_title": "Hizmet kataloğu",
+    "catalog_all_projects": "Tüm uygulamalar",
+    "catalog_search_placeholder": "Hizmet arayın",
+    "select_owner_project": "Sahip uygulamayı seçin",
+    "lite": {
+      "restricted": "Kısıtlı"
     }
   }
 }

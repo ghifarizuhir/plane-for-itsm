@@ -25,12 +25,8 @@
     "intake": "Intake",
     "drafts": "Bozze",
     "favorites": "Preferiti",
-    "pro": "Pro",
-    "upgrade": "Aggiorna",
     "pi_chat": "Terraline AI",
     "epics": "Epiche",
-    "upgrade_plan": "Piano di aggiornamento",
-    "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
       "delivery": "Consegna",
@@ -40,6 +36,12 @@
     },
     "work": "Lavoro",
     "procedure": "Procedura",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Documentazione",
+    "ai_scheduler": "Pianificatore",
+    "hide": "Nascondi",
+    "more": "Altro",
+    "pin": "Fissa",
+    "unpin": "Sblocca"
   }
 }

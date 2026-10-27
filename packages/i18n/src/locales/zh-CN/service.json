@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "服务",
+    "catalog_title": "服务目录",
+    "catalog_all_projects": "所有应用",
+    "catalog_search_placeholder": "搜索服务",
+    "select_owner_project": "选择所有者应用",
     "add": "添加服务",
     "create": "创建服务",
     "empty_state": {
@@ -19,6 +23,7 @@
       "type": "类型",
       "kind": "组件类型",
       "owner": "所有者",
+      "owner_project": "所有者应用",
       "repository": "仓库",
       "documentation": "文档",
       "health": "健康",
@@ -161,7 +166,16 @@
       "related_to": "相关"
     },
     "project_links": {
-      "hint": "所有者管理该服务。使用方应用可以将工作项关联到该服务，但无法编辑该服务。"
+      "owner": "所有者",
+      "transfer": "转移所有权…",
+      "add_project": "添加应用",
+      "hint": "所有者管理该服务。使用方应用可以将工作项关联到该服务，但无法编辑该服务。",
+      "add_error": "无法添加应用关联。请重试。",
+      "remove_error": "无法移除应用关联。请重试。",
+      "transfer_error": "无法转移所有权。请重试。"
+    },
+    "lite": {
+      "restricted": "受限"
     },
     "monitoring": {
       "select_metric": "指标",

@@ -6,7 +6,8 @@
       "create_project": {
         "title": "프로젝트 생성",
         "description": "Plane에서 대부분의 작업은 프로젝트로 시작됩니다.",
-        "cta": "시작하기"
+        "cta": "시작하기",
+        "cta_view_services": "서비스 보기"
       },
       "invite_team": {
         "title": "팀 초대",

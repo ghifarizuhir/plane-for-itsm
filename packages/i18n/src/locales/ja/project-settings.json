@@ -217,6 +217,42 @@
       "description": "独自のプロパティを持つさまざまな種類の作業項目を作成・カスタマイズします",
       "untyped": "タイプなし"
     },
+    "intake_sources": {
+      "title": "Intakeソース",
+      "heading": "Intakeソース",
+      "description": "監視ツールを接続して、アラートからIntakeアイテムを自動的に作成します。",
+      "add_source": "ソースを追加",
+      "edit_source": "ソースを編集",
+      "create_source": "ソースを作成",
+      "update_source": "変更を保存",
+      "empty": "Intakeソースはまだありません。ソースを追加し、AlertmanagerのWebhookをそのURLに設定してください。",
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "auto_accept": "自動承認",
+      "copy_url": "URLをコピー",
+      "rotate": "トークンをローテーション",
+      "rotate_confirm": "このトークンをローテーションしますか？古いURLはすぐに機能しなくなります。",
+      "delete_confirm": "「{name}」を削除しますか？受信イベントは拒否されます。",
+      "activate": "有効化",
+      "deactivate": "無効化",
+      "save_error": "Intakeソースを保存できませんでした。",
+      "form": {
+        "name": "名前",
+        "type": "作業項目タイプ",
+        "select_type": "タイプを選択",
+        "auto_accept": "分類後に自動承認",
+        "default_priority": "デフォルトの優先度",
+        "service_mapping": "サービスマッピング",
+        "service_label_key": "サービスラベルのキー",
+        "severity_mapping": "重要度マッピング",
+        "severity_label_key": "重要度ラベルのキー",
+        "label_value": "ラベルの値",
+        "select_service": "サービスを選択",
+        "fallback_service": "フォールバックサービス",
+        "no_fallback": "フォールバックなし",
+        "add_row": "行を追加"
+      }
+    },
     "features": {
       "cycles": {
         "title": "サイクル",

@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Fakturácia a plány",
-        "description": "Vyberte si plán, spravujte predplatné a jednoducho upgradujte podľa vašich potrieb.",
-        "title": "Fakturácia a plány",
-        "current_plan": "Aktuálny plán",
-        "free_plan": "Používate bezplatný plán",
-        "view_plans": "Zobraziť plány"
-      },
       "exports": {
         "heading": "Exporty",
         "description": "Exportujte údaje o projektoch v rôznych formátoch a získajte prístup k histórii exportov s odkazmi na stiahnutie.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Názov",
           "description": "Popis",
-          "active": "Aktívne"
+          "active": "Aktívne",
+          "requires_service": "Vyžaduje službu"
         },
         "not_found": {
           "title": "Typ pracovnej položky sa nenašiel",

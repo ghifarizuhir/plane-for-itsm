@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Źródła Intake",
+      "heading": "Źródła Intake",
+      "description": "Połącz narzędzia monitorowania, aby automatycznie tworzyć elementy Intake z alertów.",
+      "add_source": "Dodaj źródło",
+      "edit_source": "Edytuj źródło",
+      "create_source": "Utwórz źródło",
+      "update_source": "Zapisz zmiany",
+      "empty": "Brak źródeł Intake. Dodaj źródło i skieruj webhook Alertmanager na jego adres URL.",
+      "active": "Aktywne",
+      "inactive": "Nieaktywne",
+      "auto_accept": "Automatyczna akceptacja",
+      "copy_url": "Kopiuj URL",
+      "rotate": "Zmień token",
+      "rotate_confirm": "Zmień ten token? Stary adres URL natychmiast przestanie działać.",
+      "delete_confirm": "Usunąć „{name}”? Przychodzące zdarzenia będą odrzucane.",
+      "activate": "Aktywuj",
+      "deactivate": "Dezaktywuj",
+      "save_error": "Nie udało się zapisać źródła Intake.",
+      "form": {
+        "name": "Nazwa",
+        "type": "Typ elementu pracy",
+        "select_type": "Wybierz typ",
+        "auto_accept": "Automatyczna akceptacja po sklasyfikowaniu",
+        "default_priority": "Domyślny priorytet",
+        "service_mapping": "Mapowanie usług",
+        "service_label_key": "Klucz etykiety usługi",
+        "severity_mapping": "Mapowanie istotności",
+        "severity_label_key": "Klucz etykiety istotności",
+        "label_value": "Wartość etykiety",
+        "select_service": "Wybierz usługę",
+        "fallback_service": "Usługa zapasowa",
+        "no_fallback": "Brak usługi zapasowej",
+        "add_row": "Dodaj wiersz"
+      }
     }
   }
 }

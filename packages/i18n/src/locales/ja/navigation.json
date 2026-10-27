@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "付箋",
+    "docs": "ドキュメント",
+    "ai_scheduler": "スケジューラー",
     "your_work": "あなたの作業",
     "projects": "プロジェクト",
     "pages": "ナレッジベース",
@@ -25,21 +27,21 @@
     "intake": "インテーク",
     "drafts": "下書き",
     "favorites": "お気に入り",
-    "pro": "プロ",
-    "upgrade": "アップグレード",
     "pi_chat": "AIチャット",
+    "work": "ワーク",
+    "procedure": "手順",
+    "galileo": "Galileo",
     "epics": "エピック",
-    "upgrade_plan": "プランをアップグレード",
-    "plane_pro": "Terraline Pro",
     "business": "ビジネス",
+    "hide": "非表示",
+    "more": "その他",
+    "pin": "ピン留め",
+    "unpin": "ピン留めを解除",
     "groups": {
       "delivery": "実行",
       "services": "サービスとサポート",
       "knowledge": "ナレッジ",
       "personal": "パーソナル"
-    },
-    "work": "ワーク",
-    "procedure": "手順",
-    "galileo": "Galileo"
+    }
   }
 }

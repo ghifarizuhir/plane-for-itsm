@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "Ghi chú nhanh",
+    "docs": "Tài liệu",
+    "ai_scheduler": "Bộ lập lịch",
     "your_work": "Công việc của tôi",
     "projects": "Dự án",
     "pages": "Cơ sở kiến thức",
@@ -25,21 +27,21 @@
     "intake": "Thu thập",
     "drafts": "Bản nháp",
     "favorites": "Yêu thích",
-    "pro": "Phiên bản Pro",
-    "upgrade": "Nâng cấp",
     "pi_chat": "Terraline AI",
+    "work": "Công việc",
+    "procedure": "Quy trình",
+    "galileo": "Galileo",
     "epics": "Epics",
-    "upgrade_plan": "Nâng cấp gói",
-    "plane_pro": "Terraline Pro",
     "business": "Doanh nghiệp",
+    "hide": "Ẩn",
+    "more": "Thêm",
+    "pin": "Ghim",
+    "unpin": "Bỏ ghim",
     "groups": {
       "delivery": "Triển khai",
       "services": "Dịch vụ & Hỗ trợ",
       "knowledge": "Kiến thức",
       "personal": "Cá nhân"
-    },
-    "work": "Công việc",
-    "procedure": "Quy trình",
-    "galileo": "Galileo"
+    }
   }
 }

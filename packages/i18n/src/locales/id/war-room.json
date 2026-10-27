@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "Mulai ruang perang",
       "turn_off": "Akhiri ruang perang"
-    }
+    },
+    "property_label": "Ruang perang"
   }
 }

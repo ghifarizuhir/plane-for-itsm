@@ -25,12 +25,8 @@
     "intake": "Príjem",
     "drafts": "Koncepty",
     "favorites": "Obľúbené",
-    "pro": "Pro",
-    "upgrade": "Upgrade",
     "pi_chat": "AI Čet",
     "epics": "Epiky",
-    "upgrade_plan": "Apgrejd plán",
-    "plane_pro": "Plejn Pro",
     "business": "Biznis",
     "groups": {
       "delivery": "Realizácia",
@@ -40,6 +36,12 @@
     },
     "work": "Práca",
     "procedure": "Procedúra",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Dokumentácia",
+    "ai_scheduler": "Plánovač",
+    "hide": "Skryť",
+    "more": "Viac",
+    "pin": "Pripnúť",
+    "unpin": "Odopnúť"
   }
 }

@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Creează un proiect",
         "description": "Majoritatea lucrurilor încep cu un proiect în Plane.",
-        "cta": "Începe acum"
+        "cta": "Începe acum",
+        "cta_view_services": "Vedeți serviciile"
       },
       "invite_team": {
         "title": "Invită-ți echipa",

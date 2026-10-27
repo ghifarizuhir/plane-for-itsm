@@ -25,12 +25,8 @@
     "intake": "Zgłoszenia",
     "drafts": "Szkice",
     "favorites": "Ulubione",
-    "pro": "Pro",
-    "upgrade": "Uaktualnij",
     "pi_chat": "AI Czat",
     "epics": "Epiki",
-    "upgrade_plan": "Apgrejduj plan",
-    "plane_pro": "Plejn Pro",
     "business": "Biznes",
     "groups": {
       "delivery": "Realizacja",
@@ -40,6 +36,12 @@
     },
     "work": "Praca",
     "procedure": "Procedura",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Dokumentacja",
+    "ai_scheduler": "Harmonogram",
+    "hide": "Ukryj",
+    "more": "Więcej",
+    "pin": "Przypnij",
+    "unpin": "Odepnij"
   }
 }

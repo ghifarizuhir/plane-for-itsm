@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Thanh toán và Kế hoạch",
-        "description": "Chọn gói của bạn, quản lý đăng ký và dễ dàng nâng cấp khi nhu cầu của bạn phát triển.",
-        "title": "Thanh toán và Kế hoạch",
-        "current_plan": "Kế hoạch hiện tại",
-        "free_plan": "Bạn đang sử dụng kế hoạch miễn phí",
-        "view_plans": "Xem kế hoạch"
-      },
       "exports": {
         "heading": "Xuất",
         "description": "Xuất dữ liệu dự án của bạn dưới nhiều định dạng và truy cập lịch sử xuất với các liên kết tải xuống.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Tên",
           "description": "Mô tả",
-          "active": "Hoạt động"
+          "active": "Hoạt động",
+          "requires_service": "Cần có dịch vụ"
         },
         "not_found": {
           "title": "Không tìm thấy loại mục công việc",

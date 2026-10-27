@@ -217,6 +217,42 @@
       "description": "创建和自定义具有独特属性的不同类型工作项",
       "untyped": "无类型"
     },
+    "intake_sources": {
+      "title": "Intake 来源",
+      "heading": "Intake 来源",
+      "description": "连接监控工具，从告警中自动创建 Intake 条目。",
+      "add_source": "添加来源",
+      "edit_source": "编辑来源",
+      "create_source": "创建来源",
+      "update_source": "保存更改",
+      "empty": "暂无 Intake 来源。添加一个来源，并将 Alertmanager Webhook 指向其 URL。",
+      "active": "已启用",
+      "inactive": "已停用",
+      "auto_accept": "自动接受",
+      "copy_url": "复制 URL",
+      "rotate": "轮换令牌",
+      "rotate_confirm": "要轮换此令牌吗？旧 URL 将立即失效。",
+      "delete_confirm": "删除“{name}”？收到的事件将被拒绝。",
+      "activate": "启用",
+      "deactivate": "停用",
+      "save_error": "无法保存 Intake 来源。",
+      "form": {
+        "name": "名称",
+        "type": "工作项类型",
+        "select_type": "选择类型",
+        "auto_accept": "分类后自动接受",
+        "default_priority": "默认优先级",
+        "service_mapping": "服务映射",
+        "service_label_key": "服务标签键",
+        "severity_mapping": "严重级别映射",
+        "severity_label_key": "严重级别标签键",
+        "label_value": "标签值",
+        "select_service": "选择服务",
+        "fallback_service": "备用服务",
+        "no_fallback": "无备用服务",
+        "add_row": "添加行"
+      }
+    },
     "features": {
       "cycles": {
         "title": "周期",

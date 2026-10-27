@@ -177,10 +177,6 @@
       "cta_primary": "Criar primeiro adesivo",
       "cta_secondary": "Documentação"
     },
-    "active_cycles": {
-      "title": "Nenhum ciclo ativo",
-      "description": "Você não tem nenhum ciclo em andamento no momento. Os ciclos ativos aparecem aqui quando incluem a data de hoje."
-    },
     "dashboard": {
       "title": "Visualize seu progresso com painéis",
       "description": "Crie painéis personalizáveis para rastrear métricas, medir resultados e apresentar insights de forma eficaz.",
@@ -210,6 +206,10 @@
     "kb": {
       "title": "Ainda não há páginas",
       "description": "As páginas das aplicações das quais você é membro aparecerão aqui."
+    },
+    "intake": {
+      "title": "Nenhuma solicitação ainda",
+      "description": "Solicitações de serviço recebidas das aplicações das quais você faz parte aparecerão aqui."
     }
   },
   "settings_empty_state": {

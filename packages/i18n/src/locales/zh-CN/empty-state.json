@@ -124,6 +124,26 @@
       "title": "暂无已归档模块",
       "description": "为了整理项目,请归档已完成或已取消的模块。归档后在此处查找它们。"
     },
+    "sprints": {
+      "title": "暂无周期",
+      "description": "您作为成员加入的应用中的周期将显示在这里。"
+    },
+    "tracks": {
+      "title": "暂无模块",
+      "description": "您作为成员加入的应用中的模块将显示在这里。"
+    },
+    "tickets": {
+      "title": "暂无工作项",
+      "description": "您作为成员加入的应用中的工作项将显示在这里。"
+    },
+    "kb": {
+      "title": "暂无页面",
+      "description": "您作为成员加入的应用中的页面将显示在这里。"
+    },
+    "intake": {
+      "title": "暂无请求",
+      "description": "您所属应用中收到的服务请求将显示在这里。"
+    },
     "home_widget_quick_links": {
       "title": "为您的工作保留重要的参考、资源或文档"
     },
@@ -177,10 +197,6 @@
       "cta_primary": "创建第一个便签",
       "cta_secondary": "文档"
     },
-    "active_cycles": {
-      "title": "无活跃周期",
-      "description": "您目前没有任何正在进行的周期。包含今天日期的活跃周期将显示在此处。"
-    },
     "dashboard": {
       "title": "使用仪表板可视化您的进度",
       "description": "构建可自定义的仪表板以跟踪指标、衡量成果并有效呈现见解。",
@@ -194,22 +210,6 @@
     "project_overview_state_sidebar": {
       "title": "启用项目状态",
       "description": "启用项目状态以查看和管理状态、优先级、截止日期等属性。"
-    },
-    "sprints": {
-      "title": "暂无周期",
-      "description": "您作为成员加入的应用中的周期将显示在这里。"
-    },
-    "tracks": {
-      "title": "暂无模块",
-      "description": "您作为成员加入的应用中的模块将显示在这里。"
-    },
-    "tickets": {
-      "title": "暂无工作项",
-      "description": "您作为成员加入的应用中的工作项将显示在这里。"
-    },
-    "kb": {
-      "title": "暂无页面",
-      "description": "您作为成员加入的应用中的页面将显示在这里。"
     }
   },
   "settings_empty_state": {

@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Vytvořit projekt",
         "description": "Většina věcí začíná projektem v Plane.",
-        "cta": "Začít"
+        "cta": "Začít",
+        "cta_view_services": "Zobrazit služby"
       },
       "invite_team": {
         "title": "Pozvat tým",

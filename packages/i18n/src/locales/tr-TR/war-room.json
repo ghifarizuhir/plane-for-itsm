@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "Kriz odasını başlat",
       "turn_off": "Kriz odasını bitir"
-    }
+    },
+    "property_label": "Kriz odası"
   }
 }

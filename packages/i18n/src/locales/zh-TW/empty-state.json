@@ -124,6 +124,26 @@
       "title": "暫無已封存模組",
       "description": "為了整理專案,請封存已完成或已取消的模組。封存後在此處尋找它們。"
     },
+    "sprints": {
+      "title": "暫無週期",
+      "description": "您作為成員加入的應用程式中的週期將顯示在這裡。"
+    },
+    "tracks": {
+      "title": "暫無模組",
+      "description": "您作為成員加入的應用程式中的模組將顯示在這裡。"
+    },
+    "tickets": {
+      "title": "暫無工作項",
+      "description": "您作為成員加入的應用程式中的工作項將顯示在這裡。"
+    },
+    "kb": {
+      "title": "暫無頁面",
+      "description": "您作為成員加入的應用程式中的頁面將顯示在這裡。"
+    },
+    "intake": {
+      "title": "尚無請求",
+      "description": "您所屬應用程式收到的服務請求將顯示在這裡。"
+    },
     "home_widget_quick_links": {
       "title": "為您的工作保留重要的參考、資源或文件"
     },
@@ -177,10 +197,6 @@
       "cta_primary": "建立第一個便籤",
       "cta_secondary": "文件"
     },
-    "active_cycles": {
-      "title": "無活躍週期",
-      "description": "您目前沒有任何正在進行的週期。包含今天日期的活躍週期將顯示在此處。"
-    },
     "dashboard": {
       "title": "使用儀表板視覺化您的進度",
       "description": "建構可自訂的儀表板以追蹤指標、衡量成果並有效呈現見解。",
@@ -194,22 +210,6 @@
     "project_overview_state_sidebar": {
       "title": "啟用專案狀態",
       "description": "啟用專案狀態以檢視和管理狀態、優先順序、到期日等屬性。"
-    },
-    "sprints": {
-      "title": "暫無週期",
-      "description": "您作為成員加入的應用程式中的週期將顯示在這裡。"
-    },
-    "tracks": {
-      "title": "暫無模組",
-      "description": "您作為成員加入的應用程式中的模組將顯示在這裡。"
-    },
-    "tickets": {
-      "title": "暫無工作項",
-      "description": "您作為成員加入的應用程式中的工作項將顯示在這裡。"
-    },
-    "kb": {
-      "title": "暫無頁面",
-      "description": "您作為成員加入的應用程式中的頁面將顯示在這裡。"
     }
   },
   "settings_empty_state": {

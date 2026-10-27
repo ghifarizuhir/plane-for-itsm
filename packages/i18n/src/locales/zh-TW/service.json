@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "服務",
+    "catalog_title": "服務目錄",
+    "catalog_all_projects": "所有應用程式",
+    "catalog_search_placeholder": "搜尋服務",
+    "select_owner_project": "選擇擁有者應用程式",
     "add": "新增服務",
     "create": "建立服務",
     "empty_state": {
@@ -19,6 +23,7 @@
       "type": "類型",
       "kind": "元件類型",
       "owner": "擁有者",
+      "owner_project": "擁有者應用程式",
       "repository": "倉庫",
       "documentation": "文件",
       "health": "健康",
@@ -161,7 +166,16 @@
       "related_to": "相關"
     },
     "project_links": {
-      "hint": "擁有者管理該服務。使用方應用程式可以將工作項關聯到該服務，但無法編輯該服務。"
+      "owner": "擁有者",
+      "transfer": "轉移擁有權…",
+      "add_project": "新增應用程式",
+      "hint": "擁有者管理該服務。使用方應用程式可以將工作項關聯到該服務，但無法編輯該服務。",
+      "add_error": "無法新增應用程式連結。請再試一次。",
+      "remove_error": "無法移除應用程式連結。請再試一次。",
+      "transfer_error": "無法轉移擁有權。請再試一次。"
+    },
+    "lite": {
+      "restricted": "受限"
     },
     "monitoring": {
       "select_metric": "指標",

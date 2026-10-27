@@ -23,7 +23,8 @@
       "documentation": "Dokumentace",
       "health": "Zdraví",
       "incidents": "Incidenty",
-      "deploy": "Poslední nasazení"
+      "deploy": "Poslední nasazení",
+      "owner_project": "Vlastnící aplikace"
     },
     "tabs": {
       "overview": "Přehled",
@@ -161,7 +162,13 @@
       "related_to": "Související"
     },
     "project_links": {
-      "hint": "Vlastník spravuje službu. Klientské aplikace s ní mohou propojovat pracovní položky, ale nemohou ji upravovat."
+      "hint": "Vlastník spravuje službu. Klientské aplikace s ní mohou propojovat pracovní položky, ale nemohou ji upravovat.",
+      "owner": "Vlastník",
+      "transfer": "Převést vlastnictví…",
+      "add_project": "Přidat aplikaci",
+      "add_error": "Propojení s aplikací se nepodařilo přidat. Zkuste to znovu.",
+      "remove_error": "Propojení s aplikací se nepodařilo odebrat. Zkuste to znovu.",
+      "transfer_error": "Vlastnictví se nepodařilo převést. Zkuste to znovu."
     },
     "monitoring": {
       "select_metric": "Metrika",
@@ -182,6 +189,13 @@
       "max": "Max",
       "count": "Počet",
       "resolution": "Rozlišení"
+    },
+    "catalog_title": "Katalog služeb",
+    "catalog_all_projects": "Všechny aplikace",
+    "catalog_search_placeholder": "Hledat služby",
+    "select_owner_project": "Vyberte vlastnící aplikaci",
+    "lite": {
+      "restricted": "Omezeno"
     }
   }
 }

@@ -3,6 +3,11 @@
     "title": "作戰室",
     "add": "建立作戰室",
     "open": "開啟作戰室",
+    "property_label": "作戰室",
+    "toggle": {
+      "turn_on": "啟動作戰室",
+      "turn_off": "結束作戰室"
+    },
     "notification": {
       "mention": "{name} 在 {room} 中提到了您",
       "dismiss": "關閉"
@@ -231,10 +236,6 @@
       "room_archived": "此作戰室已封存，無法變更。",
       "forbidden": "您沒有執行此操作的權限。",
       "generic": "發生錯誤，請重試。"
-    },
-    "toggle": {
-      "turn_on": "啟動作戰室",
-      "turn_off": "結束作戰室"
     }
   }
 }

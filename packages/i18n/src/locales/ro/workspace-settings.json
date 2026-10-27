@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Facturare și abonamente",
-        "description": "Alege abonamentul tău, gestionează abonamentele și actualizează cu ușurință pe măsură ce nevoile tale cresc.",
-        "title": "Facturare și Abonamente",
-        "current_plan": "Abonament curent",
-        "free_plan": "Folosești în prezent abonamentul gratuit",
-        "view_plans": "Vezi abonamentele"
-      },
       "exports": {
         "heading": "Exporturi",
         "description": "Exportă datele proiectelor tale în diverse formate și accesează istoricul exporturilor cu link-uri de descărcare.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Nume",
           "description": "Descriere",
-          "active": "Activ"
+          "active": "Activ",
+          "requires_service": "Necesită un serviciu"
         },
         "not_found": {
           "title": "Tipul de activitate nu a fost găsit",

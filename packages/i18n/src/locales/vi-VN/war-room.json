@@ -3,6 +3,11 @@
     "title": "Phòng ứng phó sự cố",
     "add": "Tạo phòng ứng phó sự cố",
     "open": "Mở phòng ứng phó sự cố",
+    "property_label": "Phòng ứng phó sự cố",
+    "toggle": {
+      "turn_on": "Bắt đầu phòng ứng phó sự cố",
+      "turn_off": "Kết thúc phòng ứng phó sự cố"
+    },
     "notification": {
       "mention": "{name} đã nhắc đến bạn trong {room}",
       "dismiss": "Đóng"
@@ -231,10 +236,6 @@
       "room_archived": "Phòng ứng phó này đã lưu trữ và không thể thay đổi.",
       "forbidden": "Bạn không có quyền thực hiện việc này.",
       "generic": "Đã xảy ra lỗi. Vui lòng thử lại."
-    },
-    "toggle": {
-      "turn_on": "Bắt đầu phòng ứng phó sự cố",
-      "turn_off": "Kết thúc phòng ứng phó sự cố"
     }
   }
 }

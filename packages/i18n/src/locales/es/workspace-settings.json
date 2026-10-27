@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Facturación y Planes",
-        "description": "Elige tu plan, gestiona las suscripciones y actualiza fácilmente a medida que crecen tus necesidades.",
-        "title": "Facturación y Planes",
-        "current_plan": "Plan actual",
-        "free_plan": "Actualmente estás usando el plan gratuito",
-        "view_plans": "Ver planes"
-      },
       "exports": {
         "heading": "Exportaciones",
         "description": "Exporta los datos de tu proyecto en varios formatos y accede a tu historial de exportaciones con enlaces de descarga.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Nombre",
           "description": "Descripción",
-          "active": "Activo"
+          "active": "Activo",
+          "requires_service": "Requiere un servicio"
         },
         "not_found": {
           "title": "Tipo de elemento de trabajo no encontrado",

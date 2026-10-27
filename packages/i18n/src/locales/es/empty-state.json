@@ -177,10 +177,6 @@
       "cta_primary": "Crear primera nota adhesiva",
       "cta_secondary": "Documentación"
     },
-    "active_cycles": {
-      "title": "No hay ciclos activos",
-      "description": "No tienes ningún ciclo en curso en este momento. Los ciclos activos aparecen aquí cuando incluyen la fecha de hoy."
-    },
     "dashboard": {
       "title": "Visualiza tu progreso con paneles de control",
       "description": "Crea paneles personalizables para rastrear métricas, medir resultados y presentar insights de manera efectiva.",
@@ -210,6 +206,10 @@
     "kb": {
       "title": "Aún no hay páginas",
       "description": "Las páginas de las aplicaciones de las que usted es miembro aparecerán aquí."
+    },
+    "intake": {
+      "title": "Aún no hay solicitudes",
+      "description": "Las solicitudes de servicio entrantes de las aplicaciones de las que es miembro aparecerán aquí."
     }
   },
   "settings_empty_state": {

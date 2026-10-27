@@ -177,10 +177,6 @@
       "cta_primary": "Créer le premier pense-bête",
       "cta_secondary": "Documentation"
     },
-    "active_cycles": {
-      "title": "Aucun cycle actif",
-      "description": "Vous n'avez aucun cycle en cours pour le moment. Les cycles actifs apparaissent ici lorsqu'ils incluent la date d'aujourd'hui."
-    },
     "dashboard": {
       "title": "Visualisez votre progression avec des tableaux de bord",
       "description": "Créez des tableaux de bord personnalisables pour suivre les métriques, mesurer les résultats et présenter efficacement les insights.",
@@ -210,6 +206,10 @@
     "kb": {
       "title": "Aucune page pour le moment",
       "description": "Les pages des applications dont vous êtes membre apparaîtront ici."
+    },
+    "intake": {
+      "title": "Aucune demande pour le moment",
+      "description": "Les demandes de service entrantes provenant des applications dont vous êtes membre apparaîtront ici."
     }
   },
   "settings_empty_state": {

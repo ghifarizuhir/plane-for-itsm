@@ -6,7 +6,8 @@
       "create_project": {
         "title": "プロジェクトを作成",
         "description": "Planeのほとんどはプロジェクトから始まります。",
-        "cta": "始める"
+        "cta": "始める",
+        "cta_view_services": "サービスを表示"
       },
       "invite_team": {
         "title": "チームを招待",

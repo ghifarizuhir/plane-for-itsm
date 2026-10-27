@@ -6,7 +6,8 @@
       "create_project": {
         "title": "პროექტის შექმნა",
         "description": "ყველაფერი იწყება პროექტით Plane-ში.",
-        "cta": "დაწყება"
+        "cta": "დაწყება",
+        "cta_view_services": "სერვისების ნახვა"
       },
       "invite_team": {
         "title": "მოწვიეთ თქვენი გუნდი",

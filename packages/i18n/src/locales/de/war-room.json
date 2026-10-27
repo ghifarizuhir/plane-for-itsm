@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "War Room starten",
       "turn_off": "War Room beenden"
-    }
+    },
+    "property_label": "War Room"
   }
 }

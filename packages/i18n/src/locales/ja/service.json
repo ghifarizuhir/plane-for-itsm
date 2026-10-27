@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "サービス",
+    "catalog_title": "サービスカタログ",
+    "catalog_all_projects": "すべてのアプリケーション",
+    "catalog_search_placeholder": "サービスを検索",
+    "select_owner_project": "所有元アプリケーションを選択",
     "add": "サービスを追加",
     "create": "サービスを作成",
     "empty_state": {
@@ -19,6 +23,7 @@
       "type": "タイプ",
       "kind": "コンポーネント種別",
       "owner": "所有者",
+      "owner_project": "所有元アプリケーション",
       "repository": "リポジトリ",
       "documentation": "ドキュメント",
       "health": "ヘルス",
@@ -161,7 +166,16 @@
       "related_to": "関連"
     },
     "project_links": {
-      "hint": "所有者がサービスを管理します。利用側アプリケーションは作業項目をリンクできますが、編集はできません。"
+      "owner": "所有者",
+      "transfer": "所有権を移管…",
+      "add_project": "アプリケーションを追加",
+      "hint": "所有者がサービスを管理します。利用側アプリケーションは作業項目をリンクできますが、編集はできません。",
+      "add_error": "アプリケーションリンクを追加できませんでした。もう一度お試しください。",
+      "remove_error": "アプリケーションリンクを削除できませんでした。もう一度お試しください。",
+      "transfer_error": "所有権を移管できませんでした。もう一度お試しください。"
+    },
+    "lite": {
+      "restricted": "制限付き"
     },
     "monitoring": {
       "select_metric": "メトリクス",

@@ -23,7 +23,8 @@
       "documentation": "Dokumentasi",
       "health": "Kesehatan",
       "incidents": "Insiden",
-      "deploy": "Deploy terakhir"
+      "deploy": "Deploy terakhir",
+      "owner_project": "Aplikasi pemilik"
     },
     "tabs": {
       "overview": "Ikhtisar",
@@ -161,7 +162,13 @@
       "related_to": "Terkait dengan"
     },
     "project_links": {
-      "hint": "Pemilik mengelola layanan. Aplikasi konsumen dapat menautkan item kerja ke layanan tersebut tetapi tidak dapat mengeditnya."
+      "hint": "Pemilik mengelola layanan. Aplikasi konsumen dapat menautkan item kerja ke layanan tersebut tetapi tidak dapat mengeditnya.",
+      "owner": "Pemilik",
+      "transfer": "Alihkan kepemilikan…",
+      "add_project": "Tambah aplikasi",
+      "add_error": "Tidak dapat menambahkan tautan aplikasi. Silakan coba lagi.",
+      "remove_error": "Tidak dapat menghapus tautan aplikasi. Silakan coba lagi.",
+      "transfer_error": "Tidak dapat mengalihkan kepemilikan. Silakan coba lagi."
     },
     "monitoring": {
       "select_metric": "Metrik",
@@ -182,6 +189,13 @@
       "max": "Maks",
       "count": "Jumlah",
       "resolution": "Resolusi"
+    },
+    "catalog_title": "Katalog layanan",
+    "catalog_all_projects": "Semua aplikasi",
+    "catalog_search_placeholder": "Cari layanan",
+    "select_owner_project": "Pilih aplikasi pemilik",
+    "lite": {
+      "restricted": "Terbatas"
     }
   }
 }

@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "Začať krízovú miestnosť",
       "turn_off": "Ukončiť krízovú miestnosť"
-    }
+    },
+    "property_label": "Krízová miestnosť"
   }
 }

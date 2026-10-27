@@ -177,10 +177,6 @@
       "cta_primary": "Buat catatan pertama",
       "cta_secondary": "Dokumentasi"
     },
-    "active_cycles": {
-      "title": "Tidak ada siklus aktif",
-      "description": "Anda tidak memiliki siklus yang sedang berjalan saat ini. Siklus aktif muncul di sini ketika mereka mencakup tanggal hari ini."
-    },
     "dashboard": {
       "title": "Visualisasikan kemajuan Anda dengan dasbor",
       "description": "Bangun dasbor yang dapat disesuaikan untuk melacak metrik, mengukur hasil, dan menyajikan wawasan secara efektif.",
@@ -210,6 +206,10 @@
     "kb": {
       "title": "Belum ada halaman",
       "description": "Halaman dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
+    },
+    "intake": {
+      "title": "Belum ada permintaan",
+      "description": "Permintaan layanan dari aplikasi tempat Anda menjadi anggota akan muncul di sini."
     }
   },
   "settings_empty_state": {

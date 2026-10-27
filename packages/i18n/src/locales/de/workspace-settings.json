@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Abrechnung und Pläne",
-        "description": "Wählen Sie Ihren Plan, verwalten Sie Abonnements und führen Sie bei Bedarf ein Upgrade durch.",
-        "title": "Abrechnung und Pläne",
-        "current_plan": "Aktueller Plan",
-        "free_plan": "Sie nutzen den kostenlosen Plan",
-        "view_plans": "Pläne anzeigen"
-      },
       "exports": {
         "heading": "Exporte",
         "description": "Exportieren Sie Ihre Projektdaten in verschiedenen Formaten und greifen Sie auf Ihre Exporthistorie mit Download-Links zu.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Name",
           "description": "Beschreibung",
-          "active": "Aktiv"
+          "active": "Aktiv",
+          "requires_service": "Erfordert einen Service"
         },
         "not_found": {
           "title": "Arbeitselementtyp nicht gefunden",

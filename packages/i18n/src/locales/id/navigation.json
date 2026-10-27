@@ -26,12 +26,8 @@
     "intake": "Intake",
     "drafts": "Draft",
     "favorites": "Favorit",
-    "pro": "Pro",
-    "upgrade": "Upgrade",
     "pi_chat": "Terraline AI",
     "epics": "Epics",
-    "upgrade_plan": "Tingkatkan paket",
-    "plane_pro": "Terraline Pro",
     "business": "Bisnis",
     "groups": {
       "delivery": "Pelaksanaan",
@@ -41,6 +37,11 @@
     },
     "work": "Pekerjaan",
     "procedure": "Prosedur",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "ai_scheduler": "Penjadwal",
+    "hide": "Sembunyikan",
+    "more": "Lainnya",
+    "pin": "Sematkan",
+    "unpin": "Lepas sematan"
   }
 }

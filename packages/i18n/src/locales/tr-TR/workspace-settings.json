@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "Faturalandırma ve Planlar",
-        "description": "Planınızı seçin, abonelikleri yönetin ve ihtiyaçlarınız arttıkça kolayca yükseltin.",
-        "title": "Faturalandırma ve Planlar",
-        "current_plan": "Mevcut plan",
-        "free_plan": "Şu anda ücretsiz planı kullanıyorsunuz",
-        "view_plans": "Planları görüntüle"
-      },
       "exports": {
         "heading": "Dışa Aktarımlar",
         "description": "Proje verilerinizi çeşitli formatlarda dışa aktarın ve indirme bağlantılarıyla dışa aktarma geçmişinize erişin.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "Ad",
           "description": "Açıklama",
-          "active": "Aktif"
+          "active": "Aktif",
+          "requires_service": "Hizmet gerektirir"
         },
         "not_found": {
           "title": "İş öğesi türü bulunamadı",

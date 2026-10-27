@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Surse Intake",
+      "heading": "Surse Intake",
+      "description": "Conectați instrumente de monitorizare pentru a crea automat elemente Intake din alerte.",
+      "add_source": "Adăugați sursă",
+      "edit_source": "Editați sursa",
+      "create_source": "Creați sursă",
+      "update_source": "Salvați modificările",
+      "empty": "Încă nu există surse Intake. Adăugați una și îndreptați webhook-ul Alertmanager către URL-ul acesteia.",
+      "active": "Activă",
+      "inactive": "Inactivă",
+      "auto_accept": "Acceptare automată",
+      "copy_url": "Copiați URL-ul",
+      "rotate": "Regenerați tokenul",
+      "rotate_confirm": "Regenerați acest token? URL-ul vechi va înceta să funcționeze imediat.",
+      "delete_confirm": "Ștergeți „{name}”? Evenimentele primite vor fi respinse.",
+      "activate": "Activați",
+      "deactivate": "Dezactivați",
+      "save_error": "Sursa Intake nu a putut fi salvată.",
+      "form": {
+        "name": "Nume",
+        "type": "Tip de activitate",
+        "select_type": "Selectați un tip",
+        "auto_accept": "Acceptați automat după clasificare",
+        "default_priority": "Prioritate implicită",
+        "service_mapping": "Mapare servicii",
+        "service_label_key": "Cheie etichetă serviciu",
+        "severity_mapping": "Mapare severitate",
+        "severity_label_key": "Cheie etichetă severitate",
+        "label_value": "Valoare etichetă",
+        "select_service": "Selectați un serviciu",
+        "fallback_service": "Serviciu de rezervă",
+        "no_fallback": "Fără serviciu de rezervă",
+        "add_row": "Adăugați rând"
+      }
     }
   }
 }

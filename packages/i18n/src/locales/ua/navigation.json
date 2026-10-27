@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "Стікі",
+    "docs": "Документація",
+    "ai_scheduler": "Планувальник",
     "your_work": "Ваша робота",
     "projects": "Проєкти",
     "pages": "База знань",
@@ -25,21 +27,21 @@
     "intake": "Надходження",
     "drafts": "Чернетки",
     "favorites": "Вибране",
-    "pro": "Pro",
-    "upgrade": "Підвищити",
     "pi_chat": "ШІ Чат",
+    "work": "Робота",
+    "procedure": "Процедура",
+    "galileo": "Galileo",
     "epics": "Епікс",
-    "upgrade_plan": "Апгрейд план",
-    "plane_pro": "Плейн Про",
     "business": "Бізнес",
+    "hide": "Приховати",
+    "more": "Ще",
+    "pin": "Закріпити",
+    "unpin": "Відкріпити",
     "groups": {
       "delivery": "Виконання",
       "services": "Сервіси та підтримка",
       "knowledge": "Знання",
       "personal": "Особисте"
-    },
-    "work": "Робота",
-    "procedure": "Процедура",
-    "galileo": "Galileo"
+    }
   }
 }

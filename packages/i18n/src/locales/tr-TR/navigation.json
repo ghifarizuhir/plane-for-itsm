@@ -25,12 +25,8 @@
     "intake": "Talep",
     "drafts": "Taslaklar",
     "favorites": "Favoriler",
-    "pro": "Pro",
-    "upgrade": "Yükselt",
     "pi_chat": "AI Çet",
     "epics": "Epiks",
-    "upgrade_plan": "Apgreyd plen",
-    "plane_pro": "Pleyn Pro",
     "business": "Biznis",
     "groups": {
       "delivery": "Teslimat",
@@ -40,6 +36,12 @@
     },
     "work": "İş",
     "procedure": "Prosedür",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Dokümanlar",
+    "ai_scheduler": "Zamanlayıcı",
+    "hide": "Gizleyin",
+    "more": "Daha fazla",
+    "pin": "Sabitleyin",
+    "unpin": "Sabitlemeyi kaldırın"
   }
 }

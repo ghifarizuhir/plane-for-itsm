@@ -217,6 +217,42 @@
       "description": "使用獨特屬性建立和自訂不同類型的工作事項",
       "untyped": "無類型"
     },
+    "intake_sources": {
+      "title": "Intake 來源",
+      "heading": "Intake 來源",
+      "description": "連接監控工具，從告警自動建立 Intake 項目。",
+      "add_source": "新增來源",
+      "edit_source": "編輯來源",
+      "create_source": "建立來源",
+      "update_source": "儲存變更",
+      "empty": "尚無 Intake 來源。新增一個來源，並將 Alertmanager Webhook 指向其 URL。",
+      "active": "已啟用",
+      "inactive": "已停用",
+      "auto_accept": "自動接受",
+      "copy_url": "複製 URL",
+      "rotate": "輪換權杖",
+      "rotate_confirm": "要輪換此權杖嗎？舊 URL 將立即失效。",
+      "delete_confirm": "刪除「{name}」？收到的事件將被拒絕。",
+      "activate": "啟用",
+      "deactivate": "停用",
+      "save_error": "無法儲存 Intake 來源。",
+      "form": {
+        "name": "名稱",
+        "type": "工作項類型",
+        "select_type": "選擇類型",
+        "auto_accept": "分類後自動接受",
+        "default_priority": "預設優先順序",
+        "service_mapping": "服務對應",
+        "service_label_key": "服務標籤鍵",
+        "severity_mapping": "嚴重程度對應",
+        "severity_label_key": "嚴重程度標籤鍵",
+        "label_value": "標籤值",
+        "select_service": "選擇服務",
+        "fallback_service": "備援服務",
+        "no_fallback": "無備援服務",
+        "add_row": "新增列"
+      }
+    },
     "features": {
       "cycles": {
         "title": "週期",

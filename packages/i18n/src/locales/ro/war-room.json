@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "Porniți camera de criză",
       "turn_off": "Încheiați camera de criză"
-    }
+    },
+    "property_label": "Cameră de criză"
   }
 }

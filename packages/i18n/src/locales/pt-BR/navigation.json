@@ -25,12 +25,8 @@
     "intake": "Intake",
     "drafts": "Rascunhos",
     "favorites": "Favoritos",
-    "pro": "Pro",
-    "upgrade": "Upgrade",
     "pi_chat": "Chat AI",
     "epics": "Épicos",
-    "upgrade_plan": "Atualizar plano",
-    "plane_pro": "Terraline Pro",
     "business": "Business",
     "groups": {
       "delivery": "Entrega",
@@ -40,6 +36,12 @@
     },
     "work": "Trabalho",
     "procedure": "Procedimento",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Documentação",
+    "ai_scheduler": "Agendador",
+    "hide": "Ocultar",
+    "more": "Mais",
+    "pin": "Fixar",
+    "unpin": "Desafixar"
   }
 }

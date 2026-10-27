@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Tạo dự án",
         "description": "Trong Plane, hầu hết mọi thứ đều bắt đầu từ dự án.",
-        "cta": "Bắt đầu"
+        "cta": "Bắt đầu",
+        "cta_view_services": "Xem dịch vụ"
       },
       "invite_team": {
         "title": "Mời nhóm của bạn",

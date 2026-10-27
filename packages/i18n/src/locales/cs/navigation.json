@@ -25,12 +25,8 @@
     "intake": "Příjem",
     "drafts": "Koncepty",
     "favorites": "Oblíbené",
-    "pro": "Pro",
-    "upgrade": "Upgrade",
     "pi_chat": "Terraline AI",
     "epics": "Epiky",
-    "upgrade_plan": "Plán upgradu",
-    "plane_pro": "Terraline Pro",
     "business": "Byznys",
     "groups": {
       "delivery": "Realizace",
@@ -40,6 +36,12 @@
     },
     "work": "Práce",
     "procedure": "Postup",
-    "galileo": "Galileo"
+    "galileo": "Galileo",
+    "docs": "Dokumentace",
+    "ai_scheduler": "Plánovač",
+    "hide": "Skrýt",
+    "more": "Další",
+    "pin": "Připnout",
+    "unpin": "Odepnout"
   }
 }

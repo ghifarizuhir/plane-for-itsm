@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "請求とプラン",
-        "description": "プランを選択してサブスクリプションを管理し、ニーズの拡大に応じて簡単にアップグレードできます。",
-        "title": "請求とプラン",
-        "current_plan": "現在のプラン",
-        "free_plan": "現在フリープランを使用中です",
-        "view_plans": "プランを表示"
-      },
       "exports": {
         "heading": "エクスポート",
         "description": "プロジェクトデータをさまざまな形式でエクスポートし、ダウンロードリンク付きのエクスポート履歴にアクセスできます。",
@@ -550,7 +542,8 @@
         "form": {
           "name": "名前",
           "description": "説明",
-          "active": "アクティブ"
+          "active": "アクティブ",
+          "requires_service": "サービスを必要とする"
         },
         "not_found": {
           "title": "作業項目タイプが見つかりません",

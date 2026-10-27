@@ -416,6 +416,42 @@
           }
         }
       }
+    },
+    "intake_sources": {
+      "title": "Intake kaynakları",
+      "heading": "Intake kaynakları",
+      "description": "Uyarılardan otomatik Intake öğeleri oluşturmak için izleme araçlarını bağlayın.",
+      "add_source": "Kaynak ekleyin",
+      "edit_source": "Kaynağı düzenleyin",
+      "create_source": "Kaynak oluşturun",
+      "update_source": "Değişiklikleri kaydedin",
+      "empty": "Henüz Intake kaynağı yok. Bir tane ekleyin ve Alertmanager webhook'unu kaynağın URL'sine yönlendirin.",
+      "active": "Etkin",
+      "inactive": "Etkin değil",
+      "auto_accept": "Otomatik kabul",
+      "copy_url": "URL'yi kopyalayın",
+      "rotate": "Token'ı yenileyin",
+      "rotate_confirm": "Bu token yenilensin mi? Eski URL hemen çalışmayı durdurur.",
+      "delete_confirm": "\"{name}\" silinsin mi? Gelen olaylar reddedilir.",
+      "activate": "Etkinleştirin",
+      "deactivate": "Devre dışı bırakın",
+      "save_error": "Intake kaynağı kaydedilemedi.",
+      "form": {
+        "name": "Ad",
+        "type": "İş öğesi türü",
+        "select_type": "Bir tür seçin",
+        "auto_accept": "Sınıflandırıldıktan sonra otomatik kabul",
+        "default_priority": "Varsayılan öncelik",
+        "service_mapping": "Hizmet eşlemesi",
+        "service_label_key": "Hizmet etiketi anahtarı",
+        "severity_mapping": "Önem derecesi eşlemesi",
+        "severity_label_key": "Önem derecesi etiketi anahtarı",
+        "label_value": "Etiket değeri",
+        "select_service": "Bir hizmet seçin",
+        "fallback_service": "Yedek hizmet",
+        "no_fallback": "Yedek yok",
+        "add_row": "Satır ekleyin"
+      }
     }
   }
 }

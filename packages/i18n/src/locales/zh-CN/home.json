@@ -6,7 +6,8 @@
       "create_project": {
         "title": "创建项目",
         "description": "在Plane中，大多数事情都从项目开始。",
-        "cta": "开始使用"
+        "cta": "开始使用",
+        "cta_view_services": "查看服务"
       },
       "invite_team": {
         "title": "邀请您的团队",

@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "账单与计划",
-        "description": "选择您的计划、管理订阅，并随着需求增长轻松升级。",
-        "title": "账单与计划",
-        "current_plan": "当前计划",
-        "free_plan": "您目前使用的是免费计划",
-        "view_plans": "查看计划"
-      },
       "exports": {
         "heading": "导出",
         "description": "以多种格式导出项目数据，并通过下载链接访问导出历史记录。",
@@ -550,7 +542,8 @@
         "form": {
           "name": "名称",
           "description": "描述",
-          "active": "活动"
+          "active": "活动",
+          "requires_service": "需要服务"
         },
         "not_found": {
           "title": "工作项类型不存在",

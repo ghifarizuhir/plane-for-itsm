@@ -1,6 +1,10 @@
 {
   "service": {
     "title": "서비스",
+    "catalog_title": "서비스 카탈로그",
+    "catalog_all_projects": "모든 애플리케이션",
+    "catalog_search_placeholder": "서비스 검색",
+    "select_owner_project": "소유자 애플리케이션 선택",
     "add": "서비스 추가",
     "create": "서비스 생성",
     "empty_state": {
@@ -19,6 +23,7 @@
       "type": "유형",
       "kind": "구성 요소 종류",
       "owner": "소유자",
+      "owner_project": "소유자 애플리케이션",
       "repository": "레포지토리",
       "documentation": "문서",
       "health": "헬스",
@@ -161,7 +166,16 @@
       "related_to": "관련"
     },
     "project_links": {
-      "hint": "소유자가 서비스를 관리합니다. 컨슈머 애플리케이션은 작업 항목을 연결할 수 있지만 편집할 수는 없습니다."
+      "owner": "소유자",
+      "transfer": "소유권 이전…",
+      "add_project": "애플리케이션 추가",
+      "hint": "소유자가 서비스를 관리합니다. 컨슈머 애플리케이션은 작업 항목을 연결할 수 있지만 편집할 수는 없습니다.",
+      "add_error": "애플리케이션 링크를 추가하지 못했습니다. 다시 시도하세요.",
+      "remove_error": "애플리케이션 링크를 제거하지 못했습니다. 다시 시도하세요.",
+      "transfer_error": "소유권을 이전하지 못했습니다. 다시 시도하세요."
+    },
+    "lite": {
+      "restricted": "제한됨"
     },
     "monitoring": {
       "select_metric": "메트릭",

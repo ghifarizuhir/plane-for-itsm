@@ -65,14 +65,6 @@
           }
         }
       },
-      "billing_and_plans": {
-        "heading": "청구 및 플랜",
-        "description": "플랜을 선택하고, 구독을 관리하며, 필요에 따라 손쉽게 업그레이드하세요.",
-        "title": "청구 및 플랜",
-        "current_plan": "현재 플랜",
-        "free_plan": "현재 무료 플랜을 사용 중입니다",
-        "view_plans": "플랜 보기"
-      },
       "exports": {
         "heading": "내보내기",
         "description": "프로젝트 데이터를 다양한 형식으로 내보내고 다운로드 링크가 포함된 내보내기 기록에 접근하세요.",
@@ -550,7 +542,8 @@
         "form": {
           "name": "이름",
           "description": "설명",
-          "active": "활성"
+          "active": "활성",
+          "requires_service": "서비스 필요"
         },
         "not_found": {
           "title": "작업 항목 유형을 찾을 수 없습니다",

@@ -23,7 +23,8 @@
       "documentation": "Dokumentation",
       "health": "Zustand",
       "incidents": "Störungen",
-      "deploy": "Letzte Bereitstellung"
+      "deploy": "Letzte Bereitstellung",
+      "owner_project": "Eigentümer-Anwendung"
     },
     "tabs": {
       "overview": "Übersicht",
@@ -161,7 +162,13 @@
       "related_to": "Verwandt mit"
     },
     "project_links": {
-      "hint": "Der Besitzer verwaltet den Service. Nutzende Anwendungen können Arbeitselemente damit verknüpfen, ihn aber nicht bearbeiten."
+      "hint": "Der Besitzer verwaltet den Service. Nutzende Anwendungen können Arbeitselemente damit verknüpfen, ihn aber nicht bearbeiten.",
+      "owner": "Eigentümer",
+      "transfer": "Eigentümer übertragen…",
+      "add_project": "Anwendung hinzufügen",
+      "add_error": "Die Anwendungsverknüpfung konnte nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
+      "remove_error": "Die Anwendungsverknüpfung konnte nicht entfernt werden. Bitte versuchen Sie es erneut.",
+      "transfer_error": "Die Eigentümerschaft konnte nicht übertragen werden. Bitte versuchen Sie es erneut."
     },
     "monitoring": {
       "select_metric": "Metrik",
@@ -182,6 +189,13 @@
       "max": "Max",
       "count": "Anzahl",
       "resolution": "Auflösung"
+    },
+    "catalog_title": "Servicekatalog",
+    "catalog_all_projects": "Alle Anwendungen",
+    "catalog_search_placeholder": "Services suchen",
+    "select_owner_project": "Eigentümer-Anwendung auswählen",
+    "lite": {
+      "restricted": "Eingeschränkt"
     }
   }
 }

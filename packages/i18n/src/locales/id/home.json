@@ -6,7 +6,8 @@
       "create_project": {
         "title": "Buat proyek",
         "description": "Sebagian besar hal dimulai dengan proyek di Plane.",
-        "cta": "Mulai sekarang"
+        "cta": "Mulai sekarang",
+        "cta_view_services": "Lihat layanan"
       },
       "invite_team": {
         "title": "Undang tim Anda",

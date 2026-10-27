@@ -124,6 +124,26 @@
       "title": "Chưa có Mô-đun được lưu trữ",
       "description": "Để sắp xếp dự án của bạn, hãy lưu trữ các mô-đun đã hoàn thành hoặc bị hủy. Tìm chúng ở đây sau khi lưu trữ."
     },
+    "sprints": {
+      "title": "Chưa có chu kỳ",
+      "description": "Các chu kỳ từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "tracks": {
+      "title": "Chưa có mô-đun",
+      "description": "Các mô-đun từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "tickets": {
+      "title": "Chưa có mục công việc",
+      "description": "Các mục công việc từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "kb": {
+      "title": "Chưa có trang",
+      "description": "Các trang từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
+    "intake": {
+      "title": "Chưa có yêu cầu nào",
+      "description": "Yêu cầu dịch vụ đến từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
+    },
     "home_widget_quick_links": {
       "title": "Giữ các tài liệu tham khảo, tài nguyên hoặc tài liệu quan trọng tiện lợi cho công việc của bạn"
     },
@@ -177,10 +197,6 @@
       "cta_primary": "Tạo ghi chú dán đầu tiên",
       "cta_secondary": "Tài liệu"
     },
-    "active_cycles": {
-      "title": "Không có chu kỳ hoạt động",
-      "description": "Bạn không có chu kỳ đang tiến hành ngay bây giờ. Các chu kỳ hoạt động xuất hiện ở đây khi chúng bao gồm ngày hôm nay."
-    },
     "dashboard": {
       "title": "Trực quan hóa tiến độ của bạn với bảng điều khiển",
       "description": "Xây dựng bảng điều khiển có thể tùy chỉnh để theo dõi số liệu, đo lường kết quả và trình bày thông tin hiệu quả.",
@@ -194,22 +210,6 @@
     "project_overview_state_sidebar": {
       "title": "Kích hoạt trạng thái dự án",
       "description": "Kích hoạt Trạng thái Dự án để xem và quản lý các thuộc tính như trạng thái, mức độ ưu tiên, ngày đến hạn và hơn thế nữa."
-    },
-    "sprints": {
-      "title": "Chưa có chu kỳ",
-      "description": "Các chu kỳ từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
-    },
-    "tracks": {
-      "title": "Chưa có mô-đun",
-      "description": "Các mô-đun từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
-    },
-    "tickets": {
-      "title": "Chưa có mục công việc",
-      "description": "Các mục công việc từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
-    },
-    "kb": {
-      "title": "Chưa có trang",
-      "description": "Các trang từ các ứng dụng mà bạn là thành viên sẽ xuất hiện ở đây."
     }
   },
   "settings_empty_state": {

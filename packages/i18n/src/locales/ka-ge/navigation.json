@@ -8,6 +8,8 @@
   },
   "sidebar": {
     "stickies": "Stickies",
+    "docs": "დოკუმენტაცია",
+    "ai_scheduler": "დამგეგმავი",
     "your_work": "შენი სამუშაო",
     "projects": "პროექტები",
     "pages": "ცოდნის ბაზა",
@@ -25,21 +27,21 @@
     "intake": "Intake",
     "drafts": "მონახაზები",
     "favorites": "ფავორიტები",
-    "pro": "Pro",
-    "upgrade": "გააუმჯობესე",
     "pi_chat": "Terraline AI",
+    "work": "სამუშაო",
+    "procedure": "პროცედურა",
+    "galileo": "Galileo",
     "epics": "Epics",
-    "upgrade_plan": "Upgrade plan",
-    "plane_pro": "Terraline Pro",
     "business": "Business",
+    "hide": "დამალვა",
+    "more": "მეტი",
+    "pin": "მიმაგრება",
+    "unpin": "მიმაგრების მოხსნა",
     "groups": {
       "delivery": "მიწოდება",
       "services": "სერვისები და მხარდაჭერა",
       "knowledge": "ცოდნა",
       "personal": "პირადი"
-    },
-    "work": "სამუშაო",
-    "procedure": "პროცედურა",
-    "galileo": "Galileo"
+    }
   }
 }

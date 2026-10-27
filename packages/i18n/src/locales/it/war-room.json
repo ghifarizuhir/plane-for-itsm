@@ -235,6 +235,7 @@
     "toggle": {
       "turn_on": "Avviare sala di crisi",
       "turn_off": "Terminare sala di crisi"
-    }
+    },
+    "property_label": "Sala di crisi"
   }
 }
