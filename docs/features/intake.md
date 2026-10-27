@@ -1,127 +1,106 @@
-# Intake (Triage)
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:ca593de5aecacfd73d979c88e0a36888d49d55fc4d4c12caf64964bc22231c7e
+source_paths:
+  - apps/api-rs/crates/api/src/routes/intake.rs
+  - apps/api-rs/crates/api/src/routes/intake_source.rs
+  - apps/api-rs/crates/api/src/routes/inbound.rs
+  - apps/api-rs/migrations/0014_intake_service_gate.sql
+  - apps/api-rs/migrations/0015_intake_sources.sql
+  - apps/web/core/store/inbox
+  - apps/web/core/components/inbox
+---
 
-Status: **Approved**
-Route: `:workspaceSlug/projects/:projectId/intake` — lihat `apps/web/app/routes/core.ts:213-218` (`projects/(detail)/[projectId]/intake/page.tsx` + `layout.tsx`)
-Share: CORE
+# Intake
+
+Status: **Current.**
 
 ## Intent
 
-Pintu masuk kerja baru: work items yang masuk (dari form, integrasi, atau anggota) ditampung dulu, lalu di-triage — accept (masuk backlog), decline, snooze, atau tandai duplicate — sebelum mengotori backlog utama. Dari sudut user: "saring dulu yang masuk, yang layak baru jadi work item beneran."
+Intake adalah pintu masuk laporan sebelum menjadi ticket. Laporan ditampung,
+ditriase, lalu di-accept, decline, snooze, atau ditandai duplicate.
 
-## Current State (snapshot kode)
+## Routes
 
-- Page: `intake/page.tsx:46,83-89` — gate via `currentProjectDetails.inbox_view` (flag bernama inbox, route bernama intake); render `InboxIssueRoot` (`inbox/root.tsx:20`).
-- Legacy rename: URL lama `.../inbox` → redirect 302 ke `.../intake/` (`core.ts:385-387` via `routes/redirects/core/inbox.tsx:10-13`). Nama komponen/service masih `inbox-*` di banyak tempat — itu warisan nama, bukan halaman Inbox.
-- List: `apps/web/core/components/inbox/sidebar/inbox-list.tsx` + `inbox-list-item.tsx` + `sidebar/root.tsx` — daftar pending + tab open/closed.
-- Detail: `inbox/content/issue-root.tsx` + `inbox-issue-header.tsx` + `issue-properties.tsx` + `content/root.tsx`.
-- Actions: `inbox/modals/decline-issue-modal.tsx` (reject), `snooze-issue-modal.tsx` (snooze), `select-duplicate.tsx` (duplicate), `inbox-issue-status.tsx`; accept via `updateInboxIssueStatus(ACCEPTED)` → pindah ke default state project (`app/serializers/intake.py:51-69`).
-- Working: tab open/closed, accept/decline/snooze/duplicate, properties, description versions.
-- Stub: `intake.service.ts:10-14` (`IntakeService` kosong — CRUD via base); `IntakeIssueService.list()` masih hit `/inbox-issues/` (`packages/services/src/intake/issue.service.ts:15-23`).
-- Missing (ITSM fork, sebelum 2026-10-04): tidak ada triage request/incident di kode; ide diparkir di [`_backlog.md`](./_backlog.md). Sejak 2026-10-04 intake menjadi front-door ITSM: klasifikasi type + `requires_service` per tipe + gate accept (lihat §Gate accept & service binding).
+| Surface              | Route                                        |
+| -------------------- | -------------------------------------------- |
+| Workspace intake     | `/:workspaceSlug/intake`                     |
+| Application intake   | `/:workspaceSlug/projects/:projectId/intake` |
+| Legacy project inbox | `.../inbox` → `.../intake`                   |
+| In-app guide         | `/:workspaceSlug/docs/intake`                |
 
-### Bukan draft, bukan state Issue biasa
+## Workspace versus application intake
 
-Koreksi penting: Intake bukan `Issue.is_draft` dan bukan state Issue biasa — melainkan bridge `IntakeIssue(intake, issue, status, snoozed_till, duplicate_to)` (`apps/api/plane/db/models/intake.py:42-62`). Status: `PENDING = -2`, `REJECTED = -1`, `SNOOZED = 0`, `ACCEPTED = 1`, `DUPLICATE = 2`. Mirror FE: `EInboxIssueStatus` (`packages/types/src/inbox.ts:19-24`); state khusus triage `IIntakeState{group: "triage"}` (`packages/types/src/intake/state.ts:7-19`, endpoint `app/urls/state.py:23-25` `intake-state/`). `Issue` hanya flag `is_intake` (`app/serializers/issue.py:937-943`).
+- **Workspace intake** mengagregasi laporan lintas application dan menyediakan
+  filter application untuk triage.
+- **Application intake** hanya menampilkan laporan untuk application tersebut.
+- Accept dari workspace tetap membutuhkan pemilihan application tujuan.
 
-### Store (MobX)
+## Sources
 
-- `apps/web/core/store/inbox/project-inbox.store.ts:38` `IProjectInboxStore` / `ProjectInboxStore` (list/pagination/filter) + `store/inbox/inbox-issue.store.ts:35-37,99-208` `InboxIssueStore` (`updateInboxIssueStatus` / `updateInboxIssueDuplicateTo` / `updateInboxIssueSnoozeTill`, sinkron `intake_count`).
+- Form in-app.
+- Webhook source bertoken, termasuk payload alert gaya Alertmanager.
+- Source dapat diaktifkan/nonaktifkan dan memiliki token sendiri.
+- Intake source dikonfigurasi dari application settings.
 
-### Model + API (Django)
+## Series deduplication
 
-> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+Laporan berulang dengan series yang sama tidak membuat ticket baru. Sistem
+menaikkan `occurrence_count` dan memperbarui data laporan. Ini mencegah alert
+storm membanjiri triage.
 
-- Model: `apps/api/plane/db/models/intake.py:12-18` `Intake(name, is_default, view_props)` + `:50-80` `IntakeIssue`.
-- API: `apps/api/plane/app/urls/intake.py:16-55` → `intakes/`, `intake-issues/[/<pk>/]` + alias legacy `inboxes/`, `inbox-issues/`; `:56-65` `intake-work-items/<id>/description-versions/`; views `app/views/intake/base.py:57-80` (`IntakeViewSet` / `IntakeIssueViewSet`).
+## AI triage suggestions
 
-### Route terkait
+- Saran triage dihasilkan oleh AI berdasarkan isi laporan.
+- Saran tidak diterapkan otomatis; manusia harus accept atau menolak.
+- Jangan menganggap saran AI sebagai klasifikasi final.
 
-- `:workspaceSlug/settings/projects/:projectId/features/intake` (`core.ts:322-325`) — toggle fitur (`settings/projects/[projectId]/features/intake/page.tsx:1-64`).
+## Service gate
 
-## Primary View
+Work item type Request dapat dikonfigurasi `requires service`. Saat accept,
+service harus dipilih sebelum laporan menjadi ticket. Gate ini mencegah request
+masuk tanpa service context.
 
-- Layout: sidebar list (pending + tab open/closed) + content detail (header, properties, description).
-- Data visible: title, reporter, properties, status triage, snoozed_till, duplicate_to.
-- Interaction: klik item → detail; aksi triage per item (accept/decline/snooze/duplicate).
-- Ref: [`_shared/list.md`](./_shared/list.md).
+## Triage actions
 
-## Actions
+| Action    | Efek                                       |
+| --------- | ------------------------------------------ |
+| Accept    | Membuat ticket di application tujuan       |
+| Decline   | Menutup laporan tanpa ticket               |
+| Snooze    | Menunda laporan dari queue aktif           |
+| Duplicate | Menautkan laporan ke ticket yang sudah ada |
 
-| Action        | Trigger             | Permission | State required  |
-| ------------- | ------------------- | ---------- | --------------- |
-| Accept        | Status → ACCEPTED   | Member+    | PENDING/SNOOZED |
-| Decline       | Modal (reject)      | Member+    | PENDING/SNOOZED |
-| Snooze        | Modal (snooze till) | Member+    | PENDING         |
-| Duplicate     | Select duplicate    | Member+    | PENDING         |
-| View versions | Description history | Member+    | —               |
+## API touchpoints
 
-Accept memindahkan issue ke default state project (keluar dari antrean triage).
-
-## Filters / Sort / Search
-
-- Filters: tab open/closed; filter store project-inbox.
-- Sort: default (created desc).
-- Search: scope per halaman; global via Cmd+K (lihat `_shared/global-search.md` saat ditulis).
-
-## Detail View
-
-- Section: header + properties + description (+ versions) — reuse pola peek/detail Work Items.
-- Ref: [`_shared/detail-page.md`](./_shared/detail-page.md), [`work-items.md`](./work-items.md).
+- `intake.rs` — list, detail, triage, accept.
+- `intake_source.rs` — source CRUD dan token.
+- `inbound.rs` — ingest webhook.
+- Tabel: `intake_issues`, `intake_sources`, `intake_triage_suggestions`.
 
 ## Permissions
 
-| Role            | Triage | Read | Config (toggle) |
-| --------------- | ------ | ---- | --------------- |
-| Member          | ✅     | ✅   | ❌              |
-| Project admin   | ✅     | ✅   | ✅              |
-| Workspace admin | ✅     | ✅   | ✅              |
+| Role              | Read         | Triage            | Configure source |
+| ----------------- | ------------ | ----------------- | ---------------- |
+| Member            | Sesuai scope | Jika diberi akses | Tidak            |
+| Application admin | Ya           | Ya                | Ya               |
+| Workspace admin   | Ya           | Ya                | Ya               |
+| Guest             | Tidak        | Tidak             | Tidak            |
 
-Catatan: halaman kosong bila fitur intake dimatikan (`inbox_view === false`).
+## Edge cases
 
-## Empty / Loading / Error
+- Webhook dengan token salah harus ditolak.
+- Series yang sama tidak boleh membuat duplikat.
+- Accept tanpa service saat gate aktif harus gagal.
+- Laporan yang sudah di-accept tidak boleh di-triage ulang.
+- Application filter harus tetap konsisten saat pindah tab.
 
-- Empty: antrean kosong → message (inbox zero triage); fitur off → gate di page.
-- Loading: skeleton list + content.
-- Error: banner + retry.
+## In-app guide
 
----
-
-### Saran triage AI (Rust-only)
-
-- `GET /api/workspaces/:slug/projects/:project_id/intake-issues/:pk/triage-suggestion/`
-- `POST .../triage-suggestion/apply/` (v1: `{"fields":["severity"]}` → `issues.priority`)
-- `POST .../triage-suggestion/dismiss/` (field: `category`, `severity`, `needs_human`)
-
-Diisi worker `ai.intake.triage` (push saat create + sweep beat tiap menit) memakai
-`LLM_DECISION_MODEL` (Jev/System One di `{LLM_BASE_URL}/systemone`). Row `failed`
-tidak dikembalikan (`data: null`). Tidak ada counterpart Django.
-
----
-
-### Gate accept & service binding (2026-10-04)
-
-- Flag `issue_types.requires_service` per tipe work item (toggle di settings Work item types; seed/backfill: Incident, Request/Service Request). Epic tidak boleh `requires_service`.
-- **Accept gate** (`routes/intake.rs`): type wajib bila project punya tipe live non-epic; service link wajib bila tipe terpilih `requires_service`. Validasi di server; tombol Accept di FE disabled + hint.
-- **Set type manual** lewat `PATCH intake-issues` (`{"issue": {"type_id": ...}}`) — ditulis langsung tanpa state resolution, state triage dipertahankan sampai accept.
-- **Apply saran**: `apply` menerima `category`, `service`, `severity` — category menulis `type_id` langsung, service menulis link `service_issues`; response suggestion memuat objek `service {id, label, confidence, probabilities}`.
-- **Question service Jev**: Choice atas services project (maks 20, exclude `retired`/deleted), plus opsi abstain `"No service / unsure"` → sentinel `__none__` (hanya bisa Dismiss, apply → 400).
-- Link lama tidak dihapus saat ganti type/apply lain; gate hanya membaca link live.
-
-### Channel webhook — Alertmanager → Incident (2026-10-04)
-
-- **Endpoint publik** `POST /api/inbound/alertmanager/:token/` (tanpa auth user; token per source; origin check dikecualikan untuk prefix `/api/inbound/`). Token salah → 404, source nonaktif → 403.
-- **Source** (`intake_sources`, per project, kelola di settings → Intake sources): nama, token `plane_is_*` (rotate/revoke), toggle `auto_accept`, `type_id` tetap (default Incident), `config` mapping label → service (`service_map` + `fallback_service_id`) dan severity → priority (`severity_map` + `default_priority`).
-- **Klasifikasi deterministik** (tanpa Jev): service dari label `service`, priority dari label `severity`; title dari `annotations.summary`; deskripsi dari `annotations.description` + `generatorURL` (di-escape). Item dibuat pending (`status -2`) dengan `source = 'WEBHOOK'` + link `service_issues` bila terpetakan.
-- **Dedup fingerprint**: firing berulang update item yang sama (`intake_occurrence_count`, `intake_last_seen_at`); declined → pending lagi; accepted yang sudah completed → reopen; resolved saat pending → decline otomatis (snoozed dibiarkan); resolved pada issue accepted → state `completed` + comment INTERNAL; refire membuka lagi.
-- **Auto-accept** (default off): hanya bila klasifikasi lengkap lolos gate; service tak terpetakan → tetap pending + WARN. Error internal → 500 agar Alertmanager retry; idempotensi dijamin upsert fingerprint.
-- **Detail intake** memuat `intake_source {id, name, occurrence_count, last_seen_at}`; badge `via <nama>` di header detail.
-
----
+`/:workspaceSlug/docs/intake`.
 
 ## Changelog
 
-| Date       | Change                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| 2026-10-04 | webhook Alertmanager → Incident (intake source + dedup + auto-accept)                       |
-| 2026-10-04 | gate accept (type wajib + service kondisional) + saran service Jev + apply category/service |
-| 2026-09-03 | init — snapshot actual dari `core.ts`, `inbox/` components, store + `intake.py`             |
+| Tanggal    | Perubahan                                                                             |
+| ---------- | ------------------------------------------------------------------------------------- |
+| 2026-10-27 | rewrite — workspace/application intake, sources, dedupe, AI suggestions, service gate |
