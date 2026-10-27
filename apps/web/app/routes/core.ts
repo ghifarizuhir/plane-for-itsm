@@ -421,6 +421,16 @@ export const coreRoutes: RouteConfigEntry[] = [
         route(":workspaceSlug/docs", "./(all)/[workspaceSlug]/(docs)/docs/page.tsx"),
         route(":workspaceSlug/docs/:topicSlug", "./(all)/[workspaceSlug]/(docs)/docs/[topicSlug]/page.tsx"),
       ]),
+      // ====================================================================
+      // GALILEO SECTION
+      // ====================================================================
+      layout("./(all)/[workspaceSlug]/(galileo)/layout.tsx", [
+        route(":workspaceSlug/galileo", "./(all)/[workspaceSlug]/(galileo)/galileo/page.tsx"),
+        route(
+          ":workspaceSlug/galileo/:conversationId",
+          "./(all)/[workspaceSlug]/(galileo)/galileo/[conversationId]/page.tsx"
+        ),
+      ]),
     ]),
     // ======================================================================
     // STANDALONE ROUTES (outside workspace context)
