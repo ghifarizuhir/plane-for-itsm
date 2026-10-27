@@ -24,26 +24,33 @@ interface AppSidebarItemData {
 interface AppSidebarItemProps {
   variant?: "link" | "button";
   item?: AppSidebarItemData;
+  size?: "sm" | "md";
 }
 
 interface AppSidebarItemLabelProps {
   highlight?: boolean;
   label?: string;
+  size?: "sm" | "md";
 }
 
 interface AppSidebarItemIconProps {
   icon?: React.ReactNode;
   highlight?: boolean;
+  size?: "sm" | "md";
 }
 
 interface AppSidebarLinkItemProps {
   href?: string;
   isActive?: boolean;
+  ariaLabel?: string;
+  title?: string;
   children: React.ReactNode;
   className?: string;
 }
 
 interface AppSidebarButtonItemProps {
+  ariaLabel?: string;
+  title?: string;
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
@@ -55,11 +62,15 @@ interface AppSidebarButtonItemProps {
 // ============================================================================
 
 const styles = {
-  base: "group flex flex-col gap-0.5 items-center justify-center text-tertiary",
-  icon: "flex items-center justify-center gap-2 size-8 rounded-md text-tertiary",
+  base: "group flex w-full flex-col gap-0.5 items-center justify-center text-tertiary",
+  icon: "flex items-center justify-center gap-2 rounded-md text-tertiary",
+  iconSm: "size-7 [&_svg]:size-4.5",
+  iconMd: "size-8",
   iconActive: "bg-layer-transparent-selected text-secondary !text-icon-primary",
   iconInactive: "group-hover:text-icon-secondary group-hover:bg-layer-transparent-hover !text-icon-tertiary",
-  label: "text-11 font-medium",
+  label: "max-w-full truncate font-medium",
+  labelSm: "text-10 leading-none",
+  labelMd: "text-11",
   labelActive: "text-secondary",
   labelInactive: "group-hover:text-secondary text-tertiary",
 } as const;
@@ -68,12 +79,12 @@ const styles = {
 // SUB-COMPONENTS
 // ============================================================================
 
-function AppSidebarItemLabel({ highlight = false, label }: AppSidebarItemLabelProps) {
+function AppSidebarItemLabel({ highlight = false, label, size = "md" }: AppSidebarItemLabelProps) {
   if (!label) return null;
 
   return (
     <span
-      className={cn(styles.label, {
+      className={cn(styles.label, size === "sm" ? styles.labelSm : styles.labelMd, {
         [styles.labelActive]: highlight,
         [styles.labelInactive]: !highlight,
       })}
@@ -83,12 +94,12 @@ function AppSidebarItemLabel({ highlight = false, label }: AppSidebarItemLabelPr
   );
 }
 
-function AppSidebarItemIcon({ icon, highlight }: AppSidebarItemIconProps) {
+function AppSidebarItemIcon({ icon, highlight, size = "md" }: AppSidebarItemIconProps) {
   if (!icon) return null;
 
   return (
     <div
-      className={cn(styles.icon, {
+      className={cn(styles.icon, size === "sm" ? styles.iconSm : styles.iconMd, {
         [styles.iconActive]: highlight,
         [styles.iconInactive]: !highlight,
       })}
@@ -98,19 +109,39 @@ function AppSidebarItemIcon({ icon, highlight }: AppSidebarItemIconProps) {
   );
 }
 
-function AppSidebarLinkItem({ href, isActive, children, className }: AppSidebarLinkItemProps) {
+function AppSidebarLinkItem({ href, isActive, ariaLabel, title, children, className }: AppSidebarLinkItemProps) {
   if (!href) return null;
 
   return (
-    <Link href={href} aria-current={isActive ? "page" : undefined} className={cn(styles.base, className)}>
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      aria-current={isActive ? "page" : undefined}
+      title={title}
+      className={cn(styles.base, className)}
+    >
       {children}
     </Link>
   );
 }
 
-function AppSidebarButtonItem({ children, onClick, disabled = false, className }: AppSidebarButtonItemProps) {
+function AppSidebarButtonItem({
+  ariaLabel,
+  title,
+  children,
+  onClick,
+  disabled = false,
+  className,
+}: AppSidebarButtonItemProps) {
   return (
-    <button className={cn(styles.base, className)} onClick={onClick} disabled={disabled} type="button">
+    <button
+      className={cn(styles.base, className)}
+      aria-label={ariaLabel}
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      type="button"
+    >
       {children}
     </button>
   );
@@ -127,28 +158,28 @@ export type AppSidebarItemComponent = React.FC<AppSidebarItemProps> & {
   Button: React.FC<AppSidebarButtonItemProps>;
 };
 
-function AppSidebarItem({ variant = "link", item }: AppSidebarItemProps) {
+function AppSidebarItem({ variant = "link", item, size = "md" }: AppSidebarItemProps) {
   if (!item) return null;
 
   const { icon, isActive, label, href, onClick, disabled, showLabel = true } = item;
 
   const commonItems = (
     <>
-      <AppSidebarItemIcon icon={icon} highlight={isActive} />
-      {showLabel && <AppSidebarItemLabel highlight={isActive} label={label} />}
+      <AppSidebarItemIcon icon={icon} highlight={isActive} size={size} />
+      {showLabel && <AppSidebarItemLabel highlight={isActive} label={label} size={size} />}
     </>
   );
 
   if (variant === "link") {
     return (
-      <AppSidebarLinkItem href={href} isActive={isActive}>
+      <AppSidebarLinkItem href={href} isActive={isActive} ariaLabel={label} title={showLabel ? undefined : label}>
         {commonItems}
       </AppSidebarLinkItem>
     );
   }
 
   return (
-    <AppSidebarButtonItem onClick={onClick} disabled={disabled}>
+    <AppSidebarButtonItem ariaLabel={label} title={showLabel ? undefined : label} onClick={onClick} disabled={disabled}>
       {commonItems}
     </AppSidebarButtonItem>
   );

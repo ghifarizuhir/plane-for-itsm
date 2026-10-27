@@ -7,22 +7,17 @@
 // components
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
-import { cn } from "@plane/utils";
-import { TopNavPowerK } from "@/components/navigation";
+import useSWR from "swr";
+import { Tooltip } from "@makeplane/propel/components/tooltip";
+import { InboxOutline } from "@makeplane/propel/icons";
+import { useTranslation } from "@plane/i18n";
+import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 import { AiAssistantSidebarToggle } from "@/components/ai/assistant-sidebar/toggle-button";
-import { useInstance } from "@/hooks/store/use-instance";
-import { usePowerK } from "@/hooks/store/use-power-k";
 import { HelpMenuRoot } from "@/components/workspace/sidebar/help-section/root";
 import { UserMenuRoot } from "@/components/workspace/sidebar/user-menu-root";
 import { WorkspaceMenuRoot } from "@/components/workspace/sidebar/workspace-menu-root";
-import { useAppRailPreferences } from "@/hooks/use-navigation-preferences";
-import { Tooltip } from "@makeplane/propel/components/tooltip";
-import { IconButton } from "@plane/propel/icon-button";
-import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
-import { DocumentationOutline, InboxOutline, SearchOutline } from "@makeplane/propel/icons";
-import { useTranslation } from "@plane/i18n";
-import useSWR from "swr";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
+import { useInstance } from "@/hooks/store/use-instance";
 import { useWorkspacePaths } from "@/hooks/use-workspace-paths";
 import { WorkspaceModeMenu } from "./workspace-mode-menu";
 
@@ -33,13 +28,9 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
 
   // store hooks
   const { unreadNotificationsCount, getUnreadNotificationsCount } = useWorkspaceNotifications();
-  const { preferences } = useAppRailPreferences();
   const { config } = useInstance();
-  const { togglePowerKModal } = usePowerK();
   const { t } = useTranslation();
   const { isGalileoPath } = useWorkspacePaths();
-
-  const showLabel = preferences.displayMode === "icon_with_label";
 
   // Fetch notification count
   useSWR(
@@ -54,36 +45,22 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
     : unreadNotificationsCount.total_unread_notifications_count;
 
   return (
-    <div
-      className={cn("z-[27] flex min-h-10 w-full items-center bg-canvas px-3.5 transition-all duration-300", {
-        "px-2": !showLabel,
-      })}
-    >
+    <div className="z-[27] flex min-h-10 w-full items-center bg-canvas px-3.5 transition-all duration-300 md:hidden">
       {/* Workspace Menu */}
       <div className="flex-1 shrink-0">
         <WorkspaceMenuRoot variant="top-navigation" />
       </div>
-      {/* Power K Search — inline field on desktop only */}
-      <div className="hidden shrink-0 md:block">
-        <TopNavPowerK />
-      </div>
       {/* Additional Actions */}
       <div className="flex flex-1 shrink-0 items-center justify-end gap-1">
-        <IconButton
-          size="xl"
-          variant="ghost"
-          icon={SearchOutline}
-          className="md:hidden"
-          aria-label="Search"
-          onClick={() => togglePowerKModal(true)}
-        />
         <WorkspaceModeMenu />
         {config?.has_llm_configured && !isGalileoPath && <AiAssistantSidebarToggle />}
-        <Tooltip label="Inbox" side="bottom">
+        <Tooltip label={t("sidebar.inbox")} side="bottom">
           <AppSidebarItem
             variant="link"
             item={{
               href: `/${workspaceSlug?.toString()}/notifications/`,
+              label: t("sidebar.inbox"),
+              showLabel: false,
               icon: (
                 <div className="relative">
                   <InboxOutline className="size-5" />
@@ -93,16 +70,6 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
                 </div>
               ),
               isActive: pathname?.includes("/notifications/"),
-            }}
-          />
-        </Tooltip>
-        <Tooltip label={t("sidebar.docs")} side="bottom">
-          <AppSidebarItem
-            variant="link"
-            item={{
-              href: `/${workspaceSlug?.toString()}/docs/`,
-              icon: <DocumentationOutline className="size-5" />,
-              isActive: pathname?.includes("/docs"),
             }}
           />
         </Tooltip>

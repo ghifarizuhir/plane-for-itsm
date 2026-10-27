@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:4415c046c172feee8fdcbd133af38c9fc20fed00e77f1b9fc86a5d8b76faa0a5
+source_hash: sha256:8c20bdb100ddb00b457ae5e9a42697cc26a65abfa1bdb8dfe4b86faf2b43bb78
 source_paths:
   - apps/web/core/components/issues
   - apps/web/core/layouts

@@ -23,7 +23,15 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useUser } from "@/hooks/store/user";
 
-export const UserMenuRoot = observer(function UserMenuRoot() {
+type UserMenuRootProps = {
+  compact?: boolean;
+  placement?: "bottom-end" | "right-start";
+};
+
+export const UserMenuRoot = observer(function UserMenuRoot({
+  compact = false,
+  placement = "bottom-end",
+}: UserMenuRootProps = {}) {
   // states
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   // router
@@ -60,6 +68,7 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
       customButton={
         <AppSidebarItem
           variant="button"
+          size={compact ? "sm" : "md"}
           item={{
             icon: (
               <Avatar
@@ -75,7 +84,7 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
       }
       menuButtonOnClick={() => !isUserMenuOpen && setIsUserMenuOpen(true)}
       onMenuClose={() => setIsUserMenuOpen(false)}
-      placement="bottom-end"
+      placement={placement}
       maxHeight="2xl"
       optionsClassName="w-72 p-3 flex flex-col gap-y-3"
       closeOnSelect

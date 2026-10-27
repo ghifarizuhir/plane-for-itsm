@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:3385a616fe882933532b7a00f491828315adcd07360f565e2c6f561fc62e5ea7
+source_hash: sha256:d54dac1642c89dcc2979f4bbe6b7164d6614b7f019632335634eb7fa99c55b78
 source_paths:
   - apps/web/app/routes/core.ts
   - apps/web/core/store

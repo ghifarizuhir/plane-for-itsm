@@ -18,7 +18,15 @@ import { PlaneVersionNumber } from "@/components/global/version-number";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
 
-export const HelpMenuRoot = observer(function HelpMenuRoot() {
+type HelpMenuRootProps = {
+  compact?: boolean;
+  placement?: "bottom-end" | "right-start";
+};
+
+export const HelpMenuRoot = observer(function HelpMenuRoot({
+  compact = false,
+  placement = "bottom-end",
+}: HelpMenuRootProps = {}) {
   // store hooks
   const { t } = useTranslation();
   const { toggleShortcutsListModal } = usePowerK();
@@ -37,6 +45,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
         customButton={
           <AppSidebarItem
             variant="button"
+            size={compact ? "sm" : "md"}
             item={{
               icon: <HelpOutline className="size-5" />,
               isActive: isNeedHelpOpen,
@@ -46,7 +55,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
         // customButtonClassName="relative grid place-items-center rounded-md p-1.5 outline-none"
         menuButtonOnClick={() => !isNeedHelpOpen && setIsNeedHelpOpen(true)}
         onMenuClose={() => setIsNeedHelpOpen(false)}
-        placement="bottom-end"
+        placement={placement}
         maxHeight="lg"
         closeOnSelect
       >

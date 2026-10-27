@@ -10,7 +10,11 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { cn } from "@plane/utils";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 
-export const AiAssistantSidebarToggle = observer(function AiAssistantSidebarToggle() {
+export const AiAssistantSidebarToggle = observer(function AiAssistantSidebarToggle({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
   const { aiSidebarCollapsed, toggleAiSidebar } = useAppTheme();
   const isOpen = aiSidebarCollapsed === false;
 
@@ -21,11 +25,15 @@ export const AiAssistantSidebarToggle = observer(function AiAssistantSidebarTogg
         aria-label="AI Assistant"
         aria-expanded={isOpen}
         onClick={() => toggleAiSidebar(isOpen)}
-        className={cn("flex size-8 items-center justify-center rounded-md transition-colors hover:bg-layer-1-hover", {
-          "bg-layer-1": isOpen,
-        })}
+        className={cn(
+          "flex items-center justify-center rounded-md transition-colors hover:bg-layer-1-hover",
+          compact ? "size-7" : "size-8",
+          {
+            "bg-layer-1": isOpen,
+          }
+        )}
       >
-        <AiStar1Outline className="size-5 text-primary" />
+        <AiStar1Outline className={cn("text-primary", compact ? "size-4.5" : "size-5")} />
       </button>
     </Tooltip>
   );

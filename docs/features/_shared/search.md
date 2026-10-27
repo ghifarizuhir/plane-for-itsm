@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:c48e97217d2ea9d51a41a9f6e61d9ef59aabbddbcdb7fbcc4686432706371eb8
+source_hash: sha256:01a1ec7768cddcf81b965bf9c401af294788897657c7a6b3df8a368d383c5317
 source_paths:
   - apps/web/core/components
   - apps/web/core/store/base-command-palette.store.ts

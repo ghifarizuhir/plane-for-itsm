@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:e9d2c8624354fbbd92f5fd04d775b2ded17575d48b54d6a2d1380197961ad117
+source_hash: sha256:8b99053ab673c7efe03ab11bbc4d4da84b8b3640414b9cd7fab2517aea305d8a
 source_paths:
   - apps/web/core/components
   - apps/api-rs/crates/api/src/routes/issue_activity_write.rs

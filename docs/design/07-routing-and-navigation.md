@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:6a58e6aa1913aad717b7fe8b5cc644315dbcefe7e9da8f7b82682d74d31f1455
+source_hash: sha256:308835dca27fbf7eb4197c8834f5132b527d59172aaba005b8e393236cadab66
 source_paths:
   - apps/web/app/routes/core.ts
   - apps/web/core/components/navigation
@@ -76,13 +76,17 @@ Ticket dimiliki satu application. Service adalah katalog workspace.
 
 App rail adalah navigasi utama workspace:
 
-1. **Work** → `/:workspaceSlug` dan surface pekerjaan.
-2. **Procedure** → `/:workspaceSlug/docs`.
-3. **Galileo** → `/:workspaceSlug/galileo`; hanya tampil jika LLM dikonfigurasi.
-4. **Settings** → `/:workspaceSlug/settings`, di bawah divider.
+1. **Workspace switcher** → di paling atas rail.
+2. **Work** → `/:workspaceSlug` dan surface pekerjaan.
+3. **Procedure** → `/:workspaceSlug/docs`.
+4. **Galileo** → `/:workspaceSlug/galileo`; hanya tampil jika LLM dikonfigurasi.
+5. **Utility** → AI assistant, Inbox, Help, dan Account.
+6. **Settings** → `/:workspaceSlug/settings`, di bawah divider.
 
 Mode aktif ditentukan dari route, bukan state terpisah. Sidebar dalam berubah
-sesuai mode. Pada mobile, rail diganti menu mode di top navigation.
+sesuai mode. Pada mobile, rail diganti top navigation yang juga memuat menu mode.
+Search bar dihapus dari top navigation; command palette tetap dapat dibuka lewat
+shortcut keyboard.
 
 ## Legacy redirects
 
@@ -124,6 +128,7 @@ resmi.
 
 ## Changelog
 
-| Tanggal    | Perubahan                                        |
-| ---------- | ------------------------------------------------ |
-| 2026-10-27 | new — route families, app rail, legacy redirects |
+| Tanggal    | Perubahan                                          |
+| ---------- | -------------------------------------------------- |
+| 2026-10-27 | new — route families, app rail, legacy redirects   |
+| 2026-10-27 | rail compact + utility top bar; search bar dihapus |
