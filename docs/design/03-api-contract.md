@@ -1,120 +1,105 @@
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:000505effcc09eb903f65fdb22a69b5be2daa007e032691fc2752789e19b251e
+source_paths:
+  - apps/api-rs/crates/api/src/main.rs
+  - apps/api-rs/crates/api/src/routes
+---
+
 # 03 — API Contract
 
-Status: **Draft.**
+Status: **Current.**
 
-Base: [`01-architecture.md`](./01-architecture.md), [`02-data-model.md`](./02-data-model.md).
+API utama adalah Rust Axum di `apps/api-rs`. Daftar method dan path lengkap
+dihasilkan di [`../_generated/api-routes.md`](../_generated/api-routes.md).
+Dokumen ini menjelaskan konvensi yang berlaku lintas endpoint.
 
-Backend: `apps/api-rs` Rust Axum + SQLx — kontrak 1:1 Django (`plane/settings/common.py:138` = referensi). Session/CSRF Django hanya berlaku di fallback `api-legacy`.
+## Base and conventions
 
-Base URL: `http://localhost:8000` (Rust `api`, via `docker-compose.yml`). Client: `packages/services` (axios) + `SWR` di `apps/web`.
+- Local base URL: `http://localhost:8000`.
+- JSON untuk request dan response.
+- Timestamp memakai ISO 8601 UTC.
+- ID adalah string/UUID; jangan mengandalkan urutan angka.
+- Path workspace memakai slug: `/api/workspaces/:slug/`.
+- Path application memakai project ID di bawah workspace.
 
----
+## Authentication
 
-## Design Principles
+Urutan autentikasi di `AuthUser`:
 
-1. **REST over RPC.** Resource-oriented, HTTP verb standard (GET/POST/PATCH/DELETE).
-2. **Workspace-scoped.** Semua endpoint di bawah `/api/workspaces/:slug/` atau `/api/workspaces/:slug/projects/:id/` — filter `workspace_id` selalu.
-3. **Thin handlers, pure validators.** Handler hanya parse + `validate_*` + query SQLx; logic async di worker via Stream.
-4. **Predictable errors.** Shape konsisten + HTTP status bermakna.
-5. **Soft delete invisible.** Default `deleted_at__isnull=True`; `?includeDeleted=true` untuk admin/audit.
+1. `Authorization: Bearer <jwt>` dengan JWT yang diverifikasi memakai
+   `jwt_secret`.
+2. Cookie akses `plane_at` atau `__Host-plane_at`.
+3. `X-Api-Key` yang dicocokkan ke `api_tokens` aktif dan belum kedaluwarsa.
 
----
+Jika tidak ada kredensial valid, response `401` dengan body
+`{"error":"missing or invalid auth"}`.
 
-## Conventions
+Django fallback tetap memakai session cookie, CSRF, dan DRF session
+authentication. Jangan mengasumsikan mekanisme itu berlaku di API utama.
 
-### Authentication
+## Authorization scopes
 
-- **API Key utama:** `X-Api-Key` — token dicek ke tabel `api_tokens` → owner `user_id`; tanpa token valid → 401 `missing or invalid bearer` (`middleware/auth.rs:12`).
-- **Bearer:** didukung sebagai alternatif API key (bukan JWT session Terra).
-- **Legacy (Django `api-legacy` saja):** session cookie `session-id` + CSRF + DRF `SessionAuthentication`. Login/social (GitHub/GitLab/Google/Gitea) masih via Django — belum di-port.
-- Public: `/api/auth/` + `/api/workspaces/` list (tergantung permission). Lainnya butuh auth.
+| Scope             | Akses                                                          |
+| ----------------- | -------------------------------------------------------------- |
+| Instance admin    | God-mode, workspace, user, auth provider, konfigurasi instance |
+| Workspace admin   | Seluruh resource dalam workspace                               |
+| Application admin | Konfigurasi dan ticket dalam application                       |
+| Member            | Resource sesuai membership dan role                            |
+| Guest             | Akses terbatas per application                                 |
 
-### Authorization
+Enforcement dilakukan oleh extractor `AuthUser` dan guard per handler. Jangan
+mengandalkan filtering di frontend sebagai kontrol akses.
 
-| Role (Plane)              | Access                                            |
-| ------------------------- | ------------------------------------------------- |
-| Instance admin (god-mode) | Full (`apps/admin`, `ADMIN_BASE_PATH=/god-mode/`) |
-| Workspace admin           | CRUD workspace + projects + members               |
-| Project admin             | CRUD project + issues/cycles/modules              |
-| Member                    | CRUD own + read others dalam workspace            |
-| Guest (space)             | Read-only via `apps/space`                        |
+## Route families
 
-Enforcement di Axum extractor `AuthUser` + guard per handler (owner/self/higher-role) — bukan di SQL scope utility Terra (`buildScopeCondition`).
+| Family        | Contoh prefix            | Catatan                                     |
+| ------------- | ------------------------ | ------------------------------------------- |
+| Workspace API | `/api/workspaces/:slug/` | Ticket, service, intake, AI, settings       |
+| Public API v1 | `/api/v1/`               | Work item, project, relation, activity, PQL |
+| Auth          | `/api/auth/`             | Login, signup, token, session compatibility |
+| Health        | `/health`                | Readiness API                               |
+| Ingest        | `/api/inbound/`          | Webhook source dan metrics                  |
 
-### Request / Response Format
+Daftar aktual: [`../_generated/api-routes.md`](../_generated/api-routes.md).
+Jangan menyalin daftar endpoint ke dokumen lain.
 
-- JSON, `Content-Type: application/json`, timestamps ISO 8601 UTC, IDs string.
-- Pagination: `?page=1&pageSize=50` (default 50, max 200) → `{results, count, next, previous, hasMore}` atau `{items,total,hasMore}` — konsistenkan ke `CHEAT-SHEET.md` §URL & Routing (shape parity Django `PageNumberPagination`).
-- Filter: `?state=backlog,started&priority=urgent&assignee=USR-1` (CSV multi-value).
-- Sort: `?sort=created_at:desc,priority:asc`.
+## Pagination, filtering, sorting
 
-### Error Shape
+Pagination tidak seragam:
 
-```json
-{ "error": "Human readable", "code": "ERR_SLUG", "details": { "field": "info" }, "requestId": "req-abc123" }
-```
+- Sebagian endpoint memakai `page` dan `per_page`.
+- Endpoint issue v2 memakai `cursor`; ukuran halaman dapat berada di dalam
+  cursor.
+- Endpoint version memakai cursor sendiri.
 
-HTTP status: 200 OK, 201 Created, 204 No Content, 400 Validation, 401 Unauth, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Rate Limited (token-bucket per-key 600/mnt, 429 langsung — `middleware/rate_limit.rs`), 500 Internal.
+Filter dan sort mengikuti kontrak Django parity. Gunakan nama field yang sama
+dengan response dan jangan mengarang parameter baru tanpa menambahkannya di
+handler Rust.
 
-Error Rust: plain string validasi (parity pesan Django, mis. `PROJECT_NAME_ALREADY_EXIST`) atau `missing or invalid bearer` untuk 401 — kontrak diverifikasi shadow + parity gate, bukan wrapper DRF.
+## Errors and rate limits
 
----
+- `400` untuk validasi, `401` untuk autentikasi, `403` untuk otorisasi, `404`
+  untuk resource tidak ditemukan, `409` untuk konflik, `429` untuk rate limit.
+- Body error utama berbentuk `{"error":"..."}`. Beberapa endpoint legacy
+  mengembalikan pesan string untuk parity Django; client harus memeriksa status
+  code dan bentuk body.
+- Rate limiter token-bucket berjalan process-wide dengan kuota 600 request per
+  menit; auth memiliki limiter IP terpisah. Excess langsung ditolak `429`.
+- Origin check berlaku untuk mutasi; `WEB_BASE_URL`/origin yang diizinkan harus
+  cocok dengan konfigurasi CORS.
 
-## Endpoint Inventory
+## Source of truth
 
-### Plane Upstream (existing — `plane/api/urls/*`)
-
-| Method           | Path                                             | Auth | Deskripsi                                                                    |
-| ---------------- | ------------------------------------------------ | ---- | ---------------------------------------------------------------------------- |
-| GET/POST         | `/api/workspaces/`                               | Auth | List/create workspace                                                        |
-| GET/PATCH        | `/api/workspaces/:slug/`                         | Auth | Detail/update workspace                                                      |
-| GET/POST         | `/api/workspaces/:slug/projects/`                | Auth | List/create project                                                          |
-| GET/PATCH/DELETE | `/api/workspaces/:slug/projects/:id/`            | Auth | Project detail                                                               |
-| GET/POST         | `/api/workspaces/:slug/projects/:id/issues/`     | Auth | Issues (Work Items) — list/create dengan filter `?state=&priority=&q=&sort=` |
-| GET/PATCH        | `/api/workspaces/:slug/projects/:id/issues/:id/` | Auth | Issue detail/update                                                          |
-| GET/POST         | `/api/workspaces/:slug/projects/:id/cycles/`     | Auth | Cycles                                                                       |
-| GET/POST         | `/api/workspaces/:slug/projects/:id/modules/`    | Auth | Modules                                                                      |
-| GET/POST         | `/api/workspaces/:slug/projects/:id/views/`      | Auth | Views (saved filters)                                                        |
-| GET/POST         | `/api/workspaces/:slug/projects/:id/pages/`      | Auth | Pages (TipTap)                                                               |
-| GET              | `/api/workspaces/:slug/projects/:id/analytics/`  | Auth | Analytics                                                                    |
-| POST             | `/api/auth/sign-in/`                             | No   | Login (session cookie)                                                       |
-| POST             | `/api/auth/sign-out/`                            | Auth | Logout                                                                       |
-| GET              | `/api/users/me/`                                 | Auth | Current user                                                                 |
-
-> Inventory lengkap: `apps/api/plane/api/urls` + `plane/settings/common.py:160` `ROOT_URLCONF=plane.urls`.
-
-> ITSM endpoints belum ada (actual-only) — propose di `features/_backlog.md`.
-
-### Versions / Timeline (fork — reuse Plane pattern)
-
-| Method | Path                                                                     | Deskripsi                |
-| ------ | ------------------------------------------------------------------------ | ------------------------ |
-| GET    | `/api/workspaces/:slug/projects/:id/issues/:id/versions/`                | List versions (desc)     |
-| GET    | `/api/workspaces/:slug/projects/:id/issues/:id/versions/:vn/`            | Single snapshot          |
-| GET    | `/api/workspaces/:slug/projects/:id/issues/:id/versions/:vn/diff?from=N` | Diff fields+items        |
-| POST   | `/api/workspaces/:slug/projects/:id/issues/:id/versions/:vn/revert`      | Revert (buat versi baru) |
-
-Implement di `plane/bgtasks/issue_version_sync` + `description_version.py` — jangan copy `VersionService` Terra (`terra/02-api-contract.md:554`).
-
----
-
-## Resolved Decisions
-
-| #   | Topik          | Keputusan                                                                                                                        |
-| --- | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Auth           | **Session cookie + CSRF** (Plane) — bukan JWT bearer Terra                                                                       |
-| 2   | Scoping        | **Workspace FK filter** — bukan `org_id` orgMiddleware                                                                           |
-| 3   | Pagination     | **Shape parity Django PageNumberPagination** — `{count,next,previous,results}` atau normalisasi ke `{items,total,hasMore}` di FE |
-| 4   | ITSM endpoints | **Nested `/workspaces/:slug/projects/:id/incidents/`** — reuse Issue infra, bukan `/api/incidents` global                        |
-| 5   | Error shape    | **Parity pesan Django** via validator Rust + shadow/parity gate (bukan wrapper DRF)                                              |
-
----
-
----
+- Route API generated: [`../_generated/api-routes.md`](../_generated/api-routes.md)
+- Arsitektur: [`01-architecture.md`](./01-architecture.md)
+- Data model: [`02-data-model.md`](./02-data-model.md)
 
 ## Changelog
 
-| Date       | Change                                                                             |
-| ---------- | ---------------------------------------------------------------------------------- |
-| 2026-09-03 | —                                                                                  |
-| 2026-09-05 | cutover `rust-cutover-v1`: auth X-Api-Key/Bearer, rate-limit 600/mnt, error parity |
+| Tanggal    | Perubahan                                                                   |
+| ---------- | --------------------------------------------------------------------------- |
+| 2026-09-03 | fork init                                                                   |
+| 2026-09-05 | cutover Rust                                                                |
+| 2026-10-27 | rewrite — JWT/cookie/API key, route families, cursor pagination, rate limit |
