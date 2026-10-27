@@ -6,6 +6,36 @@
     "slash_incident_off": "インシデントフローを終了",
     "incident_ref_required": "インシデント ID を入力（例：/incident OPS-123）",
     "incident_invalid_ref": "作業項目 ID の形式ではありません（例：OPS-123）",
-    "incident_flow_ended": "インシデントフローを終了しました"
+    "incident_flow_ended": "インシデントフローを終了しました",
+    "galileo": {
+      "new_chat": "新しいチャット",
+      "history": "チャット履歴",
+      "today": "今日",
+      "yesterday": "昨日",
+      "previous_7_days": "過去7日間",
+      "older": "それ以前",
+      "empty_history": "まだ会話がありません。",
+      "empty_title": "Galileo は何をお手伝いできますか？",
+      "empty_subtitle": "何でも質問するか、次の候補から始めてください。",
+      "suggestion_summarize": "最近のインシデントを要約する",
+      "suggestion_procedure": "サービスリクエストに適した手順を探す",
+      "suggestion_draft": "インシデントに関する顧客向け更新を作成する",
+      "suggestion_explain": "変更プロセスの仕組みを説明する",
+      "rename": "名前を変更",
+      "delete_confirm": "このチャットを削除しますか？",
+      "conversation_actions": "会話の操作",
+      "conversation_title": "会話のタイトル",
+      "not_found_title": "会話が見つかりません",
+      "not_found_body": "この会話は削除されたか、別のユーザーに属している可能性があります。",
+      "start_new_chat": "新しいチャットを開始",
+      "load_failed": "会話を読み込めませんでした。",
+      "composer_placeholder": "Galileo に何でも質問してください…",
+      "composer_hint": "Enter で送信 · Shift+Enter で改行",
+      "send": "メッセージを送信",
+      "scroll_to_bottom": "一番下へスクロール",
+      "typing": "Galileo が考えています",
+      "switch_mode": "ワークスペースモードを切り替え",
+      "third_party_notice": "メッセージは第三者の AI サービスに送信されます。"
+    }
   }
 }

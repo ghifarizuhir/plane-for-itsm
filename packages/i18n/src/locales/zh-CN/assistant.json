@@ -6,6 +6,36 @@
     "slash_incident_off": "结束事件流程",
     "incident_ref_required": "添加事件 ID，例如 /incident OPS-123",
     "incident_invalid_ref": "这看起来不像工作项 ID（例如 OPS-123）",
-    "incident_flow_ended": "事件流程已结束"
+    "incident_flow_ended": "事件流程已结束",
+    "galileo": {
+      "new_chat": "新对话",
+      "history": "对话历史",
+      "today": "今天",
+      "yesterday": "昨天",
+      "previous_7_days": "过去 7 天",
+      "older": "更早",
+      "empty_history": "还没有对话。",
+      "empty_title": "Galileo 能帮您做什么？",
+      "empty_subtitle": "提出任何问题，或从以下建议开始。",
+      "suggestion_summarize": "总结我最近的故障",
+      "suggestion_procedure": "为服务请求找到合适的流程",
+      "suggestion_draft": "起草故障的客户更新",
+      "suggestion_explain": "解释我们的变更流程如何运作",
+      "rename": "重命名",
+      "delete_confirm": "删除此对话？",
+      "conversation_actions": "对话操作",
+      "conversation_title": "对话标题",
+      "not_found_title": "未找到对话",
+      "not_found_body": "此对话可能已被删除，或属于其他用户。",
+      "start_new_chat": "开始新对话",
+      "load_failed": "无法加载对话。",
+      "composer_placeholder": "向 Galileo 提问…",
+      "composer_hint": "Enter 发送 · Shift+Enter 换行",
+      "send": "发送消息",
+      "scroll_to_bottom": "滚动到底部",
+      "typing": "Galileo 正在思考",
+      "switch_mode": "切换工作区模式",
+      "third_party_notice": "消息将发送至第三方 AI 服务。"
+    }
   }
 }

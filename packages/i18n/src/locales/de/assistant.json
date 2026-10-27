@@ -6,6 +6,36 @@
     "slash_incident_off": "Störungsablauf beenden",
     "incident_ref_required": "ID der Störung angeben, z. B. /incident OPS-123",
     "incident_invalid_ref": "Das sieht nicht wie eine Arbeitselement-ID aus (z. B. OPS-123)",
-    "incident_flow_ended": "Störungsablauf beendet"
+    "incident_flow_ended": "Störungsablauf beendet",
+    "galileo": {
+      "new_chat": "Neuer Chat",
+      "history": "Chatverlauf",
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "previous_7_days": "Letzte 7 Tage",
+      "older": "Älter",
+      "empty_history": "Noch keine Unterhaltungen.",
+      "empty_title": "Wobei kann Galileo helfen?",
+      "empty_subtitle": "Fragen Sie alles oder starten Sie mit einem der Vorschläge.",
+      "suggestion_summarize": "Meine letzten Vorfälle zusammenfassen",
+      "suggestion_procedure": "Die richtige Prozedur für eine Serviceanfrage finden",
+      "suggestion_draft": "Ein Kundenupdate für einen Vorfall entwerfen",
+      "suggestion_explain": "Erklären, wie unser Änderungsprozess funktioniert",
+      "rename": "Umbenennen",
+      "delete_confirm": "Diesen Chat löschen?",
+      "conversation_actions": "Unterhaltungsaktionen",
+      "conversation_title": "Titel der Unterhaltung",
+      "not_found_title": "Unterhaltung nicht gefunden",
+      "not_found_body": "Diese Unterhaltung wurde möglicherweise gelöscht oder gehört einem anderen Benutzer.",
+      "start_new_chat": "Neuen Chat starten",
+      "load_failed": "Unterhaltungen konnten nicht geladen werden.",
+      "composer_placeholder": "Fragen Sie Galileo alles…",
+      "composer_hint": "Enter zum Senden · Umschalt+Enter für eine neue Zeile",
+      "send": "Nachricht senden",
+      "scroll_to_bottom": "Nach unten scrollen",
+      "typing": "Galileo denkt nach",
+      "switch_mode": "Arbeitsbereichsmodus wechseln",
+      "third_party_notice": "Nachrichten werden an einen KI-Drittanbieter gesendet."
+    }
   }
 }

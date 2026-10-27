@@ -6,6 +6,36 @@
     "slash_incident_off": "Encerrar o fluxo do incidente",
     "incident_ref_required": "Adicione o ID do incidente, ex.: /incident OPS-123",
     "incident_invalid_ref": "Isso não parece ser um ID de item de trabalho (ex.: OPS-123)",
-    "incident_flow_ended": "Fluxo do incidente encerrado"
+    "incident_flow_ended": "Fluxo do incidente encerrado",
+    "galileo": {
+      "new_chat": "Novo chat",
+      "history": "Histórico de chats",
+      "today": "Hoje",
+      "yesterday": "Ontem",
+      "previous_7_days": "Últimos 7 dias",
+      "older": "Mais antigos",
+      "empty_history": "Ainda não há conversas.",
+      "empty_title": "Como o Galileo pode ajudar?",
+      "empty_subtitle": "Pergunte qualquer coisa ou comece com uma destas sugestões.",
+      "suggestion_summarize": "Resumir meus últimos incidentes",
+      "suggestion_procedure": "Encontrar o procedimento certo para uma solicitação de serviço",
+      "suggestion_draft": "Redigir uma atualização para o cliente sobre um incidente",
+      "suggestion_explain": "Explicar como funciona nosso processo de mudança",
+      "rename": "Renomear",
+      "delete_confirm": "Excluir este chat?",
+      "conversation_actions": "Ações da conversa",
+      "conversation_title": "Título da conversa",
+      "not_found_title": "Conversa não encontrada",
+      "not_found_body": "Esta conversa pode ter sido excluída ou pertencer a outro usuário.",
+      "start_new_chat": "Iniciar um novo chat",
+      "load_failed": "Não foi possível carregar as conversas.",
+      "composer_placeholder": "Pergunte qualquer coisa ao Galileo…",
+      "composer_hint": "Enter para enviar · Shift+Enter para uma nova linha",
+      "send": "Enviar mensagem",
+      "scroll_to_bottom": "Rolar para o final",
+      "typing": "Galileo está pensando",
+      "switch_mode": "Alterar modo do espaço de trabalho",
+      "third_party_notice": "As mensagens são enviadas a um serviço de IA de terceiros."
+    }
   }
 }

@@ -38,6 +38,9 @@
       "services": "Layanan & Dukungan",
       "knowledge": "Pengetahuan",
       "personal": "Pribadi"
-    }
+    },
+    "work": "Pekerjaan",
+    "procedure": "Prosedur",
+    "galileo": "Galileo"
   }
 }

@@ -6,6 +6,36 @@
     "slash_incident_off": "Olay akışını sonlandır",
     "incident_ref_required": "Olay kimliğini ekleyin, örn. /incident OPS-123",
     "incident_invalid_ref": "Bu bir iş öğesi kimliğine benzemiyor (örn. OPS-123)",
-    "incident_flow_ended": "Olay akışı sonlandırıldı"
+    "incident_flow_ended": "Olay akışı sonlandırıldı",
+    "galileo": {
+      "new_chat": "Yeni sohbet",
+      "history": "Sohbet geçmişi",
+      "today": "Bugün",
+      "yesterday": "Dün",
+      "previous_7_days": "Son 7 gün",
+      "older": "Daha eski",
+      "empty_history": "Henüz sohbet yok.",
+      "empty_title": "Galileo size nasıl yardımcı olabilir?",
+      "empty_subtitle": "Herhangi bir şey sorun veya önerilerden biriyle başlayın.",
+      "suggestion_summarize": "Son olaylarımı özetle",
+      "suggestion_procedure": "Bir hizmet talebi için doğru prosedürü bul",
+      "suggestion_draft": "Bir olay için müşteri güncellemesi taslağı hazırla",
+      "suggestion_explain": "Değişiklik sürecimizin nasıl işlediğini açıkla",
+      "rename": "Yeniden adlandır",
+      "delete_confirm": "Bu sohbet silinsin mi?",
+      "conversation_actions": "Sohbet işlemleri",
+      "conversation_title": "Sohbet başlığı",
+      "not_found_title": "Sohbet bulunamadı",
+      "not_found_body": "Bu sohbet silinmiş veya başka bir kullanıcıya ait olabilir.",
+      "start_new_chat": "Yeni sohbet başlat",
+      "load_failed": "Sohbetler yüklenemedi.",
+      "composer_placeholder": "Galileo'ya herhangi bir şey sorun…",
+      "composer_hint": "Göndermek için Enter · Yeni satır için Shift+Enter",
+      "send": "Mesaj gönder",
+      "scroll_to_bottom": "En alta kaydır",
+      "typing": "Galileo düşünüyor",
+      "switch_mode": "Çalışma alanı modunu değiştir",
+      "third_party_notice": "Mesajlar üçüncü taraf bir yapay zeka hizmetine gönderilir."
+    }
   }
 }

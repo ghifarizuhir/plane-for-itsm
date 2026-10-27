@@ -6,6 +6,36 @@
     "slash_incident_off": "Завершити процес інциденту",
     "incident_ref_required": "Укажіть ID інциденту, наприклад: /incident OPS-123",
     "incident_invalid_ref": "Схоже, це не ID робочої одиниці (наприклад, OPS-123)",
-    "incident_flow_ended": "Процес інциденту завершено"
+    "incident_flow_ended": "Процес інциденту завершено",
+    "galileo": {
+      "new_chat": "Новий чат",
+      "history": "Історія чатів",
+      "today": "Сьогодні",
+      "yesterday": "Учора",
+      "previous_7_days": "Останні 7 днів",
+      "older": "Раніше",
+      "empty_history": "Поки немає розмов.",
+      "empty_title": "Чим Galileo може допомогти?",
+      "empty_subtitle": "Задайте будь-яке питання або почніть з однієї з підказок.",
+      "suggestion_summarize": "Підсумувати мої останні інциденти",
+      "suggestion_procedure": "Знайти відповідну процедуру для запиту на обслуговування",
+      "suggestion_draft": "Підготувати оновлення для клієнта щодо інциденту",
+      "suggestion_explain": "Пояснити, як працює наш процес змін",
+      "rename": "Перейменувати",
+      "delete_confirm": "Видалити цей чат?",
+      "conversation_actions": "Дії з розмовою",
+      "conversation_title": "Назва розмови",
+      "not_found_title": "Розмову не знайдено",
+      "not_found_body": "Можливо, цю розмову видалено або вона належить іншому користувачу.",
+      "start_new_chat": "Почати новий чат",
+      "load_failed": "Не вдалося завантажити розмови.",
+      "composer_placeholder": "Запитайте Galileo про будь-що…",
+      "composer_hint": "Enter — надіслати · Shift+Enter — новий рядок",
+      "send": "Надіслати повідомлення",
+      "scroll_to_bottom": "Прокрутити вниз",
+      "typing": "Galileo думає",
+      "switch_mode": "Змінити режим робочого простору",
+      "third_party_notice": "Повідомлення надсилаються сторонньому сервісу ШІ."
+    }
   }
 }

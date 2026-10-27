@@ -6,6 +6,36 @@
     "slash_incident_off": "Încheiați fluxul incidentului",
     "incident_ref_required": "Adăugați ID-ul incidentului, de ex. /incident OPS-123",
     "incident_invalid_ref": "Nu pare a fi un ID de activitate (de ex. OPS-123)",
-    "incident_flow_ended": "Fluxul incidentului încheiat"
+    "incident_flow_ended": "Fluxul incidentului încheiat",
+    "galileo": {
+      "new_chat": "Chat nou",
+      "history": "Istoric chat",
+      "today": "Astăzi",
+      "yesterday": "Ieri",
+      "previous_7_days": "Ultimele 7 zile",
+      "older": "Mai vechi",
+      "empty_history": "Încă nu există conversații.",
+      "empty_title": "Cu ce vă poate ajuta Galileo?",
+      "empty_subtitle": "Întrebați orice sau începeți cu una dintre sugestii.",
+      "suggestion_summarize": "Rezumă ultimele mele incidente",
+      "suggestion_procedure": "Găsește procedura potrivită pentru o solicitare de serviciu",
+      "suggestion_draft": "Redactează o actualizare pentru client despre un incident",
+      "suggestion_explain": "Explică modul în care funcționează procesul nostru de schimbare",
+      "rename": "Redenumește",
+      "delete_confirm": "Ștergeți acest chat?",
+      "conversation_actions": "Acțiuni conversație",
+      "conversation_title": "Titlul conversației",
+      "not_found_title": "Conversația nu a fost găsită",
+      "not_found_body": "Această conversație poate fi ștearsă sau aparține altui utilizator.",
+      "start_new_chat": "Începeți un chat nou",
+      "load_failed": "Conversațiile nu au putut fi încărcate.",
+      "composer_placeholder": "Întrebați-l pe Galileo orice…",
+      "composer_hint": "Enter pentru a trimite · Shift+Enter pentru un rând nou",
+      "send": "Trimiteți mesajul",
+      "scroll_to_bottom": "Derulați la final",
+      "typing": "Galileo se gândește",
+      "switch_mode": "Schimbați modul spațiului de lucru",
+      "third_party_notice": "Mesajele sunt trimise unui serviciu AI terț."
+    }
   }
 }

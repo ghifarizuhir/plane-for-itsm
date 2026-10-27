@@ -6,6 +6,36 @@
     "slash_incident_off": "Terminar el flujo del incidente",
     "incident_ref_required": "Añada el ID del incidente, p. ej. /incident OPS-123",
     "incident_invalid_ref": "Eso no parece un ID de elemento de trabajo (p. ej. OPS-123)",
-    "incident_flow_ended": "Flujo del incidente terminado"
+    "incident_flow_ended": "Flujo del incidente terminado",
+    "galileo": {
+      "new_chat": "Nuevo chat",
+      "history": "Historial de chats",
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "previous_7_days": "Últimos 7 días",
+      "older": "Más antiguos",
+      "empty_history": "Aún no hay conversaciones.",
+      "empty_title": "¿En qué puede ayudarle Galileo?",
+      "empty_subtitle": "Pregunte lo que quiera o empiece con una de estas sugerencias.",
+      "suggestion_summarize": "Resumir mis últimos incidentes",
+      "suggestion_procedure": "Encontrar el procedimiento adecuado para una solicitud de servicio",
+      "suggestion_draft": "Redactar una actualización para el cliente sobre un incidente",
+      "suggestion_explain": "Explicar cómo funciona nuestro proceso de cambios",
+      "rename": "Renombrar",
+      "delete_confirm": "¿Eliminar este chat?",
+      "conversation_actions": "Acciones de la conversación",
+      "conversation_title": "Título de la conversación",
+      "not_found_title": "Conversación no encontrada",
+      "not_found_body": "Es posible que esta conversación se haya eliminado o pertenezca a otro usuario.",
+      "start_new_chat": "Iniciar un chat nuevo",
+      "load_failed": "No se pudieron cargar las conversaciones.",
+      "composer_placeholder": "Pregúntele cualquier cosa a Galileo…",
+      "composer_hint": "Enter para enviar · Mayús+Enter para una nueva línea",
+      "send": "Enviar mensaje",
+      "scroll_to_bottom": "Desplazarse al final",
+      "typing": "Galileo está pensando",
+      "switch_mode": "Cambiar el modo del espacio de trabajo",
+      "third_party_notice": "Los mensajes se envían a un servicio de IA de terceros."
+    }
   }
 }

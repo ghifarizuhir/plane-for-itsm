@@ -37,6 +37,9 @@
       "services": "Services et assistance",
       "knowledge": "Connaissances",
       "personal": "Personnel"
-    }
+    },
+    "work": "Travail",
+    "procedure": "Procédure",
+    "galileo": "Galileo"
   }
 }

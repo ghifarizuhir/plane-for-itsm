@@ -6,6 +6,36 @@
     "slash_incident_off": "Ukončiť priebeh incidentu",
     "incident_ref_required": "Zadajte ID incidentu, napr. /incident OPS-123",
     "incident_invalid_ref": "To nevyzerá ako ID pracovnej položky (napr. OPS-123)",
-    "incident_flow_ended": "Priebeh incidentu ukončený"
+    "incident_flow_ended": "Priebeh incidentu ukončený",
+    "galileo": {
+      "new_chat": "Nový chat",
+      "history": "História chatov",
+      "today": "Dnes",
+      "yesterday": "Včera",
+      "previous_7_days": "Posledných 7 dní",
+      "older": "Staršie",
+      "empty_history": "Zatiaľ žiadne konverzácie.",
+      "empty_title": "S čím vám Galileo môže pomôcť?",
+      "empty_subtitle": "Opýtajte sa na čokoľvek alebo začnite jedným z návrhov.",
+      "suggestion_summarize": "Zhrnúť moje posledné incidenty",
+      "suggestion_procedure": "Nájsť správny postup pre požiadavku na službu",
+      "suggestion_draft": "Pripraviť aktualizáciu pre zákazníka k incidentu",
+      "suggestion_explain": "Vysvetliť, ako funguje náš proces zmien",
+      "rename": "Premenovať",
+      "delete_confirm": "Odstrániť tento chat?",
+      "conversation_actions": "Akcie konverzácie",
+      "conversation_title": "Názov konverzácie",
+      "not_found_title": "Konverzácia sa nenašla",
+      "not_found_body": "Táto konverzácia mohla byť odstránená alebo patrí inému používateľovi.",
+      "start_new_chat": "Začať nový chat",
+      "load_failed": "Konverzácie sa nepodarilo načítať.",
+      "composer_placeholder": "Opýtajte sa Galilea na čokoľvek…",
+      "composer_hint": "Enter na odoslanie · Shift+Enter pre nový riadok",
+      "send": "Odoslať správu",
+      "scroll_to_bottom": "Prejsť na koniec",
+      "typing": "Galileo rozmýšľa",
+      "switch_mode": "Prepnúť režim pracovného priestoru",
+      "third_party_notice": "Správy sa odosielajú externej službe AI."
+    }
   }
 }

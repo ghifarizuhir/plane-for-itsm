@@ -6,6 +6,36 @@
     "slash_incident_off": "Zakończ przepływ incydentu",
     "incident_ref_required": "Podaj identyfikator incydentu, np. /incident OPS-123",
     "incident_invalid_ref": "To nie wygląda na identyfikator elementu pracy (np. OPS-123)",
-    "incident_flow_ended": "Przepływ incydentu zakończony"
+    "incident_flow_ended": "Przepływ incydentu zakończony",
+    "galileo": {
+      "new_chat": "Nowy czat",
+      "history": "Historia czatów",
+      "today": "Dzisiaj",
+      "yesterday": "Wczoraj",
+      "previous_7_days": "Ostatnie 7 dni",
+      "older": "Starsze",
+      "empty_history": "Brak rozmów.",
+      "empty_title": "W czym Galileo może pomóc?",
+      "empty_subtitle": "Można zadać dowolne pytanie lub zacząć od jednej z propozycji.",
+      "suggestion_summarize": "Podsumuj ostatnie incydenty",
+      "suggestion_procedure": "Znajdź właściwą procedurę dla zgłoszenia serwisowego",
+      "suggestion_draft": "Przygotuj aktualizację dla klienta dotyczącą incydentu",
+      "suggestion_explain": "Wyjaśnij, jak działa proces zmian",
+      "rename": "Zmień nazwę",
+      "delete_confirm": "Usunąć ten czat?",
+      "conversation_actions": "Działania rozmowy",
+      "conversation_title": "Tytuł rozmowy",
+      "not_found_title": "Nie znaleziono rozmowy",
+      "not_found_body": "Ta rozmowa mogła zostać usunięta lub należy do innego użytkownika.",
+      "start_new_chat": "Rozpocznij nowy czat",
+      "load_failed": "Nie udało się wczytać rozmów.",
+      "composer_placeholder": "Zapytaj Galileo o cokolwiek…",
+      "composer_hint": "Enter, aby wysłać · Shift+Enter, aby dodać nowy wiersz",
+      "send": "Wyślij wiadomość",
+      "scroll_to_bottom": "Przewiń na dół",
+      "typing": "Galileo myśli",
+      "switch_mode": "Zmień tryb obszaru roboczego",
+      "third_party_notice": "Wiadomości są wysyłane do zewnętrznej usługi AI."
+    }
   }
 }

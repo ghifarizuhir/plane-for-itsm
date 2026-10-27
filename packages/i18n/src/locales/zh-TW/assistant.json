@@ -6,6 +6,36 @@
     "slash_incident_off": "結束事件流程",
     "incident_ref_required": "新增事件 ID，例如 /incident OPS-123",
     "incident_invalid_ref": "這看起來不像工作事項 ID（例如 OPS-123）",
-    "incident_flow_ended": "事件流程已結束"
+    "incident_flow_ended": "事件流程已結束",
+    "galileo": {
+      "new_chat": "新對話",
+      "history": "對話歷史",
+      "today": "今天",
+      "yesterday": "昨天",
+      "previous_7_days": "過去 7 天",
+      "older": "更早",
+      "empty_history": "尚無對話。",
+      "empty_title": "Galileo 能幫您什麼？",
+      "empty_subtitle": "提出任何問題，或從以下建議開始。",
+      "suggestion_summarize": "總結我最近的故障",
+      "suggestion_procedure": "為服務請求找到合適的流程",
+      "suggestion_draft": "起草故障的客戶更新",
+      "suggestion_explain": "說明我們的變更流程如何運作",
+      "rename": "重新命名",
+      "delete_confirm": "刪除此對話？",
+      "conversation_actions": "對話操作",
+      "conversation_title": "對話標題",
+      "not_found_title": "找不到對話",
+      "not_found_body": "此對話可能已被刪除，或屬於其他使用者。",
+      "start_new_chat": "開始新對話",
+      "load_failed": "無法載入對話。",
+      "composer_placeholder": "向 Galileo 提問…",
+      "composer_hint": "Enter 傳送 · Shift+Enter 換行",
+      "send": "傳送訊息",
+      "scroll_to_bottom": "捲動至底部",
+      "typing": "Galileo 正在思考",
+      "switch_mode": "切換工作區模式",
+      "third_party_notice": "訊息將傳送至第三方 AI 服務。"
+    }
   }
 }

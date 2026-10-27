@@ -6,6 +6,36 @@
     "slash_incident_off": "Terminer le flux d’incident",
     "incident_ref_required": "Ajoutez l’ID de l’incident, p. ex. /incident OPS-123",
     "incident_invalid_ref": "Cela ne ressemble pas à un ID d’élément de travail (p. ex. OPS-123)",
-    "incident_flow_ended": "Flux d’incident terminé"
+    "incident_flow_ended": "Flux d’incident terminé",
+    "galileo": {
+      "new_chat": "Nouvelle conversation",
+      "history": "Historique des conversations",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "previous_7_days": "7 derniers jours",
+      "older": "Plus ancien",
+      "empty_history": "Aucune conversation pour le moment.",
+      "empty_title": "Comment Galileo peut-il vous aider ?",
+      "empty_subtitle": "Posez une question ou commencez par l'une de ces suggestions.",
+      "suggestion_summarize": "Résumer mes derniers incidents",
+      "suggestion_procedure": "Trouver la bonne procédure pour une demande de service",
+      "suggestion_draft": "Rédiger une mise à jour client pour un incident",
+      "suggestion_explain": "Expliquer le fonctionnement de notre processus de changement",
+      "rename": "Renommer",
+      "delete_confirm": "Supprimer cette conversation ?",
+      "conversation_actions": "Actions de la conversation",
+      "conversation_title": "Titre de la conversation",
+      "not_found_title": "Conversation introuvable",
+      "not_found_body": "Cette conversation a peut-être été supprimée ou appartient à un autre utilisateur.",
+      "start_new_chat": "Démarrer une nouvelle conversation",
+      "load_failed": "Impossible de charger les conversations.",
+      "composer_placeholder": "Demandez n'importe quoi à Galileo…",
+      "composer_hint": "Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne",
+      "send": "Envoyer le message",
+      "scroll_to_bottom": "Faire défiler vers le bas",
+      "typing": "Galileo réfléchit",
+      "switch_mode": "Changer de mode d'espace de travail",
+      "third_party_notice": "Les messages sont envoyés à un service d'IA tiers."
+    }
   }
 }

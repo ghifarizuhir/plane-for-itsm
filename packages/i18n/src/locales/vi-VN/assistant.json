@@ -6,6 +6,36 @@
     "slash_incident_off": "Kết thúc luồng sự cố",
     "incident_ref_required": "Thêm ID sự cố, ví dụ: /incident OPS-123",
     "incident_invalid_ref": "Đây không giống ID mục công việc (ví dụ: OPS-123)",
-    "incident_flow_ended": "Luồng sự cố đã kết thúc"
+    "incident_flow_ended": "Luồng sự cố đã kết thúc",
+    "galileo": {
+      "new_chat": "Cuộc trò chuyện mới",
+      "history": "Lịch sử trò chuyện",
+      "today": "Hôm nay",
+      "yesterday": "Hôm qua",
+      "previous_7_days": "7 ngày trước",
+      "older": "Cũ hơn",
+      "empty_history": "Chưa có cuộc trò chuyện nào.",
+      "empty_title": "Galileo có thể giúp gì cho bạn?",
+      "empty_subtitle": "Hãy hỏi bất cứ điều gì hoặc bắt đầu với một trong các gợi ý.",
+      "suggestion_summarize": "Tóm tắt các sự cố gần đây của tôi",
+      "suggestion_procedure": "Tìm quy trình phù hợp cho một yêu cầu dịch vụ",
+      "suggestion_draft": "Soạn bản cập nhật cho khách hàng về một sự cố",
+      "suggestion_explain": "Giải thích cách quy trình thay đổi của chúng ta hoạt động",
+      "rename": "Đổi tên",
+      "delete_confirm": "Xóa cuộc trò chuyện này?",
+      "conversation_actions": "Thao tác với cuộc trò chuyện",
+      "conversation_title": "Tiêu đề cuộc trò chuyện",
+      "not_found_title": "Không tìm thấy cuộc trò chuyện",
+      "not_found_body": "Cuộc trò chuyện này có thể đã bị xóa hoặc thuộc về người dùng khác.",
+      "start_new_chat": "Bắt đầu cuộc trò chuyện mới",
+      "load_failed": "Không thể tải các cuộc trò chuyện.",
+      "composer_placeholder": "Hỏi Galileo bất cứ điều gì…",
+      "composer_hint": "Enter để gửi · Shift+Enter để xuống dòng",
+      "send": "Gửi tin nhắn",
+      "scroll_to_bottom": "Cuộn xuống cuối",
+      "typing": "Galileo đang suy nghĩ",
+      "switch_mode": "Chuyển chế độ không gian làm việc",
+      "third_party_notice": "Tin nhắn được gửi đến một dịch vụ AI bên thứ ba."
+    }
   }
 }

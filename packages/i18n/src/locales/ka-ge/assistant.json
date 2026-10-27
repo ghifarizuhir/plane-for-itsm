@@ -6,6 +6,36 @@
     "slash_incident_off": "ინციდენტის ნაკადის დასრულება",
     "incident_ref_required": "მიუთითეთ ინციდენტის ID, მაგ. /incident OPS-123",
     "incident_invalid_ref": "ეს არ ჰგავს სამუშაო ელემენტის ID-ს (მაგ. OPS-123)",
-    "incident_flow_ended": "ინციდენტის ნაკადი დასრულდა"
+    "incident_flow_ended": "ინციდენტის ნაკადი დასრულდა",
+    "galileo": {
+      "new_chat": "ახალი ჩატი",
+      "history": "ჩატის ისტორია",
+      "today": "დღეს",
+      "yesterday": "გუშინ",
+      "previous_7_days": "ბოლო 7 დღე",
+      "older": "უფრო ძველი",
+      "empty_history": "ჯერ არ არის საუბრები.",
+      "empty_title": "რით შეუძლია Galileo-ს დახმარება?",
+      "empty_subtitle": "დასვით ნებისმიერი კითხვა ან დაიწყეთ ერთ-ერთი შემოთავაზებით.",
+      "suggestion_summarize": "ჩემი ბოლო ინციდენტების შეჯამება",
+      "suggestion_procedure": "სერვისის მოთხოვნისთვის შესაბამისი პროცედურის პოვნა",
+      "suggestion_draft": "ინციდენტის შესახებ კლიენტისთვის განახლების მომზადება",
+      "suggestion_explain": "ჩვენი ცვლილების პროცესის ახსნა",
+      "rename": "გადარქმევა",
+      "delete_confirm": "წავშალოთ ეს ჩატი?",
+      "conversation_actions": "საუბრის მოქმედებები",
+      "conversation_title": "საუბრის სათაური",
+      "not_found_title": "საუბარი ვერ მოიძებნა",
+      "not_found_body": "ეს საუბარი შეიძლება წაშლილი იყოს ან სხვა მომხმარებელს ეკუთვნოდეს.",
+      "start_new_chat": "ახალი ჩატის დაწყება",
+      "load_failed": "საუბრების ჩატვირთვა ვერ მოხერხდა.",
+      "composer_placeholder": "ჰკითხეთ Galileo-ს ნებისმიერი რამ…",
+      "composer_hint": "Enter გაგზავნისთვის · Shift+Enter ახალი ხაზისთვის",
+      "send": "შეტყობინების გაგზავნა",
+      "scroll_to_bottom": "ბოლომდე ჩამოსქროლვა",
+      "typing": "Galileo ფიქრობს",
+      "switch_mode": "სამუშაო სივრცის რეჟიმის შეცვლა",
+      "third_party_notice": "შეტყობინებები იგზავნება მესამე მხარის AI სერვისზე."
+    }
   }
 }

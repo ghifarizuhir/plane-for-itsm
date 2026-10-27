@@ -6,6 +6,36 @@
     "slash_incident_off": "Akhiri alur insiden",
     "incident_ref_required": "Tambahkan ID insiden, mis. /incident OPS-123",
     "incident_invalid_ref": "Itu tidak terlihat seperti ID item kerja (mis. OPS-123)",
-    "incident_flow_ended": "Alur insiden berakhir"
+    "incident_flow_ended": "Alur insiden berakhir",
+    "galileo": {
+      "new_chat": "Chat baru",
+      "history": "Riwayat chat",
+      "today": "Hari ini",
+      "yesterday": "Kemarin",
+      "previous_7_days": "7 hari terakhir",
+      "older": "Lebih lama",
+      "empty_history": "Belum ada percakapan.",
+      "empty_title": "Apa yang bisa Galileo bantu?",
+      "empty_subtitle": "Tanyakan apa saja, atau mulai dengan salah satu saran ini.",
+      "suggestion_summarize": "Ringkas insiden terbaru saya",
+      "suggestion_procedure": "Temukan prosedur yang tepat untuk permintaan layanan",
+      "suggestion_draft": "Buat draf pembaruan pelanggan untuk insiden",
+      "suggestion_explain": "Jelaskan cara kerja proses perubahan kami",
+      "rename": "Ganti nama",
+      "delete_confirm": "Hapus chat ini?",
+      "conversation_actions": "Tindakan percakapan",
+      "conversation_title": "Judul percakapan",
+      "not_found_title": "Percakapan tidak ditemukan",
+      "not_found_body": "Percakapan ini mungkin telah dihapus atau milik pengguna lain.",
+      "start_new_chat": "Mulai chat baru",
+      "load_failed": "Tidak dapat memuat percakapan.",
+      "composer_placeholder": "Tanyakan apa saja kepada Galileo…",
+      "composer_hint": "Enter untuk kirim · Shift+Enter untuk baris baru",
+      "send": "Kirim pesan",
+      "scroll_to_bottom": "Gulir ke bawah",
+      "typing": "Galileo sedang berpikir",
+      "switch_mode": "Ganti mode ruang kerja",
+      "third_party_notice": "Pesan dikirim ke layanan AI pihak ketiga."
+    }
   }
 }
