@@ -1,94 +1,53 @@
-# List — Filter / Sort / Export / Pagination
-
-Status: **Draft.**
-
-Used by: Work Items (`issues`), Cycles, Modules, Views, Pages (actual)
-
-Adaptasi dari `terra/docs/features/_shared/list.md` + `filter-sort-export.md` — Plane pakai `apps/web/core/store/*` + `@plane/ui` tables (`@tanstack/react-table`), bukan custom `DataTable` Terra.
-
 ---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:cb827bbb6705b6ab90b11e7c371117e632b961dabd32f87aadc908390232b4da
+source_paths:
+  - apps/web/core/components/issues
+  - apps/web/core/components/views
+  - apps/web/core/components/cycles
+  - apps/web/core/components/modules
+---
+
+# List — Filter, Sort, and Pagination
+
+Status: **Current.**
 
 ## Purpose
 
-Semua list pages (Plane + ITSM) pakai pola yang sama: **table/board/grid + filter + sort + search + pagination + export** — URL-driven, shareable, persist.
-
----
+Perilaku list dipakai bersama oleh ticket, sprint, track, view, dan queue.
 
 ## Behavior
 
-### Layout
+- Filter disimpan di URL agar bisa dibagikan dan di-restore.
+- Sort default per surface; user dapat mengganti urutan.
+- Pagination mengikuti endpoint: page-based atau cursor-based.
+- Application scope selector membatasi data di halaman agregat workspace.
+- Empty, loading, dan error state harus konsisten.
 
-```
-Tier-1: Breadcrumbs + Filters (search, state/priority/label, date) + Sort + View toggle
-Tier-2: Page header (title + count chip "N total" dari pagination)
-Primary: DataTable (Work Items) / Board (Cycles) / Card grid (Pages) / Graph (Service Map)
-Footer: Pagination mono "1–N of M" + per-page selector
-```
+## Layouts
 
-Tier headers via `apps/web/core/layouts` + `packages/ui` — bukan `ListPageHeader` custom Terra (tapi pola sama: sticky `border-b /70`, `px-6 sm:px-8`).
+- Table/list untuk data padat.
+- Board/kanban untuk state.
+- Calendar/gantt untuk tanggal dan timeline.
+- Spreadsheet untuk editing cepat.
 
-### Filter
+Layout bukan sumber kebenaran data; semuanya membaca filter yang sama.
 
-| Filter                | Type                 | Default | Persist                    |
-| --------------------- | -------------------- | ------- | -------------------------- |
-| State / Status        | multi-select         | all     | `?state=backlog,started`   |
-| Priority              | multi-select         | all     | `?priority=urgent,high`    |
-| Assignee / Created by | single               | —       | `?assignee=USR-1`          |
-| Label                 | multi-select         | —       | `?label=LAB-1`             |
-| Search                | text debounced 300ms | —       | `?q=payment`               |
-| Date range            | picker               | —       | `?createdFrom=&createdTo=` |
+## Permission
 
-**Chips:** active filters render sebagai chips di atas table — klik `×` remove. `Clear all` push history.
+List hanya menampilkan entity yang boleh dibaca user. Jangan melakukan
+client-side filtering sebagai pengganti permission API.
 
-### Sort
+## Edge cases
 
-- Klik column header → `asc/desc/off` cycle.
-- Multi-sort: Shift+click (opsional — Terra pakai, Plane Work Items belum; tambah bila ITSM butuh).
-- Persist URL: `?sort=created_at:desc,priority:asc`.
+- Filter yang menunjuk state/label terhapus harus menampilkan pesan atau
+  diabaikan dengan aman.
+- Pagination harus reset saat filter berubah.
+- Empty state berbeda antara "tidak ada data" dan "tidak ada hasil filter".
 
-### Pagination
+## Related
 
-- Default `pageSize=50` (25/50/100 options). Footer bar monokrom.
-- Persist URL: `?page=2&pageSize=50` → DRF `?page=2` + `count` di response.
-
-### Export
-
-- Actual: `exporter` model (`plane/db/models/exporter.py`) + `plane.bgtasks.exporter_expired_task` — CSV/XLSX export Work Items (cek `apps/api/plane/api/` actual sebelum tulis detail).
-- Propose ITSM (mis. `incidents/export` cap 5000) diparkir di `_backlog.md`.
-
----
-
-## States
-
-- **Default:** table rows + filter chips.
-- **Empty (0 items, no filter):** `h2` + CTA "Create work item" / "Report incident".
-- **Empty (filter 0):** "No results for filters. [Clear filters]".
-- **Loading initial:** skeleton rows 8 (shimmer).
-- **Loading filter:** top progress bar 2px + dim rows 0.6.
-- **Error:** banner "Failed to load. [Retry]".
-
----
-
-## Edge Cases
-
-- URL param rusak → auto-clear + toast "Invalid filter, reset to default".
-- `page` out of range → clamp ke `1` atau `last`.
-
----
-
-## API Touchpoints
-
-- `GET /api/workspaces/:slug/projects/:id/issues/?state=&priority=&q=&sort=&page=` — Work Items (`plane/api/views/issue.py`)
-- (ITSM `incidents/` belum ada — lihat `_backlog.md`)
-
-Ref: [`../../design/03-api-contract.md`](../../design/03-api-contract.md).
-
----
-
----
-
-## Changelog
-
-| Date       | Change |
-| ---------- | ------ |
-| 2026-09-03 | —      |
+- [`detail-page.md`](./detail-page.md)
+- [`../views.md`](../views.md)
+- [`../work-items.md`](../work-items.md)

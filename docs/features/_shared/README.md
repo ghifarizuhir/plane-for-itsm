@@ -1,48 +1,29 @@
-# Shared Concerns — Plane for ITSM
-
-Cross-cutting behavior dipakai > 1 halaman. Adaptasi dari `terra/docs/features/_shared/README.md` — ramping dari 19 file Terra → 5 file Plane Phase 1.
-
 ---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:7e52258fc71005a92297b6eab2a7a0f9516d14409919b1ba21496d9813104bfd
+source_paths:
+  - apps/web/app/routes/core.ts
+  - apps/web/core/components
+  - apps/api-rs/crates/api/src/routes
+---
+
+# Shared Concerns
+
+Perilaku yang dipakai lebih dari satu feature. Dokumen di sini menjelaskan
+kontrak bersama; detail feature tetap berada di dokumen masing-masing.
 
 ## Inventory
 
-| Concern                   | File                                     | Status   | Used by                                          |
-| ------------------------- | ---------------------------------------- | -------- | ------------------------------------------------ |
-| List & filter/sort/export | [`list.md`](./list.md)                   | 📝 Draft | Work Items, Cycles, Modules, Views, + ITSM lists |
-| Detail page               | [`detail-page.md`](./detail-page.md)     | 📝 Draft | Issue detail, Cycle/Module detail, ITSM detail   |
-| Routing                   | [`routing.md`](./routing.md)             | 📝 Draft | URL pattern `/:workspaceSlug/projects/:id/...`   |
-| Comments & activity       | [`comments.md`](./comments.md)           | 📝 Draft | Issue comments, Pages comments                   |
-| Global search             | [`global-search.md`](./global-search.md) | 📝 Draft | Cmd+K palette                                    |
+| Concern                        | Dokumen                              | Dipakai oleh                            |
+| ------------------------------ | ------------------------------------ | --------------------------------------- |
+| List, filter, sort, pagination | [`list.md`](./list.md)               | Tickets, sprints, tracks, views, queues |
+| Detail page                    | [`detail-page.md`](./detail-page.md) | Ticket, sprint, track, page, view       |
+| Comments, activity, versions   | [`comments.md`](./comments.md)       | Semua entity dengan activity            |
+| Search and command palette     | [`search.md`](./search.md)           | Semua surface                           |
 
-> **Jangan pre-build 19 file Terra** (`terra/docs/features/_shared:19` — termasuk `entity-linking`, `versioning`, `reviews`, `rail`, `report`, `attachments`, `app-selector`). Tambah bila ITSM benar-benar butuh (rule-of-3: dipakai 3× baru ekstrak).
+## Rules
 
----
-
-## Template (ringkas — lihat `../README.md`)
-
-```markdown
-# <Concern>
-
-Status: **Draft** | **Approved**
-Used by: ...
-
-## Purpose
-
-## Behavior
-
-## States
-
-## Edge Cases
-
-## API Touchpoints (ref design/03-api-contract.md)
-```
-
----
-
----
-
-## Changelog
-
-| Date       | Change |
-| ---------- | ------ |
-| 2026-09-03 | —      |
+- Jangan menduplikasi perilaku shared ke dokumen feature.
+- Perubahan shared harus dicek dampaknya ke semua consumer.
+- Permission tetap milik API; shared UI hanya merender aksi yang diizinkan.

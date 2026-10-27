@@ -1,210 +1,49 @@
-# Feature Specifications
-
-Product-level spec per halaman + per konsep cross-cutting. Adaptasi dari `terra/docs/features/README.md:1` — Plane punya Work Items/Cycles/Modules/Views/Pages/Analytics (bukan incidents/changes Terra mentah); ITSM adalah overlay.
-
-**Menjawab pertanyaan:** "Apa yang user lihat dan bisa lakukan di halaman X?"
-
-Bukan:
-
-- Bukan schema DB → lihat [`../design/02-data-model.md`](../design/02-data-model.md)
-- Bukan API shape → lihat [`../design/03-api-contract.md`](../design/03-api-contract.md)
-- Bukan pola UI generik → lihat [`../design/04-design-system.md`](../design/04-design-system.md)
-
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:853923d339a4bd50230878de625ab5b5b22f1deff5bef783b8c927646d6ee47e
+source_paths:
+  - apps/web/app/routes/core.ts
 ---
 
-## Organisasi
+# Feature Documentation
 
-```
-features/
-├── README.md                           ← ini
-├── _backlog.md                         ← parked ideas (belum commit phase)
-├── <page>.md                           ← 1 file per halaman
-└── _shared/                            ← cross-cutting, dipakai > 1 halaman
-    ├── README.md
-    └── <concern>.md
-```
+Dokumentasi implementasi per capability. Untuk alur pemakaian, lihat in-app docs
+di `/:workspaceSlug/docs`; untuk daftar route resmi, lihat
+[`../_generated/routes.md`](../_generated/routes.md).
 
----
+## Inventory
 
-## Page Inventory — Plane Upstream (existing)
+| Capability           | Dokumen                                    | Route utama                                      | Status  |
+| -------------------- | ------------------------------------------ | ------------------------------------------------ | ------- |
+| Tickets / work items | [`work-items.md`](./work-items.md)         | `/work-items`, `/projects/:projectId/issues`     | current |
+| Services             | [`services.md`](./services.md)             | `/services`                                      | current |
+| Intake               | [`intake.md`](./intake.md)                 | `/intake`, `/projects/:projectId/intake`         | current |
+| Knowledge            | [`knowledge.md`](./knowledge.md)           | `/pages`, `/projects/:projectId/pages`           | current |
+| Sprints              | [`sprints.md`](./sprints.md)               | `/cycles`, `/projects/:projectId/cycles`         | current |
+| Tracks               | [`tracks.md`](./tracks.md)                 | `/modules`, `/projects/:projectId/modules`       | current |
+| War rooms            | [`war-rooms.md`](./war-rooms.md)           | `/projects/:projectId/war-rooms/:warRoomId`      | current |
+| AI                   | [`ai.md`](./ai.md)                         | `/galileo`, `/scheduler`                         | current |
+| Analytics            | [`analytics.md`](./analytics.md)           | `/analytics/:tabId`                              | current |
+| Notifications        | [`notifications.md`](./notifications.md)   | `/notifications`                                 | current |
+| Applications         | [`applications.md`](./applications.md)     | `/projects`                                      | current |
+| Settings             | [`settings.md`](./settings.md)             | `/settings`                                      | current |
+| Archives             | [`archives.md`](./archives.md)             | `/projects/:projectId/archives/*`                | current |
+| Drafts               | [`drafts.md`](./drafts.md)                 | `/drafts`                                        | current |
+| Stickies             | [`stickies.md`](./stickies.md)             | `/stickies`                                      | current |
+| Views / queues       | [`views.md`](./views.md)                   | `/workspace-views`, `/projects/:projectId/views` | current |
+| Browse               | [`browse.md`](./browse.md)                 | `/browse/:workItem`                              | current |
+| Shared concerns      | [`_shared/README.md`](./_shared/README.md) | —                                                | current |
 
-| Page                                      | File                               | Status      | Catatan                                                       |
-| ----------------------------------------- | ---------------------------------- | ----------- | ------------------------------------------------------------- |
-| Work Items (Issues)                       | [`work-items.md`](./work-items.md) | ✅ Doc done | Core — `apps/web/core/store/issue/*`, `plane.db.models.issue` |
-| Cycles (Sprints)                          | [`cycles.md`](./cycles.md)         | ✅ Doc done | `plane.db.models.cycle`, burn-down                            |
-| Modules                                   | [`modules.md`](./modules.md)       | ✅ Doc done | `plane.db.models.module`                                      |
-| Views                                     | [`views.md`](./views.md)           | ✅ Doc done | Saved filters, `plane.db.models.view`                         |
-| Pages                                     | [`pages.md`](./pages.md)           | ✅ Doc done | TipTap + Yjs, `apps/live`                                     |
-| Analytics                                 | [`analytics.md`](./analytics.md)   | ✅ Doc done | `plane.analytics`                                             |
-| Inbox / Notifications                     | [`inbox.md`](./inbox.md)           | ✅ Doc done | `plane.db.models.notification`                                |
-| Intake                                    | [`intake.md`](./intake.md)         | ✅ Doc done | `IntakeIssue` triage (`intake.py`), ex-inbox URL              |
-| Drafts                                    | [`drafts.md`](./drafts.md)         | ✅ Doc done | `draft_issues` table, publish via `draft-to-issue/`           |
-| Stickies                                  | [`stickies.md`](./stickies.md)     | ✅ Doc done | Personal notes, `sticky.py`                                   |
-| Browse                                    | [`browse.md`](./browse.md)         | ✅ Doc done | URL kanonik `{identifier}-{seq}`, full `IssueDetailRoot`      |
-| Archives (issues/cycles/modules/projects) | [`archives.md`](./archives.md)     | ✅ Doc done | `archived_at` soft-delete + restore                           |
-| Workspace / Project Settings              | [`settings.md`](./settings.md)     | ✅ Doc done | `apps/admin` god-mode + flags `features-list.tsx`             |
+## Boundary
 
-## Page Inventory — ITSM (future, bukan actual)
-
-| Page                                               | File                             | Status              | Catatan                                                                                                   |
-| -------------------------------------------------- | -------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------- |
-| CMDB / Service Map                                 | [`cmdb.md`](./cmdb.md)           | 📝 Proposal (Draft) | Proposal pertama — dari Terra actual, butuh 3 tabel Postgres baru (+ migrasi sqlx + handler Rust)         |
-| War Rooms                                          | [`war-rooms.md`](./war-rooms.md) | ✅ Doc done         | Project page `:projectId/war-rooms`; realtime via `apps/live`; tabel `war_rooms` (api-rs)                 |
-| Incident, Problem, Change, Request, Knowledge, ... | —                                | 💡 Backlog          | Diparkir di [`_backlog.md`](./_backlog.md) — jangan buat `features/<page>.md` sampai implementasi dimulai |
-
-> `cmdb.md` adalah proposal pertama (sebelum ada kode). `war-rooms.md` mengikuti aturan normal: ditulis setelah Fase 1–4 diimplementasikan. Proposal ITSM lain tetap diparkir di [`_backlog.md`](./_backlog.md).
-
-## Shared Concerns
-
-Lihat [`_shared/README.md`](./_shared/README.md).
-
-| Concern                   | File                                                     | Status   | Dipakai oleh                         |
-| ------------------------- | -------------------------------------------------------- | -------- | ------------------------------------ |
-| List & filter/sort/export | [`_shared/list.md`](./_shared/list.md)                   | 📝 Draft | Semua list pages (Work Items + ITSM) |
-| Detail page               | [`_shared/detail-page.md`](./_shared/detail-page.md)     | 📝 Draft | Issue detail + ITSM detail           |
-| Routing                   | [`_shared/routing.md`](./_shared/routing.md)             | 📝 Draft | URL pattern `/:workspaceSlug/...`    |
-| Comments & activity       | [`_shared/comments.md`](./_shared/comments.md)           | 📝 Draft | Comments + timeline                  |
-| Global search (Cmd+K)     | [`_shared/global-search.md`](./_shared/global-search.md) | 📝 Draft | Cmd+K palette                        |
-
-> Terra `_shared` punya 19 file (`terra/docs/features/_shared:19` — termasuk `entity-linking.md`, `versioning.md`, `reviews.md`, `rail.md`). Plane **ramping** — ITSM fork reuse `list/detail/routing/comments` saja Phase 1; `entity-linking`/`reviews`/`rail` ditambah bila ITSM butuh (jangan pre-build 19 file).
-
----
-
-## Template — Page Doc
-
-Format baku untuk setiap file di `features/*.md` (contek `terra/features/README.md:80`):
-
-```markdown
-# <Page Name>
-
-Status: **Draft** | **Approved**
-Route: `:workspaceSlug/projects/:projectId/<page>` (actual — lihat `apps/web/app/routes/core.ts`)
-Share: CORE / CONTEXT / PLATFORM
-
-## Intent
-
-Satu-dua kalimat: tujuan halaman dari sudut user.
-
-## Current State (snapshot kode)
-
-- Komponen: `<Component>` di `apps/web/core/...:<range>` atau `apps/web/app/routes/...`
-- Working: ...
-- Stub: ...
-- Missing (ITSM fork): ...
-
-## Primary View
-
-- Layout: table / board / grid / graph
-- Data visible: kolom/field utama
-- Interaction: klik row, hover, select
-
-## Actions
-
-| Action | Trigger     | Permission | State required |
-| ------ | ----------- | ---------- | -------------- |
-| Create | Toolbar / C | Member+    | —              |
-
-...
-
-## Filters / Sort / Search
-
-- Filters: field, default, persist di URL `?state=&priority=&sort=`
-- Sort: default column
-- Search: scope (per-page atau Cmd+K)
-
-## Detail View
-
-- Section: metadata / description / comments / timeline / versions
-- Ref: [`_shared/detail-page.md`](./_shared/detail-page.md)
-
-## Permissions
-
-| Role            | Create | Read | Update | Delete |
-| --------------- | ------ | ---- | ------ | ------ |
-| Member          | ✅     | ✅   | own    | ❌     |
-| Project admin   | ✅     | ✅   | ✅     | ✅     |
-| Workspace admin | ✅     | ✅   | ✅     | ✅     |
-
-## Empty / Loading / Error
-
-- Empty: message + CTA
-- Loading: skeleton
-- Error: banner + retry
-```
-
----
-
-## Template — Shared Doc
-
-```markdown
-# <Concern Name>
-
-Status: **Draft** | **Approved**
-Used by: daftar halaman yang pakai
-
-## Purpose
-
-Kenapa ini di-shared.
-
-## Behavior
-
-- Trigger, steps, success/failure, keyboard/a11y
-
-## States
-
-- Default, loading, error, empty
-
-## Edge Cases
-
-## API Touchpoints
-
-Endpoint yang di-hit. Ref ke [`../design/03-api-contract.md`](../design/03-api-contract.md).
-```
-
----
-
-## Conventions
-
-1. **Status eksplisit** di header setiap doc: `Draft` → `Approved`.
-2. **Current State dari kode Plane** — referensi `apps/web/core/store/*` atau `plane/db/models/*` + line range.
-3. **Phase fork explicit** — Phase 1 fork (Incident+Knowledge+Service Map) vs Phase 2 deferred.
-4. **Cross-reference `_shared/*`** kalau dipakai > 1 halaman — jangan duplikasi.
-5. **Permissions matrix** per page (inherit Plane workspace/project hierarchy).
-6. **Tidak iterasi batch** — satu file per session, diskusi + tulis + approve baru pindah.
-
----
-
-## Content Boundary (apa taruh di mana)
-
-Berlaku cross-folder (`design/`, `features/`, `ui/`):
-
-| Jenis konten              | Lokasi                            | Lifecycle                       |
-| ------------------------- | --------------------------------- | ------------------------------- |
-| Living spec               | Body doc yang relevan             | Permanent, update-in-place      |
-| Open question aktif       | §Open Items di doc relevan        | Ephemeral — hapus saat resolved |
-| Phase 2 deferred          | §Phase 2 Deferred di doc relevan  | Permanent commitment            |
-| Parked idea cross-feature | [`_backlog.md`](./_backlog.md)    | Fluid, tanpa deadline           |
-| Parked engineering        | `design/README.md` §Open Items    | Fluid                           |
-| Review discussion         | Chat / PR                         | Ephemeral — tidak masuk docs    |
-| Change history            | Git log + `## Changelog` per file | Immutable                       |
-
----
-
-## Writing Order (recommended)
-
-**Option Y — Start dari yang ada dulu (recommended untuk fork):** Work Items (`work-items.md` ✅) → Cycles → Modules → Views → Pages. Validates template dengan page yang sudah ada; ITSM pakai template matang (ide diparkir di `_backlog.md`).
-
-**Option X — Start complex first:** Incidents → Service Map → Work Items.
-
-> Untuk fork, **jangan start dari Terra complex first** — Plane Work Items sudah kompleks; ITSM adapt polanya.
-
----
-
----
+- `docs/features` menjelaskan route, store, API, permission, dan edge case.
+- In-app docs menjelaskan langkah penggunaan untuk end user.
+- Generated inventory adalah daftar route/API yang authoritative.
+- Setiap dokumen current memiliki frontmatter dan source hash.
 
 ## Changelog
 
-| Date       | Change                                                     |
-| ---------- | ---------------------------------------------------------- |
-| 2026-09-03 | fork init — adaptasi dari terra `features/README.md:1`     |
-| 2026-10-01 | tambah `war-rooms.md` ke inventory ITSM (Fase 1–4 shipped) |
+| Tanggal    | Perubahan                                        |
+| ---------- | ------------------------------------------------ |
+| 2026-10-27 | rewrite — inventory current, hapus dokumen usang |

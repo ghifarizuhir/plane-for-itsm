@@ -1,81 +1,51 @@
-# Stickies (Quick Notes)
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:3385a616fe882933532b7a00f491828315adcd07360f565e2c6f561fc62e5ea7
+source_paths:
+  - apps/web/app/routes/core.ts
+  - apps/web/core/store
+  - apps/web/core/components
+  - apps/api-rs/crates/api/src/routes
+---
 
-Status: **Approved**
-Route: `:workspaceSlug/stickies` — lihat `apps/web/app/routes/core.ts:103-106` (`stickies/page.tsx:11-16` → `StickiesInfinite`)
-Share: CORE
+# Stickies
+
+Status: **Current.**
 
 ## Intent
 
-Catatan cepat pribadi per workspace (sticky notes): tempel ide, simpan warna, cari lagi nanti. Dari sudut user: "post-it digital yang hanya kumiliki."
+Stickies adalah catatan cepat pribadi di workspace: ide, pengingat, atau potongan
+teks yang belum perlu menjadi ticket.
 
-## Current State (snapshot kode)
+## Route
 
-- List: `apps/web/core/components/stickies/layout/stickies-infinite.tsx:18-22` — infinite list via `useSticky()`.
-- Item: `stickies/sticky/root.tsx:38-40` + `sticky/use-operations.tsx:40-44` (`stickies` + `stickyOperations`: CRUD + warna).
-- Personal: API filter `workspace__slug + owner = request.user` (`apps/api/plane/api/views/sticky.py:30-36,48,66,85,96,110` — create/list/retrieve/partial_update/destroy).
-- Search server-side: `description_stripped__icontains`, paginate 20/page (`sticky.py:69-76` di views).
-- Working: CRUD, warna (`color`/`background_color`), infinite scroll, search.
-- Stub: —
-- Missing (ITSM fork): tidak ada.
+| Surface      | Route                           |
+| ------------ | ------------------------------- |
+| Stickies     | `/:workspaceSlug/stickies`      |
+| In-app guide | `/:workspaceSlug/docs/stickies` |
 
-### Store (MobX)
+## Behavior
 
-- `apps/web/core/store/sticky/sticky.store.ts:44,84,146,178` `StickyStore` (`getWorkspaceStickyIds`, `fetchWorkspaceStickies`, `createSticky`, ...); hook `core/hooks/use-stickies.tsx:13` (`useSticky(): IStickyStore`); service `core/services/sticky.service.ts:19,32,46,54,62` (`POST/GET/PATCH/DELETE /stickies/`).
+- Stickies bersifat personal dan workspace-scoped.
+- Catatan mendukung warna dan konten teks.
+- Stickies tidak muncul di search lintas user.
+- Hapus sticky tidak memengaruhi ticket atau draft.
 
-### Model + API (Django)
+## Stores and components
 
-> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
+- Store domain: `apps/web/core/store/sticky`.
+- Komponen: `apps/web/core/components/stickies`.
+- API: route sticky di `apps/api-rs/crates/api/src/routes`.
 
-- Model: `apps/api/plane/db/models/sticky.py:16-30` `Sticky` (`name`, `description` JSON/HTML, `color`/`background_color`, `workspace` + `owner` FK, `sort_order`).
-- API: `apps/api/plane/app/urls/workspace.py:245,250` → `stickies/`, `stickies/<pk>/`.
+## Edge cases
 
-## Primary View
-
-- Layout: infinite grid/list of stickies.
-- Data visible: name, description, color, updated_at.
-- Interaction: klik → edit; warna via picker; hapus langsung.
-- Ref: [`_shared/list.md`](./_shared/list.md).
-
-## Actions
-
-| Action  | Trigger      | Permission | State required |
-| ------- | ------------ | ---------- | -------------- |
-| Create  | Quick-add    | Own        | —              |
-| Edit    | Inline       | Own        | —              |
-| Recolor | Color picker | Own        | —              |
-| Delete  | Aksi item    | Own        | —              |
-
-Sepenuhnya personal — tidak ada sharing antar user.
-
-## Filters / Sort / Search
-
-- Filters: —
-- Sort: `sort_order` + updated.
-- Search: server-side `description_stripped__icontains` (20/page).
-
-## Detail View
-
-- Tidak ada detail page — edit inline di sticky.
-- Ref: [`_shared/detail-page.md`](./_shared/detail-page.md).
-
-## Permissions
-
-| Role            | Own stickies | Others' stickies |
-| --------------- | ------------ | ---------------- |
-| Member          | ✅           | ❌               |
-| Project admin   | ✅           | ❌               |
-| Workspace admin | ✅           | ❌               |
-
-## Empty / Loading / Error
-
-- Empty: no stickies → message + CTA.
-- Loading: infinite loader.
-- Error: banner + retry.
-
----
+- Sticky hanya dapat diakses pemiliknya.
+- Konten besar harus tetap bisa disimpan tanpa memblokir UI.
+- Sticky tidak menggantikan knowledge base atau komentar ticket.
 
 ## Changelog
 
-| Date       | Change                                                                  |
-| ---------- | ----------------------------------------------------------------------- |
-| 2026-09-03 | init — snapshot actual dari `core.ts`, `stickies/`, store + `sticky.py` |
+| Tanggal    | Perubahan                                   |
+| ---------- | ------------------------------------------- |
+| 2026-10-27 | verify — personal scope, behavior, boundary |
