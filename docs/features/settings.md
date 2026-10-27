@@ -1,127 +1,102 @@
-# Settings (Workspace / Project / Profile / Admin)
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:2ceccf43295162bda8919738fb6a9956ab5e7adb1b7341eb2b624172d7407d13
+source_paths:
+  - apps/web/app/routes/core.ts
+  - apps/api-rs/crates/api/src/routes/workspace_settings.rs
+  - apps/api-rs/crates/api/src/routes/instance_admin.rs
+  - apps/web/core/components/settings
+  - apps/web/core/components/workspace/sidebar
+---
 
-Status: **Approved**
-Route: lihat `apps/web/app/routes/core.ts:255-363` (ringkas di bawah)
-Share: PLATFORM
+# Settings
+
+Status: **Current.**
 
 ## Intent
 
-Pusat konfigurasi tiga level: workspace (anggota, billing, exports, webhooks), project (fitur, states, labels, estimates, automations), dan profil pribadi (general, security, preferences, notifications, api-tokens) — plus panel god-mode `apps/admin` di level instance. Dari sudut user: "atur yang perlu diatur, sesuai peranku."
+Settings menyatukan konfigurasi workspace, application, profil, dan instance
+admin. Konfigurasi workspace berlaku lintas application; konfigurasi application
+hanya untuk application tersebut.
 
-## Current State (snapshot kode)
+## Workspace settings
 
-### Workspace settings (`:workspaceSlug/settings/*`, `core.ts:263-285`)
+| Surface         | Route                                      |
+| --------------- | ------------------------------------------ |
+| General         | `/:workspaceSlug/settings`                 |
+| Members         | `/:workspaceSlug/settings/members`         |
+| Exports         | `/:workspaceSlug/settings/exports`         |
+| Webhooks        | `/:workspaceSlug/settings/webhooks`        |
+| Work item types | `/:workspaceSlug/settings/work-item-types` |
+| Metric sources  | `/:workspaceSlug/settings/metric-sources`  |
+| Features        | `/:workspaceSlug/settings/features`        |
+| Document export | `/:workspaceSlug/settings/document-export` |
 
-| Sub-halaman | Route                                | Komponen                                                                                                                                                 |
-| ----------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| General     | `settings`                           | `settings/(workspace)/page.tsx:19-33` (`GeneralWorkspaceSettingsPage` → `WorkspaceDetails`, `workspace/settings/workspace-details.tsx` — nama/slug/icon) |
-| Members     | `settings/members`                   | `members-list.tsx` + `members-list-item.tsx` + `invitations-list-item.tsx` (members + invites + roles)                                                   |
-| Billing     | `settings/billing`                   | `billing/page.tsx:20-28` (`BillingRoot`, guard `EUserPermissions.ADMIN` else `NotAuthorizedView`)                                                        |
-| Exports     | `settings/exports`                   | `exporter/export-form.tsx` + `prev-exports.tsx` + `single-export.tsx`                                                                                    |
-| Webhooks    | `settings/webhooks` (+ `:webhookId`) | `web-hooks/webhooks-list.tsx` + `create-webhook-modal.tsx` + `delete-webhook-modal.tsx`                                                                  |
+## Application settings
 
-Catatan: `settings/(workspace)/integrations/page.tsx` ada di disk tapi **tidak terdaftar** di `core.ts:263-285` (dead route).
+| Surface         | Route                                                        |
+| --------------- | ------------------------------------------------------------ |
+| General         | `/:workspaceSlug/settings/projects/:projectId`               |
+| Members         | `.../members`                                                |
+| States          | `.../states`                                                 |
+| Labels          | `.../labels`                                                 |
+| Estimates       | `.../estimates`                                              |
+| Work item types | `.../work-item-types`                                        |
+| Intake sources  | `.../intake-sources`                                         |
+| Features        | `.../features/cycles`, `modules`, `views`, `pages`, `intake` |
+| Automations     | `.../automations`                                            |
 
-### Project settings (`:workspaceSlug/settings/projects/*`, `core.ts:291-349`)
+## Profile settings
 
-| Sub-halaman | Route                                              | Komponen                                                                                                                                                                      |
-| ----------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| List        | `settings/projects`                                | —                                                                                                                                                                             |
-| General     | `settings/projects/:projectId`                     | `[projectId]/page.tsx:39-48` (`ProjectDetailsForm` + `GeneralProjectSettingsControlSection`, guard admin `useUserPermissions:30`)                                             |
-| Members     | `.../members`                                      | —                                                                                                                                                                             |
-| Features    | `.../features/{cycles,modules,views,pages,intake}` | `project/settings/features-list.tsx:30-75` — flag `cycle_view`, `module_view`, `issue_views_view`, `page_view`, `inbox_view` (key `intake`); toggle via `updateProject:86-93` |
-| States      | `.../states`                                       | `project-states/state-list.tsx` + `state-item.tsx` + `state-delete-modal.tsx` (CRUD state + groups `backlog/unstarted/started/completed/cancelled` via `state.group`)         |
-| Labels      | `.../labels`                                       | `labels/project-setting-label-list.tsx` + `project-setting-label-item.tsx` + `create-update-label-inline.tsx` + `label-drag-n-drop-HOC.tsx` (CRUD + `color`)                  |
-| Estimates   | `.../estimates`                                    | `estimates/estimate-list.tsx` + `estimate-list-item.tsx` + `estimate-disable-switch.tsx`; store `store/estimates/project-estimate.store.ts` + `estimate-point.ts`             |
-| Automations | `.../automations`                                  | `page.tsx` + `automation/auto-close-automation.tsx` + `auto-archive-automation.tsx` (auto-close / auto-archive)                                                               |
+| Surface           | Route                                                      |
+| ----------------- | ---------------------------------------------------------- |
+| Profile           | `/settings/profile/:profileTabId`                          |
+| Legacy API tokens | `/:workspaceSlug/settings/api-tokens` → profile API tokens |
 
-Redirect legacy: `:workspaceSlug/projects/:projectId/settings/*` → path baru (`core.ts:376`).
+## God-mode
 
-### Feature flags (persimpangan semua feature docs)
+- Instance admin berjalan di `apps/admin` pada `/god-mode/`.
+- Mengelola workspace, user, auth provider, email, image, dan AI.
+- Perubahan instance-level tidak boleh dilakukan dari web workspace biasa.
 
-`features-list.tsx:30-75` adalah sumber tunggal flag yang di-gate di tiap halaman: `cycle_view` (cycles), `module_view` (modules), `issue_views_view` (views), `page_view` (pages), `inbox_view` (intake, key `intake`). Pola gate: empty-state + link ke features.
+## Feature flags
 
-### Profile settings (`settings/profile/:profileTabId`, `core.ts:360-362`)
+- Workspace settings menyimpan flag fitur.
+- Sidebar dan route tertentu dapat disembunyikan berdasarkan flag.
+- Flag tidak menggantikan permission; keduanya harus dicek.
 
-- Layout: `layout.tsx:13-28` (`AuthenticationWrapper`); page `:32-56` validasi `PROFILE_SETTINGS_TABS`, split `ProfileSettingsSidebarRoot` + `ProfileSettingsContent`.
-- Tab: `packages/constants/src/settings/profile.ts:32-52` — `general`, `security`, `preferences`, `notifications`, `api-tokens`; grup `:60-67` (YOUR_PROFILE vs DEVELOPER).
-- API tokens: `settings/profile/content/pages/api-tokens.tsx:25-29` (list via `APITokenService.list()` + `CreateApiTokenModal`); redirect lama `:workspaceSlug/settings/api-tokens` → `/settings/profile/api-tokens` (`core.ts:381-383`).
-- Notifications: `.../notifications/email-notification-form.tsx` (lihat [`inbox.md`](./inbox.md)).
+## API touchpoints
 
-### Admin god-mode (`apps/admin`, port 3001)
-
-- Routes: `apps/admin/app/routes.ts:11-24` — `general`, `workspace`, `workspace/create`, `email`, `authentication{,/github,/gitlab,/google,/gitea}`, `ai`, `image`; catch-all `*:26` → `components/404.tsx`.
-- Level instance (bukan workspace): kelola workspace, email/instance, auth provider, AI/image config.
-
-### Working / Stub / Missing
-
-- Working: semua sub-halaman di atas + guards admin + redirects legacy.
-- Stub: route `integrations` mati (tidak terdaftar).
-- Missing (ITSM fork): tidak ada — tidak ada settings ITSM (SLA policies, on-call, CMDB) di kode; ide diparkir di [`_backlog.md`](./_backlog.md).
-
-### Model Django + Store FE (peta)
-
-> Cutover `rust-cutover-v1`: tabel/skema tidak berubah — dilayani Rust Axum (`apps/api-rs/crates/api/src/routes/`), kontrak 1:1 (shadow + parity gate). Path Django di bawah = referensi skema.
-
-- Model: `workspace.py:198` (`WorkspaceMember`), `project.py:210` (`ProjectMember`), `state.py:79` (`State`), `label.py:11` (`Label`), `estimate.py:18` (`Estimate`), `webhook.py:34` (`Webhook`).
-- Store FE: `store/member/workspace/workspace-member.store.ts`, `member/project/base-project-member.store.ts`, `state.store.ts`, `label.store.ts`, `estimates/project-estimate.store.ts`, `workspace/webhook.store.ts`, `user/settings.store.ts` + `profile.store.ts`.
-
-## Primary View
-
-- Layout: settings shell (sidebar sub-halaman + content form/list) per level.
-- Data visible: form general, tabel members/labels/states/estimates/webhooks/tokens, toggles features, aturan automations.
-- Interaction: edit inline / modal CRUD, toggle, guard `NotAuthorizedView` bila bukan admin.
-- Ref: [`_shared/list.md`](./_shared/list.md).
-
-## Actions
-
-| Action            | Trigger            | Permission      | State required |
-| ----------------- | ------------------ | --------------- | -------------- |
-| Edit general      | Form               | Admin           | —              |
-| Invite member     | Members list       | Admin           | —              |
-| Ubah role         | Member item        | Admin           | —              |
-| Toggle feature    | Features list      | Project admin+  | —              |
-| CRUD states       | State list + modal | Project admin+  | —              |
-| CRUD labels       | Label list inline  | Project admin+  | —              |
-| Config estimates  | Estimate list      | Project admin+  | —              |
-| Toggle automation | Auto-close/archive | Project admin+  | —              |
-| CRUD webhooks     | Webhooks + modal   | Workspace admin | —              |
-| Export data       | Export form        | Workspace admin | —              |
-| Create API token  | Modal              | Self            | —              |
-| Email prefs       | Notifications form | Self            | —              |
-
-## Filters / Sort / Search
-
-- Filters: per tabel (members by role, labels/states by group).
-- Sort: manual (labels drag-n-drop) + default.
-- Search: members search; global via Cmd+K (lihat `_shared/global-search.md` saat ditulis).
-
-## Detail View
-
-- Webhook `:webhookId` punya detail; sisanya list/form tanpa detail page.
-- Ref: [`_shared/detail-page.md`](./_shared/detail-page.md).
+- `workspace_settings.rs` — settings workspace.
+- `instance_admin.rs` — instance admin.
+- `apps/web/core/components/settings` — UI settings.
+- Inventory: [`../_generated/api-routes.md`](../_generated/api-routes.md).
 
 ## Permissions
 
-| Role            | Workspace settings | Project settings | Profile (self) | Admin app |
-| --------------- | ------------------ | ---------------- | -------------- | --------- |
-| Member          | ❌                 | ❌               | ✅             | ❌        |
-| Project admin   | ❌                 | ✅ (own project) | ✅             | ❌        |
-| Workspace admin | ✅                 | ✅               | ✅             | ❌        |
-| Instance admin  | ✅                 | ✅               | ✅             | ✅        |
+| Role              | Workspace settings | Application settings | Instance settings |
+| ----------------- | ------------------ | -------------------- | ----------------- |
+| Member            | Read terbatas      | Read terbatas        | Tidak             |
+| Application admin | Tidak              | Ya                   | Tidak             |
+| Workspace admin   | Ya                 | Ya                   | Tidak             |
+| Instance admin    | Ya                 | Ya                   | Ya                |
 
-Billing + beberapa aksi workspace guard `EUserPermissions.ADMIN` eksplisit.
+## Edge cases
 
-## Empty / Loading / Error
+- Menghapus member harus mempertahankan audit dan ticket ownership.
+- Mengubah work item type harus mempertimbangkan ticket yang sudah ada.
+- Metric source yang dihapus tidak boleh menghapus metrik historis.
+- Feature flag yang dimatikan tidak boleh membuat route inaccessible tanpa
+  pesan.
 
-- Empty: list kosong → message + CTA (invite/label/state pertama).
-- Loading: skeleton per section.
-- Error/unauthorized: `NotAuthorizedView` + banner + retry.
+## In-app guide
 
----
+`/:workspaceSlug/docs/personal-settings` dan
+`/:workspaceSlug/docs/project-settings`.
 
 ## Changelog
 
-| Date       | Change                                                                                |
-| ---------- | ------------------------------------------------------------------------------------- |
-| 2026-09-03 | init — snapshot actual dari `core.ts:255-363`, `features-list.tsx`, `routes.ts` admin |
+| Tanggal    | Perubahan                                                                       |
+| ---------- | ------------------------------------------------------------------------------- |
+| 2026-10-27 | rewrite — workspace/application/profile/god-mode, feature flags, metric sources |
