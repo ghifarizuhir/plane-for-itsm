@@ -24,7 +24,7 @@ menyediakan service catalog dan agregat lintas application.
 | Surface               | Route                                          |
 | --------------------- | ---------------------------------------------- |
 | Application list      | `/:workspaceSlug/projects`                     |
-| Application detail    | `/:workspaceSlug/projects/:projectId`          |
+| Application workspace | `/:workspaceSlug/projects/:projectId/*`        |
 | Tickets               | `.../projects/:projectId/issues`               |
 | Settings              | `/:workspaceSlug/settings/projects/:projectId` |
 | Archived applications | `/:workspaceSlug/projects/archives`            |
