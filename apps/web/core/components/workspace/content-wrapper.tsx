@@ -13,6 +13,7 @@ import { useAppRailVisibility } from "@/lib/app-rail";
 import { TopNavigationRoot } from "@/components/navigation/top-navigation-root";
 import { AiAssistantSidebar } from "@/components/ai/assistant-sidebar/root";
 import { useMobileViewport } from "@/hooks/use-mobile-viewport";
+import { useWorkspacePaths } from "@/hooks/use-workspace-paths";
 
 export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper({
   children,
@@ -23,6 +24,7 @@ export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper
   const { shouldRenderAppRail } = useAppRailVisibility();
   // hooks
   const isMobileViewport = useMobileViewport();
+  const { isGalileoPath } = useWorkspacePaths();
   // derived values
   const showAppRail = shouldRenderAppRail && !isMobileViewport;
 
@@ -43,7 +45,7 @@ export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper
           {children}
         </div>
         {/* AI assistant rail: flex sibling that pushes main content instead of overlaying it */}
-        <AiAssistantSidebar />
+        {!isGalileoPath && <AiAssistantSidebar />}
       </div>
     </div>
   );

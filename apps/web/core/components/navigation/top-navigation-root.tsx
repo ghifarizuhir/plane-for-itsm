@@ -23,6 +23,8 @@ import { DocumentationOutline, InboxOutline, SearchOutline } from "@makeplane/pr
 import { useTranslation } from "@plane/i18n";
 import useSWR from "swr";
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
+import { useWorkspacePaths } from "@/hooks/use-workspace-paths";
+import { WorkspaceModeMenu } from "./workspace-mode-menu";
 
 export const TopNavigationRoot = observer(function TopNavigationRoot() {
   // router
@@ -35,6 +37,7 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
   const { config } = useInstance();
   const { togglePowerKModal } = usePowerK();
   const { t } = useTranslation();
+  const { isGalileoPath } = useWorkspacePaths();
 
   const showLabel = preferences.displayMode === "icon_with_label";
 
@@ -74,7 +77,8 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
           aria-label="Search"
           onClick={() => togglePowerKModal(true)}
         />
-        {config?.has_llm_configured && <AiAssistantSidebarToggle />}
+        <WorkspaceModeMenu />
+        {config?.has_llm_configured && !isGalileoPath && <AiAssistantSidebarToggle />}
         <Tooltip label="Inbox" side="bottom">
           <AppSidebarItem
             variant="link"
