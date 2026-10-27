@@ -8,3 +8,5 @@ node_modules/
 out/
 pnpm-lock.yaml
 storybook-static/
+
+docs/_generated/
