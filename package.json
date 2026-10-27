@@ -19,6 +19,10 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "docs:inventory": "node scripts/docs-inventory.mjs",
+    "docs:verify": "node scripts/docs-verify.mjs",
+    "docs:check": "node scripts/docs-check.mjs",
+    "docs:test": "node --test scripts/docs-*.test.mjs",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest"
   },
