@@ -81,6 +81,7 @@ const makeServices = (overrides: Partial<Record<string, any>> = {}) => ({
       storedMessage("srv-1", "user", "old question"),
       storedMessage("srv-2", "assistant", "old answer"),
     ]),
+    retrieve: vi.fn(async (_slug: string, id: string) => conversation(id, "classic")),
     update: vi.fn(async (_slug: string, id: string, title: string) => conversation(id, "agent", { title })),
     remove: vi.fn(async () => undefined),
     updateMessageMetadata: vi.fn(async () => storedMessage("srv-assistant", "assistant", "ok")),
@@ -2495,5 +2496,120 @@ describe("incident flow", () => {
     await store.sendMessage("/incident OPS-9");
 
     expect(store.activeFlow).toEqual({ id: "incident", ref: "OPS-9" });
+  });
+});
+
+describe("galileo chat", () => {
+  it("sendGalileoMessage uses the classic endpoint without changing the selected mode", async () => {
+    const services = makeServices({
+      ai: {
+        createGptTask: vi.fn(async (_slug: string, data: any) => ({
+          ...chatResponse(data.conversation_id, data.prompt, "classic ok"),
+          conversation: conversation("c-galileo", "classic", { title: data.prompt }),
+        })),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.setMode("agent");
+    await flush();
+    store.newChat();
+
+    await store.sendGalileoMessage("hello galileo");
+
+    expect(services.ai.createGptTask).toHaveBeenCalledTimes(1);
+    expect(services.ai.createAgentTask).not.toHaveBeenCalled();
+    expect(services.conversations.create).toHaveBeenCalledWith("acme", "classic");
+    expect(store.mode).toBe("agent");
+    expect(store.messages.at(-2)?.content).toBe("hello galileo");
+    expect(store.messages.at(-1)?.content).toBe("classic ok");
+  });
+
+  it("sendGalileoMessage does not switch to agent for incident commands", async () => {
+    const services = makeServices();
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    store.newChat();
+
+    await store.sendGalileoMessage("/incident OPS-123");
+
+    expect(services.ai.createAgentTask).not.toHaveBeenCalled();
+    expect(services.ai.createGptTask).toHaveBeenCalledTimes(1);
+    expect(store.messages.at(-2)?.content).toBe("/incident OPS-123");
+  });
+
+  it("openConversationById retrieves conversations outside the list", async () => {
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => []),
+        retrieve: vi.fn(async () => conversation("c-deep", "classic")),
+        listMessages: vi.fn(async () => [storedMessage("m1", "user", "deep")]),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await expect(store.openConversationById("c-deep")).resolves.toBe("opened");
+    expect(services.conversations.retrieve).toHaveBeenCalledWith("acme", "c-deep");
+    expect(store.activeConversationId).toBe("c-deep");
+    expect(store.messages.map((message) => message.content)).toEqual(["deep"]);
+  });
+
+  it("openConversationById treats agent conversations as not found", async () => {
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => [conversation("c-agent", "agent")]),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+
+    await expect(store.openConversationById("c-agent")).resolves.toBe("not_found");
+  });
+
+  it("openConversationById maps 404 to not found and other failures to error", async () => {
+    const notFound = makeServices({
+      conversations: {
+        list: vi.fn(async () => []),
+        retrieve: vi.fn(async () => {
+          throw { status: 404 };
+        }),
+      },
+    });
+    const notFoundStore = makeStore(notFound);
+    notFoundStore.setWorkspace("acme");
+    await flush();
+    await expect(notFoundStore.openConversationById("missing")).resolves.toBe("not_found");
+
+    const failed = makeServices({
+      conversations: {
+        list: vi.fn(async () => []),
+        retrieve: vi.fn(async () => {
+          throw { status: 500 };
+        }),
+      },
+    });
+    const failedStore = makeStore(failed);
+    failedStore.setWorkspace("acme");
+    await flush();
+    await expect(failedStore.openConversationById("broken")).resolves.toBe("error");
+  });
+
+  it("records conversation list failures", async () => {
+    const services = makeServices({
+      conversations: {
+        list: vi.fn(async () => {
+          throw { status: 500 };
+        }),
+      },
+    });
+    const store = makeStore(services);
+    store.setWorkspace("acme");
+    await flush();
+    expect(store.conversationsError).toBe(true);
   });
 });

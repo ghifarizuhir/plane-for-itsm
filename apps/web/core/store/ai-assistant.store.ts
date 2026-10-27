@@ -34,7 +34,7 @@ type TAiService = Pick<AIService, "createGptTask" | "createAgentTask">;
 type TAiSchedulesService = Pick<AiSchedulesService, "create" | "update">;
 type TAiConversationsService = Pick<
   AiConversationsService,
-  "list" | "create" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
+  "list" | "create" | "retrieve" | "listMessages" | "update" | "remove" | "updateMessageMetadata"
 >;
 type TIssueService = Pick<IssueService, "createIssue" | "patchIssue" | "addIssueToCycle" | "removeIssueFromCycle">;
 type TCommentsService = Pick<IssueCommentService, "createIssueComment">;
@@ -62,6 +62,7 @@ export interface IAIAssistantStore {
   conversations: TAiConversation[];
   activeConversationId: string | undefined;
   conversationsLoading: boolean;
+  conversationsError: boolean;
   historyOpen: boolean;
   activeFlow: TAiFlow | undefined;
   flowHint: TFlowFeedbackKey | undefined;
@@ -72,11 +73,13 @@ export interface IAIAssistantStore {
   setActiveContext: (context: TAiAssistantContext | undefined) => void;
   clearFlowFeedback: () => void;
   loadConversations: () => Promise<void>;
-  openConversation: (conversationId: string) => Promise<void>;
+  openConversation: (conversationId: string) => Promise<"opened" | "not_found" | "error">;
   newChat: () => void;
   renameConversation: (conversationId: string, title: string) => Promise<boolean>;
   deleteConversation: (conversationId: string) => Promise<boolean>;
   sendMessage: (question: string) => Promise<void>;
+  sendGalileoMessage: (question: string) => Promise<void>;
+  openConversationById: (conversationId: string) => Promise<"opened" | "not_found" | "error">;
   retryLast: () => Promise<void>;
   confirmScheduleProposal: (messageId: string, proposal?: TAiScheduleProposal) => Promise<void>;
   resolveScheduleProposal: (messageId: string, decision: "cancelled") => void;
@@ -133,6 +136,7 @@ export class AIAssistantStore implements IAIAssistantStore {
   conversations: TAiConversation[] = [];
   activeConversationId: string | undefined = undefined;
   conversationsLoading = false;
+  conversationsError = false;
   historyOpen = false;
   activeFlow: TAiFlow | undefined = undefined;
   flowHint: TFlowFeedbackKey | undefined = undefined;
@@ -167,6 +171,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       conversations: observable.deep,
       activeConversationId: observable.ref,
       conversationsLoading: observable.ref,
+      conversationsError: observable.ref,
       historyOpen: observable.ref,
       activeFlow: observable.ref,
       flowHint: observable.ref,
@@ -182,6 +187,8 @@ export class AIAssistantStore implements IAIAssistantStore {
       renameConversation: action,
       deleteConversation: action,
       sendMessage: action,
+      sendGalileoMessage: action,
+      openConversationById: action,
       retryLast: action,
       confirmScheduleProposal: action,
       resolveScheduleProposal: action,
@@ -212,6 +219,7 @@ export class AIAssistantStore implements IAIAssistantStore {
       this.conversations = [];
       this.activeConversationId = undefined;
       this.messages = [];
+      this.conversationsError = false;
       this.activeFlow = undefined;
       this.flowHint = undefined;
       this.flowNotice = undefined;
@@ -231,6 +239,7 @@ export class AIAssistantStore implements IAIAssistantStore {
     const version = this.listVersion;
     const interaction = this.interactionSeq;
     this.conversationsLoading = true;
+    this.conversationsError = false;
     try {
       const conversations = await this.conversationsService.list(slug);
       if (seq !== this.listSeq) return;
@@ -245,7 +254,11 @@ export class AIAssistantStore implements IAIAssistantStore {
         await this.openLastForMode();
       }
     } catch {
-      // fetch failures leave the previous list in place — loading is reset below
+      if (seq === this.listSeq) {
+        runInAction(() => {
+          this.conversationsError = true;
+        });
+      }
     } finally {
       if (seq === this.listSeq) {
         runInAction(() => {
@@ -265,10 +278,10 @@ export class AIAssistantStore implements IAIAssistantStore {
     void this.openLastForMode();
   };
 
-  openConversation = async (conversationId: string) => {
+  openConversation = async (conversationId: string): Promise<"opened" | "not_found" | "error"> => {
     const slug = this.workspaceSlug;
     const conversation = this.conversations.find((candidate) => candidate.id === conversationId);
-    if (!slug || !conversation) return;
+    if (!slug || !conversation) return "not_found";
     this.interactionSeq += 1;
     const seq = ++this.requestSeq;
     this.isGenerating = false;
@@ -280,14 +293,15 @@ export class AIAssistantStore implements IAIAssistantStore {
     this.persistMode();
     try {
       const messages = await this.conversationsService.listMessages(slug, conversationId);
-      if (seq !== this.requestSeq) return;
+      if (seq !== this.requestSeq) return "error";
       runInAction(() => {
         this.messages = messages.map(toAiMessage);
         this.activeFlow = activeFlowFromMessages(this.messages);
       });
       this.persistActiveId();
+      return "opened";
     } catch (error: any) {
-      if (seq !== this.requestSeq) return;
+      if (seq !== this.requestSeq) return "error";
       if (error?.status === 404) {
         this.touchList();
         runInAction(() => {
@@ -297,13 +311,14 @@ export class AIAssistantStore implements IAIAssistantStore {
           this.activeFlow = undefined;
         });
         this.clearActiveId();
-        return;
+        return "not_found";
       }
       runInAction(() => {
         this.activeConversationId = undefined;
         this.messages = [];
         this.activeFlow = undefined;
       });
+      return "error";
     }
   };
 
@@ -351,6 +366,66 @@ export class AIAssistantStore implements IAIAssistantStore {
     });
     if (this.activeConversationId === conversationId) this.newChat();
     return true;
+  };
+
+  sendGalileoMessage = async (question: string): Promise<void> => {
+    const trimmed = question.trim();
+    const slug = this.workspaceSlug;
+    if (!trimmed || this.isGenerating || this.turnGuard || !slug) return;
+
+    this.turnGuard = true;
+    const turn = ++this.turnSeq;
+    runInAction(() => {
+      this.isGenerating = true;
+    });
+
+    try {
+      this.interactionSeq += 1;
+      const conversationId = await this.ensureConversation("classic");
+      if (!conversationId) return;
+
+      const tempId = uuidv4();
+      runInAction(() => {
+        this.messages.push({ id: tempId, role: "user", content: trimmed });
+      });
+      await this.request(trimmed, slug, conversationId, tempId, "classic");
+    } finally {
+      if (turn === this.turnSeq) {
+        this.turnGuard = false;
+        runInAction(() => {
+          this.isGenerating = false;
+        });
+      }
+    }
+  };
+
+  openConversationById = async (conversationId: string): Promise<"opened" | "not_found" | "error"> => {
+    const slug = this.workspaceSlug;
+    if (!slug) return "error";
+
+    const known = this.conversations.find((candidate) => candidate.id === conversationId);
+    if (known) {
+      if (known.mode !== "classic") return "not_found";
+      return this.openConversation(conversationId);
+    }
+
+    try {
+      const conversation = await this.conversationsService.retrieve(slug, conversationId);
+      if (slug !== this.workspaceSlug) return "error";
+      if (conversation.mode !== "classic") return "not_found";
+      runInAction(() => {
+        this.touchList();
+        this.conversations = [
+          conversation,
+          ...this.conversations.filter((candidate) => candidate.id !== conversation.id),
+        ];
+      });
+    } catch (error: any) {
+      if (slug !== this.workspaceSlug) return "error";
+      return error?.status === 404 ? "not_found" : "error";
+    }
+
+    return this.openConversation(conversationId);
   };
 
   setHistoryOpen = (open: boolean) => {
@@ -730,23 +805,27 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   };
 
-  private ensureConversation = async (): Promise<string | undefined> => {
+  private ensureConversation = async (mode: TAiAssistantMode = this.mode): Promise<string | undefined> => {
     const slug = this.workspaceSlug;
     if (!slug) return undefined;
     const active = this.conversations.find((candidate) => candidate.id === this.activeConversationId);
-    if (active && active.mode === this.mode) return active.id;
+    if (active && active.mode === mode) return active.id;
     if (this.ensurePromise) return this.ensurePromise;
     const interaction = this.interactionSeq;
-    const pending = this.createConversation(slug, interaction).finally(() => {
+    const pending = this.createConversation(slug, interaction, mode).finally(() => {
       if (this.ensurePromise === pending) this.ensurePromise = undefined;
     });
     this.ensurePromise = pending;
     return pending;
   };
 
-  private createConversation = async (slug: string, interaction: number): Promise<string | undefined> => {
+  private createConversation = async (
+    slug: string,
+    interaction: number,
+    mode: TAiAssistantMode = this.mode
+  ): Promise<string | undefined> => {
     try {
-      const created = await this.conversationsService.create(slug, this.mode);
+      const created = await this.conversationsService.create(slug, mode);
       if (slug !== this.workspaceSlug) return undefined;
       if (interaction !== this.interactionSeq) {
         runInAction(() => {
@@ -835,8 +914,14 @@ export class AIAssistantStore implements IAIAssistantStore {
     }
   };
 
-  private async request(question: string, slug: string, conversationId: string, optimisticId: string) {
-    const mode = this.mode;
+  private async request(
+    question: string,
+    slug: string,
+    conversationId: string,
+    optimisticId: string,
+    modeOverride?: TAiAssistantMode
+  ) {
+    const mode = modeOverride ?? this.mode;
     const seq = ++this.requestSeq;
     runInAction(() => {
       this.isGenerating = true;
