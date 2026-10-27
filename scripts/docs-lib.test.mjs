@@ -77,3 +77,69 @@ test("banned claims are reported with the document path", () => {
     "docs/x.md: banned claim `6 apps`",
   ]);
 });
+
+import { buildInventories, parseApiRoutes, parseSchemaMigrations, parseWebRoutes } from "./docs-lib.mjs";
+
+test("parseWebRoutes distinguishes canonical and redirect routes", () => {
+  const source = [
+    'route(":workspaceSlug/services", "./(all)/[workspaceSlug]/(projects)/services/page.tsx");',
+    'route(":workspaceSlug/projects/:projectId/services", "routes/redirects/core/project-services.tsx");',
+  ].join("\n");
+
+  assert.deepEqual(parseWebRoutes(source), [
+    {
+      path: "/:workspaceSlug/services",
+      file: "./(all)/[workspaceSlug]/(projects)/services/page.tsx",
+      kind: "canonical",
+    },
+    {
+      path: "/:workspaceSlug/projects/:projectId/services",
+      file: "routes/redirects/core/project-services.tsx",
+      kind: "redirect",
+    },
+  ]);
+});
+
+test("parseApiRoutes extracts methods and handlers", () => {
+  const source = [
+    '.route("/health", get(routes::health::health))',
+    '.route("/api/workspaces/:slug/services/", get(routes::service::list).post(routes::service::create))',
+  ].join("\n");
+
+  assert.deepEqual(parseApiRoutes(source), [
+    {
+      path: "/health",
+      methods: [{ method: "GET", handler: "routes::health::health" }],
+      file: "apps/api-rs/crates/api/src/main.rs",
+    },
+    {
+      path: "/api/workspaces/:slug/services/",
+      methods: [
+        { method: "GET", handler: "routes::service::list" },
+        { method: "POST", handler: "routes::service::create" },
+      ],
+      file: "apps/api-rs/crates/api/src/main.rs",
+    },
+  ]);
+});
+
+test("parseSchemaMigrations tracks create, alter, and drop", () => {
+  const tables = parseSchemaMigrations([
+    { name: "0001_initial.sql", sql: "CREATE TABLE workspace (id uuid);\nALTER TABLE workspace ADD COLUMN slug text;" },
+    { name: "0002_more.sql", sql: "CREATE TABLE IF NOT EXISTS service (id uuid);\nDROP TABLE old_thing;" },
+  ]);
+
+  assert.deepEqual(tables, [
+    { table: "old_thing", created: null, lastChanged: "0002_more.sql", dropped: true },
+    { table: "service", created: "0002_more.sql", lastChanged: "0002_more.sql", dropped: false },
+    { table: "workspace", created: "0001_initial.sql", lastChanged: "0001_initial.sql", dropped: false },
+  ]);
+});
+
+test("buildInventories reads the real repository", () => {
+  const inventories = buildInventories(process.cwd());
+  assert.match(inventories["docs/_generated/routes.md"], /\/:workspaceSlug\/services/);
+  assert.match(inventories["docs/_generated/api-routes.md"], /\/api\/workspaces\/:slug\/services\//);
+  assert.match(inventories["docs/_generated/schema.md"], /workspace_services/);
+  assert.match(inventories["docs/_generated/schema.md"], /war_rooms/);
+});
