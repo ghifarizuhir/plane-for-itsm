@@ -5,8 +5,9 @@
  */
 
 "use client";
+
 import { observer } from "mobx-react";
-import { useParams, usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import { SettingsOutline, TickOutline } from "@makeplane/propel/icons";
 import { ContextMenu } from "@plane/propel/context-menu";
 import { cn } from "@plane/utils";
@@ -14,19 +15,17 @@ import { cn } from "@plane/utils";
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
 import { useAppRailPreferences } from "@/hooks/use-navigation-preferences";
-import { useAppRailVisibility } from "@/lib/app-rail/context";
+import { useWorkspacePaths } from "@/hooks/use-workspace-paths";
 // local imports
 import { AppSidebarItemsRoot } from "./items-root";
 
-export const AppRailRoot = observer(() => {
+export const AppRailRoot = observer(function AppRailRoot() {
   // router
-  const { workspaceSlug, projectId } = useParams();
-  const pathname = usePathname();
+  const { workspaceSlug } = useParams();
   // preferences
   const { preferences, updateDisplayMode } = useAppRailPreferences();
-  const { isCollapsed, toggleAppRail } = useAppRailVisibility();
+  const { isSettingsPath } = useWorkspacePaths();
   // derived values
-  const isWorkspaceSettingsPath = pathname.includes(`/${workspaceSlug}/settings`) && !projectId;
   const showLabel = preferences.displayMode === "icon_with_label";
   const railWidth = showLabel ? "3.75rem" : "3rem";
 
@@ -40,7 +39,7 @@ export const AppRailRoot = observer(() => {
     >
       <ContextMenu>
         <ContextMenu.Trigger className="h-full">
-          <div className="flex h-full flex-col justify-between gap-4 px-2 py-3">
+          <div className="flex h-full flex-col gap-4 px-2 py-3">
             <div
               className={cn("flex flex-col", {
                 "gap-4": showLabel,
@@ -54,7 +53,7 @@ export const AppRailRoot = observer(() => {
                   label: "Settings",
                   icon: <SettingsOutline className="size-5" />,
                   href: `/${workspaceSlug}/settings`,
-                  isActive: isWorkspaceSettingsPath,
+                  isActive: isSettingsPath,
                   showLabel,
                 }}
               />
@@ -74,10 +73,6 @@ export const AppRailRoot = observer(() => {
                 <span className="text-11">Icon with name</span>
                 {preferences.displayMode === "icon_with_label" && <TickOutline className="size-3.5" />}
               </div>
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.Item onClick={toggleAppRail}>
-              <span className="text-11">{isCollapsed ? "Dock App Rail" : "Undock App Rail"}</span>
             </ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Portal>

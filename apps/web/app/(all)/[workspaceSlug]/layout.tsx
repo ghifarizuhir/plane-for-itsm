@@ -21,7 +21,7 @@ export default function WorkspaceLayout(props: Route.ComponentProps) {
   return (
     <AuthenticationWrapper>
       <WorkspaceAuthWrapper>
-        <AppRailVisibilityProvider>
+        <AppRailVisibilityProvider isEnabled>
           <GlobalModals workspaceSlug={workspaceSlug} />
           {isFullscreen ? (
             <Outlet />

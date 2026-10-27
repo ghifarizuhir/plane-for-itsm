@@ -38,6 +38,7 @@ interface AppSidebarItemIconProps {
 
 interface AppSidebarLinkItemProps {
   href?: string;
+  isActive?: boolean;
   children: React.ReactNode;
   className?: string;
 }
@@ -97,11 +98,11 @@ function AppSidebarItemIcon({ icon, highlight }: AppSidebarItemIconProps) {
   );
 }
 
-function AppSidebarLinkItem({ href, children, className }: AppSidebarLinkItemProps) {
+function AppSidebarLinkItem({ href, isActive, children, className }: AppSidebarLinkItemProps) {
   if (!href) return null;
 
   return (
-    <Link href={href} className={cn(styles.base, className)}>
+    <Link href={href} aria-current={isActive ? "page" : undefined} className={cn(styles.base, className)}>
       {children}
     </Link>
   );
@@ -139,7 +140,11 @@ function AppSidebarItem({ variant = "link", item }: AppSidebarItemProps) {
   );
 
   if (variant === "link") {
-    return <AppSidebarLinkItem href={href}>{commonItems}</AppSidebarLinkItem>;
+    return (
+      <AppSidebarLinkItem href={href} isActive={isActive}>
+        {commonItems}
+      </AppSidebarLinkItem>
+    );
   }
 
   return (
