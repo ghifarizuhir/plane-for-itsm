@@ -1,97 +1,80 @@
-# Shell — AppShell + Sidebar + Topbar
-
-Status: **Draft.**
-
-File: `apps/web/core/layouts/*` + `apps/web/app/layout.tsx` + `packages/ui/src/*`.
-
-Adaptasi dari `terra/docs/ui/sidebar.md:1` — Terra punya 180px↔44px collapsible sidebar dengan `border-r /70` structural seam + ghost rows; Plane pakai pola serupa di `core/layouts` (cek `apps/web/core/layouts` actual vs doc ini saat divergen, doc ini menang untuk runtime).
-
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:123fefe4cf7bde00daa3522a83dc4ebf6f677481ba5b1798b8bbe6515083ee27
+source_paths:
+  - apps/web/core/components/navigation
+  - apps/web/core/components/workspace/sidebar
+  - apps/web/core/components/sidebar
 ---
 
-## Layout
+# Shell
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ Topbar (workspace + project switcher + search Cmd+K)         │  sticky h-9 border-b /70, bg-theme-bg/85 backdrop-blur
-├──────────┬───────────────────────────────────────────────────┤
-│ Sidebar  │ Page Content (flex-1 min-h-0 overflow-hidden)     │
-│ 180↔44px │  List two-tier / Detail EntityPageShell / Board   │
-│ border-r │                                                   │
-│ /70      │                                                   │
-└──────────┴───────────────────────────────────────────────────┘
-```
+Status: **Current.**
 
-- **Topbar:** workspace switcher + project switcher + Cmd+K + user menu. Height `h-9` (36px) fixed — sama contract `terra/ui/design-tokens.md:271` Tier-1 strip.
-- **Sidebar:** groups — Pulse/Home → Work Items/Cycles/Modules/Views/Pages/Analytics → ITSM (Incidents/Service Map bila fork) → Settings (workspace admin) → god-mode link (instance admin).
-- **Page:** `flex h-full min-h-0 flex-col` — tanpa `max-w` wrapper; header self-contained `px-6 sm:px-8`.
+## Structure
 
----
-
-## Sidebar Spec
-
-### Container
-
-```
-<aside class="self-stretch shrink-0 flex flex-col border-r border-theme-border/70
-             transition-all duration-300 ease-in-out overflow-hidden
-             w-[180px] | w-[44px] | w-0 opacity-0">
+```text
+AppShell
+├── App rail (desktop)
+├── Workspace sidebar
+├── Top navigation
+└── Page content
 ```
 
-- `w-[180px]` expanded, `w-[44px]` collapsed (icons only), `w-0` hidden.
-- `border-r border-theme-border/70` structural seam — tidak ada saat hidden.
-- `self-stretch` — docked bottom, flush top (gutter dihapus untuk edge-to-edge).
+Pada mobile, app rail diganti menu mode di top navigation.
 
-### Nav Item
+## App rail
 
-```
-<NavLink class="flex items-center rounded-chrome text-xs font-semibold mx-2 px-2 py-1
-                text-theme-muted hover:bg-theme-border/40 hover:text-theme-text
-                aria-[current=page]:bg-wash-4 aria-[current=page]:text-theme-text
-                aria-[current=page]:shadow-[inset_2px_0_0_0_var(--foreground)]">
-  <Icon class="size-3.5 shrink-0" strokeWidth={2.25} />
-  <span class="ml-1.5 truncate">Label</span>
-</NavLink>
-```
+| Item      | Tujuan                                          |
+| --------- | ----------------------------------------------- |
+| Work      | `/:workspaceSlug` dan surface pekerjaan         |
+| Procedure | `/:workspaceSlug/docs`                          |
+| Galileo   | `/:workspaceSlug/galileo`; hanya jika LLM aktif |
+| Settings  | `/:workspaceSlug/settings`                      |
 
-- Radius `rounded-chrome` (0px) structural — controls tetap `rounded-lg`.
-- Active: `bg-wash-4` + left inset bar `shadow-[inset_2px_0_0_0_var(--foreground)]` (monochrome, kedua theme).
-- Icon `lucide-react` — actual Plane nav; mapping ITSM (`Flame`/`Bug`/`Share2`) hanya referensi Terra, belum dipakai.
+- Rail selalu terlihat di desktop; tidak ada undock.
+- Mode aktif ditentukan dari route.
+- Settings berada di bawah divider.
+- Label dan ikon memakai i18n dan `@plane/propel`.
 
-### Groups
+## Workspace sidebar
 
-| Group       | Items                                                   | Visibility                      |
-| ----------- | ------------------------------------------------------- | ------------------------------- |
-| Workspace   | Workspace switcher (~Apps row)                          | always                          |
-| Main        | Inbox, Work Items, Cycles, Modules, Views, Pages        | always                          |
-| ITSM (fork) | (belum ada di kode — propose di `features/_backlog.md`) | fork — tambah bila ITSM enabled |
-| Admin       | Settings (workspace admin), god-mode (instance admin)   | role-gated                      |
+- Item berubah sesuai mode (Work/Procedure/Galileo).
+- Sidebar dapat di-resize dan di-collapse.
+- Feature flag workspace dapat menyembunyikan item.
+- Application list dan scope selector berada di sidebar Work.
 
----
+## Top navigation
 
-## Topbar Spec
+- Breadcrumb dan judul halaman.
+- Application scope selector untuk halaman agregat.
+- Search/command palette.
+- Aksi halaman (create, filter, view).
+- Toggle right assistant Galileo.
 
-```
-<header class="sticky top-0 z-30 flex h-9 items-center gap-2 border-b border-theme-border/70
-               bg-theme-bg/85 backdrop-blur-sm px-6 sm:px-8">
-  <Breadcrumbs /> <Filters /> <Search /> <Actions />
-</header>
-```
+## Mobile
 
-- Search expand `h-8 w-40` (icon 14px `size={14}`); view toggle 12px `size={12}`; create "+" `h-7 w-7` + icon 14px — kontrak `terra/ui/design-tokens.md:271` §7.5 ListPageHeader (pakai langsung bila ITSM list ramping ke two-tier).
+- Rail tidak ditampilkan.
+- Menu mode ada di top navigation.
+- Sidebar menjadi drawer.
+- Detail/peek menjadi sheet atau halaman penuh.
 
----
+## Accessibility
 
-## Resolved
+- Semua item rail/sidebar dapat difokuskan keyboard.
+- Escape menutup drawer/overlay.
+- Focus kembali ke trigger setelah overlay ditutup.
+- Hormati `prefers-reduced-motion`.
 
-- Sidebar 14px + `strokeWidth 2.25` adalah scale referensi untuk header actions (Terra §5.2).
-- `rounded-chrome` untuk structural, `rounded-lg` untuk controls — jangan tukar.
+## Related
 
----
-
----
+- [`design-tokens.md`](./design-tokens.md)
+- [`../design/04-design-system.md`](../design/04-design-system.md)
+- [`../design/07-routing-and-navigation.md`](../design/07-routing-and-navigation.md)
 
 ## Changelog
 
-| Date       | Change |
-| ---------- | ------ |
-| 2026-09-03 | —      |
+| Tanggal    | Perubahan                                       |
+| ---------- | ----------------------------------------------- |
+| 2026-10-27 | rewrite — app rail, mode, mobile, accessibility |

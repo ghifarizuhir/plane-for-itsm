@@ -1,67 +1,51 @@
-# UI Docs — Component Specifications
-
-Dokumen teknis untuk global shell + editor. Source of truth untuk implementasi — bukan aspirasi. Kalau bertentangan dengan `design/04-design-system.md`, **doc di sini menang** untuk actual runtime (CSS tokens, font, icon).
-
-Adaptasi dari `terra/docs/ui/README.md:1`.
-
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:30cfd4c9ab562db69dffec843b03a7e35767cb344a84f9efdcb470cf33178fe3
+source_paths:
+  - packages/ui/src
+  - packages/editor
+  - packages/tailwind-config
 ---
 
-## Reading Order
+# UI Docs
 
-### Global Shell
+Dokumentasi teknis untuk shell, token, dan editor. Fokus pada implementasi yang
+benar-benar dipakai, bukan aspirasi desain.
 
-| #   | Doc                                      | Status    | Content                                                                                                                    |
-| --- | ---------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1   | [`design-tokens.md`](./design-tokens.md) | ✅ Stable | Color tokens, opacity, radius, font, icon, motion, spacing — actual CSS (`packages/tailwind-config`, `packages/ui/styles`) |
-| 2   | [`shell.md`](./shell.md)                 | ✅ Draft  | AppShell + Sidebar + Topbar — `apps/web/core/layouts`                                                                      |
-| 3   | [`editor.md`](./editor.md)               | ✅ Draft  | TipTap editor (`packages/editor`) + Yjs collaboration (`apps/live`)                                                        |
+## Reading order
 
-### Page Patterns
+| #   | Dokumen                                  | Isi                                     | Status  |
+| --- | ---------------------------------------- | --------------------------------------- | ------- |
+| 1   | [`design-tokens.md`](./design-tokens.md) | Token warna, radius, font, icon, motion | current |
+| 2   | [`shell.md`](./shell.md)                 | App rail, sidebar, topbar, mobile       | current |
+| 3   | [`editor.md`](./editor.md)               | TipTap, Yjs, Hocuspocus                 | current |
 
-| #   | Doc | Status | Content                                                                                     |
-| --- | --- | ------ | ------------------------------------------------------------------------------------------- |
-| 4   | —   | —      | Service Map graph, DataTable patterns — lihat `features/_shared/list.md` + `detail-page.md` |
-
----
-
-## Organisasi
-
-```
-ui/
-├── README.md              ← ini
-├── design-tokens.md       ← token definitions (actual CSS, bukan aspirasi)
-├── shell.md               ← AppShell + Sidebar + Topbar
-└── editor.md              ← TipTap + Yjs editor
-```
-
-> Terra `ui/` punya `sidebar.md`, `globaltopbar.md` (removed), `incidents.md`, `services.md`, `audit/known-issues-*.md` (`terra/docs/ui/README.md:9`). Plane ramping — `shell.md` gabung sidebar+topbar; `incidents.md`/`services.md` tidak duplikasi di `ui/` (sudah di `features/`); `audit/` ditambah bila perlu tapi tidak pre-build.
-
----
+Untuk keputusan desain lintas UI, lihat
+[`../design/04-design-system.md`](../design/04-design-system.md). Untuk pola
+list/detail, lihat [`../features/_shared/`](../features/_shared/README.md).
 
 ## Conventions
 
-1. **Technical, not aspirational.** Classes, tokens, struktur DOM yang benar-benar dipakai — bukan target ideal.
-2. **Status per doc:** `✅ Stable` (sesuai codebase) / `📝 Draft`.
-3. **Cross-reference `design-tokens.md`** untuk semua token — jangan duplikasi definisi.
-4. **Actual file refs** (`apps/web/core/layouts/*`, `packages/ui/src/*`) — bukan `apps/web/src/legacy`.
+- Tulis class/token yang benar-benar dipakai di kode.
+- Jangan menduplikasi definisi token; link ke `design-tokens.md`.
+- Rujuk path komponen dan package, bukan line number.
+- Status dokumen memakai frontmatter `status: current`.
+- Jika dokumen bertentangan dengan kode, kode menang; update dokumen.
 
----
+## Boundary
 
-## Content Boundary
-
-| Jenis konten                            | Lokasi                                         |
-| --------------------------------------- | ---------------------------------------------- |
-| Token definitions (color, radius, font) | `design-tokens.md`                             |
-| Component anatomy + exact classes       | `shell.md`, `editor.md`                        |
-| Known issues                            | `audit/known-issues-<component>.md` (bila ada) |
-| Visual intent / reasoning               | `../design/04-design-system.md`                |
-
----
-
----
+| Jenis konten             | Lokasi                          |
+| ------------------------ | ------------------------------- |
+| Token dan CSS variable   | `design-tokens.md`              |
+| Shell, rail, sidebar     | `shell.md`                      |
+| Editor dan collaboration | `editor.md`                     |
+| Alasan desain lintas UI  | `../design/04-design-system.md` |
+| Pola list/detail         | `../features/_shared/`          |
 
 ## Changelog
 
-| Date       | Change    |
-| ---------- | --------- |
-| 2026-09-03 | fork init |
+| Tanggal    | Perubahan                                   |
+| ---------- | ------------------------------------------- |
+| 2026-09-03 | fork init                                   |
+| 2026-10-27 | rewrite — reading order, boundary, app rail |

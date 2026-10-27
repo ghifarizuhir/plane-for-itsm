@@ -1,8 +1,17 @@
-# Design Tokens — Plane for ITSM (Technical)
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:cea4ba23c05686205695ba8fab873f6a8376884615f1c9ce65f7f1949713ec8d
+source_paths:
+  - packages/tailwind-config
+  - packages/ui/styles
+---
 
-> Status: Source of truth untuk Shell + Editor. Adaptasi dari `terra/docs/ui/design-tokens.md:1` — Terra pakai `linear-*` legacy, Plane pakai `theme-*`/`wash-*` (sinkron dengan `design/04-design-system.md`). Stack: Tailwind 4 `@theme` + CSS vars (`packages/tailwind-config`, `packages/ui/styles`).
+# Design Tokens — Terraline
 
-> Font: `Inter` (sans, `@fontsource/inter` + `@fontsource-variable/inter` — `pnpm-workspace.yaml:18`) + `IBM Plex Mono` (`@fontsource/ibm-plex-mono:20`) / `JetBrains Mono`. Icon: `lucide-react` (`pnpm-workspace.yaml:131`) — tunggal.
+> Source of truth untuk token shell dan editor. Token memakai `theme-*`/`wash-*` dan disinkronkan dengan `design/04-design-system.md`. Stack: Tailwind 4 `@theme` + CSS vars (`packages/tailwind-config`, `packages/ui/styles`).
+
+> Font: `Inter` (sans, `@fontsource/inter` + `@fontsource-variable/inter`) + `IBM Plex Mono` (`@fontsource/ibm-plex-mono:20`) / `JetBrains Mono`. Icon: `lucide-react` — tunggal.
 
 ---
 
@@ -91,6 +100,6 @@ Sidebar width animation `transition-all duration-300 ease-in-out` — label `max
 
 ## Changelog
 
-| Date       | Change                                        |
-| ---------- | --------------------------------------------- |
-| 2026-09-03 | fork init — contek terra `design-tokens.md:1` |
+| Date       | Change                |
+| ---------- | --------------------- |
+| 2026-09-03 | fork init — fork init |

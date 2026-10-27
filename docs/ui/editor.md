@@ -1,16 +1,25 @@
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:d46af016cf55cc326f8d88f7ad426f4e7976f07f91bc271e17dccb5b17423f55
+source_paths:
+  - packages/editor
+  - apps/live
+---
+
 # Editor — TipTap + Yjs
 
-Status: **Draft.**
+Status: **Current.**
 
-File: `packages/editor` + `apps/live` (Hocuspocus). Adaptasi dari `terra/docs/ui/editor.md:1` — Terra pakai TipTap standalone; Plane pakai `packages/editor` + `apps/live` Yjs collaboration.
+File: `packages/editor` + `apps/live` (Hocuspocus). Editor memakai TipTap di `packages/editor`; collaboration memakai Yjs melalui `apps/live`.
 
 ---
 
 ## Stack
 
-- **TipTap 2** (`@tiptap/core`, `@tiptap/starter-kit`, `@tiptap/extension-mention/image/placeholder` — `pnpm-workspace.yaml:52`) — `packages/editor`.
-- **Yjs** (`yjs 13.6`, `y-prosemirror 1.3`, `y-indexeddb 9.0` — `pnpm-workspace.yaml:188`) — CRDT.
-- **Hocuspocus** (`@hocuspocus/server 2.15`, `@hocuspocus/provider 2.15`, `extension-redis/database` — `pnpm-workspace.yaml:23`) — `apps/live` (Express+ws).
+- **TipTap 2** (`@tiptap/core`, `@tiptap/starter-kit`, `@tiptap/extension-mention/image/placeholder`) — `packages/editor`.
+- **Yjs** (`yjs 13.6`, `y-prosemirror 1.3`, `y-indexeddb 9.0`) — CRDT.
+- **Hocuspocus** (`@hocuspocus/server 2.15`, `@hocuspocus/provider 2.15`, `extension-redis/database`) — `apps/live` (Express+ws).
 - `prosemirror-view 1.40`, `lowlight 3.0` (syntax), `highlight.js` — code blocks.
 
 ---
@@ -25,7 +34,7 @@ File: `packages/editor` + `apps/live` (Hocuspocus). Adaptasi dari `terra/docs/ui
 
 ### Mention (`@`)
 
-- `@` → `Mention` extension (`@tiptap/extension-mention:61`) — query `searchIssues` / `searchUsers` (actual).
+- `@` → `Mention` extension (`@tiptap/extension-mention`) — query `searchIssues` / `searchUsers` (actual).
 - Render pill: `bg-wash-2 rounded-full px-2 text-xs font-medium` (mirip Terra `.bn-entity-mention`).
 
 ### Code Block
