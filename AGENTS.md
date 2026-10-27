@@ -8,6 +8,9 @@
 - `pnpm check:lint` - OxLint across all packages
 - `pnpm check:types` - TypeScript type checking
 - `pnpm fix` - Auto-fix format and lint issues
+- `pnpm docs:check` - Validate docs frontmatter, links, source hashes, and generated inventories
+- `pnpm docs:test` - Run docs parser tests
+- `pnpm docs:verify <doc.md>` - Recompute `source_hash` after changing a documented source
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
 
@@ -55,6 +58,7 @@ Stack backend berjalan dikelola `docker-compose-local.yml` (via systemd `plane-b
 - **Error Handling**: Use try-catch with proper error types, log errors appropriately
 - **State Management**: MobX stores in `packages/shared-state`, reactive patterns
 - **Testing**: All features require unit tests, use existing test framework per package
+- **Docs drift**: After changing routes, API routes, migrations, or documented behavior, run `pnpm docs:verify <doc>` for the affected documents and `pnpm docs:check`. Never edit `docs/_generated/*` by hand; run `pnpm docs:inventory`.
 - **Components**: Build in `@plane/ui` with Storybook for isolated development
 
 ## Backend tests (Docker)

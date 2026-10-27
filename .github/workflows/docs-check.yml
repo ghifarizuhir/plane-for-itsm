@@ -1,0 +1,53 @@
+name: Docs check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "scripts/docs-*"
+      - "apps/web/app/routes/core.ts"
+      - "apps/api-rs/crates/api/src/main.rs"
+      - "apps/api-rs/migrations/**"
+      - "package.json"
+      - "AGENTS.md"
+      - ".github/workflows/docs-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "scripts/docs-*"
+      - "apps/web/app/routes/core.ts"
+      - "apps/api-rs/crates/api/src/main.rs"
+      - "apps/api-rs/migrations/**"
+      - "package.json"
+      - "AGENTS.md"
+      - ".github/workflows/docs-check.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: docs:check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Enable Corepack and pnpm
+        run: corepack enable pnpm
+
+      - name: Run docs tests
+        run: pnpm docs:test
+
+      - name: Check docs
+        run: pnpm docs:check

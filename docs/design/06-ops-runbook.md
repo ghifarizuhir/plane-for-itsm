@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:772e0a109d60beb73e118e160e0c59a86adf498544c2761e19656330ac5d5f80
+source_hash: sha256:8e6bb8636cd9f06d0d5aebd383d4ac178ab1c6363b62eeb4f2c00c425b497084
 source_paths:
   - AGENTS.md
   - docker-compose-local.yml

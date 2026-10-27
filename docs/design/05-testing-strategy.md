@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:a578c965c9eeeee7fa7a7974247a1d37b103dedfc2490842f0f890b63fbfecb8
+source_hash: sha256:b4667cc3b9e5a6324f1b808469c0319359e697563cfcef6ac7f1ba70a395f28e
 source_paths:
   - package.json
   - apps/api-rs/Cargo.toml
