@@ -1,168 +1,160 @@
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:75cf2c25b2e710740a80af0e2eedd123c9c2e49db9cf1a0e9b696123402f0ec0
+source_paths:
+  - package.json
+  - pnpm-workspace.yaml
+  - apps/web/app/routes/core.ts
+  - apps/api-rs/migrations
+---
+
 # Cross-Cutting Decisions — Cheat Sheet
 
-Single-page reference keputusan arsitektur + product yang tersebar di `design/` + `features/` + `ui/`. Dipakai sebagai **final sign-off checklist** sebelum coding dan reference cepat selama implementasi.
+Rangkuman keputusan arsitektur dan produk. Dokumen ini adalah reference cepat,
+bukan pengganti dokumen spesifik. Jika ada konflik, dokumen di `design/` dan
+inventory generated yang menang.
 
-Kalau konflik dengan doc spesifik, **doc spesifik menang** — ini rangkuman, bukan source of truth. Adaptasi dari `terra/docs/CHEAT-SHEET.md:1`.
+## Stack
 
----
+| Layer        | Pilihan                                                 |
+| ------------ | ------------------------------------------------------- |
+| Monorepo     | pnpm workspaces + Turbo                                 |
+| Bahasa       | TypeScript strict + Rust                                |
+| Web          | React 19, React Router 8, Vite, Tailwind 4, MobX 6, SWR |
+| Editor       | TipTap 2 + Yjs + Hocuspocus                             |
+| API utama    | Rust Axum + SQLx di `apps/api-rs`                       |
+| API fallback | Django 5 + DRF di `apps/api` (opt-in)                   |
+| Database     | PostgreSQL                                              |
+| Queue/job    | Redis Stream `plane:jobs`                               |
+| Realtime     | `apps/live` (Express + WebSocket + Hocuspocus)          |
+| Lint/format  | OxLint + oxfmt                                          |
+| Test         | cargo test, pytest baseline, Vitest/RTL                 |
+| Deploy lokal | Docker Compose untuk backend; web via pnpm/Turbo        |
 
-## 1. Stack & Tooling
+## Monorepo layout
 
-| Layer       | Pilihan                                                                                                                                                                                                 | Rujukan                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Monorepo    | **pnpm workspaces + Turbo** (`pnpm-workspace.yaml:1`, `turbo.json:1`) — bukan npm workspaces Terra                                                                                                      | `design/01-architecture.md`     |
-| Backend     | **Rust Axum + SQLx + Redis Stream** (`apps/api-rs`, tag `rust-cutover-v1`) — skema dari Django 123 migrasi (baseline idempoten); Django = fallback opt-in `api-legacy`                                  | `design/01-architecture.md`     |
-| Frontend    | **React 19 + React Router 8 + Vite + TS + Tailwind 4 + Radix + MobX 6 + SWR + TipTap 2** (`apps/web/package.json:67`, `pnpm-workspace.yaml:52`)                                                         | `design/01-architecture.md`     |
-| Database    | **Postgres** (prod + tests via `TEST_PG_URL` / `DATABASE_URL`) — `plane/settings/common.py:204`                                                                                                         | `design/02-data-model.md`       |
-| Test runner | **cargo test** (workspace `apps/api-rs`: unit + shadow + parity/cutover gates) + **pytest** (Django baseline via `docker-compose-test.yml`) + **Vitest 4** (web/packages) + RTL + Playwright (deferred) | `design/05-testing-strategy.md` |
-| Lint/format | **Oxlint 1.51 + oxfmt 0.35** (`pnpm-workspace.yaml:137`, `package.json:31`) — bukan ESLint+Prettier                                                                                                     | `docs/linting.md`               |
-| Editor      | **TipTap 2 + Yjs + Hocuspocus 2.15** (`pnpm-workspace.yaml:28`, `packages/editor`)                                                                                                                      | `ui/editor.md`                  |
-| Realtime    | **apps/live (Express+ws)** + Hocuspocus (`plane/settings/common.py:409` LIVE_BASE_URL) — bukan SSE ticket Terra                                                                                         | `design/01-architecture.md`     |
-| Process     | **Docker Compose** (`docker-compose.yml`, `docker-compose-local.yml`) + `deployments/`                                                                                                                  | `design/06-ops-runbook.md`      |
+Tujuh aplikasi:
 
----
+| App           | Peran                          |
+| ------------- | ------------------------------ |
+| `apps/web`    | SPA utama, port 3000           |
+| `apps/admin`  | God-mode admin, port 3001      |
+| `apps/live`   | Kolaborasi realtime, port 3100 |
+| `apps/space`  | Halaman publik Space           |
+| `apps/api-rs` | API, worker, dan beat utama    |
+| `apps/api`    | Django fallback                |
+| `apps/proxy`  | Reverse proxy                  |
 
-## 2. Monorepo Layout
+Lima belas package:
 
+| Package             | Peran                          |
+| ------------------- | ------------------------------ |
+| `ui`                | Design system dan komponen     |
+| `editor`            | Editor TipTap dan ekstensi     |
+| `types`             | Tipe TypeScript bersama        |
+| `shared-state`      | Store MobX                     |
+| `services`          | Client API                     |
+| `constants`         | Konstanta dan enum             |
+| `i18n`              | Locale dan terjemahan          |
+| `hooks`             | Hook React bersama             |
+| `utils`             | Utility bersama                |
+| `logger`            | Logging                        |
+| `decorators`        | Decorator bersama              |
+| `propel`            | Ikon dan primitives            |
+| `codemods`          | Codemod internal               |
+| `tailwind-config`   | Token dan konfigurasi Tailwind |
+| `typescript-config` | Konfigurasi TypeScript         |
+
+## Scope model
+
+```text
+Workspace
+├── Services                 (katalog lintas application)
+├── Intake                   (triage queue)
+├── Sprints / Tracks         (agregat workspace)
+├── Knowledge / Pages        (page tree workspace)
+├── Workspace Views          (queue lintas application)
+├── Settings                 (workspace configuration)
+└── Applications             (project)
+    ├── Tickets              (work items)
+    ├── Sprints / Tracks
+    ├── Pages
+    ├── Intake
+    ├── Views
+    ├── War Rooms
+    └── Archives
 ```
-plane-for-itsm/                         ← pnpm + turbo (Terra: npm workspaces)
-├── pnpm-workspace.yaml                 ← workspaces: apps/* + packages/* (exclude api/proxy)
-├── turbo.json                          ← tasks: build, dev, check:lint/types/format
-├── package.json                        ← scripts: pnpm dev/build/check/fix (AGPL-3.0)
-├── apps/
-│   ├── web/        (web — React Router SPA, port 3000)
-│   ├── admin/      (admin — god-mode, port 3001)
-│   ├── live/       (live — Express+ws collaboration, Hocuspocus)
-│   ├── space/      (space — Pages public)
-│   ├── api-rs/     (api — Rust Axum+SQLx, worker, beat, cargo test, port 8000)
-│   ├── api/        (api-legacy — Django opt-in `--profile legacy`, pytest baseline)
-│   └── proxy/      (proxy — reverse)
-├── packages/
-│   ├── ui/             (@plane/ui — Radix + Tailwind, Storybook)
-│   ├── editor/         (@plane/editor — TipTap 2 + Yjs)
-│   ├── types/          (@plane/types — shared TS types)
-│   ├── shared-state/   (@plane/shared-state — MobX stores)
-│   ├── services/       (@plane/services — API clients)
-│   ├── constants/      (@plane/constants — enums, prefixes)
-│   ├── i18n/           (@plane/i18n — locales)
-│   └── utils/hooks/logger/...
-└── docs/
-    ├── design/     (engineering cross-cutting)
-    ├── features/   (product per-halaman + _shared)
-    └── ui/         (shell + editor specs)
-```
 
-**Dependency rules** (enforce via `pnpm-workspace.yaml:1` `catalog:` + `workspace:*`):
+- Workspace adalah tenant dan batas data utama.
+- Application adalah nama user-facing untuk project.
+- Ticket dimiliki tepat satu application.
+- Service adalah entitas workspace dan dapat dihubungkan sebagai owner atau
+  consumer application.
 
-- `apps/*` ❌ import `apps/*` lain
-- `packages/*` ❌ import `apps/*`
-- `apps/*` ✅ import `packages/*` via `workspace:*`
+## Backend
 
----
+- `apps/api-rs` adalah API utama sejak cutover Rust.
+- Handler tipis, validator murni, query SQLx.
+- Pekerjaan async berjalan di worker melalui Redis Stream.
+- `apps/api` dipertahankan untuk boundary yang belum diport; jangan menambah
+  fitur baru ke Django tanpa alasan migrasi.
+- Migrasi schema ada di `apps/api-rs/migrations/`; Django models menjadi
+  referensi historis.
 
-## 3. Data Model Core
+Detail: [`design/01-architecture.md`](design/01-architecture.md).
 
-**Paradigm Terra (referensi, jangan copy):** satu tabel `entities` JSONB (`terra/docs/design/01-erd.md:12`).
+## Data
 
-**Paradigm Plane (aktual, pakai ini):** Postgres per-table — tiap entity tabel sendiri, skema didefinisikan Django di `apps/api/plane/db/models/`, **dilayani Rust Axum** (`apps/api-rs/crates/api/src/routes/`):
+- PostgreSQL per-table, bukan satu tabel `entities` JSONB.
+- Migrasi `0001` sampai `0025` mencakup baseline, services, war rooms, AI,
+  intake sources, penghapusan workflow, workspace services, taxonomy, metrics,
+  dan service kind.
+- Soft delete memakai `deleted_at`; archive dan restore tersedia per entity.
+- Tabel aktual: [`_generated/schema.md`](_generated/schema.md).
 
-| Model               | File                             | Kunci                                                                                  |
-| ------------------- | -------------------------------- | -------------------------------------------------------------------------------------- |
-| `Workspace`         | `workspace.py`                   | multi-tenant root                                                                      |
-| `Project`           | `project.py`                     | scope untuk issues/cycles/modules                                                      |
-| `State`             | `state.py`                       | workflow states per project                                                            |
-| `Issue` (Work Item) | `issue.py`                       | core work item                                                                         |
-| `Cycle`             | `cycle.py`                       | sprint, burn-down                                                                      |
-| `Module`            | `module.py`                      | sub-project grouping                                                                   |
-| `Page`              | `page.py`                        | TipTap + Yjs                                                                           |
-| `Label`             | `label.py`                       | tagging                                                                                |
-| ITSM (fork)         | `issue.py` extended / new models | Incident/Problem/Change via IssueType atau tabel baru (putuskan di `02-data-model.md`) |
+Detail: [`design/02-data-model.md`](design/02-data-model.md).
 
-**Actual:** Postgres per-table (skema Django `plane/db/models/` — `workspace`, `project`, `issue`, `issue_type`, `cycle`, `module`, `page`, `view`, `state`, `label`, ...; migrasi sqlx `apps/api-rs/migrations/`). Tidak ada `entities` JSONB, tidak ada `ConfigurationItem`. Propose ITSM di `features/_backlog.md`.
+## Auth and permissions
 
----
+- API utama memakai `X-Api-Key` dan Bearer token.
+- Session cookie dan CSRF hanya berlaku di Django fallback.
+- Hirarki: instance admin → workspace admin → application admin → member.
+- Guest dapat dibatasi per application.
+- God-mode berjalan di `apps/admin` pada `/god-mode/`.
 
-## 4. Auth & Authorization
+Detail: [`design/03-api-contract.md`](design/03-api-contract.md).
 
-| Aspek   | Plane (aktual)                                                                                                                                             | Terra (referensi — jangan pakai)                   |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Auth    | Rust `X-Api-Key` (token DB `api_tokens` → owner) + `Bearer` (`middleware/auth.rs:12`); tanpa token → 401. Session cookie/CSRF hanya di Django `api-legacy` | JWT bearer 15m + DPoP (`terra/CHEAT-SHEET.md:84`)  |
-| Social  | GitHub/GitLab/Google/Gitea (`apps/admin/app/(all)/(dashboard)/authentication/*`)                                                                           | Username+password + device-code MCP                |
-| Scoping | `workspace_id` + `project_id` FK di semua model; instance admin override via `apps/admin` god-mode (`ADMIN_BASE_PATH=/god-mode/:395`)                      | `org_id` di 30+ tabel + scope `any/dept/team/self` |
-| Roles   | Instance admin → Workspace admin → Project admin → Member (Plane hierarchy)                                                                                | `gm/dept_head/team_lead/member`                    |
+## Routing
 
-**Enforcement:** Axum extractor `AuthUser` + validator `validate_*` per route + rate-limit token-bucket 600/mnt (429); kontrak 1:1 Django dijaga shadow + parity gate. Detail: `design/03-api-contract.md`.
+Route families:
 
----
+- Workspace: `/:workspaceSlug/services`, `/work-items`, `/intake`, `/cycles`,
+  `/modules`, `/pages`, `/analytics/:tabId`, `/scheduler`, `/notifications`,
+  `/docs`, `/galileo`, `/settings`.
+- Application: `/:workspaceSlug/projects/:projectId/issues`,
+  `/cycles`, `/modules`, `/pages`, `/intake`, `/war-rooms`, `/views`,
+  `/archives`.
+- Canonical ticket URL: `/:workspaceSlug/browse/:workItem`.
 
-## 5. URL & Routing
+Legacy redirects tetap didaftarkan di `apps/web/app/routes/core.ts`. Daftar
+lengkap: [`_generated/routes.md`](_generated/routes.md). Detail arsitektur
+routing ada di `design/07-routing-and-navigation.md`.
 
-**Terra:** `/o/:orgId/<type>/<id>` (`terra/CHEAT-SHEET.md:152`) + `?q=&status=&sort=&page=` + `withAppScope`.
+## Testing and ops
 
-**Plane (aktual):** React Router 8 (`apps/web/app/routes.ts`, `apps/web/core/helper.ts`):
+- Rust: `cargo test` di `apps/api-rs`; suite scratch tertentu harus serial.
+- Django: pytest via `docker-compose-test.yml`.
+- Web/packages: Vitest + RTL.
+- Docs: `pnpm docs:test`, `pnpm docs:verify`, `pnpm docs:check`.
 
-- Workspaces: `/workspaces` / `/:workspaceSlug` / `/:workspaceSlug/projects/:projectId/issues/:issueId`
-- Admin: `/god-mode/*` (`ADMIN_BASE_PATH`)
-- Live: `/live/*` (`LIVE_BASE_PATH`)
-- Space: `/spaces/*` (`SPACE_BASE_PATH`)
-- ITSM fork: tambahkan di bawah workspace scope — `/:workspaceSlug/itsm/incidents/:id` atau `/projects/:projectId/incidents` (putuskan di `features/README.md`; jangan pakai `/o/:orgId` Terra — Plane pakai slug).
-
-Query: `?q=&state=&priority=&sort=&page=` — sama dengan Terra, tapi param names ikut Plane (`state` bukan `status`).
-
----
-
-## 6. UI Patterns
-
-| Pattern    | Plane (aktual)                                                                                            | Terra referensi                                |
-| ---------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Shell      | `apps/web/app/layout.tsx` + `apps/web/core/layouts` + `packages/ui` (`ui/shell.md`)                       | `docs/ui/sidebar.md:40` 180px↔44px sidebar     |
-| Editor     | `packages/editor` TipTap 2 + Yjs collab (`ui/editor.md`)                                                  | `ui/editor.md` TipTap mention                  |
-| Tokens     | `packages/tailwind-config` + `packages/ui/styles` (`ui/design-tokens.md`) — `theme-*` / `wash-*`          | `ui/design-tokens.md:32` `bg-theme-*`          |
-| State      | **MobX** (`packages/shared-state`, `apps/web/core/store/root.store.ts`) + SWR — bukan TanStack Query only | `design/03-architecture.md:140` TanStack Query |
-| Components | `@plane/ui` Storybook (`pnpm --filter=@plane/ui storybook` — `AGENTS.md:11`)                              | `@terra/ui` Storybook                          |
-
----
-
-## 7. Testing Targets
-
-| Layer                     | Target   | Tool                                                                                          | Rujukan                         |
-| ------------------------- | -------- | --------------------------------------------------------------------------------------------- | ------------------------------- |
-| `apps/api-rs` routes      | **100%** | `cargo test --workspace` — TDD, 0 failed gate + shadow/parity/cutover                         | `design/05-testing-strategy.md` |
-| `apps/api/plane` services | **70%**  | `pytest` via `docker-compose-test.yml` (`AGENTS.md:28`) — baseline kontrak Django (573 green) | `design/05-testing-strategy.md` |
-| `apps/api` middleware     | 80%      | pytest                                                                                        | —                               |
-| `apps/web/core/store`     | 50%      | Vitest + RTL                                                                                  | —                               |
-| `packages/ui`             | 60%      | Vitest + Storybook                                                                            | —                               |
-| Global                    | 55%      | —                                                                                             | —                               |
-
-**Commands (AGENTS.md:7):**
-
-- `pnpm check` — all (format+lint+types)
-- `pnpm turbo run check:lint --filter=@plane/ui` — per-package
-- `DATABASE_URL=postgres://plane:plane@<plane-db-ip>:5432/plane_test cargo test --workspace` — Rust (catatan: IP bridge berubah tiap recreate; dari dalam compose pakai hostname `plane-db`)
-- `docker compose -f docker-compose-test.yml up --build --abort-on-container-exit --exit-code-from api-tests` — full pytest baseline Django
-
----
-
-## 8. Ops
-
-- **Env:** `apps/api/.env` dari `.env.example` via `./setup.sh` (`AGENTS.md:28`). Rust baca `DATABASE_URL` / `REDIS_URL` / `PORT` (`crates/common/src/config.rs`).
-- **DB:** Postgres (`max_connections=100`); pool SQLx 5 koneksi; boot-migrate idempoten `apps/api-rs/migrations/`. Redis Valkey: cache + Stream `plane:jobs` (ganti RabbitMQ/Celery — `plane-mq` dihapus).
-- **Storage:** `STORAGES` S3/MinIO (`plane/settings/common.py:303` `USE_MINIO`, `AWS_S3_BUCKET_NAME`) — sama dengan Terra R2.
-- **Deploy:** `docker-compose.yml` + `deployments/` + `Dockerfile.*` (bukan `systemd` Terra).
-
----
-
-## 9. ITSM Scope (future — actual-only)
-
-Belum ada kode ITSM (tidak ada route `incidents`, model `ConfigurationItem`). Semua scope ITSM diparkir di `features/_backlog.md` — jangan implementasi dari CHEAT-SHEET ini.
-
----
-
----
+Detail: [`design/05-testing-strategy.md`](design/05-testing-strategy.md) dan
+[`design/06-ops-runbook.md`](design/06-ops-runbook.md).
 
 ## Changelog
 
-| Date       | Change                                                                                   |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| 2026-09-03 | fork init — adaptasi dari terra `CHEAT-SHEET.md:1`                                       |
-| 2026-09-05 | cutover `rust-cutover-v1`: backend Rust Axum+SQLx, auth X-Api-Key/Bearer, tanpa RabbitMQ |
+| Tanggal    | Perubahan                                           |
+| ---------- | --------------------------------------------------- |
+| 2026-09-03 | fork init                                           |
+| 2026-09-05 | cutover Rust                                        |
+| 2026-10-27 | rewrite — stack, scope, data, auth, routing current |

@@ -1,4 +1,15 @@
-# Linting in Plane - How It Works
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:129468496eb60eace46103f233ebf7e93f2505ae0281e574b69d3c3517becc3f
+source_paths:
+  - package.json
+  - .oxlintrc.json
+  - .oxfmtrc.json
+  - turbo.json
+---
+
+# Linting in Terraline - How It Works
 
 We use [OxLint](https://oxc.rs/docs/guide/usage/linter) for linting across the entire monorepo. OxLint is a single Rust binary that's 50-100x faster than ESLint, with zero Node.js dependencies at runtime.
 

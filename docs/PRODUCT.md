@@ -1,90 +1,203 @@
-# Product — Plane for ITSM
+---
+status: current
+last_verified: 2026-10-27
+source_hash: sha256:a3c0aee78922ec89e83669255eda6eda8b6bd3e1b6ce1e6b88c4a73287c75c55
+source_paths:
+  - README.md
+  - apps/web/app/routes/core.ts
+  - apps/api-rs/migrations
+---
+
+# Product — Terraline
+
+## Ringkasan
+
+Terraline adalah fork dari [Plane](https://github.com/makeplane/plane) yang
+mengarahkan produk dari project delivery ke **IT service management (ITSM)**.
+Workspace menjadi tenant, application mengelompokkan pekerjaan, service
+membentuk katalog bersama, dan ticket membawa incident, request, problem,
+change, serta improvement melalui praktik ITIL4.
+
+Dokumen ini menjelaskan produk yang sudah berjalan di repo. Untuk alur pemakaian
+per fitur, lihat in-app docs di `/:workspaceSlug/docs`. Untuk kontrak teknis,
+lihat [`design/`](design/README.md) dan inventory yang dihasilkan di
+[`_generated/`](_generated/routes.md).
 
 ## Platform
 
-Fork dari **Plane** (open-source project management — `README.md:26`). Actual-only: docs ini snapshot Plane upstream (Work Items, Cycles, Modules, Views, Pages, Analytics). Arah ITSM (incidents/problems/changes/Service Map) adalah future — diparkir di `features/_backlog.md`, belum ada kode/route/model.
+- **Runtime utama:** SPA React Router 8 di `apps/web`.
+- **API utama:** Rust Axum + SQLx di `apps/api-rs`.
+- **Fallback:** Django + DRF di `apps/api`, hanya untuk boundary yang belum
+  dipindahkan.
+- **Realtime:** `apps/live` dengan Hocuspocus/Yjs untuk kolaborasi dokumen.
+- **Penyimpanan:** PostgreSQL per-table; Redis untuk cache, job stream, dan
+  realtime.
+- **Monorepo:** pnpm workspaces + Turbo.
 
 ## Users
 
-Hierarki Plane tetap, ditambah peran ITSM:
+| Persona                 | Kebutuhan utama                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Member / helpdesk L1-L2 | Triage intake, membuat dan memperbarui ticket, mencari knowledge, berkoordinasi di war room.         |
+| Application admin       | Mengelola anggota, state, label, work item type, dan konfigurasi application.                        |
+| Workspace admin         | Mengelola service catalog, intake, sprint, track, knowledge, view, dan pengaturan workspace.         |
+| Instance admin          | Mengelola workspace, user, autentikasi, dan konfigurasi instance lewat `apps/admin` di `/god-mode/`. |
 
-- **Members** (engineer, helpdesk L1/L2) — daily operators: triage incidents, log requests, update work items, capture knowledge.
-- **Team leads / Project admins** — own workload + applications/infrastruktur: approve requests, review changes, publish RCA.
-- **Workspace admins / Instance admins (god-mode)** — oversight + governance: `apps/admin` (`ADMIN_BASE_PATH=/god-mode/` — `plane/settings/common.py:395`), manage workspaces, users, auth providers.
-- **Instance = multi-tenant** — setiap workspace terisolasi; instance admin punya override lintas-workspace.
+Scope akses mengikuti hierarki workspace dan application. Guest dapat diberi
+akses terbatas per application.
 
-Access scope mengikuti hierarki Plane (member ⊂ project admin ⊂ workspace admin ⊂ instance admin).
+## Product purpose
 
-## Product Purpose
+Menyatukan pekerjaan operasional IT dan delivery dalam satu sistem:
 
-**Plane** = track issues, run cycles, manage modules roadmaps tanpa chaos (`README.md:28`). **Plane for ITSM** = satukan day-to-day IT operations (incident→problem→change→knowledge→asset→Service Map) dengan delivery work (issues/cycles/modules) dalam satu sistem, satu data model — supaya ops dan product tidak juggling tool terpisah.
+- laporan masuk lewat intake;
+- triage mengubah laporan menjadi ticket;
+- ticket dapat terhubung ke service, sprint, track, knowledge, dan war room;
+- pekerjaan delivery tetap memakai work item, sprint, track, view, dan analytics
+  yang sama.
 
-Sukses = seberapa cepat work bergerak `open → done` dengan trace lengkap (comments, history, versions).
+## ITIL4 map
 
-## Positioning
+| Praktik ITIL4              | Yang disediakan platform                                                           | Surface utama                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Incident management        | Lapor, triage, resolve, dan review gangguan; major incident ditangani di war room. | Intake, Tickets, Queues, Services, War Rooms, Knowledge base, Reports |
+| Problem management         | Kaitkan insiden berulang, investigasi akar masalah, dan publikasikan known error.  | Tickets (Problem), Tracks, Knowledge base, Reports                    |
+| Service request management | Alur request standar dengan work item type Request dan service gate opsional.      | Intake, Tickets (Request), Services, Queues, Knowledge base           |
+| Change enablement          | Rencanakan perubahan, kaitkan service terdampak, dan koordinasikan rollout.        | Tickets (Change), Sprints, Tracks, Services                           |
+| Continual improvement      | Ubah temuan review menjadi Improvement ticket dan ukur hasilnya.                   | Tickets (Improvement), Tracks, Reports                                |
+| Knowledge management       | Simpan solusi, runbook, dan known error; publikasikan lewat Space.                 | Knowledge base, Space, Galileo                                        |
 
-Plane = **project delivery** (issues, sprints/cycles, roadmaps). Referensi Terra = **entity-graph unification**, tapi itu arsitektur Terra (Express+Drizzle `entities` JSONB) — bukan actual Plane (Postgres per-table, skema `plane/db/models/`, dilayani Rust Axum). Fork ITSM future (lihat `_backlog.md`) akan reuse Work Items + `IssueType` (`issue_type.py:11`) bila memungkinkan, bukan copy `entities` JSONB.
+ITIL4 di sini adalah operating model, bukan klaim sertifikasi. Dua batas yang
+disengaja saat ini:
 
-## Operating Context
+- belum ada SLA engine atau CAB approval board;
+- service health adalah indikator katalog, bukan live monitoring.
 
-- Operators kerja di browser SPA: **React Router 8** (`apps/web/package.json:67`, `apps/web/react-router.config.ts`), keyboard-first (Cmd+K global search), URL-driven filters (`?q=&status=&sort=&page=`), detail via page/overlay.
-- State: **MobX** (`packages/shared-state`, `apps/web/core/store/root.store.ts`) + SWR (`swr:2.4.2` — `pnpm-workspace.yaml:170`). Bukan TanStack Query only seperti Terra.
-- Editor: **TipTap 2** (`packages/editor`, `@tiptap/*` — `pnpm-workspace.yaml:52`) + Yjs collaboration (`yjs`, `y-prosemirror`).
-- Realtime: `apps/live` (Express + express-ws — `pnpm-workspace.yaml:109`) + Hocuspocus (`@hocuspocus/server:2.15.2`) untuk Pages collaboration; bukan SSE ticket-based Terra.
-- Home/dashboard: work items stats + Cycles/Modules/Views/Pages/Analytics.
-- Entity pages: rich sections, comments, timeline, versions, attachments.
+## Current capabilities
 
-## Capabilities and Constraints
+### Tickets
 
-**Confirmed capabilities (Plane base):**
+Ticket adalah unit kerja operasional. Seed menyediakan work item type
+**Incident**, **Problem**, **Change**, dan **Improvement**. **Request** bersifat
+opt-in dan dapat mewajibkan service link saat triage.
 
-- Work Items — rich text editor + file uploads, sub-properties, cross-issue refs.
-- Cycles — burn-down charts, momentum tracking.
-- Modules — divide complex projects.
-- Views — saved filters, shareable.
-- Pages — TipTap + AI capabilities, convert notes → actionable items.
-- Analytics — realtime insights, trends, blockers.
-- Workspaces/Projects/States/Labels/Estimates/Members — fondasi multi-tenant Plane.
+- Lima layout: list, kanban, calendar, gantt, dan spreadsheet.
+- Deskripsi TipTap, versi, komentar, activity, attachment, sub-item, dan relasi.
+- Saved filter, queue, export, keyboard-first navigation, dan global search.
+- Tampilan workspace-wide dan application-scoped dengan application scope
+  selector.
 
-**ITSM extensions (fork):**
+### Intake
 
-- Incident, Problem (+RCA), Change (+goals/checkpoints), Improvement, Request, Knowledge, Asset — CRUD + filters + export.
-- Service Map — `configuration_items` + dependencies + app links (impact analysis).
-- Cross-entity refs via `@`-mention di description/sections.
+Intake adalah pintu masuk service desk. Laporan masuk ke triage queue workspace
+sebelum menjadi ticket.
 
-**Constraints:**
+- Form in-app dan webhook source bertoken, termasuk alert gaya Alertmanager.
+- Deduplikasi series: alert berulang menaikkan `occurrence_count`, bukan membuat
+  ticket baru.
+- Saran triage AI dengan gate accept/decline manusia.
+- Klasifikasi work item type saat accept, termasuk service gate untuk Request.
+- Intake workspace mengagregasi laporan lintas application dengan filter
+  application.
 
-- UI bahasa Inggris (product), docs Indonesia.
-- Deploy: **Docker Compose** (`docker-compose.yml`) + Postgres + Valkey Redis (Stream `plane:jobs`, ganti RabbitMQ/Celery) — bukan Render free-tier Terra. API: Rust `api:8000`; Django hanya fallback opt-in.
-- Auth: `X-Api-Key` + `Bearer` (Rust) + social OAuth via Django fallback (GitHub/GitLab/Google/Gitea) + god-mode — bukan JWT bearer Terra.
-- Package manager: **pnpm** (`pnpm@11.10.0`, `pnpm-workspace.yaml:1`) + **Turbo** (`turbo.json:1`) — bukan npm workspaces.
+### Services
 
-## Brand Commitments
+Service membentuk katalog workspace yang dipakai bersama lintas application.
 
-- Nama: **Plane for ITSM** (fork Plane). Plane tetap brand upstream (AGPL-3.0 — `package.json:6`).
-- Entity color ITSM (Terra: Incident=red, Problem=purple, dst.) belum dipakai — actual Plane pakai `project.identifier` + `IssueType.logo_props`.
-- UI voice Inggris, concise, operational.
+- Relasi owner dan consumer application.
+- Status, criticality, type, owner, repository, dan documentation.
+- Dependency bertipe: `runs_on`, `connects_to`, `replicates_to`, `depends_on`,
+  `uses`, dan `other`.
+- Layout board dan dependency graph, link work item, serta indikator insiden dan
+  health.
+- Health diturunkan dari data katalog, bukan feed monitoring langsung.
 
-## Evidence on Hand
+### War Rooms
 
-- `apps/web` + `apps/admin` + `apps/live` + `apps/space` + `apps/api-rs` (Rust Axum — API utama) + `apps/api` (Django, fallback) + `packages/*` (15 packages) — working implementation Plane.
-- `docs/design/` — engineering cross-cutting (lihat `design/README.md`).
-- `docs/features/` — per-page specs (lihat `features/README.md`).
-- Upstream: `https://docs.plane.so` + `https://developers.plane.so`.
+War room mengubah Incident ticket menjadi respons major incident terkoordinasi.
 
-## Product Principles
+- Toggle War Room pada Incident untuk membuat atau membuka kembali room.
+- Chat realtime dengan presence, typing indicator, mention, dan message history.
+- Runbook, participant, activity timeline, dan blast-radius service map.
+- Severity mengikuti priority ticket; satu active room per incident.
+- Event realtime diteruskan melalui `apps/live` lewat Redis.
 
-1. **Actual first** — docs gambarkan Plane apa adanya; ITSM hanya sebagai backlog sampai ada kode.
-2. **Scope-aware operations** — access mengikuti workspace/project hierarchy; UI harus komunikasikan apa yang visible.
-3. **ITIL4 as methodology, not ceremony** — proses ada untuk mempercepat traceability, bukan paperwork.
-4. **Speed for operators** — keyboard-first, realtime, low-friction capture > dashboard polish.
-5. **Everything is traceable** — comments, timeline, versions, audit logs.
+### Sprints and Tracks
 
----
+- **Sprints** (cycles) menyediakan cadence berulang dengan start/end date,
+  progress, dan burn-down.
+- **Tracks** (modules) mengelompokkan ticket menuju outcome atau fase yang lebih
+  besar.
+- Keduanya adalah agregat workspace dengan application scope.
+
+### Queues, Knowledge base, and Reports
+
+- **Queues** adalah saved view atas ticket: triage, active incident, problem
+  review, request per service, dan upcoming change.
+- **Knowledge base** adalah page tree workspace dengan TipTap, versi, komentar,
+  dan kolaborasi Yjs. Page terpilih dapat dipublikasikan lewat **Space**.
+- **Reports** menyediakan analytics workspace untuk tren dan distribusi lintas
+  application.
+
+### AI
+
+- **Galileo** adalah asisten kontekstual untuk ticket, service, sprint, track,
+  atau knowledge article yang sedang dibuka.
+- **Scheduler** menjalankan recipe AI berulang seperti laporan harian, rangkuman
+  mingguan, dan pengingat, dengan run history.
+- Saran triage intake tetap mempertahankan human-in-the-loop.
+
+### Applications
+
+- **Application** adalah nama user-facing untuk project: identity, member,
+  issue prefix, ticket, dan war room.
+- Konfigurasi berada di level workspace: state, label, estimate, work item type,
+  view, intake, sprint, dan track.
+- Ticket dimiliki tepat satu application; identifier dan deep link tetap stabil.
+- RBAC mempertahankan dua lapisan: workspace role dan application membership.
+
+## Terminology
+
+| Istilah produk | Istilah kode            | Route utama                                                    |
+| -------------- | ----------------------- | -------------------------------------------------------------- |
+| Tickets        | Work items / issues     | `/:workspaceSlug/work-items`, `.../projects/:projectId/issues` |
+| Sprints        | Cycles                  | `/:workspaceSlug/cycles`                                       |
+| Tracks         | Modules                 | `/:workspaceSlug/modules`                                      |
+| Knowledge      | Pages                   | `/:workspaceSlug/pages`                                        |
+| Applications   | Projects                | `/:workspaceSlug/projects`                                     |
+| Queues         | Workspace/project views | `/:workspaceSlug/workspace-views`, `.../views`                 |
+
+## Non-goals
+
+- SLA engine, escalation policy, dan CAB approval board.
+- Live monitoring atau APM; service health saat ini adalah indikator katalog.
+- Modul Problem, Change, dan Asset terpisah di luar work item type dan surface
+  yang sudah ada.
+- Billing dan subscription model baru.
+- Mobile native app.
+
+## Operating context
+
+- Operator bekerja di browser SPA dengan URL-driven state.
+- Scope utama adalah workspace; application adalah filter dan batas kepemilikan
+  ticket.
+- State frontend memakai MobX dan SWR.
+- Dokumen memakai TipTap + Yjs + Hocuspocus.
+- API dan worker berjalan sebagai service Rust terpisah.
+
+## Source of truth
+
+- Route web: [`_generated/routes.md`](_generated/routes.md)
+- Route API: [`_generated/api-routes.md`](_generated/api-routes.md)
+- Tabel database: [`_generated/schema.md`](_generated/schema.md)
+- Arsitektur: [`design/01-architecture.md`](design/01-architecture.md)
+- Data model: [`design/02-data-model.md`](design/02-data-model.md)
+- API contract: [`design/03-api-contract.md`](design/03-api-contract.md)
 
 ## Changelog
 
-| Date       | Change                                                    |
-| ---------- | --------------------------------------------------------- |
-| 2026-09-03 | fork init — adaptasi dari terra `PRODUCT.md:6`            |
-| 2026-09-05 | cutover `rust-cutover-v1`: backend + deploy + auth → Rust |
+| Tanggal    | Perubahan                                                         |
+| ---------- | ----------------------------------------------------------------- |
+| 2026-09-03 | fork init — adaptasi dari dokumen produk Terra                    |
+| 2026-09-05 | cutover backend ke Rust                                           |
+| 2026-10-27 | rewrite — produk current, capability ITSM, terminology, non-goals |
