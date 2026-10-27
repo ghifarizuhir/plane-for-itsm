@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:081fdb1e82cd655f75bbae572326a02be6cf67c6965bf3f41fa02c89b10da047
+source_hash: sha256:af729c55a8f696500b3607999aa55a0755cd99d639c15d14e7253f62a8db9709
 source_paths:
   - apps/web/app/routes/core.ts
   - apps/api-rs/crates/api/src/routes/workspace_settings.rs

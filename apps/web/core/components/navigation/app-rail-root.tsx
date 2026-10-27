@@ -6,6 +6,7 @@
 
 "use client";
 
+import type { CSSProperties } from "react";
 import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 import useSWR from "swr";
@@ -49,20 +50,19 @@ export const AppRailRoot = observer(function AppRailRoot() {
 
   // derived values
   const showLabel = preferences.displayMode === "icon_with_label";
-  const railWidth = showLabel ? "3.5rem" : "2.75rem";
+  const railWidth = showLabel ? "4rem" : "2.75rem";
   const totalNotifications =
     unreadNotificationsCount.mention_unread_notifications_count > 0
       ? unreadNotificationsCount.mention_unread_notifications_count
       : unreadNotificationsCount.total_unread_notifications_count;
+  const railStyle = {
+    width: railWidth,
+    display: "block",
+    "--app-rail-width": railWidth,
+  } as CSSProperties;
 
   return (
-    <div
-      className="z-[26] h-full flex-shrink-0 bg-canvas transition-all duration-300 ease-in-out"
-      style={{
-        width: railWidth,
-        display: "block",
-      }}
-    >
+    <div className="z-[26] h-full flex-shrink-0 bg-canvas transition-all duration-300 ease-in-out" style={railStyle}>
       <ContextMenu>
         <ContextMenu.Trigger className="h-full">
           <div className="flex h-full flex-col px-1 py-2">

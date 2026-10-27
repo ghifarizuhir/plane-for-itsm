@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:3d2adc0bb01400384c209a905e557c409debbb8f4b3024f6aafba3de3d8bb2b7
+source_hash: sha256:9dae3a54066596e11dc3bcb93be128c6ad0363995cc9fd8f358f150eaca30b1a
 source_paths:
   - packages/tailwind-config
   - packages/ui/src

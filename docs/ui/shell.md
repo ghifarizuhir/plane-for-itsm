@@ -1,7 +1,7 @@
 ---
 status: current
 last_verified: 2026-10-27
-source_hash: sha256:90ee945b70aac6dafe439a58cc771b25e96fd0992ec208724fe96cc14a59b9c8
+source_hash: sha256:ff949168cfc38f551074a90b7f45da0060f5b97b306e4adf3f433a3e125e1bde
 source_paths:
   - apps/web/core/components/navigation
   - apps/web/core/components/workspace/sidebar

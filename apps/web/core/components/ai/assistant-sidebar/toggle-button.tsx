@@ -5,7 +5,7 @@
  */
 
 import { observer } from "mobx-react";
-import { AiStar1Outline } from "@makeplane/propel/icons";
+import { RightSidePaneOutline } from "@makeplane/propel/icons";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { cn } from "@plane/utils";
 import { useAppTheme } from "@/hooks/store/use-app-theme";
@@ -26,14 +26,15 @@ export const AiAssistantSidebarToggle = observer(function AiAssistantSidebarTogg
         aria-expanded={isOpen}
         onClick={() => toggleAiSidebar(isOpen)}
         className={cn(
-          "flex items-center justify-center rounded-md transition-colors hover:bg-layer-1-hover",
+          "flex items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none",
           compact ? "size-7" : "size-8",
-          {
-            "bg-layer-1": isOpen,
-          }
+          isOpen
+            ? "text-icon-primary"
+            : "text-icon-tertiary hover:bg-layer-transparent-hover hover:text-icon-secondary",
+          isOpen && (compact ? "bg-layer-transparent-selected" : "bg-layer-1")
         )}
       >
-        <AiStar1Outline className={cn("text-primary", compact ? "size-4.5" : "size-5")} />
+        <RightSidePaneOutline className={cn(compact ? "size-4.5" : "size-5")} />
       </button>
     </Tooltip>
   );

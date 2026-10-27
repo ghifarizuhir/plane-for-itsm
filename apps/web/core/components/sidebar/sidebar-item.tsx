@@ -62,14 +62,14 @@ interface AppSidebarButtonItemProps {
 // ============================================================================
 
 const styles = {
-  base: "group flex w-full flex-col gap-0.5 items-center justify-center text-tertiary",
-  icon: "flex items-center justify-center gap-2 rounded-md text-tertiary",
+  base: "group flex w-full flex-col items-center justify-center gap-0.5 rounded-md text-tertiary focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none",
+  icon: "flex items-center justify-center gap-2 rounded-md",
   iconSm: "size-7 [&_svg]:size-4.5",
   iconMd: "size-8",
-  iconActive: "bg-layer-transparent-selected text-secondary !text-icon-primary",
-  iconInactive: "group-hover:text-icon-secondary group-hover:bg-layer-transparent-hover !text-icon-tertiary",
+  iconActive: "bg-layer-transparent-selected text-icon-primary",
+  iconInactive: "text-icon-tertiary group-hover:bg-layer-transparent-hover group-hover:text-icon-secondary",
   label: "max-w-full truncate font-medium",
-  labelSm: "text-10 leading-none",
+  labelSm: "text-10 leading-3",
   labelMd: "text-11",
   labelActive: "text-secondary",
   labelInactive: "group-hover:text-secondary text-tertiary",

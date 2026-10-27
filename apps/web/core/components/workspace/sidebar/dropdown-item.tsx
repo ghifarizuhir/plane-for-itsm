@@ -42,7 +42,7 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
     >
       <Menu.Item
         as="div"
-        className={cn("px-4 py-2", {
+        className={cn("px-4 py-2 data-focus:bg-layer-transparent-selected", {
           "bg-layer-transparent-active": workspace.id === activeWorkspace?.id,
           "hover:bg-layer-transparent-hover": workspace.id !== activeWorkspace?.id,
         })}
@@ -51,7 +51,7 @@ const SidebarDropdownItem = observer(function SidebarDropdownItem(props: TProps)
           <div className="relative flex w-[80%] items-center justify-start gap-2.5">
             <span
               className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center border-subtle p-2 text-14 font-medium uppercase ${
-                !workspace?.logo_url && "rounded-md bg-[#026292] text-on-color"
+                !workspace?.logo_url && "rounded-md bg-accent-primary text-on-color"
               }`}
             >
               {workspace?.logo_url && workspace.logo_url !== "" ? (

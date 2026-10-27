@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 // icons
 import { ChevronDownOutline, LogOutOutline, MailOutline, PlusCircleOutline } from "@makeplane/propel/icons";
+import { Tooltip } from "@makeplane/propel/components/tooltip";
 // ui
 import { Menu, Transition } from "@headlessui/react";
 // plane imports
@@ -17,8 +18,6 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspace } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { orderWorkspacesList, cn } from "@plane/utils";
-// helpers
-import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -76,9 +75,9 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
   return (
     <Menu
       as="div"
-      className={cn("relative flex h-full w-fit max-w-48 truncate whitespace-nowrap", {
+      className={cn("relative flex h-full w-fit max-w-48 whitespace-nowrap", {
         "w-full justify-center text-center": variant === "sidebar",
-        "flex-grow justify-stretch truncate text-left": variant === "top-navigation",
+        "flex-grow justify-stretch text-left": variant === "top-navigation",
       })}
     >
       {({ open, close }: { open: boolean; close: () => void }) => {
@@ -90,34 +89,39 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
         return (
           <>
             {variant === "sidebar" && (
-              <Menu.Button
-                className={cn("flex size-8 w-full items-center justify-center rounded-md", {
-                  "bg-layer-1": open,
-                })}
-              >
-                <AppSidebarItem
-                  variant="button"
-                  item={{
-                    icon: (
-                      <WorkspaceLogo
-                        logo={activeWorkspace?.logo_url}
-                        name={activeWorkspace?.name}
-                        classNames="size-8 rounded-md border border-subtle"
-                      />
-                    ),
-                  }}
-                />
-              </Menu.Button>
+              <Tooltip label={activeWorkspace?.name ?? t("loading")} side="right">
+                <Menu.Button
+                  type="button"
+                  aria-label={`${t("aria_labels.projects_sidebar.open_workspace_switcher")}: ${activeWorkspace?.name ?? ""}`}
+                  className={cn(
+                    "flex h-8 w-full items-center justify-center rounded-md transition-colors hover:bg-layer-transparent-hover focus-visible:ring-2 focus-visible:ring-accent-strong focus-visible:outline-none",
+                    {
+                      "bg-layer-transparent-selected": open,
+                    }
+                  )}
+                >
+                  <WorkspaceLogo
+                    logo={activeWorkspace?.logo_url}
+                    name={activeWorkspace?.name}
+                    classNames="size-6 rounded-md border border-subtle"
+                  />
+                  <ChevronDownOutline
+                    className={cn("size-2.5 flex-shrink-0 text-icon-tertiary transition-transform duration-300", {
+                      "rotate-180": open,
+                    })}
+                  />
+                </Menu.Button>
+              </Tooltip>
             )}
             {variant === "top-navigation" && (
               <Menu.Button
                 className={cn(
-                  "group/menu-button flex flex-grow items-center justify-between gap-1 truncate rounded-sm p-1 text-13 font-medium text-secondary hover:bg-layer-1 focus:outline-none",
+                  "group/menu-button flex flex-grow items-center justify-between gap-1 truncate rounded-sm p-1 text-13 font-medium text-secondary transition-colors hover:bg-layer-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong",
                   {
                     "bg-layer-1": open,
                   }
                 )}
-                aria-label={t("aria_labels.projects_sidebar.open_workspace_switcher")}
+                aria-label={`${t("aria_labels.projects_sidebar.open_workspace_switcher")}: ${activeWorkspace?.name ?? t("loading")}`}
               >
                 <div className="flex flex-grow items-center gap-2 truncate">
                   <WorkspaceLogo
@@ -128,7 +132,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                   <h4 className="truncate text-14 font-medium text-primary">{activeWorkspace?.name ?? t("loading")}</h4>
                 </div>
                 <ChevronDownOutline
-                  className={cn("size-4 flex-shrink-0 text-placeholder duration-300", {
+                  className={cn("size-4 flex-shrink-0 text-icon-tertiary transition-transform duration-300", {
                     "rotate-180": open,
                   })}
                 />
@@ -138,17 +142,17 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
               as={Fragment}
               enter="transition ease-out duration-100"
               enterFrom="transform opacity-0 scale-95"
-              enterTo="trnsform opacity-100 scale-100"
+              enterTo="transform opacity-100 scale-100"
               leave="transition ease-in duration-75"
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items as={Fragment}>
+              <Menu.Items as={Fragment} modal={false}>
                 <div
                   className={cn(
                     "fixed z-21 mt-1 flex w-[19rem] max-w-[calc(100vw-2rem)] origin-top-left flex-col divide-y divide-subtle rounded-md border-[0.5px] border-strong bg-surface-1 shadow-raised-200 outline-none",
                     {
-                      "top-11 left-14": variant === "sidebar",
+                      "top-11 left-[var(--app-rail-width)]": variant === "sidebar",
                       "top-10 left-4": variant === "top-navigation",
                     }
                   )}
@@ -190,7 +194,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                       <Link href="/create-workspace" className="w-full">
                         <Menu.Item
                           as="div"
-                          className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover"
+                          className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover data-focus:bg-layer-transparent-selected"
                         >
                           <PlusCircleOutline className="size-4 flex-shrink-0" />
                           {t("create_workspace")}
@@ -201,7 +205,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                     <Link href="/invitations" className="w-full" onClick={handleItemClick}>
                       <Menu.Item
                         as="div"
-                        className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover"
+                        className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover data-focus:bg-layer-transparent-selected"
                       >
                         <MailOutline className="h-4 w-4 flex-shrink-0" />
                         {t("workspace_invites")}
@@ -212,7 +216,7 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                       <Menu.Item
                         as="button"
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-danger-primary hover:bg-layer-transparent-hover"
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-danger-primary hover:bg-layer-transparent-hover data-focus:bg-layer-transparent-selected"
                         onClick={handleSignOut}
                       >
                         <LogOutOutline className="size-4 flex-shrink-0" />
