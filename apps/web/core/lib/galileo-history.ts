@@ -29,7 +29,8 @@ export const groupConversationsByDate = (
     older: [],
   };
 
-  const sorted = [...conversations].toSorted((a, b) => {
+  // oxlint-disable-next-line unicorn/no-array-sort -- tsconfig lib does not include ES2023 array methods
+  const sorted = [...conversations].sort((a, b) => {
     const aTime = new Date(a.updated_at).getTime();
     const bTime = new Date(b.updated_at).getTime();
     const safeA = Number.isNaN(aTime) ? Number.NEGATIVE_INFINITY : aTime;
