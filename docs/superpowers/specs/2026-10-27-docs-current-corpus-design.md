@@ -147,6 +147,10 @@ Rules:
   path in order.
 - `source_paths`: repo-relative files or directories that the document
   describes. Directories expand recursively in sorted order.
+- `source_paths` must not include the document itself or a directory that
+  contains it; a document cannot hash itself.
+- `source_paths` must not include other hand-written documents. Use code or
+  generated inventories instead, so verification does not create hash chains.
 - `generated` documents are under `docs/_generated/` only and use an HTML
   comment banner instead of frontmatter.
 - A current document with a missing or invalid field fails `docs:check`.
