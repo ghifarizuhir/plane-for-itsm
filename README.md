@@ -1,6 +1,6 @@
 <div align="center">
 
-# Plane for ITSM
+# Terraline
 
 **Open-source IT service management, built on Plane and shaped by ITIL4.**
 
@@ -12,9 +12,9 @@ Tickets, services, knowledge, and delivery work in one workspace — so incident
 
 ---
 
-## Why Plane for ITSM
+## Why Terraline
 
-Plane for ITSM is a fork of [Plane](https://plane.so) that moves the product from project delivery into **IT service management**. The workspace is the tenant. Applications group the work. Services form a shared catalog. Tickets carry incidents, requests, problems, changes, and improvements through ITIL4 practices.
+Terraline is a fork of [Plane](https://plane.so) that moves the product from project delivery into **IT service management**. The workspace is the tenant. Applications group the work. Services form a shared catalog. Tickets carry incidents, requests, problems, changes, and improvements through ITIL4 practices.
 
 The result is one operational system for support and delivery teams:
 
@@ -106,7 +106,7 @@ A War Room turns an Incident ticket into a coordinated major-incident response.
 
 ## Architecture
 
-Plane for ITSM is a pnpm + Turbo monorepo with a Rust API at its center.
+Terraline is a pnpm + Turbo monorepo with a Rust API at its center.
 
 | Path              | Role                                                               | Stack                                                           |
 | ----------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -203,6 +203,7 @@ docs/
 
 ## Documentation
 
+- **Docs index** — [`docs/README.md`](docs/README.md) lists which documents are current and which are historical snapshots.
 - **In-app guide** — open `/:workspaceSlug/docs` in a running instance. The **ITIL4** group covers incident, problem, service request, change and improvement, and an end-to-end operating flow.
 - **Architecture** — [`docs/design/01-architecture.md`](docs/design/01-architecture.md)
 - **API contract** — [`docs/design/03-api-contract.md`](docs/design/03-api-contract.md)
@@ -220,4 +221,8 @@ Report vulnerabilities responsibly instead of opening a public issue. See [`SECU
 
 ## License
 
-Plane for ITSM is licensed under the [GNU Affero General Public License v3.0](LICENSE.txt). It is a fork of [Plane](https://github.com/makeplane/plane), which is also AGPL-3.0. Upstream copyright notices and license terms remain in effect.
+Terraline is licensed under the [GNU Affero General Public License v3.0 only](LICENSE.txt) (`AGPL-3.0-only`). It is a modified fork of [Plane](https://github.com/makeplane/plane), which is also licensed under AGPL-3.0-only.
+
+Upstream copyright notices and license terms remain in effect. Fork attribution, the copyright for modifications, and a summary of changes are recorded in [`NOTICE`](NOTICE).
+
+If you run a modified version of Terraline as a network service, AGPL section 13 requires you to offer users of that service the Corresponding Source of the version you run.

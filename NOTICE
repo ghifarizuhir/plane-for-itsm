@@ -1,0 +1,27 @@
+Terraline
+Copyright (c) 2026-present Terraline contributors
+SPDX-License-Identifier: AGPL-3.0-only
+
+Terraline is a modified fork of Plane:
+  https://github.com/makeplane/plane
+  Copyright (c) 2023-present Plane Software, Inc. and contributors
+  Licensed under the GNU Affero General Public License v3.0 only.
+
+Modifications have been made from 2026 to the present. They include the ITSM
+product surface (incidents, problems, changes, service catalog, intake, war
+rooms), the Rust API migration, UI changes, and documentation updates.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+The full license text is in LICENSE.txt. Upstream copyright notices and license
+terms remain in effect.
+
+If you run a modified version of Terraline as a network service, AGPL section 13
+requires you to offer users of that service the Corresponding Source of the
+version you run.

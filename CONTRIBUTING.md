@@ -1,19 +1,21 @@
-# Contributing to Plane
+# Contributing to Terraline
 
-Thank you for showing an interest in contributing to Plane! All kinds of contributions are valuable to us. In this guide, we will cover how you can quickly onboard and make your first contribution.
+Thank you for showing an interest in contributing to Terraline! All kinds of contributions are valuable to the project. In this guide, we will cover how you can quickly onboard and make your first contribution.
+
+Terraline is a modified fork of [Plane](https://github.com/makeplane/plane). Upstream code remains subject to its original copyright and the AGPL-3.0-only license.
 
 ## Submitting an issue
 
-Before submitting a new issue, please search the [issues](https://github.com/makeplane/plane/issues) tab. Maybe an issue or discussion already exists and might inform you of workarounds. Otherwise, you can give new information.
+Before submitting a new issue, please search the [issues](https://github.com/ghifarizuhir/plane-for-itsm/issues) tab. Maybe an issue or discussion already exists and might inform you of workarounds. Otherwise, you can give new information.
 
-While we want to fix all the [issues](https://github.com/makeplane/plane/issues), before fixing a bug we need to be able to reproduce and confirm it. Please provide us with a minimal reproduction scenario using a repository or [Gist](https://gist.github.com/). Having a live, reproducible scenario gives us the information without asking questions back & forth with additional questions like:
+While we want to fix all the [issues](https://github.com/ghifarizuhir/plane-for-itsm/issues), before fixing a bug we need to be able to reproduce and confirm it. Please provide us with a minimal reproduction scenario using a repository or [Gist](https://gist.github.com/). Having a live, reproducible scenario gives us the information without asking questions back & forth with additional questions like:
 
 - 3rd-party libraries being used and their versions
 - a use-case that fails
 
-Without said minimal reproduction, we won't be able to investigate all [issues](https://github.com/makeplane/plane/issues), and the issue might not be resolved.
+Without said minimal reproduction, we won't be able to investigate all [issues](https://github.com/ghifarizuhir/plane-for-itsm/issues), and the issue might not be resolved.
 
-You can open a new issue with this [issue form](https://github.com/makeplane/plane/issues/new).
+You can open a new issue with this [issue form](https://github.com/ghifarizuhir/plane-for-itsm/issues/new).
 
 ### Naming conventions for issues
 
@@ -36,24 +38,22 @@ This helps us triage and manage issues more efficiently.
 
 ### Requirements
 
-- Docker Engine installed and running
-- Node.js version 20+ [LTS version](https://nodejs.org/en/about/previous-releases)
-- Python version 3.8+
-- Postgres version v14
-- Redis version v6.2.7
+- Docker Engine with Docker Compose
+- Node.js >= 22.22
+- pnpm 11.10 (enabled through Corepack)
 - **Memory**: Minimum **12 GB RAM** recommended
   > ⚠️ Running the project on a system with only 8 GB RAM may lead to setup failures or memory crashes (especially during Docker container build/start or dependency install). Use cloud environments like GitHub Codespaces or upgrade local RAM if possible.
 
+Postgres, Valkey/Redis, and MinIO run inside Docker; you do not need local installations.
+
 ### Setup the project
 
-The project is a monorepo, with backend api and frontend in a single repo.
-
-The backend is a django project which is kept inside apps/api
+The project is a pnpm + Turbo monorepo. The primary API is Rust (`apps/api-rs`); the Django app (`apps/api`) remains as an opt-in fallback.
 
 1. Clone the repo
 
 ```bash
-git clone https://github.com/makeplane/plane.git [folder-name]
+git clone https://github.com/ghifarizuhir/plane-for-itsm.git [folder-name]
 cd [folder-name]
 chmod +x setup.sh
 ```
@@ -64,10 +64,10 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-3. Start the containers
+3. Start the backend containers
 
 ```bash
-docker compose -f docker-compose-local.yml up
+docker compose -f docker-compose-local.yml up -d --build api worker beat-worker
 ```
 
 4. Start web apps:
@@ -79,11 +79,13 @@ pnpm dev
 5. Open your browser to http://localhost:3001/god-mode/ and register yourself as instance admin
 6. Open up your browser to http://localhost:3000 then log in using the same credentials from the previous step
 
-That’s it! You’re all set to begin coding. Remember to refresh your browser if changes don’t auto-reload. Happy contributing! 🎉
+Other local endpoints: API at `http://localhost:8000`, live collaboration at `http://localhost:3100`. The web app runs at `http://localhost:3000` and admin at `http://localhost:3001`.
+
+That's it! You're all set to begin coding. Detailed commands and service-specific workflows are in [AGENTS.md](AGENTS.md).
 
 ## Missing a Feature?
 
-If a feature is missing, you can directly _request_ a new one [here](https://github.com/makeplane/plane/issues/new?assignees=&labels=feature&template=feature_request.yml&title=%F0%9F%9A%80+Feature%3A+). You also can do the same by choosing "🚀 Feature" when raising a [New Issue](https://github.com/makeplane/plane/issues/new/choose) on our GitHub Repository.
+If a feature is missing, you can directly _request_ a new one [here](https://github.com/ghifarizuhir/plane-for-itsm/issues/new?labels=feature). You can also choose "🚀 Feature" when raising a [New Issue](https://github.com/ghifarizuhir/plane-for-itsm/issues/new/choose) on this repository.
 If you would like to _implement_ it, an issue with your proposal must be submitted first, to be sure that we can use it. Please consider the guidelines given below.
 
 ## Coding guidelines
@@ -95,15 +97,15 @@ To ensure consistency throughout the source code, please keep these rules in min
 
 ## Ways to contribute
 
-- Try Plane Cloud and the self hosting platform and give feedback
+- Try Terraline and the self-hosting platform and give feedback
 - Add new integrations
 - Add or update translations
-- Help with open [issues](https://github.com/makeplane/plane/issues) or [create your own](https://github.com/makeplane/plane/issues/new/choose)
-- Share your thoughts and suggestions with us
+- Help with open [issues](https://github.com/ghifarizuhir/plane-for-itsm/issues) or [create your own](https://github.com/ghifarizuhir/plane-for-itsm/issues/new/choose)
+- Share your thoughts and suggestions
 - Help create tutorials and blog posts
 - Request a feature by submitting a proposal
 - Report a bug
-- **Improve documentation** - fix incomplete or missing [docs](https://docs.plane.so/), bad wording, examples or explanations.
+- **Improve documentation** — fix incomplete or missing docs in [`docs/`](docs/README.md), bad wording, examples, or explanations.
 
 ## Contributing to language support
 
@@ -242,6 +244,23 @@ Before submitting your contribution, please ensure the following:
 
 Happy translating! 🌍✨
 
+## License
+
+Terraline is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). By contributing, you agree that your contribution is licensed under the same terms. You retain copyright over your contribution. See [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE).
+
+New source files authored for Terraline should carry:
+
+```text
+Copyright (c) 2026-present Terraline contributors
+SPDX-License-Identifier: AGPL-3.0-only
+See the LICENSE file for details.
+```
+
+When you substantially modify an upstream Plane file, keep the existing upstream
+copyright header and add a `Copyright (c) 2026-present Terraline contributors`
+line. Do not remove upstream notices. `COPYRIGHT.txt` remains the upstream
+header template used by the copyright-check tooling.
+
 ## Need help? Questions and suggestions
 
-Questions, suggestions, and thoughts are most welcome. We can also be reached in our [Forum](https://forum.plane.so).
+Questions, suggestions, and thoughts are most welcome. Open an issue in this repository or read [AGENTS.md](AGENTS.md) for the development workflow.
